@@ -1,0 +1,71 @@
+{
+  "name": "comfyui-image-manager",
+  "version": "1.0.0",
+  "description": "React-based image viewer and manager for ComfyUI",
+  "main": "electron/main.js",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "setup": "node scripts/setup.js",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:frontend": "cd frontend && npm run preview",
+    "start:backend": "cd backend && npm run start",
+    "clean": "rm -rf frontend/dist backend/dist frontend/node_modules backend/node_modules node_modules",
+    "db:reset": "rm -f database/*.db && cd backend && npm run db:migrate",
+    "electron:dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"wait-on http://localhost:1566 http://localhost:5173 && electron .\"",
+    "electron:build": "npm run build && npx electron-builder",
+    "electron:start": "electron ."
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "38.2.2",
+    "electron-builder": "^26.0.12",
+    "fs-extra": "^11.3.2",
+    "wait-on": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "exif-parser": "^0.1.12",
+    "png-chunks-extract": "^1.0.0"
+  },
+  "build": {
+    "appId": "com.comfyui.imagemanager",
+    "productName": "ComfyUI Image Manager",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*",
+      "!backend",
+      "!frontend/src"
+    ],
+    "afterPack": "./scripts/after-pack.js",
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "signAndEditExecutable": false
+    },
+    "mac": {
+      "identity": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

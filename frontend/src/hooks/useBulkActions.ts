@@ -1,0 +1,92 @@
+import { useState, useCallback } from 'react';
+import { imageApi, groupApi } from '../services/api';
+
+export const useBulkActions = () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const deleteImages = useCallback(async (imageIds: number[]): Promise<boolean> => {
+    if (imageIds.length === 0) return false;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const results = await imageApi.deleteImages(imageIds);
+      const failedCount = results.filter(result => !result.success).length;
+
+      if (failedCount > 0) {
+        setError(`${failedCount}개 이미지 삭제에 실패했습니다.`);
+      }
+
+      return failedCount === 0;
+    } catch (err) {
+      setError('이미지 삭제 중 오류가 발생했습니다.');
+      console.error('Bulk delete error:', err);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const downloadImages = useCallback(async (imageIds: number[]) => {
+    if (imageIds.length === 0) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // 각 이미지를 순차적으로 다운로드
+      // 브라우저에서 동시 다운로드 제한을 고려하여 순차 처리
+      for (const imageId of imageIds) {
+        const link = document.createElement('a');
+        link.href = imageApi.getDownloadUrl(imageId, 'original');
+        link.download = `image_${imageId}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // 다운로드 간 짧은 지연 (브라우저 제한 회피)
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    } catch (err) {
+      setError('이미지 다운로드 중 오류가 발생했습니다.');
+      console.error('Bulk download error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const assignToGroup = useCallback(async (imageIds: number[], groupId: number): Promise<boolean> => {
+    if (imageIds.length === 0) return false;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await groupApi.addImagesToGroup(groupId, imageIds);
+
+      if (!result.success) {
+        setError(result.error || '그룹 할당에 실패했습니다.');
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      setError('그룹 할당 중 오류가 발생했습니다.');
+      console.error('Group assignment error:', err);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return {
+    loading,
+    error,
+    deleteImages,
+    downloadImages,
+    assignToGroup,
+    clearError: () => setError(null),
+  };
+};

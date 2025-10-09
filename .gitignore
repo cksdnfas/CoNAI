@@ -1,0 +1,89 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Production builds
+dist/
+build/
+*/dist/
+*/build/
+dist-electron/
+
+# Electron build outputs
+out/
+release/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Database files
+database/
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploaded images
+uploads/
+
+# User config
+config/user/
+
+# Logs
+*.log
+logs/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+
+# Windows nul files
+nul
+*/nul
+**/nul
+
+# Claude Code settings (local only)
+.claude/settings.local.json

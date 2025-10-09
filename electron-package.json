@@ -1,0 +1,49 @@
+{
+  "name": "comfyui-image-manager-electron",
+  "version": "1.0.0",
+  "description": "ComfyUI Image Manager - Electron Desktop App",
+  "main": "electron/main.js",
+  "scripts": {
+    "electron:dev": "concurrently \"npm run dev:backend\" \"wait-on http://localhost:1566 && electron .\"",
+    "electron:build": "npm run build && electron-builder",
+    "dev:backend": "cd backend && npm run dev"
+  },
+  "build": {
+    "appId": "com.comfyui.imagemanager",
+    "productName": "ComfyUI Image Manager",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*",
+      "!backend",
+      "!frontend/src"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": ["dist/**/*", "node_modules/**/*", "package.json"]
+      }
+    ],
+    "asarUnpack": [
+      "**/node_modules/sharp/**/*",
+      "**/node_modules/sqlite3/**/*"
+    ],
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.2.0"
+  }
+}
