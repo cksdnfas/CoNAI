@@ -27,6 +27,7 @@ export interface ImageRecord {
   generation_time: number | null;      // 생성 시간(초)
   batch_size: number | null;           // 배치 크기
   batch_index: number | null;          // 배치 내 인덱스
+  auto_tags: string | null;            // WD v3 자동 태그 (JSON)
 }
 
 export interface ImageMetadata {

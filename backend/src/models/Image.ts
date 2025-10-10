@@ -178,6 +178,25 @@ export class ImageModel {
   }
 
   /**
+   * Update auto_tags for an image
+   */
+  static updateAutoTags(id: number, autoTags: string | null): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      db.run(
+        'UPDATE images SET auto_tags = ? WHERE id = ?',
+        [autoTags, id],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(this.changes > 0);
+          }
+        }
+      );
+    });
+  }
+
+  /**
    * 고급 검색 (프롬프트 중심, 그룹 정보 포함)
    */
   static advancedSearch(

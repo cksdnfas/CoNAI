@@ -135,8 +135,35 @@ for (const moduleName of nativeModules) {
 }
 console.log('✅ Native modules copied\n');
 
-// Step 6: Copy frontend assets
-console.log('Step 6: Copying frontend assets...');
+// Step 6: Copy Python scripts and dependencies
+console.log('Step 6: Copying Python scripts...');
+const pythonSource = path.join(ROOT_DIR, 'backend', 'python');
+const pythonTarget = path.join(appDir, 'python');
+
+if (fs.existsSync(pythonSource)) {
+  fs.ensureDirSync(pythonTarget);
+
+  // Copy Python files
+  const pythonFiles = ['wdv3_tagger.py', 'requirements.txt', 'README.md'];
+  let copiedCount = 0;
+
+  for (const file of pythonFiles) {
+    const src = path.join(pythonSource, file);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, path.join(pythonTarget, file));
+      copiedCount++;
+    }
+  }
+
+  console.log(`   ✅ Copied ${copiedCount} Python files`);
+  console.log('   ℹ️  Users need to run: pip install -r app/python/requirements.txt');
+} else {
+  console.warn('   ⚠️  Python source not found, skipping');
+}
+console.log('');
+
+// Step 7: Copy frontend assets
+console.log('Step 7: Copying frontend assets...');
 const frontendSource = path.join(BACKEND_DIST, 'frontend');
 const frontendTarget = path.join(appDir, 'frontend');
 
@@ -148,8 +175,8 @@ if (fs.existsSync(frontendSource)) {
   console.warn('⚠️  Frontend dist not found, skipping\n');
 }
 
-// Step 7: Create startup scripts
-console.log('Step 7: Creating startup scripts...');
+// Step 8: Create startup scripts
+console.log('Step 8: Creating startup scripts...');
 
 // Windows batch file - Use ASCII characters for maximum compatibility
 const batchScript = `@echo off
@@ -224,8 +251,8 @@ if (!isWindows) {
 
 console.log('✅ Startup scripts created\n');
 
-// Step 8: Create environment template
-console.log('Step 8: Creating environment template...');
+// Step 9: Create environment template
+console.log('Step 9: Creating environment template...');
 const envTemplate = `# ComfyUI Image Manager Configuration
 #
 # This file was auto-generated. Rename to .env to use.
@@ -278,25 +305,54 @@ BACKEND_PROTOCOL=http
 
 # Supported: en, ko, ja, zh
 LOCALE=en
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# WD v3 Tagger Configuration
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Enable/disable auto tagging feature
+TAGGER_ENABLED=true
+
+# Model type: vit, swinv2, convnext
+TAGGER_MODEL=vit
+
+# General tags threshold (0.0-1.0)
+TAGGER_GEN_THRESHOLD=0.35
+
+# Character tags threshold (0.0-1.0)
+TAGGER_CHAR_THRESHOLD=0.75
+
+# Python executable path (default: python)
+PYTHON_PATH=python
 `;
 
 fs.writeFileSync(path.join(PORTABLE_OUTPUT_DIR, '.env.example'), envTemplate, 'utf8');
 console.log('✅ Environment template created\n');
 
-// Step 9: Create data directories
-console.log('Step 9: Creating data directories...');
-const dataDirectories = ['database', 'uploads', 'logs', 'temp'];
+// Step 10: Create data directories
+console.log('Step 10: Creating data directories...');
+const dataDirectories = ['database', 'uploads', 'logs', 'temp', 'models'];
 for (const dir of dataDirectories) {
   const dirPath = path.join(PORTABLE_OUTPUT_DIR, dir);
   fs.ensureDirSync(dirPath);
 }
 console.log('✅ Data directories created\n');
 
-// Step 10: Create README
-console.log('Step 10: Creating README...');
+// Step 11: Create README
+console.log('Step 11: Creating README...');
 const readmeContent = `# ComfyUI Image Manager - Portable Edition
 
 ## 🚀 Quick Start
+
+### Prerequisites (Optional - for WD v3 Tagger feature)
+
+If you want to use the AI tagging feature, install Python dependencies:
+
+\`\`\`bash
+pip install -r app/python/requirements.txt
+\`\`\`
+
+**Note:** The application works without Python - tagging is an optional feature.
 
 ### Windows
 1. Double-click \`start.bat\`
@@ -314,6 +370,34 @@ const readmeContent = `# ComfyUI Image Manager - Portable Edition
 2. Edit \`.env\` to customize settings
 3. Restart the application
 
+## 🤖 WD v3 Tagger (Optional AI Feature)
+
+The application includes an optional AI image tagging feature:
+
+### Setup
+1. Install Python 3.8+ (if not already installed)
+2. Install dependencies:
+   \`\`\`bash
+   pip install -r app/python/requirements.txt
+   \`\`\`
+3. Enable in \`.env\`:
+   \`\`\`
+   TAGGER_ENABLED=true
+   PYTHON_PATH=python
+   \`\`\`
+
+### Features
+- Automatic tag detection (characters, objects, style)
+- Rating classification (safe/questionable/explicit)
+- Multiple model options (vit, swinv2, convnext)
+- Models download automatically on first use (~600MB-1GB)
+
+### GPU Acceleration (Optional)
+For faster tagging with NVIDIA GPU:
+\`\`\`bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+\`\`\`
+
 ## 🌐 Remote Access
 
 To access from other devices on your network:
@@ -330,6 +414,7 @@ All data is stored in these folders (created automatically):
 - \`uploads/\` - Your images
 - \`database/\` - Database files
 - \`logs/\` - Application logs
+- \`models/\` - AI model cache (if using tagger)
 
 ## 🔧 Troubleshooting
 
@@ -346,6 +431,12 @@ Change PORT in \`.env\` file
 - Check firewall settings
 - Use the network URLs shown when starting
 
+### Tagging not working
+- Check if Python is installed: \`python --version\`
+- Install dependencies: \`pip install -r app/python/requirements.txt\`
+- Check \`PYTHON_PATH\` in \`.env\` (try 'python3' on Linux/Mac)
+- First use downloads models (~1GB) - be patient!
+
 ## 📚 Documentation
 
 For detailed documentation:
@@ -359,8 +450,12 @@ Visit: https://github.com/yourusername/comfyui-image-manager
 
 - \`${nodeExecutableName}\` - Node.js runtime (${NODE_VERSION})
 - \`app/\` - Application files
+  - \`app/bundle.js\` - Main application
+  - \`app/python/\` - Python scripts for AI tagging (optional)
+  - \`app/node_modules/\` - Native dependencies (sharp, sqlite3)
 - \`start.bat\` / \`start.sh\` - Startup scripts
 - \`.env.example\` - Configuration template
+- \`models/\` - AI model cache (created on first use)
 
 ## 💡 Tips
 
@@ -368,6 +463,8 @@ Visit: https://github.com/yourusername/comfyui-image-manager
 - The app folder contains all necessary dependencies
 - No Node.js installation required on the system
 - Portable - can be moved to any location
+- Python is optional - only needed for AI tagging feature
+- Models are downloaded once and cached in \`models/\` folder
 
 ---
 

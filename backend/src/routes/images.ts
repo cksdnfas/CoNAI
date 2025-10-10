@@ -7,6 +7,7 @@ import { ImageProcessor } from '../services/imageProcessor';
 import { ImageModel } from '../models/Image';
 import { PromptCollectionService } from '../services/promptCollectionService';
 import { AutoCollectionService } from '../services/autoCollectionService';
+import { imageTaggerService, ImageTaggerService } from '../services/imageTaggerService';
 import { UploadResponse, ImageListResponse } from '../types/image';
 import { runtimePaths, toUploadsUrl } from '../config/runtimePaths';
 
@@ -49,7 +50,10 @@ function enrichImageRecord(image: any) {
     },
 
     // 원본 메타데이터는 그대로 유지
-    metadata: image.metadata ? JSON.parse(image.metadata) : null
+    metadata: image.metadata ? JSON.parse(image.metadata) : null,
+
+    // 자동 태그 정보 추가
+    auto_tags: image.auto_tags ? JSON.parse(image.auto_tags) : null
   };
 
   // null 값 정리
@@ -147,7 +151,8 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
       denoise_strength: aiInfo.denoise_strength || null,
       generation_time: aiInfo.generation_time || null,
       batch_size: aiInfo.batch_size || null,
-      batch_index: aiInfo.batch_index || null
+      batch_index: aiInfo.batch_index || null,
+      auto_tags: null  // 업로드 시에는 null, 별도 태깅 요청으로 추가
     });
     console.log('✅ Database save successful, ID:', imageId);
 
@@ -261,7 +266,8 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
           denoise_strength: aiInfo.denoise_strength || null,
           generation_time: aiInfo.generation_time || null,
           batch_size: aiInfo.batch_size || null,
-          batch_index: aiInfo.batch_index || null
+          batch_index: aiInfo.batch_index || null,
+          auto_tags: null  // 업로드 시에는 null, 별도 태깅 요청으로 추가
         });
 
         // 프롬프트 수집 (비동기로 처리, 오류가 있어도 업로드는 계속 진행)
@@ -615,6 +621,222 @@ router.get('/:id/download/optimized', asyncHandler(async (req: Request, res: Res
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to download optimized image'
+    });
+    return;
+  }
+}));
+
+/**
+ * 단일 이미지 태깅 (WD v3 Tagger)
+ */
+router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+
+  if (isNaN(id)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid image ID'
+    });
+  }
+
+  try {
+    // 이미지 정보 조회
+    const image = await ImageModel.findById(id);
+
+    if (!image) {
+      return res.status(404).json({
+        success: false,
+        error: 'Image not found'
+      });
+    }
+
+    // 원본 이미지 경로
+    const imagePath = path.join(UPLOAD_BASE_PATH, image.file_path);
+
+    if (!fs.existsSync(imagePath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'Image file not found'
+      });
+    }
+
+    console.log(`[ImageTag] Tagging image ${id}: ${imagePath}`);
+
+    // 이미지 태깅 실행
+    const taggerResult = await imageTaggerService.tagImage(imagePath);
+
+    console.log('[ImageTag] Tagger result:', {
+      success: taggerResult.success,
+      hasCaption: !!taggerResult.caption,
+      hasGeneral: !!taggerResult.general,
+      captionLength: taggerResult.caption?.length || 0
+    });
+
+    if (!taggerResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: taggerResult.error || 'Tagging failed',
+        details: {
+          error_type: taggerResult.error_type
+        }
+      });
+    }
+
+    // 데이터베이스에 저장
+    const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
+    console.log('[ImageTag] Formatted JSON length:', autoTagsJson?.length || 0);
+    console.log('[ImageTag] Formatted JSON preview:', autoTagsJson?.substring(0, 100));
+
+    await ImageModel.updateAutoTags(id, autoTagsJson);
+
+    console.log(`[ImageTag] Successfully tagged image ${id}`);
+
+    res.json({
+      success: true,
+      data: {
+        image_id: id,
+        auto_tags: autoTagsJson ? JSON.parse(autoTagsJson) : null
+      }
+    });
+    return;
+  } catch (error) {
+    console.error('[ImageTag] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to tag image'
+    });
+    return;
+  }
+}));
+
+/**
+ * 일괄 이미지 태깅 (WD v3 Tagger)
+ */
+router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
+  const { image_ids } = req.body;
+
+  if (!Array.isArray(image_ids) || image_ids.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'image_ids must be a non-empty array'
+    });
+  }
+
+  try {
+    const results = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    console.log(`[BatchTag] Starting batch tagging for ${image_ids.length} images`);
+
+    for (const id of image_ids) {
+      try {
+        // 이미지 정보 조회
+        const image = await ImageModel.findById(id);
+
+        if (!image) {
+          results.push({
+            image_id: id,
+            success: false,
+            error: 'Image not found'
+          });
+          failCount++;
+          continue;
+        }
+
+        // 원본 이미지 경로
+        const imagePath = path.join(UPLOAD_BASE_PATH, image.file_path);
+
+        if (!fs.existsSync(imagePath)) {
+          results.push({
+            image_id: id,
+            success: false,
+            error: 'Image file not found'
+          });
+          failCount++;
+          continue;
+        }
+
+        // 이미지 태깅 실행
+        const taggerResult = await imageTaggerService.tagImage(imagePath);
+
+        if (!taggerResult.success) {
+          results.push({
+            image_id: id,
+            success: false,
+            error: taggerResult.error || 'Tagging failed'
+          });
+          failCount++;
+          continue;
+        }
+
+        // 데이터베이스에 저장
+        const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
+        await ImageModel.updateAutoTags(id, autoTagsJson);
+
+        results.push({
+          image_id: id,
+          success: true,
+          auto_tags: autoTagsJson ? JSON.parse(autoTagsJson) : null
+        });
+        successCount++;
+
+        console.log(`[BatchTag] Tagged image ${id} (${successCount}/${image_ids.length})`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        results.push({
+          image_id: id,
+          success: false,
+          error: message
+        });
+        failCount++;
+      }
+    }
+
+    console.log(`[BatchTag] Completed: ${successCount} success, ${failCount} failed`);
+
+    res.json({
+      success: true,
+      data: {
+        total: image_ids.length,
+        success_count: successCount,
+        fail_count: failCount,
+        results
+      }
+    });
+    return;
+  } catch (error) {
+    console.error('[BatchTag] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to batch tag images'
+    });
+    return;
+  }
+}));
+
+/**
+ * Check Python dependencies for tagger
+ */
+router.get('/tagger/check', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const result = await imageTaggerService.checkPythonDependencies();
+    const modelInfo = imageTaggerService.getModelInfo();
+
+    res.json({
+      success: true,
+      data: {
+        dependencies: result,
+        model_info: modelInfo,
+        models_dir: runtimePaths.modelsDir
+      }
+    });
+    return;
+  } catch (error) {
+    console.error('[TaggerCheck] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to check tagger status'
     });
     return;
   }

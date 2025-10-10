@@ -27,6 +27,7 @@ const uploadsDir = path.join(basePath, 'uploads');
 const databaseDir = path.join(basePath, 'database');
 const logsDir = path.join(basePath, 'logs');
 const tempDir = path.join(basePath, 'temp');
+const modelsDir = path.join(basePath, 'models');
 const databaseFile = path.join(databaseDir, 'images.db');
 
 function stripTrailingSlash(url: string): string {
@@ -61,7 +62,8 @@ export const runtimePaths = {
   databaseDir,
   databaseFile,
   logsDir,
-  tempDir
+  tempDir,
+  modelsDir
 };
 
 export const publicUrls = {
@@ -70,7 +72,7 @@ export const publicUrls = {
 };
 
 export function ensureRuntimeDirectories(): void {
-  [uploadsDir, databaseDir, logsDir, tempDir].forEach(dir => {
+  [uploadsDir, databaseDir, logsDir, tempDir, modelsDir].forEach(dir => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
