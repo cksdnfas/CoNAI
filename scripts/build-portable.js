@@ -1,0 +1,428 @@
+#!/usr/bin/env node
+
+/**
+ * ComfyUI Image Manager - Portable Build Script
+ * Creates a portable package with Node.js runtime
+ */
+
+const fs = require('fs-extra');
+const path = require('path');
+const { execSync } = require('child_process');
+const os = require('os');
+const https = require('https');
+
+const ROOT_DIR = path.resolve(__dirname, '..');
+const BACKEND_DIST = path.join(ROOT_DIR, 'backend', 'dist');
+const BUNDLE_FILE = path.join(BACKEND_DIST, 'bundle.js');
+const PORTABLE_OUTPUT_DIR = path.join(ROOT_DIR, 'portable-output');
+
+const platform = os.platform();
+const arch = os.arch();
+const isWindows = platform === 'win32';
+
+// Node.js version to download
+const NODE_VERSION = process.version; // Use current Node.js version
+const NODE_MAJOR = NODE_VERSION.split('.')[0];
+
+console.log('🚀 ComfyUI Image Manager - Portable Build\n');
+console.log(`📋 Platform: ${platform} ${arch}`);
+console.log(`📦 Node.js: ${NODE_VERSION}\n`);
+
+// Step 1: Check prerequisites
+console.log('Step 1: Checking prerequisites...');
+if (!fs.existsSync(BUNDLE_FILE)) {
+  console.error('❌ Bundle not found. Run "npm run build:bundle" first.');
+  process.exit(1);
+}
+console.log('✅ Prerequisites OK\n');
+
+// Step 2: Clean and create output directory
+console.log('Step 2: Preparing output directory...');
+if (fs.existsSync(PORTABLE_OUTPUT_DIR)) {
+  fs.removeSync(PORTABLE_OUTPUT_DIR);
+}
+fs.ensureDirSync(PORTABLE_OUTPUT_DIR);
+console.log('✅ Output directory ready\n');
+
+// Step 3: Download Node.js portable
+console.log('Step 3: Preparing Node.js runtime...');
+
+const nodeExecutableName = isWindows ? 'node.exe' : 'node';
+const targetNodePath = path.join(PORTABLE_OUTPUT_DIR, nodeExecutableName);
+
+// Option 1: Copy current Node.js executable (simpler and faster)
+console.log('   Using current Node.js runtime...');
+try {
+  fs.copyFileSync(process.execPath, targetNodePath);
+  if (!isWindows) {
+    fs.chmodSync(targetNodePath, 0o755);
+  }
+  console.log(`✅ Node.js runtime prepared: ${nodeExecutableName}\n`);
+} catch (error) {
+  console.error('❌ Failed to copy Node.js runtime:', error.message);
+  process.exit(1);
+}
+
+// Step 4: Copy application bundle
+console.log('Step 4: Copying application bundle...');
+const appDir = path.join(PORTABLE_OUTPUT_DIR, 'app');
+fs.ensureDirSync(appDir);
+
+// Copy bundle
+fs.copyFileSync(BUNDLE_FILE, path.join(appDir, 'bundle.js'));
+console.log('   ✅ Copied bundle.js');
+
+// Copy migration files (compiled .js from dist)
+const migrationsSource = path.join(ROOT_DIR, 'backend', 'dist', 'database', 'migrations');
+const migrationsTarget = path.join(appDir, 'migrations');
+
+if (fs.existsSync(migrationsSource)) {
+  fs.copySync(migrationsSource, migrationsTarget, {
+    filter: (src) => {
+      // .js 파일만 복사 (컴파일된 JavaScript)
+      return src.endsWith('.js') || fs.statSync(src).isDirectory();
+    }
+  });
+  const migrationFiles = fs.readdirSync(migrationsTarget).filter(f => f.endsWith('.js'));
+  console.log(`   ✅ Copied ${migrationFiles.length} migration files`);
+} else {
+  console.warn('   ⚠️  Migration source not found, skipping');
+}
+console.log('');
+
+// Step 5: Copy native modules
+console.log('Step 5: Copying native modules...');
+const nativeModules = ['sharp', 'sqlite3'];
+const appNodeModules = path.join(appDir, 'node_modules');
+
+for (const moduleName of nativeModules) {
+  const possibleLocations = [
+    path.join(ROOT_DIR, 'node_modules', moduleName),
+    path.join(ROOT_DIR, 'backend', 'node_modules', moduleName)
+  ];
+
+  let sourceModule = null;
+  for (const location of possibleLocations) {
+    if (fs.existsSync(location)) {
+      sourceModule = location;
+      break;
+    }
+  }
+
+  if (!sourceModule) {
+    console.warn(`   ⚠️  ${moduleName} not found, skipping`);
+    continue;
+  }
+
+  const targetModule = path.join(appNodeModules, moduleName);
+  console.log(`   📦 Copying ${moduleName}...`);
+
+  fs.copySync(sourceModule, targetModule, {
+    dereference: true,
+    filter: (src) => {
+      const relativePath = path.relative(sourceModule, src);
+      return !relativePath.includes('.git') &&
+             !relativePath.includes('test') &&
+             !relativePath.includes('docs') &&
+             !relativePath.includes('example') &&
+             !relativePath.includes('benchmark') &&
+             !path.basename(src).startsWith('.') &&
+             !src.endsWith('.md') &&
+             !src.endsWith('.markdown');
+    }
+  });
+  console.log(`   ✅ Copied ${moduleName}`);
+}
+console.log('✅ Native modules copied\n');
+
+// Step 6: Copy frontend assets
+console.log('Step 6: Copying frontend assets...');
+const frontendSource = path.join(BACKEND_DIST, 'frontend');
+const frontendTarget = path.join(appDir, 'frontend');
+
+if (fs.existsSync(frontendSource)) {
+  fs.copySync(frontendSource, frontendTarget, { dereference: true });
+  const fileCount = fs.readdirSync(frontendTarget).length;
+  console.log(`✅ Copied ${fileCount} frontend files/folders\n`);
+} else {
+  console.warn('⚠️  Frontend dist not found, skipping\n');
+}
+
+// Step 7: Create startup scripts
+console.log('Step 7: Creating startup scripts...');
+
+// Windows batch file - Use ASCII characters for maximum compatibility
+const batchScript = `@echo off
+chcp 65001 > nul
+title ComfyUI Image Manager
+cd /d "%~dp0"
+
+echo.
+echo ========================================================================
+echo              ComfyUI Image Manager
+echo.
+echo  Starting server...
+echo ========================================================================
+echo.
+
+node.exe app\\bundle.js
+
+if errorlevel 1 (
+    echo.
+    echo ========================================================================
+    echo  ERROR: Server failed to start
+    echo.
+    echo  Please check:
+    echo  - Port 1566 is not in use
+    echo  - All files are present
+    echo  - Check logs folder for errors
+    echo ========================================================================
+    echo.
+    pause
+    exit /b 1
+)
+
+pause
+`;
+
+// Linux/Mac shell script
+const shellScript = `#!/bin/bash
+cd "$(dirname "$0")"
+
+echo ""
+echo "╔════════════════════════════════════════════════════════════════════════╗"
+echo "║                    ComfyUI Image Manager                               ║"
+echo "║                                                                        ║"
+echo "║  Starting server...                                                    ║"
+echo "╚════════════════════════════════════════════════════════════════════════╝"
+echo ""
+
+./node app/bundle.js
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "╔════════════════════════════════════════════════════════════════════════╗"
+    echo "║  ❌ Error: Server failed to start                                     ║"
+    echo "║                                                                        ║"
+    echo "║  Please check:                                                         ║"
+    echo "║  - Port 1566 is not in use                                            ║"
+    echo "║  - All files are present                                              ║"
+    echo "║  - Check logs folder for errors                                       ║"
+    echo "╚════════════════════════════════════════════════════════════════════════╝"
+    echo ""
+    read -p "Press Enter to continue..."
+    exit 1
+fi
+`;
+
+fs.writeFileSync(path.join(PORTABLE_OUTPUT_DIR, 'start.bat'), batchScript, 'utf8');
+fs.writeFileSync(path.join(PORTABLE_OUTPUT_DIR, 'start.sh'), shellScript, 'utf8');
+
+if (!isWindows) {
+  fs.chmodSync(path.join(PORTABLE_OUTPUT_DIR, 'start.sh'), 0o755);
+}
+
+console.log('✅ Startup scripts created\n');
+
+// Step 8: Create environment template
+console.log('Step 8: Creating environment template...');
+const envTemplate = `# ComfyUI Image Manager Configuration
+#
+# This file was auto-generated. Rename to .env to use.
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Server Configuration
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Port to run the server on
+PORT=1566
+
+# Host binding (0.0.0.0 allows external connections)
+HOST=0.0.0.0
+
+# Protocol (http or https)
+BACKEND_PROTOCOL=http
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Remote Access Configuration
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# For external access, set your public IP or domain
+# PUBLIC_BASE_URL=http://your-external-ip:1566
+# BACKEND_HOST=your-external-ip
+
+# Enable external IP detection (requires internet)
+# ENABLE_EXTERNAL_IP=true
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Runtime Paths (Optional)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Where to store data (uploads, database, logs)
+# Leave empty to use the current directory
+# RUNTIME_BASE_PATH=./data
+
+# Where frontend files are located
+# FRONTEND_DIST_PATH=./app/frontend
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ComfyUI Integration (Future)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ComfyUI server URL for workflow integration
+# COMFYUI_SERVER_URL=http://localhost:8188
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Locale
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Supported: en, ko, ja, zh
+LOCALE=en
+`;
+
+fs.writeFileSync(path.join(PORTABLE_OUTPUT_DIR, '.env.example'), envTemplate, 'utf8');
+console.log('✅ Environment template created\n');
+
+// Step 9: Create data directories
+console.log('Step 9: Creating data directories...');
+const dataDirectories = ['database', 'uploads', 'logs', 'temp'];
+for (const dir of dataDirectories) {
+  const dirPath = path.join(PORTABLE_OUTPUT_DIR, dir);
+  fs.ensureDirSync(dirPath);
+}
+console.log('✅ Data directories created\n');
+
+// Step 10: Create README
+console.log('Step 10: Creating README...');
+const readmeContent = `# ComfyUI Image Manager - Portable Edition
+
+## 🚀 Quick Start
+
+### Windows
+1. Double-click \`start.bat\`
+2. Wait for the server to start (console window will open)
+3. Open your browser to the URL displayed
+
+### Linux/Mac
+1. Open terminal in this directory
+2. Run: \`./start.sh\`
+3. Open your browser to the URL displayed
+
+## 📝 Configuration
+
+1. Copy \`.env.example\` to \`.env\`
+2. Edit \`.env\` to customize settings
+3. Restart the application
+
+## 🌐 Remote Access
+
+To access from other devices on your network:
+- The server will automatically display all available URLs when it starts
+- Use the "Network" URLs shown in the console
+
+For external internet access:
+- See the full deployment guide in DEPLOYMENT_GUIDE.md (if included)
+- Configure port forwarding on your router (port 1566)
+
+## 📁 Data Storage
+
+All data is stored in these folders (created automatically):
+- \`uploads/\` - Your images
+- \`database/\` - Database files
+- \`logs/\` - Application logs
+
+## 🔧 Troubleshooting
+
+### Port already in use
+Change PORT in \`.env\` file
+
+### Server won't start
+- Check if port 1566 is available
+- Check logs/ folder for error messages
+- Ensure all files are present (app/, node.exe/node)
+
+### Cannot access from other devices
+- Ensure HOST=0.0.0.0 in \`.env\`
+- Check firewall settings
+- Use the network URLs shown when starting
+
+## 📚 Documentation
+
+For detailed documentation:
+- API Documentation
+- Deployment Guide
+- Development Guide
+
+Visit: https://github.com/yourusername/comfyui-image-manager
+
+## 📦 Package Contents
+
+- \`${nodeExecutableName}\` - Node.js runtime (${NODE_VERSION})
+- \`app/\` - Application files
+- \`start.bat\` / \`start.sh\` - Startup scripts
+- \`.env.example\` - Configuration template
+
+## 💡 Tips
+
+- Keep this folder together - don't move individual files
+- The app folder contains all necessary dependencies
+- No Node.js installation required on the system
+- Portable - can be moved to any location
+
+---
+
+**Version:** 1.0.0
+**Platform:** ${platform} ${arch}
+**Node.js:** ${NODE_VERSION}
+**Built:** ${new Date().toISOString()}
+`;
+
+fs.writeFileSync(path.join(PORTABLE_OUTPUT_DIR, 'README.txt'), readmeContent, 'utf8');
+console.log('✅ README created\n');
+
+// Step 11: Display summary
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('✨ Portable Build Complete!');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+const getDirectorySize = (dirPath) => {
+  let size = 0;
+  if (!fs.existsSync(dirPath)) return 0;
+
+  const files = fs.readdirSync(dirPath);
+  for (const file of files) {
+    const filePath = path.join(dirPath, file);
+    const stats = fs.statSync(filePath);
+    if (stats.isDirectory()) {
+      size += getDirectorySize(filePath);
+    } else {
+      size += stats.size;
+    }
+  }
+  return size;
+};
+
+const totalSize = getDirectorySize(PORTABLE_OUTPUT_DIR);
+const nodeSizeStats = fs.statSync(targetNodePath);
+const nodeSize = nodeSizeStats.size;
+
+console.log(`\n📦 Package Information:`);
+console.log(`   Node.js Runtime: ${(nodeSize / 1024 / 1024).toFixed(2)} MB`);
+console.log(`   Application: ${((totalSize - nodeSize) / 1024 / 1024).toFixed(2)} MB`);
+console.log(`   Total Size: ${(totalSize / 1024 / 1024).toFixed(2)} MB`);
+console.log(`   Location: ${PORTABLE_OUTPUT_DIR}`);
+
+console.log('\n🚀 To test:');
+if (isWindows) {
+  console.log(`   cd ${path.relative(ROOT_DIR, PORTABLE_OUTPUT_DIR)}`);
+  console.log('   start.bat');
+} else {
+  console.log(`   cd ${path.relative(ROOT_DIR, PORTABLE_OUTPUT_DIR)}`);
+  console.log('   ./start.sh');
+}
+
+console.log('\n📦 To distribute:');
+console.log('   1. Zip the entire "portable-output" folder');
+console.log('   2. Share with users');
+console.log('   3. Users just unzip and run start.bat/start.sh');
+console.log('   4. No installation required!\n');

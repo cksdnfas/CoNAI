@@ -15,8 +15,12 @@ export const errorHandler = (
   let error = { ...err };
   error.message = err.message;
 
-  // Log error
-  console.error('Error:', err);
+  // Log error with full details
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.error('❌ API Error:', req.method, req.path);
+  console.error('Error Message:', err.message);
+  console.error('Error Stack:', err.stack);
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   // Default error
   error.statusCode = error.statusCode || 500;

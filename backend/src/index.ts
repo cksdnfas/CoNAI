@@ -1,3 +1,13 @@
+// Configure NODE_PATH for native modules in SEA (Single Executable Application)
+// This must be done before any imports that depend on native modules
+if (process.env.NODE_ENV === 'production' || process.execPath.includes('comfyui-image-manager')) {
+  const nativeModulesPath = require('path').join(__dirname, '..', 'node_modules');
+  if (require('fs').existsSync(nativeModulesPath)) {
+    process.env.NODE_PATH = nativeModulesPath;
+    require('module').Module._initPaths();
+  }
+}
+
 import https from 'https';
 import express from 'express';
 import cors from 'cors';
@@ -7,6 +17,7 @@ import path from 'path';
 import fs from 'fs';
 import { runtimePaths, ensureRuntimeDirectories } from './config/runtimePaths';
 import { prepareHttpsOptions } from './utils/httpsOptions';
+import { getNetworkInfo, formatNetworkInfo } from './utils/networkInfo';
 
 import { imageRoutes } from './routes/images';
 import promptCollectionRoutes from './routes/promptCollection';
@@ -85,22 +96,33 @@ app.use('/api/prompt-groups', promptGroupRoutes);
 app.use('/api/negative-prompt-groups', negativePromptGroupRoutes);
 app.use('/api/groups', groupRoutes);
 
+// Frontend static file serving
 const frontendDistPath = process.env.FRONTEND_DIST_PATH
   ? path.resolve(process.env.FRONTEND_DIST_PATH)
-  : path.join(__dirname, '../frontend/dist');
+  : path.join(__dirname, 'frontend');  // SEA integrated build uses dist/frontend
 
 if (fs.existsSync(frontendDistPath)) {
   console.log(`🎨 Serving frontend from: ${frontendDistPath}`);
   app.use(express.static(frontendDistPath));
 
+  // SPA fallback - serve index.html for all non-API routes
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
       next();
       return;
     }
 
-    res.sendFile(path.join(frontendDistPath, 'index.html'));
+    const indexPath = path.join(frontendDistPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).json({ error: 'Frontend not found. Please build the frontend first.' });
+    }
   });
+} else {
+  console.warn('⚠️  Frontend dist not found. API-only mode.');
+  console.warn(`   Expected location: ${frontendDistPath}`);
+  console.warn('   Run "npm run build:integrated" to build with frontend.\n');
 }
 
 // Health check
@@ -161,35 +183,57 @@ async function startServer() {
       extractHost(process.env.BACKEND_ORIGIN) ||
       'localhost';
 
-    const printBanner = (protocol: 'http' | 'https', extraLines: string[] = []) => {
-      const innerWidth = 59;
+    const printBanner = async (protocol: 'http' | 'https', extraLines: string[] = []) => {
+      const innerWidth = 70;
       const divider = '╔' + '═'.repeat(innerWidth + 2) + '╗';
+      const separator = '╠' + '─'.repeat(innerWidth + 2) + '╣';
       const footer = '╚' + '═'.repeat(innerWidth + 2) + '╝';
       const formatLine = (text: string) => {
         const truncated = text.length > innerWidth ? `${text.slice(0, innerWidth - 3)}...` : text;
         return `║  ${truncated.padEnd(innerWidth)}║`;
       };
 
-      const apiUrl = `${protocol}://${displayHost}:${PORT}`;
-      const healthUrl = `${apiUrl}/health`;
+      // Get network information
+      const enableExternalIPDetection = process.env.ENABLE_EXTERNAL_IP === 'true';
+      const networkInfo = await getNetworkInfo(protocol, PORT, enableExternalIPDetection);
+      const networkLines = formatNetworkInfo(networkInfo);
+
       const uploadsPathRelative = path.relative(runtimePaths.basePath, uploadsDir) || '.';
 
       console.log(`
 ${divider}`);
-      console.log(formatLine('🎉 Backend Server 실행 완료!'));
-      console.log('╠' + '═'.repeat(innerWidth + 2) + '╣');
-      console.log(formatLine(`🌐 API Server: ${apiUrl}`));
-      console.log(formatLine(`📊 Health Check: ${healthUrl}`));
+      console.log(formatLine('🎉 ComfyUI Image Manager - Server Running!'));
+      console.log(separator);
+      console.log(formatLine('📡 Access URLs:'));
+      console.log(formatLine(''));
+
+      // Display all network URLs
+      networkLines.forEach((line) => {
+        console.log(formatLine(line));
+      });
+
+      console.log(separator);
       console.log(formatLine(`📦 Data Root: ${runtimePaths.basePath}`));
       console.log(formatLine(`📁 Uploads: ${uploadsPathRelative}`));
-      extraLines.forEach((line) => console.log(formatLine(line)));
+
+      if (extraLines.length > 0) {
+        console.log(separator);
+        extraLines.forEach((line) => console.log(formatLine(line)));
+      }
+
       console.log(`${footer}
+
+💡 Tips:
+   - Access from this computer: ${networkInfo.localUrl}
+   - Access from local network: Use any of the network URLs above
+   - For external access: Configure port forwarding on your router
+   - Press Ctrl+C to stop the server
 `);
     };
 
     const startHttpServer = (): import('http').Server =>
-      app.listen(Number(PORT), bindHost, () => {
-        printBanner('http');
+      app.listen(Number(PORT), bindHost, async () => {
+        await printBanner('http');
       });
 
     let server: import('http').Server | import('https').Server;
@@ -207,8 +251,8 @@ ${divider}`);
         }
 
         const httpsServer = https.createServer(httpsOptions, app);
-        httpsServer.listen(Number(PORT), bindHost, () => {
-          printBanner('https', extraLines);
+        httpsServer.listen(Number(PORT), bindHost, async () => {
+          await printBanner('https', extraLines);
         });
         server = httpsServer;
       } else {

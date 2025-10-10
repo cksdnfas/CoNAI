@@ -7,11 +7,14 @@ dist/
 build/
 */dist/
 */build/
-dist-electron/
 
-# Electron build outputs
-out/
-release/
+# Build outputs
+pkg-output/
+portable-output/
+/*.exe
+.pkg-cache/
+sea-prep.blob
+*.blob
 
 # Environment variables
 .env

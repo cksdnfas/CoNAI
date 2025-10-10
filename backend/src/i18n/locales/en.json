@@ -1,0 +1,36 @@
+{
+  "server": {
+    "starting": "ComfyUI Image Manager Backend starting...",
+    "started": "ComfyUI Image Manager - Server Running!",
+    "access_urls": "Access URLs:",
+    "local": "Local",
+    "network": "Network",
+    "external": "External (requires port forwarding)",
+    "data_root": "Data Root",
+    "uploads": "Uploads",
+    "tips": {
+      "local_access": "Access from this computer",
+      "network_access": "Access from local network: Use any of the network URLs above",
+      "external_access": "For external access: Configure port forwarding on your router",
+      "stop_server": "Press Ctrl+C to stop the server"
+    }
+  },
+  "database": {
+    "initialized": "Database initialized successfully"
+  },
+  "errors": {
+    "port_in_use": "Port {port} is already in use",
+    "database_error": "Database error",
+    "frontend_not_found": "Frontend not found. Please build the frontend first.",
+    "invalid_image": "Invalid image file",
+    "group_not_found": "Group not found",
+    "image_not_found": "Image not found"
+  },
+  "api": {
+    "image_uploaded": "Image uploaded successfully",
+    "image_deleted": "Image deleted successfully",
+    "group_created": "Group created successfully",
+    "group_updated": "Group updated successfully",
+    "group_deleted": "Group deleted successfully"
+  }
+}
