@@ -286,10 +286,10 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
               <strong>Model:</strong> {autoTags.model}
             </Typography>
             <Typography variant="body2">
-              <strong>General Threshold:</strong> {autoTags.thresholds.general}
+              <strong>General:</strong> {autoTags.thresholds.general}
             </Typography>
             <Typography variant="body2">
-              <strong>Character Threshold:</strong> {autoTags.thresholds.character}
+              <strong>Character:</strong> {autoTags.thresholds.character}
             </Typography>
             {autoTags.tagged_at && (
               <Typography variant="body2">

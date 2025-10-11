@@ -16,7 +16,11 @@ import {
   ArrowBack as ArrowBackIcon,
   Download as DownloadIcon,
   Share as ShareIcon,
+  ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
 import { imageApi } from '../../services/api';
 import type { ImageRecord } from '../../types/image';
 import { buildUploadsUrl, ensureAbsoluteUrl, getBackendOrigin } from '../../utils/backend';
@@ -110,6 +114,15 @@ const ImageDetailPage: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  const handleBack = () => {
+    // 히스토리가 있으면 뒤로가기, 없으면 갤러리로 이동
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/gallery');
+    }
+  };
+
   const handleShare = async () => {
     if (navigator.share) {
       try {
@@ -158,7 +171,7 @@ const ImageDetailPage: React.FC = () => {
     return (
       <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
         <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-          <IconButton onClick={() => navigate(-1)}>
+          <IconButton onClick={handleBack}>
             <ArrowBackIcon />
           </IconButton>
           <Typography variant="h5">이미지 상세 정보</Typography>
@@ -177,18 +190,18 @@ const ImageDetailPage: React.FC = () => {
     <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
       {/* 헤더 */}
       <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <IconButton onClick={() => navigate(-1)}>
+        <IconButton onClick={handleBack}>
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h5" sx={{ flex: 1 }}>
           이미지 상세 정보
         </Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Tooltip title="공유">
+          {/* <Tooltip title="공유">
             <IconButton onClick={handleShare}>
               <ShareIcon />
             </IconButton>
-          </Tooltip>
+          </Tooltip> */}
           <Button
             variant="outlined"
             startIcon={<DownloadIcon />}
@@ -200,28 +213,26 @@ const ImageDetailPage: React.FC = () => {
       </Box>
 
       <Grid container spacing={3}>
-        {/* 이미지 영역 */}
+        {/* 1열: 이미지, 파일정보, 이미지정보 */}
         <Grid size={{ xs: 12, md: 8 }}>
-          <Paper sx={{ p: 2, borderRadius: 2 }}>
-            <Box
-              component="img"
-              src={imageError ? fallbackUrl : imageUrl}
-              alt={image.original_name}
-              onError={() => setImageError(true)}
-              sx={{
-                width: '100%',
-                height: 'auto',
-                maxHeight: '80vh',
-                objectFit: 'contain',
-                borderRadius: 1,
-              }}
-            />
-          </Paper>
-        </Grid>
-
-        {/* 상세 정보 영역 */}
-        <Grid size={{ xs: 12, md: 4 }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {/* 이미지 영역 */}
+            <Paper sx={{ p: 2, borderRadius: 2 }}>
+              <Box
+                component="img"
+                src={imageError ? fallbackUrl : imageUrl}
+                alt={image.original_name}
+                onError={() => setImageError(true)}
+                sx={{
+                  width: '100%',
+                  height: 'auto',
+                  maxHeight: '80vh',
+                  objectFit: 'contain',
+                  borderRadius: 1,
+                }}
+              />
+            </Paper>
+
             {/* 파일명 영역 */}
             <Paper sx={{ p: 2, borderRadius: 2 }}>
               <Typography variant="h6" gutterBottom>
@@ -283,7 +294,12 @@ const ImageDetailPage: React.FC = () => {
                 </Box>
               </Paper>
             )}
+          </Box>
+        </Grid>
 
+        {/* 2열: AI생성정보, 프롬프트정보 */}
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {/* AI 생성 정보 영역 */}
             {image.ai_metadata && (
               <Paper sx={{ p: 2, borderRadius: 2 }}>
@@ -364,7 +380,7 @@ const ImageDetailPage: React.FC = () => {
                 <PromptDisplay
                   prompt={image.ai_metadata?.prompts.prompt}
                   negativePrompt={image.ai_metadata?.prompts.negative_prompt}
-                  maxHeight={400}
+                  maxHeight={600}
                   variant="none"
                   imageId={image.id}
                   autoTags={image.auto_tags}
@@ -376,6 +392,33 @@ const ImageDetailPage: React.FC = () => {
           </Box>
         </Grid>
       </Grid>
+
+      {/* 전체 메타데이터 섹션 */}
+      <Box sx={{ mt: 3 }}>
+        <Accordion defaultExpanded={false}>
+          <AccordionSummary
+            expandIcon={<ExpandMoreIcon />}
+            aria-controls="metadata-content"
+            id="metadata-header"
+          >
+            <Typography variant="h6">전체 메타데이터</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Box
+              component="pre"
+              sx={{
+                p: 2,
+                borderRadius: 1,
+                overflow: 'auto',
+                maxHeight: '750px',
+                fontSize: '0.875rem',
+              }}
+            >
+              {JSON.stringify(image, null, 2)}
+            </Box>
+          </AccordionDetails>
+        </Accordion>
+      </Box>
     </Box>
   );
 };

@@ -106,7 +106,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
             <Tooltip title="상세 정보">
               <IconButton
                 size="small"
-                onClick={() => window.open(`/image/${image.id}`, '_blank')}
+                onClick={() => window.open(`/#/image/${image.id}`, '_blank')}
                 sx={{
                   bgcolor: (theme) => theme.palette.mode === 'dark'
                     ? 'rgba(0, 0, 0, 0.6)'
