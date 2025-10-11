@@ -37,6 +37,7 @@ const Header: React.FC = () => {
     { label: '검색', path: '/search' },
     { label: '업로드', path: '/upload' },
     { label: '프롬프트 관리', path: '/prompt-management' },
+    { label: '설정', path: '/settings' },
   ];
 
   const handleMobileMenuToggle = () => {

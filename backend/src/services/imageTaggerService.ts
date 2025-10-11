@@ -1,232 +1,64 @@
-import { spawn } from 'child_process';
-import path from 'path';
-import fs from 'fs';
-import { runtimePaths } from '../config/runtimePaths';
+import { taggerDaemon, TaggerResult, TaggerServerStatus } from './taggerDaemon';
+import { TaggerModel } from '../types/settings';
 
-export interface TaggerConfig {
-  modelName: 'vit' | 'swinv2' | 'convnext';
-  generalThreshold: number;
-  characterThreshold: number;
-  pythonPath: string;
-  timeout: number; // milliseconds
-}
+// Re-export types from taggerDaemon
+export type { TaggerResult, TaggerServerStatus } from './taggerDaemon';
 
-export interface TaggerResult {
-  success: boolean;
-  caption?: string;
-  taglist?: string;
-  rating?: Record<string, number>;
-  general?: Record<string, number>;
-  character?: Record<string, number>;
-  model?: string;
-  thresholds?: {
-    general: number;
-    character: number;
-  };
-  error?: string;
-  error_type?: string;
-}
-
+/**
+ * ImageTaggerService - High-level interface for image tagging
+ * Uses daemon for persistent model loading and efficient batch processing
+ */
 export class ImageTaggerService {
-  private config: TaggerConfig;
-  private scriptPath: string;
-
-  constructor(config?: Partial<TaggerConfig>) {
-    this.config = {
-      modelName: config?.modelName || (process.env.TAGGER_MODEL as any) || 'vit',
-      generalThreshold: config?.generalThreshold || parseFloat(process.env.TAGGER_GEN_THRESHOLD || '0.35'),
-      characterThreshold: config?.characterThreshold || parseFloat(process.env.TAGGER_CHAR_THRESHOLD || '0.75'),
-      pythonPath: config?.pythonPath || process.env.PYTHON_PATH || 'python',
-      timeout: config?.timeout || 120000 // 2 minutes default
-    };
-
-    // Python script path - handle both development and portable builds
-    const possiblePaths = [
-      // Development: backend/src/services -> backend/python
-      path.join(__dirname, '..', '..', 'python', 'wdv3_tagger.py'),
-      // Compiled: backend/dist/services -> backend/python
-      path.join(__dirname, '..', '..', '..', 'python', 'wdv3_tagger.py'),
-      // Portable build: dist/services -> app/python
-      path.join(__dirname, '..', 'python', 'wdv3_tagger.py'),
-      // Bundle build: relative to process.cwd()
-      path.join(process.cwd(), 'app', 'python', 'wdv3_tagger.py')
-    ];
-
-    // Find first existing path
-    this.scriptPath = possiblePaths.find(p => fs.existsSync(p)) || possiblePaths[0];
-
-    console.log('[ImageTagger] Script path:', this.scriptPath);
-    console.log('[ImageTagger] Script exists:', fs.existsSync(this.scriptPath));
-  }
-
   /**
-   * Check if Python and required packages are available
-   */
-  async checkPythonDependencies(): Promise<{ available: boolean; message: string }> {
-    return new Promise((resolve) => {
-      const checkScript = `
-import sys
-try:
-    import torch
-    import timm
-    import huggingface_hub
-    import PIL
-    import pandas
-    import numpy
-    print("OK")
-except ImportError as e:
-    print(f"MISSING:{e}")
-    sys.exit(1)
-`;
-
-      const pythonProcess = spawn(this.config.pythonPath, ['-c', checkScript]);
-      let output = '';
-      let errorOutput = '';
-
-      pythonProcess.stdout.on('data', (data) => {
-        output += data.toString();
-      });
-
-      pythonProcess.stderr.on('data', (data) => {
-        errorOutput += data.toString();
-      });
-
-      pythonProcess.on('close', (code) => {
-        if (code === 0 && output.includes('OK')) {
-          resolve({
-            available: true,
-            message: 'All Python dependencies are available'
-          });
-        } else {
-          resolve({
-            available: false,
-            message: `Missing Python dependencies: ${errorOutput || output}`
-          });
-        }
-      });
-
-      pythonProcess.on('error', (error) => {
-        resolve({
-          available: false,
-          message: `Python not found or error: ${error.message}`
-        });
-      });
-    });
-  }
-
-  /**
-   * Tag a single image
+   * Tag a single image using daemon
    */
   async tagImage(imagePath: string): Promise<TaggerResult> {
-    return new Promise((resolve, reject) => {
-      const args = [
-        this.scriptPath,
-        imagePath,
-        this.config.modelName,
-        this.config.generalThreshold.toString(),
-        this.config.characterThreshold.toString(),
-        runtimePaths.modelsDir
-      ];
+    try {
+      console.log(`[ImageTagger] Tagging image via daemon: ${imagePath}`);
+      const result = await taggerDaemon.tagImage(imagePath);
 
-      console.log(`[ImageTagger] Running: ${this.config.pythonPath} ${args.join(' ')}`);
-      console.log(`[ImageTagger] Models directory: ${runtimePaths.modelsDir}`);
-
-      const pythonProcess = spawn(this.config.pythonPath, args, {
-        cwd: path.dirname(this.scriptPath),
-        env: {
-          ...process.env,
-          HF_HOME: runtimePaths.modelsDir,
-          HUGGINGFACE_HUB_CACHE: runtimePaths.modelsDir,
-          TRANSFORMERS_CACHE: runtimePaths.modelsDir
-        }
-      });
-
-      let stdoutData = '';
-      let stderrData = '';
-      let timedOut = false;
-
-      // Set timeout
-      const timeoutId = setTimeout(() => {
-        timedOut = true;
-        pythonProcess.kill('SIGTERM');
-        reject(new Error(`Tagging timeout after ${this.config.timeout}ms`));
-      }, this.config.timeout);
-
-      pythonProcess.stdout.on('data', (data) => {
-        stdoutData += data.toString();
-      });
-
-      pythonProcess.stderr.on('data', (data) => {
-        stderrData += data.toString();
-      });
-
-      pythonProcess.on('close', (code) => {
-        clearTimeout(timeoutId);
-
-        if (timedOut) {
-          return; // Already rejected
-        }
-
-        if (code !== 0) {
-          console.error('[ImageTagger] Process exited with code:', code);
-          console.error('[ImageTagger] stderr:', stderrData);
-          resolve({
-            success: false,
-            error: `Python process exited with code ${code}: ${stderrData}`,
-            error_type: 'ProcessError'
-          });
-          return;
-        }
-
-        try {
-          // Parse JSON output
-          console.log('[ImageTagger] Raw stdout length:', stdoutData.length);
-          console.log('[ImageTagger] Raw stdout preview:', stdoutData.substring(0, 200));
-
-          const result: TaggerResult = JSON.parse(stdoutData);
-
-          console.log('[ImageTagger] Parsed result success:', result.success);
-          console.log('[ImageTagger] Parsed result has caption:', !!result.caption);
-          console.log('[ImageTagger] Parsed result has general tags:', !!result.general);
-
-          resolve(result);
-        } catch (error) {
-          console.error('[ImageTagger] Failed to parse JSON:', stdoutData);
-          console.error('[ImageTagger] stderr:', stderrData);
-          const message = error instanceof Error ? error.message : 'Unknown error';
-          resolve({
-            success: false,
-            error: `Failed to parse tagging result: ${message}`,
-            error_type: 'ParseError'
-          });
-        }
-      });
-
-      pythonProcess.on('error', (error) => {
-        clearTimeout(timeoutId);
-        console.error('[ImageTagger] Process error:', error);
-        resolve({
-          success: false,
-          error: `Failed to start Python process: ${error.message}`,
-          error_type: 'SpawnError'
+      if (result.success) {
+        console.log('[ImageTagger] Tagging succeeded');
+      } else {
+        console.error('[ImageTagger] Tagging failed:', {
+          error: result.error,
+          error_type: result.error_type
         });
-      });
-    });
+      }
+
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const stack = error instanceof Error ? error.stack : undefined;
+      console.error('[ImageTagger] Tagging exception:', message);
+      if (stack) console.error('[ImageTagger] Stack:', stack);
+
+      return {
+        success: false,
+        error: message,
+        error_type: 'DaemonError'
+      };
+    }
   }
 
   /**
    * Tag multiple images in batch
+   * Processes sequentially through daemon for optimal performance
    */
   async tagImageBatch(imagePaths: string[]): Promise<TaggerResult[]> {
     const results: TaggerResult[] = [];
 
-    // Process sequentially to avoid resource exhaustion
+    console.log(`[ImageTagger] Batch tagging ${imagePaths.length} images`);
+
+    // Process sequentially through daemon
+    // Daemon keeps model loaded, so this is fast
     for (const imagePath of imagePaths) {
       try {
         const result = await this.tagImage(imagePath);
         results.push(result);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`[ImageTagger] Batch error for ${imagePath}:`, message);
         results.push({
           success: false,
           error: message,
@@ -235,7 +67,99 @@ except ImportError as e:
       }
     }
 
+    console.log(`[ImageTagger] Batch complete: ${results.filter(r => r.success).length}/${imagePaths.length} succeeded`);
+
     return results;
+  }
+
+  /**
+   * Check if Python and required packages are available
+   * Uses daemon to verify dependencies
+   */
+  async checkPythonDependencies(): Promise<{ available: boolean; message: string }> {
+    try {
+      console.log('[ImageTagger] Checking Python dependencies via daemon...');
+
+      // Try to start daemon - if it starts, dependencies are OK
+      await taggerDaemon.start();
+
+      // Get status to confirm
+      const status = await taggerDaemon.getStatus();
+
+      if (status.isRunning) {
+        return {
+          available: true,
+          message: 'All Python dependencies are available'
+        };
+      } else {
+        return {
+          available: false,
+          message: 'Daemon failed to start - check Python dependencies'
+        };
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[ImageTagger] Dependency check failed:', message);
+      return {
+        available: false,
+        message: `Python dependencies check failed: ${message}`
+      };
+    }
+  }
+
+  /**
+   * Get daemon status
+   */
+  async getStatus(): Promise<TaggerServerStatus> {
+    return await taggerDaemon.getStatus();
+  }
+
+  /**
+   * Load model manually
+   */
+  async loadModel(model?: TaggerModel): Promise<void> {
+    console.log('[ImageTagger] Loading model manually:', model || 'default');
+    await taggerDaemon.loadModel(model);
+  }
+
+  /**
+   * Unload model manually
+   */
+  async unloadModel(): Promise<void> {
+    console.log('[ImageTagger] Unloading model manually');
+    await taggerDaemon.unloadModel();
+  }
+
+  /**
+   * Start daemon
+   */
+  async startDaemon(): Promise<void> {
+    console.log('[ImageTagger] Starting daemon');
+    await taggerDaemon.start();
+  }
+
+  /**
+   * Stop daemon
+   */
+  async stopDaemon(): Promise<void> {
+    console.log('[ImageTagger] Stopping daemon');
+    await taggerDaemon.stop();
+  }
+
+  /**
+   * Reload configuration
+   * Restarts daemon with new settings
+   */
+  async reloadConfig(): Promise<void> {
+    console.log('[ImageTagger] Reloading configuration...');
+
+    // Stop existing daemon
+    if (taggerDaemon.isRunning()) {
+      await taggerDaemon.stop();
+    }
+
+    // Daemon will be restarted on next use with new settings
+    console.log('[ImageTagger] Configuration reloaded - daemon will restart on next use');
   }
 
   /**
@@ -259,20 +183,7 @@ except ImportError as e:
 
     return JSON.stringify(formatted);
   }
-
-  /**
-   * Get model information
-   */
-  getModelInfo(): { model: string; thresholds: { general: number; character: number } } {
-    return {
-      model: this.config.modelName,
-      thresholds: {
-        general: this.config.generalThreshold,
-        character: this.config.characterThreshold
-      }
-    };
-  }
 }
 
-// Export singleton instance with default config
+// Export singleton instance
 export const imageTaggerService = new ImageTaggerService();

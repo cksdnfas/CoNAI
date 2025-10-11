@@ -7,6 +7,8 @@ import {
   Tab,
 } from '@mui/material';
 import { groupPromptTerms, type GroupedPromptResult } from '../../utils/promptGrouping';
+import type { AutoTagsData } from '../../types/image';
+import AutoTagDisplay from './AutoTagDisplay';
 
 interface PromptDisplayProps {
   prompt?: string | null;
@@ -15,6 +17,11 @@ interface PromptDisplayProps {
   showLabels?: boolean;
   variant?: 'outlined' | 'elevation' | 'none';
   showGrouped?: boolean; // 그룹별 배지 표시 모드
+  // AUTO 탭 관련 props
+  imageId?: number;
+  autoTags?: AutoTagsData | null;
+  isTaggerEnabled?: boolean;
+  onAutoTagGenerated?: () => void;
 }
 
 interface TabPanelProps {
@@ -56,6 +63,10 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
   showLabels = true,
   variant = 'outlined',
   showGrouped = false,
+  imageId,
+  autoTags,
+  isTaggerEnabled = false,
+  onAutoTagGenerated,
 }) => {
   const [tabValue, setTabValue] = useState(0);
   const [positiveGrouped, setPositiveGrouped] = useState<GroupedPromptResult | null>(null);
@@ -64,6 +75,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
 
   const hasPrompt = prompt && prompt.trim();
   const hasNegativePrompt = negativePrompt && negativePrompt.trim();
+  const showAutoTab = isTaggerEnabled && imageId !== undefined;
 
   // showGrouped가 true일 때 프롬프트 그룹화 처리
   useEffect(() => {
@@ -162,8 +174,8 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
   const containerHeight = maxHeight || '100%';
 
 
-  // 기존 모드 (텍스트 표시)
-  if (!hasPrompt && !hasNegativePrompt) {
+  // 프롬프트와 AUTO 탭 모두 없는 경우
+  if (!hasPrompt && !hasNegativePrompt && !showAutoTab) {
     return (
       <Box sx={{ py: 2, textAlign: 'center', height: containerHeight, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Typography variant="body2" color="text.secondary">
@@ -173,8 +185,8 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
     );
   }
 
-  // 탭이 하나만 있는 경우 탭 없이 표시
-  if (hasPrompt && !hasNegativePrompt) {
+  // 탭이 하나만 있는 경우 탭 없이 표시 (AUTO 탭이 없을 때만)
+  if (hasPrompt && !hasNegativePrompt && !showAutoTab) {
     const containerSx = {
       height: '100%',
       borderRadius: variant === 'none' ? 0 : 2,
@@ -261,7 +273,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
     );
   }
 
-  if (!hasPrompt && hasNegativePrompt) {
+  if (!hasPrompt && hasNegativePrompt && !showAutoTab) {
     const containerSx = {
       height: '100%',
       borderRadius: variant === 'none' ? 0 : 2,
@@ -349,7 +361,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
     );
   }
 
-  // 둘 다 있는 경우 탭으로 표시
+  // 여러 탭이 필요한 경우 탭으로 표시 (긍정+부정, 또는 AUTO 탭 포함)
   const containerSx = {
     height: '100%',
     borderRadius: variant === 'none' ? 0 : 2,
@@ -372,35 +384,54 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
             },
           }}
         >
-          <Tab
-            label="긍정"
-            id="prompt-tab-0"
-            aria-controls="prompt-tabpanel-0"
-            sx={{
-              minHeight: 48,
-              color: 'primary.main',
-              '&.Mui-selected': {
-                fontWeight: 600,
-              },
-            }}
-          />
-          <Tab
-            label="부정"
-            id="prompt-tab-1"
-            aria-controls="prompt-tabpanel-1"
-            sx={{
-              minHeight: 48,
-              color: 'error.main',
-              '&.Mui-selected': {
-                fontWeight: 600,
-              },
-            }}
-          />
+          {hasPrompt && (
+            <Tab
+              label="긍정"
+              id="prompt-tab-0"
+              aria-controls="prompt-tabpanel-0"
+              sx={{
+                minHeight: 48,
+                color: 'primary.main',
+                '&.Mui-selected': {
+                  fontWeight: 600,
+                },
+              }}
+            />
+          )}
+          {hasNegativePrompt && (
+            <Tab
+              label="부정"
+              id={`prompt-tab-${hasPrompt ? 1 : 0}`}
+              aria-controls={`prompt-tabpanel-${hasPrompt ? 1 : 0}`}
+              sx={{
+                minHeight: 48,
+                color: 'error.main',
+                '&.Mui-selected': {
+                  fontWeight: 600,
+                },
+              }}
+            />
+          )}
+          {showAutoTab && (
+            <Tab
+              label="AUTO"
+              id={`prompt-tab-${(hasPrompt ? 1 : 0) + (hasNegativePrompt ? 1 : 0)}`}
+              aria-controls={`prompt-tabpanel-${(hasPrompt ? 1 : 0) + (hasNegativePrompt ? 1 : 0)}`}
+              sx={{
+                minHeight: 48,
+                color: 'info.main',
+                '&.Mui-selected': {
+                  fontWeight: 600,
+                },
+              }}
+            />
+          )}
         </Tabs>
 
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-          <TabPanel value={tabValue} index={0}>
-            {showGrouped ? (
+          {hasPrompt && (
+            <TabPanel value={tabValue} index={0}>
+              {showGrouped ? (
               loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                   <Typography variant="body2" color="text.secondary">
@@ -449,9 +480,11 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
                 </Typography>
               </Box>
             )}
-          </TabPanel>
+            </TabPanel>
+          )}
 
-          <TabPanel value={tabValue} index={1}>
+          {hasNegativePrompt && (
+            <TabPanel value={tabValue} index={hasPrompt ? 1 : 0}>
             {showGrouped ? (
               loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -502,7 +535,18 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
                 </Typography>
               </Box>
             )}
-          </TabPanel>
+            </TabPanel>
+          )}
+
+          {showAutoTab && (
+            <TabPanel value={tabValue} index={(hasPrompt ? 1 : 0) + (hasNegativePrompt ? 1 : 0)}>
+              <AutoTagDisplay
+                imageId={imageId!}
+                autoTags={autoTags ?? null}
+                onTagGenerated={onAutoTagGenerated}
+              />
+            </TabPanel>
+          )}
         </Box>
       </>
   );

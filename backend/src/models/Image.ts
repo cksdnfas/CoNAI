@@ -423,4 +423,62 @@ export class ImageModel {
       });
     });
   }
+
+  /**
+   * Find all images without auto_tags (untagged images)
+   */
+  static findUntagged(limit: number = 100): Promise<ImageRecord[]> {
+    return new Promise((resolve, reject) => {
+      db.all(
+        `SELECT * FROM images WHERE auto_tags IS NULL ORDER BY upload_date DESC LIMIT ?`,
+        [limit],
+        (err, rows: ImageRecord[]) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(rows || []);
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Find all image IDs (for batch processing)
+   */
+  static findAllIds(limit?: number): Promise<number[]> {
+    return new Promise((resolve, reject) => {
+      const query = limit
+        ? `SELECT id FROM images ORDER BY upload_date DESC LIMIT ?`
+        : `SELECT id FROM images ORDER BY upload_date DESC`;
+
+      const params = limit ? [limit] : [];
+
+      db.all(query, params, (err, rows: any[]) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows.map(row => row.id));
+        }
+      });
+    });
+  }
+
+  /**
+   * Count untagged images
+   */
+  static countUntagged(): Promise<number> {
+    return new Promise((resolve, reject) => {
+      db.get(
+        `SELECT COUNT(*) as count FROM images WHERE auto_tags IS NULL`,
+        (err, row: any) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(row.count);
+          }
+        }
+      );
+    });
+  }
 }

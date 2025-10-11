@@ -1,0 +1,10 @@
+{
+  "tagger": {
+    "enabled": true,
+    "model": "convnext",
+    "generalThreshold": 0.35,
+    "characterThreshold": 0.35,
+    "pythonPath": "python",
+    "autoTagOnUpload": true
+  }
+}

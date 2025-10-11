@@ -1,3 +1,18 @@
+// Auto-tagging data structure (WD v3 Tagger)
+export interface AutoTagsData {
+  caption: string;
+  taglist: string;
+  rating: Record<string, number>;      // general, sensitive, questionable, explicit
+  general: Record<string, number>;     // tag -> confidence score
+  character: Record<string, number>;   // character -> confidence score
+  model: string;
+  thresholds: {
+    general: number;
+    character: number;
+  };
+  tagged_at: string;
+}
+
 export interface ImageRecord {
   id: number;
   filename: string;
@@ -27,6 +42,7 @@ export interface ImageRecord {
   generation_time: number | null;
   batch_size: number | null;
   batch_index: number | null;
+  auto_tags: AutoTagsData | null;     // WD v3 자동 태그 (백엔드에서 이미 파싱됨)
 
   // 추가된 URL 필드들 (백엔드에서 enrichImageRecord로 추가)
   thumbnail_url?: string;

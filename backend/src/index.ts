@@ -24,8 +24,11 @@ import promptCollectionRoutes from './routes/promptCollection';
 import promptGroupRoutes from './routes/promptGroups';
 import negativePromptGroupRoutes from './routes/negativePromptGroups';
 import { groupRoutes } from './routes/groups';
+import { settingsRoutes } from './routes/settings';
 import { initializeDatabase } from './database/init';
 import { errorHandler } from './middleware/errorHandler';
+import { imageTaggerService } from './services/imageTaggerService';
+import { settingsService } from './services/settingsService';
 
 const app = express();
 const PORT = process.env.PORT || 1566;
@@ -95,6 +98,7 @@ app.use('/api/prompt-collection', promptCollectionRoutes);
 app.use('/api/prompt-groups', promptGroupRoutes);
 app.use('/api/negative-prompt-groups', negativePromptGroupRoutes);
 app.use('/api/groups', groupRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Frontend static file serving
 const frontendDistPath = process.env.FRONTEND_DIST_PATH
@@ -159,6 +163,21 @@ async function startServer() {
     console.log('🗄️  데이터베이스를 초기화하는 중...');
     await initializeDatabase();
     console.log('✅ Database initialized successfully');
+
+    // 4. Tagger daemon 자동 시작 (설정이 활성화된 경우)
+    const settings = settingsService.loadSettings();
+    if (settings.tagger.enabled) {
+      console.log('🤖 Starting tagger daemon...');
+      try {
+        await imageTaggerService.startDaemon();
+        console.log('✅ Tagger daemon started successfully');
+      } catch (error) {
+        console.warn('⚠️  Failed to start tagger daemon:', error instanceof Error ? error.message : error);
+        console.warn('   Tagger will be started on first use');
+      }
+    } else {
+      console.log('⏭️  Tagger is disabled - skipping daemon startup');
+    }
 
     const extractHost = (value?: string | null): string | undefined => {
       if (!value || value.trim().length === 0) {
@@ -266,6 +285,35 @@ ${divider}`);
     server.setTimeout?.(60000);
     (server as any).keepAliveTimeout = 65000;
     (server as any).headersTimeout = 66000;
+
+    // Graceful shutdown
+    const shutdown = async () => {
+      console.log('\n🛑 Shutting down gracefully...');
+
+      // Stop tagger daemon
+      try {
+        await imageTaggerService.stopDaemon();
+        console.log('✅ Tagger daemon stopped');
+      } catch (error) {
+        console.warn('⚠️  Error stopping tagger daemon:', error);
+      }
+
+      // Close server
+      server.close(() => {
+        console.log('✅ Server closed');
+        process.exit(0);
+      });
+
+      // Force exit after 10 seconds
+      setTimeout(() => {
+        console.error('❌ Forced shutdown after timeout');
+        process.exit(1);
+      }, 10000);
+    };
+
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
+
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);

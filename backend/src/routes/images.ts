@@ -179,6 +179,28 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
       console.warn('⚠️ Failed to run auto collection (non-critical):', autoCollectError);
     }
 
+    // 자동 태깅 (설정에서 활성화된 경우)
+    try {
+      const { settingsService } = await import('../services/settingsService');
+      const settings = settingsService.loadSettings();
+
+      if (settings.tagger.enabled && settings.tagger.autoTagOnUpload) {
+        console.log('🏷️ Auto-tagging image on upload...');
+        const imagePath = path.join(UPLOAD_BASE_PATH, processedImage.originalPath);
+        const taggerResult = await imageTaggerService.tagImage(imagePath);
+
+        if (taggerResult.success) {
+          const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
+          await ImageModel.updateAutoTags(imageId, autoTagsJson);
+          console.log('✅ Auto-tagging completed successfully');
+        } else {
+          console.warn('⚠️ Auto-tagging failed (non-critical):', taggerResult.error);
+        }
+      }
+    } catch (autoTagError) {
+      console.warn('⚠️ Failed to auto-tag image (non-critical):', autoTagError);
+    }
+
     const response: UploadResponse = {
       success: true,
       data: {
@@ -288,6 +310,24 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
           }
         } catch (autoCollectError) {
           console.warn('⚠️ Failed to run auto collection for', file.originalname, '(non-critical):', autoCollectError);
+        }
+
+        // 자동 태깅 (설정에서 활성화된 경우)
+        try {
+          const { settingsService } = await import('../services/settingsService');
+          const settings = settingsService.loadSettings();
+
+          if (settings.tagger.enabled && settings.tagger.autoTagOnUpload) {
+            const imagePath = path.join(UPLOAD_BASE_PATH, processedImage.originalPath);
+            const taggerResult = await imageTaggerService.tagImage(imagePath);
+
+            if (taggerResult.success) {
+              const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
+              await ImageModel.updateAutoTags(imageId, autoTagsJson);
+            }
+          }
+        } catch (autoTagError) {
+          console.warn('⚠️ Failed to auto-tag', file.originalname, '(non-critical):', autoTagError);
         }
 
         results.push({
@@ -816,18 +856,257 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
+ * 미처리 이미지 일괄 태깅 (auto_tags IS NULL)
+ */
+router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Response) => {
+  const { limit } = req.body;
+  const maxLimit = limit ? parseInt(limit) : 100;
+
+  try {
+    // 미처리 이미지 조회
+    const untaggedImages = await ImageModel.findUntagged(maxLimit);
+
+    if (untaggedImages.length === 0) {
+      res.json({
+        success: true,
+        data: {
+          total: 0,
+          success_count: 0,
+          fail_count: 0,
+          message: 'No untagged images found',
+          results: []
+        }
+      });
+      return;
+    }
+
+    console.log(`[BatchTagUnprocessed] Processing ${untaggedImages.length} untagged images`);
+
+    const results = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const image of untaggedImages) {
+      try {
+        const imagePath = path.join(UPLOAD_BASE_PATH, image.file_path);
+
+        if (!fs.existsSync(imagePath)) {
+          results.push({
+            image_id: image.id,
+            success: false,
+            error: 'Image file not found'
+          });
+          failCount++;
+          continue;
+        }
+
+        const taggerResult = await imageTaggerService.tagImage(imagePath);
+
+        if (!taggerResult.success) {
+          results.push({
+            image_id: image.id,
+            success: false,
+            error: taggerResult.error || 'Tagging failed'
+          });
+          failCount++;
+          continue;
+        }
+
+        const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
+        await ImageModel.updateAutoTags(image.id, autoTagsJson);
+
+        results.push({
+          image_id: image.id,
+          success: true,
+          auto_tags: autoTagsJson ? JSON.parse(autoTagsJson) : null
+        });
+        successCount++;
+
+        console.log(`[BatchTagUnprocessed] Tagged image ${image.id} (${successCount}/${untaggedImages.length})`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        results.push({
+          image_id: image.id,
+          success: false,
+          error: message
+        });
+        failCount++;
+      }
+    }
+
+    console.log(`[BatchTagUnprocessed] Completed: ${successCount} success, ${failCount} failed`);
+
+    res.json({
+      success: true,
+      data: {
+        total: untaggedImages.length,
+        success_count: successCount,
+        fail_count: failCount,
+        results
+      }
+    });
+    return;
+  } catch (error) {
+    console.error('[BatchTagUnprocessed] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to batch tag unprocessed images'
+    });
+    return;
+  }
+}));
+
+/**
+ * 전체 이미지 재태깅
+ */
+router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) => {
+  const { limit, force } = req.body;
+  const maxLimit = limit ? parseInt(limit) : 100;
+  const forceRetag = force !== undefined ? force : true;
+
+  try {
+    // 전체 이미지 ID 조회
+    const imageIds = await ImageModel.findAllIds(maxLimit);
+
+    if (imageIds.length === 0) {
+      res.json({
+        success: true,
+        data: {
+          total: 0,
+          success_count: 0,
+          fail_count: 0,
+          message: 'No images found',
+          results: []
+        }
+      });
+      return;
+    }
+
+    console.log(`[BatchTagAll] Processing ${imageIds.length} images (force=${forceRetag})`);
+
+    const results = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const id of imageIds) {
+      try {
+        const image = await ImageModel.findById(id);
+
+        if (!image) {
+          results.push({
+            image_id: id,
+            success: false,
+            error: 'Image not found'
+          });
+          failCount++;
+          continue;
+        }
+
+        const imagePath = path.join(UPLOAD_BASE_PATH, image.file_path);
+
+        if (!fs.existsSync(imagePath)) {
+          results.push({
+            image_id: id,
+            success: false,
+            error: 'Image file not found'
+          });
+          failCount++;
+          continue;
+        }
+
+        const taggerResult = await imageTaggerService.tagImage(imagePath);
+
+        if (!taggerResult.success) {
+          results.push({
+            image_id: id,
+            success: false,
+            error: taggerResult.error || 'Tagging failed'
+          });
+          failCount++;
+          continue;
+        }
+
+        const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
+        await ImageModel.updateAutoTags(id, autoTagsJson);
+
+        results.push({
+          image_id: id,
+          success: true,
+          auto_tags: autoTagsJson ? JSON.parse(autoTagsJson) : null
+        });
+        successCount++;
+
+        console.log(`[BatchTagAll] Tagged image ${id} (${successCount}/${imageIds.length})`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        results.push({
+          image_id: id,
+          success: false,
+          error: message
+        });
+        failCount++;
+      }
+    }
+
+    console.log(`[BatchTagAll] Completed: ${successCount} success, ${failCount} failed`);
+
+    res.json({
+      success: true,
+      data: {
+        total: imageIds.length,
+        success_count: successCount,
+        fail_count: failCount,
+        results
+      }
+    });
+    return;
+  } catch (error) {
+    console.error('[BatchTagAll] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to batch tag all images'
+    });
+    return;
+  }
+}));
+
+/**
+ * 미처리 이미지 개수 조회
+ */
+router.get('/untagged-count', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const count = await ImageModel.countUntagged();
+
+    res.json({
+      success: true,
+      data: {
+        count
+      }
+    });
+    return;
+  } catch (error) {
+    console.error('[UntaggedCount] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to count untagged images'
+    });
+    return;
+  }
+}));
+
+/**
  * Check Python dependencies for tagger
  */
 router.get('/tagger/check', asyncHandler(async (req: Request, res: Response) => {
   try {
     const result = await imageTaggerService.checkPythonDependencies();
-    const modelInfo = imageTaggerService.getModelInfo();
+    const status = await imageTaggerService.getStatus();
 
     res.json({
       success: true,
       data: {
         dependencies: result,
-        model_info: modelInfo,
+        daemon_status: status,
         models_dir: runtimePaths.modelsDir
       }
     });

@@ -21,6 +21,7 @@ import { imageApi } from '../../services/api';
 import type { ImageRecord } from '../../types/image';
 import { buildUploadsUrl, ensureAbsoluteUrl, getBackendOrigin } from '../../utils/backend';
 import PromptDisplay from '../../components/PromptDisplay';
+import { settingsApi } from '../../services/settingsApi';
 
 const ImageDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -29,7 +30,23 @@ const ImageDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
+  const [isTaggerEnabled, setIsTaggerEnabled] = useState(false);
   const backendOrigin = getBackendOrigin();
+
+  // Load settings to check if tagger is enabled
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const settings = await settingsApi.getSettings();
+        setIsTaggerEnabled(settings.tagger.enabled);
+      } catch (err) {
+        console.error('Failed to load settings:', err);
+        setIsTaggerEnabled(false);
+      }
+    };
+
+    loadSettings();
+  }, []);
 
   useEffect(() => {
     const loadImage = async () => {
@@ -57,6 +74,19 @@ const ImageDetailPage: React.FC = () => {
 
     loadImage();
   }, [id]);
+
+  // Reload image after auto-tag generation
+  const handleAutoTagGenerated = async () => {
+    if (!id) return;
+    try {
+      const response = await imageApi.getImage(parseInt(id));
+      if (response.success && response.data) {
+        setImage(response.data);
+      }
+    } catch (err) {
+      console.error('Failed to reload image after tagging:', err);
+    }
+  };
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -326,19 +356,23 @@ const ImageDetailPage: React.FC = () => {
             )}
 
             {/* 프롬프트 영역 */}
-            {image.ai_metadata && (image.ai_metadata.prompts.prompt || image.ai_metadata.prompts.negative_prompt) && (
+            {(image.ai_metadata && (image.ai_metadata.prompts.prompt || image.ai_metadata.prompts.negative_prompt)) || isTaggerEnabled ? (
               <Paper sx={{ p: 2, borderRadius: 2 }}>
                 <Typography variant="h6" gutterBottom>
                   프롬프트 정보
                 </Typography>
                 <PromptDisplay
-                  prompt={image.ai_metadata.prompts.prompt}
-                  negativePrompt={image.ai_metadata.prompts.negative_prompt}
+                  prompt={image.ai_metadata?.prompts.prompt}
+                  negativePrompt={image.ai_metadata?.prompts.negative_prompt}
                   maxHeight={400}
                   variant="none"
+                  imageId={image.id}
+                  autoTags={image.auto_tags}
+                  isTaggerEnabled={isTaggerEnabled}
+                  onAutoTagGenerated={handleAutoTagGenerated}
                 />
               </Paper>
-            )}
+            ) : null}
           </Box>
         </Grid>
       </Grid>
