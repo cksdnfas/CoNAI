@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { getBackendOrigin } from '../utils/backend';
-import type { ImageRecord, ImageListResponse, UploadResponse, ImageSearchParams } from '../types/image';
+import type { ImageRecord, ImageListResponse, UploadResponse, ImageSearchParams, AutoTagSearchParams } from '../types/image';
 import type {
   GroupRecord,
   GroupResponse,
@@ -36,6 +36,12 @@ export const imageApi = {
   // 이미지 검색
   searchImages: async (params: ImageSearchParams): Promise<ImageListResponse> => {
     const response = await api.post('/api/images/search', params);
+    return response.data;
+  },
+
+  // 오토태그 기반 이미지 검색
+  searchByAutoTags: async (params: AutoTagSearchParams): Promise<ImageListResponse> => {
+    const response = await api.post('/api/images/search-by-autotags', params);
     return response.data;
   },
 

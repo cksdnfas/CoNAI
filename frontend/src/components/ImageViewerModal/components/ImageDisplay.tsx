@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Skeleton } from '@mui/material';
 import type { ImageRecord } from '../../../types/image';
-import { ensureAbsoluteUrl, buildUploadsUrl } from '../../../utils/backend';
+import { getBackendOrigin } from '../../../utils/backend';
 
 interface ImageDisplayProps {
   image: ImageRecord;
@@ -31,6 +31,7 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
 }) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
+  const backendOrigin = getBackendOrigin();
 
   // Reset loading states when image changes
   useEffect(() => {
@@ -38,8 +39,9 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
     setImageLoading(true);
   }, [image.id]);
 
-  const imageUrl = ensureAbsoluteUrl(image.image_url) || buildUploadsUrl(image.file_path);
-  const fallbackUrl = buildUploadsUrl(image.file_path);
+  // API 엔드포인트를 통해 이미지 제공 (외부 네트워크 접근 보장)
+  const imageUrl = `${backendOrigin}/api/images/${image.id}/optimized`;
+  const fallbackUrl = `${backendOrigin}/api/images/${image.id}/download/original`;
 
   return (
     <Box

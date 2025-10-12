@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import type { ImageRecord, ImageSearchParams, PageSize } from '../types/image';
+import type { ImageRecord, ImageSearchParams, AutoTagSearchParams, PageSize } from '../types/image';
 import { imageApi } from '../services/api';
 
 export const useSearch = () => {
@@ -11,8 +11,9 @@ export const useSearch = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [total, setTotal] = useState(0);
   const [lastSearchParams, setLastSearchParams] = useState<ImageSearchParams | null>(null);
+  const [lastAutoTagParams, setLastAutoTagParams] = useState<AutoTagSearchParams | null>(null);
 
-  const searchImages = useCallback(async (params: ImageSearchParams) => {
+  const searchImages = useCallback(async (params: ImageSearchParams, autoTagParams?: AutoTagSearchParams) => {
     setLoading(true);
     setError(null);
 
@@ -23,7 +24,23 @@ export const useSearch = () => {
     };
 
     try {
-      const response = await imageApi.searchImages(searchParams);
+      let response;
+
+      // AutoTag 검색이 활성화된 경우
+      if (autoTagParams) {
+        const autoTagSearchParams = {
+          ...autoTagParams,
+          page: searchParams.page,
+          limit: searchParams.limit,
+        };
+        response = await imageApi.searchByAutoTags(autoTagSearchParams);
+        setLastAutoTagParams(autoTagSearchParams);
+      } else {
+        // 일반 검색
+        response = await imageApi.searchImages(searchParams);
+        setLastAutoTagParams(null);
+      }
+
       if (response.success && response.data) {
         setImages(response.data.images);
         setTotalPages(response.data.totalPages);
@@ -50,20 +67,20 @@ export const useSearch = () => {
   const changePage = useCallback((page: number) => {
     if (lastSearchParams) {
       const newParams = { ...lastSearchParams, page };
-      searchImages(newParams);
+      searchImages(newParams, lastAutoTagParams || undefined);
     }
-  }, [lastSearchParams, searchImages]);
+  }, [lastSearchParams, lastAutoTagParams, searchImages]);
 
   const changePageSize = useCallback((newPageSize: PageSize) => {
     setPageSize(newPageSize);
     if (lastSearchParams) {
       const newParams = { ...lastSearchParams, page: 1, limit: newPageSize };
-      searchImages(newParams);
+      searchImages(newParams, lastAutoTagParams || undefined);
     }
 
     // 로컬 스토리지에 저장
     localStorage.setItem('searchPageSize', newPageSize.toString());
-  }, [lastSearchParams, searchImages]);
+  }, [lastSearchParams, lastAutoTagParams, searchImages]);
 
   const deleteImages = useCallback(async (ids: number[]) => {
     setLoading(true);
@@ -71,7 +88,7 @@ export const useSearch = () => {
       await imageApi.deleteImages(ids);
       // 삭제 후 검색 재실행
       if (lastSearchParams) {
-        await searchImages(lastSearchParams);
+        await searchImages(lastSearchParams, lastAutoTagParams || undefined);
       }
     } catch (err) {
       setError('이미지 삭제에 실패했습니다.');
@@ -79,13 +96,13 @@ export const useSearch = () => {
     } finally {
       setLoading(false);
     }
-  }, [lastSearchParams, searchImages]);
+  }, [lastSearchParams, lastAutoTagParams, searchImages]);
 
   const refreshSearch = useCallback(() => {
     if (lastSearchParams) {
-      searchImages(lastSearchParams);
+      searchImages(lastSearchParams, lastAutoTagParams || undefined);
     }
-  }, [lastSearchParams, searchImages]);
+  }, [lastSearchParams, lastAutoTagParams, searchImages]);
 
   const clearSearch = useCallback(() => {
     setImages([]);
@@ -93,6 +110,7 @@ export const useSearch = () => {
     setTotalPages(0);
     setCurrentPage(1);
     setLastSearchParams(null);
+    setLastAutoTagParams(null);
     setError(null);
   }, []);
 

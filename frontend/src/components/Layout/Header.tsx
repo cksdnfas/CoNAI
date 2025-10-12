@@ -12,7 +12,7 @@ import {
   ListItemButton,
   ListItemText,
   useMediaQuery,
-  useTheme,
+  useTheme as useMuiTheme,
   Divider,
 } from '@mui/material';
 import {
@@ -26,7 +26,7 @@ import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
 
 const Header: React.FC = () => {
   const location = useLocation();
-  const theme = useTheme();
+  const theme = useMuiTheme();
   const { mode, toggleMode } = useAppTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -54,9 +54,14 @@ const Header: React.FC = () => {
       open={mobileMenuOpen}
       onClose={handleMobileMenuClose}
       sx={{
+        zIndex: (theme) => theme.zIndex.drawer + 2,
         '& .MuiDrawer-paper': {
           width: 280,
+          boxSizing: 'border-box',
         },
+      }}
+      ModalProps={{
+        keepMounted: true, // Better mobile performance
       }}
     >
       <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

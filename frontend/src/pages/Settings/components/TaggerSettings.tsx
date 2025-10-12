@@ -372,36 +372,43 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
             />
 
             {/* Model Selection */}
-            <FormControl fullWidth disabled={!localSettings.enabled}>
-              <InputLabel>모델 선택</InputLabel>
-              <Select
-                value={localSettings.model}
-                label="모델 선택"
-                onChange={(e) => setLocalSettings({ ...localSettings, model: e.target.value as any })}
-              >
-                {models.map((model) => (
-                  <MenuItem key={model.name} value={model.name}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                      <Box>
-                        <Typography variant="body1">{model.label}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {model.description}
-                        </Typography>
+            {models.length > 0 ? (
+              <FormControl fullWidth disabled={!localSettings.enabled}>
+                <InputLabel>모델 선택</InputLabel>
+                <Select
+                  value={localSettings.model}
+                  label="모델 선택"
+                  onChange={(e) => setLocalSettings({ ...localSettings, model: e.target.value as any })}
+                >
+                  {models.map((model) => (
+                    <MenuItem key={model.name} value={model.name}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                        <Box>
+                          <Typography variant="body1">{model.label}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {model.description}
+                          </Typography>
+                        </Box>
+                        {model.downloaded && (
+                          <Chip
+                            size="small"
+                            icon={<CheckCircleIcon />}
+                            label="Downloaded"
+                            color="success"
+                            sx={{ ml: 2 }}
+                          />
+                        )}
                       </Box>
-                      {model.downloaded && (
-                        <Chip
-                          size="small"
-                          icon={<CheckCircleIcon />}
-                          label="Downloaded"
-                          color="success"
-                          sx={{ ml: 2 }}
-                        />
-                      )}
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            ) : (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <CircularProgress size={20} />
+                <Typography variant="body2" color="text.secondary">모델 목록 로딩 중...</Typography>
+              </Box>
+            )}
 
             {/* Download Status and Button */}
             {localSettings.enabled && (

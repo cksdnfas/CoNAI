@@ -1,0 +1,80 @@
+import { Router, Request, Response } from 'express';
+import { asyncHandler } from '../../middleware/errorHandler';
+import { ImageProcessor } from '../../services/imageProcessor';
+import { ImageModel } from '../../models/Image';
+import { PromptCollectionService } from '../../services/promptCollectionService';
+import { runtimePaths } from '../../config/runtimePaths';
+
+const router = Router();
+const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
+
+/**
+ * 이미지 삭제
+ */
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+
+  if (isNaN(id)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid image ID'
+    });
+  }
+
+  try {
+    // 이미지 정보 조회
+    const image = await ImageModel.findById(id);
+
+    if (!image) {
+      return res.status(404).json({
+        success: false,
+        error: 'Image not found'
+      });
+    }
+
+    // 프롬프트 사용 횟수 감산 (비동기로 처리, 오류가 있어도 삭제는 계속 진행)
+    try {
+      console.log('🔍 Removing prompts from collection...');
+      await PromptCollectionService.removeFromImage(
+        image.prompt || null,
+        image.negative_prompt || null
+      );
+      console.log('✅ Prompts removed from collection successfully');
+    } catch (promptError) {
+      console.warn('⚠️ Failed to remove prompts from collection (non-critical):', promptError);
+    }
+
+    // 파일 삭제 (3개 버전 모두)
+    await ImageProcessor.deleteImageFiles(
+      image.file_path,
+      image.thumbnail_path,
+      image.optimized_path || '',
+      UPLOAD_BASE_PATH
+    );
+
+    // 데이터베이스에서 삭제
+    const deleted = await ImageModel.delete(id);
+
+    if (deleted) {
+      res.json({
+        success: true,
+        message: 'Image deleted successfully'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to delete image from database'
+      });
+    }
+    return;
+  } catch (error) {
+    console.error('Delete image error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete image'
+    });
+    return;
+  }
+}));
+
+export { router as managementRoutes };

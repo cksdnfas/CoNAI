@@ -19,7 +19,7 @@ import { runtimePaths, ensureRuntimeDirectories } from './config/runtimePaths';
 import { prepareHttpsOptions } from './utils/httpsOptions';
 import { getNetworkInfo, formatNetworkInfo } from './utils/networkInfo';
 
-import { imageRoutes } from './routes/images';
+import { imageRoutes } from './routes/images/index';
 import promptCollectionRoutes from './routes/promptCollection';
 import promptGroupRoutes from './routes/promptGroups';
 import negativePromptGroupRoutes from './routes/negativePromptGroups';
@@ -57,7 +57,15 @@ app.use(helmet({
 
   originAgentCluster: isSecureContext,
 
-  hsts: isSecureContext ? { maxAge: 60 * 60 * 24 * 365, includeSubDomains: true } : false
+  hsts: isSecureContext ? { maxAge: 60 * 60 * 24 * 365, includeSubDomains: true } : false,
+
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      'upgrade-insecure-requests': null, // HTTP 접속 허용
+      'img-src': ["'self'", 'data:', 'http:', 'https:'], // 외부 네트워크 이미지 로딩 허용
+    },
+  },
 
 }));
 app.use(limiter);
@@ -89,8 +97,25 @@ const createEnvFileIfNotExists = () => {
 
 const uploadsDir = runtimePaths.uploadsDir;
 
-// 정적 파일 서빙 (썸네일 및 원본 이미지)
-app.use('/uploads', express.static(uploadsDir));
+// 정적 파일 서빙 (썸네일 및 원본 이미지) - CORS 및 캐시 헤더 추가
+app.use('/uploads', express.static(uploadsDir, {
+  // 외부 네트워크에서도 접근 가능하도록 CORS 헤더 추가
+  setHeaders: (res, filePath) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+    // 이미지 파일에 대한 캐시 설정
+    if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  },
+  // 성능 최적화
+  etag: true,
+  lastModified: true,
+  maxAge: '1y'
+}));
 
 // Routes
 app.use('/api/images', imageRoutes);

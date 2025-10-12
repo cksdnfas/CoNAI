@@ -88,6 +88,8 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
 
   // Rating 게이지 렌더링 (HP바 형태)
   const renderRatingGauge = () => {
+    if (!autoTags.rating) return null;
+
     const ratings = Object.entries(autoTags.rating)
       .map(([key, value]) => ({
         key,
@@ -95,6 +97,8 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
         color: getRatingColor(key),
       }))
       .filter(r => r.value > 0);
+
+    if (ratings.length === 0) return null;
 
     const total = ratings.reduce((sum, r) => sum + r.value, 0);
 
@@ -167,6 +171,8 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
 
   // Character 정보 렌더링 (게이지 형태)
   const renderCharacters = () => {
+    if (!autoTags.character) return null;
+
     const characters = Object.entries(autoTags.character)
       .sort((a, b) => b[1] - a[1]); // 점수 높은 순으로 정렬
 
@@ -226,6 +232,8 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
 
   // General 태그 렌더링 (접을 수 있는 형태)
   const renderGeneralTags = () => {
+    if (!autoTags.general) return null;
+
     const generalTags = Object.entries(autoTags.general)
       .sort((a, b) => b[1] - a[1]); // 점수 높은 순으로 정렬
 

@@ -7,7 +7,6 @@ import {
   Chip,
   Button,
   IconButton,
-  Tooltip,
   Skeleton,
   Alert,
 } from '@mui/material';
@@ -15,7 +14,6 @@ import Grid from '@mui/material/Grid';
 import {
   ArrowBack as ArrowBackIcon,
   Download as DownloadIcon,
-  Share as ShareIcon,
   ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
 import Accordion from '@mui/material/Accordion';
@@ -23,7 +21,7 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import { imageApi } from '../../services/api';
 import type { ImageRecord } from '../../types/image';
-import { buildUploadsUrl, ensureAbsoluteUrl, getBackendOrigin } from '../../utils/backend';
+import { getBackendOrigin } from '../../utils/backend';
 import PromptDisplay from '../../components/PromptDisplay';
 import { settingsApi } from '../../services/settingsApi';
 
@@ -123,23 +121,6 @@ const ImageDetailPage: React.FC = () => {
     }
   };
 
-  const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `이미지: ${image?.original_name}`,
-          url: window.location.href,
-        });
-      } catch (err) {
-        // 사용자가 공유를 취소했거나 오류 발생
-      }
-    } else {
-      // Fallback: 클립보드에 URL 복사
-      navigator.clipboard.writeText(window.location.href);
-      alert('URL이 클립보드에 복사되었습니다.');
-    }
-  };
-
   const truncateFilename = (filename: string, maxLength: number = 50) => {
     if (filename.length <= maxLength) return filename;
     const ext = filename.split('.').pop();
@@ -183,8 +164,9 @@ const ImageDetailPage: React.FC = () => {
     );
   }
 
-  const imageUrl = image ? (ensureAbsoluteUrl(image.image_url) || buildUploadsUrl(image.file_path)) : '';
-  const fallbackUrl = image ? buildUploadsUrl(image.file_path) : '';
+  // API 엔드포인트를 통해 이미지 제공 (외부 네트워크 접근 보장)
+  const imageUrl = image ? `${backendOrigin}/api/images/${image.id}/optimized` : '';
+  const fallbackUrl = image ? `${backendOrigin}/api/images/${image.id}/download/original` : '';
 
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
@@ -214,7 +196,7 @@ const ImageDetailPage: React.FC = () => {
 
       <Grid container spacing={3}>
         {/* 1열: 이미지, 파일정보, 이미지정보 */}
-        <Grid size={{ xs: 12, md: 8 }}>
+        <Grid size={{ xs: 12, md: 7 }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {/* 이미지 영역 */}
             <Paper sx={{ p: 2, borderRadius: 2 }}>
@@ -294,12 +276,12 @@ const ImageDetailPage: React.FC = () => {
                 </Box>
               </Paper>
             )}
-          </Box>
+        </Box>
         </Grid>
 
         {/* 2열: AI생성정보, 프롬프트정보 */}
-        <Grid size={{ xs: 12, md: 4 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <Grid size={{ xs: 12, md: 5 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 325 }}>
             {/* AI 생성 정보 영역 */}
             {image.ai_metadata && (
               <Paper sx={{ p: 2, borderRadius: 2 }}>
@@ -380,7 +362,7 @@ const ImageDetailPage: React.FC = () => {
                 <PromptDisplay
                   prompt={image.ai_metadata?.prompts.prompt}
                   negativePrompt={image.ai_metadata?.prompts.negative_prompt}
-                  maxHeight={600}
+                  maxHeight={800}
                   variant="none"
                   imageId={image.id}
                   autoTags={image.auto_tags}
@@ -389,7 +371,7 @@ const ImageDetailPage: React.FC = () => {
                 />
               </Paper>
             ) : null}
-          </Box>
+        </Box>
         </Grid>
       </Grid>
 

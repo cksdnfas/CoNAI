@@ -141,7 +141,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         {/* Image area */}
         <Box
           sx={{
-            flex: isMobile ? 1 : '0 0 70%',
+            flex: isMobile ? 1 : '1 1 auto',
+            minWidth: 0,
             display: 'flex',
             flexDirection: 'column',
             bgcolor: 'black',
@@ -182,6 +183,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           <Paper
             sx={{
               flex: '0 0 30%',
+              minWidth: '325px',
               display: 'flex',
               flexDirection: 'column',
               borderRadius: 0,

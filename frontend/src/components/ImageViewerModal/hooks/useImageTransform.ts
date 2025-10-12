@@ -36,6 +36,10 @@ export const useImageTransform = (imageId?: number, isOpen: boolean = false): Us
   const [dragStart, setDragStart] = useState<ImagePosition>({ x: 0, y: 0 });
   const imageContainerRef = useRef<HTMLDivElement>(null);
 
+  // Touch pinch zoom states
+  const [touchStartDistance, setTouchStartDistance] = useState<number>(0);
+  const [touchStartScale, setTouchStartScale] = useState<number>(1);
+
   // Reset all transformations when image changes
   useEffect(() => {
     setScale(1);
@@ -52,7 +56,14 @@ export const useImageTransform = (imageId?: number, isOpen: boolean = false): Us
   }, []);
 
   const handleZoomOut = useCallback(() => {
-    setScale(prev => Math.max(prev / 1.2, 0.1));
+    setScale(prev => {
+      const newScale = Math.max(prev / 1.2, 0.1);
+      // Reset position to center when zooming out to or below 100%
+      if (newScale <= 1) {
+        setImagePosition({ x: 0, y: 0 });
+      }
+      return newScale;
+    });
   }, []);
 
   // Rotation handlers
@@ -136,8 +147,12 @@ export const useImageTransform = (imageId?: number, isOpen: boolean = false): Us
         const zoomFactor = 1 + (delta * 0.1);
 
         setScale(prev => {
-          const newScale = prev * zoomFactor;
-          return Math.max(0.1, Math.min(5, newScale));
+          const newScale = Math.max(0.1, Math.min(5, prev * zoomFactor));
+          // Reset position to center when zooming out to or below 100%
+          if (newScale <= 1) {
+            setImagePosition({ x: 0, y: 0 });
+          }
+          return newScale;
         });
       };
 
@@ -152,6 +167,88 @@ export const useImageTransform = (imageId?: number, isOpen: boolean = false): Us
       clearTimeout(timer);
     };
   }, [isOpen]);
+
+  // Touch pinch zoom handler
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const container = imageContainerRef.current;
+    if (!container) return;
+
+    // Calculate distance between two touch points
+    const getTouchDistance = (touches: TouchList): number => {
+      if (touches.length < 2) return 0;
+      const touch1 = touches[0];
+      const touch2 = touches[1];
+      const dx = touch1.clientX - touch2.clientX;
+      const dy = touch1.clientY - touch2.clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const distance = getTouchDistance(e.touches);
+        setTouchStartDistance(distance);
+        setTouchStartScale(scale);
+      } else if (e.touches.length === 1 && scale > 1) {
+        // Single touch drag when zoomed in
+        e.preventDefault();
+        const touch = e.touches[0];
+        setIsDragging(true);
+        setDragStart({
+          x: touch.clientX - imagePosition.x,
+          y: touch.clientY - imagePosition.y,
+        });
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const distance = getTouchDistance(e.touches);
+        if (touchStartDistance > 0) {
+          const scaleMultiplier = distance / touchStartDistance;
+          const newScale = Math.max(0.1, Math.min(5, touchStartScale * scaleMultiplier));
+
+          setScale(newScale);
+
+          // Reset position to center when zooming out to or below 100%
+          if (newScale <= 1) {
+            setImagePosition({ x: 0, y: 0 });
+          }
+        }
+      } else if (e.touches.length === 1 && scale > 1 && isDragging) {
+        // Single touch drag when zoomed in
+        e.preventDefault();
+        const touch = e.touches[0];
+        setImagePosition({
+          x: touch.clientX - dragStart.x,
+          y: touch.clientY - dragStart.y,
+        });
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        setTouchStartDistance(0);
+        setTouchStartScale(1);
+      }
+      if (e.touches.length === 0) {
+        setIsDragging(false);
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: false });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [isOpen, scale, touchStartDistance, touchStartScale, imagePosition, isDragging, dragStart]);
 
   return {
     scale,

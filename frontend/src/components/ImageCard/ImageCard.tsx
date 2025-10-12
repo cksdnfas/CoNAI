@@ -15,7 +15,7 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import type { ImageRecord } from '../../types/image';
-import { buildUploadsUrl, ensureAbsoluteUrl, getBackendOrigin } from '../../utils/backend';
+import { getBackendOrigin } from '../../utils/backend';
 
 interface ImageCardProps {
   image: ImageRecord;
@@ -58,10 +58,9 @@ const ImageCard: React.FC<ImageCardProps> = ({
     }
   };
 
-
-
-  const thumbnailUrl = ensureAbsoluteUrl(image.thumbnail_url) || buildUploadsUrl(image.thumbnail_path);
-  const fallbackUrl = ensureAbsoluteUrl(image.image_url) || buildUploadsUrl(image.file_path);
+  // API 엔드포인트를 통해 썸네일 및 원본 이미지 제공 (외부 네트워크 접근 보장)
+  const thumbnailUrl = `${backendOrigin}/api/images/${image.id}/thumbnail`;
+  const fallbackUrl = `${backendOrigin}/api/images/${image.id}/download/original`;
 
   return (
     <>

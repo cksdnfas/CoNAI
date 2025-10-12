@@ -1,11 +1,14 @@
 ﻿const resolveDefaultBackendOrigin = (): string => {
+  // 런타임에 동적으로 평가 (빌드 타임 평가 방지)
   if (typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin;
   }
-  return 'http://localhost:1566';
+  // 문자열 분리로 빌드 타임 평가 완전 방지
+  const protocol = 'http';
+  const host = 'localhost';
+  const port = '1566';
+  return `${protocol}://${host}:${port}`;
 };
-
-const DEFAULT_BACKEND_ORIGIN = resolveDefaultBackendOrigin();
 
 const stripTrailingSlash = (value: string): string => value.replace(/\/+$/, '');
 
@@ -34,14 +37,24 @@ const readEnvOrigin = (): string | undefined => {
   return candidates.find((value) => value && value.trim().length > 0);
 };
 
+// 캐시 변수 (런타임에만 초기화됨)
+let cachedBackendOrigin: string | null = null;
+
 export const getBackendOrigin = (): string => {
+  // 이미 계산된 값이 있으면 재사용
+  if (cachedBackendOrigin) {
+    return cachedBackendOrigin;
+  }
+
   const source = readElectronOrigin() || readEnvOrigin();
 
   if (!source) {
-    return DEFAULT_BACKEND_ORIGIN;
+    cachedBackendOrigin = resolveDefaultBackendOrigin(); // 런타임에 동적 평가
+  } else {
+    cachedBackendOrigin = stripTrailingSlash(ensureProtocol(source.trim()));
   }
 
-  return stripTrailingSlash(ensureProtocol(source.trim()));
+  return cachedBackendOrigin;
 };
 
 const isAbsoluteUrl = (value: string): boolean => /^https?:\/\//i.test(value);

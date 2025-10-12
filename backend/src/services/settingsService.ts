@@ -68,8 +68,25 @@ export class SettingsService {
     try {
       if (fs.existsSync(SETTINGS_FILE_PATH)) {
         const fileContent = fs.readFileSync(SETTINGS_FILE_PATH, 'utf-8');
-        this.settings = JSON.parse(fileContent);
-        console.log('[SettingsService] Loaded settings from file');
+        const loadedSettings = JSON.parse(fileContent);
+
+        // Merge with defaults to ensure all new fields are present
+        const defaults = this.getDefaultSettings();
+        this.settings = {
+          tagger: {
+            ...defaults.tagger,
+            ...loadedSettings.tagger,
+          },
+        };
+
+        // Check if any new fields were added
+        const hasNewFields = JSON.stringify(this.settings) !== JSON.stringify(loadedSettings);
+        if (hasNewFields) {
+          console.log('[SettingsService] Migrating settings with new default fields');
+          this.saveSettings(this.settings);
+        } else {
+          console.log('[SettingsService] Loaded settings from file');
+        }
       } else {
         this.settings = this.getDefaultSettings();
         this.saveSettings(this.settings);

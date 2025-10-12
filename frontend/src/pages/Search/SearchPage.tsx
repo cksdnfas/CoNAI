@@ -15,7 +15,7 @@ import ImageGrid from '../../components/ImageGrid/ImageGrid';
 import BulkActionBar from '../../components/BulkActionBar/BulkActionBar';
 import { useSearch } from '../../hooks/useSearch';
 import { useSelection } from '../../hooks/useSelection';
-import type { ImageSearchParams } from '../../types/image';
+import type { ImageSearchParams, AutoTagSearchParams } from '../../types/image';
 
 const SearchPage: React.FC = () => {
   const {
@@ -43,9 +43,9 @@ const SearchPage: React.FC = () => {
     selectedCount,
   } = useSelection();
 
-  const handleSearch = (params: ImageSearchParams) => {
+  const handleSearch = (params: ImageSearchParams, autoTagParams?: AutoTagSearchParams) => {
     deselectAll(); // 새 검색 시 선택 해제
-    searchImages(params);
+    searchImages(params, autoTagParams);
   };
 
   const handleSelectionChange = (newSelectedIds: number[]) => {
@@ -104,7 +104,7 @@ const SearchPage: React.FC = () => {
             fontSize: { xs: '0.875rem', sm: '1rem' },
           }}
         >
-          프롬프트, AI 도구, 모델명 등으로 이미지를 검색할 수 있습니다.
+          프롬프트, AI 도구, 모델명, 오토태그 등으로 이미지를 검색할 수 있습니다.
         </Typography>
       </Box>
 
@@ -176,7 +176,7 @@ const SearchPage: React.FC = () => {
             검색어를 입력하여 이미지를 찾아보세요
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            프롬프트, AI 도구, 모델명, 날짜 등으로 검색할 수 있습니다.
+            프롬프트, AI 도구, 모델명, 오토태그, 날짜 등으로 검색할 수 있습니다.
           </Typography>
         </Box>
       ) : hasResults ? (

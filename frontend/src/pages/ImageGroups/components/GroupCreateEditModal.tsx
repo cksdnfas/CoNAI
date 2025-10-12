@@ -17,6 +17,7 @@ import {
   InputLabel,
   Alert,
   CircularProgress,
+  Slider,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -34,12 +35,30 @@ interface GroupCreateEditModalProps {
 }
 
 const CONDITION_TYPES = [
-  { value: 'prompt_contains', label: '프롬프트 포함' },
-  { value: 'prompt_regex', label: '프롬프트 정규식' },
-  { value: 'negative_prompt_contains', label: '네거티브 프롬프트 포함' },
-  { value: 'negative_prompt_regex', label: '네거티브 프롬프트 정규식' },
-  { value: 'ai_tool', label: 'AI 도구' },
-  { value: 'model_name', label: '모델명' },
+  // 기본 조건
+  { value: 'ai_tool', label: 'AI 도구', group: '기본' },
+  { value: 'model_name', label: '모델명 (메타데이터)', group: '기본' },
+
+  // 프롬프트 조건
+  { value: 'prompt_contains', label: '프롬프트 포함', group: '프롬프트' },
+  { value: 'prompt_regex', label: '프롬프트 정규식', group: '프롬프트' },
+  { value: 'negative_prompt_contains', label: '네거티브 프롬프트 포함', group: '프롬프트' },
+  { value: 'negative_prompt_regex', label: '네거티브 프롬프트 정규식', group: '프롬프트' },
+
+  // 오토태그 조건
+  { value: 'auto_tag_exists', label: '오토태그 존재 여부', group: '오토태그' },
+  { value: 'auto_tag_rating', label: '오토태그: Rating', group: '오토태그' },
+  { value: 'auto_tag_general', label: '오토태그: General 태그', group: '오토태그' },
+  { value: 'auto_tag_character', label: '오토태그: 캐릭터', group: '오토태그' },
+  { value: 'auto_tag_has_character', label: '오토태그: 캐릭터 존재 여부', group: '오토태그' },
+  { value: 'auto_tag_model', label: '오토태그: 모델명', group: '오토태그' },
+];
+
+const RATING_TYPES = [
+  { value: 'general', label: 'General' },
+  { value: 'sensitive', label: 'Sensitive' },
+  { value: 'questionable', label: 'Questionable' },
+  { value: 'explicit', label: 'Explicit' },
 ];
 
 const PRESET_COLORS = [
@@ -127,9 +146,61 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
 
   // 조건 변경
   const updateCondition = (index: number, field: keyof AutoCollectCondition, value: any) => {
-    setConditions(prev => prev.map((condition, i) =>
-      i === index ? { ...condition, [field]: value } : condition
-    ));
+    setConditions(prev => prev.map((condition, i) => {
+      if (i === index) {
+        const updated = { ...condition, [field]: value };
+
+        // 타입이 변경될 때 관련 필드 초기화
+        if (field === 'type') {
+          const newType = value as AutoCollectCondition['type'];
+
+          // Boolean 타입 조건
+          if (newType === 'auto_tag_exists' || newType === 'auto_tag_has_character') {
+            updated.value = true;
+            delete updated.min_score;
+            delete updated.max_score;
+            delete updated.rating_type;
+            delete updated.case_sensitive;
+          }
+          // Rating 조건
+          else if (newType === 'auto_tag_rating') {
+            updated.value = '';
+            updated.rating_type = 'general';
+            delete updated.case_sensitive;
+          }
+          // 점수 범위가 있는 조건
+          else if (newType === 'auto_tag_general' || newType === 'auto_tag_character') {
+            updated.value = '';
+            delete updated.rating_type;
+            delete updated.case_sensitive;
+          }
+          // 문자열 조건
+          else {
+            updated.value = '';
+            delete updated.min_score;
+            delete updated.max_score;
+            delete updated.rating_type;
+          }
+        }
+
+        return updated;
+      }
+      return condition;
+    }));
+  };
+
+  // 조건 타입에 따른 입력 필드 결정
+  const getConditionFieldType = (type: AutoCollectCondition['type']): 'string' | 'boolean' | 'score' | 'rating' => {
+    if (type === 'auto_tag_exists' || type === 'auto_tag_has_character') {
+      return 'boolean';
+    }
+    if (type === 'auto_tag_rating') {
+      return 'rating';
+    }
+    if (type === 'auto_tag_general' || type === 'auto_tag_character') {
+      return 'score';
+    }
+    return 'string';
   };
 
   // 폼 유효성 검사
@@ -146,9 +217,41 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
       }
 
       for (let i = 0; i < conditions.length; i++) {
-        if (!conditions[i].value.trim()) {
+        const condition = conditions[i];
+        const fieldType = getConditionFieldType(condition.type);
+
+        // 값 검증
+        if (fieldType === 'string' && typeof condition.value === 'string' && !condition.value.trim()) {
           setError(`조건 ${i + 1}의 값을 입력해주세요.`);
           return false;
+        }
+
+        // Rating 조건 검증
+        if (condition.type === 'auto_tag_rating' && !condition.rating_type) {
+          setError(`조건 ${i + 1}: Rating 유형을 선택해주세요.`);
+          return false;
+        }
+
+        // 점수 범위 검증
+        if (condition.min_score !== undefined) {
+          if (condition.min_score < 0 || condition.min_score > 1) {
+            setError(`조건 ${i + 1}: 최소 점수는 0.0 ~ 1.0 사이여야 합니다.`);
+            return false;
+          }
+        }
+
+        if (condition.max_score !== undefined) {
+          if (condition.max_score < 0 || condition.max_score > 1) {
+            setError(`조건 ${i + 1}: 최대 점수는 0.0 ~ 1.0 사이여야 합니다.`);
+            return false;
+          }
+        }
+
+        if (condition.min_score !== undefined && condition.max_score !== undefined) {
+          if (condition.min_score > condition.max_score) {
+            setError(`조건 ${i + 1}: 최소 점수가 최대 점수보다 클 수 없습니다.`);
+            return false;
+          }
         }
       }
     }
@@ -271,9 +374,17 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
             label="자동수집 활성화"
           />
 
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 1 }}>
             설정한 조건에 맞는 이미지를 자동으로 이 그룹에 추가합니다.
           </Typography>
+          <Alert severity="info" sx={{ mt: 1 }}>
+            <Typography variant="body2">
+              <strong>OR 조건:</strong> 여러 조건을 추가하면 <strong>하나라도 만족</strong>하는 이미지가 자동수집됩니다.
+            </Typography>
+            <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
+              예시: "프롬프트에 'anime' 포함" + "오토태그 캐릭터 존재" → 둘 중 하나만 만족해도 수집
+            </Typography>
+          </Alert>
         </Box>
 
         {/* 자동수집 조건 */}
@@ -293,64 +404,163 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
               </Button>
             </Box>
 
-            {conditions.map((condition, index) => (
-              <Box
-                key={index}
-                sx={{
-                  border: '1px solid',
-                  borderColor: 'grey.300',
-                  borderRadius: 1,
-                  p: 2,
-                  mb: 2,
-                }}
-              >
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
-                  <FormControl sx={{ minWidth: 200 }}>
-                    <InputLabel>조건 유형</InputLabel>
-                    <Select
-                      value={condition.type}
-                      label="조건 유형"
-                      onChange={(e) => updateCondition(index, 'type', e.target.value)}
-                    >
-                      {CONDITION_TYPES.map((type) => (
-                        <MenuItem key={type.value} value={type.value}>
-                          {type.label}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
+            {conditions.map((condition, index) => {
+              const fieldType = getConditionFieldType(condition.type);
 
-                  <TextField
-                    label="값"
-                    fullWidth
-                    value={condition.value}
-                    onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                    placeholder={
-                      condition.type.includes('regex')
-                        ? '정규식 패턴을 입력하세요'
-                        : '검색할 텍스트를 입력하세요'
-                    }
-                  />
+              return (
+                <Box
+                  key={index}
+                  sx={{
+                    border: '1px solid',
+                    borderColor: 'grey.300',
+                    borderRadius: 1,
+                    p: 2,
+                    mb: 2,
+                  }}
+                >
+                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', mb: 2 }}>
+                    <FormControl sx={{ minWidth: 220 }}>
+                      <InputLabel>조건 유형</InputLabel>
+                      <Select
+                        value={condition.type}
+                        label="조건 유형"
+                        onChange={(e) => updateCondition(index, 'type', e.target.value)}
+                      >
+                        {CONDITION_TYPES.map((type) => (
+                          <MenuItem key={type.value} value={type.value}>
+                            {type.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
 
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={condition.case_sensitive || false}
-                        onChange={(e) => updateCondition(index, 'case_sensitive', e.target.checked)}
+                    {/* Boolean 타입 (존재 여부) */}
+                    {fieldType === 'boolean' && (
+                      <FormControl sx={{ minWidth: 200 }}>
+                        <InputLabel>값</InputLabel>
+                        <Select
+                          value={condition.value ? 'true' : 'false'}
+                          label="값"
+                          onChange={(e) => updateCondition(index, 'value', e.target.value === 'true')}
+                        >
+                          <MenuItem value="true">있음</MenuItem>
+                          <MenuItem value="false">없음</MenuItem>
+                        </Select>
+                      </FormControl>
+                    )}
+
+                    {/* Rating 조건 */}
+                    {fieldType === 'rating' && (
+                      <FormControl sx={{ minWidth: 200 }}>
+                        <InputLabel>Rating 유형</InputLabel>
+                        <Select
+                          value={condition.rating_type || 'general'}
+                          label="Rating 유형"
+                          onChange={(e) => updateCondition(index, 'rating_type', e.target.value)}
+                        >
+                          {RATING_TYPES.map((rating) => (
+                            <MenuItem key={rating.value} value={rating.value}>
+                              {rating.label}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    )}
+
+                    {/* 점수 범위 조건 (General 태그, 캐릭터) */}
+                    {fieldType === 'score' && (
+                      <TextField
+                        label={condition.type === 'auto_tag_character' ? '캐릭터명' : '태그명'}
+                        fullWidth
+                        value={condition.value}
+                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
+                        placeholder={condition.type === 'auto_tag_character' ? '캐릭터명 입력' : '태그명 입력'}
                       />
-                    }
-                    label="대소문자 구분"
-                  />
+                    )}
 
-                  <IconButton
-                    onClick={() => removeCondition(index)}
-                    color="error"
-                  >
-                    <DeleteIcon />
-                  </IconButton>
+                    {/* 문자열 조건 */}
+                    {fieldType === 'string' && (
+                      <>
+                        <TextField
+                          label="값"
+                          fullWidth
+                          value={condition.value}
+                          onChange={(e) => updateCondition(index, 'value', e.target.value)}
+                          placeholder={
+                            condition.type.includes('regex')
+                              ? '정규식 패턴을 입력하세요'
+                              : condition.type === 'auto_tag_model'
+                              ? '모델명 입력 (예: wd-v1-4-moat-tagger-v2)'
+                              : '검색할 텍스트를 입력하세요'
+                          }
+                        />
+
+                        {/* 대소문자 구분 (문자열 조건만) */}
+                        {!condition.type.startsWith('auto_tag_') && (
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                checked={condition.case_sensitive || false}
+                                onChange={(e) => updateCondition(index, 'case_sensitive', e.target.checked)}
+                              />
+                            }
+                            label="대소문자 구분"
+                          />
+                        )}
+
+                        {/* 오토태그 모델명은 case_sensitive 지원 */}
+                        {condition.type === 'auto_tag_model' && (
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                checked={condition.case_sensitive || false}
+                                onChange={(e) => updateCondition(index, 'case_sensitive', e.target.checked)}
+                              />
+                            }
+                            label="대소문자 구분"
+                          />
+                        )}
+                      </>
+                    )}
+
+                    <IconButton
+                      onClick={() => removeCondition(index)}
+                      color="error"
+                      sx={{ mt: 1 }}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Box>
+
+                  {/* 점수 범위 입력 (Rating, General 태그, 캐릭터) */}
+                  {(fieldType === 'rating' || fieldType === 'score') && (
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="caption" color="text.secondary" gutterBottom>
+                        점수 범위: {(condition.min_score ?? 0).toFixed(2)} ~ {(condition.max_score ?? 1).toFixed(2)}
+                      </Typography>
+                      <Slider
+                        value={[condition.min_score ?? 0, condition.max_score ?? 1]}
+                        onChange={(_, newValue) => {
+                          const [min, max] = newValue as [number, number];
+                          updateCondition(index, 'min_score', min);
+                          updateCondition(index, 'max_score', max);
+                        }}
+                        valueLabelDisplay="auto"
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        size="small"
+                        marks={[
+                          { value: 0, label: '0.0' },
+                          { value: 0.5, label: '0.5' },
+                          { value: 1, label: '1.0' },
+                        ]}
+                      />
+                    </Box>
+                  )}
                 </Box>
-              </Box>
-            ))}
+              );
+            })}
 
             {conditions.length === 0 ? (
               <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ py: 3 }}>

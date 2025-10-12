@@ -128,3 +128,36 @@ export interface ImageSearchParams {
 }
 
 export type PageSize = 25 | 50 | 100;
+
+// AutoTag 검색 관련 타입
+export interface RatingFilter {
+  general?: { min?: number; max?: number };
+  sensitive?: { min?: number; max?: number };
+  questionable?: { min?: number; max?: number };
+  explicit?: { min?: number; max?: number };
+}
+
+export interface TagFilter {
+  tag: string;
+  min_score?: number;
+  max_score?: number;
+}
+
+export interface CharacterFilter {
+  name?: string;
+  min_score?: number;
+  max_score?: number;
+  has_character?: boolean;
+}
+
+export interface AutoTagSearchParams {
+  rating?: RatingFilter;
+  general_tags?: TagFilter[];
+  character?: CharacterFilter;
+  model?: string;
+  has_auto_tags?: boolean;
+  page?: number;
+  limit?: number;
+  sortBy?: 'upload_date' | 'filename' | 'file_size' | 'width' | 'height';
+  sortOrder?: 'ASC' | 'DESC';
+}

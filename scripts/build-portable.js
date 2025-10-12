@@ -90,50 +90,118 @@ if (fs.existsSync(migrationsSource)) {
 }
 console.log('');
 
-// Step 5: Copy native modules
+// Step 5: Copy native modules with ALL dependencies
 console.log('Step 5: Copying native modules...');
-const nativeModules = ['sharp', 'sqlite3'];
 const appNodeModules = path.join(appDir, 'node_modules');
+fs.ensureDirSync(appNodeModules);
 
-for (const moduleName of nativeModules) {
-  const possibleLocations = [
-    path.join(ROOT_DIR, 'node_modules', moduleName),
-    path.join(ROOT_DIR, 'backend', 'node_modules', moduleName)
-  ];
+// Find source node_modules
+const sourceNodeModules = fs.existsSync(path.join(ROOT_DIR, 'backend', 'node_modules'))
+  ? path.join(ROOT_DIR, 'backend', 'node_modules')
+  : path.join(ROOT_DIR, 'node_modules');
 
-  let sourceModule = null;
-  for (const location of possibleLocations) {
-    if (fs.existsSync(location)) {
-      sourceModule = location;
-      break;
-    }
-  }
+console.log(`   📦 Reading sharp package.json to find all dependencies...`);
+const sharpSource = path.join(sourceNodeModules, 'sharp');
+const sharpPackageJson = JSON.parse(fs.readFileSync(path.join(sharpSource, 'package.json'), 'utf8'));
 
-  if (!sourceModule) {
-    console.warn(`   ⚠️  ${moduleName} not found, skipping`);
-    continue;
-  }
-
-  const targetModule = path.join(appNodeModules, moduleName);
-  console.log(`   📦 Copying ${moduleName}...`);
-
-  fs.copySync(sourceModule, targetModule, {
-    dereference: true,
-    filter: (src) => {
-      const relativePath = path.relative(sourceModule, src);
-      return !relativePath.includes('.git') &&
-             !relativePath.includes('test') &&
-             !relativePath.includes('docs') &&
-             !relativePath.includes('example') &&
-             !relativePath.includes('benchmark') &&
-             !path.basename(src).startsWith('.') &&
-             !src.endsWith('.md') &&
-             !src.endsWith('.markdown');
-    }
-  });
-  console.log(`   ✅ Copied ${moduleName}`);
+// Collect all sharp dependencies
+const sharpDependencies = new Set();
+if (sharpPackageJson.dependencies) {
+  Object.keys(sharpPackageJson.dependencies).forEach(dep => sharpDependencies.add(dep));
 }
-console.log('✅ Native modules copied\n');
+if (sharpPackageJson.optionalDependencies) {
+  Object.keys(sharpPackageJson.optionalDependencies).forEach(dep => sharpDependencies.add(dep));
+}
+
+console.log(`   Found ${sharpDependencies.size} direct dependencies of sharp`);
+
+// Function to recursively collect dependencies
+const collectAllDependencies = (moduleName, collected = new Set()) => {
+  if (collected.has(moduleName)) return collected;
+  collected.add(moduleName);
+
+  const modulePath = path.join(sourceNodeModules, moduleName);
+  const packageJsonPath = path.join(modulePath, 'package.json');
+
+  if (!fs.existsSync(packageJsonPath)) return collected;
+
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+
+    if (packageJson.dependencies) {
+      Object.keys(packageJson.dependencies).forEach(dep => {
+        collectAllDependencies(dep, collected);
+      });
+    }
+  } catch (e) {
+    // Ignore parse errors
+  }
+
+  return collected;
+};
+
+// Collect all transitive dependencies
+console.log(`   📦 Collecting all transitive dependencies...`);
+const allDependencies = new Set();
+sharpDependencies.forEach(dep => {
+  collectAllDependencies(dep, allDependencies);
+});
+console.log(`   Found ${allDependencies.size} total dependencies`);
+
+// Copy sharp
+console.log(`   📦 Copying sharp...`);
+const sharpTarget = path.join(appNodeModules, 'sharp');
+fs.copySync(sharpSource, sharpTarget, { dereference: true });
+console.log(`   ✅ Copied sharp`);
+
+// Copy sqlite3 and collect its dependencies
+console.log(`   📦 Copying sqlite3...`);
+const sqlite3Source = path.join(sourceNodeModules, 'sqlite3');
+const sqlite3Target = path.join(appNodeModules, 'sqlite3');
+if (fs.existsSync(sqlite3Source)) {
+  fs.copySync(sqlite3Source, sqlite3Target, { dereference: true });
+  console.log(`   ✅ Copied sqlite3`);
+
+  // Collect sqlite3 dependencies
+  const sqlite3PackageJson = JSON.parse(fs.readFileSync(path.join(sqlite3Source, 'package.json'), 'utf8'));
+  if (sqlite3PackageJson.dependencies) {
+    Object.keys(sqlite3PackageJson.dependencies).forEach(dep => {
+      collectAllDependencies(dep, allDependencies);
+    });
+  }
+  console.log(`   Found additional sqlite3 dependencies`);
+}
+
+// Copy all dependencies
+console.log(`   📦 Copying all dependencies (${allDependencies.size} total)...`);
+let copiedCount = 0;
+for (const dep of allDependencies) {
+  const depSource = path.join(sourceNodeModules, dep);
+  const depTarget = path.join(appNodeModules, dep);
+
+  if (fs.existsSync(depSource) && !fs.existsSync(depTarget)) {
+    try {
+      fs.copySync(depSource, depTarget, { dereference: true });
+      copiedCount++;
+    } catch (e) {
+      console.warn(`   ⚠️  Failed to copy ${dep}: ${e.message}`);
+    }
+  }
+}
+console.log(`   ✅ Copied ${copiedCount} dependencies`);
+
+// Copy @img scoped packages (sharp platform binaries)
+console.log('   📦 Copying @img platform binaries...');
+const imgScopeSource = path.join(sourceNodeModules, '@img');
+const imgScopeTarget = path.join(appNodeModules, '@img');
+
+if (fs.existsSync(imgScopeSource)) {
+  fs.copySync(imgScopeSource, imgScopeTarget, { dereference: true });
+  const packages = fs.readdirSync(imgScopeTarget);
+  console.log(`   ✅ Copied ${packages.length} @img packages`);
+}
+
+console.log('✅ Native modules and dependencies copied\n');
 
 // Step 6: Copy Python scripts and dependencies
 console.log('Step 6: Copying Python scripts...');
@@ -144,7 +212,7 @@ if (fs.existsSync(pythonSource)) {
   fs.ensureDirSync(pythonTarget);
 
   // Copy Python files
-  const pythonFiles = ['wdv3_tagger.py', 'requirements.txt', 'README.md'];
+  const pythonFiles = ['wdv3_tagger_daemon.py', 'requirements.txt', 'README.md'];
   let copiedCount = 0;
 
   for (const file of pythonFiles) {
@@ -310,20 +378,11 @@ LOCALE=en
 # WD v3 Tagger Configuration
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# Enable/disable auto tagging feature
-TAGGER_ENABLED=true
-
-# Model type: vit, swinv2, convnext
-TAGGER_MODEL=vit
-
-# General tags threshold (0.0-1.0)
-TAGGER_GEN_THRESHOLD=0.35
-
-# Character tags threshold (0.0-1.0)
-TAGGER_CHAR_THRESHOLD=0.75
-
-# Python executable path (default: python)
-PYTHON_PATH=python
+# Note: Tagger settings are managed via Settings UI (config/settings.json)
+# The values below are only used as initial defaults on first run
+# After first run, change all tagger settings through the Settings page in the web UI
+#
+# For instructions on Python setup, see app/python/README.md
 `;
 
 fs.writeFileSync(path.join(PORTABLE_OUTPUT_DIR, '.env.example'), envTemplate, 'utf8');
