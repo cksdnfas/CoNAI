@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { getBackendOrigin } from '../utils/backend';
-import type { ImageRecord, ImageListResponse, UploadResponse, ImageSearchParams, AutoTagSearchParams } from '../types/image';
+import type { ImageRecord, ImageListResponse, UploadResponse, ImageSearchParams, AutoTagSearchParams, UploadProgressEvent } from '../types/image';
 import type {
   GroupRecord,
   GroupResponse,
@@ -120,7 +120,7 @@ export const imageApi = {
       if (error.response?.status === 400 && error.response?.data?.error?.includes('LIMIT_FILE_COUNT')) {
         return [{
           success: false,
-          error: '업로드 파일 개수가 제한을 초과했습니다. 최대 50개 파일까지 업로드할 수 있습니다.'
+          error: '업로드 파일 개수가 제한을 초과했습니다.'
         }];
       }
 
@@ -135,6 +135,57 @@ export const imageApi = {
         success: false,
         error: error.response?.data?.error || error.message || '업로드 중 오류가 발생했습니다.'
       }];
+    }
+  },
+
+  // 이미지 업로드 (다중 - SSE 스트리밍)
+  uploadImagesWithProgress: async (
+    files: File[],
+    onProgress: (event: UploadProgressEvent) => void
+  ): Promise<void> => {
+    const formData = new FormData();
+    files.forEach(file => {
+      formData.append('images', file);
+    });
+
+    const response = await fetch(`${API_BASE_URL}/api/images/upload-multiple-stream`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.statusText}`);
+    }
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        // 청크를 문자열로 디코딩하여 버퍼에 추가
+        buffer += decoder.decode(value, { stream: true });
+
+        // 라인 단위로 분리
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // 마지막 불완전한 라인은 버퍼에 유지
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6)) as UploadProgressEvent;
+              onProgress(event);
+            } catch (parseError) {
+              console.warn('Failed to parse SSE event:', line, parseError);
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
     }
   },
 
@@ -230,6 +281,31 @@ export const groupApi = {
   removeImageFromGroup: async (groupId: number, imageId: number): Promise<GroupResponse> => {
     const response = await api.delete(`/api/groups/${groupId}/images/${imageId}`);
     return response.data;
+  },
+
+  // 그룹에서 여러 이미지 제거
+  removeImagesFromGroup: async (groupId: number, imageIds: number[]): Promise<{ success: boolean; removed: number; errors: string[] }> => {
+    let removedCount = 0;
+    const errors: string[] = [];
+
+    for (const imageId of imageIds) {
+      try {
+        const response = await api.delete(`/api/groups/${groupId}/images/${imageId}`);
+        if (response.data.success) {
+          removedCount++;
+        } else {
+          errors.push(`Image ${imageId}: ${response.data.error || 'Failed to remove'}`);
+        }
+      } catch (error: any) {
+        errors.push(`Image ${imageId}: ${error.response?.data?.error || error.message || 'Failed to remove'}`);
+      }
+    }
+
+    return {
+      success: errors.length === 0,
+      removed: removedCount,
+      errors
+    };
   },
 
   // 그룹의 자동수집 실행

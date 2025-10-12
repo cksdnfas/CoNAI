@@ -1,21 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Paper,
   Typography,
-  Button,
   IconButton,
   Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  List,
-  ListItemButton,
-  ListItemText,
   Alert,
   CircularProgress,
-  Slide,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -23,19 +14,8 @@ import {
   FolderOpen as FolderOpenIcon,
   Close as CloseIcon,
 } from '@mui/icons-material';
-import type { TransitionProps } from '@mui/material/transitions';
-import type { GroupRecord } from '../../types/group';
-import { groupApi } from '../../services/api';
 import { useBulkActions } from '../../hooks/useBulkActions';
-
-const Transition = React.forwardRef(function Transition(
-  props: TransitionProps & {
-    children: React.ReactElement<any, any>;
-  },
-  ref: React.Ref<unknown>,
-) {
-  return <Slide direction="up" ref={ref} {...props} />;
-});
+import GroupAssignModal from '../GroupAssignModal';
 
 interface BulkActionBarProps {
   selectedCount: number;
@@ -51,29 +31,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
   onActionComplete,
 }) => {
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
-  const [groups, setGroups] = useState<GroupRecord[]>([]);
-  const [groupsLoading, setGroupsLoading] = useState(false);
   const { loading, error, deleteImages, downloadImages, assignToGroup, clearError } = useBulkActions();
-
-  const loadGroups = async () => {
-    setGroupsLoading(true);
-    try {
-      const response = await groupApi.getGroups();
-      if (response.success && response.data) {
-        setGroups(response.data);
-      }
-    } catch (err) {
-      console.error('Failed to load groups:', err);
-    } finally {
-      setGroupsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (groupDialogOpen) {
-      loadGroups();
-    }
-  }, [groupDialogOpen]);
 
   const handleDelete = async () => {
     if (!window.confirm(`선택된 ${selectedCount}개 이미지를 삭제하시겠습니까?`)) {
@@ -95,7 +53,6 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
 
   const handleGroupAssign = async (groupId: number) => {
     const success = await assignToGroup(selectedIds, groupId);
-    setGroupDialogOpen(false);
 
     if (success) {
       onSelectionClear();
@@ -103,11 +60,6 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
         onActionComplete();
       }
     }
-  };
-
-  const handleGroupDialogClose = () => {
-    setGroupDialogOpen(false);
-    clearError();
   };
 
   if (selectedCount === 0) {
@@ -177,56 +129,13 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
         </Tooltip>
       </Paper>
 
-      {/* 그룹 선택 다이얼로그 */}
-      <Dialog
+      {/* 그룹 선택 모달 */}
+      <GroupAssignModal
         open={groupDialogOpen}
-        onClose={handleGroupDialogClose}
-        TransitionComponent={Transition}
-        maxWidth="sm"
-        fullWidth
-        disableRestoreFocus
-        keepMounted={false}
-      >
-        <DialogTitle>
-          그룹 선택
-          <Typography variant="body2" color="text.secondary">
-            {selectedCount}개 이미지를 추가할 그룹을 선택하세요
-          </Typography>
-        </DialogTitle>
-        <DialogContent sx={{ p: 0 }}>
-          {groupsLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-              <CircularProgress />
-            </Box>
-          ) : groups.length === 0 ? (
-            <Box sx={{ p: 3, textAlign: 'center' }}>
-              <Typography color="text.secondary">
-                생성된 그룹이 없습니다
-              </Typography>
-            </Box>
-          ) : (
-            <List>
-              {groups.map((group) => (
-                <ListItemButton
-                  key={group.id}
-                  onClick={() => handleGroupAssign(group.id)}
-                  disabled={loading}
-                >
-                  <ListItemText
-                    primary={group.name}
-                    secondary={group.description}
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleGroupDialogClose}>
-            취소
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onClose={() => setGroupDialogOpen(false)}
+        selectedImageCount={selectedCount}
+        onAssign={handleGroupAssign}
+      />
 
       {/* 에러 메시지 */}
       {error && (

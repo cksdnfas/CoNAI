@@ -237,10 +237,10 @@ export class ImageSearchModel {
   /**
    * 오토태그 기반 이미지 검색 (그룹 정보 포함)
    */
-  static searchByAutoTags(
+  static async searchByAutoTags(
     searchParams: AutoTagSearchParams
   ): Promise<{ images: any[], total: number }> {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       const page = searchParams.page || 1;
       const limit = searchParams.limit || 20;
       const sortBy = searchParams.sortBy || 'upload_date';
@@ -248,7 +248,7 @@ export class ImageSearchModel {
       const offset = (page - 1) * limit;
 
       // 오토태그 검색 조건 생성
-      const queryBuilder = AutoTagSearchService.buildAutoTagSearchQuery(searchParams);
+      const queryBuilder = await AutoTagSearchService.buildAutoTagSearchQuery(searchParams);
       const whereClause = queryBuilder.conditions.length > 0
         ? `WHERE ${queryBuilder.conditions.join(' AND ')}`
         : '';

@@ -152,6 +152,7 @@ export interface CharacterFilter {
 
 export interface AutoTagSearchParams {
   rating?: RatingFilter;
+  rating_score?: { min_score?: number; max_score?: number };  // 가중치 기반 점수 필터
   general_tags?: TagFilter[];
   character?: CharacterFilter;
   model?: string;
@@ -160,4 +161,20 @@ export interface AutoTagSearchParams {
   limit?: number;
   sortBy?: 'upload_date' | 'filename' | 'file_size' | 'width' | 'height';
   sortOrder?: 'ASC' | 'DESC';
+}
+
+// 업로드 진행도 이벤트 타입 (SSE용)
+export type UploadProgressEventType = 'start' | 'processing' | 'stage' | 'complete' | 'error';
+export type UploadStage = 'upload' | 'metadata' | 'thumbnail' | 'auto-collect' | 'auto-tag';
+
+export interface UploadProgressEvent {
+  type: UploadProgressEventType;
+  currentFile: number;        // 현재 처리 중인 파일 번호 (1-based)
+  totalFiles: number;          // 전체 파일 개수
+  filename: string;            // 현재 파일명
+  stage?: UploadStage;         // 처리 단계
+  message?: string;            // 상세 메시지
+  imageId?: number;            // 완료 시 이미지 ID
+  error?: string;              // 에러 메시지
+  timestamp: string;           // 타임스탬프
 }

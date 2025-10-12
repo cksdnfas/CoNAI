@@ -1,7 +1,8 @@
-import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import CssBaseline from '@mui/material/CssBaseline';
 
 // 페이지 컴포넌트들
+import HomePage from './pages/Home/HomePage';
 import UploadPage from './pages/Upload/UploadPage';
 import GalleryPage from './pages/Gallery/GalleryPage';
 import SearchPage from './pages/Search/SearchPage';
@@ -23,7 +24,7 @@ function App() {
       <Router>
         <Layout>
           <Routes>
-            <Route path="/" element={<Navigate to="/gallery" replace />} />
+            <Route path="/" element={<HomePage />} />
             <Route path="/gallery" element={<GalleryPage />} />
             <Route path="/image-groups" element={<ImageGroupsPage />} />
             <Route path="/upload" element={<UploadPage />} />

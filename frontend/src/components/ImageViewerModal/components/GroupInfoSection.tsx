@@ -21,9 +21,9 @@ export const GroupInfoSection: React.FC<GroupInfoSectionProps> = ({ groups, onGr
         소속 그룹
       </Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-        {groups.map((group) => (
+        {groups.map((group, index) => (
           <Chip
-            key={group.id}
+            key={group.id ?? `group-${index}`}
             label={group.name}
             size="small"
             variant="filled"

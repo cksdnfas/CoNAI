@@ -13,6 +13,7 @@ import {
   Info as InfoIcon,
   Download as DownloadIcon,
   Delete as DeleteIcon,
+  AutoAwesome as AutoAwesomeIcon,
 } from '@mui/icons-material';
 import type { ImageRecord } from '../../types/image';
 import { getBackendOrigin } from '../../utils/backend';
@@ -24,6 +25,8 @@ interface ImageCardProps {
   onSelectionChange?: (id: number) => void;
   onDelete?: (id: number) => void;
   onImageClick?: () => void;
+  showCollectionType?: boolean; // 그룹 모달에서만 collection_type 표시
+  currentGroupId?: number; // 현재 그룹 ID (collection_type 표시용)
 }
 
 const ImageCard: React.FC<ImageCardProps> = ({
@@ -33,9 +36,17 @@ const ImageCard: React.FC<ImageCardProps> = ({
   onSelectionChange,
   onDelete,
   onImageClick,
+  showCollectionType = false,
+  currentGroupId,
 }) => {
   const [imageError, setImageError] = useState(false);
   const backendOrigin = getBackendOrigin();
+
+  // 현재 그룹의 collection_type 찾기
+  const currentGroupInfo = currentGroupId
+    ? image.groups?.find(g => g.id === currentGroupId)
+    : null;
+  const isAutoCollected = currentGroupInfo?.collection_type === 'auto';
 
   const handleSelectionChange = () => {
     if (onSelectionChange) {
@@ -70,8 +81,11 @@ const ImageCard: React.FC<ImageCardProps> = ({
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          border: selected ? 2 : 1,
-          borderColor: selected ? 'primary.main' : 'divider',
+          border: selected ? 2 : (showCollectionType && isAutoCollected ? 2 : 1),
+          borderColor: selected
+            ? 'primary.main'
+            : (showCollectionType && isAutoCollected ? 'info.light' : 'divider'),
+          borderStyle: (showCollectionType && isAutoCollected) ? 'dashed' : 'solid',
           borderRadius: 2,
           transition: 'all 0.3s ease',
           '&:hover': {
@@ -94,6 +108,30 @@ const ImageCard: React.FC<ImageCardProps> = ({
                   bgcolor: (theme) => theme.palette.mode === 'dark'
                     ? 'rgba(0, 0, 0, 0.8)'
                     : 'rgba(255, 255, 255, 0.9)',
+                },
+              }}
+            />
+          </Box>
+        )}
+
+        {/* 자동수집 배지 */}
+        {showCollectionType && isAutoCollected && (
+          <Box sx={{ position: 'absolute', top: selectable ? 54 : 8, left: 8, zIndex: 1 }}>
+            <Chip
+              icon={<AutoAwesomeIcon sx={{ fontSize: '0.9rem' }} />}
+              label="자동"
+              size="small"
+              color="info"
+              sx={{
+                fontSize: '0.7rem',
+                height: '24px',
+                fontWeight: 600,
+                bgcolor: (theme) => theme.palette.mode === 'dark'
+                  ? 'rgba(33, 150, 243, 0.8)'
+                  : 'rgba(33, 150, 243, 0.9)',
+                color: 'white',
+                '& .MuiChip-icon': {
+                  color: 'white',
                 },
               }}
             />

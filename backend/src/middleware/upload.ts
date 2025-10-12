@@ -1,5 +1,7 @@
 import multer from 'multer';
 import { Request } from 'express';
+import path from 'path';
+import { runtimePaths } from '../config/runtimePaths';
 
 // 지원되는 이미지 MIME 타입
 const ALLOWED_MIME_TYPES = [
@@ -15,7 +17,7 @@ const ALLOWED_MIME_TYPES = [
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 // 파일 필터 함수
-const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
@@ -23,12 +25,24 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
   }
 };
 
-// Multer 설정 (메모리 저장)
+// Multer 설정 (디스크 저장 - 메모리 부담 제거)
 export const uploadConfig = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      // 임시 폴더에 저장 (runtimePaths.tempDir)
+      cb(null, runtimePaths.tempDir);
+    },
+    filename: (_req, file, cb) => {
+      // 고유한 임시 파일명 생성: temp-upload-타임스탬프-랜덤문자열.확장자
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(2, 10);
+      const ext = path.extname(file.originalname);
+      cb(null, `temp-upload-${timestamp}-${random}${ext}`);
+    }
+  }),
   limits: {
-    fileSize: MAX_FILE_SIZE,
-    files: 50 // 최대 50개 파일 동시 업로드
+    fileSize: MAX_FILE_SIZE
+    // files 제한 제거 - diskStorage 사용으로 메모리 문제 해결
   },
   fileFilter
 });
@@ -40,7 +54,8 @@ export const uploadSingle = uploadConfig.fields([
 ]);
 
 // 다중 파일 업로드 미들웨어 (images 또는 files 필드명 모두 허용)
+// 파일 개수 제한 제거 - diskStorage 사용으로 메모리 걱정 없음
 export const uploadMultiple = uploadConfig.fields([
-  { name: 'images', maxCount: 50 },
-  { name: 'files', maxCount: 50 }
+  { name: 'images' },
+  { name: 'files' }
 ]);

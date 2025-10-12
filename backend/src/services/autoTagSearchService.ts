@@ -5,6 +5,7 @@ import {
   CharacterFilter,
   QueryBuilderResult
 } from '../types/autoTag';
+import { RatingScoreService } from './ratingScoreService';
 
 /**
  * 오토태그 검색 서비스
@@ -14,7 +15,7 @@ export class AutoTagSearchService {
   /**
    * 오토태그 검색 파라미터를 SQL WHERE 조건으로 변환
    */
-  static buildAutoTagSearchQuery(searchParams: AutoTagSearchParams): QueryBuilderResult {
+  static async buildAutoTagSearchQuery(searchParams: AutoTagSearchParams): Promise<QueryBuilderResult> {
     const conditions: string[] = [];
     const params: any[] = [];
 
@@ -39,6 +40,13 @@ export class AutoTagSearchService {
       params.push(...ratingConditions.params);
     }
 
+    // 2-1. Rating Score 필터 (가중치 기반)
+    if (searchParams.rating_score) {
+      const scoreConditions = await this.buildRatingScoreConditions(searchParams.rating_score);
+      conditions.push(...scoreConditions.conditions);
+      params.push(...scoreConditions.params);
+    }
+
     // 3. General 태그 필터
     if (searchParams.general_tags && searchParams.general_tags.length > 0) {
       const generalConditions = this.buildGeneralTagConditions(searchParams.general_tags);
@@ -57,6 +65,27 @@ export class AutoTagSearchService {
     if (searchParams.model) {
       conditions.push(`json_extract(auto_tags, '$.model') = ?`);
       params.push(searchParams.model);
+    }
+
+    return { conditions, params };
+  }
+
+  /**
+   * Rating Score 조건 생성 (가중치 기반)
+   */
+  private static async buildRatingScoreConditions(scoreFilter: { min_score?: number; max_score?: number }): Promise<QueryBuilderResult> {
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    // 가중치 설정 조회
+    const weights = await RatingScoreService.getWeights();
+
+    // RatingScoreService의 SQL 생성 함수 사용
+    const result = RatingScoreService.buildScoreFilterSQL(scoreFilter, weights);
+
+    if (result.condition) {
+      conditions.push(result.condition);
+      params.push(...result.params);
     }
 
     return { conditions, params };
@@ -92,34 +121,72 @@ export class AutoTagSearchService {
   }
 
   /**
-   * General 태그 조건 생성
+   * General 태그 조건 생성 (부분 매칭 및 띄어쓰기 정규화 지원)
    */
   private static buildGeneralTagConditions(tags: TagFilter[]): QueryBuilderResult {
     const conditions: string[] = [];
     const params: any[] = [];
 
     for (const tagFilter of tags) {
-      // 태그명에 특수문자가 있을 수 있으므로 JSON path escape 처리
-      const escapedTag = this.escapeJsonPath(tagFilter.tag);
-      const jsonPath = `$.general.${escapedTag}`;
+      // 검색어 정규화 및 변형 생성
+      const searchVariants = this.normalizeSearchTerm(tagFilter.tag);
 
-      // 태그가 존재하는지 먼저 확인
-      const tagConditions: string[] = [];
-      tagConditions.push(`json_extract(auto_tags, '${jsonPath}') IS NOT NULL`);
+      // 각 변형에 대한 OR 조건 생성
+      const tagOrConditions: string[] = [];
 
-      if (tagFilter.min_score !== undefined) {
-        tagConditions.push(`json_extract(auto_tags, '${jsonPath}') >= ?`);
-        params.push(tagFilter.min_score);
+      for (const variant of searchVariants) {
+        // SQLite JSON 키 검색: json_each로 키를 순회하며 LIKE 패턴 매칭
+        const keyMatchCondition = `
+          EXISTS (
+            SELECT 1 FROM json_each(auto_tags, '$.general')
+            WHERE LOWER(json_each.key) LIKE ?
+          )
+        `.trim();
+
+        tagOrConditions.push(keyMatchCondition);
+        params.push(`%${variant}%`);
       }
 
-      if (tagFilter.max_score !== undefined) {
-        tagConditions.push(`json_extract(auto_tags, '${jsonPath}') <= ?`);
-        params.push(tagFilter.max_score);
-      }
+      // 매칭되는 키가 하나라도 있으면 통과 (OR 조건)
+      const existsCondition = `(${tagOrConditions.join(' OR ')})`;
 
-      // 각 태그의 조건들을 AND로 결합
-      if (tagConditions.length > 0) {
-        conditions.push(`(${tagConditions.join(' AND ')})`);
+      // Score 범위 조건이 있는 경우
+      if (tagFilter.min_score !== undefined || tagFilter.max_score !== undefined) {
+        // Score 조건을 위한 서브쿼리
+        const scoreConditions: string[] = [];
+
+        for (const variant of searchVariants) {
+          const scoreSubConditions: string[] = [];
+
+          if (tagFilter.min_score !== undefined) {
+            scoreSubConditions.push(`json_each.value >= ?`);
+            params.push(tagFilter.min_score);
+          }
+
+          if (tagFilter.max_score !== undefined) {
+            scoreSubConditions.push(`json_each.value <= ?`);
+            params.push(tagFilter.max_score);
+          }
+
+          const scoreCheck = scoreSubConditions.length > 0
+            ? ` AND ${scoreSubConditions.join(' AND ')}`
+            : '';
+
+          scoreConditions.push(`
+            EXISTS (
+              SELECT 1 FROM json_each(auto_tags, '$.general')
+              WHERE LOWER(json_each.key) LIKE ?${scoreCheck}
+            )
+          `.trim());
+
+          params.push(`%${variant}%`);
+        }
+
+        // 존재 여부와 Score 조건을 AND로 결합
+        conditions.push(`(${existsCondition} AND (${scoreConditions.join(' OR ')}))`);
+      } else {
+        // Score 조건이 없으면 존재 여부만 체크
+        conditions.push(existsCondition);
       }
     }
 
@@ -127,7 +194,7 @@ export class AutoTagSearchService {
   }
 
   /**
-   * Character 조건 생성
+   * Character 조건 생성 (부분 매칭 및 띄어쓰기 정규화 지원)
    */
   private static buildCharacterConditions(character: CharacterFilter): QueryBuilderResult {
     const conditions: string[] = [];
@@ -150,26 +217,67 @@ export class AutoTagSearchService {
       }
     }
 
-    // 특정 캐릭터명 검색
+    // 특정 캐릭터명 검색 (부분 매칭 지원)
     if (character.name) {
-      const escapedName = this.escapeJsonPath(character.name);
-      const jsonPath = `$.character.${escapedName}`;
+      // 검색어 정규화 및 변형 생성
+      const searchVariants = this.normalizeSearchTerm(character.name);
 
-      const characterConditions: string[] = [];
-      characterConditions.push(`json_extract(auto_tags, '${jsonPath}') IS NOT NULL`);
+      // 각 변형에 대한 OR 조건 생성
+      const charOrConditions: string[] = [];
 
-      if (character.min_score !== undefined) {
-        characterConditions.push(`json_extract(auto_tags, '${jsonPath}') >= ?`);
-        params.push(character.min_score);
+      for (const variant of searchVariants) {
+        // SQLite JSON 키 검색: json_each로 키를 순회하며 LIKE 패턴 매칭
+        const keyMatchCondition = `
+          EXISTS (
+            SELECT 1 FROM json_each(auto_tags, '$.character')
+            WHERE LOWER(json_each.key) LIKE ?
+          )
+        `.trim();
+
+        charOrConditions.push(keyMatchCondition);
+        params.push(`%${variant}%`);
       }
 
-      if (character.max_score !== undefined) {
-        characterConditions.push(`json_extract(auto_tags, '${jsonPath}') <= ?`);
-        params.push(character.max_score);
-      }
+      // 매칭되는 키가 하나라도 있으면 통과 (OR 조건)
+      const existsCondition = `(${charOrConditions.join(' OR ')})`;
 
-      if (characterConditions.length > 0) {
-        conditions.push(`(${characterConditions.join(' AND ')})`);
+      // Score 범위 조건이 있는 경우
+      if (character.min_score !== undefined || character.max_score !== undefined) {
+        // Score 조건을 위한 서브쿼리
+        const scoreConditions: string[] = [];
+
+        for (const variant of searchVariants) {
+          const scoreSubConditions: string[] = [];
+
+          if (character.min_score !== undefined) {
+            scoreSubConditions.push(`json_each.value >= ?`);
+            params.push(character.min_score);
+          }
+
+          if (character.max_score !== undefined) {
+            scoreSubConditions.push(`json_each.value <= ?`);
+            params.push(character.max_score);
+          }
+
+          const scoreCheck = scoreSubConditions.length > 0
+            ? ` AND ${scoreSubConditions.join(' AND ')}`
+            : '';
+
+          scoreConditions.push(`
+            EXISTS (
+              SELECT 1 FROM json_each(auto_tags, '$.character')
+              WHERE LOWER(json_each.key) LIKE ?${scoreCheck}
+            )
+          `.trim());
+
+          params.push(`%${variant}%`);
+        }
+
+        // 존재 여부와 Score 조건을 AND로 결합
+        conditions.push(`(${existsCondition} AND (${scoreConditions.join(' OR ')}))`);
+      } else {
+        // Score 조건이 없으면 존재 여부만 체크
+        conditions.push(existsCondition);
       }
     }
 
@@ -194,6 +302,85 @@ export class AutoTagSearchService {
     }
 
     return key;
+  }
+
+  /**
+   * 검색어 정규화 및 변형 생성
+   * 예: "short_hair" → ["short_hair", "short hair", "shorthair", "short", "hair"]
+   *
+   * @param term 검색어
+   * @returns LIKE 패턴으로 사용할 수 있는 검색 변형들
+   */
+  private static normalizeSearchTerm(term: string): string[] {
+    const variants: Set<string> = new Set();
+    const normalized = term.trim().toLowerCase();
+
+    if (!normalized) return [];
+
+    // 1. 원본 검색어 추가
+    variants.add(normalized);
+
+    // 2. 언더스코어 ↔ 공백 변형
+    if (normalized.includes('_')) {
+      variants.add(normalized.replace(/_/g, ' '));  // short_hair → short hair
+      variants.add(normalized.replace(/_/g, ''));   // short_hair → shorthair
+    }
+
+    if (normalized.includes(' ')) {
+      variants.add(normalized.replace(/ /g, '_'));  // short hair → short_hair
+      variants.add(normalized.replace(/ /g, ''));   // short hair → shorthair
+    }
+
+    // 3. 토큰 분리 (언더스코어 또는 공백 기준)
+    const tokens = normalized.split(/[_ ]+/).filter(t => t.length >= 2);
+
+    // 각 토큰을 개별 검색어로 추가 (너무 짧은 토큰 제외)
+    if (tokens.length > 1) {
+      for (const token of tokens) {
+        if (token.length >= 2) {  // 최소 2자 이상만 추가
+          variants.add(token);
+        }
+      }
+    }
+
+    // 4. 하이픈 처리 (추가 변형)
+    if (normalized.includes('-')) {
+      variants.add(normalized.replace(/-/g, '_'));
+      variants.add(normalized.replace(/-/g, ' '));
+      variants.add(normalized.replace(/-/g, ''));
+    }
+
+    return Array.from(variants);
+  }
+
+  /**
+   * 검색 변형 패턴에 매칭되는 JSON 키 찾기 (메모리 내)
+   *
+   * @param jsonObject 검색 대상 JSON 객체
+   * @param searchTerm 검색어
+   * @returns 매칭된 키들
+   */
+  private static findMatchingKeys(jsonObject: any, searchTerm: string): string[] {
+    if (!jsonObject || typeof jsonObject !== 'object') {
+      return [];
+    }
+
+    const variants = this.normalizeSearchTerm(searchTerm);
+    const matchingKeys: string[] = [];
+
+    for (const key of Object.keys(jsonObject)) {
+      const normalizedKey = key.toLowerCase();
+
+      // 각 변형 패턴과 비교
+      for (const variant of variants) {
+        if (normalizedKey.includes(variant)) {
+          matchingKeys.push(key);
+          break;  // 하나라도 매칭되면 다음 키로
+        }
+      }
+    }
+
+    return matchingKeys;
   }
 
   /**
@@ -275,10 +462,10 @@ export class AutoTagSearchService {
    * 오토태그가 검색 조건과 일치하는지 확인 (메모리 내 필터링)
    * 주로 자동수집 서비스에서 사용
    */
-  static matchesAutoTagConditions(
+  static async matchesAutoTagConditions(
     autoTagsJson: string | null,
     searchParams: AutoTagSearchParams
-  ): boolean {
+  ): Promise<boolean> {
     // 오토태그가 없는 경우
     if (!autoTagsJson) {
       return searchParams.has_auto_tags === false;
@@ -295,6 +482,14 @@ export class AutoTagSearchService {
       // Rating 체크
       if (searchParams.rating) {
         if (!this.matchesRating(autoTags.rating, searchParams.rating)) {
+          return false;
+        }
+      }
+
+      // Rating Score 체크 (가중치 기반)
+      if (searchParams.rating_score) {
+        const scoreMatches = await this.matchesRatingScore(autoTags.rating, searchParams.rating_score);
+        if (!scoreMatches) {
           return false;
         }
       }
@@ -328,6 +523,37 @@ export class AutoTagSearchService {
   }
 
   /**
+   * Rating Score 조건 매칭 (메모리 내, 가중치 기반)
+   */
+  private static async matchesRatingScore(
+    rating: any,
+    scoreFilter: { min_score?: number; max_score?: number }
+  ): Promise<boolean> {
+    if (!rating) return false;
+
+    try {
+      // 점수 계산
+      const scoreResult = await RatingScoreService.calculateScore(rating);
+      const score = scoreResult.score;
+
+      // min_score 체크
+      if (scoreFilter.min_score !== undefined && score < scoreFilter.min_score) {
+        return false;
+      }
+
+      // max_score 체크
+      if (scoreFilter.max_score !== undefined && score > scoreFilter.max_score) {
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.warn('Failed to calculate rating score:', error);
+      return false;
+    }
+  }
+
+  /**
    * Rating 조건 매칭 (메모리 내)
    */
   private static matchesRating(rating: any, filter: RatingFilter): boolean {
@@ -349,24 +575,46 @@ export class AutoTagSearchService {
   }
 
   /**
-   * General 태그 조건 매칭 (메모리 내)
+   * General 태그 조건 매칭 (메모리 내, 부분 매칭 지원)
    */
   private static matchesGeneralTags(general: any, filters: TagFilter[]): boolean {
     if (!general) return false;
 
     for (const filter of filters) {
-      const value = general[filter.tag];
-      if (value === undefined || value === null) return false;
+      // 매칭되는 키 찾기 (부분 매칭 및 정규화 지원)
+      const matchingKeys = this.findMatchingKeys(general, filter.tag);
 
-      if (filter.min_score !== undefined && value < filter.min_score) return false;
-      if (filter.max_score !== undefined && value > filter.max_score) return false;
+      // 매칭되는 키가 없으면 실패
+      if (matchingKeys.length === 0) return false;
+
+      // 매칭된 키들 중 하나라도 Score 조건을 만족하면 통과
+      let hasValidScore = false;
+
+      for (const key of matchingKeys) {
+        const value = general[key];
+        if (value === undefined || value === null) continue;
+
+        // Score 조건 체크
+        const meetsMinScore = filter.min_score === undefined || value >= filter.min_score;
+        const meetsMaxScore = filter.max_score === undefined || value <= filter.max_score;
+
+        if (meetsMinScore && meetsMaxScore) {
+          hasValidScore = true;
+          break;
+        }
+      }
+
+      // Score 조건이 있는데 만족하는 키가 없으면 실패
+      if ((filter.min_score !== undefined || filter.max_score !== undefined) && !hasValidScore) {
+        return false;
+      }
     }
 
     return true;
   }
 
   /**
-   * Character 조건 매칭 (메모리 내)
+   * Character 조건 매칭 (메모리 내, 부분 매칭 지원)
    */
   private static matchesCharacter(character: any, filter: CharacterFilter): boolean {
     // has_character 체크
@@ -375,14 +623,37 @@ export class AutoTagSearchService {
       if (filter.has_character !== hasChar) return false;
     }
 
-    // 특정 캐릭터명 체크
+    // 특정 캐릭터명 체크 (부분 매칭 지원)
     if (filter.name) {
       if (!character) return false;
-      const value = character[filter.name];
-      if (value === undefined || value === null) return false;
 
-      if (filter.min_score !== undefined && value < filter.min_score) return false;
-      if (filter.max_score !== undefined && value > filter.max_score) return false;
+      // 매칭되는 키 찾기 (부분 매칭 및 정규화 지원)
+      const matchingKeys = this.findMatchingKeys(character, filter.name);
+
+      // 매칭되는 키가 없으면 실패
+      if (matchingKeys.length === 0) return false;
+
+      // 매칭된 키들 중 하나라도 Score 조건을 만족하면 통과
+      let hasValidScore = false;
+
+      for (const key of matchingKeys) {
+        const value = character[key];
+        if (value === undefined || value === null) continue;
+
+        // Score 조건 체크
+        const meetsMinScore = filter.min_score === undefined || value >= filter.min_score;
+        const meetsMaxScore = filter.max_score === undefined || value <= filter.max_score;
+
+        if (meetsMinScore && meetsMaxScore) {
+          hasValidScore = true;
+          break;
+        }
+      }
+
+      // Score 조건이 있는데 만족하는 키가 없으면 실패
+      if ((filter.min_score !== undefined || filter.max_score !== undefined) && !hasValidScore) {
+        return false;
+      }
     }
 
     return true;

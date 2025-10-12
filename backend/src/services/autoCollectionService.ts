@@ -28,6 +28,7 @@ export class AutoCollectionService {
 
   /**
    * 개별 조건 평가
+   * Note: async로 변경되어 rating_score 조건도 지원
    */
   private static async evaluateCondition(
     image: ImageRecord,
@@ -103,6 +104,9 @@ export class AutoCollectionService {
 
       case 'auto_tag_has_character':
         return this.evaluateHasCharacterCondition(image, condition);
+
+      case 'auto_tag_rating_score':
+        return await this.evaluateRatingScoreCondition(image, condition);
 
       default:
         return false;
@@ -264,7 +268,44 @@ export class AutoCollectionService {
   }
 
   /**
+   * Rating Score 조건 평가 (가중치 기반)
+   */
+  private static async evaluateRatingScoreCondition(
+    image: ImageRecord,
+    condition: AutoCollectCondition
+  ): Promise<boolean> {
+    if (!image.auto_tags) return false;
+
+    try {
+      const autoTags = JSON.parse(image.auto_tags);
+      if (!autoTags.rating) return false;
+
+      // RatingScoreService를 이용한 점수 계산
+      const { RatingScoreService } = await import('./ratingScoreService');
+      const scoreResult = await RatingScoreService.calculateScore(autoTags.rating);
+      const score = scoreResult.score;
+
+      // min_score 체크
+      if (condition.min_score !== undefined && score < condition.min_score) {
+        return false;
+      }
+
+      // max_score 체크
+      if (condition.max_score !== undefined && score > condition.max_score) {
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.warn('Failed to evaluate rating_score condition:', error);
+      return false;
+    }
+  }
+
+  /**
    * 특정 그룹의 자동수집 실행
+   * - 수동으로 추가된 이미지는 삭제하지 않음
+   * - 자동수집 조건 변경 시에도 수동 추가 이미지 유지
    */
   static async runAutoCollectionForGroup(groupId: number): Promise<AutoCollectResult> {
     const startTime = Date.now();
@@ -280,7 +321,7 @@ export class AutoCollectionService {
         throw new Error('No valid conditions found');
       }
 
-      // 기존 자동수집 이미지들 제거
+      // 기존 자동수집 이미지들만 제거 (수동 추가 이미지는 유지)
       const removedCount = await ImageGroupModel.removeAutoCollectedImages(groupId);
 
       // 모든 이미지 검사
@@ -301,12 +342,15 @@ export class AutoCollectionService {
         for (const image of images) {
           const matches = await this.checkImageMatchesConditions(image, conditions);
           if (matches) {
-            try {
-              await ImageGroupModel.addImageToGroup(groupId, image.id, 'auto');
-              addedCount++;
-            } catch (err) {
-              // 이미 존재하는 경우 무시 (UNIQUE 제약)
-              if (!(err as Error).message.includes('UNIQUE constraint failed')) {
+            // 이미 그룹에 속해있는지 확인 (manual/auto 모두 포함)
+            const alreadyInGroup = await ImageGroupModel.isImageInGroup(groupId, image.id);
+
+            // 이미 그룹에 있으면 스킵 (수동 추가된 이미지 보호)
+            if (!alreadyInGroup) {
+              try {
+                await ImageGroupModel.addImageToGroup(groupId, image.id, 'auto');
+                addedCount++;
+              } catch (err) {
                 console.warn('Error adding image to group:', err);
               }
             }
@@ -442,7 +486,8 @@ export class AutoCollectionService {
         // 오토태그 조건
         'auto_tag_rating', 'auto_tag_general',
         'auto_tag_character', 'auto_tag_model',
-        'auto_tag_has_character', 'auto_tag_exists'
+        'auto_tag_has_character', 'auto_tag_exists',
+        'auto_tag_rating_score'  // 가중치 기반 rating 점수 조건
       ];
 
       if (!validTypes.includes(condition.type)) {
@@ -475,22 +520,27 @@ export class AutoCollectionService {
           }
         }
 
-        // 점수 범위 검증
-        if (condition.min_score !== undefined) {
-          if (condition.min_score < 0 || condition.min_score > 1) {
-            errors.push(`Condition ${i + 1}: min_score must be between 0 and 1`);
+        // rating_score는 별도 검증 (가중치 기반이므로 0-1 범위가 아님)
+        if (condition.type === 'auto_tag_rating_score') {
+          // 이미 위에서 검증됨 (line 558-569)
+        } else {
+          // 일반 점수 범위 검증 (rating, general, character는 0-1 범위)
+          if (condition.min_score !== undefined) {
+            if (condition.min_score < 0 || condition.min_score > 1) {
+              errors.push(`Condition ${i + 1}: min_score must be between 0 and 1`);
+            }
           }
-        }
 
-        if (condition.max_score !== undefined) {
-          if (condition.max_score < 0 || condition.max_score > 1) {
-            errors.push(`Condition ${i + 1}: max_score must be between 0 and 1`);
+          if (condition.max_score !== undefined) {
+            if (condition.max_score < 0 || condition.max_score > 1) {
+              errors.push(`Condition ${i + 1}: max_score must be between 0 and 1`);
+            }
           }
-        }
 
-        if (condition.min_score !== undefined && condition.max_score !== undefined) {
-          if (condition.min_score > condition.max_score) {
-            errors.push(`Condition ${i + 1}: min_score cannot be greater than max_score`);
+          if (condition.min_score !== undefined && condition.max_score !== undefined) {
+            if (condition.min_score > condition.max_score) {
+              errors.push(`Condition ${i + 1}: min_score cannot be greater than max_score`);
+            }
           }
         }
 
@@ -505,6 +555,22 @@ export class AutoCollectionService {
         if (['auto_tag_general', 'auto_tag_character', 'auto_tag_model'].includes(condition.type)) {
           if (typeof condition.value !== 'string') {
             errors.push(`Condition ${i + 1}: value must be string for ${condition.type}`);
+          }
+        }
+
+        // rating_score 조건 검증
+        if (condition.type === 'auto_tag_rating_score') {
+          if (condition.min_score === undefined && condition.max_score === undefined) {
+            errors.push(`Condition ${i + 1}: rating_score requires at least min_score or max_score`);
+          }
+          if (condition.min_score !== undefined && condition.min_score < 0) {
+            errors.push(`Condition ${i + 1}: min_score cannot be negative`);
+          }
+          if (condition.max_score !== undefined && condition.max_score < 0) {
+            errors.push(`Condition ${i + 1}: max_score cannot be negative`);
+          }
+          if (condition.min_score !== undefined && condition.max_score !== undefined && condition.min_score >= condition.max_score) {
+            errors.push(`Condition ${i + 1}: min_score must be less than max_score`);
           }
         }
       }

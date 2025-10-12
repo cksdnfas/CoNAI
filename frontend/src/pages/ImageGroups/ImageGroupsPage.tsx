@@ -30,7 +30,7 @@ import { groupApi } from '../../services/api';
 import type { GroupWithStats } from '../../types/group';
 import type { ImageRecord, PageSize } from '../../types/image';
 import GroupCreateEditModal from './components/GroupCreateEditModal';
-import { ImageGridModal } from '../../components/ImageGrid';
+import GroupImageGridModal from './components/GroupImageGridModal';
 
 const ImageGroupsPage: React.FC = () => {
   const [groups, setGroups] = useState<GroupWithStats[]>([]);
@@ -226,6 +226,83 @@ const ImageGroupsPage: React.FC = () => {
     if (selectedGroupForImages) {
       setGroupImagesPage(1);
       fetchGroupImages(selectedGroupForImages.id, 1, size);
+    }
+  };
+
+  // 이미지 제거 핸들러
+  const handleImagesRemoved = async (manualImageIds: number[]) => {
+    if (!selectedGroupForImages) return;
+
+    try {
+      if (manualImageIds.length === 0) {
+        showSnackbar('제거할 수 있는 이미지가 없습니다.', 'warning');
+        return;
+      }
+
+      const result = await groupApi.removeImagesFromGroup(selectedGroupForImages.id, manualImageIds);
+
+      if (result.success) {
+        showSnackbar(`${result.removed}개 이미지가 제거되었습니다.`, 'success');
+      } else {
+        showSnackbar(
+          `${result.removed}개 이미지가 제거되었습니다. ${result.errors.length}개 실패.`,
+          'warning'
+        );
+      }
+
+      // 제거 후 그룹 이미지 목록 다시 조회하여 페이지 확인
+      const updatedResult = await groupApi.getGroupImages(
+        selectedGroupForImages.id,
+        groupImagesPage,
+        groupImagesPageSize
+      );
+
+      // 현재 페이지가 비어있고, 이전 페이지가 존재하면 이전 페이지로 이동
+      if (updatedResult.success && updatedResult.data) {
+        const hasImages = updatedResult.data.images && updatedResult.data.images.length > 0;
+        const hasPreviousPage = groupImagesPage > 1;
+
+        if (!hasImages && hasPreviousPage) {
+          // 빈 페이지이고 이전 페이지가 있으면 이전 페이지로 이동
+          setGroupImagesPage(groupImagesPage - 1);
+          fetchGroupImages(selectedGroupForImages.id, groupImagesPage - 1, groupImagesPageSize);
+        } else {
+          // 현재 페이지에 이미지가 있거나 첫 페이지면 현재 페이지 유지
+          fetchGroupImages(selectedGroupForImages.id, groupImagesPage, groupImagesPageSize);
+        }
+      } else {
+        // 조회 실패 시 현재 페이지 새로고침
+        fetchGroupImages(selectedGroupForImages.id, groupImagesPage, groupImagesPageSize);
+      }
+
+      // 그룹 목록 새로고침
+      fetchGroups();
+    } catch (error) {
+      console.error('Error removing images:', error);
+      showSnackbar('이미지 제거 중 오류가 발생했습니다.', 'error');
+    }
+  };
+
+  // 이미지 할당 핸들러
+  const handleImagesAssigned = async (targetGroupId: number, selectedImageIds: number[]) => {
+    try {
+      const response = await groupApi.addImagesToGroup(targetGroupId, selectedImageIds);
+
+      if (response.success && response.data) {
+        const { added_count, converted_count, skipped_count } = response.data;
+        showSnackbar(
+          `${added_count}개 추가, ${converted_count}개 변환, ${skipped_count}개 스킵`,
+          'success'
+        );
+      } else {
+        showSnackbar(response.error || '이미지 할당에 실패했습니다.', 'error');
+      }
+
+      // 그룹 목록 새로고침
+      fetchGroups();
+    } catch (error) {
+      console.error('Error assigning images:', error);
+      showSnackbar('이미지 할당 중 오류가 발생했습니다.', 'error');
     }
   };
 
@@ -447,18 +524,21 @@ const ImageGroupsPage: React.FC = () => {
       ) : null}
 
       {/* 그룹 이미지 모달 */}
-      <ImageGridModal
+      <GroupImageGridModal
         open={groupImagesModalOpen}
         onClose={handleGroupImagesModalClose}
         images={groupImages}
         loading={groupImagesLoading}
-        title={selectedGroupForImages ? `${selectedGroupForImages.name} (${groupImagesTotal}개 이미지)` : '그룹 이미지'}
+        currentGroup={selectedGroupForImages}
+        allGroups={groups}
         pageSize={groupImagesPageSize}
         onPageSizeChange={handleGroupImagesPageSizeChange}
         currentPage={groupImagesPage}
         totalPages={groupImagesTotalPages}
         total={groupImagesTotal}
         onPageChange={handleGroupImagesPageChange}
+        onImagesRemoved={handleImagesRemoved}
+        onImagesAssigned={handleImagesAssigned}
       />
 
       {/* 스낵바 */}

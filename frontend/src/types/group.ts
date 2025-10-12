@@ -38,15 +38,15 @@ export interface AutoCollectCondition {
         'negative_prompt_contains' | 'negative_prompt_regex' |
         'ai_tool' | 'model_name' |
         // 오토태그 관련 조건
-        'auto_tag_rating' | 'auto_tag_general' |
-        'auto_tag_character' | 'auto_tag_model' |
+        'auto_tag_rating' | 'auto_tag_rating_score' |
+        'auto_tag_general' | 'auto_tag_character' | 'auto_tag_model' |
         'auto_tag_has_character' | 'auto_tag_exists';
   value: string | number | boolean;
   case_sensitive?: boolean;
 
   // 오토태그용 추가 필드
-  min_score?: number;  // 최소 점수 (0.0 ~ 1.0)
-  max_score?: number;  // 최대 점수 (0.0 ~ 1.0)
+  min_score?: number;  // 최소 점수 (0.0 ~ 1.0 또는 rating_score의 경우 0 ~ 200+)
+  max_score?: number;  // 최대 점수 (0.0 ~ 1.0 또는 rating_score의 경우 0 ~ 200+)
   rating_type?: 'general' | 'sensitive' | 'questionable' | 'explicit';  // rating 조건용
 }
 

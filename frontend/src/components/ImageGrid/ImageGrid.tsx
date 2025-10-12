@@ -28,6 +28,8 @@ export interface ImageGridProps {
   total?: number;
   onPageChange?: (page: number) => void;
   onImageDelete?: (id: number) => void;
+  showCollectionType?: boolean;
+  currentGroupId?: number;
 }
 
 const ImageGrid: React.FC<ImageGridProps> = ({
@@ -43,6 +45,8 @@ const ImageGrid: React.FC<ImageGridProps> = ({
   total = 0,
   onPageChange,
   onImageDelete,
+  showCollectionType = false,
+  currentGroupId,
 }) => {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -165,6 +169,8 @@ const ImageGrid: React.FC<ImageGridProps> = ({
               onSelectionChange={handleSelectionChange}
               onDelete={onImageDelete}
               onImageClick={() => handleImageClick(index)}
+              showCollectionType={showCollectionType}
+              currentGroupId={currentGroupId}
             />
           </Grid>
         ))}

@@ -48,6 +48,7 @@ const CONDITION_TYPES = [
   // 오토태그 조건
   { value: 'auto_tag_exists', label: '오토태그 존재 여부', group: '오토태그' },
   { value: 'auto_tag_rating', label: '오토태그: Rating', group: '오토태그' },
+  { value: 'auto_tag_rating_score', label: '오토태그: Rating 점수 (가중치)', group: '오토태그' },
   { value: 'auto_tag_general', label: '오토태그: General 태그', group: '오토태그' },
   { value: 'auto_tag_character', label: '오토태그: 캐릭터', group: '오토태그' },
   { value: 'auto_tag_has_character', label: '오토태그: 캐릭터 존재 여부', group: '오토태그' },
@@ -120,7 +121,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   }, [group, open]);
 
   // 폼 데이터 변경
-  const handleFormChange = (field: string, value: any) => {
+  const handleFormChange = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -145,7 +146,11 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   };
 
   // 조건 변경
-  const updateCondition = (index: number, field: keyof AutoCollectCondition, value: any) => {
+  const updateCondition = <K extends keyof AutoCollectCondition>(
+    index: number,
+    field: K,
+    value: AutoCollectCondition[K]
+  ) => {
     setConditions(prev => prev.map((condition, i) => {
       if (i === index) {
         const updated = { ...condition, [field]: value };
@@ -166,6 +171,14 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
           else if (newType === 'auto_tag_rating') {
             updated.value = '';
             updated.rating_type = 'general';
+            delete updated.case_sensitive;
+          }
+          // Rating Score 조건 (가중치 기반)
+          else if (newType === 'auto_tag_rating_score') {
+            updated.value = '';  // value는 사용하지 않지만 빈 문자열로 설정
+            updated.min_score = 0;
+            updated.max_score = 200;
+            delete updated.rating_type;
             delete updated.case_sensitive;
           }
           // 점수 범위가 있는 조건
@@ -190,16 +203,24 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   };
 
   // 조건 타입에 따른 입력 필드 결정
-  const getConditionFieldType = (type: AutoCollectCondition['type']): 'string' | 'boolean' | 'score' | 'rating' => {
+  const getConditionFieldType = (type: AutoCollectCondition['type']): 'string' | 'boolean' | 'score' | 'rating' | 'rating_score' => {
+    // Boolean 타입: 존재 여부 확인
     if (type === 'auto_tag_exists' || type === 'auto_tag_has_character') {
       return 'boolean';
     }
+    // Rating 타입: Rating 유형 선택 (General, Sensitive, etc.)
     if (type === 'auto_tag_rating') {
       return 'rating';
     }
+    // Rating Score 타입: 가중치 기반 점수 범위 (0-200)
+    if (type === 'auto_tag_rating_score') {
+      return 'rating_score';
+    }
+    // Score 타입: 태그명/캐릭터명 + 신뢰도 점수 (0.0-1.0)
     if (type === 'auto_tag_general' || type === 'auto_tag_character') {
       return 'score';
     }
+    // String 타입: 문자열 검색 (프롬프트, 모델명 등)
     return 'string';
   };
 
@@ -232,25 +253,47 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
           return false;
         }
 
-        // 점수 범위 검증
-        if (condition.min_score !== undefined) {
-          if (condition.min_score < 0 || condition.min_score > 1) {
-            setError(`조건 ${i + 1}: 최소 점수는 0.0 ~ 1.0 사이여야 합니다.`);
+        // Rating Score 조건 검증 (가중치 기반)
+        if (condition.type === 'auto_tag_rating_score') {
+          if (condition.min_score === undefined && condition.max_score === undefined) {
+            setError(`조건 ${i + 1}: 최소 점수 또는 최대 점수 중 하나는 설정해야 합니다.`);
+            return false;
+          }
+          if (condition.min_score !== undefined && condition.min_score < 0) {
+            setError(`조건 ${i + 1}: 최소 점수는 0 이상이어야 합니다.`);
+            return false;
+          }
+          if (condition.max_score !== undefined && condition.max_score < 0) {
+            setError(`조건 ${i + 1}: 최대 점수는 0 이상이어야 합니다.`);
+            return false;
+          }
+          if (condition.min_score !== undefined && condition.max_score !== undefined && condition.min_score >= condition.max_score) {
+            setError(`조건 ${i + 1}: 최소 점수는 최대 점수보다 작아야 합니다.`);
             return false;
           }
         }
 
-        if (condition.max_score !== undefined) {
-          if (condition.max_score < 0 || condition.max_score > 1) {
-            setError(`조건 ${i + 1}: 최대 점수는 0.0 ~ 1.0 사이여야 합니다.`);
-            return false;
+        // 일반 점수 범위 검증 (Rating, General 태그, 캐릭터만 해당)
+        if (fieldType === 'rating' || fieldType === 'score') {
+          if (condition.min_score !== undefined) {
+            if (condition.min_score < 0 || condition.min_score > 1) {
+              setError(`조건 ${i + 1}: 최소 점수는 0.0 ~ 1.0 사이여야 합니다.`);
+              return false;
+            }
           }
-        }
 
-        if (condition.min_score !== undefined && condition.max_score !== undefined) {
-          if (condition.min_score > condition.max_score) {
-            setError(`조건 ${i + 1}: 최소 점수가 최대 점수보다 클 수 없습니다.`);
-            return false;
+          if (condition.max_score !== undefined) {
+            if (condition.max_score < 0 || condition.max_score > 1) {
+              setError(`조건 ${i + 1}: 최대 점수는 0.0 ~ 1.0 사이여야 합니다.`);
+              return false;
+            }
+          }
+
+          if (condition.min_score !== undefined && condition.max_score !== undefined) {
+            if (condition.min_score > condition.max_score) {
+              setError(`조건 ${i + 1}: 최소 점수가 최대 점수보다 클 수 없습니다.`);
+              return false;
+            }
           }
         }
       }
@@ -439,7 +482,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
                       <FormControl sx={{ minWidth: 200 }}>
                         <InputLabel>값</InputLabel>
                         <Select
-                          value={condition.value ? 'true' : 'false'}
+                          value={condition.value === true ? 'true' : 'false'}
                           label="값"
                           onChange={(e) => updateCondition(index, 'value', e.target.value === 'true')}
                         >
@@ -465,6 +508,30 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
                           ))}
                         </Select>
                       </FormControl>
+                    )}
+
+                    {/* Rating Score 조건 (가중치 기반) */}
+                    {fieldType === 'rating_score' && (
+                      <>
+                        <TextField
+                          label="최소 점수"
+                          type="number"
+                          value={condition.min_score !== undefined ? condition.min_score : 0}
+                          onChange={(e) => updateCondition(index, 'min_score', Number(e.target.value))}
+                          sx={{ minWidth: 150 }}
+                          inputProps={{ min: 0, step: 1 }}
+                          helperText="가중치 합산 점수"
+                        />
+                        <TextField
+                          label="최대 점수"
+                          type="number"
+                          value={condition.max_score !== undefined ? condition.max_score : 200}
+                          onChange={(e) => updateCondition(index, 'max_score', Number(e.target.value))}
+                          sx={{ minWidth: 150 }}
+                          inputProps={{ min: 0, step: 1 }}
+                          helperText="일반적으로 200까지"
+                        />
+                      </>
                     )}
 
                     {/* 점수 범위 조건 (General 태그, 캐릭터) */}
@@ -532,11 +599,11 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
                     </IconButton>
                   </Box>
 
-                  {/* 점수 범위 입력 (Rating, General 태그, 캐릭터) */}
+                  {/* 점수 범위 입력 (Rating, General 태그, 캐릭터) - rating_score는 위에서 직접 입력 */}
                   {(fieldType === 'rating' || fieldType === 'score') && (
                     <Box sx={{ mt: 2 }}>
                       <Typography variant="caption" color="text.secondary" gutterBottom>
-                        점수 범위: {(condition.min_score ?? 0).toFixed(2)} ~ {(condition.max_score ?? 1).toFixed(2)}
+                        신뢰도 점수 범위 (0.0 ~ 1.0): {(condition.min_score ?? 0).toFixed(2)} ~ {(condition.max_score ?? 1).toFixed(2)}
                       </Typography>
                       <Slider
                         value={[condition.min_score ?? 0, condition.max_score ?? 1]}
@@ -556,6 +623,9 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
                           { value: 1, label: '1.0' },
                         ]}
                       />
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                        💡 높은 점수일수록 해당 태그의 신뢰도가 높습니다
+                      </Typography>
                     </Box>
                   )}
                 </Box>

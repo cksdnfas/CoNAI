@@ -1,7 +1,7 @@
 {
   "tagger": {
     "enabled": true,
-    "model": "convnext",
+    "model": "swinv2",
     "generalThreshold": 0.35,
     "characterThreshold": 0.35,
     "pythonPath": "python",

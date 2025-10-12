@@ -32,6 +32,7 @@ const Header: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
+    { label: '홈', path: '/' },
     { label: '갤러리', path: '/gallery' },
     { label: '이미지 그룹', path: '/image-groups' },
     { label: '검색', path: '/search' },

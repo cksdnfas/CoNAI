@@ -476,6 +476,7 @@ router.post('/search-by-autotags', asyncHandler(async (req: Request, res: Respon
   try {
     const searchParams: AutoTagSearchParams = {
       rating: req.body.rating,
+      rating_score: req.body.rating_score,
       general_tags: req.body.general_tags,
       character: req.body.character,
       model: req.body.model,

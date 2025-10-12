@@ -1,0 +1,20 @@
+/* Masonry Grid Container */
+.my-masonry-grid {
+  display: flex;
+  width: 100%;
+  gap: 16px; /* Modern CSS gap instead of negative margin */
+  contain: layout; /* Browser optimization hint */
+}
+
+.my-masonry-grid_column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px; /* Consistent spacing */
+  flex: 1;
+}
+
+/* GPU acceleration for smoother rendering */
+.my-masonry-grid_column > div {
+  will-change: transform;
+  transform: translateZ(0); /* Force GPU layer */
+}

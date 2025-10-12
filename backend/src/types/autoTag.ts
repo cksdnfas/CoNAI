@@ -70,6 +70,7 @@ export interface CharacterFilter {
  */
 export interface AutoTagSearchParams {
   rating?: RatingFilter;
+  rating_score?: { min_score?: number; max_score?: number };  // 가중치 기반 점수 필터
   general_tags?: TagFilter[];
   character?: CharacterFilter;
   model?: string;

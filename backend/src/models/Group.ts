@@ -200,6 +200,8 @@ export class GroupModel {
 export class ImageGroupModel {
   /**
    * 이미지를 그룹에 추가
+   * - INSERT OR IGNORE를 사용하여 기존 레코드의 collection_type을 보존
+   * - 이미 존재하는 이미지는 추가하지 않음 (manual/auto 관계없이)
    */
   static addImageToGroup(
     groupId: number,
@@ -211,7 +213,7 @@ export class ImageGroupModel {
       const autoCollectedDate = collectionType === 'auto' ? new Date().toISOString() : null;
 
       const stmt = db.prepare(`
-        INSERT OR REPLACE INTO image_groups (
+        INSERT OR IGNORE INTO image_groups (
           group_id, image_id, order_index, collection_type, auto_collected_date
         ) VALUES (?, ?, ?, ?, ?)
       `);
@@ -388,6 +390,48 @@ export class ImageGroupModel {
             reject(err);
           } else {
             resolve(!!row);
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * 이미지의 collection_type 조회
+   */
+  static getCollectionType(groupId: number, imageId: number): Promise<'manual' | 'auto' | null> {
+    return new Promise((resolve, reject) => {
+      db.get(
+        'SELECT collection_type FROM image_groups WHERE group_id = ? AND image_id = ?',
+        [groupId, imageId],
+        (err, row: any) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(row ? row.collection_type : null);
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * 자동수집 이미지를 수동 수집으로 변환
+   * - 사용자가 자동수집된 이미지를 수동으로 추가할 때 사용
+   * - 이후 자동수집 조건 변경 시에도 유지됨
+   */
+  static convertToManual(groupId: number, imageId: number): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      db.run(
+        `UPDATE image_groups
+         SET collection_type = 'manual', auto_collected_date = NULL
+         WHERE group_id = ? AND image_id = ? AND collection_type = 'auto'`,
+        [groupId, imageId],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(this.changes > 0);
           }
         }
       );

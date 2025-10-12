@@ -375,6 +375,8 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
 /**
  * 이미지를 그룹에 수동 추가
  * POST /api/groups/:id/images
+ * - 자동수집된 이미지를 수동으로 추가하면 collection_type이 'manual'로 변경됨
+ * - 이후 자동수집 조건 변경 시에도 해당 이미지는 그룹에 유지됨
  */
 router.post('/:id/images', asyncHandler(async (req: Request, res: Response) => {
   const groupId = parseInt(req.params.id);
@@ -389,20 +391,36 @@ router.post('/:id/images', asyncHandler(async (req: Request, res: Response) => {
 
   try {
     // 이미 그룹에 속해있는지 확인
-    const alreadyInGroup = await ImageGroupModel.isImageInGroup(groupId, image_id);
-    if (alreadyInGroup) {
+    const collectionType = await ImageGroupModel.getCollectionType(groupId, image_id);
+
+    if (collectionType === 'manual') {
+      // 이미 수동으로 추가된 이미지
       return res.status(409).json({
         success: false,
-        error: 'Image is already in the group'
+        error: 'Image is already manually added to the group'
       } as GroupResponse);
+    } else if (collectionType === 'auto') {
+      // 자동수집된 이미지를 수동으로 전환
+      const converted = await ImageGroupModel.convertToManual(groupId, image_id);
+      if (converted) {
+        return res.status(200).json({
+          success: true,
+          data: {
+            message: 'Image converted from auto-collection to manual',
+            converted: true
+          }
+        } as GroupResponse);
+      }
     }
 
+    // 그룹에 없는 이미지를 새로 추가
     await ImageGroupModel.addImageToGroup(groupId, image_id, 'manual', order_index);
 
     const response: GroupResponse = {
       success: true,
       data: {
-        message: 'Image added to group successfully'
+        message: 'Image added to group successfully',
+        converted: false
       }
     };
 
@@ -420,6 +438,8 @@ router.post('/:id/images', asyncHandler(async (req: Request, res: Response) => {
 /**
  * 여러 이미지를 그룹에 수동 추가
  * POST /api/groups/:id/images/bulk
+ * - 자동수집된 이미지를 수동으로 추가하면 collection_type이 'manual'로 변경됨
+ * - 이후 자동수집 조건 변경 시에도 해당 이미지들은 그룹에 유지됨
  */
 router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response) => {
   const groupId = parseInt(req.params.id);
@@ -434,18 +454,29 @@ router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response)
 
   try {
     let addedCount = 0;
+    let convertedCount = 0;
     let skippedCount = 0;
     const errors: string[] = [];
 
     for (const imageId of image_ids) {
       try {
         // 이미 그룹에 속해있는지 확인
-        const alreadyInGroup = await ImageGroupModel.isImageInGroup(groupId, imageId);
-        if (alreadyInGroup) {
+        const collectionType = await ImageGroupModel.getCollectionType(groupId, imageId);
+
+        if (collectionType === 'manual') {
+          // 이미 수동으로 추가된 이미지
           skippedCount++;
+          continue;
+        } else if (collectionType === 'auto') {
+          // 자동수집된 이미지를 수동으로 전환
+          const converted = await ImageGroupModel.convertToManual(groupId, imageId);
+          if (converted) {
+            convertedCount++;
+          }
           continue;
         }
 
+        // 그룹에 없는 이미지를 새로 추가
         await ImageGroupModel.addImageToGroup(groupId, imageId, 'manual', 0);
         addedCount++;
       } catch (error) {
@@ -456,8 +487,9 @@ router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response)
     const response: GroupResponse = {
       success: true,
       data: {
-        message: `Bulk add completed: ${addedCount} added, ${skippedCount} skipped`,
+        message: `Bulk add completed: ${addedCount} added, ${convertedCount} converted, ${skippedCount} skipped`,
         added_count: addedCount,
+        converted_count: convertedCount,
         skipped_count: skippedCount,
         errors: errors.length > 0 ? errors : undefined
       }

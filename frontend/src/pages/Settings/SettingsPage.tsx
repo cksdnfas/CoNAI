@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import { Settings as SettingsIcon } from '@mui/icons-material';
 import TaggerSettings from './components/TaggerSettings';
+import RatingScoreSettings from './components/RatingScoreSettings';
 import { settingsApi, type AppSettings, type TaggerSettings as TaggerSettingsType } from '../../services/settingsApi';
 
 interface TabPanelProps {
@@ -121,6 +122,7 @@ const SettingsPage: React.FC = () => {
         <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
           <Tabs value={tabValue} onChange={handleTabChange}>
             <Tab label="Tagger 설정" />
+            <Tab label="Rating 점수 설정" />
             <Tab label="고급 설정" disabled />
           </Tabs>
         </Box>
@@ -134,6 +136,10 @@ const SettingsPage: React.FC = () => {
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
+          <RatingScoreSettings />
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={2}>
           <Alert severity="info">
             고급 설정 기능은 향후 추가될 예정입니다.
           </Alert>

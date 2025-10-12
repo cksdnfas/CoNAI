@@ -424,11 +424,14 @@ export class ImageProcessor {
 
   /**
    * 메인 이미지 처리 함수
+   * diskStorage 사용 시 file.path에서 임시 파일을 읽어 처리하고 정리함
    */
   static async processImage(
     file: Express.Multer.File,
     baseUploadPath: string
   ): Promise<ProcessedImage> {
+    let tempFilePath: string | undefined;
+
     try {
       // 폴더 구조 생성
       const folders = await this.createUploadFolders(baseUploadPath);
@@ -445,8 +448,18 @@ export class ImageProcessor {
       const optimizedFilename = `${path.parse(filename).name}_opt.webp`;
       const optimizedPath = path.join(folders.optimizedFolder, optimizedFilename);
 
-      // 원본 파일 저장
-      await fs.promises.writeFile(originalPath, file.buffer);
+      // diskStorage 사용: file.path에서 임시 파일 읽기
+      // memoryStorage 사용: file.buffer 사용 (하위 호환성)
+      if (file.path) {
+        // diskStorage: 임시 파일 복사
+        tempFilePath = file.path;
+        await fs.promises.copyFile(file.path, originalPath);
+      } else if (file.buffer) {
+        // memoryStorage (레거시): 버퍼에서 저장
+        await fs.promises.writeFile(originalPath, file.buffer);
+      } else {
+        throw new Error('No file data available (neither path nor buffer)');
+      }
 
       // 이미지 정보 추출
       const imageInfo = await this.getImageInfo(originalPath);
@@ -478,6 +491,15 @@ export class ImageProcessor {
       console.error('Image processing failed:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Image processing failed: ${message}`);
+    } finally {
+      // 임시 파일 정리 (diskStorage 사용 시)
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+        try {
+          await fs.promises.unlink(tempFilePath);
+        } catch (cleanupError) {
+          console.warn('Failed to cleanup temp file:', tempFilePath, cleanupError);
+        }
+      }
     }
   }
 
