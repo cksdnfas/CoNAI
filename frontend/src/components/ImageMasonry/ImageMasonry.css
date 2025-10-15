@@ -4,6 +4,10 @@
   width: 100%;
   gap: 16px; /* Modern CSS gap instead of negative margin */
   contain: layout; /* Browser optimization hint */
+  user-select: none; /* 텍스트 드래그 방지 */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }
 
 .my-masonry-grid_column {

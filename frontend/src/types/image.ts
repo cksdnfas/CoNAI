@@ -44,6 +44,10 @@ export interface ImageRecord {
   batch_index: number | null;
   auto_tags: AutoTagsData | null;     // WD v3 자동 태그 (백엔드에서 이미 파싱됨)
 
+  // 이미지 유사도 검색 필드들
+  perceptual_hash: string | null;      // pHash 알고리즘 기반 이미지 해시
+  color_histogram: string | null;      // RGB 색상 분포 (JSON)
+
   // 추가된 URL 필드들 (백엔드에서 enrichImageRecord로 추가)
   thumbnail_url?: string;
   image_url?: string;
@@ -177,4 +181,11 @@ export interface UploadProgressEvent {
   imageId?: number;            // 완료 시 이미지 ID
   error?: string;              // 에러 메시지
   timestamp: string;           // 타임스탬프
+}
+
+// 이미지 선택 관련 타입
+export interface ImageSelectionProps {
+  selectable?: boolean;
+  selectedIds?: number[];
+  onSelectionChange?: (selectedIds: number[]) => void;
 }

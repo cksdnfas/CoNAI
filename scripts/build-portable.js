@@ -154,22 +154,22 @@ const sharpTarget = path.join(appNodeModules, 'sharp');
 fs.copySync(sharpSource, sharpTarget, { dereference: true });
 console.log(`   ✅ Copied sharp`);
 
-// Copy sqlite3 and collect its dependencies
-console.log(`   📦 Copying sqlite3...`);
-const sqlite3Source = path.join(sourceNodeModules, 'sqlite3');
-const sqlite3Target = path.join(appNodeModules, 'sqlite3');
-if (fs.existsSync(sqlite3Source)) {
-  fs.copySync(sqlite3Source, sqlite3Target, { dereference: true });
-  console.log(`   ✅ Copied sqlite3`);
+// Copy better-sqlite3 and collect its dependencies
+console.log(`   📦 Copying better-sqlite3...`);
+const betterSqlite3Source = path.join(sourceNodeModules, 'better-sqlite3');
+const betterSqlite3Target = path.join(appNodeModules, 'better-sqlite3');
+if (fs.existsSync(betterSqlite3Source)) {
+  fs.copySync(betterSqlite3Source, betterSqlite3Target, { dereference: true });
+  console.log(`   ✅ Copied better-sqlite3`);
 
-  // Collect sqlite3 dependencies
-  const sqlite3PackageJson = JSON.parse(fs.readFileSync(path.join(sqlite3Source, 'package.json'), 'utf8'));
-  if (sqlite3PackageJson.dependencies) {
-    Object.keys(sqlite3PackageJson.dependencies).forEach(dep => {
+  // Collect better-sqlite3 dependencies
+  const betterSqlite3PackageJson = JSON.parse(fs.readFileSync(path.join(betterSqlite3Source, 'package.json'), 'utf8'));
+  if (betterSqlite3PackageJson.dependencies) {
+    Object.keys(betterSqlite3PackageJson.dependencies).forEach(dep => {
       collectAllDependencies(dep, allDependencies);
     });
   }
-  console.log(`   Found additional sqlite3 dependencies`);
+  console.log(`   Found additional better-sqlite3 dependencies`);
 }
 
 // Copy all dependencies
@@ -243,6 +243,37 @@ if (fs.existsSync(frontendSource)) {
   console.warn('⚠️  Frontend dist not found, skipping\n');
 }
 
+// Step 7.5: Copy bootstrap script
+console.log('Step 7.5: Copying bootstrap script...');
+const bootstrapSource = path.join(ROOT_DIR, 'scripts', 'bootstrap.js');
+const bootstrapTarget = path.join(appDir, 'bootstrap.js');
+
+if (fs.existsSync(bootstrapSource)) {
+  fs.copyFileSync(bootstrapSource, bootstrapTarget);
+  console.log('✅ Bootstrap script copied\n');
+} else {
+  console.warn('⚠️  Bootstrap script not found, skipping\n');
+}
+
+// Step 7.6: Create package.json for automatic dependency installation
+console.log('Step 7.6: Creating package.json for dependency management...');
+const portablePackageJson = {
+  name: "comfyui-image-manager-portable",
+  version: "1.0.0",
+  private: true,
+  description: "Portable distribution of ComfyUI Image Manager",
+  dependencies: {
+    "sharp": "^0.33.0",
+    "better-sqlite3": "^9.4.0"
+  }
+};
+fs.writeFileSync(
+  path.join(appDir, 'package.json'),
+  JSON.stringify(portablePackageJson, null, 2),
+  'utf8'
+);
+console.log('✅ package.json created\n');
+
 // Step 8: Create startup scripts
 console.log('Step 8: Creating startup scripts...');
 
@@ -255,9 +286,23 @@ cd /d "%~dp0"
 echo.
 echo ========================================================================
 echo              ComfyUI Image Manager
-echo.
-echo  Starting server...
 echo ========================================================================
+echo.
+
+REM Check and install dependencies if needed
+node.exe app\\bootstrap.js
+if errorlevel 1 (
+    echo.
+    echo ========================================================================
+    echo  ERROR: Bootstrap failed
+    echo ========================================================================
+    echo.
+    pause
+    exit /b 1
+)
+
+echo.
+echo Starting server...
 echo.
 
 node.exe app\\bundle.js
@@ -287,9 +332,23 @@ cd "$(dirname "$0")"
 echo ""
 echo "╔════════════════════════════════════════════════════════════════════════╗"
 echo "║                    ComfyUI Image Manager                               ║"
-echo "║                                                                        ║"
-echo "║  Starting server...                                                    ║"
 echo "╚════════════════════════════════════════════════════════════════════════╝"
+echo ""
+
+# Check and install dependencies if needed
+./node app/bootstrap.js
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "╔════════════════════════════════════════════════════════════════════════╗"
+    echo "║  ❌ Bootstrap failed                                                  ║"
+    echo "╚════════════════════════════════════════════════════════════════════════╝"
+    echo ""
+    read -p "Press Enter to continue..."
+    exit 1
+fi
+
+echo ""
+echo "Starting server..."
 echo ""
 
 ./node app/bundle.js
@@ -403,6 +462,33 @@ const readmeContent = `# ComfyUI Image Manager - Portable Edition
 
 ## 🚀 Quick Start
 
+### First Run (Automatic Setup)
+
+**Important:** On first run, the application will automatically download required dependencies.
+- This requires an internet connection (one-time only)
+- Takes 1-2 minutes depending on your connection speed
+- Dependencies are cached for future runs
+
+### Windows
+1. Double-click \`start.bat\`
+2. Wait for automatic dependency installation (first run only)
+3. Server will start automatically after setup
+4. Open your browser to the URL displayed
+
+### Linux/Mac
+1. Open terminal in this directory
+2. Run: \`chmod +x start.sh\` (first time only)
+3. Run: \`./start.sh\`
+4. Wait for automatic dependency installation (first run only)
+5. Open your browser to the URL displayed
+
+### Offline Usage
+
+If you need to use this in an offline environment:
+1. Run once with internet connection to download dependencies
+2. After first successful run, no internet is required
+3. The \`app/node_modules/\` folder contains all required dependencies
+
 ### Prerequisites (Optional - for WD v3 Tagger feature)
 
 If you want to use the AI tagging feature, install Python dependencies:
@@ -412,16 +498,6 @@ pip install -r app/python/requirements.txt
 \`\`\`
 
 **Note:** The application works without Python - tagging is an optional feature.
-
-### Windows
-1. Double-click \`start.bat\`
-2. Wait for the server to start (console window will open)
-3. Open your browser to the URL displayed
-
-### Linux/Mac
-1. Open terminal in this directory
-2. Run: \`./start.sh\`
-3. Open your browser to the URL displayed
 
 ## 📝 Configuration
 
@@ -485,6 +561,12 @@ Change PORT in \`.env\` file
 - Check logs/ folder for error messages
 - Ensure all files are present (app/, node.exe/node)
 
+### Dependencies not downloading
+- Ensure you have internet connection (first run only)
+- Check if npm is accessible: \`npm --version\`
+- If npm is not found, install Node.js from https://nodejs.org/
+- Manually install: \`cd app && npm install --production\`
+
 ### Cannot access from other devices
 - Ensure HOST=0.0.0.0 in \`.env\`
 - Check firewall settings
@@ -519,11 +601,26 @@ Visit: https://github.com/yourusername/comfyui-image-manager
 ## 💡 Tips
 
 - Keep this folder together - don't move individual files
-- The app folder contains all necessary dependencies
-- No Node.js installation required on the system
-- Portable - can be moved to any location
+- **First run requires internet** for automatic dependency download
+- After first run, works completely offline
+- The app folder contains all necessary dependencies after setup
+- Portable - can be moved to any location after first run
 - Python is optional - only needed for AI tagging feature
 - Models are downloaded once and cached in \`models/\` folder
+
+## 🔄 How Auto-Download Works
+
+1. **First Run**: \`start.bat\`/\`start.sh\` runs \`bootstrap.js\`
+2. **Dependency Check**: Verifies if native modules (sharp, sqlite3) are present
+3. **Auto-Install**: If missing, automatically runs \`npm install\` in \`app/\` folder
+4. **Caching**: Downloaded modules are saved in \`app/node_modules/\`
+5. **Subsequent Runs**: No download needed, starts immediately
+
+This approach allows:
+- ✅ Smaller Git repository size (no node_modules committed)
+- ✅ Automatic platform-specific binary download
+- ✅ Works on Windows, Linux, and Mac
+- ✅ Offline usage after first run
 
 ---
 

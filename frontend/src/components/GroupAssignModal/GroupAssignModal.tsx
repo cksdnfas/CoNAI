@@ -81,12 +81,22 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
     }
   };
 
+  const handleDialogMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
+  const handleDialogPointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+  };
+
   return (
     <Dialog
       open={open}
       onClose={onClose}
       maxWidth="sm"
       fullWidth
+      onMouseDown={handleDialogMouseDown}
+      onPointerDown={handleDialogPointerDown}
     >
       <DialogTitle>그룹에 할당</DialogTitle>
       <DialogContent>
@@ -118,6 +128,11 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
                 ? groupApi.getThumbnailUrl(group.id)
                 : '';
 
+              const handleCardClick = (e: React.MouseEvent) => {
+                e.stopPropagation();
+                setSelectedGroupId(group.id);
+              };
+
               return (
                 <Card
                   key={group.id}
@@ -138,7 +153,9 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
                         boxShadow: 4,
                       },
                     }}
-                    onClick={() => setSelectedGroupId(group.id)}
+                    onClick={handleCardClick}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
                   >
                     {/* 색상 바 */}
                     {group.color && (

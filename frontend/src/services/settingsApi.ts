@@ -8,9 +8,12 @@ export interface TaggerModel {
   downloaded: boolean;
 }
 
+export type TaggerDevice = 'auto' | 'cpu' | 'cuda';
+
 export interface TaggerSettings {
   enabled: boolean;
   model: 'vit' | 'swinv2' | 'convnext';
+  device: TaggerDevice;            // 디바이스 선택 (auto/cpu/cuda)
   generalThreshold: number;
   characterThreshold: number;
   pythonPath: string;
@@ -23,11 +26,17 @@ export interface TaggerServerStatus {
   isRunning: boolean;              // Daemon 실행 상태
   modelLoaded: boolean;            // 모델 로드 상태
   currentModel: 'vit' | 'swinv2' | 'convnext' | null; // 현재 로드된 모델
+  currentDevice: string | null;    // 현재 사용 중인 디바이스 (예: "cuda:0", "cpu")
   lastUsedAt: string | null;       // 마지막 사용 시간 (ISO string)
+}
+
+export interface SimilaritySettings {
+  autoGenerateHashOnUpload: boolean;  // 업로드 시 자동 해시 생성 여부
 }
 
 export interface AppSettings {
   tagger: TaggerSettings;
+  similarity: SimilaritySettings;
 }
 
 export interface DependencyCheckResult {
@@ -123,6 +132,17 @@ export const settingsApi = {
    */
   unloadModel: async (): Promise<void> => {
     await api.post('/tagger/unload-model');
+  },
+
+  /**
+   * Update similarity settings
+   */
+  updateSimilaritySettings: async (settings: Partial<SimilaritySettings>): Promise<AppSettings> => {
+    const response = await api.put<{ success: boolean; data: AppSettings; message: string }>(
+      '/similarity',
+      settings
+    );
+    return response.data.data;
   },
 };
 

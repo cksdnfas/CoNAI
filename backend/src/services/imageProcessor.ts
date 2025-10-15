@@ -2,6 +2,8 @@ import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs';
 import { ImageMetadata, AITool, LoRAModel } from '../types/image';
+import { ImageSimilarityService } from './imageSimilarity';
+import { settingsService } from './settingsService';
 
 export interface ProcessedImage {
   filename: string;
@@ -12,6 +14,8 @@ export interface ProcessedImage {
   height: number;
   fileSize: number;
   metadata: ImageMetadata;
+  perceptualHash?: string;
+  colorHistogram?: string;
 }
 
 export class ImageProcessor {
@@ -35,7 +39,8 @@ export class ImageProcessor {
   }
 
   /**
-   * 업로드 폴더 구조 생성
+   * 업로드 폴더 구조 생성 (이미지 전용)
+   * 경로: uploads/images/YYYY-MM-DD/Origin|thumbnails|optimized/
    */
   static async createUploadFolders(baseUploadPath: string): Promise<{
     dateFolder: string;
@@ -44,7 +49,9 @@ export class ImageProcessor {
     optimizedFolder: string;
   }> {
     const dateFolder = this.getDateFolder();
-    const dateFolderPath = path.join(baseUploadPath, dateFolder);
+    // 이미지는 images 서브폴더 사용
+    const imagesPath = path.join(baseUploadPath, 'images');
+    const dateFolderPath = path.join(imagesPath, dateFolder);
     const originFolder = path.join(dateFolderPath, 'Origin');
     const thumbnailFolder = path.join(dateFolderPath, 'thumbnails');
     const optimizedFolder = path.join(dateFolderPath, 'optimized');
@@ -55,7 +62,7 @@ export class ImageProcessor {
     await fs.promises.mkdir(optimizedFolder, { recursive: true });
 
     return {
-      dateFolder,
+      dateFolder: path.join('images', dateFolder),
       originFolder,
       thumbnailFolder,
       optimizedFolder
@@ -477,6 +484,24 @@ export class ImageProcessor {
       const relativeThumbnail = this.normalizeRelativePath(thumbnailPath, baseUploadPath);
       const relativeOptimized = this.normalizeRelativePath(optimizedPath, baseUploadPath);
 
+      // 이미지 유사도 검색을 위한 해시 생성 (비동기, 실패해도 업로드는 성공)
+      let perceptualHash: string | undefined;
+      let colorHistogram: string | undefined;
+
+      // 설정에 따라 자동 해시 생성 여부 결정
+      const settings = settingsService.loadSettings();
+      if (settings.similarity.autoGenerateHashOnUpload) {
+        try {
+          perceptualHash = await ImageSimilarityService.generatePerceptualHash(originalPath);
+          const histogram = await ImageSimilarityService.generateColorHistogram(originalPath);
+          colorHistogram = ImageSimilarityService.serializeHistogram(histogram);
+        } catch (hashError) {
+          console.warn('Failed to generate similarity hashes (non-critical):', hashError);
+        }
+      } else {
+        console.log('Auto hash generation disabled in settings');
+      }
+
       return {
         filename,
         originalPath: relativeOriginal,
@@ -485,7 +510,9 @@ export class ImageProcessor {
         width: imageInfo.width,
         height: imageInfo.height,
         fileSize: file.size,
-        metadata
+        metadata,
+        perceptualHash,
+        colorHistogram
       };
     } catch (error) {
       console.error('Image processing failed:', error);

@@ -21,7 +21,8 @@ interface BulkActionBarProps {
   selectedCount: number;
   selectedIds: number[];
   onSelectionClear: () => void;
-  onActionComplete?: () => void;
+  onActionComplete?: (deletedIds?: number[]) => void;
+  onModalStateChange?: (isOpen: boolean) => void;
 }
 
 const BulkActionBar: React.FC<BulkActionBarProps> = ({
@@ -29,36 +30,48 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
   selectedIds,
   onSelectionClear,
   onActionComplete,
+  onModalStateChange,
 }) => {
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
   const { loading, error, deleteImages, downloadImages, assignToGroup, clearError } = useBulkActions();
+
+  // 모달 상태가 변경될 때마다 부모에게 알림
+  const handleSetGroupDialogOpen = (isOpen: boolean) => {
+    setGroupDialogOpen(isOpen);
+    if (onModalStateChange) {
+      onModalStateChange(isOpen);
+    }
+  };
 
   const handleDelete = async () => {
     if (!window.confirm(`선택된 ${selectedCount}개 이미지를 삭제하시겠습니까?`)) {
       return;
     }
 
-    const success = await deleteImages(selectedIds);
+    const deletedIds = [...selectedIds];
+    const success = await deleteImages(deletedIds);
     if (success) {
-      onSelectionClear();
+      // 삭제된 ID를 전달하여 선택에서 제거
       if (onActionComplete) {
-        onActionComplete();
+        onActionComplete(deletedIds);
       }
     }
   };
 
   const handleDownload = async () => {
     await downloadImages(selectedIds);
+    // 다운로드는 선택 유지 (아무 작업도 하지 않음)
   };
 
   const handleGroupAssign = async (groupId: number) => {
     const success = await assignToGroup(selectedIds, groupId);
 
     if (success) {
+      // 그룹 할당 성공 시 모달 닫기
+      handleSetGroupDialogOpen(false);
+      // 그룹 할당 후 선택 해제 (사용자가 빈 공간을 클릭할 필요 없도록)
       onSelectionClear();
-      if (onActionComplete) {
-        onActionComplete();
-      }
+      // 토스트 메시지는 useBulkActions에서 처리
     }
   };
 
@@ -66,17 +79,28 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
     return null;
   }
 
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+  };
+
   return (
     <>
       <Paper
+        className="no-drag-select"
         elevation={4}
+        onMouseDown={handleMouseDown}
+        onPointerDown={handlePointerDown}
         sx={{
           position: 'fixed',
           bottom: 24,
           left: '50%',
           transform: 'translateX(-50%)',
           p: 2,
-          zIndex: 1000,
+          zIndex: 1100,
           display: 'flex',
           alignItems: 'center',
           gap: 2,
@@ -101,7 +125,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
 
         <Tooltip title="그룹에 추가">
           <IconButton
-            onClick={() => setGroupDialogOpen(true)}
+            onClick={() => handleSetGroupDialogOpen(true)}
             disabled={loading}
             color="primary"
           >
@@ -132,7 +156,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
       {/* 그룹 선택 모달 */}
       <GroupAssignModal
         open={groupDialogOpen}
-        onClose={() => setGroupDialogOpen(false)}
+        onClose={() => handleSetGroupDialogOpen(false)}
         selectedImageCount={selectedCount}
         onAssign={handleGroupAssign}
       />

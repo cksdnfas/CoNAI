@@ -12,7 +12,7 @@ export interface ImageRecord {
   upload_date: string;
   metadata: string | null;
 
-  // AI 메타데이터 필드들
+  // AI 메타데이터 필드들 (이미지 생성 정보)
   ai_tool: string | null;              // ComfyUI, NovelAI, Stable Diffusion 등
   model_name: string | null;           // 메인 모델명
   lora_models: string | null;          // LoRA 모델들 (JSON 배열)
@@ -28,6 +28,17 @@ export interface ImageRecord {
   batch_size: number | null;           // 배치 크기
   batch_index: number | null;          // 배치 내 인덱스
   auto_tags: string | null;            // WD v3 자동 태그 (JSON)
+
+  // 이미지 유사도 검색 필드들
+  perceptual_hash: string | null;      // pHash 알고리즘 기반 이미지 해시
+  color_histogram: string | null;      // RGB 색상 분포 (JSON)
+
+  // 동영상 전용 메타데이터 필드들
+  duration: number | null;             // 동영상 재생 시간(초)
+  fps: number | null;                  // 프레임 레이트
+  video_codec: string | null;          // 비디오 코덱 (h264, vp9 등)
+  audio_codec: string | null;          // 오디오 코덱 (aac, opus 등)
+  bitrate: number | null;              // 비트레이트 (kbps)
 }
 
 export interface ImageMetadata {

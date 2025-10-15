@@ -34,7 +34,7 @@ import {
   CloudUpload as CloudUploadIcon,
   CloudOff as CloudOffIcon,
 } from '@mui/icons-material';
-import { settingsApi, taggerBatchApi, type TaggerSettings as TaggerSettingsType, type TaggerModel, type TaggerServerStatus } from '../../../services/settingsApi';
+import { settingsApi, taggerBatchApi, type TaggerSettings as TaggerSettingsType, type TaggerModel, type TaggerDevice, type TaggerServerStatus } from '../../../services/settingsApi';
 
 interface TaggerSettingsProps {
   settings: TaggerSettingsType;
@@ -306,6 +306,14 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                             variant="outlined"
                           />
                         )}
+                        {modelStatus?.currentDevice && (
+                          <Chip
+                            label={modelStatus.currentDevice}
+                            size="small"
+                            color={modelStatus.currentDevice.includes('cuda') ? 'success' : 'default'}
+                            variant="outlined"
+                          />
+                        )}
                         {statusLoading && <CircularProgress size={16} />}
                       </Stack>
                       {modelStatus?.lastUsedAt && (
@@ -409,6 +417,41 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                 <Typography variant="body2" color="text.secondary">모델 목록 로딩 중...</Typography>
               </Box>
             )}
+
+            {/* Device Selection */}
+            <FormControl fullWidth disabled={!localSettings.enabled}>
+              <InputLabel>디바이스 선택</InputLabel>
+              <Select
+                value={localSettings.device}
+                label="디바이스 선택"
+                onChange={(e) => setLocalSettings({ ...localSettings, device: e.target.value as TaggerDevice })}
+              >
+                <MenuItem value="auto">
+                  <Box>
+                    <Typography variant="body1">자동 (Auto)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      GPU 사용 가능하면 GPU, 없으면 CPU 사용
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <MenuItem value="cpu">
+                  <Box>
+                    <Typography variant="body1">CPU</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      CPU만 사용 (느리지만 안정적)
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <MenuItem value="cuda">
+                  <Box>
+                    <Typography variant="body1">GPU (CUDA)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      NVIDIA GPU 사용 (빠름, GPU 필요)
+                    </Typography>
+                  </Box>
+                </MenuItem>
+              </Select>
+            </FormControl>
 
             {/* Download Status and Button */}
             {localSettings.enabled && (

@@ -21,9 +21,10 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 # Global state
-torch_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+torch_device: Optional[torch.device] = None  # Will be set in load_model
 model: Optional[nn.Module] = None
 current_model_name: Optional[str] = None
+current_device_name: Optional[str] = None
 labels = None
 transform = None
 
@@ -111,9 +112,9 @@ def get_tags(probs: Tensor, label_data: LabelData, gen_threshold: float, char_th
     return caption, taglist, rating_labels, char_labels, gen_labels
 
 
-def load_model_command(model_name: str, cache_dir: Optional[str] = None):
+def load_model_command(model_name: str, cache_dir: Optional[str] = None, device: str = "auto"):
     """Load model into memory"""
-    global model, current_model_name, labels, transform
+    global model, current_model_name, current_device_name, labels, transform, torch_device
 
     try:
         # Validate model
@@ -122,6 +123,29 @@ def load_model_command(model_name: str, cache_dir: Optional[str] = None):
             return {
                 "success": False,
                 "error": f"Unknown model: {model_name}",
+                "error_type": "ValidationError"
+            }
+
+        # Determine device
+        if device == "auto":
+            # Auto-detect: use CUDA if available, otherwise CPU
+            torch_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        elif device == "cpu":
+            # Force CPU
+            torch_device = torch.device("cpu")
+        elif device == "cuda":
+            # Force CUDA, error if not available
+            if not torch.cuda.is_available():
+                return {
+                    "success": False,
+                    "error": "CUDA is not available on this system",
+                    "error_type": "DeviceError"
+                }
+            torch_device = torch.device("cuda")
+        else:
+            return {
+                "success": False,
+                "error": f"Unknown device: {device}. Use 'auto', 'cpu', or 'cuda'",
                 "error_type": "ValidationError"
             }
 
@@ -147,11 +171,12 @@ def load_model_command(model_name: str, cache_dir: Optional[str] = None):
         transform = create_transform(**resolve_data_config(model.pretrained_cfg, model=model))
 
         current_model_name = model_name
+        current_device_name = str(torch_device)
 
         return {
             "success": True,
             "model": model_name,
-            "device": str(torch_device)
+            "device": current_device_name
         }
 
     except Exception as e:
@@ -164,14 +189,16 @@ def load_model_command(model_name: str, cache_dir: Optional[str] = None):
 
 def unload_model_command():
     """Unload model from memory"""
-    global model, current_model_name, labels, transform
+    global model, current_model_name, current_device_name, labels, transform, torch_device
 
     try:
         # Clear references
         model = None
         current_model_name = None
+        current_device_name = None
         labels = None
         transform = None
+        torch_device = None
 
         # Clear CUDA cache if available
         if torch.cuda.is_available():
@@ -189,7 +216,7 @@ def unload_model_command():
 
 def tag_image_command(image_path: str, gen_threshold: float, char_threshold: float):
     """Tag a single image using loaded model"""
-    global model, current_model_name, labels, transform
+    global model, current_model_name, current_device_name, labels, transform, torch_device
 
     try:
         # Check if model is loaded
@@ -220,13 +247,13 @@ def tag_image_command(image_path: str, gen_threshold: float, char_threshold: flo
 
         # Run inference
         with torch.inference_mode():
-            if torch_device.type != "cpu":
+            if torch_device is not None and torch_device.type != "cpu":
                 inputs = inputs.to(torch_device)
 
             outputs = model.forward(inputs)
             outputs = F.sigmoid(outputs)
 
-            if torch_device.type != "cpu":
+            if torch_device is not None and torch_device.type != "cpu":
                 inputs = inputs.to("cpu")
                 outputs = outputs.to("cpu")
 
@@ -263,13 +290,13 @@ def tag_image_command(image_path: str, gen_threshold: float, char_threshold: flo
 
 def get_status_command():
     """Get current daemon status"""
-    global model, current_model_name
+    global model, current_model_name, current_device_name
 
     return {
         "success": True,
         "model_loaded": model is not None,
         "current_model": current_model_name,
-        "device": str(torch_device)
+        "device": current_device_name
     }
 
 
@@ -297,7 +324,8 @@ def main():
             if action == "load_model":
                 response = load_model_command(
                     model_name=command.get("model", "vit"),
-                    cache_dir=command.get("cache_dir")
+                    cache_dir=command.get("cache_dir"),
+                    device=command.get("device", "auto")
                 )
                 send_response(response)
 

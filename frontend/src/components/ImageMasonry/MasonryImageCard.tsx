@@ -1,20 +1,46 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardMedia, Box, Skeleton } from '@mui/material';
+import { CheckCircle as CheckCircleIcon } from '@mui/icons-material';
 import type { ImageRecord } from '../../types/image';
 import { getBackendOrigin } from '../../utils/backend';
 
 interface MasonryImageCardProps {
   image: ImageRecord;
   onClick: () => void;
+  selected?: boolean;
+  selectable?: boolean;
+  onSelectionChange?: (id: number, event?: React.MouseEvent) => void;
 }
 
-const MasonryImageCard: React.FC<MasonryImageCardProps> = ({ image, onClick }) => {
+const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
+  image,
+  onClick,
+  selected = false,
+  selectable = false,
+  onSelectionChange
+}) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const backendOrigin = getBackendOrigin();
   // API 엔드포인트를 통해 썸네일 제공 (외부 네트워크 접근 보장)
   const imageUrl = `${backendOrigin}/api/images/${image.id}/thumbnail`;
+
+  const handleSelectionChange = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onSelectionChange) {
+      onSelectionChange(image.id, e);
+    }
+  };
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    // 체크박스 클릭이면 무시
+    if ((e.target as HTMLElement).closest('.image-card-actions')) {
+      return;
+    }
+    onClick();
+  };
 
   // 이미지 aspect ratio 계산 (레이아웃 시프트 방지)
   const aspectRatio = image.width && image.height
@@ -53,16 +79,84 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({ image, onClick }) =
   return (
     <Card
       ref={cardRef}
-      onClick={onClick}
+      onClick={handleCardClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       sx={{
         cursor: 'pointer',
         transition: 'all 0.2s ease-in-out',
+        position: 'relative',
+        border: selected ? 3 : 1,
+        borderColor: selected ? 'primary.main' : 'divider',
         '&:hover': {
           transform: 'translateY(-4px)',
           boxShadow: 6,
         },
       }}
     >
+      {/* 선택 체크박스/아이콘 - selectable일 때 항상 표시 */}
+      {selectable && (
+        <Box
+          className="image-card-actions"
+          sx={{
+            position: 'absolute',
+            top: 8,
+            left: 8,
+            zIndex: 2,
+            opacity: isHovered || selected ? 1 : 0.3, // 항상 표시하되 투명도로 구분
+            transition: 'opacity 0.2s ease-in-out',
+          }}
+          onClick={handleSelectionChange}
+        >
+          {selected ? (
+            <CheckCircleIcon
+              sx={{
+                fontSize: 32,
+                color: 'primary.main',
+                bgcolor: 'white',
+                borderRadius: '50%',
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+              }}
+            />
+          ) : (
+            <Box
+              sx={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                border: '2px solid white',
+                bgcolor: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  bgcolor: 'rgba(0, 0, 0, 0.7)',
+                  transform: 'scale(1.1)',
+                },
+              }}
+            />
+          )}
+        </Box>
+      )}
+
+      {/* 선택 오버레이 */}
+      {selected && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            bgcolor: 'rgba(33, 150, 243, 0.15)',
+            zIndex: 1,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+
       <Box
         sx={{
           position: 'relative',
@@ -94,6 +188,7 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({ image, onClick }) =
             alt={image.original_name}
             loading="lazy"
             decoding="async"
+            draggable={false}
             onLoad={handleImageLoad}
             sx={{
               position: 'absolute',

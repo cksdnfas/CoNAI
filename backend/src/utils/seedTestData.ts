@@ -190,52 +190,43 @@ export async function seedTestData(): Promise<void> {
 
   try {
     for (const [index, imageData] of testImages.entries()) {
-      await new Promise<void>((resolve, reject) => {
-        const stmt = db.prepare(`
-          INSERT INTO images (
-            filename, original_name, file_path, thumbnail_path, optimized_path,
-            file_size, mime_type, width, height, metadata,
-            ai_tool, model_name, lora_models, steps, cfg_scale, sampler, seed, scheduler,
-            prompt, negative_prompt, denoise_strength, generation_time, batch_size, batch_index
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
+      const stmt = db.prepare(`
+        INSERT INTO images (
+          filename, original_name, file_path, thumbnail_path, optimized_path,
+          file_size, mime_type, width, height, metadata,
+          ai_tool, model_name, lora_models, steps, cfg_scale, sampler, seed, scheduler,
+          prompt, negative_prompt, denoise_strength, generation_time, batch_size, batch_index
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
 
-        stmt.run([
-          imageData.filename,
-          imageData.original_name,
-          imageData.file_path,
-          imageData.thumbnail_path,
-          imageData.optimized_path,
-          imageData.file_size,
-          imageData.mime_type,
-          imageData.width,
-          imageData.height,
-          imageData.metadata,
-          imageData.ai_tool,
-          imageData.model_name,
-          imageData.lora_models,
-          imageData.steps,
-          imageData.cfg_scale,
-          imageData.sampler,
-          imageData.seed,
-          imageData.scheduler,
-          imageData.prompt,
-          imageData.negative_prompt,
-          imageData.denoise_strength,
-          imageData.generation_time,
-          imageData.batch_size,
-          imageData.batch_index
-        ], function(err) {
-          if (err) {
-            reject(err);
-          } else {
-            console.log(`✅ 테스트 이미지 ${index + 1}/5 추가됨 (ID: ${this.lastID})`);
-            resolve();
-          }
-        });
+      const info = stmt.run(
+        imageData.filename,
+        imageData.original_name,
+        imageData.file_path,
+        imageData.thumbnail_path,
+        imageData.optimized_path,
+        imageData.file_size,
+        imageData.mime_type,
+        imageData.width,
+        imageData.height,
+        imageData.metadata,
+        imageData.ai_tool,
+        imageData.model_name,
+        imageData.lora_models,
+        imageData.steps,
+        imageData.cfg_scale,
+        imageData.sampler,
+        imageData.seed,
+        imageData.scheduler,
+        imageData.prompt,
+        imageData.negative_prompt,
+        imageData.denoise_strength,
+        imageData.generation_time,
+        imageData.batch_size,
+        imageData.batch_index
+      );
 
-        stmt.finalize();
-      });
+      console.log(`✅ 테스트 이미지 ${index + 1}/5 추가됨 (ID: ${info.lastInsertRowid})`);
 
       // 간단한 더미 파일 생성 (실제 이미지는 아니지만 파일 존재 확인용)
       const dummyContent = `Dummy image file for testing - ${imageData.filename}`;

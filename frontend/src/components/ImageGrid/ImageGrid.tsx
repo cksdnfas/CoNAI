@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Grid,
   Box,
@@ -14,6 +14,7 @@ import type { ImageRecord, PageSize } from '../../types/image';
 import ImageCard from '../ImageCard/ImageCard';
 import PageSizeSelector from '../PageSizeSelector/PageSizeSelector';
 import ImageViewerModal from '../ImageViewerModal';
+import './ImageGrid.css';
 
 export interface ImageGridProps {
   images: ImageRecord[];
@@ -50,18 +51,42 @@ const ImageGrid: React.FC<ImageGridProps> = ({
 }) => {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [lastClickedIndex, setLastClickedIndex] = useState<number>(-1);
 
   // images가 undefined일 경우 방어
   const safeImages = images || [];
 
-  const handleSelectionChange = (id: number) => {
+  const handleSelectionChange = (id: number, event?: React.MouseEvent) => {
     if (!onSelectionChange) return;
 
+    const imageIndex = safeImages.findIndex(img => img.id === id);
+
+    // Ctrl/Cmd + Click: 토글 선택
+    if (event && (event.ctrlKey || event.metaKey)) {
+      const newSelectedIds = selectedIds.includes(id)
+        ? selectedIds.filter(selectedId => selectedId !== id)
+        : [...selectedIds, id];
+      onSelectionChange(newSelectedIds);
+      setLastClickedIndex(imageIndex);
+      return;
+    }
+
+    // Shift + Click: 범위 선택
+    if (event && event.shiftKey && lastClickedIndex >= 0) {
+      const start = Math.min(lastClickedIndex, imageIndex);
+      const end = Math.max(lastClickedIndex, imageIndex);
+      const rangeIds = safeImages.slice(start, end + 1).map(img => img.id);
+      const newSelectedIds = Array.from(new Set([...selectedIds, ...rangeIds]));
+      onSelectionChange(newSelectedIds);
+      return;
+    }
+
+    // 일반 클릭: 토글 선택
     const newSelectedIds = selectedIds.includes(id)
       ? selectedIds.filter(selectedId => selectedId !== id)
       : [...selectedIds, id];
-
     onSelectionChange(newSelectedIds);
+    setLastClickedIndex(imageIndex);
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -86,6 +111,48 @@ const ImageGrid: React.FC<ImageGridProps> = ({
   const handleImageChange = (newIndex: number) => {
     setCurrentImageIndex(newIndex);
   };
+
+  // 컨테이너 클릭 핸들러 (빈 공간 클릭 시 선택 해제)
+  const handleContainerClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const isImageCard = target.closest('.MuiCard-root');
+    const isCheckbox = target.closest('.image-card-actions');
+    const isBulkActionBar = target.closest('.no-drag-select');
+    const isPagination = target.closest('.MuiPagination-root');
+
+    // 빈 공간 클릭인 경우에만 선택 해제
+    if (!isImageCard && !isCheckbox && !isBulkActionBar && !isPagination && onSelectionChange && selectedIds.length > 0) {
+      onSelectionChange([]);
+      setLastClickedIndex(-1);
+    }
+  };
+
+  // 키보드 단축키 핸들러
+  useEffect(() => {
+    if (!selectable || !onSelectionChange) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + A: 전체 선택
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        const allIds = safeImages.map(img => img.id);
+        onSelectionChange(allIds);
+      }
+
+      // ESC: 선택 해제
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onSelectionChange([]);
+        setLastClickedIndex(-1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectable, onSelectionChange, safeImages]);
+
 
   if (loading) {
     return (
@@ -119,7 +186,10 @@ const ImageGrid: React.FC<ImageGridProps> = ({
   }
 
   return (
-    <Box>
+    <Box
+      onClick={handleContainerClick}
+      sx={{ position: 'relative' }}
+    >
       {/* 컨트롤 바 */}
       <Box sx={{ mb: 3 }}>
         <Stack
@@ -129,18 +199,17 @@ const ImageGrid: React.FC<ImageGridProps> = ({
           spacing={2}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {selectable && (
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={isAllSelected}
-                    indeterminate={isIndeterminate}
-                    onChange={(e) => handleSelectAll(e.target.checked)}
-                  />
-                }
-                label={`전체 선택 (${selectedIds.length}/${safeImages.length})`}
-              />
-            )}
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={isAllSelected}
+                  indeterminate={isIndeterminate}
+                  onChange={(e) => handleSelectAll(e.target.checked)}
+                  disabled={!selectable}
+                />
+              }
+              label={`전체 선택 (${selectedIds.length}/${safeImages.length})`}
+            />
             <Typography variant="body2" color="text.secondary">
               총 {total.toLocaleString()}개 이미지
             </Typography>
@@ -166,7 +235,7 @@ const ImageGrid: React.FC<ImageGridProps> = ({
               image={image}
               selected={selectedIds.includes(image.id)}
               selectable={selectable}
-              onSelectionChange={handleSelectionChange}
+              onSelectionChange={(id, event) => handleSelectionChange(id, event)}
               onDelete={onImageDelete}
               onImageClick={() => handleImageClick(index)}
               showCollectionType={showCollectionType}

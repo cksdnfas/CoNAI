@@ -3,7 +3,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { settingsService } from '../services/settingsService';
 import { imageTaggerService } from '../services/imageTaggerService';
 import { RatingScoreService } from '../services/ratingScoreService';
-import { TaggerSettings } from '../types/settings';
+import { TaggerSettings, SimilaritySettings } from '../types/settings';
 import { RatingWeightsUpdate, RatingTierInput, RatingData } from '../types/rating';
 
 const router = Router();
@@ -215,6 +215,29 @@ router.post(
     res.json({
       success: true,
       message: 'Model unloaded successfully',
+    });
+    return;
+  })
+);
+
+// ==================== Similarity Settings Routes ====================
+
+/**
+ * PUT /api/settings/similarity
+ * Update similarity settings
+ */
+router.put(
+  '/similarity',
+  asyncHandler(async (req: Request, res: Response) => {
+    const similaritySettings: Partial<SimilaritySettings> = req.body;
+
+    // Update settings
+    const updatedSettings = settingsService.updateSimilaritySettings(similaritySettings);
+
+    res.json({
+      success: true,
+      data: updatedSettings,
+      message: 'Similarity settings updated successfully',
     });
     return;
   })

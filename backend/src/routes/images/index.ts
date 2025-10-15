@@ -3,6 +3,7 @@ import { uploadRoutes } from './upload.routes';
 import { queryRoutes } from './query.routes';
 import { taggingRoutes } from './tagging.routes';
 import { managementRoutes } from './management.routes';
+import { similarityRoutes } from './similarity.routes';
 
 const router = Router();
 
@@ -17,5 +18,8 @@ router.use('/', taggingRoutes);
 
 // Management routes (delete, update, etc.)
 router.use('/', managementRoutes);
+
+// Similarity search routes
+router.use('/', similarityRoutes);
 
 export { router as imageRoutes };

@@ -26,12 +26,14 @@ export interface TaggerServerStatus {
   isRunning: boolean;
   modelLoaded: boolean;
   currentModel: TaggerModel | null;
+  currentDevice: string | null;
   lastUsedAt: string | null;
 }
 
 interface DaemonCommand {
   action: 'load_model' | 'unload_model' | 'tag_image' | 'get_status' | 'shutdown';
   model?: TaggerModel;
+  device?: string;
   cache_dir?: string;
   image_path?: string;
   gen_threshold?: number;
@@ -54,6 +56,7 @@ export class TaggerDaemon {
   private process: ChildProcess | null = null;
   private modelLoaded = false;
   private currentModel: TaggerModel | null = null;
+  private currentDevice: string | null = null;
   private lastUsedAt: Date | null = null;
   private autoUnloadTimer: NodeJS.Timeout | null = null;
   private scriptPath: string;
@@ -186,6 +189,7 @@ export class TaggerDaemon {
           this.readyPromise = null;
           this.modelLoaded = false;
           this.currentModel = null;
+          this.currentDevice = null;
         });
 
         // Handle process errors
@@ -241,6 +245,7 @@ export class TaggerDaemon {
     this.readyPromise = null;
     this.modelLoaded = false;
     this.currentModel = null;
+    this.currentDevice = null;
   }
 
   /**
@@ -275,12 +280,14 @@ export class TaggerDaemon {
 
     const settings = settingsService.loadSettings();
     const targetModel = model || settings.tagger.model;
+    const targetDevice = settings.tagger.device || 'auto';
 
-    console.log(`[TaggerDaemon] Loading model: ${targetModel}`);
+    console.log(`[TaggerDaemon] Loading model: ${targetModel} on device: ${targetDevice}`);
 
     const response = await this.sendCommand({
       action: 'load_model',
       model: targetModel,
+      device: targetDevice,
       cache_dir: runtimePaths.modelsDir
     });
 
@@ -290,6 +297,7 @@ export class TaggerDaemon {
 
     this.modelLoaded = true;
     this.currentModel = targetModel;
+    this.currentDevice = response.device || null;
     this.lastUsedAt = new Date();
 
     console.log(`[TaggerDaemon] Model loaded: ${targetModel} on ${response.device}`);
@@ -318,6 +326,7 @@ export class TaggerDaemon {
 
     this.modelLoaded = false;
     this.currentModel = null;
+    this.currentDevice = null;
 
     console.log('[TaggerDaemon] Model unloaded');
   }
@@ -391,6 +400,7 @@ export class TaggerDaemon {
         isRunning: false,
         modelLoaded: false,
         currentModel: null,
+        currentDevice: null,
         lastUsedAt: null
       };
     }
@@ -402,6 +412,7 @@ export class TaggerDaemon {
         isRunning: true,
         modelLoaded: response.model_loaded || false,
         currentModel: (response.current_model as TaggerModel) || null,
+        currentDevice: response.device || null,
         lastUsedAt: this.lastUsedAt ? this.lastUsedAt.toISOString() : null
       };
     } catch (error) {
@@ -410,6 +421,7 @@ export class TaggerDaemon {
         isRunning: false,
         modelLoaded: false,
         currentModel: null,
+        currentDevice: null,
         lastUsedAt: null
       };
     }

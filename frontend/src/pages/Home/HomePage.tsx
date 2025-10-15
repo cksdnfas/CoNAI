@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Typography, IconButton, Tooltip } from '@mui/material';
 import { Refresh as RefreshIcon } from '@mui/icons-material';
 import { ImageMasonry } from '../../components/ImageMasonry';
+import BulkActionBar from '../../components/BulkActionBar/BulkActionBar';
 import { useInfiniteImages } from '../../hooks/useInfiniteImages';
 
 const HomePage: React.FC = () => {
@@ -13,6 +14,26 @@ const HomePage: React.FC = () => {
     loadMore,
     refreshImages,
   } = useInfiniteImages();
+
+  // 선택 상태 관리 (상시 선택모드)
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
+  const handleSelectionChange = (newSelectedIds: number[]) => {
+    setSelectedIds(newSelectedIds);
+  };
+
+  const handleSelectionClear = () => {
+    setSelectedIds([]);
+  };
+
+  const handleActionComplete = async (deletedIds?: number[]) => {
+    // 삭제된 이미지가 있으면 선택에서 제거
+    if (deletedIds && deletedIds.length > 0) {
+      setSelectedIds(prev => prev.filter(id => !deletedIds.includes(id)));
+    }
+    // 이미지 목록 새로고침
+    await refreshImages();
+  };
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -72,12 +93,23 @@ const HomePage: React.FC = () => {
         </Box>
       )}
 
-      {/* 이미지 Masonry 그리드 */}
+      {/* 이미지 Masonry 그리드 (상시 선택모드) */}
       <ImageMasonry
         images={images}
         loading={loading}
         hasMore={hasMore}
         onLoadMore={loadMore}
+        selectable={true}
+        selectedIds={selectedIds}
+        onSelectionChange={handleSelectionChange}
+      />
+
+      {/* 일괄 작업 바 */}
+      <BulkActionBar
+        selectedCount={selectedIds.length}
+        selectedIds={selectedIds}
+        onSelectionClear={handleSelectionClear}
+        onActionComplete={handleActionComplete}
       />
     </Box>
   );

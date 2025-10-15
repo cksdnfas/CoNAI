@@ -1,0 +1,288 @@
+import { Router, Request, Response } from 'express';
+import path from 'path';
+import { asyncHandler } from '../../middleware/errorHandler';
+import { ImageModel } from '../../models/Image';
+import { ImageSimilarityModel } from '../../models/Image/ImageSimilarityModel';
+import { ImageSimilarityService } from '../../services/imageSimilarity';
+import {
+  SimilaritySearchResponse,
+  DuplicateSearchResponse,
+  SIMILARITY_THRESHOLDS
+} from '../../types/similarity';
+import { runtimePaths } from '../../config/runtimePaths';
+
+const router = Router();
+const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
+
+/**
+ * GET /api/images/:id/duplicates
+ * 특정 이미지의 중복 이미지 검색
+ */
+router.get('/:id/duplicates', asyncHandler(async (req: Request, res: Response) => {
+  const imageId = parseInt(req.params.id);
+  const threshold = parseInt(req.query.threshold as string) || SIMILARITY_THRESHOLDS.NEAR_DUPLICATE;
+  const includeMetadata = req.query.includeMetadata !== 'false';
+
+  if (isNaN(imageId)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid image ID'
+    } as SimilaritySearchResponse);
+  }
+
+  // 이미지 존재 확인
+  const image = await ImageModel.findById(imageId);
+  if (!image) {
+    return res.status(404).json({
+      success: false,
+      error: 'Image not found'
+    } as SimilaritySearchResponse);
+  }
+
+  if (!image.perceptual_hash) {
+    return res.status(400).json({
+      success: false,
+      error: 'Image does not have perceptual hash. Please rebuild hashes.'
+    } as SimilaritySearchResponse);
+  }
+
+  const duplicates = await ImageSimilarityModel.findDuplicates(imageId, {
+    threshold,
+    includeMetadata
+  });
+
+  return res.json({
+    success: true,
+    data: {
+      similar: duplicates,
+      total: duplicates.length,
+      query: {
+        imageId,
+        threshold,
+        limit: duplicates.length
+      }
+    }
+  } as SimilaritySearchResponse);
+}));
+
+/**
+ * GET /api/images/:id/similar
+ * 특정 이미지와 유사한 이미지 검색
+ */
+router.get('/:id/similar', asyncHandler(async (req: Request, res: Response) => {
+  const imageId = parseInt(req.params.id);
+  const threshold = parseInt(req.query.threshold as string) || SIMILARITY_THRESHOLDS.SIMILAR;
+  const limit = parseInt(req.query.limit as string) || 20;
+  const includeColorSimilarity = req.query.includeColorSimilarity === 'true';
+  const sortBy = (req.query.sortBy as 'similarity' | 'upload_date' | 'file_size') || 'similarity';
+  const sortOrder = (req.query.sortOrder as 'ASC' | 'DESC') || 'DESC';
+
+  if (isNaN(imageId)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid image ID'
+    } as SimilaritySearchResponse);
+  }
+
+  // 이미지 존재 확인
+  const image = await ImageModel.findById(imageId);
+  if (!image) {
+    return res.status(404).json({
+      success: false,
+      error: 'Image not found'
+    } as SimilaritySearchResponse);
+  }
+
+  if (!image.perceptual_hash) {
+    return res.status(400).json({
+      success: false,
+      error: 'Image does not have perceptual hash. Please rebuild hashes.'
+    } as SimilaritySearchResponse);
+  }
+
+  const similar = await ImageSimilarityModel.findSimilar(imageId, {
+    threshold,
+    limit,
+    includeColorSimilarity,
+    sortBy,
+    sortOrder
+  });
+
+  return res.json({
+    success: true,
+    data: {
+      similar,
+      total: similar.length,
+      query: {
+        imageId,
+        threshold,
+        limit
+      }
+    }
+  } as SimilaritySearchResponse);
+}));
+
+/**
+ * GET /api/images/:id/similar-color
+ * 특정 이미지와 색감이 유사한 이미지 검색
+ */
+router.get('/:id/similar-color', asyncHandler(async (req: Request, res: Response) => {
+  const imageId = parseInt(req.params.id);
+  const threshold = parseFloat(req.query.threshold as string) || (SIMILARITY_THRESHOLDS.COLOR_SIMILAR * 100);
+  const limit = parseInt(req.query.limit as string) || 20;
+
+  if (isNaN(imageId)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid image ID'
+    } as SimilaritySearchResponse);
+  }
+
+  // 이미지 존재 확인
+  const image = await ImageModel.findById(imageId);
+  if (!image) {
+    return res.status(404).json({
+      success: false,
+      error: 'Image not found'
+    } as SimilaritySearchResponse);
+  }
+
+  if (!image.color_histogram) {
+    return res.status(400).json({
+      success: false,
+      error: 'Image does not have color histogram. Please rebuild hashes.'
+    } as SimilaritySearchResponse);
+  }
+
+  const similar = await ImageSimilarityModel.findSimilarByColor(imageId, threshold, limit);
+
+  return res.json({
+    success: true,
+    data: {
+      similar,
+      total: similar.length,
+      query: {
+        imageId,
+        threshold,
+        limit
+      }
+    }
+  } as SimilaritySearchResponse);
+}));
+
+/**
+ * GET /api/images/duplicates/all
+ * 전체 중복 이미지 그룹 검색
+ */
+router.get('/duplicates/all', asyncHandler(async (req: Request, res: Response) => {
+  const threshold = parseInt(req.query.threshold as string) || SIMILARITY_THRESHOLDS.NEAR_DUPLICATE;
+  const minGroupSize = parseInt(req.query.minGroupSize as string) || 2;
+
+  const groups = await ImageSimilarityModel.findAllDuplicateGroups({
+    threshold,
+    minGroupSize
+  });
+
+  const totalImages = groups.reduce((sum, group) => sum + group.images.length, 0);
+
+  return res.json({
+    success: true,
+    data: {
+      groups,
+      totalGroups: groups.length,
+      totalImages,
+      query: {
+        threshold,
+        minGroupSize
+      }
+    }
+  } as DuplicateSearchResponse);
+}));
+
+/**
+ * POST /api/images/similarity/rebuild
+ * 기존 이미지들의 해시 재생성 (배치 처리)
+ * - limit 파라미터: 한 번에 처리할 이미지 개수 (기본값: 50)
+ */
+router.post('/similarity/rebuild', asyncHandler(async (req: Request, res: Response) => {
+  const limit = parseInt(req.query.limit as string) || 50;
+
+  // 해시가 없는 이미지 개수 조회
+  const totalWithoutHash = await ImageSimilarityModel.countImagesWithoutHash();
+
+  if (totalWithoutHash === 0) {
+    return res.json({
+      success: true,
+      data: {
+        message: 'All images already have hashes',
+        processed: 0,
+        failed: 0,
+        total: 0,
+        remaining: 0
+      }
+    });
+  }
+
+  // 배치 크기만큼 이미지 조회
+  const imagesToProcess = await ImageSimilarityModel.getImagesWithoutHash(limit);
+  let processed = 0;
+  let failed = 0;
+  const errors: Array<{ imageId: number; error: string }> = [];
+
+  for (const image of imagesToProcess) {
+    try {
+      const fullPath = path.join(UPLOAD_BASE_PATH, image.file_path);
+
+      // 해시 생성
+      const perceptualHash = await ImageSimilarityService.generatePerceptualHash(fullPath);
+      const histogram = await ImageSimilarityService.generateColorHistogram(fullPath);
+      const colorHistogram = ImageSimilarityService.serializeHistogram(histogram);
+
+      // 데이터베이스 업데이트
+      await ImageSimilarityModel.updateHash(image.id, perceptualHash, colorHistogram);
+      processed++;
+    } catch (error) {
+      failed++;
+      errors.push({
+        imageId: image.id,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      console.error(`Failed to process image ${image.id}:`, error);
+    }
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      message: `Processed ${processed} images`,
+      processed,
+      failed,
+      total: totalWithoutHash,
+      remaining: totalWithoutHash - processed,
+      errors: errors.length > 0 ? errors : undefined
+    }
+  });
+}));
+
+/**
+ * GET /api/images/similarity/stats
+ * 유사도 검색 통계
+ */
+router.get('/similarity/stats', asyncHandler(async (req: Request, res: Response) => {
+  const totalImages = await ImageSimilarityModel.countImagesWithoutHash();
+  const totalWithHash = await ImageModel.findAll(1, 1);
+
+  return res.json({
+    success: true,
+    data: {
+      totalImages: totalWithHash.total,
+      imagesWithoutHash: totalImages,
+      imagesWithHash: totalWithHash.total - totalImages,
+      completionPercentage: totalWithHash.total > 0
+        ? Math.round(((totalWithHash.total - totalImages) / totalWithHash.total) * 100)
+        : 0
+    }
+  });
+}));
+
+export { router as similarityRoutes };

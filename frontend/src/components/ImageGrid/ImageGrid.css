@@ -1,0 +1,29 @@
+/* 선택 가능한 이미지 카드 기본 스타일 */
+.selectable-image {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* 이미지 드래그 방지 */
+.selectable-image img {
+  user-select: none;
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+}
+
+/* 액션 버튼 영역 (체크박스, 정보, 다운로드, 삭제) */
+.image-card-actions {
+  user-select: none;
+  cursor: pointer;
+}
+
+/* BulkActionBar 스타일 */
+.no-drag-select {
+  user-select: auto;
+  z-index: 1100;
+  position: relative;
+}

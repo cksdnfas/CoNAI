@@ -2,11 +2,15 @@
   "tagger": {
     "enabled": true,
     "model": "swinv2",
+    "device": "cuda",
     "generalThreshold": 0.35,
     "characterThreshold": 0.35,
     "pythonPath": "python",
     "autoTagOnUpload": true,
     "keepModelLoaded": false,
     "autoUnloadMinutes": 5
+  },
+  "similarity": {
+    "autoGenerateHashOnUpload": true
   }
 }

@@ -81,52 +81,29 @@ export class SynonymService {
   /**
    * 정규화된 텍스트로 프롬프트 찾기
    */
-  private static findPromptByNormalizedText(
+  private static async findPromptByNormalizedText(
     normalizedText: string,
     type: 'positive' | 'negative'
   ): Promise<PromptCollectionRecord | NegativePromptCollectionRecord | null> {
-    return new Promise((resolve, reject) => {
-      const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+    const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
 
-      db.get(
-        `SELECT * FROM ${tableName} WHERE prompt = ? COLLATE NOCASE`,
-        [normalizedText],
-        (err, row: PromptCollectionRecord | NegativePromptCollectionRecord | undefined) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(row || null);
-          }
-        }
-      );
-    });
+    const row = db.prepare(`SELECT * FROM ${tableName} WHERE prompt = ? COLLATE NOCASE`).get(normalizedText) as PromptCollectionRecord | NegativePromptCollectionRecord | undefined;
+    return row || null;
   }
 
   /**
    * 사용 횟수 병합
    */
-  private static mergeUsageCount(
+  private static async mergeUsageCount(
     mainPromptId: number,
     additionalCount: number,
     type: 'positive' | 'negative'
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+    const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
 
-      db.run(
-        `UPDATE ${tableName}
-         SET usage_count = usage_count + ?, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-        [additionalCount, mainPromptId],
-        (err) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
-        }
-      );
-    });
+    db.prepare(`UPDATE ${tableName}
+       SET usage_count = usage_count + ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`).run(additionalCount, mainPromptId);
   }
 
   /**
@@ -141,53 +118,31 @@ export class SynonymService {
       const normalizedSearch = normalizeSearchTerm(searchTerm);
       const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
 
-      return new Promise((resolve, reject) => {
-        // 1. 메인 프롬프트에서 직접 검색
-        db.get(
-          `SELECT * FROM ${tableName} WHERE prompt = ? COLLATE NOCASE`,
-          [normalizedSearch],
-          (err, directMatch: PromptCollectionRecord | NegativePromptCollectionRecord | undefined) => {
-            if (err) {
-              reject(err);
-              return;
-            }
+      // 1. 메인 프롬프트에서 직접 검색
+      const directMatch = db.prepare(`SELECT * FROM ${tableName} WHERE prompt = ? COLLATE NOCASE`).get(normalizedSearch) as PromptCollectionRecord | NegativePromptCollectionRecord | undefined;
 
-            if (directMatch) {
-              resolve(directMatch);
-              return;
-            }
+      if (directMatch) {
+        return directMatch;
+      }
 
-            // 2. 동의어에서 검색
-            db.all(
-              `SELECT * FROM ${tableName} WHERE synonyms IS NOT NULL`,
-              [],
-              (err, rows: (PromptCollectionRecord | NegativePromptCollectionRecord)[]) => {
-                if (err) {
-                  reject(err);
-                  return;
-                }
+      // 2. 동의어에서 검색
+      const rows = db.prepare(`SELECT * FROM ${tableName} WHERE synonyms IS NOT NULL`).all() as (PromptCollectionRecord | NegativePromptCollectionRecord)[];
 
-                for (const row of rows) {
-                  try {
-                    const synonyms = JSON.parse(row.synonyms || '[]');
-                    const normalizedSynonyms = synonyms.map((s: string) => s.toLowerCase());
+      for (const row of rows) {
+        try {
+          const synonyms = JSON.parse(row.synonyms || '[]');
+          const normalizedSynonyms = synonyms.map((s: string) => s.toLowerCase());
 
-                    if (normalizedSynonyms.includes(normalizedSearch.toLowerCase())) {
-                      resolve(row);
-                      return;
-                    }
-                  } catch (parseError) {
-                    // JSON 파싱 오류 무시
-                    continue;
-                  }
-                }
-
-                resolve(null);
-              }
-            );
+          if (normalizedSynonyms.includes(normalizedSearch.toLowerCase())) {
+            return row;
           }
-        );
-      });
+        } catch (parseError) {
+          // JSON 파싱 오류 무시
+          continue;
+        }
+      }
+
+      return null;
 
     } catch (error) {
       console.error('Error in findInSynonymGroup:', error);
@@ -206,54 +161,34 @@ export class SynonymService {
     try {
       const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
 
-      return new Promise((resolve, reject) => {
-        // 현재 동의어 목록 가져오기
-        db.get(
-          `SELECT synonyms FROM ${tableName} WHERE id = ?`,
-          [mainPromptId],
-          (err, row: { synonyms: string } | undefined) => {
-            if (err) {
-              reject(err);
-              return;
-            }
+      // 현재 동의어 목록 가져오기
+      const row = db.prepare(`SELECT synonyms FROM ${tableName} WHERE id = ?`).get(mainPromptId) as { synonyms: string } | undefined;
 
-            if (!row || !row.synonyms) {
-              resolve(false);
-              return;
-            }
+      if (!row || !row.synonyms) {
+        return false;
+      }
 
-            try {
-              const synonyms = JSON.parse(row.synonyms);
-              const normalizedToRemove = normalizeSearchTerm(synonymToRemove).toLowerCase();
+      try {
+        const synonyms = JSON.parse(row.synonyms);
+        const normalizedToRemove = normalizeSearchTerm(synonymToRemove).toLowerCase();
 
-              // 동의어 제거
-              const updatedSynonyms = synonyms.filter(
-                (s: string) => normalizeSearchTerm(s).toLowerCase() !== normalizedToRemove
-              );
-
-              // 업데이트된 동의어 목록 저장
-              const updatedSynonymsJson = JSON.stringify(updatedSynonyms);
-
-              db.run(
-                `UPDATE ${tableName}
-                 SET synonyms = ?, updated_at = CURRENT_TIMESTAMP
-                 WHERE id = ?`,
-                [updatedSynonymsJson, mainPromptId],
-                function(err) {
-                  if (err) {
-                    reject(err);
-                  } else {
-                    resolve(this.changes > 0);
-                  }
-                }
-              );
-
-            } catch (parseError) {
-              reject(parseError);
-            }
-          }
+        // 동의어 제거
+        const updatedSynonyms = synonyms.filter(
+          (s: string) => normalizeSearchTerm(s).toLowerCase() !== normalizedToRemove
         );
-      });
+
+        // 업데이트된 동의어 목록 저장
+        const updatedSynonymsJson = JSON.stringify(updatedSynonyms);
+
+        const info = db.prepare(`UPDATE ${tableName}
+               SET synonyms = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?`).run(updatedSynonymsJson, mainPromptId);
+
+        return info.changes > 0;
+
+      } catch (parseError) {
+        throw parseError;
+      }
 
     } catch (error) {
       console.error('Error in removeSynonym:', error);
@@ -268,20 +203,9 @@ export class SynonymService {
     groupId: number,
     type: 'positive' | 'negative' = 'positive'
   ): Promise<(PromptCollectionRecord | NegativePromptCollectionRecord)[]> {
-    return new Promise((resolve, reject) => {
-      const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+    const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
 
-      db.all(
-        `SELECT * FROM ${tableName} WHERE group_id = ? ORDER BY usage_count DESC`,
-        [groupId],
-        (err, rows: (PromptCollectionRecord | NegativePromptCollectionRecord)[]) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(rows || []);
-          }
-        }
-      );
-    });
+    const rows = db.prepare(`SELECT * FROM ${tableName} WHERE group_id = ? ORDER BY usage_count DESC`).all(groupId) as (PromptCollectionRecord | NegativePromptCollectionRecord)[];
+    return rows || [];
   }
 }

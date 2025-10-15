@@ -205,54 +205,36 @@ export class PromptGroupService {
   /**
    * 프롬프트 컬렉션의 group_id 업데이트 (내부 유틸리티)
    */
-  private static updatePromptGroupIds(
+  private static async updatePromptGroupIds(
     oldGroupId: number | null,
     newGroupId: number | null,
     type: 'positive' | 'negative' = 'positive'
   ): Promise<number> {
-    return new Promise((resolve, reject) => {
-      const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+    const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
 
-      let query: string;
-      let params: any[];
+    let query: string;
+    let params: any[];
 
-      if (oldGroupId === null) {
-        query = `UPDATE ${tableName} SET group_id = ?, updated_at = CURRENT_TIMESTAMP WHERE group_id IS NULL`;
-        params = [newGroupId];
-      } else {
-        query = `UPDATE ${tableName} SET group_id = ?, updated_at = CURRENT_TIMESTAMP WHERE group_id = ?`;
-        params = [newGroupId, oldGroupId];
-      }
+    if (oldGroupId === null) {
+      query = `UPDATE ${tableName} SET group_id = ?, updated_at = CURRENT_TIMESTAMP WHERE group_id IS NULL`;
+      params = [newGroupId];
+    } else {
+      query = `UPDATE ${tableName} SET group_id = ?, updated_at = CURRENT_TIMESTAMP WHERE group_id = ?`;
+      params = [newGroupId, oldGroupId];
+    }
 
-      db.run(query, params, function(err) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(this.changes);
-        }
-      });
-    });
+    const info = db.prepare(query).run(...params);
+    return info.changes;
   }
 
   /**
    * Unclassified 프롬프트 개수 조회 (내부 유틸리티)
    */
-  private static getUnclassifiedPromptCount(type: 'positive' | 'negative' = 'positive'): Promise<number> {
-    return new Promise((resolve, reject) => {
-      const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+  private static async getUnclassifiedPromptCount(type: 'positive' | 'negative' = 'positive'): Promise<number> {
+    const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
 
-      db.get(
-        `SELECT COUNT(*) as count FROM ${tableName} WHERE group_id IS NULL`,
-        [],
-        (err, row: any) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(row.count || 0);
-          }
-        }
-      );
-    });
+    const row = db.prepare(`SELECT COUNT(*) as count FROM ${tableName} WHERE group_id IS NULL`).get() as { count: number };
+    return row.count || 0;
   }
 
   /**
@@ -268,51 +250,39 @@ export class PromptGroupService {
       const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
       const offset = (page - 1) * limit;
 
-      return new Promise((resolve, reject) => {
-        // 총 개수 조회
-        let countQuery: string;
-        let countParams: any[];
+      // 총 개수 조회
+      let countQuery: string;
+      let countParams: any[];
 
-        if (groupId === null || groupId === 0) {
-          countQuery = `SELECT COUNT(*) as total FROM ${tableName} WHERE group_id IS NULL`;
-          countParams = [];
-        } else {
-          countQuery = `SELECT COUNT(*) as total FROM ${tableName} WHERE group_id = ?`;
-          countParams = [groupId];
-        }
+      if (groupId === null || groupId === 0) {
+        countQuery = `SELECT COUNT(*) as total FROM ${tableName} WHERE group_id IS NULL`;
+        countParams = [];
+      } else {
+        countQuery = `SELECT COUNT(*) as total FROM ${tableName} WHERE group_id = ?`;
+        countParams = [groupId];
+      }
 
-        db.get(countQuery, countParams, (err, countRow: any) => {
-          if (err) {
-            reject(err);
-            return;
-          }
+      const countRow = db.prepare(countQuery).get(...countParams) as { total: number };
+      const total = countRow.total;
 
-          const total = countRow.total;
+      // 데이터 조회
+      let dataQuery: string;
+      let dataParams: any[];
 
-          // 데이터 조회
-          let dataQuery: string;
-          let dataParams: any[];
+      if (groupId === null || groupId === 0) {
+        dataQuery = `SELECT * FROM ${tableName} WHERE group_id IS NULL ORDER BY usage_count DESC, prompt ASC LIMIT ? OFFSET ?`;
+        dataParams = [limit, offset];
+      } else {
+        dataQuery = `SELECT * FROM ${tableName} WHERE group_id = ? ORDER BY usage_count DESC, prompt ASC LIMIT ? OFFSET ?`;
+        dataParams = [groupId, limit, offset];
+      }
 
-          if (groupId === null || groupId === 0) {
-            dataQuery = `SELECT * FROM ${tableName} WHERE group_id IS NULL ORDER BY usage_count DESC, prompt ASC LIMIT ? OFFSET ?`;
-            dataParams = [limit, offset];
-          } else {
-            dataQuery = `SELECT * FROM ${tableName} WHERE group_id = ? ORDER BY usage_count DESC, prompt ASC LIMIT ? OFFSET ?`;
-            dataParams = [groupId, limit, offset];
-          }
+      const rows = db.prepare(dataQuery).all(...dataParams) as any[];
 
-          db.all(dataQuery, dataParams, (err, rows: any[]) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve({
-                prompts: rows || [],
-                total
-              });
-            }
-          });
-        });
-      });
+      return {
+        prompts: rows || [],
+        total
+      };
     } catch (error) {
       console.error('Error getting prompts in group:', error);
       throw error;
@@ -345,105 +315,69 @@ export class PromptGroupService {
       const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
       const groupTableName = type === 'positive' ? 'prompt_groups' : 'negative_prompt_groups';
 
-      return new Promise((resolve, reject) => {
-        // 먼저 모든 visible한 그룹들을 조회
-        const groupQuery = `
-          SELECT id, group_name, display_order, is_visible
-          FROM ${groupTableName}
-          WHERE is_visible = 1
-          ORDER BY display_order ASC
+      // 먼저 모든 visible한 그룹들을 조회
+      const groupQuery = `
+        SELECT id, group_name, display_order, is_visible
+        FROM ${groupTableName}
+        WHERE is_visible = 1
+        ORDER BY display_order ASC
+      `;
+
+      const groupRows = db.prepare(groupQuery).all() as any[];
+
+      const groups: GroupedPrompts[] = [];
+
+      // 각 그룹별 프롬프트 조회
+      for (const group of groupRows) {
+        const promptQuery = `
+          SELECT id, prompt, usage_count, synonyms
+          FROM ${tableName}
+          WHERE group_id = ?
+          ORDER BY usage_count DESC, prompt ASC
         `;
 
-        db.all(groupQuery, [], (err, groupRows: any[]) => {
-          if (err) {
-            reject(err);
-            return;
-          }
+        const promptRows = db.prepare(promptQuery).all(group.id) as any[];
 
-          const groups: GroupedPrompts[] = [];
-          let completedQueries = 0;
-          const totalQueries = groupRows.length + 1; // 그룹 수 + Unclassified
+        const prompts: PromptItem[] = promptRows.map(row => ({
+          id: row.id,
+          prompt: row.prompt,
+          usage_count: row.usage_count,
+          synonyms: row.synonyms ? JSON.parse(row.synonyms) : undefined
+        }));
 
-          // 각 그룹별 프롬프트 조회
-          groupRows.forEach((group) => {
-            const promptQuery = `
-              SELECT id, prompt, usage_count, synonyms
-              FROM ${tableName}
-              WHERE group_id = ?
-              ORDER BY usage_count DESC, prompt ASC
-            `;
-
-            db.all(promptQuery, [group.id], (err, promptRows: any[]) => {
-              if (err) {
-                reject(err);
-                return;
-              }
-
-              const prompts: PromptItem[] = promptRows.map(row => ({
-                id: row.id,
-                prompt: row.prompt,
-                usage_count: row.usage_count,
-                synonyms: row.synonyms ? JSON.parse(row.synonyms) : undefined
-              }));
-
-              groups.push({
-                id: group.id,
-                group_name: group.group_name,
-                display_order: group.display_order,
-                is_visible: group.is_visible,
-                prompts
-              });
-
-              completedQueries++;
-              if (completedQueries === totalQueries) {
-                // display_order로 정렬
-                groups.sort((a, b) => a.display_order - b.display_order);
-                finishQuery();
-              }
-            });
-          });
-
-          // Unclassified 프롬프트들 조회
-          let unclassifiedPrompts: PromptItem[] = [];
-          const unclassifiedQuery = `
-            SELECT id, prompt, usage_count, synonyms
-            FROM ${tableName}
-            WHERE group_id IS NULL
-            ORDER BY usage_count DESC, prompt ASC
-          `;
-
-          db.all(unclassifiedQuery, [], (err, unclassifiedRows: any[]) => {
-            if (err) {
-              reject(err);
-              return;
-            }
-
-            unclassifiedPrompts = unclassifiedRows.map(row => ({
-              id: row.id,
-              prompt: row.prompt,
-              usage_count: row.usage_count,
-              synonyms: row.synonyms ? JSON.parse(row.synonyms) : undefined
-            }));
-
-            completedQueries++;
-            if (completedQueries === totalQueries) {
-              finishQuery();
-            }
-          });
-
-          function finishQuery() {
-            resolve({
-              groups,
-              unclassified_prompts: unclassifiedPrompts
-            });
-          }
-
-          // 그룹이 없는 경우 처리
-          if (groupRows.length === 0) {
-            completedQueries = totalQueries - 1; // Unclassified만 남음
-          }
+        groups.push({
+          id: group.id,
+          group_name: group.group_name,
+          display_order: group.display_order,
+          is_visible: group.is_visible,
+          prompts
         });
-      });
+      }
+
+      // Unclassified 프롬프트들 조회
+      const unclassifiedQuery = `
+        SELECT id, prompt, usage_count, synonyms
+        FROM ${tableName}
+        WHERE group_id IS NULL
+        ORDER BY usage_count DESC, prompt ASC
+      `;
+
+      const unclassifiedRows = db.prepare(unclassifiedQuery).all() as any[];
+
+      const unclassifiedPrompts: PromptItem[] = unclassifiedRows.map(row => ({
+        id: row.id,
+        prompt: row.prompt,
+        usage_count: row.usage_count,
+        synonyms: row.synonyms ? JSON.parse(row.synonyms) : undefined
+      }));
+
+      // display_order로 정렬
+      groups.sort((a, b) => a.display_order - b.display_order);
+
+      return {
+        groups,
+        unclassified_prompts: unclassifiedPrompts
+      };
     } catch (error) {
       console.error('Error getting grouped prompts:', error);
       throw error;

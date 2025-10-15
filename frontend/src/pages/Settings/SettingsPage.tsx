@@ -11,6 +11,7 @@ import {
 import { Settings as SettingsIcon } from '@mui/icons-material';
 import TaggerSettings from './components/TaggerSettings';
 import RatingScoreSettings from './components/RatingScoreSettings';
+import SimilaritySettings from './components/SimilaritySettings';
 import { settingsApi, type AppSettings, type TaggerSettings as TaggerSettingsType } from '../../services/settingsApi';
 
 interface TabPanelProps {
@@ -123,6 +124,7 @@ const SettingsPage: React.FC = () => {
           <Tabs value={tabValue} onChange={handleTabChange}>
             <Tab label="Tagger 설정" />
             <Tab label="Rating 점수 설정" />
+            <Tab label="이미지 유사도 검색" />
             <Tab label="고급 설정" disabled />
           </Tabs>
         </Box>
@@ -140,6 +142,10 @@ const SettingsPage: React.FC = () => {
         </TabPanel>
 
         <TabPanel value={tabValue} index={2}>
+          <SimilaritySettings />
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={3}>
           <Alert severity="info">
             고급 설정 기능은 향후 추가될 예정입니다.
           </Alert>

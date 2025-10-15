@@ -53,25 +53,8 @@ const GalleryPage: React.FC = () => {
   const [filterAiTool, setFilterAiTool] = useState<string>('');
 
   const handleSelectionChange = (newSelectedIds: number[]) => {
-    if (newSelectedIds.length === 0) {
-      deselectAll();
-    } else {
-      // 개별 선택의 경우 useSelection의 toggleSelection 사용
-      // 전체 선택의 경우 selectAll 사용
-      if (newSelectedIds.length === images.length) {
-        selectAll(newSelectedIds);
-      } else {
-        // 새로 추가된 ID나 제거된 ID를 찾아서 토글
-        const lastSelected = newSelectedIds.find(id => !selectedIds.includes(id));
-        const lastDeselected = selectedIds.find(id => !newSelectedIds.includes(id));
-
-        if (lastSelected) {
-          toggleSelection(lastSelected);
-        } else if (lastDeselected) {
-          toggleSelection(lastDeselected);
-        }
-      }
-    }
+    // 선택 상태를 직접 업데이트
+    selectAll(newSelectedIds);
   };
 
   const handleImageDelete = async (id: number) => {
@@ -267,7 +250,7 @@ const GalleryPage: React.FC = () => {
         </Box>
       )}
 
-      {/* 이미지 그리드 */}
+      {/* 이미지 그리드 (상시 선택모드) */}
       <ImageGrid
         images={filteredImages}
         loading={loading}

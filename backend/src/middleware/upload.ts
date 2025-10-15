@@ -3,18 +3,25 @@ import { Request } from 'express';
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
 
-// 지원되는 이미지 MIME 타입
+// 지원되는 이미지 및 동영상 MIME 타입
 const ALLOWED_MIME_TYPES = [
+  // 이미지 포맷
   'image/jpeg',
   'image/png',
   'image/webp',
   'image/tiff',
   'image/bmp',
-  'image/gif'
+  'image/gif',
+  // 동영상 포맷
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',  // .mov
+  'video/x-msvideo',  // .avi
+  'video/x-matroska'  // .mkv
 ];
 
-// 최대 파일 크기 (50MB)
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
+// 최대 파일 크기
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB (동영상 파일 고려)
 
 // 파일 필터 함수
 const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {

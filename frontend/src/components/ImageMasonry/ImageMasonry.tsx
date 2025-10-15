@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Typography, Skeleton } from '@mui/material';
 import Masonry from 'react-masonry-css';
 import InfiniteScroll from 'react-infinite-scroll-component';
@@ -12,6 +12,9 @@ interface ImageMasonryProps {
   loading?: boolean;
   hasMore: boolean;
   onLoadMore: () => void;
+  selectable?: boolean;
+  selectedIds?: number[];
+  onSelectionChange?: (selectedIds: number[]) => void;
 }
 
 const ImageMasonry: React.FC<ImageMasonryProps> = ({
@@ -19,9 +22,13 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
   loading = false,
   hasMore,
   onLoadMore,
+  selectable = false,
+  selectedIds = [],
+  onSelectionChange,
 }) => {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [lastClickedIndex, setLastClickedIndex] = useState<number>(-1);
 
   // react-masonry-css breakpoint 설정
   const breakpointColumns = {
@@ -40,6 +47,81 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
   const handleImageChange = (newIndex: number) => {
     setCurrentImageIndex(newIndex);
   };
+
+  const handleSelectionChange = (id: number, event?: React.MouseEvent) => {
+    if (!onSelectionChange) return;
+
+    const imageIndex = images.findIndex(img => img.id === id);
+
+    // Ctrl/Cmd + Click: 토글 선택
+    if (event && (event.ctrlKey || event.metaKey)) {
+      const newSelectedIds = selectedIds.includes(id)
+        ? selectedIds.filter(selectedId => selectedId !== id)
+        : [...selectedIds, id];
+      onSelectionChange(newSelectedIds);
+      setLastClickedIndex(imageIndex);
+      return;
+    }
+
+    // Shift + Click: 범위 선택
+    if (event && event.shiftKey && lastClickedIndex >= 0) {
+      const start = Math.min(lastClickedIndex, imageIndex);
+      const end = Math.max(lastClickedIndex, imageIndex);
+      const rangeIds = images.slice(start, end + 1).map(img => img.id);
+      const newSelectedIds = Array.from(new Set([...selectedIds, ...rangeIds]));
+      onSelectionChange(newSelectedIds);
+      return;
+    }
+
+    // 일반 클릭: 토글 선택 (체크박스 방식)
+    const newSelectedIds = selectedIds.includes(id)
+      ? selectedIds.filter(selectedId => selectedId !== id)
+      : [...selectedIds, id];
+    onSelectionChange(newSelectedIds);
+    setLastClickedIndex(imageIndex);
+  };
+
+  // 컨테이너 클릭 핸들러 (빈 공간 클릭 시 선택 해제)
+  const handleContainerClick = (e: React.MouseEvent) => {
+    // 이미지나 체크박스를 클릭한 경우가 아니면
+    const target = e.target as HTMLElement;
+    const isImageCard = target.closest('.selectable-image');
+    const isCheckbox = target.closest('.image-card-actions');
+    const isBulkActionBar = target.closest('.no-drag-select');
+
+    // 빈 공간 클릭인 경우에만 선택 해제
+    if (!isImageCard && !isCheckbox && !isBulkActionBar && onSelectionChange && selectedIds.length > 0) {
+      onSelectionChange([]);
+      setLastClickedIndex(-1);
+    }
+  };
+
+  // 키보드 단축키 핸들러
+  useEffect(() => {
+    if (!selectable || !onSelectionChange) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + A: 전체 선택
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        const allIds = images.map(img => img.id);
+        onSelectionChange(allIds);
+      }
+
+      // ESC: 선택 해제
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onSelectionChange([]);
+        setLastClickedIndex(-1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectable, onSelectionChange, images]);
+
 
   // 초기 로딩 중
   if (loading && images.length === 0) {
@@ -78,7 +160,10 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
   }
 
   return (
-    <Box sx={{ width: '100%' }}>
+    <Box
+      onClick={handleContainerClick}
+      sx={{ width: '100%', position: 'relative' }}
+    >
       <InfiniteScroll
         dataLength={images.length}
         next={onLoadMore}
@@ -112,6 +197,9 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
               key={image.id}
               image={image}
               onClick={() => handleImageClick(index)}
+              selected={selectedIds.includes(image.id)}
+              selectable={selectable}
+              onSelectionChange={(id, event) => handleSelectionChange(id, event)}
             />
           ))}
         </Masonry>

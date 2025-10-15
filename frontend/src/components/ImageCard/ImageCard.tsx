@@ -3,7 +3,6 @@ import {
   Card,
   CardMedia,
   CardContent,
-  Checkbox,
   Box,
   Chip,
   IconButton,
@@ -14,6 +13,7 @@ import {
   Download as DownloadIcon,
   Delete as DeleteIcon,
   AutoAwesome as AutoAwesomeIcon,
+  CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
 import type { ImageRecord } from '../../types/image';
 import { getBackendOrigin } from '../../utils/backend';
@@ -22,7 +22,7 @@ interface ImageCardProps {
   image: ImageRecord;
   selected?: boolean;
   selectable?: boolean;
-  onSelectionChange?: (id: number) => void;
+  onSelectionChange?: (id: number, event?: React.MouseEvent) => void;
   onDelete?: (id: number) => void;
   onImageClick?: () => void;
   showCollectionType?: boolean; // 그룹 모달에서만 collection_type 표시
@@ -40,6 +40,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
   currentGroupId,
 }) => {
   const [imageError, setImageError] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const backendOrigin = getBackendOrigin();
 
   // 현재 그룹의 collection_type 찾기
@@ -48,13 +49,15 @@ const ImageCard: React.FC<ImageCardProps> = ({
     : null;
   const isAutoCollected = currentGroupInfo?.collection_type === 'auto';
 
-  const handleSelectionChange = () => {
+  const handleSelectionClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // 이벤트 전파 방지
     if (onSelectionChange) {
-      onSelectionChange(image.id);
+      onSelectionChange(image.id, e);
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation(); // 이벤트 전파 방지
     const link = document.createElement('a');
     link.href = `${backendOrigin}/api/images/${image.id}/download/original`;
     link.download = image.original_name;
@@ -63,10 +66,16 @@ const ImageCard: React.FC<ImageCardProps> = ({
     document.body.removeChild(link);
   };
 
-  const handleDelete = () => {
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation(); // 이벤트 전파 방지
     if (onDelete && window.confirm('이미지를 삭제하시겠습니까?')) {
       onDelete(image.id);
     }
+  };
+
+  const handleInfoClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // 이벤트 전파 방지
+    window.open(`/#/image/${image.id}`, '_blank');
   };
 
   // API 엔드포인트를 통해 썸네일 및 원본 이미지 제공 (외부 네트워크 접근 보장)
@@ -76,12 +85,17 @@ const ImageCard: React.FC<ImageCardProps> = ({
   return (
     <>
       <Card
+        className={selectable ? 'selectable-image' : ''}
+        data-image-id={image.id}
+        data-selectable={selectable}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         sx={{
           position: 'relative',
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          border: selected ? 2 : (showCollectionType && isAutoCollected ? 2 : 1),
+          border: selected ? 3 : (showCollectionType && isAutoCollected ? 2 : 1),
           borderColor: selected
             ? 'primary.main'
             : (showCollectionType && isAutoCollected ? 'info.light' : 'divider'),
@@ -94,24 +108,67 @@ const ImageCard: React.FC<ImageCardProps> = ({
           },
         }}
       >
+        {/* 선택 체크박스/아이콘 - selectable일 때 항상 표시 */}
         {selectable && (
-          <Box sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}>
-            <Checkbox
-              checked={selected}
-              onChange={handleSelectionChange}
-              sx={{
-                bgcolor: (theme) => theme.palette.mode === 'dark'
-                  ? 'rgba(0, 0, 0, 0.6)'
-                  : 'rgba(255, 255, 255, 0.8)',
-                borderRadius: 1,
-                '&:hover': {
-                  bgcolor: (theme) => theme.palette.mode === 'dark'
-                    ? 'rgba(0, 0, 0, 0.8)'
-                    : 'rgba(255, 255, 255, 0.9)',
-                },
-              }}
-            />
+          <Box
+            className="image-card-actions"
+            sx={{
+              position: 'absolute',
+              top: 8,
+              left: 8,
+              zIndex: 2,
+              opacity: isHovered || selected ? 1 : 0.3,
+              transition: 'opacity 0.2s ease-in-out',
+            }}
+            onClick={handleSelectionClick}
+          >
+            {selected ? (
+              <CheckCircleIcon
+                sx={{
+                  fontSize: 32,
+                  color: 'primary.main',
+                  bgcolor: 'white',
+                  borderRadius: '50%',
+                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+                }}
+              />
+            ) : (
+              <Box
+                sx={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  border: '2px solid white',
+                  bgcolor: 'rgba(0, 0, 0, 0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease-in-out',
+                  '&:hover': {
+                    bgcolor: 'rgba(0, 0, 0, 0.7)',
+                    transform: 'scale(1.1)',
+                  },
+                }}
+              />
+            )}
           </Box>
+        )}
+
+        {/* 선택 오버레이 */}
+        {selected && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              bgcolor: 'rgba(33, 150, 243, 0.15)',
+              zIndex: 1,
+              pointerEvents: 'none',
+            }}
+          />
         )}
 
         {/* 자동수집 배지 */}
@@ -138,12 +195,12 @@ const ImageCard: React.FC<ImageCardProps> = ({
           </Box>
         )}
 
-        <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
+        <Box className="image-card-actions" sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
           <Box sx={{ display: 'flex', gap: 0.5 }}>
             <Tooltip title="상세 정보">
               <IconButton
                 size="small"
-                onClick={() => window.open(`/#/image/${image.id}`, '_blank')}
+                onClick={handleInfoClick}
                 sx={{
                   bgcolor: (theme) => theme.palette.mode === 'dark'
                     ? 'rgba(0, 0, 0, 0.6)'
@@ -207,6 +264,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
           height="250"
           image={imageError ? fallbackUrl : thumbnailUrl}
           alt={image.original_name}
+          draggable={false}
           onError={() => setImageError(true)}
           sx={{
             objectFit: 'cover',

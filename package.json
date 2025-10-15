@@ -28,6 +28,7 @@
     "db:reset": "rm -f database/*.db && cd backend && npm run db:migrate"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@vercel/ncc": "^0.38.4",
     "concurrently": "^8.2.2",
     "esbuild": "^0.25.10",
