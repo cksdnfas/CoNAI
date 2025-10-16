@@ -490,16 +490,51 @@ export class ImageProcessor {
 
       // 설정에 따라 자동 해시 생성 여부 결정
       const settings = settingsService.loadSettings();
+
       if (settings.similarity.autoGenerateHashOnUpload) {
+        console.log('✅ [ImageProcessor] Auto hash generation ENABLED, starting...');
         try {
+          console.log('🔍 [ImageProcessor] Generating perceptual hash for:', filename);
           perceptualHash = await ImageSimilarityService.generatePerceptualHash(originalPath);
+
+          if (!perceptualHash) {
+            console.error('❌ [ImageProcessor] Perceptual hash is undefined/null!');
+          } else {
+            console.log('✅ [ImageProcessor] Perceptual hash generated:', perceptualHash.substring(0, 16) + '...', `(${perceptualHash.length} chars)`);
+          }
+
+          console.log('🔍 [ImageProcessor] Generating color histogram...');
           const histogram = await ImageSimilarityService.generateColorHistogram(originalPath);
           colorHistogram = ImageSimilarityService.serializeHistogram(histogram);
+
+          if (!colorHistogram) {
+            console.error('❌ [ImageProcessor] Color histogram is undefined/null!');
+          } else {
+            console.log('✅ [ImageProcessor] Color histogram generated:', colorHistogram.length, 'bytes');
+          }
+
+          // 최종 검증
+          if (perceptualHash && colorHistogram) {
+            console.log('✅ [ImageProcessor] Hash generation SUCCESS - both hashes valid');
+          } else {
+            console.error('❌ [ImageProcessor] Hash generation FAILED - one or both hashes invalid:', {
+              hasPerceptualHash: !!perceptualHash,
+              hasColorHistogram: !!colorHistogram
+            });
+          }
         } catch (hashError) {
-          console.warn('Failed to generate similarity hashes (non-critical):', hashError);
+          console.error('❌ [ImageProcessor] Failed to generate similarity hashes (non-critical):', hashError);
+          if (hashError instanceof Error) {
+            console.error('❌ [ImageProcessor] Error details:', {
+              name: hashError.name,
+              message: hashError.message,
+              stack: hashError.stack?.split('\n').slice(0, 3).join('\n')
+            });
+          }
         }
       } else {
-        console.log('Auto hash generation disabled in settings');
+        console.warn('⚠️ [ImageProcessor] Auto hash generation DISABLED in settings');
+        console.log('   Settings value:', { autoGenerateHashOnUpload: settings.similarity.autoGenerateHashOnUpload });
       }
 
       return {
@@ -531,6 +566,110 @@ export class ImageProcessor {
   }
 
   /**
+   * 기존 이미지 파일 처리 (ComfyUI 등에서 생성된 이미지용)
+   * 이미 uploads 디렉토리에 저장된 파일을 데이터베이스에 등록
+   * @param relativePath uploads 디렉토리 기준 상대 경로
+   * @param additionalMetadata 추가 메타데이터 (ai_tool, prompt 등)
+   * @returns 생성된 이미지 ID
+   */
+  async processExistingImage(
+    relativePath: string,
+    additionalMetadata?: Partial<ImageMetadata['ai_info']>
+  ): Promise<number> {
+    const { resolveUploadsPath } = await import('../config/runtimePaths');
+    const { ImageModel } = await import('../models/Image');
+
+    try {
+      const fullPath = resolveUploadsPath(relativePath);
+
+      if (!fs.existsSync(fullPath)) {
+        throw new Error(`Image file not found: ${relativePath}`);
+      }
+
+      // 파일 정보 가져오기
+      const stats = await fs.promises.stat(fullPath);
+      const imageInfo = await ImageProcessor.getImageInfo(fullPath);
+
+      // 메타데이터 추출
+      const metadata = await ImageProcessor.extractMetadata(fullPath);
+
+      // 추가 메타데이터 병합
+      if (additionalMetadata) {
+        metadata.ai_info = {
+          ...metadata.ai_info,
+          ...additionalMetadata
+        };
+      }
+
+      // 썸네일 생성 (같은 폴더에)
+      const ext = path.extname(relativePath);
+      const basename = path.basename(relativePath, ext);
+      const dirname = path.dirname(relativePath);
+
+      const thumbnailRelativePath = path.join(dirname, `${basename}_thumb.webp`);
+      const optimizedRelativePath = path.join(dirname, `${basename}_opt.webp`);
+
+      const thumbnailPath = resolveUploadsPath(thumbnailRelativePath);
+      const optimizedPath = resolveUploadsPath(optimizedRelativePath);
+
+      // 썸네일과 최적화 이미지 생성
+      await Promise.all([
+        ImageProcessor.generateThumbnail(fullPath, thumbnailPath),
+        ImageProcessor.generateOptimized(fullPath, optimizedPath)
+      ]);
+
+      const aiInfo = metadata.ai_info || {};
+
+      // 데이터베이스에 저장
+      const imageId = await ImageModel.create({
+        filename: path.basename(relativePath),
+        original_name: path.basename(relativePath),
+        file_path: relativePath.replace(/\\/g, '/'),
+        thumbnail_path: thumbnailRelativePath.replace(/\\/g, '/'),
+        optimized_path: optimizedRelativePath.replace(/\\/g, '/'),
+        file_size: stats.size,
+        mime_type: 'image/' + ext.substring(1),
+        width: imageInfo.width,
+        height: imageInfo.height,
+        metadata: JSON.stringify(metadata),
+
+        // AI 메타데이터 필드들
+        ai_tool: aiInfo.ai_tool || null,
+        model_name: aiInfo.model || null,
+        lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
+        steps: aiInfo.steps || null,
+        cfg_scale: aiInfo.cfg_scale || null,
+        sampler: aiInfo.sampler || null,
+        seed: aiInfo.seed || null,
+        scheduler: aiInfo.scheduler || null,
+        prompt: aiInfo.prompt || null,
+        negative_prompt: aiInfo.negative_prompt || null,
+        denoise_strength: aiInfo.denoise_strength || null,
+        generation_time: aiInfo.generation_time || null,
+        batch_size: aiInfo.batch_size || null,
+        batch_index: aiInfo.batch_index || null,
+        auto_tags: null,
+
+        // 동영상 메타데이터 필드들 (이미지는 null)
+        duration: null,
+        fps: null,
+        video_codec: null,
+        audio_codec: null,
+        bitrate: null,
+
+        // 유사도 검색 필드들 (기존 이미지는 나중에 생성 가능)
+        perceptual_hash: null,
+        color_histogram: null
+      });
+
+      return imageId;
+    } catch (error) {
+      console.error('Failed to process existing image:', error);
+      throw error instanceof Error ? error : new Error('Unknown error occurred while processing existing image');
+    }
+  }
+
+  /**
    * 파일 삭제
    */
   static async deleteImageFiles(
@@ -540,27 +679,58 @@ export class ImageProcessor {
     baseUploadPath: string
   ): Promise<void> {
     try {
-      const fullOriginalPath = path.join(baseUploadPath, originalPath);
-      const fullThumbnailPath = path.join(baseUploadPath, thumbnailPath);
-      const fullOptimizedPath = path.join(baseUploadPath, optimizedPath);
+      // 경로 검증 및 정규화
+      const pathsToDelete = new Set<string>();
 
-      // 모든 버전의 파일 삭제
-      const deletePromises = [];
+      // 각 경로 검증 및 추가
+      const addPathIfValid = (relativePath: string) => {
+        // 빈 문자열이거나 null/undefined 체크
+        if (!relativePath || relativePath.trim() === '') {
+          return;
+        }
 
-      if (fs.existsSync(fullOriginalPath)) {
-        deletePromises.push(fs.promises.unlink(fullOriginalPath));
-      }
+        // 절대 경로 생성
+        const fullPath = path.join(baseUploadPath, relativePath);
 
-      if (fs.existsSync(fullThumbnailPath)) {
-        deletePromises.push(fs.promises.unlink(fullThumbnailPath));
-      }
+        // 경로가 baseUploadPath 내부에 있는지 확인 (보안)
+        const resolvedPath = path.resolve(fullPath);
+        const resolvedBase = path.resolve(baseUploadPath);
+        if (!resolvedPath.startsWith(resolvedBase)) {
+          console.warn(`⚠️ Path outside base directory, skipping: ${relativePath}`);
+          return;
+        }
 
-      if (fs.existsSync(fullOptimizedPath)) {
-        deletePromises.push(fs.promises.unlink(fullOptimizedPath));
-      }
+        // 파일 존재 여부 및 파일 타입 확인
+        if (fs.existsSync(fullPath)) {
+          const stats = fs.statSync(fullPath);
+          if (stats.isFile()) {
+            pathsToDelete.add(fullPath);
+          } else {
+            console.warn(`⚠️ Not a file (possibly a directory), skipping: ${fullPath}`);
+          }
+        }
+      };
 
-      // 병렬로 파일 삭제
+      addPathIfValid(originalPath);
+      addPathIfValid(thumbnailPath);
+      addPathIfValid(optimizedPath);
+
+      // 각 파일을 개별적으로 삭제 (하나 실패해도 나머지 삭제 계속)
+      const deletePromises = Array.from(pathsToDelete).map(async (filePath) => {
+        try {
+          await fs.promises.unlink(filePath);
+          console.log(`✅ Deleted file: ${path.relative(baseUploadPath, filePath)}`);
+        } catch (error) {
+          console.error(`❌ Failed to delete file: ${path.relative(baseUploadPath, filePath)}`, error);
+          // 개별 파일 삭제 실패는 전체 작업을 중단하지 않음
+        }
+      });
+
       await Promise.all(deletePromises);
+
+      if (pathsToDelete.size === 0) {
+        console.warn('⚠️ No valid files found to delete');
+      }
     } catch (error) {
       console.error('Failed to delete image files:', error);
       throw error instanceof Error ? error : new Error('Unknown error occurred while deleting files');

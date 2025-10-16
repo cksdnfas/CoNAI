@@ -24,6 +24,7 @@ import {
   Error as ErrorIcon,
   HourglassEmpty as HourglassEmptyIcon,
   AutoAwesome as AutoAwesomeIcon,
+  VideoLibrary as VideoLibraryIcon,
 } from '@mui/icons-material';
 import { imageApi } from '../../services/api';
 import type { UploadProgressEvent, UploadStage } from '../../types/image';
@@ -151,7 +152,8 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff']
+      'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff'],
+      'video/*': ['.mp4', '.webm', '.mov', '.avi', '.mkv']
     },
     multiple: true,
   });
@@ -160,7 +162,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = true;
-    input.accept = 'image/*';
+    input.accept = 'image/*,video/*';
     input.onchange = (e) => {
       const files = Array.from((e.target as HTMLInputElement).files || []);
       if (files.length > 0) {
@@ -177,7 +179,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
     input.multiple = true;
     input.onchange = (e) => {
       const files = Array.from((e.target as HTMLInputElement).files || [])
-        .filter(file => file.type.startsWith('image/'));
+        .filter(file => file.type.startsWith('image/') || file.type.startsWith('video/'));
       if (files.length > 0) {
         onDrop(files);
       }
@@ -224,16 +226,22 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
         <input {...getInputProps()} />
         <CloudUploadIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
         <Typography variant="h5" gutterBottom>
-          {isDragActive ? '파일을 여기에 놓으세요' : '이미지를 드래그하거나 클릭하여 업로드'}
+          {isDragActive ? '파일을 여기에 놓으세요' : '이미지 및 비디오를 드래그하거나 클릭하여 업로드'}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          JPG, PNG, GIF, BMP, WebP, TIFF 형식을 지원합니다 (파일 개수 제한 없음)
+          이미지: JPG, PNG, GIF, BMP, WebP, TIFF | 비디오: MP4, WebM, MOV, AVI, MKV (최대 500MB, 파일 개수 제한 없음)
         </Typography>
 
-        <Stack direction="row" spacing={2} justifyContent="center">
+        <Stack direction="row" spacing={2} justifyContent="center" flexWrap="wrap">
           <Chip
             icon={<ImageIcon />}
-            label="지원 형식"
+            label="이미지 지원"
+            variant="outlined"
+            size="small"
+          />
+          <Chip
+            icon={<VideoLibraryIcon />}
+            label="비디오 지원"
             variant="outlined"
             size="small"
           />

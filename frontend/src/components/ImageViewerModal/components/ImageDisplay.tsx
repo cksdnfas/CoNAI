@@ -69,26 +69,51 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
           }}
         />
       )}
-      <Box
-        component="img"
-        src={imageError ? fallbackUrl : imageUrl}
-        alt={image.original_name}
-        draggable={false}
-        onError={() => setImageError(true)}
-        onLoad={() => setImageLoading(false)}
-        sx={{
-          maxWidth: '100%',
-          maxHeight: '100%',
-          objectFit: 'contain',
-          opacity: imageLoading ? 0 : 1,
-          transition: isDragging ? 'opacity 0.3s ease' : 'opacity 0.3s ease, transform 0.15s ease-out',
-          transform: `translate(${imagePosition.x}px, ${imagePosition.y}px) scale(${scale}) rotate(${rotation}deg) scaleX(${flipX ? -1 : 1}) scaleY(${flipY ? -1 : 1})`,
-          transformOrigin: 'center center',
-          cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
-          userSelect: 'none',
-          pointerEvents: 'none',
-        }}
-      />
+      {image.mime_type?.startsWith('video/') ? (
+        <Box
+          component="video"
+          src={imageError ? fallbackUrl : imageUrl}
+          controls
+          autoPlay
+          loop
+          muted
+          onError={() => setImageError(true)}
+          onLoadedData={() => setImageLoading(false)}
+          sx={{
+            maxWidth: '100%',
+            maxHeight: '100%',
+            objectFit: 'contain',
+            opacity: imageLoading ? 0 : 1,
+            transition: isDragging ? 'opacity 0.3s ease' : 'opacity 0.3s ease, transform 0.15s ease-out',
+            transform: `translate(${imagePosition.x}px, ${imagePosition.y}px) scale(${scale}) rotate(${rotation}deg) scaleX(${flipX ? -1 : 1}) scaleY(${flipY ? -1 : 1})`,
+            transformOrigin: 'center center',
+            cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+            userSelect: 'none',
+            pointerEvents: 'auto', // 비디오 컨트롤 클릭 가능하도록
+          }}
+        />
+      ) : (
+        <Box
+          component="img"
+          src={imageError ? fallbackUrl : imageUrl}
+          alt={image.original_name}
+          draggable={false}
+          onError={() => setImageError(true)}
+          onLoad={() => setImageLoading(false)}
+          sx={{
+            maxWidth: '100%',
+            maxHeight: '100%',
+            objectFit: 'contain',
+            opacity: imageLoading ? 0 : 1,
+            transition: isDragging ? 'opacity 0.3s ease' : 'opacity 0.3s ease, transform 0.15s ease-out',
+            transform: `translate(${imagePosition.x}px, ${imagePosition.y}px) scale(${scale}) rotate(${rotation}deg) scaleX(${flipX ? -1 : 1}) scaleY(${flipY ? -1 : 1})`,
+            transformOrigin: 'center center',
+            cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+            userSelect: 'none',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
     </Box>
   );
 };

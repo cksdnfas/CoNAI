@@ -198,7 +198,8 @@ router.get('/date/:startDate/:endDate', asyncHandler(async (req: Request, res: R
 }));
 
 /**
- * 썸네일 이미지 조회 (스트림 방식)
+ * 썸네일 이미지/비디오 조회 (스트림 방식)
+ * 비디오의 경우 원본 비디오를 스트리밍으로 제공
  */
 router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
@@ -220,6 +221,55 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
       });
     }
 
+    // 비디오인 경우 원본 비디오를 스트리밍으로 제공
+    if (image.mime_type && image.mime_type.startsWith('video/')) {
+      const originalPath = path.join(UPLOAD_BASE_PATH, image.file_path);
+
+      if (!fs.existsSync(originalPath)) {
+        return res.status(404).json({
+          success: false,
+          error: 'Video file not found'
+        });
+      }
+
+      // 비디오 스트리밍 헤더 설정
+      const stat = fs.statSync(originalPath);
+      const fileSize = stat.size;
+      const range = req.headers.range;
+
+      if (range) {
+        // Range 요청 처리 (비디오 시킹 지원)
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunkSize = (end - start) + 1;
+        const fileStream = fs.createReadStream(originalPath, { start, end });
+
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize,
+          'Content-Type': image.mime_type,
+          'Cache-Control': 'public, max-age=31536000, immutable'
+        });
+
+        fileStream.pipe(res);
+      } else {
+        // 전체 비디오 스트리밍
+        res.writeHead(200, {
+          'Content-Length': fileSize,
+          'Content-Type': image.mime_type,
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'public, max-age=31536000, immutable'
+        });
+
+        const fileStream = fs.createReadStream(originalPath);
+        fileStream.pipe(res);
+      }
+      return;
+    }
+
+    // 이미지인 경우 기존 로직
     const thumbnailPath = path.join(UPLOAD_BASE_PATH, image.thumbnail_path);
 
     if (!fs.existsSync(thumbnailPath)) {

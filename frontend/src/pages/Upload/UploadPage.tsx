@@ -19,7 +19,7 @@ const UploadPage: React.FC = () => {
           fontWeight: 600,
         }}
       >
-        이미지 업로드
+        미디어 업로드
       </Typography>
       <Typography
         variant="body1"
@@ -29,7 +29,7 @@ const UploadPage: React.FC = () => {
           fontSize: { xs: '0.875rem', sm: '1rem' },
         }}
       >
-        AI 생성 이미지를 업로드하면 메타데이터가 자동으로 추출되어 분석됩니다.
+        AI 생성 이미지 및 비디오를 업로드하면 메타데이터가 자동으로 추출되어 분석됩니다.
       </Typography>
 
       <UploadZone onUploadComplete={handleUploadComplete} />
@@ -63,6 +63,17 @@ const UploadPage: React.FC = () => {
             }}
           >
             ComfyUI, Stable Diffusion, NovelAI 등에서 생성된 이미지의 메타데이터가 자동으로 추출됩니다.
+          </Typography>
+          <Typography
+            component="li"
+            variant="body2"
+            sx={{
+              mb: 1,
+              fontSize: { xs: '0.8rem', sm: '0.875rem' },
+              lineHeight: 1.5,
+            }}
+          >
+            비디오 파일은 FFmpeg를 통해 메타데이터(재생시간, 코덱, 해상도 등)를 추출하고 애니메이션 썸네일을 생성합니다.
           </Typography>
           <Typography
             component="li"

@@ -1,12 +1,16 @@
 import { taggerDaemon, TaggerResult, TaggerServerStatus } from './taggerDaemon';
 import { TaggerModel } from '../types/settings';
+import { VideoFrameExtractor } from './videoFrameExtractor';
+import { TagMergeService } from './tagMergeService';
+import path from 'path';
 
 // Re-export types from taggerDaemon
 export type { TaggerResult, TaggerServerStatus } from './taggerDaemon';
 
 /**
- * ImageTaggerService - High-level interface for image tagging
+ * ImageTaggerService - High-level interface for image and video tagging
  * Uses daemon for persistent model loading and efficient batch processing
+ * Supports video tagging via frame extraction and tag merging
  */
 export class ImageTaggerService {
   /**
@@ -42,6 +46,80 @@ export class ImageTaggerService {
   }
 
   /**
+   * Tag a video by extracting frames and merging results
+   * Extracts 7 uniformly distributed frames, tags each, and merges with conservative rating
+   */
+  async tagVideo(videoPath: string): Promise<TaggerResult> {
+    let framePaths: string[] = [];
+
+    try {
+      console.log(`[ImageTagger] Tagging video: ${videoPath}`);
+
+      // 1. Extract 7 frames from video
+      console.log('[ImageTagger] Extracting frames from video...');
+      framePaths = await VideoFrameExtractor.extractFramesForTagging(videoPath);
+      console.log(`[ImageTagger] Extracted ${framePaths.length} frames`);
+
+      // 2. Tag each frame
+      console.log('[ImageTagger] Tagging extracted frames...');
+      const frameResults: TaggerResult[] = [];
+
+      for (let i = 0; i < framePaths.length; i++) {
+        const framePath = framePaths[i];
+        console.log(`[ImageTagger] Tagging frame ${i + 1}/${framePaths.length}`);
+
+        try {
+          const result = await this.tagImage(framePath);
+          frameResults.push(result);
+
+          if (!result.success) {
+            console.warn(`[ImageTagger] Frame ${i + 1} tagging failed:`, result.error);
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          console.error(`[ImageTagger] Frame ${i + 1} tagging exception:`, message);
+          frameResults.push({
+            success: false,
+            error: message,
+            error_type: 'FrameTagError'
+          });
+        }
+      }
+
+      // 3. Merge frame results
+      console.log('[ImageTagger] Merging frame results...');
+      const mergedResult = TagMergeService.mergeVideoTagResults(frameResults);
+
+      const stats = TagMergeService.getMergeStatistics(frameResults);
+      console.log(`[ImageTagger] Video tagging complete: ${stats.successful}/${stats.total} frames successful`);
+
+      return mergedResult;
+
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const stack = error instanceof Error ? error.stack : undefined;
+      console.error('[ImageTagger] Video tagging exception:', message);
+      if (stack) console.error('[ImageTagger] Stack:', stack);
+
+      return {
+        success: false,
+        error: message,
+        error_type: 'VideoTagError'
+      };
+
+    } finally {
+      // 4. Always cleanup temporary frames
+      if (framePaths.length > 0) {
+        try {
+          await VideoFrameExtractor.cleanupTempFrames(framePaths);
+        } catch (cleanupError) {
+          console.warn('[ImageTagger] Frame cleanup failed (non-critical):', cleanupError);
+        }
+      }
+    }
+  }
+
+  /**
    * Tag multiple images in batch
    * Processes sequentially through daemon for optimal performance
    */
@@ -70,6 +148,19 @@ export class ImageTaggerService {
     console.log(`[ImageTagger] Batch complete: ${results.filter(r => r.success).length}/${imagePaths.length} succeeded`);
 
     return results;
+  }
+
+  /**
+   * Check if a file is a video based on MIME type or file extension
+   */
+  static isVideoFile(filePath: string, mimeType?: string): boolean {
+    // Check MIME type first if provided
+    if (mimeType && mimeType.startsWith('video/')) {
+      return true;
+    }
+
+    // Fallback to file extension check
+    return VideoFrameExtractor.isVideoFile(filePath);
   }
 
   /**

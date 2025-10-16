@@ -75,6 +75,7 @@ export class SettingsService {
         const loadedSettings = JSON.parse(fileContent);
 
         // Merge with defaults to ensure all new fields are present
+        // User settings take precedence over defaults
         const defaults = this.getDefaultSettings();
         this.settings = {
           tagger: {
@@ -87,13 +88,19 @@ export class SettingsService {
           },
         };
 
-        // Check if any new fields were added
-        const hasNewFields = JSON.stringify(this.settings) !== JSON.stringify(loadedSettings);
-        if (hasNewFields) {
-          console.log('[SettingsService] Migrating settings with new default fields');
+        console.log('[SettingsService] Loaded settings from file:', {
+          tagger_enabled: this.settings.tagger.enabled,
+          tagger_model: this.settings.tagger.model,
+          tagger_device: this.settings.tagger.device,
+          tagger_autoTag: this.settings.tagger.autoTagOnUpload,
+          similarity_autoHash: this.settings.similarity.autoGenerateHashOnUpload
+        });
+
+        // Check for missing fields only (not field order differences)
+        const needsMigration = this.checkForMissingFields(loadedSettings, defaults);
+        if (needsMigration) {
+          console.log('[SettingsService] Adding missing fields to settings file');
           this.saveSettings(this.settings);
-        } else {
-          console.log('[SettingsService] Loaded settings from file');
         }
       } else {
         this.settings = this.getDefaultSettings();
@@ -110,6 +117,29 @@ export class SettingsService {
   }
 
   /**
+   * Check if loaded settings are missing any fields from defaults
+   */
+  private checkForMissingFields(loaded: any, defaults: AppSettings): boolean {
+    // Check tagger fields
+    for (const key of Object.keys(defaults.tagger)) {
+      if (!(key in (loaded.tagger || {}))) {
+        console.log(`[SettingsService] Missing field: tagger.${key}`);
+        return true;
+      }
+    }
+
+    // Check similarity fields
+    for (const key of Object.keys(defaults.similarity)) {
+      if (!(key in (loaded.similarity || {}))) {
+        console.log(`[SettingsService] Missing field: similarity.${key}`);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Save settings to file
    */
   saveSettings(settings: AppSettings): void {
@@ -117,7 +147,11 @@ export class SettingsService {
       this.ensureConfigDirectory();
       fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(settings, null, 2), 'utf-8');
       this.settings = settings;
-      console.log('[SettingsService] Settings saved successfully');
+      console.log('[SettingsService] Settings saved successfully:', {
+        tagger_enabled: settings.tagger.enabled,
+        tagger_autoTag: settings.tagger.autoTagOnUpload,
+        similarity_autoHash: settings.similarity.autoGenerateHashOnUpload
+      });
     } catch (error) {
       console.error('[SettingsService] Error saving settings:', error);
       throw new Error('Failed to save settings');

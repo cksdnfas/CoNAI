@@ -198,21 +198,36 @@ const ImageDetailPage: React.FC = () => {
         {/* 1열: 이미지, 파일정보, 이미지정보 */}
         <Grid size={{ xs: 12, md: 7 }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {/* 이미지 영역 */}
+            {/* 이미지/비디오 영역 */}
             <Paper sx={{ p: 2, borderRadius: 2 }}>
-              <Box
-                component="img"
-                src={imageError ? fallbackUrl : imageUrl}
-                alt={image.original_name}
-                onError={() => setImageError(true)}
-                sx={{
-                  width: '100%',
-                  height: 'auto',
-                  maxHeight: '80vh',
-                  objectFit: 'contain',
-                  borderRadius: 1,
-                }}
-              />
+              {image.mime_type?.startsWith('video/') ? (
+                <Box
+                  component="video"
+                  src={imageError ? fallbackUrl : imageUrl}
+                  controls
+                  onError={() => setImageError(true)}
+                  sx={{
+                    width: '100%',
+                    height: 'auto',
+                    maxHeight: '80vh',
+                    borderRadius: 1,
+                  }}
+                />
+              ) : (
+                <Box
+                  component="img"
+                  src={imageError ? fallbackUrl : imageUrl}
+                  alt={image.original_name}
+                  onError={() => setImageError(true)}
+                  sx={{
+                    width: '100%',
+                    height: 'auto',
+                    maxHeight: '80vh',
+                    objectFit: 'contain',
+                    borderRadius: 1,
+                  }}
+                />
+              )}
             </Paper>
 
             {/* 파일명 영역 */}
@@ -233,10 +248,10 @@ const ImageDetailPage: React.FC = () => {
               </Typography>
             </Paper>
 
-            {/* 이미지 정보 영역 */}
+            {/* 이미지/비디오 정보 영역 */}
             <Paper sx={{ p: 2, borderRadius: 2 }}>
               <Typography variant="h6" gutterBottom>
-                이미지 정보
+                {image.mime_type?.startsWith('video/') ? '비디오 정보' : '이미지 정보'}
               </Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <Typography variant="body2">
@@ -248,6 +263,38 @@ const ImageDetailPage: React.FC = () => {
                 <Typography variant="body2">
                   <strong>MIME 타입:</strong> {image.mime_type}
                 </Typography>
+
+                {/* 비디오 전용 메타데이터 */}
+                {image.mime_type?.startsWith('video/') && (
+                  <>
+                    {image.duration && (
+                      <Typography variant="body2">
+                        <strong>재생 시간:</strong> {Math.floor(image.duration / 60)}분 {Math.floor(image.duration % 60)}초
+                      </Typography>
+                    )}
+                    {image.fps && (
+                      <Typography variant="body2">
+                        <strong>프레임 레이트:</strong> {image.fps.toFixed(2)} fps
+                      </Typography>
+                    )}
+                    {image.video_codec && (
+                      <Typography variant="body2">
+                        <strong>비디오 코덱:</strong> {image.video_codec}
+                      </Typography>
+                    )}
+                    {image.audio_codec && (
+                      <Typography variant="body2">
+                        <strong>오디오 코덱:</strong> {image.audio_codec}
+                      </Typography>
+                    )}
+                    {image.bitrate && (
+                      <Typography variant="body2">
+                        <strong>비트레이트:</strong> {(image.bitrate / 1000).toFixed(2)} Mbps
+                      </Typography>
+                    )}
+                  </>
+                )}
+
                 <Typography variant="body2">
                   <strong>업로드 날짜:</strong> {formatDate(image.upload_date)}
                 </Typography>

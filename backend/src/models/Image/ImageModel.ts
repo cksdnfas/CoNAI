@@ -14,8 +14,10 @@ export class ImageModel {
         filename, original_name, file_path, thumbnail_path, optimized_path,
         file_size, mime_type, width, height, metadata,
         ai_tool, model_name, lora_models, steps, cfg_scale, sampler, seed, scheduler,
-        prompt, negative_prompt, denoise_strength, generation_time, batch_size, batch_index
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        prompt, negative_prompt, denoise_strength, generation_time, batch_size, batch_index,
+        auto_tags, duration, fps, video_codec, audio_codec, bitrate,
+        perceptual_hash, color_histogram
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       imageData.filename,
       imageData.original_name,
@@ -40,7 +42,15 @@ export class ImageModel {
       imageData.denoise_strength,
       imageData.generation_time,
       imageData.batch_size,
-      imageData.batch_index
+      imageData.batch_index,
+      imageData.auto_tags,
+      imageData.duration,
+      imageData.fps,
+      imageData.video_codec,
+      imageData.audio_codec,
+      imageData.bitrate,
+      imageData.perceptual_hash,
+      imageData.color_histogram
     );
 
     return info.lastInsertRowid as number;

@@ -48,6 +48,13 @@ export interface ImageRecord {
   perceptual_hash: string | null;      // pHash 알고리즘 기반 이미지 해시
   color_histogram: string | null;      // RGB 색상 분포 (JSON)
 
+  // 동영상 전용 메타데이터 필드들
+  duration: number | null;             // 동영상 재생 시간(초)
+  fps: number | null;                  // 프레임 레이트
+  video_codec: string | null;          // 비디오 코덱 (h264, vp9 등)
+  audio_codec: string | null;          // 오디오 코덱 (aac, opus 등)
+  bitrate: number | null;              // 비트레이트 (kbps)
+
   // 추가된 URL 필드들 (백엔드에서 enrichImageRecord로 추가)
   thumbnail_url?: string;
   image_url?: string;

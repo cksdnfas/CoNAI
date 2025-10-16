@@ -25,6 +25,8 @@ import promptGroupRoutes from './routes/promptGroups';
 import negativePromptGroupRoutes from './routes/negativePromptGroups';
 import { groupRoutes } from './routes/groups';
 import { settingsRoutes } from './routes/settings';
+import { workflowRoutes } from './routes/workflows';
+import { comfyuiServerRoutes } from './routes/comfyuiServers';
 import { initializeDatabase } from './database/init';
 import { errorHandler } from './middleware/errorHandler';
 import { imageTaggerService } from './services/imageTaggerService';
@@ -124,6 +126,8 @@ app.use('/api/prompt-groups', promptGroupRoutes);
 app.use('/api/negative-prompt-groups', negativePromptGroupRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/workflows', workflowRoutes);
+app.use('/api/comfyui-servers', comfyuiServerRoutes);
 
 // Frontend static file serving
 const frontendDistPath = process.env.FRONTEND_DIST_PATH

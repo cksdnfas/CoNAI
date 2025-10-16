@@ -14,6 +14,7 @@ import {
   Delete as DeleteIcon,
   AutoAwesome as AutoAwesomeIcon,
   CheckCircle as CheckCircleIcon,
+  VideoLibrary as VideoLibraryIcon,
 } from '@mui/icons-material';
 import type { ImageRecord } from '../../types/image';
 import { getBackendOrigin } from '../../utils/backend';
@@ -68,7 +69,9 @@ const ImageCard: React.FC<ImageCardProps> = ({
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation(); // 이벤트 전파 방지
-    if (onDelete && window.confirm('이미지를 삭제하시겠습니까?')) {
+    const isVideo = image.mime_type?.startsWith('video/');
+    const confirmMessage = isVideo ? '비디오를 삭제하시겠습니까?' : '이미지를 삭제하시겠습니까?';
+    if (onDelete && window.confirm(confirmMessage)) {
       onDelete(image.id);
     }
   };
@@ -195,6 +198,28 @@ const ImageCard: React.FC<ImageCardProps> = ({
           </Box>
         )}
 
+        {/* 비디오 배지 (재생 시간 표시) */}
+        {image.mime_type?.startsWith('video/') && image.duration && (
+          <Box sx={{ position: 'absolute', bottom: 8, left: 8, zIndex: 1 }}>
+            <Chip
+              icon={<VideoLibraryIcon sx={{ fontSize: '0.8rem' }} />}
+              label={`${Math.floor(image.duration / 60)}:${String(Math.floor(image.duration % 60)).padStart(2, '0')}`}
+              size="small"
+              sx={{
+                fontSize: '0.7rem',
+                height: '22px',
+                fontWeight: 600,
+                bgcolor: 'rgba(0, 0, 0, 0.75)',
+                color: 'white',
+                backdropFilter: 'blur(4px)',
+                '& .MuiChip-icon': {
+                  color: 'white',
+                },
+              }}
+            />
+          </Box>
+        )}
+
         <Box className="image-card-actions" sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
           <Box sx={{ display: 'flex', gap: 0.5 }}>
             <Tooltip title="상세 정보">
@@ -259,19 +284,39 @@ const ImageCard: React.FC<ImageCardProps> = ({
           </Box>
         </Box>
 
-        <CardMedia
-          component="img"
-          height="250"
-          image={imageError ? fallbackUrl : thumbnailUrl}
-          alt={image.original_name}
-          draggable={false}
-          onError={() => setImageError(true)}
-          sx={{
-            objectFit: 'cover',
-            cursor: 'pointer',
-          }}
-          onClick={onImageClick}
-        />
+        {/* 비디오인 경우 video 태그, 이미지인 경우 img 태그 */}
+        {image.mime_type?.startsWith('video/') ? (
+          <Box
+            component="video"
+            height="250"
+            src={thumbnailUrl}
+            muted
+            loop
+            autoPlay
+            playsInline
+            onError={() => setImageError(true)}
+            sx={{
+              width: '100%',
+              objectFit: 'cover',
+              cursor: 'pointer',
+            }}
+            onClick={onImageClick}
+          />
+        ) : (
+          <CardMedia
+            component="img"
+            height="250"
+            image={imageError ? fallbackUrl : thumbnailUrl}
+            alt={image.original_name}
+            draggable={false}
+            onError={() => setImageError(true)}
+            sx={{
+              objectFit: 'cover',
+              cursor: 'pointer',
+            }}
+            onClick={onImageClick}
+          />
+        )}
 
         <CardContent sx={{
           flexGrow: 1,

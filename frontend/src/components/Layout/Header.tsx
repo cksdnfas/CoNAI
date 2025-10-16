@@ -37,6 +37,8 @@ const Header: React.FC = () => {
     { label: '이미지 그룹', path: '/image-groups' },
     { label: '검색', path: '/search' },
     { label: '업로드', path: '/upload' },
+    { label: '워크플로우', path: '/workflows' },
+    { label: 'ComfyUI 서버', path: '/comfyui-servers' },
     { label: '프롬프트 관리', path: '/prompt-management' },
     { label: '설정', path: '/settings' },
   ];

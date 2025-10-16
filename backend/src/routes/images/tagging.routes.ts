@@ -47,10 +47,16 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`[ImageTag] Tagging image ${id}: ${imagePath}`);
+    console.log(`[ImageTag] Tagging file ${id}: ${imagePath}`);
 
-    // 이미지 태깅 실행
-    const taggerResult = await imageTaggerService.tagImage(imagePath);
+    // 동영상 또는 이미지 태깅 실행
+    let taggerResult;
+    if (ImageTaggerService.isVideoFile(imagePath, image.mime_type)) {
+      console.log('[ImageTag] Detected video file, extracting frames...');
+      taggerResult = await imageTaggerService.tagVideo(imagePath);
+    } else {
+      taggerResult = await imageTaggerService.tagImage(imagePath);
+    }
 
     console.log('[ImageTag] Tagger result:', {
       success: taggerResult.success,
@@ -144,8 +150,13 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
           continue;
         }
 
-        // 이미지 태깅 실행
-        const taggerResult = await imageTaggerService.tagImage(imagePath);
+        // 동영상 또는 이미지 태깅 실행
+        let taggerResult;
+        if (ImageTaggerService.isVideoFile(imagePath, image.mime_type)) {
+          taggerResult = await imageTaggerService.tagVideo(imagePath);
+        } else {
+          taggerResult = await imageTaggerService.tagImage(imagePath);
+        }
 
         if (!taggerResult.success) {
           results.push({
@@ -247,7 +258,13 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
           continue;
         }
 
-        const taggerResult = await imageTaggerService.tagImage(imagePath);
+        // 동영상 또는 이미지 태깅 실행
+        let taggerResult;
+        if (ImageTaggerService.isVideoFile(imagePath, image.mime_type)) {
+          taggerResult = await imageTaggerService.tagVideo(imagePath);
+        } else {
+          taggerResult = await imageTaggerService.tagImage(imagePath);
+        }
 
         if (!taggerResult.success) {
           results.push({
@@ -269,7 +286,7 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
         });
         successCount++;
 
-        console.log(`[BatchTagUnprocessed] Tagged image ${image.id} (${successCount}/${untaggedImages.length})`);
+        console.log(`[BatchTagUnprocessed] Tagged file ${image.id} (${successCount}/${untaggedImages.length})`);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         results.push({
@@ -361,7 +378,13 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
           continue;
         }
 
-        const taggerResult = await imageTaggerService.tagImage(imagePath);
+        // 동영상 또는 이미지 태깅 실행
+        let taggerResult;
+        if (ImageTaggerService.isVideoFile(imagePath, image.mime_type)) {
+          taggerResult = await imageTaggerService.tagVideo(imagePath);
+        } else {
+          taggerResult = await imageTaggerService.tagImage(imagePath);
+        }
 
         if (!taggerResult.success) {
           results.push({
@@ -383,7 +406,7 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
         });
         successCount++;
 
-        console.log(`[BatchTagAll] Tagged image ${id} (${successCount}/${imageIds.length})`);
+        console.log(`[BatchTagAll] Tagged file ${id} (${successCount}/${imageIds.length})`);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         results.push({

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, CardMedia, Box, Skeleton } from '@mui/material';
-import { CheckCircle as CheckCircleIcon } from '@mui/icons-material';
+import { Card, CardMedia, Box, Skeleton, Chip } from '@mui/material';
+import { CheckCircle as CheckCircleIcon, VideoLibrary as VideoLibraryIcon } from '@mui/icons-material';
 import type { ImageRecord } from '../../types/image';
 import { getBackendOrigin } from '../../utils/backend';
 
@@ -180,30 +180,75 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
           />
         )}
 
-        {/* 이미지 - 뷰포트에 들어왔을 때만 로드 */}
+        {/* 이미지/비디오 - 뷰포트에 들어왔을 때만 로드 */}
         {isVisible && (
-          <CardMedia
-            component="img"
-            image={imageUrl}
-            alt={image.original_name}
-            loading="lazy"
-            decoding="async"
-            draggable={false}
-            onLoad={handleImageLoad}
-            sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain',
-              display: 'block',
-              opacity: imageLoaded ? 1 : 0,
-              transition: 'opacity 0.15s ease-in-out',
-            }}
-          />
+          image.mime_type?.startsWith('video/') ? (
+            <Box
+              component="video"
+              src={imageUrl}
+              muted
+              loop
+              autoPlay
+              playsInline
+              onLoadedData={handleImageLoad}
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                display: 'block',
+                opacity: imageLoaded ? 1 : 0,
+                transition: 'opacity 0.15s ease-in-out',
+              }}
+            />
+          ) : (
+            <CardMedia
+              component="img"
+              image={imageUrl}
+              alt={image.original_name}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+              onLoad={handleImageLoad}
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                display: 'block',
+                opacity: imageLoaded ? 1 : 0,
+                transition: 'opacity 0.15s ease-in-out',
+              }}
+            />
+          )
         )}
       </Box>
+
+      {/* 비디오 배지 (재생 시간 표시) */}
+      {image.mime_type?.startsWith('video/') && image.duration && (
+        <Box sx={{ position: 'absolute', bottom: 8, left: 8, zIndex: 1 }}>
+          <Chip
+            icon={<VideoLibraryIcon sx={{ fontSize: '0.8rem' }} />}
+            label={`${Math.floor(image.duration / 60)}:${String(Math.floor(image.duration % 60)).padStart(2, '0')}`}
+            size="small"
+            sx={{
+              fontSize: '0.7rem',
+              height: '22px',
+              fontWeight: 600,
+              bgcolor: 'rgba(0, 0, 0, 0.75)',
+              color: 'white',
+              backdropFilter: 'blur(4px)',
+              '& .MuiChip-icon': {
+                color: 'white',
+              },
+            }}
+          />
+        </Box>
+      )}
     </Card>
   );
 };

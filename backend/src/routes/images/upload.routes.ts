@@ -181,6 +181,21 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
 
       processedData = processedImage;
       console.log('✅ Image database save successful, ID:', imageId);
+      console.log('💾 [Upload] Database save with hash data:', {
+        imageId: imageId,
+        has_perceptual_hash: !!processedImage.perceptualHash,
+        has_color_histogram: !!processedImage.colorHistogram,
+        perceptual_hash: processedImage.perceptualHash ? `${processedImage.perceptualHash.substring(0, 16)}... (${processedImage.perceptualHash.length} chars)` : 'NULL',
+        color_histogram: processedImage.colorHistogram ? `${processedImage.colorHistogram.length} bytes` : 'NULL'
+      });
+
+      // 검증: 데이터베이스에 실제로 저장되었는지 확인
+      if (!processedImage.perceptualHash || !processedImage.colorHistogram) {
+        console.error('⚠️ [Upload] WARNING: Hash data is NULL - will be saved as NULL in database!', {
+          perceptualHash: processedImage.perceptualHash || 'NULL',
+          colorHistogram: processedImage.colorHistogram ? `${processedImage.colorHistogram.length} bytes` : 'NULL'
+        });
+      }
 
       // 이미지인 경우에만 프롬프트 수집 및 자동 태깅 실행
       // 프롬프트 수집 (비동기로 처리, 오류가 있어도 업로드는 계속 진행)
@@ -195,29 +210,41 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
         console.warn('⚠️ Failed to collect prompts (non-critical):', promptError);
       }
 
-      // 자동 태깅 (설정에서 활성화된 경우) - 자동수집보다 먼저 실행
-      try {
-        const { settingsService } = await import('../../services/settingsService');
-        const settings = settingsService.loadSettings();
-
-        if (settings.tagger.enabled && settings.tagger.autoTagOnUpload) {
-          console.log('🏷️ Auto-tagging image on upload...');
-          const imagePath = path.join(UPLOAD_BASE_PATH, processedImage.originalPath);
-          const taggerResult = await imageTaggerService.tagImage(imagePath);
-
-          if (taggerResult.success) {
-            const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-            await ImageModel.updateAutoTags(imageId, autoTagsJson);
-            console.log('✅ Auto-tagging completed successfully');
-          } else {
-            console.warn('⚠️ Auto-tagging failed (non-critical):', taggerResult.error);
-          }
-        }
-      } catch (autoTagError) {
-        console.warn('⚠️ Failed to auto-tag image (non-critical):', autoTagError);
-      }
+      // 이미지인 경우에만 프롬프트 수집 실행
+      // (프롬프트 수집은 이미지 전용)
+      processedData = processedImage;
     } else {
       throw new Error(`Unsupported file type: ${file.mimetype}`);
+    }
+
+    // 자동 태깅 (설정에서 활성화된 경우) - 이미지/동영상 모두 적용, 자동수집보다 먼저 실행
+    try {
+      const { settingsService } = await import('../../services/settingsService');
+      const settings = settingsService.loadSettings();
+
+      if (settings.tagger.enabled && settings.tagger.autoTagOnUpload) {
+        console.log('🏷️ Auto-tagging on upload...');
+        const filePath = path.join(UPLOAD_BASE_PATH, processedData.originalPath);
+
+        let taggerResult;
+        if (isVideoFile(file.mimetype)) {
+          console.log('🎬 Tagging video (extracting frames)...');
+          taggerResult = await imageTaggerService.tagVideo(filePath);
+        } else {
+          console.log('🖼️ Tagging image...');
+          taggerResult = await imageTaggerService.tagImage(filePath);
+        }
+
+        if (taggerResult.success) {
+          const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
+          await ImageModel.updateAutoTags(imageId, autoTagsJson);
+          console.log('✅ Auto-tagging completed successfully');
+        } else {
+          console.warn('⚠️ Auto-tagging failed (non-critical):', taggerResult.error);
+        }
+      }
+    } catch (autoTagError) {
+      console.warn('⚠️ Failed to auto-tag file (non-critical):', autoTagError);
     }
 
     // 자동수집 그룹 처리 (이미지/동영상 모두 적용, 자동 태깅 이후 실행하여 auto_tags 조건도 체크 가능)
@@ -285,72 +312,150 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
 
     for (const file of files) {
       try {
-        // 이미지 처리
-        const processedImage = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
+        let imageId: number;
+        let processedData: {
+          filename: string;
+          originalPath: string;
+          thumbnailPath: string;
+          optimizedPath: string | null;
+          width: number;
+          height: number;
+          fileSize: number;
+          metadata?: any;
+        };
 
-        // 메타데이터에서 구조화된 필드 추출
-        const aiInfo = processedImage.metadata.ai_info || {};
+        // 파일 타입에 따라 분기 처리
+        if (isVideoFile(file.mimetype)) {
+          // 동영상 처리
+          const processedVideo = await VideoProcessor.processVideo(file, UPLOAD_BASE_PATH);
 
-        // 데이터베이스에 저장
-        const imageId = await ImageModel.create({
-          filename: processedImage.filename,
-          original_name: file.originalname,
-          file_path: processedImage.originalPath,
-          thumbnail_path: processedImage.thumbnailPath,
-          optimized_path: processedImage.optimizedPath,
-          file_size: processedImage.fileSize,
-          mime_type: file.mimetype,
-          width: processedImage.width,
-          height: processedImage.height,
-          metadata: JSON.stringify(processedImage.metadata),
+          // 동영상 메타데이터 저장
+          imageId = await ImageModel.create({
+            filename: processedVideo.filename,
+            original_name: file.originalname,
+            file_path: processedVideo.originalPath,
+            thumbnail_path: processedVideo.thumbnailPath,
+            optimized_path: processedVideo.optimizedPath,
+            file_size: processedVideo.fileSize,
+            mime_type: file.mimetype,
+            width: processedVideo.width,
+            height: processedVideo.height,
+            metadata: JSON.stringify(processedVideo.metadata),
 
-          // AI 메타데이터 필드들
-          ai_tool: aiInfo.ai_tool || null,
-          model_name: aiInfo.model || null,
-          lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
-          steps: aiInfo.steps || null,
-          cfg_scale: aiInfo.cfg_scale || null,
-          sampler: aiInfo.sampler || null,
-          seed: aiInfo.seed || null,
-          scheduler: aiInfo.scheduler || null,
-          prompt: aiInfo.prompt || null,
-          negative_prompt: aiInfo.negative_prompt || null,
-          denoise_strength: aiInfo.denoise_strength || null,
-          generation_time: aiInfo.generation_time || null,
-          batch_size: aiInfo.batch_size || null,
-          batch_index: aiInfo.batch_index || null,
-          auto_tags: null,  // 업로드 시에는 null, 별도 태깅 요청으로 추가
+            // 동영상 메타데이터 필드들
+            duration: processedVideo.metadata.duration,
+            fps: processedVideo.metadata.fps,
+            video_codec: processedVideo.metadata.video_codec,
+            audio_codec: processedVideo.metadata.audio_codec,
+            bitrate: processedVideo.metadata.bitrate,
 
-          // 동영상 메타데이터 필드들 (이미지는 null)
-          duration: null,
-          fps: null,
-          video_codec: null,
-          audio_codec: null,
-          bitrate: null,
+            // AI 메타데이터 필드들 (동영상은 null)
+            ai_tool: null,
+            model_name: null,
+            lora_models: null,
+            steps: null,
+            cfg_scale: null,
+            sampler: null,
+            seed: null,
+            scheduler: null,
+            prompt: null,
+            negative_prompt: null,
+            denoise_strength: null,
+            generation_time: null,
+            batch_size: null,
+            batch_index: null,
+            auto_tags: null,
 
-          // 유사도 검색 필드들
-          perceptual_hash: processedImage.perceptualHash || null,
-          color_histogram: processedImage.colorHistogram || null
-        });
+            // 유사도 검색 필드들 (동영상은 null)
+            perceptual_hash: null,
+            color_histogram: null
+          });
 
-        // 프롬프트 수집 (비동기로 처리, 오류가 있어도 업로드는 계속 진행)
-        try {
-          await PromptCollectionService.collectFromImage(
-            aiInfo.prompt || null,
-            aiInfo.negative_prompt || null
-          );
-        } catch (promptError) {
-          console.warn('⚠️ Failed to collect prompts for', file.originalname, '(non-critical):', promptError);
+          processedData = processedVideo;
+        } else if (isImageFile(file.mimetype)) {
+          // 이미지 처리
+          const processedImage = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
+
+          // 메타데이터에서 구조화된 필드 추출
+          const aiInfo = processedImage.metadata.ai_info || {};
+
+          // 데이터베이스에 저장
+          imageId = await ImageModel.create({
+            filename: processedImage.filename,
+            original_name: file.originalname,
+            file_path: processedImage.originalPath,
+            thumbnail_path: processedImage.thumbnailPath,
+            optimized_path: processedImage.optimizedPath,
+            file_size: processedImage.fileSize,
+            mime_type: file.mimetype,
+            width: processedImage.width,
+            height: processedImage.height,
+            metadata: JSON.stringify(processedImage.metadata),
+
+            // AI 메타데이터 필드들
+            ai_tool: aiInfo.ai_tool || null,
+            model_name: aiInfo.model || null,
+            lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
+            steps: aiInfo.steps || null,
+            cfg_scale: aiInfo.cfg_scale || null,
+            sampler: aiInfo.sampler || null,
+            seed: aiInfo.seed || null,
+            scheduler: aiInfo.scheduler || null,
+            prompt: aiInfo.prompt || null,
+            negative_prompt: aiInfo.negative_prompt || null,
+            denoise_strength: aiInfo.denoise_strength || null,
+            generation_time: aiInfo.generation_time || null,
+            batch_size: aiInfo.batch_size || null,
+            batch_index: aiInfo.batch_index || null,
+            auto_tags: null,  // 업로드 시에는 null, 별도 태깅 요청으로 추가
+
+            // 동영상 메타데이터 필드들 (이미지는 null)
+            duration: null,
+            fps: null,
+            video_codec: null,
+            audio_codec: null,
+            bitrate: null,
+
+            // 유사도 검색 필드들
+            perceptual_hash: processedImage.perceptualHash || null,
+            color_histogram: processedImage.colorHistogram || null
+          });
+
+          console.log('🔍 [Upload Multiple] Hash data for', file.originalname, ':', {
+            has_perceptual_hash: !!processedImage.perceptualHash,
+            has_color_histogram: !!processedImage.colorHistogram
+          });
+
+          // 이미지인 경우에만 프롬프트 수집 실행
+          try {
+            await PromptCollectionService.collectFromImage(
+              aiInfo.prompt || null,
+              aiInfo.negative_prompt || null
+            );
+          } catch (promptError) {
+            console.warn('⚠️ Failed to collect prompts for', file.originalname, '(non-critical):', promptError);
+          }
+
+          // 이미지인 경우에만 프롬프트 수집 실행
+          processedData = processedImage;
+        } else {
+          throw new Error(`Unsupported file type: ${file.mimetype}`);
         }
 
-        // 자동 태깅 (설정에서 활성화된 경우) - 자동수집보다 먼저 실행
+        // 자동 태깅 (설정에서 활성화된 경우) - 이미지/동영상 모두 적용, 자동수집보다 먼저 실행
         try {
           const { settingsService } = await import('../../services/settingsService');
           const settings = settingsService.loadSettings();
 
           if (settings.tagger.enabled && settings.tagger.autoTagOnUpload) {
-            const imagePath = path.join(UPLOAD_BASE_PATH, processedImage.originalPath);
-            const taggerResult = await imageTaggerService.tagImage(imagePath);
+            const filePath = path.join(UPLOAD_BASE_PATH, processedData.originalPath);
+
+            let taggerResult;
+            if (isVideoFile(file.mimetype)) {
+              taggerResult = await imageTaggerService.tagVideo(filePath);
+            } else {
+              taggerResult = await imageTaggerService.tagImage(filePath);
+            }
 
             if (taggerResult.success) {
               const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
@@ -361,7 +466,7 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
           console.warn('⚠️ Failed to auto-tag', file.originalname, '(non-critical):', autoTagError);
         }
 
-        // 자동수집 그룹 처리 (자동 태깅 이후 실행하여 auto_tags 조건도 체크 가능)
+        // 자동수집 그룹 처리 (이미지/동영상 모두 적용, 자동 태깅 이후 실행)
         try {
           const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(imageId);
           if (autoCollectResults.length > 0) {
@@ -373,14 +478,14 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
 
         results.push({
           id: imageId,
-          filename: processedImage.filename,
+          filename: processedData.filename,
           original_name: file.originalname,
-          thumbnail_url: toUploadsUrl(processedImage.thumbnailPath)!,
-          optimized_url: toUploadsUrl(processedImage.optimizedPath)!,
-          file_size: processedImage.fileSize,
+          thumbnail_url: toUploadsUrl(processedData.thumbnailPath)!,
+          optimized_url: toUploadsUrl(processedData.optimizedPath)!,
+          file_size: processedData.fileSize,
           mime_type: file.mimetype,
-          width: processedImage.width,
-          height: processedImage.height,
+          width: processedData.width,
+          height: processedData.height,
           upload_date: new Date().toISOString()
         });
       } catch (error) {
@@ -464,84 +569,167 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
         timestamp: new Date().toISOString()
       });
 
-      // 2. 이미지 처리 단계
-      sendProgress({
-        type: 'stage',
-        currentFile,
-        totalFiles: files.length,
-        filename: file.originalname,
-        stage: 'metadata',
-        message: '메타데이터 추출 중...',
-        timestamp: new Date().toISOString()
-      });
+      let imageId: number;
+      let processedData: {
+        originalPath: string;
+        [key: string]: any;
+      } | undefined;
 
-      const processedImage = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
+      // 파일 타입에 따라 분기 처리
+      if (isVideoFile(file.mimetype)) {
+        // 동영상 처리
+        sendProgress({
+          type: 'stage',
+          currentFile,
+          totalFiles: files.length,
+          filename: file.originalname,
+          stage: 'metadata',
+          message: '동영상 메타데이터 추출 중...',
+          timestamp: new Date().toISOString()
+        });
 
-      // 3. 썸네일 생성 단계
-      sendProgress({
-        type: 'stage',
-        currentFile,
-        totalFiles: files.length,
-        filename: file.originalname,
-        stage: 'thumbnail',
-        message: '썸네일 및 최적화 이미지 생성 완료',
-        timestamp: new Date().toISOString()
-      });
+        const processedVideo = await VideoProcessor.processVideo(file, UPLOAD_BASE_PATH);
+        processedData = processedVideo;
 
-      // 메타데이터에서 구조화된 필드 추출
-      const aiInfo = processedImage.metadata.ai_info || {};
+        sendProgress({
+          type: 'stage',
+          currentFile,
+          totalFiles: files.length,
+          filename: file.originalname,
+          stage: 'thumbnail',
+          message: '애니메이션 썸네일 생성 완료',
+          timestamp: new Date().toISOString()
+        });
 
-      // 데이터베이스에 저장
-      const imageId = await ImageModel.create({
-        filename: processedImage.filename,
-        original_name: file.originalname,
-        file_path: processedImage.originalPath,
-        thumbnail_path: processedImage.thumbnailPath,
-        optimized_path: processedImage.optimizedPath,
-        file_size: processedImage.fileSize,
-        mime_type: file.mimetype,
-        width: processedImage.width,
-        height: processedImage.height,
-        metadata: JSON.stringify(processedImage.metadata),
-        ai_tool: aiInfo.ai_tool || null,
-        model_name: aiInfo.model || null,
-        lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
-        steps: aiInfo.steps || null,
-        cfg_scale: aiInfo.cfg_scale || null,
-        sampler: aiInfo.sampler || null,
-        seed: aiInfo.seed || null,
-        scheduler: aiInfo.scheduler || null,
-        prompt: aiInfo.prompt || null,
-        negative_prompt: aiInfo.negative_prompt || null,
-        denoise_strength: aiInfo.denoise_strength || null,
-        generation_time: aiInfo.generation_time || null,
-        batch_size: aiInfo.batch_size || null,
-        batch_index: aiInfo.batch_index || null,
-        auto_tags: null,
+        // 동영상 메타데이터 저장
+        imageId = await ImageModel.create({
+          filename: processedVideo.filename,
+          original_name: file.originalname,
+          file_path: processedVideo.originalPath,
+          thumbnail_path: processedVideo.thumbnailPath,
+          optimized_path: processedVideo.optimizedPath,
+          file_size: processedVideo.fileSize,
+          mime_type: file.mimetype,
+          width: processedVideo.width,
+          height: processedVideo.height,
+          metadata: JSON.stringify(processedVideo.metadata),
 
-        // 동영상 메타데이터 필드들 (이미지는 null)
-        duration: null,
-        fps: null,
-        video_codec: null,
-        audio_codec: null,
-        bitrate: null,
+          // 동영상 메타데이터 필드들
+          duration: processedVideo.metadata.duration,
+          fps: processedVideo.metadata.fps,
+          video_codec: processedVideo.metadata.video_codec,
+          audio_codec: processedVideo.metadata.audio_codec,
+          bitrate: processedVideo.metadata.bitrate,
 
-        // 유사도 검색 필드들
-        perceptual_hash: processedImage.perceptualHash || null,
-        color_histogram: processedImage.colorHistogram || null
-      });
+          // AI 메타데이터 필드들 (동영상은 null)
+          ai_tool: null,
+          model_name: null,
+          lora_models: null,
+          steps: null,
+          cfg_scale: null,
+          sampler: null,
+          seed: null,
+          scheduler: null,
+          prompt: null,
+          negative_prompt: null,
+          denoise_strength: null,
+          generation_time: null,
+          batch_size: null,
+          batch_index: null,
+          auto_tags: null,
 
-      // 4. 프롬프트 수집
-      try {
-        await PromptCollectionService.collectFromImage(
-          aiInfo.prompt || null,
-          aiInfo.negative_prompt || null
-        );
-      } catch (promptError) {
-        console.warn('⚠️ Failed to collect prompts for', file.originalname, promptError);
+          // 유사도 검색 필드들 (동영상은 null)
+          perceptual_hash: null,
+          color_histogram: null
+        });
+      } else if (isImageFile(file.mimetype)) {
+        // 이미지 처리
+        sendProgress({
+          type: 'stage',
+          currentFile,
+          totalFiles: files.length,
+          filename: file.originalname,
+          stage: 'metadata',
+          message: '메타데이터 추출 중...',
+          timestamp: new Date().toISOString()
+        });
+
+        const processedImage = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
+
+        sendProgress({
+          type: 'stage',
+          currentFile,
+          totalFiles: files.length,
+          filename: file.originalname,
+          stage: 'thumbnail',
+          message: '썸네일 및 최적화 이미지 생성 완료',
+          timestamp: new Date().toISOString()
+        });
+
+        // 메타데이터에서 구조화된 필드 추출
+        const aiInfo = processedImage.metadata.ai_info || {};
+
+        // 데이터베이스에 저장
+        imageId = await ImageModel.create({
+          filename: processedImage.filename,
+          original_name: file.originalname,
+          file_path: processedImage.originalPath,
+          thumbnail_path: processedImage.thumbnailPath,
+          optimized_path: processedImage.optimizedPath,
+          file_size: processedImage.fileSize,
+          mime_type: file.mimetype,
+          width: processedImage.width,
+          height: processedImage.height,
+          metadata: JSON.stringify(processedImage.metadata),
+          ai_tool: aiInfo.ai_tool || null,
+          model_name: aiInfo.model || null,
+          lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
+          steps: aiInfo.steps || null,
+          cfg_scale: aiInfo.cfg_scale || null,
+          sampler: aiInfo.sampler || null,
+          seed: aiInfo.seed || null,
+          scheduler: aiInfo.scheduler || null,
+          prompt: aiInfo.prompt || null,
+          negative_prompt: aiInfo.negative_prompt || null,
+          denoise_strength: aiInfo.denoise_strength || null,
+          generation_time: aiInfo.generation_time || null,
+          batch_size: aiInfo.batch_size || null,
+          batch_index: aiInfo.batch_index || null,
+          auto_tags: null,
+
+          // 동영상 메타데이터 필드들 (이미지는 null)
+          duration: null,
+          fps: null,
+          video_codec: null,
+          audio_codec: null,
+          bitrate: null,
+
+          // 유사도 검색 필드들
+          perceptual_hash: processedImage.perceptualHash || null,
+          color_histogram: processedImage.colorHistogram || null
+        });
+
+        console.log('🔍 [Upload Stream] Hash data for', file.originalname, ':', {
+          has_perceptual_hash: !!processedImage.perceptualHash,
+          has_color_histogram: !!processedImage.colorHistogram
+        });
+
+        // 이미지인 경우에만 프롬프트 수집 실행
+        try {
+          await PromptCollectionService.collectFromImage(
+            aiInfo.prompt || null,
+            aiInfo.negative_prompt || null
+          );
+        } catch (promptError) {
+          console.warn('⚠️ Failed to collect prompts for', file.originalname, promptError);
+        }
+
+        processedData = processedImage;
+      } else {
+        throw new Error(`Unsupported file type: ${file.mimetype}`);
       }
 
-      // 5. 자동 태깅 (설정에서 활성화된 경우) - 자동수집보다 먼저 실행
+      // 자동 태깅 (설정에서 활성화된 경우) - 이미지/동영상 모두 적용, 자동수집보다 먼저 실행
       if (autoTagEnabled) {
         sendProgress({
           type: 'stage',
@@ -549,13 +737,23 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
           totalFiles: files.length,
           filename: file.originalname,
           stage: 'auto-tag',
-          message: '자동 태깅 실행 중...',
+          message: isVideoFile(file.mimetype) ? '동영상 자동 태깅 실행 중 (프레임 추출)...' : '자동 태깅 실행 중...',
           timestamp: new Date().toISOString()
         });
 
         try {
-          const imagePath = path.join(UPLOAD_BASE_PATH, processedImage.originalPath);
-          const taggerResult = await imageTaggerService.tagImage(imagePath);
+          if (!processedData) {
+            throw new Error('Processed data is not available');
+          }
+
+          const filePath = path.join(UPLOAD_BASE_PATH, processedData.originalPath);
+
+          let taggerResult;
+          if (isVideoFile(file.mimetype)) {
+            taggerResult = await imageTaggerService.tagVideo(filePath);
+          } else {
+            taggerResult = await imageTaggerService.tagImage(filePath);
+          }
 
           if (taggerResult.success) {
             const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);

@@ -16,10 +16,12 @@ import {
 } from '@mui/icons-material';
 import { useBulkActions } from '../../hooks/useBulkActions';
 import GroupAssignModal from '../GroupAssignModal';
+import type { ImageRecord } from '../../types/image';
 
 interface BulkActionBarProps {
   selectedCount: number;
   selectedIds: number[];
+  selectedImages?: ImageRecord[];
   onSelectionClear: () => void;
   onActionComplete?: (deletedIds?: number[]) => void;
   onModalStateChange?: (isOpen: boolean) => void;
@@ -28,6 +30,7 @@ interface BulkActionBarProps {
 const BulkActionBar: React.FC<BulkActionBarProps> = ({
   selectedCount,
   selectedIds,
+  selectedImages = [],
   onSelectionClear,
   onActionComplete,
   onModalStateChange,
@@ -44,7 +47,22 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
   };
 
   const handleDelete = async () => {
-    if (!window.confirm(`선택된 ${selectedCount}개 이미지를 삭제하시겠습니까?`)) {
+    // 선택된 항목 중 비디오가 있는지 확인
+    const hasVideo = selectedImages.some(img => img.mime_type?.startsWith('video/'));
+    const hasImage = selectedImages.some(img => !img.mime_type?.startsWith('video/'));
+
+    let confirmMessage = `선택된 ${selectedCount}개 파일을 삭제하시겠습니까?`;
+
+    // 더 구체적인 메시지 표시
+    if (hasVideo && hasImage) {
+      confirmMessage = `선택된 ${selectedCount}개 파일(이미지/비디오)을 삭제하시겠습니까?`;
+    } else if (hasVideo) {
+      confirmMessage = `선택된 ${selectedCount}개 비디오를 삭제하시겠습니까?`;
+    } else if (hasImage) {
+      confirmMessage = `선택된 ${selectedCount}개 이미지를 삭제하시겠습니까?`;
+    }
+
+    if (!window.confirm(confirmMessage)) {
       return;
     }
 

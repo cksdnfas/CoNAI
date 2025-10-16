@@ -108,6 +108,7 @@ const HomePage: React.FC = () => {
       <BulkActionBar
         selectedCount={selectedIds.length}
         selectedIds={selectedIds}
+        selectedImages={images.filter(img => selectedIds.includes(img.id))}
         onSelectionClear={handleSelectionClear}
         onActionComplete={handleActionComplete}
       />

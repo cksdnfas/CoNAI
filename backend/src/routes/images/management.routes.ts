@@ -44,13 +44,25 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
       console.warn('⚠️ Failed to remove prompts from collection (non-critical):', promptError);
     }
 
-    // 파일 삭제 (3개 버전 모두)
-    await ImageProcessor.deleteImageFiles(
-      image.file_path,
-      image.thumbnail_path,
-      image.optimized_path || '',
-      UPLOAD_BASE_PATH
-    );
+    // 파일 삭제 (비디오와 이미지 구분)
+    const isVideo = image.mime_type?.startsWith('video/');
+
+    if (isVideo) {
+      const { VideoProcessor } = await import('../../services/videoProcessor');
+      await VideoProcessor.deleteVideoFiles(
+        image.file_path,
+        image.thumbnail_path,
+        image.optimized_path,
+        UPLOAD_BASE_PATH
+      );
+    } else {
+      await ImageProcessor.deleteImageFiles(
+        image.file_path,
+        image.thumbnail_path,
+        image.optimized_path || '',
+        UPLOAD_BASE_PATH
+      );
+    }
 
     // 데이터베이스에서 삭제
     const deleted = await ImageModel.delete(id);
