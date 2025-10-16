@@ -1,7 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { GroupModel, ImageGroupModel } from '../models/Group';
 import { AutoCollectionService } from '../services/autoCollectionService';
-import { GroupResponse, GroupCreateData, GroupUpdateData } from '../types/group';
+import {
+  GroupResponse,
+  GroupCreateData,
+  GroupUpdateData,
+  validateId,
+  successResponse,
+  errorResponse,
+  PAGINATION
+} from '@comfyui-image-manager/shared';
 import { asyncHandler } from '../middleware/errorHandler';
 import { enrichImageRecord } from './images/utils';
 import path from 'path';
@@ -17,20 +25,10 @@ const router = Router();
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   try {
     const groups = await GroupModel.findAllWithStats();
-
-    const response: GroupResponse = {
-      success: true,
-      data: groups
-    };
-
-    return res.json(response);
+    return res.json(successResponse(groups));
   } catch (error) {
     console.error('Error getting groups:', error);
-    const response: GroupResponse = {
-      success: false,
-      error: 'Failed to get groups'
-    };
-    return res.status(500).json(response);
+    return res.status(500).json(errorResponse('Failed to get groups'));
   }
 }));
 
@@ -39,36 +37,22 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/groups/:id/thumbnail
  */
 router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
-
-  if (isNaN(id)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid group ID'
-    } as GroupResponse);
-  }
-
   try {
+    const id = validateId(req.params.id, 'Group ID');
+
     const randomImage = await ImageGroupModel.findRandomImageForGroup(id);
 
     if (!randomImage) {
-      return res.status(404).json({
-        success: false,
-        error: 'No images found in group'
-      } as GroupResponse);
+      return res.status(404).json(errorResponse('No images found in group'));
     }
 
     // 썸네일 파일 경로 결정 (thumbnail_path가 있으면 사용, 없으면 원본 사용)
     const imagePath = randomImage.thumbnail_path || randomImage.file_path;
-    // uploads 디렉토리 기준으로 절대 경로 생성
     const fullPath = resolveUploadsPath(imagePath);
 
     // 파일 존재 여부 확인
     if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({
-        success: false,
-        error: 'Image file not found'
-      } as GroupResponse);
+      return res.status(404).json(errorResponse('Image file not found'));
     }
 
     // 이미지 파일 직접 전송
@@ -98,11 +82,9 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
     return res.sendFile(fullPath);
   } catch (error) {
     console.error('Error getting group thumbnail:', error);
-    const response: GroupResponse = {
-      success: false,
-      error: 'Failed to get group thumbnail'
-    };
-    return res.status(500).json(response);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get group thumbnail';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
   }
 }));
 
@@ -111,38 +93,21 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
  * GET /api/groups/:id
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
-
-  if (isNaN(id)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid group ID'
-    } as GroupResponse);
-  }
-
   try {
+    const id = validateId(req.params.id, 'Group ID');
+
     const group = await GroupModel.findById(id);
 
     if (!group) {
-      return res.status(404).json({
-        success: false,
-        error: 'Group not found'
-      } as GroupResponse);
+      return res.status(404).json(errorResponse('Group not found'));
     }
 
-    const response: GroupResponse = {
-      success: true,
-      data: group
-    };
-
-    return res.json(response);
+    return res.json(successResponse(group));
   } catch (error) {
     console.error('Error getting group:', error);
-    const response: GroupResponse = {
-      success: false,
-      error: 'Failed to get group'
-    };
-    return res.status(500).json(response);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get group';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
   }
 }));
 
@@ -154,20 +119,16 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions } = req.body;
 
   if (!name) {
-    return res.status(400).json({
-      success: false,
-      error: 'Group name is required'
-    } as GroupResponse);
+    return res.status(400).json(errorResponse('Group name is required'));
   }
 
   // 자동수집 조건 유효성 검사
   if (auto_collect_enabled && auto_collect_conditions) {
     const validation = AutoCollectionService.validateConditions(auto_collect_conditions);
     if (!validation.valid) {
-      return res.status(400).json({
-        success: false,
-        error: `Invalid auto collection conditions: ${validation.errors.join(', ')}`
-      } as GroupResponse);
+      return res.status(400).json(
+        errorResponse(`Invalid auto collection conditions: ${validation.errors.join(', ')}`)
+      );
     }
   }
 
@@ -192,22 +153,18 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       }
     }
 
-    const response: GroupResponse = {
-      success: true,
-      data: {
+    return res.status(201).json(
+      successResponse({
         id: groupId,
         message: 'Group created successfully'
-      }
-    };
-
-    return res.status(201).json(response);
+      })
+    );
   } catch (error) {
     console.error('Error creating group:', error);
-    const response: GroupResponse = {
-      success: false,
-      error: (error as Error).message.includes('UNIQUE') ? 'Group name already exists' : 'Failed to create group'
-    };
-    return res.status(500).json(response);
+    const errorMessage = (error as Error).message.includes('UNIQUE')
+      ? 'Group name already exists'
+      : 'Failed to create group';
+    return res.status(500).json(errorResponse(errorMessage));
   }
 }));
 
@@ -216,28 +173,20 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  * PUT /api/groups/:id
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
-  const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions } = req.body;
-
-  if (isNaN(id)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid group ID'
-    } as GroupResponse);
-  }
-
-  // 자동수집 조건 유효성 검사
-  if (auto_collect_enabled && auto_collect_conditions) {
-    const validation = AutoCollectionService.validateConditions(auto_collect_conditions);
-    if (!validation.valid) {
-      return res.status(400).json({
-        success: false,
-        error: `Invalid auto collection conditions: ${validation.errors.join(', ')}`
-      } as GroupResponse);
-    }
-  }
-
   try {
+    const id = validateId(req.params.id, 'Group ID');
+    const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions } = req.body;
+
+    // 자동수집 조건 유효성 검사
+    if (auto_collect_enabled && auto_collect_conditions) {
+      const validation = AutoCollectionService.validateConditions(auto_collect_conditions);
+      if (!validation.valid) {
+        return res.status(400).json(
+          errorResponse(`Invalid auto collection conditions: ${validation.errors.join(', ')}`)
+        );
+      }
+    }
+
     const groupData: GroupUpdateData = {
       name,
       description,
@@ -250,10 +199,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     const updated = await GroupModel.update(id, groupData);
 
     if (!updated) {
-      return res.status(404).json({
-        success: false,
-        error: 'Group not found'
-      } as GroupResponse);
+      return res.status(404).json(errorResponse('Group not found'));
     }
 
     // 자동수집 조건이 변경된 경우 재실행
@@ -265,21 +211,15 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
       }
     }
 
-    const response: GroupResponse = {
-      success: true,
-      data: {
-        message: 'Group updated successfully'
-      }
-    };
-
-    return res.json(response);
+    return res.json(successResponse({ message: 'Group updated successfully' }));
   } catch (error) {
     console.error('Error updating group:', error);
-    const response: GroupResponse = {
-      success: false,
-      error: (error as Error).message.includes('UNIQUE') ? 'Group name already exists' : 'Failed to update group'
-    };
-    return res.status(500).json(response);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update group';
+    if ((errorMessage as string).includes('UNIQUE')) {
+      return res.status(400).json(errorResponse('Group name already exists'));
+    }
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
   }
 }));
 
@@ -288,40 +228,21 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
  * DELETE /api/groups/:id
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
-
-  if (isNaN(id)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid group ID'
-    } as GroupResponse);
-  }
-
   try {
+    const id = validateId(req.params.id, 'Group ID');
+
     const deleted = await GroupModel.delete(id);
 
     if (!deleted) {
-      return res.status(404).json({
-        success: false,
-        error: 'Group not found'
-      } as GroupResponse);
+      return res.status(404).json(errorResponse('Group not found'));
     }
 
-    const response: GroupResponse = {
-      success: true,
-      data: {
-        message: 'Group deleted successfully'
-      }
-    };
-
-    return res.json(response);
+    return res.json(successResponse({ message: 'Group deleted successfully' }));
   } catch (error) {
     console.error('Error deleting group:', error);
-    const response: GroupResponse = {
-      success: false,
-      error: 'Failed to delete group'
-    };
-    return res.status(500).json(response);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete group';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
   }
 }));
 
@@ -330,27 +251,19 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/groups/:id/images
  */
 router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 20;
-  const collectionType = req.query.collection_type as 'manual' | 'auto';
-
-  if (isNaN(id)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid group ID'
-    } as GroupResponse);
-  }
-
   try {
+    const id = validateId(req.params.id, 'Group ID');
+    const page = parseInt(req.query.page as string) || PAGINATION.DEFAULT_PAGE;
+    const limit = parseInt(req.query.limit as string) || PAGINATION.GROUP_IMAGES_LIMIT;
+    const collectionType = req.query.collection_type as 'manual' | 'auto';
+
     const result = await ImageGroupModel.findImagesByGroup(id, page, limit, collectionType);
 
     // URL과 구조화된 메타데이터 추가
     const enrichedImages = result.images.map(enrichImageRecord);
 
-    const response: GroupResponse = {
-      success: true,
-      data: {
+    return res.json(
+      successResponse({
         images: enrichedImages,
         pagination: {
           page,
@@ -358,101 +271,77 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
           total: result.total,
           totalPages: Math.ceil(result.total / limit)
         }
-      }
-    };
-
-    return res.json(response);
+      })
+    );
   } catch (error) {
     console.error('Error getting group images:', error);
-    const response: GroupResponse = {
-      success: false,
-      error: 'Failed to get group images'
-    };
-    return res.status(500).json(response);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get group images';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
   }
 }));
 
 /**
  * 이미지를 그룹에 수동 추가
  * POST /api/groups/:id/images
- * - 자동수집된 이미지를 수동으로 추가하면 collection_type이 'manual'로 변경됨
- * - 이후 자동수집 조건 변경 시에도 해당 이미지는 그룹에 유지됨
  */
 router.post('/:id/images', asyncHandler(async (req: Request, res: Response) => {
-  const groupId = parseInt(req.params.id);
-  const { image_id, order_index = 0 } = req.body;
-
-  if (isNaN(groupId) || !image_id) {
-    return res.status(400).json({
-      success: false,
-      error: 'Group ID and image ID are required'
-    } as GroupResponse);
-  }
-
   try {
+    const groupId = validateId(req.params.id, 'Group ID');
+    const { image_id, order_index = 0 } = req.body;
+
+    if (!image_id) {
+      return res.status(400).json(errorResponse('Image ID is required'));
+    }
+
     // 이미 그룹에 속해있는지 확인
     const collectionType = await ImageGroupModel.getCollectionType(groupId, image_id);
 
     if (collectionType === 'manual') {
-      // 이미 수동으로 추가된 이미지
-      return res.status(409).json({
-        success: false,
-        error: 'Image is already manually added to the group'
-      } as GroupResponse);
+      return res.status(409).json(errorResponse('Image is already manually added to the group'));
     } else if (collectionType === 'auto') {
       // 자동수집된 이미지를 수동으로 전환
       const converted = await ImageGroupModel.convertToManual(groupId, image_id);
       if (converted) {
-        return res.status(200).json({
-          success: true,
-          data: {
+        return res.status(200).json(
+          successResponse({
             message: 'Image converted from auto-collection to manual',
             converted: true
-          }
-        } as GroupResponse);
+          })
+        );
       }
     }
 
     // 그룹에 없는 이미지를 새로 추가
     await ImageGroupModel.addImageToGroup(groupId, image_id, 'manual', order_index);
 
-    const response: GroupResponse = {
-      success: true,
-      data: {
+    return res.status(201).json(
+      successResponse({
         message: 'Image added to group successfully',
         converted: false
-      }
-    };
-
-    return res.status(201).json(response);
+      })
+    );
   } catch (error) {
     console.error('Error adding image to group:', error);
-    const response: GroupResponse = {
-      success: false,
-      error: 'Failed to add image to group'
-    };
-    return res.status(500).json(response);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to add image to group';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
   }
 }));
 
 /**
  * 여러 이미지를 그룹에 수동 추가
  * POST /api/groups/:id/images/bulk
- * - 자동수집된 이미지를 수동으로 추가하면 collection_type이 'manual'로 변경됨
- * - 이후 자동수집 조건 변경 시에도 해당 이미지들은 그룹에 유지됨
  */
 router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response) => {
-  const groupId = parseInt(req.params.id);
-  const { image_ids } = req.body;
-
-  if (isNaN(groupId) || !image_ids || !Array.isArray(image_ids) || image_ids.length === 0) {
-    return res.status(400).json({
-      success: false,
-      error: 'Group ID and image IDs array are required'
-    } as GroupResponse);
-  }
-
   try {
+    const groupId = validateId(req.params.id, 'Group ID');
+    const { image_ids } = req.body;
+
+    if (!image_ids || !Array.isArray(image_ids) || image_ids.length === 0) {
+      return res.status(400).json(errorResponse('Image IDs array is required'));
+    }
+
     let addedCount = 0;
     let convertedCount = 0;
     let skippedCount = 0;
@@ -464,11 +353,9 @@ router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response)
         const collectionType = await ImageGroupModel.getCollectionType(groupId, imageId);
 
         if (collectionType === 'manual') {
-          // 이미 수동으로 추가된 이미지
           skippedCount++;
           continue;
         } else if (collectionType === 'auto') {
-          // 자동수집된 이미지를 수동으로 전환
           const converted = await ImageGroupModel.convertToManual(groupId, imageId);
           if (converted) {
             convertedCount++;
@@ -484,25 +371,20 @@ router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response)
       }
     }
 
-    const response: GroupResponse = {
-      success: true,
-      data: {
+    return res.status(201).json(
+      successResponse({
         message: `Bulk add completed: ${addedCount} added, ${convertedCount} converted, ${skippedCount} skipped`,
         added_count: addedCount,
         converted_count: convertedCount,
         skipped_count: skippedCount,
         errors: errors.length > 0 ? errors : undefined
-      }
-    };
-
-    return res.status(201).json(response);
+      })
+    );
   } catch (error) {
     console.error('Error bulk adding images to group:', error);
-    const response: GroupResponse = {
-      success: false,
-      error: 'Failed to bulk add images to group'
-    };
-    return res.status(500).json(response);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to bulk add images to group';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
   }
 }));
 
@@ -511,41 +393,22 @@ router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response)
  * DELETE /api/groups/:id/images/:imageId
  */
 router.delete('/:id/images/:imageId', asyncHandler(async (req: Request, res: Response) => {
-  const groupId = parseInt(req.params.id);
-  const imageId = parseInt(req.params.imageId);
-
-  if (isNaN(groupId) || isNaN(imageId)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid group ID or image ID'
-    } as GroupResponse);
-  }
-
   try {
+    const groupId = validateId(req.params.id, 'Group ID');
+    const imageId = validateId(req.params.imageId, 'Image ID');
+
     const removed = await ImageGroupModel.removeImageFromGroup(groupId, imageId);
 
     if (!removed) {
-      return res.status(404).json({
-        success: false,
-        error: 'Image not found in group'
-      } as GroupResponse);
+      return res.status(404).json(errorResponse('Image not found in group'));
     }
 
-    const response: GroupResponse = {
-      success: true,
-      data: {
-        message: 'Image removed from group successfully'
-      }
-    };
-
-    return res.json(response);
+    return res.json(successResponse({ message: 'Image removed from group successfully' }));
   } catch (error) {
     console.error('Error removing image from group:', error);
-    const response: GroupResponse = {
-      success: false,
-      error: 'Failed to remove image from group'
-    };
-    return res.status(500).json(response);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to remove image from group';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
   }
 }));
 
@@ -554,31 +417,17 @@ router.delete('/:id/images/:imageId', asyncHandler(async (req: Request, res: Res
  * POST /api/groups/:id/auto-collect
  */
 router.post('/:id/auto-collect', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
-
-  if (isNaN(id)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid group ID'
-    } as GroupResponse);
-  }
-
   try {
+    const id = validateId(req.params.id, 'Group ID');
+
     const result = await AutoCollectionService.runAutoCollectionForGroup(id);
 
-    const response: GroupResponse = {
-      success: true,
-      data: result
-    };
-
-    return res.json(response);
+    return res.json(successResponse(result));
   } catch (error) {
     console.error('Error running auto collection:', error);
-    const response: GroupResponse = {
-      success: false,
-      error: (error as Error).message || 'Failed to run auto collection'
-    };
-    return res.status(500).json(response);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to run auto collection';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
   }
 }));
 
@@ -590,24 +439,17 @@ router.post('/auto-collect-all', asyncHandler(async (req: Request, res: Response
   try {
     const results = await AutoCollectionService.runAutoCollectionForAllGroups();
 
-    const response: GroupResponse = {
-      success: true,
-      data: {
+    return res.json(
+      successResponse({
         results,
         total_groups: results.length,
         total_images_added: results.reduce((sum, r) => sum + r.images_added, 0),
         total_images_removed: results.reduce((sum, r) => sum + r.images_removed, 0)
-      }
-    };
-
-    return res.json(response);
+      })
+    );
   } catch (error) {
     console.error('Error running auto collection for all groups:', error);
-    const response: GroupResponse = {
-      success: false,
-      error: 'Failed to run auto collection for all groups'
-    };
-    return res.status(500).json(response);
+    return res.status(500).json(errorResponse('Failed to run auto collection for all groups'));
   }
 }));
 

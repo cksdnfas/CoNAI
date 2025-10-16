@@ -1,7 +1,10 @@
 import { db } from '../database/init';
 import { PromptCollectionModel } from '../models/PromptCollection';
-import { PromptCollectionRecord, NegativePromptCollectionRecord } from '../types/promptCollection';
-import { normalizeSearchTerm } from '../utils/promptParser';
+import {
+  PromptCollectionRecord,
+  NegativePromptCollectionRecord,
+  normalizeSearchTerm
+} from '@comfyui-image-manager/shared';
 
 export class SynonymService {
   /**

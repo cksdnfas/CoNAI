@@ -1,8 +1,12 @@
 import { PromptCollectionModel } from '../models/PromptCollection';
 import { SynonymService } from './synonymService';
 import { PromptGroupService } from './promptGroupService';
-import { parsePromptTerms, normalizeSearchTerm } from '../utils/promptParser';
-import { PromptSearchResult, PromptStatistics } from '../types/promptCollection';
+import {
+  parsePromptTerms,
+  normalizeSearchTerm,
+  PromptSearchResult,
+  PromptStatistics
+} from '@comfyui-image-manager/shared';
 
 export class PromptCollectionService {
   /**

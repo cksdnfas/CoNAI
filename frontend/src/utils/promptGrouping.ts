@@ -3,7 +3,7 @@
  * 현재 프롬프트를 그룹별로 분류하는 로직
  */
 
-import { parsePromptTerms } from './promptParser';
+import { parsePromptTerms } from '@comfyui-image-manager/shared';
 import { API_BASE_URL } from '../services/api';
 
 export interface PromptGroup {

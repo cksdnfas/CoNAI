@@ -1,7 +1,7 @@
 import { GroupModel, ImageGroupModel } from '../models/Group';
 import { ImageModel } from '../models/Image';
-import { GroupRecord, AutoCollectCondition, AutoCollectResult } from '../types/group';
-import { ImageRecord } from '../types/image';
+import { GroupRecord, AutoCollectCondition, AutoCollectResult } from '@comfyui-image-manager/shared';
+import { ImageRecord } from '@comfyui-image-manager/shared';
 import { AutoTagSearchService } from './autoTagSearchService';
 import { AutoTagSearchParams } from '../types/autoTag';
 

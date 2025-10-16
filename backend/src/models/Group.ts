@@ -1,5 +1,5 @@
 import { db } from '../database/init';
-import { GroupRecord, ImageGroupRecord, GroupCreateData, GroupUpdateData, GroupWithStats, AutoCollectCondition } from '../types/group';
+import { GroupRecord, ImageGroupRecord, GroupCreateData, GroupUpdateData, GroupWithStats, AutoCollectCondition } from '@comfyui-image-manager/shared';
 
 export class GroupModel {
   /**

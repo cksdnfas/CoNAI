@@ -25,7 +25,7 @@ import {
 } from '@mui/icons-material';
 
 import { groupApi } from '../../../services/api';
-import type { GroupWithStats, GroupCreateData, GroupUpdateData, AutoCollectCondition } from '../../../types/group';
+import type { GroupWithStats, GroupCreateData, GroupUpdateData, AutoCollectCondition } from '@comfyui-image-manager/shared';
 
 interface GroupCreateEditModalProps {
   open: boolean;

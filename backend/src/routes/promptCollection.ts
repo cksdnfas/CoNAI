@@ -1,6 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { PromptCollectionService } from '../services/promptCollectionService';
-import { PromptCollectionResponse } from '../types/promptCollection';
+import {
+  PromptCollectionResponse,
+  successResponse,
+  errorResponse,
+  paginatedResponse,
+  PAGINATION,
+  validateId
+} from '@comfyui-image-manager/shared';
 
 const router = Router();
 
@@ -35,13 +42,8 @@ router.get('/search', async (req: Request, res: Response) => {
       groupId
     );
 
-    const response: PromptCollectionResponse = {
-      success: true,
-      data: result.prompts
-    };
-
-    res.json({
-      ...response,
+    return res.json({
+      ...successResponse(result.prompts),
       group_info: result.group_info,
       pagination: {
         page: parseInt(page as string),
@@ -50,14 +52,9 @@ router.get('/search', async (req: Request, res: Response) => {
         totalPages: Math.ceil(result.total / parseInt(limit as string))
       }
     });
-    return;
   } catch (error) {
     console.error('Error in prompt search:', error);
-    const response: PromptCollectionResponse = {
-      success: false,
-      error: 'Failed to search prompts'
-    };
-    return res.status(500).json(response);
+    return res.status(500).json(errorResponse('Failed to search prompts'));
   }
 });
 
@@ -70,11 +67,7 @@ router.get('/search-synonyms', async (req: Request, res: Response) => {
     const { q: query, type = 'positive' } = req.query;
 
     if (!query) {
-      const response: PromptCollectionResponse = {
-        success: false,
-        error: 'Query parameter is required'
-      };
-      return res.status(400).json(response);
+      return res.status(400).json(errorResponse('Query parameter is required'));
     }
 
     const result = await PromptCollectionService.searchInSynonymGroup(
@@ -82,20 +75,10 @@ router.get('/search-synonyms', async (req: Request, res: Response) => {
       type as 'positive' | 'negative'
     );
 
-    const response: PromptCollectionResponse = {
-      success: true,
-      data: result
-    };
-
-    return res.json(response);
-
+    return res.json(successResponse(result));
   } catch (error) {
     console.error('Error in synonym search:', error);
-    const response: PromptCollectionResponse = {
-      success: false,
-      error: 'Failed to search in synonym group'
-    };
-    return res.status(500).json(response);
+    return res.status(500).json(errorResponse('Failed to search in synonym group'));
   }
 });
 
@@ -106,21 +89,10 @@ router.get('/search-synonyms', async (req: Request, res: Response) => {
 router.get('/statistics', async (req: Request, res: Response) => {
   try {
     const statistics = await PromptCollectionService.getStatistics();
-
-    const response: PromptCollectionResponse = {
-      success: true,
-      data: statistics
-    };
-
-    return res.json(response);
-
+    return res.json(successResponse(statistics));
   } catch (error) {
     console.error('Error getting statistics:', error);
-    const response: PromptCollectionResponse = {
-      success: false,
-      error: 'Failed to get statistics'
-    };
-    return res.status(500).json(response);
+    return res.status(500).json(errorResponse('Failed to get statistics'));
   }
 });
 
@@ -131,7 +103,7 @@ router.get('/statistics', async (req: Request, res: Response) => {
 router.get('/top', async (req: Request, res: Response) => {
   try {
     const {
-      limit = '20',
+      limit = String(PAGINATION.GROUP_IMAGES_LIMIT),
       type = 'both'
     } = req.query;
 
@@ -140,20 +112,10 @@ router.get('/top', async (req: Request, res: Response) => {
       type as 'positive' | 'negative' | 'both'
     );
 
-    const response: PromptCollectionResponse = {
-      success: true,
-      data: result
-    };
-
-    return res.json(response);
-
+    return res.json(successResponse(result));
   } catch (error) {
     console.error('Error getting top prompts:', error);
-    const response: PromptCollectionResponse = {
-      success: false,
-      error: 'Failed to get top prompts'
-    };
-    return res.status(500).json(response);
+    return res.status(500).json(errorResponse('Failed to get top prompts'));
   }
 });
 
@@ -163,28 +125,20 @@ router.get('/top', async (req: Request, res: Response) => {
  */
 router.get('/group/:groupId', async (req: Request, res: Response) => {
   try {
-    const { groupId } = req.params;
+    const groupId = validateId(req.params.groupId, 'Group ID');
     const { type = 'positive' } = req.query;
 
     const result = await PromptCollectionService.getGroupPrompts(
-      parseInt(groupId),
+      groupId,
       type as 'positive' | 'negative'
     );
 
-    const response: PromptCollectionResponse = {
-      success: true,
-      data: result
-    };
-
-    return res.json(response);
-
+    return res.json(successResponse(result));
   } catch (error) {
     console.error('Error getting group prompts:', error);
-    const response: PromptCollectionResponse = {
-      success: false,
-      error: 'Failed to get group prompts'
-    };
-    return res.status(500).json(response);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get group prompts';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
   }
 });
 
@@ -197,11 +151,7 @@ router.post('/synonyms', async (req: Request, res: Response) => {
     const { mainPrompt, synonyms, type = 'positive' } = req.body;
 
     if (!mainPrompt || !Array.isArray(synonyms)) {
-      const response: PromptCollectionResponse = {
-        success: false,
-        error: 'mainPrompt and synonyms array are required'
-      };
-      return res.status(400).json(response);
+      return res.status(400).json(errorResponse('mainPrompt and synonyms array are required'));
     }
 
     const result = await PromptCollectionService.setSynonyms(
@@ -210,24 +160,14 @@ router.post('/synonyms', async (req: Request, res: Response) => {
       type
     );
 
-    const response: PromptCollectionResponse = {
-      success: true,
-      data: {
-        message: `Successfully set synonyms. Merged ${result.mergedCount} existing prompts.`,
-        mainPromptId: result.mainPromptId,
-        mergedCount: result.mergedCount
-      }
-    };
-
-    return res.json(response);
-
+    return res.json(successResponse({
+      message: `Successfully set synonyms. Merged ${result.mergedCount} existing prompts.`,
+      mainPromptId: result.mainPromptId,
+      mergedCount: result.mergedCount
+    }));
   } catch (error) {
     console.error('Error setting synonyms:', error);
-    const response: PromptCollectionResponse = {
-      success: false,
-      error: 'Failed to set synonyms'
-    };
-    return res.status(500).json(response);
+    return res.status(500).json(errorResponse('Failed to set synonyms'));
   }
 });
 
@@ -237,40 +177,28 @@ router.post('/synonyms', async (req: Request, res: Response) => {
  */
 router.delete('/synonyms/:promptId', async (req: Request, res: Response) => {
   try {
-    const { promptId } = req.params;
+    const promptId = validateId(req.params.promptId, 'Prompt ID');
     const { synonym, type = 'positive' } = req.body;
 
     if (!synonym) {
-      const response: PromptCollectionResponse = {
-        success: false,
-        error: 'synonym is required'
-      };
-      return res.status(400).json(response);
+      return res.status(400).json(errorResponse('synonym is required'));
     }
 
     const result = await PromptCollectionService.removeSynonym(
-      parseInt(promptId),
+      promptId,
       synonym,
       type
     );
 
-    const response: PromptCollectionResponse = {
-      success: true,
-      data: {
-        message: result ? 'Synonym removed successfully' : 'Synonym not found',
-        removed: result
-      }
-    };
-
-    return res.json(response);
-
+    return res.json(successResponse({
+      message: result ? 'Synonym removed successfully' : 'Synonym not found',
+      removed: result
+    }));
   } catch (error) {
     console.error('Error removing synonym:', error);
-    const response: PromptCollectionResponse = {
-      success: false,
-      error: 'Failed to remove synonym'
-    };
-    return res.status(500).json(response);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to remove synonym';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
   }
 });
 
@@ -280,31 +208,23 @@ router.delete('/synonyms/:promptId', async (req: Request, res: Response) => {
  */
 router.delete('/:promptId', async (req: Request, res: Response) => {
   try {
-    const { promptId } = req.params;
+    const promptId = validateId(req.params.promptId, 'Prompt ID');
     const { type = 'positive' } = req.query;
 
     const result = await PromptCollectionService.deletePrompt(
-      parseInt(promptId),
+      promptId,
       type as 'positive' | 'negative'
     );
 
-    const response: PromptCollectionResponse = {
-      success: true,
-      data: {
-        message: result ? 'Prompt deleted successfully' : 'Prompt not found',
-        deleted: result
-      }
-    };
-
-    return res.json(response);
-
+    return res.json(successResponse({
+      message: result ? 'Prompt deleted successfully' : 'Prompt not found',
+      deleted: result
+    }));
   } catch (error) {
     console.error('Error deleting prompt:', error);
-    const response: PromptCollectionResponse = {
-      success: false,
-      error: 'Failed to delete prompt'
-    };
-    return res.status(500).json(response);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete prompt';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
   }
 });
 
@@ -317,11 +237,7 @@ router.put('/group', async (req: Request, res: Response) => {
     const { promptId, groupId, type = 'positive' } = req.body;
 
     if (!promptId) {
-      const response: PromptCollectionResponse = {
-        success: false,
-        error: 'promptId is required'
-      };
-      return res.status(400).json(response);
+      return res.status(400).json(errorResponse('promptId is required'));
     }
 
     const result = await PromptCollectionService.setGroupId(
@@ -330,23 +246,13 @@ router.put('/group', async (req: Request, res: Response) => {
       type
     );
 
-    const response: PromptCollectionResponse = {
-      success: true,
-      data: {
-        message: result ? 'Group ID set successfully' : 'Prompt not found',
-        updated: result
-      }
-    };
-
-    return res.json(response);
-
+    return res.json(successResponse({
+      message: result ? 'Group ID set successfully' : 'Prompt not found',
+      updated: result
+    }));
   } catch (error) {
     console.error('Error setting group ID:', error);
-    const response: PromptCollectionResponse = {
-      success: false,
-      error: 'Failed to set group ID'
-    };
-    return res.status(500).json(response);
+    return res.status(500).json(errorResponse('Failed to set group ID'));
   }
 });
 
@@ -360,22 +266,12 @@ router.post('/collect', async (req: Request, res: Response) => {
 
     await PromptCollectionService.collectFromImage(prompt, negativePrompt);
 
-    const response: PromptCollectionResponse = {
-      success: true,
-      data: {
-        message: 'Prompts collected successfully'
-      }
-    };
-
-    return res.json(response);
-
+    return res.json(successResponse({
+      message: 'Prompts collected successfully'
+    }));
   } catch (error) {
     console.error('Error collecting prompts:', error);
-    const response: PromptCollectionResponse = {
-      success: false,
-      error: 'Failed to collect prompts'
-    };
-    return res.status(500).json(response);
+    return res.status(500).json(errorResponse('Failed to collect prompts'));
   }
 });
 
@@ -388,11 +284,7 @@ router.put('/assign-group', async (req: Request, res: Response) => {
     const { prompt_id, group_id, type = 'positive' } = req.body;
 
     if (!prompt_id) {
-      const response: PromptCollectionResponse = {
-        success: false,
-        error: 'prompt_id is required'
-      };
-      return res.status(400).json(response);
+      return res.status(400).json(errorResponse('prompt_id is required'));
     }
 
     const result = await PromptCollectionService.assignPromptToGroup(
@@ -401,23 +293,13 @@ router.put('/assign-group', async (req: Request, res: Response) => {
       type
     );
 
-    const response: PromptCollectionResponse = {
-      success: true,
-      data: {
-        message: result ? 'Prompt assigned to group successfully' : 'Prompt not found',
-        assigned: result
-      }
-    };
-
-    return res.json(response);
-
+    return res.json(successResponse({
+      message: result ? 'Prompt assigned to group successfully' : 'Prompt not found',
+      assigned: result
+    }));
   } catch (error) {
     console.error('Error assigning prompt to group:', error);
-    const response: PromptCollectionResponse = {
-      success: false,
-      error: 'Failed to assign prompt to group'
-    };
-    return res.status(500).json(response);
+    return res.status(500).json(errorResponse('Failed to assign prompt to group'));
   }
 });
 
@@ -431,20 +313,10 @@ router.get('/group-statistics', async (req: Request, res: Response) => {
 
     const statistics = await PromptCollectionService.getGroupStatistics(type as 'positive' | 'negative');
 
-    const response: PromptCollectionResponse = {
-      success: true,
-      data: statistics
-    };
-
-    return res.json(response);
-
+    return res.json(successResponse(statistics));
   } catch (error) {
     console.error('Error getting group statistics:', error);
-    const response: PromptCollectionResponse = {
-      success: false,
-      error: 'Failed to get group statistics'
-    };
-    return res.status(500).json(response);
+    return res.status(500).json(errorResponse('Failed to get group statistics'));
   }
 });
 

@@ -20,7 +20,7 @@ import {
 } from '@mui/icons-material';
 import { Alert } from '@mui/material';
 import { groupApi } from '../../services/api';
-import type { GroupWithStats } from '../../types/group';
+import type { GroupWithStats } from '@comfyui-image-manager/shared';
 
 interface GroupAssignModalProps {
   open: boolean;

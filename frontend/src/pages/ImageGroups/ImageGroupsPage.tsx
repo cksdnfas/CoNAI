@@ -27,7 +27,7 @@ import {
 } from '@mui/icons-material';
 
 import { groupApi } from '../../services/api';
-import type { GroupWithStats } from '../../types/group';
+import type { GroupWithStats } from '@comfyui-image-manager/shared';
 import type { ImageRecord, PageSize } from '../../types/image';
 import GroupCreateEditModal from './components/GroupCreateEditModal';
 import GroupImageGridModal from './components/GroupImageGridModal';

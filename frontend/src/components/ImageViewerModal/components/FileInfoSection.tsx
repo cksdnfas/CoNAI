@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Box, Typography, IconButton, Collapse } from '@mui/material';
 import { ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon } from '@mui/icons-material';
 import type { ImageRecord } from '../../../types/image';
-import { formatFileSize, formatDate, truncateFilename } from '../utils/formatters';
+import { formatFileSize, formatDate, truncateFilename } from '@comfyui-image-manager/shared';
 
 interface FileInfoSectionProps {
   image: ImageRecord;

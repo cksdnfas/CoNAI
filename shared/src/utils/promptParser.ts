@@ -1,6 +1,9 @@
 /**
- * 프롬프트 파싱 유틸리티
- * 가중치 제거, 프롬프트 정리, 동의어 처리 등을 담당
+ * Prompt parsing utilities
+ * Handles weight removal, prompt cleaning, and term parsing
+ *
+ * This module is shared between backend and frontend to ensure consistent
+ * prompt parsing behavior across the entire application.
  */
 
 export interface ParsedPrompt {
@@ -10,21 +13,22 @@ export interface ParsedPrompt {
 }
 
 /**
- * 프롬프트에서 가중치를 제거하고 정리하는 함수
- * (대한민국:1.2) -> 대한민국
- * (대한민국:0.5) -> 대한민국
- * 하루노 사쿠라(나루토) -> 하루노 사쿠라(나루토) (변화 없음)
+ * Remove weights from prompt and clean it up
+ * Examples:
+ *   (대한민국:1.2) -> 대한민국
+ *   (대한민국:0.5) -> 대한민국
+ *   하루노 사쿠라(나루토) -> 하루노 사쿠라(나루토) (no change)
  */
 export const removeWeights = (prompt: string): string => {
   if (!prompt) return '';
 
-  // 가중치 패턴: (텍스트:숫자) 형태를 찾아서 (텍스트)로 변경
-  // 단, 가중치가 아닌 일반 괄호는 그대로 유지
+  // Weight pattern: find (text:number) format and convert to just text
+  // Preserve regular parentheses that are not weights
   return prompt.replace(/\(([^:)]+):[+-]?[\d.]+\)/g, '$1');
 };
 
 /**
- * 프롬프트를 쉼표로 분리하고 각 항목을 정리하는 함수
+ * Split prompt by comma and clean each term
  */
 export const parsePromptTerms = (prompt: string): string[] => {
   if (!prompt) return [];
@@ -37,7 +41,7 @@ export const parsePromptTerms = (prompt: string): string[] => {
 };
 
 /**
- * 전체 프롬프트를 파싱하는 메인 함수
+ * Main function to parse a complete prompt
  */
 export const parsePrompt = (prompt: string): ParsedPrompt => {
   const cleaned = removeWeights(prompt);
@@ -51,16 +55,16 @@ export const parsePrompt = (prompt: string): ParsedPrompt => {
 };
 
 /**
- * 검색용 프롬프트 정리 함수
- * 검색 시에도 동일한 기준으로 가중치를 제거
+ * Normalize search term for consistent search behavior
+ * Removes weights for search matching
  */
 export const normalizeSearchTerm = (searchTerm: string): string => {
   return removeWeights(searchTerm.trim());
 };
 
 /**
- * 두 프롬프트가 동일한지 비교하는 함수
- * 가중치를 제거한 후 비교
+ * Compare two prompts for equality
+ * Removes weights before comparison
  */
 export const comparePrompts = (prompt1: string, prompt2: string): boolean => {
   const normalized1 = normalizeSearchTerm(prompt1);
@@ -69,7 +73,8 @@ export const comparePrompts = (prompt1: string, prompt2: string): boolean => {
 };
 
 /**
- * 프롬프트 배열에서 중복을 제거하는 함수
+ * Remove duplicates from prompt array
+ * Uses normalized comparison (weight-free, case-insensitive)
  */
 export const deduplicatePrompts = (prompts: string[]): string[] => {
   const seen = new Set<string>();

@@ -4,7 +4,7 @@ import {
   NegativePromptCollectionRecord,
   PromptCollectionData,
   PromptSearchResult
-} from '../types/promptCollection';
+} from '@comfyui-image-manager/shared';
 
 export class PromptCollectionModel {
   /**

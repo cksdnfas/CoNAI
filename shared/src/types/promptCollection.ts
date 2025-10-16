@@ -1,5 +1,6 @@
 /**
- * 프롬프트 수집 관련 타입 정의
+ * Prompt collection related type definitions
+ * Shared between backend and frontend
  */
 
 export interface PromptCollectionRecord {
@@ -7,7 +8,7 @@ export interface PromptCollectionRecord {
   prompt: string;
   usage_count: number;
   group_id: number | null;
-  synonyms: string | null; // JSON 배열 문자열
+  synonyms: string | null; // JSON array string
   created_at: string;
   updated_at: string;
 }
@@ -17,7 +18,7 @@ export interface NegativePromptCollectionRecord {
   prompt: string;
   usage_count: number;
   group_id: number | null;
-  synonyms: string | null; // JSON 배열 문자열
+  synonyms: string | null; // JSON array string
   created_at: string;
   updated_at: string;
 }

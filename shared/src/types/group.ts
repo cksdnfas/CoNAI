@@ -1,3 +1,8 @@
+/**
+ * Group-related type definitions
+ * Shared between backend and frontend
+ */
+
 export interface GroupRecord {
   id: number;
   name: string;
@@ -7,7 +12,7 @@ export interface GroupRecord {
   created_date: string;
   updated_date: string;
 
-  // 자동수집 관련 필드
+  // Auto-collection fields
   auto_collect_enabled: boolean;
   auto_collect_conditions?: string;
   auto_collect_last_run?: string;
@@ -20,7 +25,7 @@ export interface ImageGroupRecord {
   added_date: string;
   order_index: number;
 
-  // 자동수집 구분 필드
+  // Auto-collection type field
   collection_type: 'manual' | 'auto';
   auto_collected_date?: string;
 }
@@ -29,18 +34,18 @@ export interface AutoCollectCondition {
   type: 'prompt_contains' | 'prompt_regex' |
         'negative_prompt_contains' | 'negative_prompt_regex' |
         'ai_tool' | 'model_name' |
-        // 오토태그 관련 조건
+        // Auto-tag related conditions
         'auto_tag_rating' | 'auto_tag_general' |
         'auto_tag_character' | 'auto_tag_model' |
         'auto_tag_has_character' | 'auto_tag_exists' |
-        'auto_tag_rating_score';  // 가중치 기반 rating 점수 조건
+        'auto_tag_rating_score';  // Weighted rating score condition
   value: string | number | boolean;
   case_sensitive?: boolean;
 
-  // 오토태그용 추가 필드
-  min_score?: number;  // 최소 점수 (rating: 0.0 ~ 1.0, rating_score: 가중치 적용 후 점수)
-  max_score?: number;  // 최대 점수 (rating: 0.0 ~ 1.0, rating_score: 가중치 적용 후 점수)
-  rating_type?: 'general' | 'sensitive' | 'questionable' | 'explicit';  // rating 조건용
+  // Auto-tag additional fields
+  min_score?: number;  // Min score (rating: 0.0 ~ 1.0, rating_score: weighted score)
+  max_score?: number;  // Max score (rating: 0.0 ~ 1.0, rating_score: weighted score)
+  rating_type?: 'general' | 'sensitive' | 'questionable' | 'explicit';  // For rating condition
 }
 
 export interface GroupCreateData {

@@ -30,10 +30,11 @@ import { comfyuiServerRoutes } from './routes/comfyuiServers';
 import { initializeDatabase } from './database/init';
 import { errorHandler } from './middleware/errorHandler';
 import { imageTaggerService } from './services/imageTaggerService';
+import { PORTS, IMAGE_PROCESSING } from '@comfyui-image-manager/shared';
 import { settingsService } from './services/settingsService';
 
 const app = express();
-const PORT = process.env.PORT || 1566;
+const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;
 
 // Rate limiting (개발 환경에서는 더 관대하게 설정)
 const limiter = rateLimit({
@@ -83,8 +84,8 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json({ limit: '50mb', strict: false }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: `${IMAGE_PROCESSING.MAX_FILE_SIZE_MB}mb`, strict: false }));
+app.use(express.urlencoded({ extended: true, limit: `${IMAGE_PROCESSING.MAX_FILE_SIZE_MB}mb` }));
 
 // .env 파일 자동 생성
 const createEnvFileIfNotExists = () => {

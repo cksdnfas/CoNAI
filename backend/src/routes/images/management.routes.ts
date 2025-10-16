@@ -4,6 +4,7 @@ import { ImageProcessor } from '../../services/imageProcessor';
 import { ImageModel } from '../../models/Image';
 import { PromptCollectionService } from '../../services/promptCollectionService';
 import { runtimePaths } from '../../config/runtimePaths';
+import { validateId, successResponse, errorResponse } from '@comfyui-image-manager/shared';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
@@ -12,24 +13,14 @@ const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
  * 이미지 삭제
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
-
-  if (isNaN(id)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid image ID'
-    });
-  }
-
   try {
+    const id = validateId(req.params.id, 'Image ID');
+
     // 이미지 정보 조회
     const image = await ImageModel.findById(id);
 
     if (!image) {
-      return res.status(404).json({
-        success: false,
-        error: 'Image not found'
-      });
+      return res.status(404).json(errorResponse('Image not found'));
     }
 
     // 프롬프트 사용 횟수 감산 (비동기로 처리, 오류가 있어도 삭제는 계속 진행)
@@ -68,24 +59,15 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     const deleted = await ImageModel.delete(id);
 
     if (deleted) {
-      res.json({
-        success: true,
-        message: 'Image deleted successfully'
-      });
+      return res.json(successResponse({ message: 'Image deleted successfully' }));
     } else {
-      res.status(500).json({
-        success: false,
-        error: 'Failed to delete image from database'
-      });
+      return res.status(500).json(errorResponse('Failed to delete image from database'));
     }
-    return;
   } catch (error) {
     console.error('Delete image error:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to delete image'
-    });
-    return;
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete image';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
   }
 }));
 

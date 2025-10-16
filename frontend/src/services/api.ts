@@ -8,7 +8,7 @@ import type {
   GroupCreateData,
   GroupUpdateData,
   AutoCollectResult
-} from '../types/group';
+} from '@comfyui-image-manager/shared';
 import type {
   PromptCollectionResponse,
   PromptGroupRecord,

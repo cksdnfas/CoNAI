@@ -19,7 +19,7 @@ import {
   DriveFileMove as MoveIcon,
 } from '@mui/icons-material';
 import type { ImageRecord, PageSize } from '../../../types/image';
-import type { GroupWithStats } from '../../../types/group';
+import type { GroupWithStats } from '@comfyui-image-manager/shared';
 import ImageGrid from '../../../components/ImageGrid/ImageGrid';
 import GroupAssignModal from '../../../components/GroupAssignModal';
 
