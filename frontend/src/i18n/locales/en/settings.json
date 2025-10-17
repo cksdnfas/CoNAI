@@ -1,0 +1,50 @@
+{
+  "title": "Settings",
+  "subtitle": "Manage your ComfyUI Image Manager application settings",
+  "tabs": {
+    "general": "General Settings",
+    "tagger": "Tagger Settings",
+    "rating": "Rating Score Settings",
+    "similarity": "Image Similarity Search",
+    "prompts": "Prompt Management",
+    "advanced": "Advanced Settings"
+  },
+  "general": {
+    "title": "General Settings",
+    "language": {
+      "label": "Language",
+      "description": "Select the application display language",
+      "ko": "한국어",
+      "en": "English",
+      "ja": "日本語",
+      "zh-CN": "简体中文",
+      "zh-TW": "繁體中文"
+    }
+  },
+  "tagger": {
+    "title": "WD Tagger Settings",
+    "enabled": "Enable Tagger",
+    "model": "Model Selection",
+    "device": "Device",
+    "generalThreshold": "General Tag Threshold",
+    "characterThreshold": "Character Tag Threshold",
+    "pythonPath": "Python Path",
+    "autoTagOnUpload": "Auto-tag on Upload",
+    "keepModelLoaded": "Keep Model in Memory",
+    "autoUnloadMinutes": "Auto-unload Time (minutes)"
+  },
+  "rating": {
+    "title": "Rating Score Settings",
+    "description": "Configure the image rating score system"
+  },
+  "similarity": {
+    "title": "Image Similarity Search Settings",
+    "autoGenerateHash": "Auto-generate Hash on Upload",
+    "description": "Automatically generate hashes for similar image search"
+  },
+  "messages": {
+    "saveSuccess": "Settings saved successfully",
+    "saveFailed": "Failed to save settings",
+    "loadFailed": "Failed to load settings"
+  }
+}

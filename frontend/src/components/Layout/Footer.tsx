@@ -1,7 +1,9 @@
 import React from 'react';
 import { Box, Typography, useTheme } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 
 const Footer: React.FC = () => {
+  const { t } = useTranslation('navigation');
   const theme = useTheme();
 
   return (
@@ -27,7 +29,7 @@ const Footer: React.FC = () => {
           fontSize: { xs: '0.75rem', sm: '0.875rem' },
         }}
       >
-        © 2024 ComfyUI Image Manager. All rights reserved.
+        {t('footer.copyright')}
       </Typography>
     </Box>
   );

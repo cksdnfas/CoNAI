@@ -1,0 +1,86 @@
+{
+  "page": {
+    "title": "이미지 상세 정보",
+    "notFound": "이미지를 찾을 수 없습니다.",
+    "errorLoading": "이미지를 불러오는 중 오류가 발생했습니다.",
+    "noIdProvided": "이미지 ID가 제공되지 않았습니다."
+  },
+  "actions": {
+    "download": "다운로드",
+    "share": "공유",
+    "back": "뒤로",
+    "goToDetail": "상세 페이지"
+  },
+  "sections": {
+    "fileInfo": "파일 정보",
+    "imageInfo": "이미지 정보",
+    "videoInfo": "비디오 정보",
+    "aiInfo": "AI 생성 정보",
+    "promptInfo": "프롬프트 정보",
+    "groupInfo": "소속 그룹",
+    "fullMetadata": "전체 메타데이터"
+  },
+  "fileInfo": {
+    "originalFilename": "원본 파일명",
+    "filename": "파일명",
+    "size": "크기",
+    "fileSize": "파일 크기",
+    "mimeType": "MIME 타입",
+    "uploadDate": "업로드 날짜"
+  },
+  "imageInfo": {
+    "dimensions": "크기",
+    "dimensionsValue": "{{width}} × {{height}}"
+  },
+  "videoInfo": {
+    "duration": "재생 시간",
+    "durationValue": "{{minutes}}분 {{seconds}}초",
+    "fps": "프레임 레이트",
+    "fpsValue": "{{fps}} fps",
+    "videoCodec": "비디오 코덱",
+    "audioCodec": "오디오 코덱",
+    "bitrate": "비트레이트",
+    "bitrateValue": "{{bitrate}} Mbps"
+  },
+  "aiInfo": {
+    "tool": "AI 도구",
+    "toolShort": "도구",
+    "model": "모델",
+    "lora": "LoRA",
+    "steps": "스텝",
+    "cfgScale": "CFG Scale",
+    "cfgShort": "CFG",
+    "sampler": "샘플러",
+    "scheduler": "스케줄러",
+    "seed": "시드",
+    "denoiseStrength": "디노이즈 강도",
+    "generationTime": "생성 시간",
+    "generationTimeValue": "{{time}}초",
+    "batchSize": "배치 크기",
+    "batchIndex": "배치 인덱스"
+  },
+  "groupInfo": {
+    "autoType": "자동",
+    "manualType": "수동",
+    "groupLabel": "{{name}} ({{type}})"
+  },
+  "viewer": {
+    "controls": {
+      "zoomIn": "확대",
+      "zoomOut": "축소",
+      "rotateLeft": "왼쪽 회전",
+      "rotateRight": "오른쪽 회전",
+      "flipHorizontal": "좌우 반전",
+      "flipVertical": "상하 반전",
+      "reset": "원본 크기로 되돌리기",
+      "info": "정보",
+      "close": "닫기"
+    },
+    "navigation": {
+      "previous": "이전 이미지 (←)",
+      "next": "다음 이미지 (→)",
+      "random": "랜덤 이미지 (Space)",
+      "currentPosition": "{{current}} / {{total}}"
+    }
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "page": {
+    "title": "Image Groups",
+    "description": "Manage images by groups and configure auto-collection rules.",
+    "emptyTitle": "No groups created yet",
+    "emptyDescription": "Create a new group to systematically manage your images."
+  },
+  "groupCard": {
+    "imageCount": "{{count}} images",
+    "autoCollect": "Auto-collect",
+    "stats": "Auto: {{auto}} | Manual: {{manual}}"
+  },
+  "menu": {
+    "edit": "Edit",
+    "delete": "Delete",
+    "runAutoCollection": "Run Auto-collection"
+  },
+  "modal": {
+    "createTitle": "Create New Group",
+    "editTitle": "Edit Group",
+    "basicInfo": "Basic Information",
+    "groupName": "Group Name",
+    "description": "Description",
+    "groupColor": "Group Color",
+    "autoCollectEnable": "Enable Auto-collection",
+    "autoCollectDescription": "Automatically add images that match the configured conditions to this group.",
+    "orConditionInfo": "OR Condition: Multiple conditions will collect images that satisfy at least one condition.",
+    "orConditionExample": "Example: \"Prompt contains 'anime'\" + \"Auto-tag has character\" → Collects if either is satisfied",
+    "conditionsTitle": "Auto-collection Conditions",
+    "addCondition": "Add Condition",
+    "conditionType": "Condition Type",
+    "conditionValue": "Value",
+    "emptyConditions": "Add conditions to configure auto-collection rules.",
+    "buttonCreate": "Create",
+    "buttonUpdate": "Update",
+    "buttonCancel": "Cancel"
+  },
+  "conditions": {
+    "groups": {
+      "basic": "Basic",
+      "prompt": "Prompt",
+      "autoTag": "Auto-tag"
+    },
+    "types": {
+      "aiTool": "AI Tool",
+      "modelName": "Model Name (Metadata)",
+      "promptContains": "Prompt Contains",
+      "promptRegex": "Prompt Regex",
+      "negativePromptContains": "Negative Prompt Contains",
+      "negativePromptRegex": "Negative Prompt Regex",
+      "autoTagExists": "Auto-tag Exists",
+      "autoTagRating": "Auto-tag: Rating",
+      "autoTagRatingScore": "Auto-tag: Rating Score (Weighted)",
+      "autoTagGeneral": "Auto-tag: General Tag",
+      "autoTagCharacter": "Auto-tag: Character",
+      "autoTagHasCharacter": "Auto-tag: Has Character",
+      "autoTagModel": "Auto-tag: Model Name"
+    },
+    "values": {
+      "exists": "Exists",
+      "notExists": "Not Exists"
+    },
+    "ratings": {
+      "general": "General",
+      "sensitive": "Sensitive",
+      "questionable": "Questionable",
+      "explicit": "Explicit"
+    },
+    "fields": {
+      "ratingType": "Rating Type",
+      "minScore": "Min Score",
+      "maxScore": "Max Score",
+      "tagName": "Tag Name",
+      "characterName": "Character Name",
+      "caseSensitive": "Case Sensitive",
+      "weightedScore": "Weighted Total Score",
+      "maxWeightInfo": "Usually up to 200",
+      "confidenceRange": "Confidence Score Range (0.0 ~ 1.0): {{min}} ~ {{max}}",
+      "confidenceInfo": "💡 Higher scores indicate higher confidence in the tag"
+    },
+    "placeholders": {
+      "regex": "Enter regex pattern",
+      "modelName": "Enter model name (e.g., wd-v1-4-moat-tagger-v2)",
+      "text": "Enter text to search",
+      "tagName": "Enter tag name",
+      "characterName": "Enter character name"
+    }
+  },
+  "validation": {
+    "nameRequired": "Please enter a group name.",
+    "conditionRequired": "At least one condition is required to enable auto-collection.",
+    "valueRequired": "Please enter a value for condition {{index}}.",
+    "ratingTypeRequired": "Condition {{index}}: Please select a rating type.",
+    "ratingScoreRequired": "Condition {{index}}: Either min score or max score must be set.",
+    "minScoreInvalid": "Condition {{index}}: Min score must be 0 or greater.",
+    "maxScoreInvalid": "Condition {{index}}: Max score must be 0 or greater.",
+    "scoreRangeInvalid": "Condition {{index}}: Min score must be less than max score.",
+    "confidenceScoreRange": "Condition {{index}}: Min score must be between 0.0 and 1.0.",
+    "confidenceMaxScoreRange": "Condition {{index}}: Max score must be between 0.0 and 1.0.",
+    "confidenceMinMaxInvalid": "Condition {{index}}: Min score cannot be greater than max score."
+  },
+  "messages": {
+    "loadFailed": "Failed to load group list.",
+    "imageLoadFailed": "Failed to load group images.",
+    "deleteSuccess": "Group has been deleted.",
+    "deleteFailed": "Failed to delete group.",
+    "autoCollectSuccess": "Auto-collection complete: {{added}} added, {{removed}} removed",
+    "autoCollectFailed": "Failed to run auto-collection.",
+    "createSuccess": "Group has been created.",
+    "createFailed": "Failed to create group.",
+    "updateSuccess": "Group has been updated.",
+    "updateFailed": "Failed to update group.",
+    "removeWarning": "No images available to remove.",
+    "removeSuccess": "{{count}} images have been removed.",
+    "removePartialSuccess": "{{removed}} images removed. {{failed}} failed.",
+    "removeError": "An error occurred while removing images.",
+    "assignSuccess": "{{added}} added, {{converted}} converted, {{skipped}} skipped",
+    "assignFailed": "Failed to assign images.",
+    "assignError": "An error occurred while assigning images."
+  },
+  "imageModal": {
+    "title": "{{name}} ({{count}} images)",
+    "selectedCount": "{{count}} selected",
+    "buttonRemove": "Remove",
+    "buttonAssign": "Assign to Group",
+    "infoMixedSelection": "Both manual and auto-collected images are selected. Only manual images can be removed, while group assignment applies to all selected images.",
+    "warningAutoOnly": "Auto-collected images cannot be removed directly from the group. Please change or disable the auto-collection conditions.",
+    "confirmRemoveTitle": "Confirm Image Removal",
+    "confirmRemoveMessage": "Remove {{count}} manually collected images from the group?",
+    "confirmRemoveNote": "The image files themselves will not be deleted."
+  },
+  "assignModal": {
+    "title": "Assign to Group",
+    "description": "Assign {{count}} selected images to a group.",
+    "currentGroup": "Current Group",
+    "emptyGroups": "No groups created",
+    "loadError": "Failed to load group list.",
+    "loadingError": "An error occurred while loading groups.",
+    "buttonAssign": "Assign",
+    "buttonCancel": "Cancel"
+  }
+}

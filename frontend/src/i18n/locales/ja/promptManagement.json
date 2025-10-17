@@ -1,0 +1,162 @@
+{
+  "title": "プロンプト管理",
+  "description": "AI生成画像から抽出されたプロンプトを管理・分析します。",
+
+  "tabs": {
+    "positive": "ポジティブ",
+    "negative": "ネガティブ"
+  },
+
+  "promptList": {
+    "search": {
+      "placeholder": "{{type}}プロンプトを検索..."
+    },
+
+    "filters": {
+      "groupFilter": {
+        "label": "グループフィルター",
+        "all": "すべて",
+        "unassigned": "未分類"
+      }
+    },
+
+    "table": {
+      "headers": {
+        "prompt": "プロンプト",
+        "usageCount": "使用回数",
+        "assignedGroup": "割り当てられたグループ",
+        "actions": "操作"
+      },
+      "empty": "プロンプトがありません。",
+      "synonyms": {
+        "more": "+{{count}}個"
+      }
+    },
+
+    "actions": {
+      "assignToGroup": "グループに割り当て",
+      "delete": "削除",
+      "cannotDelete": "使用中のプロンプトは削除できません",
+      "groupManagement": "グループ管理"
+    },
+
+    "statistics": {
+      "unclassified": "未分類",
+      "unknown": "不明"
+    },
+
+    "pagination": {
+      "rowsPerPage": "ページあたりの行数:",
+      "displayedRows": "{{from}}-{{to}} / {{count}}"
+    },
+
+    "messages": {
+      "loadFailed": "プロンプトリストの読み込みに失敗しました。",
+      "deleteSuccess": "プロンプトが削除されました。",
+      "deleteFailed": "プロンプトの削除に失敗しました。",
+      "assignSuccess": "プロンプトがグループに割り当てられました。",
+      "assignFailed": "プロンプトの割り当てに失敗しました。"
+    }
+  },
+
+  "assignDialog": {
+    "title": "グループに割り当て",
+    "selectGroup": {
+      "label": "グループを選択",
+      "unassigned": "未分類"
+    },
+    "actions": {
+      "cancel": "キャンセル",
+      "assign": "割り当て"
+    }
+  },
+
+  "groupManagement": {
+    "title": "{{type}}プロンプトグループ管理",
+
+    "editForm": {
+      "titleAdd": "新しいグループを追加",
+      "titleEdit": "グループを編集",
+      "groupName": {
+        "label": "グループ名",
+        "required": "グループ名を入力してください。"
+      },
+      "displayOrder": {
+        "label": "表示順序"
+      },
+      "visibility": {
+        "label": "表示",
+        "hidden": "非表示"
+      },
+      "actions": {
+        "save": "保存",
+        "cancel": "キャンセル"
+      }
+    },
+
+    "groupList": {
+      "title": "グループリスト ({{count}}個)",
+      "add": "グループを追加",
+      "empty": "作成されたグループがありません。",
+      "promptCount": "{{count}}個",
+      "displayOrder": "表示順序: {{order}}"
+    },
+
+    "actions": {
+      "toggleVisibility": "表示切り替え",
+      "edit": "編集",
+      "delete": "削除",
+      "deleteConfirm": "本当にこのグループを削除しますか？",
+      "close": "閉じる"
+    },
+
+    "messages": {
+      "loadFailed": "グループリストの読み込みに失敗しました。",
+      "createSuccess": "グループが作成されました。",
+      "createFailed": "グループの作成に失敗しました。",
+      "updateSuccess": "グループが更新されました。",
+      "updateFailed": "グループの更新に失敗しました。",
+      "deleteSuccess": "グループが削除されました。",
+      "deleteFailed": "グループの削除に失敗しました。",
+      "visibilityFailed": "グループ設定の変更に失敗しました。"
+    }
+  },
+
+  "promptDisplay": {
+    "tabs": {
+      "positive": "ポジティブ",
+      "negative": "ネガティブ",
+      "auto": "AUTO"
+    },
+    "labels": {
+      "prompt": "プロンプト",
+      "negativePrompt": "ネガティブプロンプト"
+    },
+    "noPrompt": "プロンプト情報がありません。",
+    "loading": "読み込み中...",
+    "loadFailed": "グループ情報の読み込みに失敗しました。",
+    "unclassified": "未分類"
+  },
+
+  "autoTagDisplay": {
+    "noTags": "この画像はまだ自動タグ付けが生成されていません。",
+    "generateButton": "タグを生成",
+    "generating": "生成中...",
+    "generationError": "タグの生成中にエラーが発生しました。",
+
+    "sections": {
+      "rating": "レーティング",
+      "characters": "キャラクター",
+      "tagList": "タグリスト",
+      "generalTags": "一般タグ ({{count}}個)",
+      "modelInfo": "モデル情報"
+    },
+
+    "modelInfo": {
+      "model": "モデル",
+      "generalThreshold": "一般",
+      "characterThreshold": "キャラクター",
+      "taggedAt": "タグ付け日時"
+    }
+  }
+}

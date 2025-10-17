@@ -1,34 +1,32 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Development guide for Claude Code when working with this repository.
 
 ## Project Overview
 
-ComfyUI Image Manager is a React-based image viewer and manager for ComfyUI, featuring a Node.js/TypeScript backend with Express.js and SQLite. The project is structured as a monorepo with separate backend and frontend workspaces.
-
-**Note**: This appears to be a backend-only implementation currently - the frontend workspace is referenced in package.json but not present in the codebase.
+ComfyUI Image Manager is a personal AI image management service with a React frontend and Node.js/TypeScript backend. The project uses a monorepo structure with separate backend and frontend workspaces.
 
 ## Development Commands
 
 ### Initial Setup
 ```bash
 npm run setup                    # Auto-create directories and .env files
-npm run install:all             # Install all dependencies (root, backend, frontend)
+npm run install:all             # Install all dependencies
 ```
 
 ### Development
 ```bash
-npm run dev                     # Start both backend and frontend concurrently
-npm run dev:backend             # Start backend only (PORT 1566)
-npm run dev:frontend            # Start frontend only (referenced but not implemented)
+npm run dev                     # Start backend + frontend concurrently
+npm run dev:backend             # Start backend only (port 1566)
+npm run dev:frontend            # Start frontend only
 ```
 
 ### Build & Production
 ```bash
-npm run build                   # Build both backend and frontend
+npm run build                   # Build backend + frontend
 npm run build:backend           # TypeScript compilation (tsc)
-npm run start                   # Start production servers
-npm run start:backend           # Start built backend (node dist/index.js)
+npm run build:frontend          # Vite build
+npm run build:full              # Integrated + bundle + portable package
 ```
 
 ### Database Management
@@ -42,35 +40,35 @@ cd backend && npm run db:migrate # Run database migrations manually
 npm run clean                   # Remove all dist and node_modules folders
 ```
 
-## Architecture Overview
+## Architecture Quick Reference
 
 ### Core System Components
 
 **Image Processing Pipeline**:
-- Upload → Sharp processing → Generate thumbnail + optimized versions → Extract AI metadata → Store in SQLite
-- Supports AI tool metadata extraction (ComfyUI, NovelAI, Stable Diffusion, etc.)
-- Creates 3 image versions: original, thumbnail (1080px), optimized (WebP, 95% quality)
+- Upload → Sharp processing → Generate thumbnail + optimized → Extract AI metadata → Store in SQLite
+- Supports ComfyUI, NovelAI, Stable Diffusion metadata
+- Creates 3 versions: original, thumbnail (1080px), optimized (WebP, 95%)
 
 **Auto-Collection System**:
-- Automatically groups images based on configurable conditions (prompt patterns, AI tools, models)
-- Supports regex and simple string matching
-- Runs on new image uploads and can be triggered manually
+- Automatically groups images based on configurable conditions
+- Supports regex and string matching
+- Runs on upload and can be triggered manually
 
 **Prompt Management**:
 - Collects and analyzes prompts from AI-generated images
-- Supports synonym grouping and statistical analysis
-- Separates positive and negative prompt collections
+- Synonym grouping and statistical analysis
+- Separates positive/negative prompts
 
 ### Database Architecture
 
 **Core Tables**:
-- `images`: Main image records with AI metadata fields (steps, cfg_scale, sampler, etc.)
+- `images`: Main image records with AI metadata
 - `groups`: Image grouping with auto-collection configuration
-- `image_groups`: Many-to-many relationship with manual/auto collection tracking
-- `prompt_collections`: Prompt usage statistics and synonym management
+- `image_groups`: Many-to-many relationship
+- `prompt_collections`: Prompt usage statistics
 - `prompt_groups`: Hierarchical prompt organization
 
-**Migration System**: Located in `backend/src/database/migrations/` with automatic execution on startup.
+**Migration System**: `backend/src/database/migrations/` - automatic execution on startup
 
 ### API Structure
 
@@ -79,25 +77,15 @@ npm run clean                   # Remove all dist and node_modules folders
 - `/api/groups/*`: Group management and auto-collection
 - `/api/prompt-collection/*`: Prompt analysis and search
 - `/api/prompt-groups/*`: Prompt organization
-- `/api/negative-prompt-groups/*`: Negative prompt management
 
 **Key Services**:
 - `ImageProcessor`: Sharp-based image processing with AI metadata extraction
 - `AutoCollectionService`: Rule-based automatic image grouping
 - `PromptCollectionService`: Prompt parsing and statistical analysis
-- `SynonymService`: Prompt synonym management and merging
-
-### Type System
-
-**Core Interfaces**:
-- `ImageRecord`: Complete image database schema with AI metadata
-- `GroupRecord`: Group configuration including auto-collection rules
-- `AutoCollectCondition`: Flexible condition system for automatic grouping
-- `PromptCollectionRecord`: Prompt usage tracking and statistics
+- `SynonymService`: Prompt synonym management
 
 ### File Organization
 
-**Backend Structure**:
 ```
 backend/src/
 ├── database/           # SQLite setup and migrations
@@ -106,30 +94,46 @@ backend/src/
 ├── routes/            # Express route handlers
 ├── services/          # Business logic services
 ├── types/             # TypeScript interfaces
-└── utils/             # Utility functions (prompt parsing)
+└── utils/             # Utility functions
 ```
 
-**Key Configuration**:
+### Key Configuration
+
 - Port: 1566 (configurable via PORT env var)
 - Upload path: `uploads/` directory (auto-created)
 - Database: `database/images.db` (auto-created)
 - Rate limiting: 1000 requests/minute (development setting)
 
-### Development Patterns
+## Development Patterns
 
-**Error Handling**: All route handlers use `asyncHandler` wrapper with structured error responses and TypeScript error typing (`error as Error`).
+### Error Handling
+All route handlers use `asyncHandler` wrapper with structured error responses and TypeScript error typing (`error as Error`).
 
-**File Processing**: Multi-step pipeline with non-critical error handling for prompt collection and auto-grouping to ensure uploads succeed even if secondary processing fails.
+### File Processing
+Multi-step pipeline with non-critical error handling for prompt collection and auto-grouping to ensure uploads succeed even if secondary processing fails.
 
-**Database Operations**: Direct SQLite3 usage with Promise-wrapped queries. All models return strongly-typed results.
+### Database Operations
+Direct SQLite3 usage with Promise-wrapped queries. All models return strongly-typed results.
 
-**Image Storage**: Date-based directory structure (`YYYY-MM-DD/`) with UUID-based filenames to prevent conflicts.
+### Image Storage
+Date-based directory structure (`YYYY-MM-DD/`) with UUID-based filenames to prevent conflicts.
 
 ## Key Development Notes
 
-- The backend automatically creates required directories and database on startup
+- Backend automatically creates required directories and database on startup
 - Image metadata extraction supports multiple AI tools with extensible parsing
 - Auto-collection runs asynchronously to avoid blocking uploads
 - Prompt parsing includes weight removal and normalization for consistent matching
 - All route handlers must return responses explicitly for TypeScript compliance
 - Database queries use parameterized statements for SQL injection protection
+
+## Documentation
+
+For detailed documentation, see:
+
+- **[Setup Guide](SETUP.md)** - Initial setup and configuration
+- **[Architecture](docs/development/architecture.md)** - Complete architecture documentation
+- **[API Documentation](docs/development/api.md)** - REST API reference
+- **[Deployment Guide](docs/user/deployment.md)** - Deployment options
+- **[Features Guide](docs/user/features.md)** - WD Tagger, video processing
+- **[FFmpeg Guide](docs/development/ffmpeg.md)** - FFmpeg setup and bundling

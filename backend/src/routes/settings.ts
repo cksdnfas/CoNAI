@@ -3,7 +3,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { settingsService } from '../services/settingsService';
 import { imageTaggerService } from '../services/imageTaggerService';
 import { RatingScoreService } from '../services/ratingScoreService';
-import { TaggerSettings, SimilaritySettings } from '../types/settings';
+import { GeneralSettings, TaggerSettings, SimilaritySettings, SupportedLanguage } from '../types/settings';
 import { RatingWeightsUpdate, RatingTierInput, RatingData } from '../types/rating';
 
 const router = Router();
@@ -23,6 +23,43 @@ router.get(
     return;
   })
 );
+
+// ==================== General Settings Routes ====================
+
+/**
+ * PUT /api/settings/general
+ * Update general settings (e.g., language)
+ */
+router.put(
+  '/general',
+  asyncHandler(async (req: Request, res: Response) => {
+    const generalSettings: Partial<GeneralSettings> = req.body;
+
+    // Validate language if provided
+    if (generalSettings.language !== undefined) {
+      const validLanguages: SupportedLanguage[] = ['ko', 'en', 'ja', 'zh-CN', 'zh-TW'];
+      if (!validLanguages.includes(generalSettings.language)) {
+        res.status(400).json({
+          success: false,
+          error: `Invalid language. Must be one of: ${validLanguages.join(', ')}`,
+        });
+        return;
+      }
+    }
+
+    // Update settings
+    const updatedSettings = settingsService.updateGeneralSettings(generalSettings);
+
+    res.json({
+      success: true,
+      data: updatedSettings,
+      message: 'General settings updated successfully',
+    });
+    return;
+  })
+);
+
+// ==================== Tagger Settings Routes ====================
 
 /**
  * GET /api/settings/tagger/models

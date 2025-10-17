@@ -1,0 +1,54 @@
+{
+  "page": {
+    "title": "媒体上传",
+    "description": "上传AI生成的图像和视频，自动提取和分析元数据。"
+  },
+  "dropzone": {
+    "dragActive": "将文件拖放到此处",
+    "dragInactive": "拖放图像或视频，或点击上传",
+    "supportedFormats": "图像：JPG、PNG、GIF、BMP、WebP、TIFF | 视频：MP4、WebM、MOV、AVI、MKV（最大500MB，文件数量不限）",
+    "imageSupport": "支持图像",
+    "videoSupport": "支持视频",
+    "multipleSelection": "可多选",
+    "divider": "或"
+  },
+  "buttons": {
+    "selectFiles": "选择文件",
+    "selectFolder": "选择文件夹"
+  },
+  "progress": {
+    "title": "总体进度",
+    "fileCount": "{{completed}}/{{total}}",
+    "summary": "共{{total}}个文件 - 成功：{{success}}，失败：{{failed}}"
+  },
+  "stages": {
+    "upload": "上传中",
+    "metadata": "提取元数据",
+    "thumbnail": "生成缩略图",
+    "autoCollect": "自动分组",
+    "autoTag": "自动标记"
+  },
+  "status": {
+    "waiting": "等待中",
+    "processing": "处理中",
+    "complete": "完成",
+    "error": "错误"
+  },
+  "messages": {
+    "uploadComplete": "上传完成",
+    "uploadSuccess": "图像上传成功。",
+    "uploadFailed": "上传失败。",
+    "uploadError": "上传过程中发生错误。",
+    "multipleSuccess": "已成功上传{{count}}张图像。",
+    "allFailed": "所有图像上传失败。",
+    "partialSuccess": "{{success}}个成功，{{failed}}个失败。"
+  },
+  "guide": {
+    "title": "上传指南",
+    "metadataExtraction": "将自动提取由ComfyUI、Stable Diffusion、NovelAI等生成的图像的元数据。",
+    "videoProcessing": "视频文件通过FFmpeg提取元数据（时长、编解码器、分辨率等）并生成动画缩略图。",
+    "dataAnalysis": "自动分析提示词、模型名称、生成参数等，用于搜索和分类。",
+    "imageVersions": "上传的图像以三种版本存储：原始、优化和缩略图。",
+    "autoGrouping": "如果配置了自动收集规则，上传时将自动分类到相关组。"
+  }
+}

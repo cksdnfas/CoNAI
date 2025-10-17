@@ -1,0 +1,86 @@
+{
+  "page": {
+    "title": "Image Details",
+    "notFound": "Image not found.",
+    "errorLoading": "An error occurred while loading the image.",
+    "noIdProvided": "No image ID provided."
+  },
+  "actions": {
+    "download": "Download",
+    "share": "Share",
+    "back": "Back",
+    "goToDetail": "Detail Page"
+  },
+  "sections": {
+    "fileInfo": "File Information",
+    "imageInfo": "Image Information",
+    "videoInfo": "Video Information",
+    "aiInfo": "AI Generation Info",
+    "promptInfo": "Prompt Information",
+    "groupInfo": "Groups",
+    "fullMetadata": "Full Metadata"
+  },
+  "fileInfo": {
+    "originalFilename": "Original Filename",
+    "filename": "Filename",
+    "size": "Size",
+    "fileSize": "File Size",
+    "mimeType": "MIME Type",
+    "uploadDate": "Upload Date"
+  },
+  "imageInfo": {
+    "dimensions": "Dimensions",
+    "dimensionsValue": "{{width}} × {{height}}"
+  },
+  "videoInfo": {
+    "duration": "Duration",
+    "durationValue": "{{minutes}}m {{seconds}}s",
+    "fps": "Frame Rate",
+    "fpsValue": "{{fps}} fps",
+    "videoCodec": "Video Codec",
+    "audioCodec": "Audio Codec",
+    "bitrate": "Bitrate",
+    "bitrateValue": "{{bitrate}} Mbps"
+  },
+  "aiInfo": {
+    "tool": "AI Tool",
+    "toolShort": "Tool",
+    "model": "Model",
+    "lora": "LoRA",
+    "steps": "Steps",
+    "cfgScale": "CFG Scale",
+    "cfgShort": "CFG",
+    "sampler": "Sampler",
+    "scheduler": "Scheduler",
+    "seed": "Seed",
+    "denoiseStrength": "Denoise Strength",
+    "generationTime": "Generation Time",
+    "generationTimeValue": "{{time}}s",
+    "batchSize": "Batch Size",
+    "batchIndex": "Batch Index"
+  },
+  "groupInfo": {
+    "autoType": "Auto",
+    "manualType": "Manual",
+    "groupLabel": "{{name}} ({{type}})"
+  },
+  "viewer": {
+    "controls": {
+      "zoomIn": "Zoom In",
+      "zoomOut": "Zoom Out",
+      "rotateLeft": "Rotate Left",
+      "rotateRight": "Rotate Right",
+      "flipHorizontal": "Flip Horizontal",
+      "flipVertical": "Flip Vertical",
+      "reset": "Reset",
+      "info": "Info",
+      "close": "Close"
+    },
+    "navigation": {
+      "previous": "Previous Image (←)",
+      "next": "Next Image (→)",
+      "random": "Random Image (Space)",
+      "currentPosition": "{{current}} / {{total}}"
+    }
+  }
+}

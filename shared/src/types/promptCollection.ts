@@ -56,3 +56,31 @@ export interface PromptCollectionResponse {
   data?: PromptSearchResult | PromptSearchResult[] | PromptStatistics | any;
   error?: string;
 }
+
+// Prompt Group types
+export interface PromptGroupRecord {
+  id: number;
+  group_name: string;
+  description: string | null;
+  is_visible: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PromptGroupData {
+  group_name: string;
+  description?: string;
+  is_visible?: boolean;
+  display_order?: number;
+}
+
+export interface PromptGroupWithPrompts extends PromptGroupRecord {
+  prompt_count: number;
+}
+
+export interface PromptGroupResponse {
+  success: boolean;
+  data?: PromptGroupRecord | PromptGroupWithPrompts | PromptGroupWithPrompts[] | any;
+  error?: string;
+}

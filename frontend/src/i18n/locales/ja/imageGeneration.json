@@ -1,0 +1,11 @@
+{
+  "page": {
+    "title": "画像生成",
+    "subtitle": "ComfyUIワークフローを管理して画像を生成します"
+  },
+  "tabs": {
+    "workflows": "ワークフロー管理",
+    "servers": "サーバー管理",
+    "ariaLabel": "画像生成タブ"
+  }
+}

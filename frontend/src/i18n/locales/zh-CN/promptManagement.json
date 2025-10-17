@@ -1,0 +1,162 @@
+{
+  "title": "提示词管理",
+  "description": "管理和分析从AI生成图像中提取的提示词。",
+
+  "tabs": {
+    "positive": "正面",
+    "negative": "负面"
+  },
+
+  "promptList": {
+    "search": {
+      "placeholder": "搜索{{type}}提示词..."
+    },
+
+    "filters": {
+      "groupFilter": {
+        "label": "组过滤器",
+        "all": "全部",
+        "unassigned": "未分类"
+      }
+    },
+
+    "table": {
+      "headers": {
+        "prompt": "提示词",
+        "usageCount": "使用次数",
+        "assignedGroup": "分配的组",
+        "actions": "操作"
+      },
+      "empty": "没有提示词。",
+      "synonyms": {
+        "more": "+{{count}}个"
+      }
+    },
+
+    "actions": {
+      "assignToGroup": "分配到组",
+      "delete": "删除",
+      "cannotDelete": "无法删除正在使用的提示词",
+      "groupManagement": "组管理"
+    },
+
+    "statistics": {
+      "unclassified": "未分类",
+      "unknown": "未知"
+    },
+
+    "pagination": {
+      "rowsPerPage": "每页行数:",
+      "displayedRows": "{{from}}-{{to}} / {{count}}"
+    },
+
+    "messages": {
+      "loadFailed": "加载提示词列表失败。",
+      "deleteSuccess": "提示词已删除。",
+      "deleteFailed": "删除提示词失败。",
+      "assignSuccess": "提示词已分配到组。",
+      "assignFailed": "分配提示词失败。"
+    }
+  },
+
+  "assignDialog": {
+    "title": "分配到组",
+    "selectGroup": {
+      "label": "选择组",
+      "unassigned": "未分类"
+    },
+    "actions": {
+      "cancel": "取消",
+      "assign": "分配"
+    }
+  },
+
+  "groupManagement": {
+    "title": "{{type}}提示词组管理",
+
+    "editForm": {
+      "titleAdd": "添加新组",
+      "titleEdit": "编辑组",
+      "groupName": {
+        "label": "组名",
+        "required": "请输入组名。"
+      },
+      "displayOrder": {
+        "label": "显示顺序"
+      },
+      "visibility": {
+        "label": "显示",
+        "hidden": "隐藏"
+      },
+      "actions": {
+        "save": "保存",
+        "cancel": "取消"
+      }
+    },
+
+    "groupList": {
+      "title": "组列表 ({{count}}个)",
+      "add": "添加组",
+      "empty": "没有创建的组。",
+      "promptCount": "{{count}}个",
+      "displayOrder": "显示顺序: {{order}}"
+    },
+
+    "actions": {
+      "toggleVisibility": "切换可见性",
+      "edit": "编辑",
+      "delete": "删除",
+      "deleteConfirm": "确定要删除此组吗？",
+      "close": "关闭"
+    },
+
+    "messages": {
+      "loadFailed": "加载组列表失败。",
+      "createSuccess": "组已创建。",
+      "createFailed": "创建组失败。",
+      "updateSuccess": "组已更新。",
+      "updateFailed": "更新组失败。",
+      "deleteSuccess": "组已删除。",
+      "deleteFailed": "删除组失败。",
+      "visibilityFailed": "更改组设置失败。"
+    }
+  },
+
+  "promptDisplay": {
+    "tabs": {
+      "positive": "正面",
+      "negative": "负面",
+      "auto": "自动"
+    },
+    "labels": {
+      "prompt": "提示词",
+      "negativePrompt": "负面提示词"
+    },
+    "noPrompt": "没有提示词信息。",
+    "loading": "加载中...",
+    "loadFailed": "无法加载组信息。",
+    "unclassified": "未分类"
+  },
+
+  "autoTagDisplay": {
+    "noTags": "此图像尚未生成自动标签。",
+    "generateButton": "生成标签",
+    "generating": "生成中...",
+    "generationError": "生成标签时发生错误。",
+
+    "sections": {
+      "rating": "评级",
+      "characters": "角色",
+      "tagList": "标签列表",
+      "generalTags": "通用标签 ({{count}}个)",
+      "modelInfo": "模型信息"
+    },
+
+    "modelInfo": {
+      "model": "模型",
+      "generalThreshold": "通用",
+      "characterThreshold": "角色",
+      "taggedAt": "标记时间"
+    }
+  }
+}

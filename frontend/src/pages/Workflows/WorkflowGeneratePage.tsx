@@ -26,6 +26,7 @@ import {
   ExpandMore as ExpandMoreIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { workflowApi, type Workflow, type MarkedField } from '../../services/api/workflowApi';
 import { comfyuiServerApi, type ComfyUIServer } from '../../services/api/comfyuiServerApi';
 
@@ -42,6 +43,7 @@ interface ServerGenerationStatus {
 export default function WorkflowGeneratePage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { t } = useTranslation(['workflows', 'common']);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -196,7 +198,7 @@ export default function WorkflowGeneratePage() {
       );
 
       if (missingFields.length > 0) {
-        setError(`필수 필드를 입력하세요: ${missingFields.map(f => f.label).join(', ')}`);
+        setError(t('workflows:generate.missingFields', { fields: missingFields.map(f => f.label).join(', ') }));
         return;
       }
     }
@@ -269,7 +271,7 @@ export default function WorkflowGeneratePage() {
     const connectedServers = servers.filter(s => serverStatus[s.id]?.connected);
 
     if (connectedServers.length === 0) {
-      setError('연결된 서버가 없습니다');
+      setError(t('workflows:generate.noConnectedServers'));
       return;
     }
 
@@ -331,7 +333,7 @@ export default function WorkflowGeneratePage() {
             SelectProps={{ native: true }}
             sx={{ mb: 2 }}
           >
-            <option value="">선택하세요</option>
+            <option value="">{t('workflows:generate.selectPlaceholder')}</option>
             {field.options?.map((option: string) => (
               <option key={option} value={option}>
                 {option}
@@ -367,7 +369,7 @@ export default function WorkflowGeneratePage() {
   if (!workflow) {
     return (
       <Box sx={{ p: 3 }}>
-        <Alert severity="error">워크플로우를 찾을 수 없습니다</Alert>
+        <Alert severity="error">{t('workflows:card.notFound')}</Alert>
       </Box>
     );
   }
@@ -378,7 +380,7 @@ export default function WorkflowGeneratePage() {
     <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
       {/* 헤더 */}
       <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <IconButton onClick={() => navigate('/workflows')}>
+        <IconButton onClick={() => navigate('/image-generation?tab=workflows')}>
           <ArrowBackIcon />
         </IconButton>
         <Box sx={{ flex: 1 }}>
@@ -390,7 +392,7 @@ export default function WorkflowGeneratePage() {
           )}
         </Box>
         {!workflow.is_active && (
-          <Chip label="비활성" color="default" />
+          <Chip label={t('workflows:card.inactive')} color="default" />
         )}
       </Box>
 
@@ -404,7 +406,7 @@ export default function WorkflowGeneratePage() {
       {/* 입력 폼 */}
       <Paper sx={{ p: 3, mb: 3 }}>
         <Typography variant="h6" gutterBottom>
-          생성 설정
+          {t('workflows:generate.settingsTitle')}
         </Typography>
         <Divider sx={{ mb: 3 }} />
 
@@ -414,7 +416,7 @@ export default function WorkflowGeneratePage() {
           </Box>
         ) : (
           <Alert severity="info" sx={{ mb: 2 }}>
-            이 워크플로우에는 설정 가능한 필드가 없습니다.
+            {t('workflows:alerts.noConfigurableFields')}
           </Alert>
         )}
 
@@ -422,7 +424,7 @@ export default function WorkflowGeneratePage() {
         <Accordion>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Typography variant="body2">
-              전송될 데이터 미리보기
+              {t('workflows:generate.previewTitle')}
             </Typography>
           </AccordionSummary>
           <AccordionDetails>
@@ -456,20 +458,20 @@ export default function WorkflowGeneratePage() {
         }
         sx={{ mb: 3 }}
       >
-        모든 활성 서버에서 동시 생성 ({servers.filter(s => serverStatus[s.id]?.connected).length}개)
+        {t('workflows:generate.generateAll', { count: servers.filter(s => serverStatus[s.id]?.connected).length })}
       </Button>
 
       {/* 서버 목록 */}
       <Typography variant="h6" gutterBottom>
-        ComfyUI 서버 목록
+        {t('workflows:generate.serversListTitle')}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        각 서버별로 독립적으로 이미지를 생성할 수 있습니다
+        {t('workflows:generate.serversListDesc')}
       </Typography>
 
       {servers.length === 0 && (
         <Alert severity="info">
-          등록된 ComfyUI 서버가 없습니다. 서버 관리 페이지에서 서버를 추가하세요.
+          {t('workflows:generate.noServers')}
         </Alert>
       )}
 
@@ -498,7 +500,7 @@ export default function WorkflowGeneratePage() {
 
               {status?.responseTime && (
                 <Typography variant="caption" color="text.secondary" display="block">
-                  응답 시간: {status.responseTime}ms
+                  {t('workflows:generate.responseTime', { time: status.responseTime })}
                 </Typography>
               )}
 
@@ -522,14 +524,14 @@ export default function WorkflowGeneratePage() {
                   genStatus?.status === 'generating'
                 }
               >
-                {genStatus?.status === 'generating' ? '생성 중...' : '이 서버로 생성'}
+                {genStatus?.status === 'generating' ? t('workflows:generate.generating') : t('workflows:generate.generateButton')}
               </Button>
 
               {/* 생성 상태 표시 */}
               {genStatus?.status === 'generating' && (
                 <Box sx={{ mt: 2 }}>
                   <Typography variant="body2" gutterBottom>
-                    생성 중...
+                    {t('workflows:generate.generating')}
                   </Typography>
                   <LinearProgress />
                 </Box>
@@ -540,11 +542,11 @@ export default function WorkflowGeneratePage() {
                   <Alert severity="success" sx={{ mb: 2 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Typography variant="body2">
-                        이미지 생성 완료!
+                        {t('workflows:generate.generationComplete')}
                       </Typography>
                       {genStatus.executionTime && (
                         <Typography variant="caption" color="text.secondary">
-                          {genStatus.executionTime}초
+                          {t('workflows:generate.executionTime', { time: genStatus.executionTime })}
                         </Typography>
                       )}
                     </Box>
@@ -562,7 +564,7 @@ export default function WorkflowGeneratePage() {
                         variant="outlined"
                         onClick={() => navigate(`/image/${genStatus.imageId}`)}
                       >
-                        이미지 상세보기
+                        {t('workflows:generate.viewImage')}
                       </Button>
                     </CardContent>
                   </Card>
@@ -571,7 +573,7 @@ export default function WorkflowGeneratePage() {
 
               {genStatus?.status === 'failed' && (
                 <Alert severity="error" sx={{ mt: 2 }}>
-                  {genStatus.error || '이미지 생성에 실패했습니다'}
+                  {genStatus.error || t('workflows:generate.generationFailed')}
                 </Alert>
               )}
             </CardContent>
@@ -582,7 +584,7 @@ export default function WorkflowGeneratePage() {
       {/* 워크플로우가 비활성 상태일 때 */}
       {!workflow.is_active && (
         <Alert severity="warning" sx={{ mt: 2 }}>
-          이 워크플로우는 현재 비활성 상태입니다. 이미지를 생성하려면 먼저 활성화해야 합니다.
+          {t('workflows:alerts.inactiveWarning')}
         </Alert>
       )}
     </Box>

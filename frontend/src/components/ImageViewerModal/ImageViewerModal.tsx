@@ -14,6 +14,7 @@ import {
   Link as LinkIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../types/image';
 import ImageNavigation from './ImageNavigation';
 import { ImageGridModal } from '../ImageGrid';
@@ -44,6 +45,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   currentIndex = 0,
   onImageChange,
 }) => {
+  const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
@@ -252,14 +254,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             startIcon={<LinkIcon />}
             onClick={handleGoToDetail}
           >
-            상세 페이지
+            {t('imageDetail:actions.goToDetail')}
           </Button>
           <Button
             size="small"
             startIcon={<DownloadIcon />}
             onClick={handleDownload}
           >
-            다운로드
+            {t('imageDetail:actions.download')}
           </Button>
         </Box>
       </DialogActions>
@@ -271,7 +273,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           onClose={groupImages.handleGroupModalClose}
           images={groupImages.groupImages}
           loading={groupImages.groupImagesLoading}
-          title={groupImages.selectedGroup ? `${groupImages.selectedGroup.name} 그룹` : '그룹 이미지'}
+          title={groupImages.selectedGroup ? t('imageDetail:groupModal.title', { name: groupImages.selectedGroup.name }) : t('imageDetail:groupModal.defaultTitle')}
           pageSize={groupImages.groupImagesPageSize}
           onPageSizeChange={groupImages.handleGroupImagesPageSizeChange}
           currentPage={groupImages.groupImagesPage}

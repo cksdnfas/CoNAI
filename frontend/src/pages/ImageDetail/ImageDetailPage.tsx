@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Typography,
@@ -26,6 +27,7 @@ import PromptDisplay from '../../components/PromptDisplay';
 import { settingsApi } from '../../services/settingsApi';
 
 const ImageDetailPage: React.FC = () => {
+  const { t } = useTranslation(['imageDetail', 'common']);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [image, setImage] = useState<ImageRecord | null>(null);
@@ -53,7 +55,7 @@ const ImageDetailPage: React.FC = () => {
   useEffect(() => {
     const loadImage = async () => {
       if (!id) {
-        setError('이미지 ID가 제공되지 않았습니다.');
+        setError(t('imageDetail:page.noIdProvided'));
         setLoading(false);
         return;
       }
@@ -65,17 +67,17 @@ const ImageDetailPage: React.FC = () => {
         if (response.success && response.data) {
           setImage(response.data);
         } else {
-          setError(response.error || '이미지를 찾을 수 없습니다.');
+          setError(response.error || t('imageDetail:page.notFound'));
         }
       } catch (err) {
-        setError('이미지를 불러오는 중 오류가 발생했습니다.');
+        setError(t('imageDetail:page.errorLoading'));
       } finally {
         setLoading(false);
       }
     };
 
     loadImage();
-  }, [id]);
+  }, [id, t]);
 
   // Reload image after auto-tag generation
   const handleAutoTagGenerated = async () => {
@@ -155,10 +157,10 @@ const ImageDetailPage: React.FC = () => {
           <IconButton onClick={handleBack}>
             <ArrowBackIcon />
           </IconButton>
-          <Typography variant="h5">이미지 상세 정보</Typography>
+          <Typography variant="h5">{t('imageDetail:page.title')}</Typography>
         </Box>
         <Alert severity="error">
-          {error || '이미지를 찾을 수 없습니다.'}
+          {error || t('imageDetail:page.notFound')}
         </Alert>
       </Box>
     );
@@ -176,10 +178,10 @@ const ImageDetailPage: React.FC = () => {
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h5" sx={{ flex: 1 }}>
-          이미지 상세 정보
+          {t('imageDetail:page.title')}
         </Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          {/* <Tooltip title="공유">
+          {/* <Tooltip title={t('imageDetail:actions.share')}>
             <IconButton onClick={handleShare}>
               <ShareIcon />
             </IconButton>
@@ -189,7 +191,7 @@ const ImageDetailPage: React.FC = () => {
             startIcon={<DownloadIcon />}
             onClick={handleDownload}
           >
-            다운로드
+            {t('imageDetail:actions.download')}
           </Button>
         </Box>
       </Box>
@@ -233,7 +235,7 @@ const ImageDetailPage: React.FC = () => {
             {/* 파일명 영역 */}
             <Paper sx={{ p: 2, borderRadius: 2 }}>
               <Typography variant="h6" gutterBottom>
-                파일 정보
+                {t('imageDetail:sections.fileInfo')}
               </Typography>
               <Typography
                 variant="body2"
@@ -241,27 +243,27 @@ const ImageDetailPage: React.FC = () => {
                 title={image.original_name}
                 sx={{ mb: 1 }}
               >
-                원본 파일명: {truncateFilename(image.original_name)}
+                {t('imageDetail:fileInfo.originalFilename')}: {truncateFilename(image.original_name)}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                파일명: {image.filename}
+                {t('imageDetail:fileInfo.filename')}: {image.filename}
               </Typography>
             </Paper>
 
             {/* 이미지/비디오 정보 영역 */}
             <Paper sx={{ p: 2, borderRadius: 2 }}>
               <Typography variant="h6" gutterBottom>
-                {image.mime_type?.startsWith('video/') ? '비디오 정보' : '이미지 정보'}
+                {image.mime_type?.startsWith('video/') ? t('imageDetail:sections.videoInfo') : t('imageDetail:sections.imageInfo')}
               </Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <Typography variant="body2">
-                  <strong>크기:</strong> {image.width} × {image.height}
+                  <strong>{t('imageDetail:fileInfo.size')}:</strong> {image.width} × {image.height}
                 </Typography>
                 <Typography variant="body2">
-                  <strong>파일 크기:</strong> {formatFileSize(image.file_size)}
+                  <strong>{t('imageDetail:fileInfo.fileSize')}:</strong> {formatFileSize(image.file_size)}
                 </Typography>
                 <Typography variant="body2">
-                  <strong>MIME 타입:</strong> {image.mime_type}
+                  <strong>{t('imageDetail:fileInfo.mimeType')}:</strong> {image.mime_type}
                 </Typography>
 
                 {/* 비디오 전용 메타데이터 */}
@@ -269,34 +271,37 @@ const ImageDetailPage: React.FC = () => {
                   <>
                     {image.duration && (
                       <Typography variant="body2">
-                        <strong>재생 시간:</strong> {Math.floor(image.duration / 60)}분 {Math.floor(image.duration % 60)}초
+                        <strong>{t('imageDetail:videoInfo.duration')}:</strong> {t('imageDetail:videoInfo.durationValue', {
+                          minutes: Math.floor(image.duration / 60),
+                          seconds: Math.floor(image.duration % 60)
+                        })}
                       </Typography>
                     )}
                     {image.fps && (
                       <Typography variant="body2">
-                        <strong>프레임 레이트:</strong> {image.fps.toFixed(2)} fps
+                        <strong>{t('imageDetail:videoInfo.fps')}:</strong> {t('imageDetail:videoInfo.fpsValue', { fps: image.fps.toFixed(2) })}
                       </Typography>
                     )}
                     {image.video_codec && (
                       <Typography variant="body2">
-                        <strong>비디오 코덱:</strong> {image.video_codec}
+                        <strong>{t('imageDetail:videoInfo.videoCodec')}:</strong> {image.video_codec}
                       </Typography>
                     )}
                     {image.audio_codec && (
                       <Typography variant="body2">
-                        <strong>오디오 코덱:</strong> {image.audio_codec}
+                        <strong>{t('imageDetail:videoInfo.audioCodec')}:</strong> {image.audio_codec}
                       </Typography>
                     )}
                     {image.bitrate && (
                       <Typography variant="body2">
-                        <strong>비트레이트:</strong> {(image.bitrate / 1000).toFixed(2)} Mbps
+                        <strong>{t('imageDetail:videoInfo.bitrate')}:</strong> {t('imageDetail:videoInfo.bitrateValue', { bitrate: (image.bitrate / 1000).toFixed(2) })}
                       </Typography>
                     )}
                   </>
                 )}
 
                 <Typography variant="body2">
-                  <strong>업로드 날짜:</strong> {formatDate(image.upload_date)}
+                  <strong>{t('imageDetail:fileInfo.uploadDate')}:</strong> {formatDate(image.upload_date)}
                 </Typography>
               </Box>
             </Paper>
@@ -305,13 +310,16 @@ const ImageDetailPage: React.FC = () => {
             {image.groups && image.groups.length > 0 && (
               <Paper sx={{ p: 2, borderRadius: 2 }}>
                 <Typography variant="h6" gutterBottom>
-                  소속 그룹
+                  {t('imageDetail:sections.groupInfo')}
                 </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                   {image.groups.map((group) => (
                     <Chip
                       key={group.id}
-                      label={`${group.name} (${group.collection_type === 'auto' ? '자동' : '수동'})`}
+                      label={t('imageDetail:groupInfo.groupLabel', {
+                        name: group.name,
+                        type: group.collection_type === 'auto' ? t('imageDetail:groupInfo.autoType') : t('imageDetail:groupInfo.manualType')
+                      })}
                       size="small"
                       variant="filled"
                       sx={{
@@ -333,67 +341,67 @@ const ImageDetailPage: React.FC = () => {
             {image.ai_metadata && (
               <Paper sx={{ p: 2, borderRadius: 2 }}>
                 <Typography variant="h6" gutterBottom>
-                  AI 생성 정보
+                  {t('imageDetail:sections.aiInfo')}
                 </Typography>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                   {image.ai_metadata.ai_tool && (
                     <Typography variant="body2">
-                      <strong>AI 도구:</strong> {image.ai_metadata.ai_tool}
+                      <strong>{t('imageDetail:aiInfo.tool')}:</strong> {image.ai_metadata.ai_tool}
                     </Typography>
                   )}
                   {image.ai_metadata.model_name && (
                     <Typography variant="body2">
-                      <strong>모델:</strong> {image.ai_metadata.model_name}
+                      <strong>{t('imageDetail:aiInfo.model')}:</strong> {image.ai_metadata.model_name}
                     </Typography>
                   )}
                   {image.ai_metadata.lora_models && (
                     <Typography variant="body2">
-                      <strong>LoRA:</strong> {JSON.stringify(image.ai_metadata.lora_models)}
+                      <strong>{t('imageDetail:aiInfo.lora')}:</strong> {JSON.stringify(image.ai_metadata.lora_models)}
                     </Typography>
                   )}
                   {image.ai_metadata.generation_params.steps && (
                     <Typography variant="body2">
-                      <strong>스텝:</strong> {image.ai_metadata.generation_params.steps}
+                      <strong>{t('imageDetail:aiInfo.steps')}:</strong> {image.ai_metadata.generation_params.steps}
                     </Typography>
                   )}
                   {image.ai_metadata.generation_params.cfg_scale && (
                     <Typography variant="body2">
-                      <strong>CFG Scale:</strong> {image.ai_metadata.generation_params.cfg_scale}
+                      <strong>{t('imageDetail:aiInfo.cfgScale')}:</strong> {image.ai_metadata.generation_params.cfg_scale}
                     </Typography>
                   )}
                   {image.ai_metadata.generation_params.sampler && (
                     <Typography variant="body2">
-                      <strong>샘플러:</strong> {image.ai_metadata.generation_params.sampler}
+                      <strong>{t('imageDetail:aiInfo.sampler')}:</strong> {image.ai_metadata.generation_params.sampler}
                     </Typography>
                   )}
                   {image.ai_metadata.generation_params.scheduler && (
                     <Typography variant="body2">
-                      <strong>스케줄러:</strong> {image.ai_metadata.generation_params.scheduler}
+                      <strong>{t('imageDetail:aiInfo.scheduler')}:</strong> {image.ai_metadata.generation_params.scheduler}
                     </Typography>
                   )}
                   {image.ai_metadata.generation_params.seed && (
                     <Typography variant="body2">
-                      <strong>시드:</strong> {image.ai_metadata.generation_params.seed}
+                      <strong>{t('imageDetail:aiInfo.seed')}:</strong> {image.ai_metadata.generation_params.seed}
                     </Typography>
                   )}
                   {image.ai_metadata.generation_params.denoise_strength && (
                     <Typography variant="body2">
-                      <strong>디노이즈 강도:</strong> {image.ai_metadata.generation_params.denoise_strength}
+                      <strong>{t('imageDetail:aiInfo.denoiseStrength')}:</strong> {image.ai_metadata.generation_params.denoise_strength}
                     </Typography>
                   )}
                   {image.ai_metadata.generation_params.generation_time && (
                     <Typography variant="body2">
-                      <strong>생성 시간:</strong> {image.ai_metadata.generation_params.generation_time}초
+                      <strong>{t('imageDetail:aiInfo.generationTime')}:</strong> {t('imageDetail:aiInfo.generationTimeValue', { time: image.ai_metadata.generation_params.generation_time })}
                     </Typography>
                   )}
                   {image.ai_metadata.generation_params.batch_size && (
                     <Typography variant="body2">
-                      <strong>배치 크기:</strong> {image.ai_metadata.generation_params.batch_size}
+                      <strong>{t('imageDetail:aiInfo.batchSize')}:</strong> {image.ai_metadata.generation_params.batch_size}
                     </Typography>
                   )}
                   {image.ai_metadata.generation_params.batch_index && (
                     <Typography variant="body2">
-                      <strong>배치 인덱스:</strong> {image.ai_metadata.generation_params.batch_index}
+                      <strong>{t('imageDetail:aiInfo.batchIndex')}:</strong> {image.ai_metadata.generation_params.batch_index}
                     </Typography>
                   )}
                 </Box>
@@ -404,7 +412,7 @@ const ImageDetailPage: React.FC = () => {
             {(image.ai_metadata && (image.ai_metadata.prompts.prompt || image.ai_metadata.prompts.negative_prompt)) || isTaggerEnabled ? (
               <Paper sx={{ p: 2, borderRadius: 2 }}>
                 <Typography variant="h6" gutterBottom>
-                  프롬프트 정보
+                  {t('imageDetail:sections.promptInfo')}
                 </Typography>
                 <PromptDisplay
                   prompt={image.ai_metadata?.prompts.prompt}
@@ -430,7 +438,7 @@ const ImageDetailPage: React.FC = () => {
             aria-controls="metadata-content"
             id="metadata-header"
           >
-            <Typography variant="h6">전체 메타데이터</Typography>
+            <Typography variant="h6">{t('imageDetail:sections.fullMetadata')}</Typography>
           </AccordionSummary>
           <AccordionDetails>
             <Box

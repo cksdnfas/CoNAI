@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
-import { AppSettings, TaggerSettings, SimilaritySettings, TaggerModel, TaggerModelInfo, TaggerDevice } from '../types/settings';
+import { AppSettings, GeneralSettings, TaggerSettings, SimilaritySettings, TaggerModel, TaggerModelInfo, TaggerDevice, SupportedLanguage } from '../types/settings';
 
 const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
 
@@ -34,6 +34,9 @@ export class SettingsService {
    */
   private getDefaultSettings(): AppSettings {
     return {
+      general: {
+        language: 'ko',  // 기본 언어: 한국어
+      },
       tagger: {
         enabled: process.env.TAGGER_ENABLED === 'true',
         model: (process.env.TAGGER_MODEL as TaggerModel) || 'vit',
@@ -78,6 +81,10 @@ export class SettingsService {
         // User settings take precedence over defaults
         const defaults = this.getDefaultSettings();
         this.settings = {
+          general: {
+            ...defaults.general,
+            ...loadedSettings.general,
+          },
           tagger: {
             ...defaults.tagger,
             ...loadedSettings.tagger,
@@ -120,6 +127,14 @@ export class SettingsService {
    * Check if loaded settings are missing any fields from defaults
    */
   private checkForMissingFields(loaded: any, defaults: AppSettings): boolean {
+    // Check general fields
+    for (const key of Object.keys(defaults.general)) {
+      if (!(key in (loaded.general || {}))) {
+        console.log(`[SettingsService] Missing field: general.${key}`);
+        return true;
+      }
+    }
+
     // Check tagger fields
     for (const key of Object.keys(defaults.tagger)) {
       if (!(key in (loaded.tagger || {}))) {
@@ -156,6 +171,22 @@ export class SettingsService {
       console.error('[SettingsService] Error saving settings:', error);
       throw new Error('Failed to save settings');
     }
+  }
+
+  /**
+   * Update general settings
+   */
+  updateGeneralSettings(generalSettings: Partial<GeneralSettings>): AppSettings {
+    const currentSettings = this.loadSettings();
+    const updatedSettings: AppSettings = {
+      ...currentSettings,
+      general: {
+        ...currentSettings.general,
+        ...generalSettings,
+      },
+    };
+    this.saveSettings(updatedSettings);
+    return updatedSettings;
   }
 
   /**

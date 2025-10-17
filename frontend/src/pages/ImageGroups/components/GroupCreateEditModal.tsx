@@ -19,6 +19,7 @@ import {
   CircularProgress,
   Slider,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
@@ -75,6 +76,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   onSuccess,
   group
 }) => {
+  const { t } = useTranslation(['imageGroups', 'common']);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -227,13 +229,13 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   // 폼 유효성 검사
   const validateForm = (): boolean => {
     if (!formData.name.trim()) {
-      setError('그룹명을 입력해주세요.');
+      setError(t('imageGroups:validation.nameRequired'));
       return false;
     }
 
     if (formData.auto_collect_enabled) {
       if (conditions.length === 0) {
-        setError('자동수집을 활성화하려면 최소 1개의 조건을 추가해주세요.');
+        setError(t('imageGroups:validation.conditionRequired'));
         return false;
       }
 
@@ -343,7 +345,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
-        {isEditMode ? '그룹 편집' : '새 그룹 생성'}
+        {isEditMode ? t('imageGroups:modal.editTitle') : t('imageGroups:modal.createTitle')}
       </DialogTitle>
 
       <DialogContent dividers>
@@ -356,11 +358,11 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
         {/* 기본 정보 */}
         <Box sx={{ mb: 3 }}>
           <Typography variant="h6" gutterBottom>
-            기본 정보
+            {t('imageGroups:modal.basicInfo')}
           </Typography>
 
           <TextField
-            label="그룹명"
+            label={t('imageGroups:modal.groupName')}
             fullWidth
             required
             value={formData.name}
@@ -369,7 +371,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
           />
 
           <TextField
-            label="설명"
+            label={t('imageGroups:modal.description')}
             fullWidth
             multiline
             rows={2}
@@ -381,7 +383,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
           {/* 색상 선택 */}
           <Box sx={{ mb: 2 }}>
             <Typography variant="body2" color="text.secondary" gutterBottom>
-              그룹 색상
+              {t('imageGroups:modal.groupColor')}
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
               {PRESET_COLORS.map((color) => (
@@ -414,18 +416,18 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
                 onChange={(e) => handleFormChange('auto_collect_enabled', e.target.checked)}
               />
             }
-            label="자동수집 활성화"
+            label={t('imageGroups:modal.autoCollectEnable')}
           />
 
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 1 }}>
-            설정한 조건에 맞는 이미지를 자동으로 이 그룹에 추가합니다.
+            {t('imageGroups:modal.autoCollectDescription')}
           </Typography>
           <Alert severity="info" sx={{ mt: 1 }}>
             <Typography variant="body2">
-              <strong>OR 조건:</strong> 여러 조건을 추가하면 <strong>하나라도 만족</strong>하는 이미지가 자동수집됩니다.
+              {t('imageGroups:modal.orConditionInfo')}
             </Typography>
             <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
-              예시: "프롬프트에 'anime' 포함" + "오토태그 캐릭터 존재" → 둘 중 하나만 만족해도 수집
+              {t('imageGroups:modal.orConditionExample')}
             </Typography>
           </Alert>
         </Box>
@@ -435,7 +437,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
           <Box sx={{ mb: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="h6">
-                자동수집 조건
+                {t('imageGroups:modal.conditionsTitle')}
               </Typography>
               <Button
                 startIcon={<AddIcon />}
@@ -443,7 +445,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
                 variant="outlined"
                 size="small"
               >
-                조건 추가
+                {t('imageGroups:modal.addCondition')}
               </Button>
             </Box>
 
@@ -634,7 +636,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
 
             {conditions.length === 0 ? (
               <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ py: 3 }}>
-                조건을 추가하여 자동수집 규칙을 설정하세요.
+                {t('imageGroups:modal.emptyConditions')}
               </Typography>
             ) : null}
           </Box>
@@ -643,7 +645,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
 
       <DialogActions>
         <Button onClick={onClose} disabled={loading}>
-          취소
+          {t('imageGroups:modal.buttonCancel')}
         </Button>
         <Button
           onClick={handleSubmit}
@@ -651,7 +653,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
           disabled={loading}
           startIcon={loading ? <CircularProgress size={20} /> : null}
         >
-          {isEditMode ? '수정' : '생성'}
+          {isEditMode ? t('imageGroups:modal.buttonUpdate') : t('imageGroups:modal.buttonCreate')}
         </Button>
       </DialogActions>
     </Dialog>

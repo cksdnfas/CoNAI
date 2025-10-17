@@ -11,6 +11,7 @@ import {
   Alert,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { useTranslation } from 'react-i18next';
 import type { AutoTagsData } from '../../types/image';
 import { taggerBatchApi } from '../../services/settingsApi';
 
@@ -25,6 +26,7 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
   autoTags,
   onTagGenerated,
 }) => {
+  const { t } = useTranslation('promptManagement');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +39,7 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
         onTagGenerated();
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : '태그 생성 중 오류가 발생했습니다.';
+      const message = err instanceof Error ? err.message : t('autoTagDisplay.generationError');
       setError(message);
     } finally {
       setIsGenerating(false);
@@ -54,7 +56,7 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
           </Alert>
         )}
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          이 이미지는 아직 자동 태깅이 생성되지 않았습니다.
+          {t('autoTagDisplay.noTags')}
         </Typography>
         <Button
           variant="contained"
@@ -62,7 +64,7 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
           disabled={isGenerating}
           startIcon={isGenerating ? <CircularProgress size={20} /> : undefined}
         >
-          {isGenerating ? '생성 중...' : '태그 생성'}
+          {isGenerating ? t('autoTagDisplay.generating') : t('autoTagDisplay.generateButton')}
         </Button>
       </Box>
     );
@@ -105,7 +107,7 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
     return (
       <Box sx={{ mb: 3 }}>
         <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-          Rating
+          {t('autoTagDisplay.sections.rating')}
         </Typography>
         <Box
           sx={{
@@ -181,7 +183,7 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
     return (
       <Box sx={{ mb: 2 }}>
         <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-          Characters
+          {t('autoTagDisplay.sections.characters')}
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {characters.map(([name, score]) => (
@@ -221,7 +223,7 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
     return (
       <Box sx={{ mb: 2 }}>
         <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-          Tag List
+          {t('autoTagDisplay.sections.tagList')}
         </Typography>
         <Typography variant="body2" sx={{ lineHeight: 1.6, wordBreak: 'break-word' }}>
           {autoTags.taglist}
@@ -243,7 +245,7 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
       <Accordion defaultExpanded={false}>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-            General Tags ({generalTags.length})
+            {t('autoTagDisplay.sections.generalTags', { count: generalTags.length })}
           </Typography>
         </AccordionSummary>
         <AccordionDetails>
@@ -285,23 +287,23 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
       <Accordion defaultExpanded={false} sx={{ mb: 2 }}>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-            Model Information
+            {t('autoTagDisplay.sections.modelInfo')}
           </Typography>
         </AccordionSummary>
         <AccordionDetails>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <Typography variant="body2">
-              <strong>Model:</strong> {autoTags.model}
+              <strong>{t('autoTagDisplay.modelInfo.model')}:</strong> {autoTags.model}
             </Typography>
             <Typography variant="body2">
-              <strong>General:</strong> {autoTags.thresholds.general}
+              <strong>{t('autoTagDisplay.modelInfo.generalThreshold')}:</strong> {autoTags.thresholds.general}
             </Typography>
             <Typography variant="body2">
-              <strong>Character:</strong> {autoTags.thresholds.character}
+              <strong>{t('autoTagDisplay.modelInfo.characterThreshold')}:</strong> {autoTags.thresholds.character}
             </Typography>
             {autoTags.tagged_at && (
               <Typography variant="body2">
-                <strong>Tagged At:</strong>{' '}
+                <strong>{t('autoTagDisplay.modelInfo.taggedAt')}:</strong>{' '}
                 {new Date(autoTags.tagged_at).toLocaleString('ko-KR')}
               </Typography>
             )}

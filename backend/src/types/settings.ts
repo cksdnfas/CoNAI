@@ -1,3 +1,9 @@
+export type SupportedLanguage = 'ko' | 'en' | 'ja' | 'zh-CN' | 'zh-TW';
+
+export interface GeneralSettings {
+  language: SupportedLanguage;
+}
+
 export type TaggerModel = 'vit' | 'swinv2' | 'convnext';
 export type TaggerDevice = 'auto' | 'cpu' | 'cuda';
 
@@ -18,6 +24,7 @@ export interface SimilaritySettings {
 }
 
 export interface AppSettings {
+  general: GeneralSettings;
   tagger: TaggerSettings;
   similarity: SimilaritySettings;
 }

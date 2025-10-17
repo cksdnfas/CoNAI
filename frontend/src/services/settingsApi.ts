@@ -1,6 +1,12 @@
 import axios from 'axios';
 import { API_BASE_URL } from './api';
 
+export type SupportedLanguage = 'ko' | 'en' | 'ja' | 'zh-CN' | 'zh-TW';
+
+export interface GeneralSettings {
+  language: SupportedLanguage;
+}
+
 export interface TaggerModel {
   name: 'vit' | 'swinv2' | 'convnext';
   label: string;
@@ -35,6 +41,7 @@ export interface SimilaritySettings {
 }
 
 export interface AppSettings {
+  general: GeneralSettings;
   tagger: TaggerSettings;
   similarity: SimilaritySettings;
 }
@@ -66,6 +73,17 @@ export const settingsApi = {
    */
   getSettings: async (): Promise<AppSettings> => {
     const response = await api.get<{ success: boolean; data: AppSettings }>('/');
+    return response.data.data;
+  },
+
+  /**
+   * Update general settings
+   */
+  updateGeneralSettings: async (settings: Partial<GeneralSettings>): Promise<AppSettings> => {
+    const response = await api.put<{ success: boolean; data: AppSettings; message: string }>(
+      '/general',
+      settings
+    );
     return response.data.data;
   },
 

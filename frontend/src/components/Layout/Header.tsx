@@ -22,9 +22,11 @@ import {
   Brightness7 as LightIcon,
 } from '@mui/icons-material';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
 
 const Header: React.FC = () => {
+  const { t } = useTranslation('navigation');
   const location = useLocation();
   const theme = useMuiTheme();
   const { mode, toggleMode } = useAppTheme();
@@ -32,15 +34,13 @@ const Header: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { label: '홈', path: '/' },
-    { label: '갤러리', path: '/gallery' },
-    { label: '이미지 그룹', path: '/image-groups' },
-    { label: '검색', path: '/search' },
-    { label: '업로드', path: '/upload' },
-    { label: '워크플로우', path: '/workflows' },
-    { label: 'ComfyUI 서버', path: '/comfyui-servers' },
-    { label: '프롬프트 관리', path: '/prompt-management' },
-    { label: '설정', path: '/settings' },
+    { label: t('header.menu.home'), path: '/' },
+    { label: t('header.menu.gallery'), path: '/gallery' },
+    { label: t('header.menu.imageGroups'), path: '/image-groups' },
+    { label: t('header.menu.search'), path: '/search' },
+    { label: t('header.menu.upload'), path: '/upload' },
+    { label: t('header.menu.imageGeneration'), path: '/image-generation' },
+    { label: t('header.menu.settings'), path: '/settings' },
   ];
 
   const handleMobileMenuToggle = () => {
@@ -69,9 +69,9 @@ const Header: React.FC = () => {
     >
       <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h6" component="div">
-          ComfyUI Manager
+          {t('header.title')}
         </Typography>
-        <IconButton onClick={handleMobileMenuClose}>
+        <IconButton onClick={handleMobileMenuClose} aria-label={t('header.mobileMenu.close')}>
           <CloseIcon />
         </IconButton>
       </Box>
@@ -95,8 +95,8 @@ const Header: React.FC = () => {
         <ListItem disablePadding>
           <ListItemButton onClick={toggleMode}>
             <ListItemText
-              primary={mode === 'dark' ? '라이트 모드' : '다크 모드'}
-              secondary="테마 전환"
+              primary={mode === 'dark' ? t('header.theme.light') : t('header.theme.dark')}
+              secondary={t('header.theme.toggle')}
             />
           </ListItemButton>
         </ListItem>
@@ -131,7 +131,7 @@ const Header: React.FC = () => {
               fontSize: { xs: '1.1rem', sm: '1.25rem' },
             }}
           >
-            ComfyUI Image Manager
+            {t('header.title')}
           </Typography>
 
           {/* 데스크톱 네비게이션 */}

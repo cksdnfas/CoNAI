@@ -1,0 +1,35 @@
+{
+  "page": {
+    "title": "圖像畫廊",
+    "description": "檢視和管理所有已上傳的圖像。"
+  },
+  "filters": {
+    "aiTool": "AI 工具",
+    "sortBy": "排序方式",
+    "sortOrder": "順序",
+    "all": "全部",
+    "clearFilters": "清除篩選"
+  },
+  "sorting": {
+    "uploadDate": "上傳日期",
+    "filename": "檔案名稱",
+    "fileSize": "檔案大小",
+    "width": "寬度",
+    "height": "高度",
+    "ascending": "升序",
+    "descending": "降序"
+  },
+  "actions": {
+    "refresh": "重新整理",
+    "selectAll": "全選",
+    "deselectAll": "取消選擇"
+  },
+  "status": {
+    "loading": "正在載入圖像...",
+    "noImages": "沒有找到圖像。",
+    "error": "載入圖像時發生錯誤。"
+  },
+  "chips": {
+    "aiToolLabel": "AI 工具: {{tool}}"
+  }
+}

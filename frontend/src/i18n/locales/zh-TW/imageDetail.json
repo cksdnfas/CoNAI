@@ -1,0 +1,86 @@
+{
+  "page": {
+    "title": "圖像詳細資訊",
+    "notFound": "未找到圖像。",
+    "errorLoading": "載入圖像時發生錯誤。",
+    "noIdProvided": "未提供圖像 ID。"
+  },
+  "actions": {
+    "download": "下載",
+    "share": "分享",
+    "back": "返回",
+    "goToDetail": "詳情頁面"
+  },
+  "sections": {
+    "fileInfo": "檔案資訊",
+    "imageInfo": "圖像資訊",
+    "videoInfo": "影片資訊",
+    "aiInfo": "AI 生成資訊",
+    "promptInfo": "提示詞資訊",
+    "groupInfo": "所屬群組",
+    "fullMetadata": "完整中繼資料"
+  },
+  "fileInfo": {
+    "originalFilename": "原始檔案名稱",
+    "filename": "檔案名稱",
+    "size": "大小",
+    "fileSize": "檔案大小",
+    "mimeType": "MIME 類型",
+    "uploadDate": "上傳日期"
+  },
+  "imageInfo": {
+    "dimensions": "尺寸",
+    "dimensionsValue": "{{width}} × {{height}}"
+  },
+  "videoInfo": {
+    "duration": "播放時長",
+    "durationValue": "{{minutes}}分 {{seconds}}秒",
+    "fps": "畫面更新率",
+    "fpsValue": "{{fps}} fps",
+    "videoCodec": "影片編解碼器",
+    "audioCodec": "音訊編解碼器",
+    "bitrate": "位元速率",
+    "bitrateValue": "{{bitrate}} Mbps"
+  },
+  "aiInfo": {
+    "tool": "AI 工具",
+    "toolShort": "工具",
+    "model": "模型",
+    "lora": "LoRA",
+    "steps": "步數",
+    "cfgScale": "CFG Scale",
+    "cfgShort": "CFG",
+    "sampler": "取樣器",
+    "scheduler": "排程器",
+    "seed": "種子",
+    "denoiseStrength": "去噪強度",
+    "generationTime": "生成時間",
+    "generationTimeValue": "{{time}}秒",
+    "batchSize": "批次大小",
+    "batchIndex": "批次索引"
+  },
+  "groupInfo": {
+    "autoType": "自動",
+    "manualType": "手動",
+    "groupLabel": "{{name}} ({{type}})"
+  },
+  "viewer": {
+    "controls": {
+      "zoomIn": "放大",
+      "zoomOut": "縮小",
+      "rotateLeft": "向左旋轉",
+      "rotateRight": "向右旋轉",
+      "flipHorizontal": "水平翻轉",
+      "flipVertical": "垂直翻轉",
+      "reset": "重設",
+      "info": "資訊",
+      "close": "關閉"
+    },
+    "navigation": {
+      "previous": "上一張圖像 (←)",
+      "next": "下一張圖像 (→)",
+      "random": "隨機圖像 (Space)",
+      "currentPosition": "{{current}} / {{total}}"
+    }
+  }
+}

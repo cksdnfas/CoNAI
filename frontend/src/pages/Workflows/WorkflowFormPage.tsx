@@ -23,6 +23,7 @@ import {
   Upload as UploadIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { workflowApi, type Workflow, type MarkedField } from '../../services/api/workflowApi';
 import { MarkedFieldsGuide } from './MarkedFieldsGuide';
 import { MarkedFieldsPreview } from './MarkedFieldsPreview';
@@ -31,6 +32,7 @@ export default function WorkflowFormPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const isEditMode = !!id;
+  const { t } = useTranslation(['workflows', 'common']);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -82,7 +84,7 @@ export default function WorkflowFormPage() {
         JSON.parse(value);
         setJsonError(null);
       } catch (err) {
-        setJsonError('유효하지 않은 JSON 형식입니다');
+        setJsonError(t('workflows:form.invalidJson'));
       }
     } else {
       setJsonError(null);
@@ -125,17 +127,17 @@ export default function WorkflowFormPage() {
   const handleSubmit = async () => {
     // 유효성 검사
     if (!name.trim()) {
-      setError('워크플로우 이름을 입력하세요');
+      setError(t('workflows:form.nameRequired'));
       return;
     }
 
     if (!workflowJson.trim()) {
-      setError('Workflow JSON을 입력하세요');
+      setError(t('workflows:form.jsonRequired'));
       return;
     }
 
     if (jsonError) {
-      setError('JSON 형식을 확인하세요');
+      setError(t('workflows:form.validateJson'));
       return;
     }
 
@@ -154,15 +156,15 @@ export default function WorkflowFormPage() {
 
       if (isEditMode) {
         await workflowApi.updateWorkflow(parseInt(id!), data);
-        setSuccess('워크플로우가 수정되었습니다');
+        setSuccess(t('workflows:alerts.updated'));
       } else {
         await workflowApi.createWorkflow(data);
-        setSuccess('워크플로우가 생성되었습니다');
+        setSuccess(t('workflows:alerts.created'));
       }
 
       // 잠시 후 목록으로 이동
       setTimeout(() => {
-        navigate('/workflows');
+        navigate('/image-generation?tab=workflows');
       }, 1500);
     } catch (err: any) {
       setError(err.response?.data?.error || err.message);
@@ -183,11 +185,11 @@ export default function WorkflowFormPage() {
     <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
       {/* 헤더 */}
       <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <IconButton onClick={() => navigate('/workflows')}>
+        <IconButton onClick={() => navigate('/image-generation?tab=workflows')}>
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h4">
-          {isEditMode ? '워크플로우 편집' : '워크플로우 추가'}
+          {isEditMode ? t('workflows:page.editTitle') : t('workflows:page.createTitle')}
         </Typography>
       </Box>
 
@@ -206,13 +208,13 @@ export default function WorkflowFormPage() {
       {/* 기본 정보 */}
       <Paper sx={{ p: 3, mb: 3 }}>
         <Typography variant="h6" gutterBottom>
-          기본 정보
+          {t('workflows:form.basicInfo')}
         </Typography>
         <Divider sx={{ mb: 2 }} />
 
         <TextField
           fullWidth
-          label="워크플로우 이름"
+          label={t('workflows:form.workflowName')}
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
@@ -221,7 +223,7 @@ export default function WorkflowFormPage() {
 
         <TextField
           fullWidth
-          label="설명"
+          label={t('workflows:form.description')}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           multiline
@@ -231,7 +233,7 @@ export default function WorkflowFormPage() {
 
         <TextField
           fullWidth
-          label="API Endpoint"
+          label={t('workflows:form.apiEndpoint')}
           value={apiEndpoint}
           onChange={(e) => setApiEndpoint(e.target.value)}
           placeholder="http://127.0.0.1:8188"
@@ -245,7 +247,7 @@ export default function WorkflowFormPage() {
               onChange={(e) => setIsActive(e.target.checked)}
             />
           }
-          label="활성화"
+          label={t('workflows:form.activate')}
         />
       </Paper>
 
@@ -253,14 +255,14 @@ export default function WorkflowFormPage() {
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h6">
-            Workflow JSON
+            {t('workflows:form.workflowJson')}
           </Typography>
           <Button
             component="label"
             startIcon={<UploadIcon />}
             size="small"
           >
-            파일 업로드
+            {t('workflows:form.uploadFile')}
             <input
               type="file"
               accept=".json"
@@ -273,8 +275,7 @@ export default function WorkflowFormPage() {
 
         <Alert severity="warning" sx={{ mb: 2 }}>
           <Typography variant="body2">
-            <strong>중요:</strong> ComfyUI에서 "Save (API Format)" 버튼으로 저장한 JSON을 사용하세요.
-            일반 워크플로우 JSON은 작동하지 않습니다.
+            <strong>{t('workflows:alerts.importantNote')}</strong> {t('workflows:alerts.apiFormatWarning')}
           </Typography>
         </Alert>
 
@@ -284,9 +285,9 @@ export default function WorkflowFormPage() {
           rows={15}
           value={workflowJson}
           onChange={(e) => handleWorkflowJsonChange(e.target.value)}
-          placeholder='{"prompt": {...}}'
+          placeholder={t('workflows:form.jsonPlaceholder')}
           error={!!jsonError}
-          helperText={jsonError || 'ComfyUI에서 Export한 Workflow API JSON을 붙여넣으세요'}
+          helperText={jsonError || t('workflows:form.jsonHelper')}
           sx={{
             '& .MuiInputBase-input': {
               fontFamily: 'monospace',
@@ -298,7 +299,7 @@ export default function WorkflowFormPage() {
         {workflowJson && !jsonError && (
           <Box sx={{ mt: 2 }}>
             <Chip
-              label={`${JSON.stringify(JSON.parse(workflowJson)).length} 문자`}
+              label={t('workflows:form.jsonCharCount', { count: JSON.stringify(JSON.parse(workflowJson)).length })}
               size="small"
               color="success"
             />
@@ -313,7 +314,7 @@ export default function WorkflowFormPage() {
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h6">
-            Marked Fields 설정
+            {t('workflows:markedFields.sectionTitle')}
           </Typography>
           <Button
             startIcon={<AddIcon />}
@@ -321,7 +322,7 @@ export default function WorkflowFormPage() {
             variant="contained"
             size="small"
           >
-            필드 추가
+            {t('workflows:markedFields.addField')}
           </Button>
         </Box>
         <Divider sx={{ mb: 2 }} />
@@ -331,37 +332,37 @@ export default function WorkflowFormPage() {
             <CardContent>
               <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'flex-start' }}>
                 <TextField
-                  label="필드 ID"
+                  label={t('workflows:fieldForm.fieldId')}
                   value={field.id}
                   onChange={(e) => updateMarkedField(index, { id: e.target.value })}
                   size="small"
-                  placeholder="prompt_positive"
-                  helperText="고유 식별자"
+                  placeholder={t('workflows:fieldForm.fieldIdPlaceholder')}
+                  helperText={t('workflows:fieldForm.fieldIdHelper')}
                   sx={{ flex: 1 }}
                 />
                 <TextField
-                  label="라벨"
+                  label={t('workflows:fieldForm.label')}
                   value={field.label}
                   onChange={(e) => updateMarkedField(index, { label: e.target.value })}
                   size="small"
-                  placeholder="프롬프트"
-                  helperText="사용자에게 표시될 이름"
+                  placeholder={t('workflows:fieldForm.labelPlaceholder')}
+                  helperText={t('workflows:fieldForm.labelHelper')}
                   sx={{ flex: 1 }}
                 />
                 <TextField
                   select
-                  label="타입"
+                  label={t('workflows:fieldForm.type')}
                   value={field.type}
                   onChange={(e) => updateMarkedField(index, { type: e.target.value as any })}
                   size="small"
-                  helperText="입력 방식"
+                  helperText={t('workflows:fieldForm.typeHelper')}
                   sx={{ flex: 1 }}
                   SelectProps={{ native: true }}
                 >
-                  <option value="text">텍스트 (한 줄)</option>
-                  <option value="textarea">긴 텍스트 (여러 줄)</option>
-                  <option value="number">숫자</option>
-                  <option value="select">선택 (드롭다운)</option>
+                  <option value="text">{t('workflows:fieldForm.typeText')}</option>
+                  <option value="textarea">{t('workflows:fieldForm.typeTextarea')}</option>
+                  <option value="number">{t('workflows:fieldForm.typeNumber')}</option>
+                  <option value="select">{t('workflows:fieldForm.typeSelect')}</option>
                 </TextField>
                 <IconButton
                   onClick={() => removeMarkedField(index)}
@@ -376,22 +377,22 @@ export default function WorkflowFormPage() {
               <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
                 <TextField
                   fullWidth
-                  label="JSON Path *"
+                  label={t('workflows:fieldForm.jsonPath')}
                   value={field.jsonPath}
                   onChange={(e) => updateMarkedField(index, { jsonPath: e.target.value })}
-                  placeholder="6.inputs.text"
+                  placeholder={t('workflows:fieldForm.jsonPathPlaceholder')}
                   size="small"
-                  helperText="Workflow JSON 내 경로. 예: 6.inputs.text (6번 노드의 text 입력)"
+                  helperText={t('workflows:fieldForm.jsonPathHelper')}
                   sx={{ flex: 2 }}
                 />
                 <TextField
                   fullWidth
-                  label="기본값"
+                  label={t('workflows:fieldForm.defaultValue')}
                   value={field.default_value || ''}
                   onChange={(e) => updateMarkedField(index, { default_value: e.target.value })}
                   size="small"
-                  placeholder={field.type === 'number' ? '512' : 'a beautiful landscape'}
-                  helperText="비어있을 경우 표시될 값"
+                  placeholder={t('workflows:fieldForm.defaultValuePlaceholder')}
+                  helperText={t('workflows:fieldForm.defaultValueHelper')}
                   sx={{ flex: 1 }}
                 />
                 <FormControlLabel
@@ -402,7 +403,7 @@ export default function WorkflowFormPage() {
                       size="small"
                     />
                   }
-                  label="필수"
+                  label={t('workflows:fieldForm.required')}
                   sx={{ mt: 1 }}
                 />
               </Box>
@@ -410,21 +411,21 @@ export default function WorkflowFormPage() {
               {field.type === 'number' && (
                 <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
                   <TextField
-                    label="최소값"
+                    label={t('workflows:fieldForm.minValue')}
                     type="number"
                     value={field.min || ''}
                     onChange={(e) => updateMarkedField(index, { min: parseFloat(e.target.value) })}
                     size="small"
-                    placeholder="1"
+                    placeholder={t('workflows:fieldForm.minPlaceholder')}
                     sx={{ flex: 1 }}
                   />
                   <TextField
-                    label="최대값"
+                    label={t('workflows:fieldForm.maxValue')}
                     type="number"
                     value={field.max || ''}
                     onChange={(e) => updateMarkedField(index, { max: parseFloat(e.target.value) })}
                     size="small"
-                    placeholder="150"
+                    placeholder={t('workflows:fieldForm.maxPlaceholder')}
                     sx={{ flex: 1 }}
                   />
                 </Box>
@@ -433,14 +434,14 @@ export default function WorkflowFormPage() {
               {field.type === 'select' && (
                 <TextField
                   fullWidth
-                  label="선택 옵션 (쉼표로 구분)"
+                  label={t('workflows:fieldForm.selectOptions')}
                   value={field.options?.join(', ') || ''}
                   onChange={(e) => updateMarkedField(index, {
                     options: e.target.value.split(',').map(s => s.trim()).filter(s => s)
                   })}
                   size="small"
-                  placeholder="euler, dpm++, ddim"
-                  helperText="예: euler, dpm++ 2m, ddim"
+                  placeholder={t('workflows:fieldForm.selectOptionsPlaceholder')}
+                  helperText={t('workflows:fieldForm.selectOptionsHelper')}
                   sx={{ mb: 1 }}
                 />
               )}
@@ -451,7 +452,7 @@ export default function WorkflowFormPage() {
         {markedFields.length === 0 && (
           <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
             <Typography variant="body2">
-              Marked Fields가 없습니다. 추가하려면 "필드 추가" 버튼을 클릭하세요
+              {t('workflows:markedFields.noFields')}
             </Typography>
           </Box>
         )}
@@ -464,10 +465,10 @@ export default function WorkflowFormPage() {
       <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
         <Button
           variant="outlined"
-          onClick={() => navigate('/workflows')}
+          onClick={() => navigate('/image-generation?tab=workflows')}
           disabled={saving}
         >
-          취소
+          {t('workflows:actions.cancel')}
         </Button>
         <Button
           variant="contained"
@@ -475,7 +476,7 @@ export default function WorkflowFormPage() {
           onClick={handleSubmit}
           disabled={saving || !!jsonError || !name.trim() || !workflowJson.trim()}
         >
-          {saving ? '저장 중...' : (isEditMode ? '수정' : '생성')}
+          {saving ? t('workflows:actions.saving') : (isEditMode ? t('workflows:actions.update') : t('workflows:actions.create'))}
         </Button>
       </Box>
     </Box>

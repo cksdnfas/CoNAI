@@ -35,9 +35,10 @@ import {
   Search as SearchIcon,
   Settings as SettingsIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 
 import { promptCollectionApi, promptGroupApi } from '../../../services/api';
-import type { PromptSearchResult, PromptGroupWithPrompts } from '../../../types/promptCollection';
+import type { PromptSearchResult, PromptGroupWithPrompts } from '@comfyui-image-manager/shared';
 import PromptGroupManagementModal from './PromptGroupManagementModal';
 
 interface PromptListProps {
@@ -45,6 +46,7 @@ interface PromptListProps {
 }
 
 const PromptList: React.FC<PromptListProps> = ({ type }) => {
+  const { t } = useTranslation('promptManagement');
   const [prompts, setPrompts] = useState<PromptSearchResult[]>([]);
   const [groups, setGroups] = useState<PromptGroupWithPrompts[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,11 +101,11 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
         setPrompts(Array.isArray(response.data) ? response.data : []);
         setTotalCount(response.pagination?.total || 0);
       } else {
-        showSnackbar('프롬프트 목록을 불러오는데 실패했습니다.', 'error');
+        showSnackbar(t('promptList.messages.loadFailed'), 'error');
       }
     } catch (error) {
       console.error('Error fetching prompts:', error);
-      showSnackbar('프롬프트 목록을 불러오는데 실패했습니다.', 'error');
+      showSnackbar(t('promptList.messages.loadFailed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -159,14 +161,14 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
     try {
       const response = await promptCollectionApi.deletePrompt(promptId, type);
       if (response.success) {
-        showSnackbar('프롬프트가 삭제되었습니다.', 'success');
+        showSnackbar(t('promptList.messages.deleteSuccess'), 'success');
         fetchPrompts();
       } else {
-        showSnackbar(response.error || '프롬프트 삭제에 실패했습니다.', 'error');
+        showSnackbar(response.error || t('promptList.messages.deleteFailed'), 'error');
       }
     } catch (error) {
       console.error('Error deleting prompt:', error);
-      showSnackbar('프롬프트 삭제에 실패했습니다.', 'error');
+      showSnackbar(t('promptList.messages.deleteFailed'), 'error');
     }
   };
 
@@ -187,14 +189,14 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
         type
       );
       if (response.success) {
-        showSnackbar('프롬프트가 그룹에 할당되었습니다.', 'success');
+        showSnackbar(t('promptList.messages.assignSuccess'), 'success');
         fetchPrompts();
       } else {
-        showSnackbar(response.error || '프롬프트 할당에 실패했습니다.', 'error');
+        showSnackbar(response.error || t('promptList.messages.assignFailed'), 'error');
       }
     } catch (error) {
       console.error('Error assigning prompt:', error);
-      showSnackbar('프롬프트 할당에 실패했습니다.', 'error');
+      showSnackbar(t('promptList.messages.assignFailed'), 'error');
     }
 
     setAssignDialogOpen(false);
@@ -214,9 +216,9 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
 
   // 그룹명 가져오기
   const getGroupName = (groupId: number | null): string => {
-    if (groupId === null) return '미분류';
+    if (groupId === null) return t('promptList.statistics.unclassified');
     const group = groups.find(g => g.id === groupId);
-    return group?.group_name || '알 수 없음';
+    return group?.group_name || t('promptList.statistics.unknown');
   };
 
   // 삭제 가능 여부 확인
@@ -229,7 +231,7 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
       {/* 검색 및 필터 */}
       <Box sx={{ display: 'flex', gap: 2, mb: 3, alignItems: 'center' }}>
         <TextField
-          placeholder={`${type === 'positive' ? 'Positive' : 'Negative'} 프롬프트 검색...`}
+          placeholder={t('promptList.search.placeholder', { type: type === 'positive' ? 'Positive' : 'Negative' })}
           variant="outlined"
           size="small"
           value={searchQuery}
@@ -241,14 +243,14 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
         />
 
         <FormControl size="small" sx={{ minWidth: 150 }}>
-          <InputLabel>그룹 필터</InputLabel>
+          <InputLabel>{t('promptList.filters.groupFilter.label')}</InputLabel>
           <Select
             value={selectedGroupFilter}
-            label="그룹 필터"
+            label={t('promptList.filters.groupFilter.label')}
             onChange={(e) => setSelectedGroupFilter(e.target.value as any)}
           >
-            <MenuItem value="all">전체</MenuItem>
-            <MenuItem value="unassigned">미분류</MenuItem>
+            <MenuItem value="all">{t('promptList.filters.groupFilter.all')}</MenuItem>
+            <MenuItem value="unassigned">{t('promptList.filters.groupFilter.unassigned')}</MenuItem>
             {groups
               .filter(group => group.is_visible)
               .map((group) => (
@@ -264,7 +266,7 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
           startIcon={<SettingsIcon />}
           onClick={handleGroupMenuOpen}
         >
-          그룹 관리
+          {t('promptList.actions.groupManagement')}
         </Button>
       </Box>
 
@@ -273,10 +275,10 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>프롬프트</TableCell>
-              <TableCell align="center">사용 횟수</TableCell>
-              <TableCell align="center">할당된 그룹</TableCell>
-              <TableCell align="center">작업</TableCell>
+              <TableCell>{t('promptList.table.headers.prompt')}</TableCell>
+              <TableCell align="center">{t('promptList.table.headers.usageCount')}</TableCell>
+              <TableCell align="center">{t('promptList.table.headers.assignedGroup')}</TableCell>
+              <TableCell align="center">{t('promptList.table.headers.actions')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -290,7 +292,7 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
               <TableRow>
                 <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
                   <Typography color="text.secondary">
-                    프롬프트가 없습니다.
+                    {t('promptList.table.empty')}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -314,7 +316,7 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
                         ))}
                         {prompt.synonyms.length > 3 && (
                           <Chip
-                            label={`+${prompt.synonyms.length - 3}개 더`}
+                            label={t('promptList.table.synonyms.more', { count: prompt.synonyms.length - 3 })}
                             size="small"
                             variant="outlined"
                             color="primary"
@@ -340,7 +342,7 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
                   </TableCell>
                   <TableCell align="center">
                     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                      <Tooltip title="그룹에 할당">
+                      <Tooltip title={t('promptList.actions.assignToGroup')}>
                         <IconButton
                           size="small"
                           onClick={() => handleAssignToGroup(prompt.id)}
@@ -348,7 +350,7 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
                           <GroupIcon />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title={canDelete(prompt) ? '삭제' : '사용 중인 프롬프트는 삭제할 수 없습니다'}>
+                      <Tooltip title={canDelete(prompt) ? t('promptList.actions.delete') : t('promptList.actions.cannotDelete')}>
                         <span>
                           <IconButton
                             size="small"
@@ -378,10 +380,11 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
         page={page}
         onPageChange={handlePageChange}
         onRowsPerPageChange={handleRowsPerPageChange}
-        labelRowsPerPage="페이지 당 행 수:"
-        labelDisplayedRows={({ from, to, count }) =>
-          `${from}-${to} / ${count !== -1 ? count : `${to}+`}`
-        }
+        labelRowsPerPage={t('promptList.pagination.rowsPerPage')}
+        labelDisplayedRows={({ from, to, count }) => {
+          const displayCount = count !== -1 ? count : `${to}+`;
+          return `${from}-${to} / ${displayCount}`;
+        }}
       />
 
       {/* 그룹 관리 메뉴 */}
@@ -397,22 +400,22 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
           <ListItemIcon>
             <SettingsIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText>그룹 관리</ListItemText>
+          <ListItemText>{t('promptList.actions.groupManagement')}</ListItemText>
         </MenuItem>
       </Menu>
 
       {/* 그룹 할당 다이얼로그 */}
       <Dialog open={assignDialogOpen} onClose={() => setAssignDialogOpen(false)}>
-        <DialogTitle>그룹에 할당</DialogTitle>
+        <DialogTitle>{t('assignDialog.title')}</DialogTitle>
         <DialogContent>
           <FormControl fullWidth sx={{ mt: 1, minWidth: 300 }}>
-            <InputLabel>그룹 선택</InputLabel>
+            <InputLabel>{t('assignDialog.selectGroup.label')}</InputLabel>
             <Select
               value={selectedGroupId || ''}
-              label="그룹 선택"
+              label={t('assignDialog.selectGroup.label')}
               onChange={(e) => setSelectedGroupId(e.target.value as number | null)}
             >
-              <MenuItem value="">미분류</MenuItem>
+              <MenuItem value="">{t('assignDialog.selectGroup.unassigned')}</MenuItem>
               {groups
                 .filter(group => group.is_visible)
                 .map((group) => (
@@ -424,9 +427,9 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
           </FormControl>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAssignDialogOpen(false)}>취소</Button>
+          <Button onClick={() => setAssignDialogOpen(false)}>{t('assignDialog.actions.cancel')}</Button>
           <Button onClick={handleConfirmAssign} variant="contained">
-            할당
+            {t('assignDialog.actions.assign')}
           </Button>
         </DialogActions>
       </Dialog>

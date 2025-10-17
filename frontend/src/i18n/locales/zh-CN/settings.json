@@ -1,0 +1,331 @@
+{
+  "title": "设置",
+  "subtitle": "管理ComfyUI Image Manager应用程序设置",
+  "tabs": {
+    "general": "常规设置",
+    "tagger": "Tagger设置",
+    "rating": "评分设置",
+    "similarity": "图像相似度搜索",
+    "prompts": "提示词管理",
+    "advanced": "高级设置"
+  },
+  "general": {
+    "title": "常规设置",
+    "language": {
+      "label": "语言",
+      "description": "选择应用程序显示语言",
+      "ko": "한국어",
+      "en": "English",
+      "ja": "日本語",
+      "zh-CN": "简体中文",
+      "zh-TW": "繁體中文"
+    }
+  },
+  "tagger": {
+    "title": "WD Tagger设置",
+    "description": "配置基于AI的图像自动标记功能。",
+    "enabled": "启用Tagger",
+    "autoTagOnUpload": "上传时自动标记",
+    "model": {
+      "label": "模型选择",
+      "loading": "正在加载模型列表...",
+      "downloaded": "已下载"
+    },
+    "device": {
+      "label": "设备选择",
+      "auto": {
+        "title": "自动 (Auto)",
+        "description": "如果GPU可用则使用GPU，否则使用CPU"
+      },
+      "cpu": {
+        "title": "CPU",
+        "description": "仅使用CPU（速度慢但稳定）"
+      },
+      "cuda": {
+        "title": "GPU (CUDA)",
+        "description": "使用NVIDIA GPU（速度快，需要GPU）"
+      }
+    },
+    "modelStatus": {
+      "title": "模型状态",
+      "loaded": "已加载",
+      "unloaded": "已卸载",
+      "lastUsed": "最后使用",
+      "justNow": "刚刚",
+      "minutesAgo": "{{minutes}}分钟前",
+      "hoursAgo": "{{hours}}小时前",
+      "daysAgo": "{{days}}天前",
+      "none": "无"
+    },
+    "buttons": {
+      "load": "加载",
+      "unload": "卸载",
+      "refresh": "刷新",
+      "download": "下载模型",
+      "downloading": "正在确认下载信息...",
+      "refreshStatus": "刷新状态",
+      "checkDependencies": "检查Python依赖",
+      "checking": "正在检查Python依赖...",
+      "save": "保存",
+      "cancel": "取消"
+    },
+    "alerts": {
+      "modelDownloaded": "<strong>{{model}}</strong>模型已下载。",
+      "modelNotDownloaded": "<strong>{{model}}</strong>模型尚未下载。首次使用时将自动下载。",
+      "modelLoaded": "模型已加载",
+      "modelUnloaded": "模型已卸载",
+      "loadFailed": "模型加载失败",
+      "unloadFailed": "模型卸载失败",
+      "saveFailed": "设置保存失败",
+      "dependencyCheckFailed": "依赖检查失败"
+    },
+    "threshold": {
+      "general": {
+        "label": "常规标签阈值: {{value}}",
+        "description": "越低提取越多标签（可能增加噪音）"
+      },
+      "character": {
+        "label": "角色标签阈值: {{value}}",
+        "description": "越低识别越多角色（可能增加误识别）"
+      }
+    },
+    "pythonPath": {
+      "label": "Python执行路径",
+      "helper": "Python可执行文件路径（例如: python, python3, C:\\Python39\\python.exe）"
+    },
+    "memoryManagement": {
+      "title": "内存管理",
+      "description": "设置模型的内存保留方式。",
+      "keepModelLoaded": "任务后保留模型内存",
+      "autoUnloadMinutes": "自动卸载时间: {{minutes}}分钟",
+      "autoUnloadDescription": "最后使用后经过设定时间将自动从内存中卸载。",
+      "keepLoadedAlert": "模型将保留在内存中。经过设定时间后将自动卸载。",
+      "notKeepLoadedAlert": "模型不会保留在内存中。任务开始时自动加载，程序关闭时卸载。"
+    },
+    "batch": {
+      "title": "批处理任务",
+      "description": "执行批量图像处理任务。",
+      "untaggedCount": "未处理图像: {{count}}张",
+      "progress": "进度: {{current}} / {{total}}",
+      "buttons": {
+        "tagUnprocessed": "标记未处理图像（最多100张）",
+        "tagAll": "重新标记全部（最多100张）",
+        "processing": "处理中..."
+      },
+      "alerts": {
+        "complete": "完成: 成功{{success}}张，失败{{failed}}张",
+        "failed": "未处理图像标记失败",
+        "tagAllFailed": "全部重新标记失败"
+      },
+      "confirmDialog": {
+        "title": "确认重新标记全部",
+        "message": "是否覆盖所有图像的标签？此操作无法撤销。\n（最多处理100张）",
+        "confirm": "确认",
+        "cancel": "取消"
+      }
+    },
+    "test": {
+      "title": "测试",
+      "description": "使用特定图像测试当前设置。",
+      "imageId": "图像ID",
+      "placeholder": "例如: 123",
+      "button": "运行测试",
+      "processing": "处理中...",
+      "result": "标记结果:",
+      "failed": "测试失败",
+      "invalidId": "请输入有效的图像ID"
+    }
+  },
+  "rating": {
+    "title": "评分设置",
+    "description": "配置图像评分系统",
+    "weights": {
+      "title": "权重设置",
+      "description": "设置各评分项的分数权重。",
+      "general": "General: {{value}}",
+      "sensitive": "Sensitive: {{value}}",
+      "questionable": "Questionable: {{value}}",
+      "explicit": "Explicit: {{value}}",
+      "preview": {
+        "title": "实时预览（示例评分: general=0.001, sensitive=0.045, questionable=0.735, explicit=0.470）",
+        "score": "总分: <strong>{{score}}分</strong>"
+      },
+      "buttons": {
+        "save": "保存权重",
+        "cancel": "取消",
+        "saving": "保存中..."
+      },
+      "alerts": {
+        "saveSuccess": "权重设置已保存。",
+        "saveFailed": "权重保存失败。",
+        "loadFailed": "权重设置加载失败。"
+      }
+    },
+    "tiers": {
+      "title": "等级区间设置",
+      "description": "按分数区间设置等级。",
+      "addButton": "添加等级",
+      "table": {
+        "order": "顺序",
+        "name": "等级名称",
+        "scoreRange": "分数区间",
+        "color": "颜色",
+        "actions": "操作",
+        "empty": "没有等级。请添加等级。",
+        "scoreFormat": "{{min}}分 ~ {{max}}分",
+        "infinity": "∞"
+      },
+      "dialog": {
+        "createTitle": "添加等级",
+        "editTitle": "编辑等级",
+        "tierName": "等级名称",
+        "minScore": "最低分数",
+        "maxScore": "最高分数（空 = 无限）",
+        "order": "顺序",
+        "color": "颜色 (Hex)",
+        "colorPlaceholder": "#2196f3",
+        "colorHelper": "例如: #22c55e, #3b82f6, #f59e0b, #ef4444",
+        "save": "保存",
+        "cancel": "取消",
+        "saving": "保存中...",
+        "requiredFields": "请填写所有必填项。"
+      },
+      "alerts": {
+        "created": "等级已添加。",
+        "updated": "等级已更新。",
+        "deleted": "等级已删除。",
+        "saveFailed": "等级保存失败。",
+        "deleteFailed": "等级删除失败。",
+        "loadFailed": "等级设置加载失败。",
+        "deleteConfirm": "确定要删除此等级吗？"
+      }
+    },
+    "calculator": {
+      "title": "分数计算测试",
+      "description": "输入评分值以计算分数。",
+      "general": "General: {{value}}",
+      "sensitive": "Sensitive: {{value}}",
+      "questionable": "Questionable: {{value}}",
+      "explicit": "Explicit: {{value}}",
+      "calculate": "计算分数",
+      "calculating": "计算中...",
+      "result": {
+        "title": "计算结果",
+        "score": "总分: <strong>{{score}}分</strong>",
+        "breakdown": "详细分数:",
+        "generalScore": "General: {{score}}分",
+        "sensitiveScore": "Sensitive: {{score}}分",
+        "questionableScore": "Questionable: {{score}}分",
+        "explicitScore": "Explicit: {{score}}分"
+      },
+      "failed": "分数计算失败。"
+    }
+  },
+  "similarity": {
+    "title": "图像相似度搜索设置",
+    "description": "自动生成用于相似图像搜索的哈希值",
+    "systemStatus": {
+      "title": "系统状态",
+      "description": "图像相似度搜索系统的当前状态。",
+      "totalImages": "总图像: {{count}}张",
+      "withHash": "已生成哈希: {{count}}张",
+      "withoutHash": "未生成: {{count}}张",
+      "completion": "完成率: {{percent}}%",
+      "autoGenerateHash": "上传时自动生成哈希",
+      "rebuildButton": "生成所有未生成图像的哈希（{{count}}张）",
+      "rebuildingButton": "生成中...",
+      "refreshButton": "刷新统计",
+      "rebuildProgress": "哈希生成进行中... {{processed}}张完成/{{total}}张总计（{{percent}}%完成）",
+      "allComplete": "所有图像的哈希已生成！",
+      "rebuildComplete": "处理完成: {{processed}}张图像哈希已生成。",
+      "rebuildCompleteWithErrors": "处理完成: {{success}}张成功，{{failed}}张失败",
+      "rebuildFailed": "哈希重新生成失败",
+      "noImagesToProcess": "没有要处理的图像。",
+      "autoGenerateUpdateFailed": "设置更新失败"
+    },
+    "test": {
+      "title": "测试与预览",
+      "description": "使用特定图像测试相似度搜索。",
+      "imageId": "图像ID",
+      "placeholder": "例如: 123",
+      "searchType": "搜索类型",
+      "types": {
+        "duplicates": "重复搜索",
+        "similar": "相似搜索",
+        "color": "色彩搜索"
+      },
+      "searchButton": "执行搜索",
+      "searching": "搜索中...",
+      "queryImage": "搜索源图像",
+      "results": "搜索结果: {{count}}张",
+      "noResults": "没有相似图像。",
+      "searchFailed": "搜索失败",
+      "imageDetails": {
+        "id": "ID:",
+        "filename": "文件名:",
+        "size": "大小:",
+        "aiTool": "AI工具:"
+      },
+      "matchTypes": {
+        "exact": "完全相同",
+        "nearDuplicate": "几乎相同",
+        "similar": "相似",
+        "colorSimilar": "色彩相似"
+      },
+      "similarity": "{{percent}}%",
+      "colorSimilarity": "色彩: {{percent}}%"
+    },
+    "duplicateScan": {
+      "title": "全局重复分析",
+      "description": "在整个数据库中查找重复图像组。",
+      "scanButton": "执行全局扫描",
+      "scanning": "扫描中...",
+      "foundGroups": "发现的重复组: {{count}}个",
+      "groupLabel": "组{{id}} • {{count}}张图像",
+      "similarityLabel": "{{percent}}%相似",
+      "moreImages": "+{{count}}张更多",
+      "noResults": "执行扫描后将显示重复图像组。",
+      "id": "ID: {{id}}"
+    },
+    "thresholds": {
+      "title": "阈值设置",
+      "description": "调整相似度搜索的灵敏度。",
+      "duplicate": {
+        "label": "重复搜索阈值: {{value}}",
+        "description": "越低越严格（0=完全相同，5=几乎相同，10=可能略有不同）",
+        "strict": "0（严格）",
+        "recommended": "5（推荐）",
+        "lenient": "10（宽松）"
+      },
+      "similar": {
+        "label": "相似搜索阈值: {{value}}",
+        "description": "越低越严格，越高搜索越多相似图像",
+        "strict": "5（严格）",
+        "recommended": "15（推荐）",
+        "lenient": "25（宽松）"
+      },
+      "color": {
+        "label": "色彩相似度阈值: {{value}}%",
+        "description": "色彩相似度标准（越高越严格）",
+        "min": "70%",
+        "recommended": "85%（推荐）",
+        "max": "100%"
+      },
+      "searchLimit": {
+        "label": "搜索结果限制",
+        "options": {
+          "10": "10张",
+          "20": "20张（推荐）",
+          "50": "50张",
+          "100": "100张"
+        }
+      },
+      "localStorageNote": "设置值仅本地保存，搜索时实时应用。"
+    }
+  },
+  "messages": {
+    "saveSuccess": "设置保存成功",
+    "saveFailed": "设置保存失败",
+    "loadFailed": "设置加载失败"
+  }
+}

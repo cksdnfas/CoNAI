@@ -1,0 +1,114 @@
+{
+  "buttons": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "edit": "編集",
+    "add": "追加",
+    "upload": "アップロード",
+    "download": "ダウンロード",
+    "search": "検索",
+    "filter": "フィルター",
+    "reset": "リセット",
+    "confirm": "確認",
+    "close": "閉じる",
+    "back": "戻る",
+    "next": "次へ",
+    "previous": "前へ",
+    "select": "選択",
+    "deselect": "選択解除",
+    "selectAll": "すべて選択",
+    "deselectAll": "すべて解除",
+    "apply": "適用",
+    "clear": "クリア"
+  },
+  "messages": {
+    "loading": "読み込み中...",
+    "saving": "保存中...",
+    "success": "成功",
+    "error": "エラー",
+    "noData": "データがありません",
+    "confirmDelete": "削除しますか？",
+    "unsavedChanges": "保存されていない変更があります",
+    "processing": "処理中...",
+    "uploading": "アップロード中...",
+    "downloading": "ダウンロード中...",
+    "deleting": "削除中..."
+  },
+  "labels": {
+    "name": "名前",
+    "description": "説明",
+    "date": "日付",
+    "status": "ステータス",
+    "type": "タイプ",
+    "size": "サイズ",
+    "created": "作成日",
+    "updated": "更新日",
+    "width": "幅",
+    "height": "高さ",
+    "duration": "再生時間",
+    "resolution": "解像度"
+  },
+  "imageCard": {
+    "tooltips": {
+      "viewDetails": "詳細情報",
+      "download": "ダウンロード",
+      "delete": "削除",
+      "select": "選択"
+    },
+    "badges": {
+      "auto": "自動",
+      "video": "動画"
+    },
+    "confirmDelete": {
+      "image": "この画像を削除しますか？",
+      "video": "この動画を削除しますか？"
+    }
+  },
+  "bulkActions": {
+    "selectedCount": "{{count}}個のアイテムが選択されました",
+    "selectedCountImages": "{{count}}個の画像が選択されました",
+    "tooltips": {
+      "download": "ダウンロード",
+      "addToGroup": "グループに追加",
+      "delete": "削除",
+      "clearSelection": "選択解除"
+    },
+    "confirmDelete": {
+      "mixed": "選択された{{count}}個のファイル（画像/動画）を削除しますか？",
+      "images": "選択された{{count}}個の画像を削除しますか？",
+      "videos": "選択された{{count}}個の動画を削除しますか？",
+      "files": "選択された{{count}}個のファイルを削除しますか？"
+    }
+  },
+  "pagination": {
+    "perPage": "ページあたり",
+    "items": "個",
+    "page": "ページ",
+    "of": "/",
+    "showing": "{{total}}個中{{from}}-{{to}}",
+    "goToPage": "ページへ移動",
+    "rowsPerPage": "ページあたりの行数"
+  },
+  "states": {
+    "loading": "読み込み中",
+    "error": "エラー",
+    "empty": "空",
+    "success": "成功",
+    "pending": "保留中",
+    "completed": "完了",
+    "failed": "失敗"
+  },
+  "actions": {
+    "view": "表示",
+    "download": "ダウンロード",
+    "delete": "削除",
+    "edit": "編集",
+    "create": "作成",
+    "update": "更新",
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "retry": "再試行",
+    "refresh": "更新"
+  }
+}

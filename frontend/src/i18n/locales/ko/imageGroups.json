@@ -1,0 +1,142 @@
+{
+  "page": {
+    "title": "이미지 그룹",
+    "description": "이미지를 그룹별로 관리하고 자동 수집 규칙을 설정할 수 있습니다.",
+    "emptyTitle": "아직 생성된 그룹이 없습니다",
+    "emptyDescription": "새 그룹을 만들어서 이미지를 체계적으로 관리해보세요."
+  },
+  "groupCard": {
+    "imageCount": "{{count}}개 이미지",
+    "autoCollect": "자동수집",
+    "stats": "자동: {{auto}}개 | 수동: {{manual}}개"
+  },
+  "menu": {
+    "edit": "편집",
+    "delete": "삭제",
+    "runAutoCollection": "자동수집 실행"
+  },
+  "modal": {
+    "createTitle": "새 그룹 생성",
+    "editTitle": "그룹 편집",
+    "basicInfo": "기본 정보",
+    "groupName": "그룹명",
+    "description": "설명",
+    "groupColor": "그룹 색상",
+    "autoCollectEnable": "자동수집 활성화",
+    "autoCollectDescription": "설정한 조건에 맞는 이미지를 자동으로 이 그룹에 추가합니다.",
+    "orConditionInfo": "OR 조건: 여러 조건을 추가하면 하나라도 만족하는 이미지가 자동수집됩니다.",
+    "orConditionExample": "예시: \"프롬프트에 'anime' 포함\" + \"오토태그 캐릭터 존재\" → 둘 중 하나만 만족해도 수집",
+    "conditionsTitle": "자동수집 조건",
+    "addCondition": "조건 추가",
+    "conditionType": "조건 유형",
+    "conditionValue": "값",
+    "emptyConditions": "조건을 추가하여 자동수집 규칙을 설정하세요.",
+    "buttonCreate": "생성",
+    "buttonUpdate": "수정",
+    "buttonCancel": "취소"
+  },
+  "conditions": {
+    "groups": {
+      "basic": "기본",
+      "prompt": "프롬프트",
+      "autoTag": "오토태그"
+    },
+    "types": {
+      "aiTool": "AI 도구",
+      "modelName": "모델명 (메타데이터)",
+      "promptContains": "프롬프트 포함",
+      "promptRegex": "프롬프트 정규식",
+      "negativePromptContains": "네거티브 프롬프트 포함",
+      "negativePromptRegex": "네거티브 프롬프트 정규식",
+      "autoTagExists": "오토태그 존재 여부",
+      "autoTagRating": "오토태그: Rating",
+      "autoTagRatingScore": "오토태그: Rating 점수 (가중치)",
+      "autoTagGeneral": "오토태그: General 태그",
+      "autoTagCharacter": "오토태그: 캐릭터",
+      "autoTagHasCharacter": "오토태그: 캐릭터 존재 여부",
+      "autoTagModel": "오토태그: 모델명"
+    },
+    "values": {
+      "exists": "있음",
+      "notExists": "없음"
+    },
+    "ratings": {
+      "general": "General",
+      "sensitive": "Sensitive",
+      "questionable": "Questionable",
+      "explicit": "Explicit"
+    },
+    "fields": {
+      "ratingType": "Rating 유형",
+      "minScore": "최소 점수",
+      "maxScore": "최대 점수",
+      "tagName": "태그명",
+      "characterName": "캐릭터명",
+      "caseSensitive": "대소문자 구분",
+      "weightedScore": "가중치 합산 점수",
+      "maxWeightInfo": "일반적으로 200까지",
+      "confidenceRange": "신뢰도 점수 범위 (0.0 ~ 1.0): {{min}} ~ {{max}}",
+      "confidenceInfo": "💡 높은 점수일수록 해당 태그의 신뢰도가 높습니다"
+    },
+    "placeholders": {
+      "regex": "정규식 패턴을 입력하세요",
+      "modelName": "모델명 입력 (예: wd-v1-4-moat-tagger-v2)",
+      "text": "검색할 텍스트를 입력하세요",
+      "tagName": "태그명 입력",
+      "characterName": "캐릭터명 입력"
+    }
+  },
+  "validation": {
+    "nameRequired": "그룹명을 입력해주세요.",
+    "conditionRequired": "자동수집을 활성화하려면 최소 1개의 조건을 추가해주세요.",
+    "valueRequired": "조건 {{index}}의 값을 입력해주세요.",
+    "ratingTypeRequired": "조건 {{index}}: Rating 유형을 선택해주세요.",
+    "ratingScoreRequired": "조건 {{index}}: 최소 점수 또는 최대 점수 중 하나는 설정해야 합니다.",
+    "minScoreInvalid": "조건 {{index}}: 최소 점수는 0 이상이어야 합니다.",
+    "maxScoreInvalid": "조건 {{index}}: 최대 점수는 0 이상이어야 합니다.",
+    "scoreRangeInvalid": "조건 {{index}}: 최소 점수는 최대 점수보다 작아야 합니다.",
+    "confidenceScoreRange": "조건 {{index}}: 최소 점수는 0.0 ~ 1.0 사이여야 합니다.",
+    "confidenceMaxScoreRange": "조건 {{index}}: 최대 점수는 0.0 ~ 1.0 사이여야 합니다.",
+    "confidenceMinMaxInvalid": "조건 {{index}}: 최소 점수가 최대 점수보다 클 수 없습니다."
+  },
+  "messages": {
+    "loadFailed": "그룹 목록을 불러오는데 실패했습니다.",
+    "imageLoadFailed": "그룹 이미지를 불러오는데 실패했습니다.",
+    "deleteSuccess": "그룹이 삭제되었습니다.",
+    "deleteFailed": "그룹 삭제에 실패했습니다.",
+    "autoCollectSuccess": "자동수집 완료: {{added}}개 추가, {{removed}}개 제거",
+    "autoCollectFailed": "자동수집 실행에 실패했습니다.",
+    "createSuccess": "그룹이 생성되었습니다.",
+    "createFailed": "그룹 생성에 실패했습니다.",
+    "updateSuccess": "그룹이 수정되었습니다.",
+    "updateFailed": "그룹 수정에 실패했습니다.",
+    "removeWarning": "제거할 수 있는 이미지가 없습니다.",
+    "removeSuccess": "{{count}}개 이미지가 제거되었습니다.",
+    "removePartialSuccess": "{{removed}}개 이미지가 제거되었습니다. {{failed}}개 실패.",
+    "removeError": "이미지 제거 중 오류가 발생했습니다.",
+    "assignSuccess": "{{added}}개 추가, {{converted}}개 변환, {{skipped}}개 스킵",
+    "assignFailed": "이미지 할당에 실패했습니다.",
+    "assignError": "이미지 할당 중 오류가 발생했습니다."
+  },
+  "imageModal": {
+    "title": "{{name}} ({{count}}개 이미지)",
+    "selectedCount": "{{count}}개 선택됨",
+    "buttonRemove": "제거",
+    "buttonAssign": "그룹 할당",
+    "infoMixedSelection": "수동 수집 이미지와 자동 수집 이미지가 함께 선택되었습니다. 제거는 수동 수집 이미지만 가능하며, 그룹 할당은 모든 선택된 이미지에 적용됩니다.",
+    "warningAutoOnly": "자동 수집 이미지는 그룹에서 직접 제거할 수 없습니다. 자동 수집 조건을 변경하거나 비활성화해주세요.",
+    "confirmRemoveTitle": "이미지 제거 확인",
+    "confirmRemoveMessage": "선택된 {{count}}개의 수동 수집 이미지를 그룹에서 제거하시겠습니까?",
+    "confirmRemoveNote": "이미지 파일 자체는 삭제되지 않습니다."
+  },
+  "assignModal": {
+    "title": "그룹에 할당",
+    "description": "선택된 {{count}}개의 이미지를 그룹에 할당합니다.",
+    "currentGroup": "현재 그룹",
+    "emptyGroups": "생성된 그룹이 없습니다",
+    "loadError": "그룹 목록을 불러오는데 실패했습니다.",
+    "loadingError": "그룹 목록을 불러오는 중 오류가 발생했습니다.",
+    "buttonAssign": "할당",
+    "buttonCancel": "취소"
+  }
+}

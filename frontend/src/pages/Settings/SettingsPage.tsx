@@ -7,12 +7,16 @@ import {
   Tab,
   CircularProgress,
   Alert,
+  Paper,
 } from '@mui/material';
 import { Settings as SettingsIcon } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
+import GeneralSettings from './components/GeneralSettings';
 import TaggerSettings from './components/TaggerSettings';
 import RatingScoreSettings from './components/RatingScoreSettings';
 import SimilaritySettings from './components/SimilaritySettings';
-import { settingsApi, type AppSettings, type TaggerSettings as TaggerSettingsType } from '../../services/settingsApi';
+import PromptList from '../PromptManagement/components/PromptList';
+import { settingsApi, type AppSettings, type GeneralSettings as GeneralSettingsType, type TaggerSettings as TaggerSettingsType } from '../../services/settingsApi';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -29,7 +33,9 @@ const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
 };
 
 const SettingsPage: React.FC = () => {
+  const { t } = useTranslation('settings');
   const [tabValue, setTabValue] = useState(0);
+  const [promptTabValue, setPromptTabValue] = useState(0);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,20 +59,39 @@ const SettingsPage: React.FC = () => {
     }
   };
 
-  const handleUpdateTaggerSettings = async (taggerSettings: Partial<TaggerSettingsType>) => {
+  const handleUpdateGeneralSettings = async (generalSettings: Partial<GeneralSettingsType>) => {
     setError(null);
     setSuccessMessage(null);
     try {
-      const updatedSettings = await settingsApi.updateTaggerSettings(taggerSettings);
+      const updatedSettings = await settingsApi.updateGeneralSettings(generalSettings);
       setSettings(updatedSettings);
-      setSuccessMessage('설정이 성공적으로 저장되었습니다.');
+      setSuccessMessage(t('messages.saveSuccess'));
 
       // Clear success message after 3 seconds
       setTimeout(() => {
         setSuccessMessage(null);
       }, 3000);
     } catch (err) {
-      setError('Failed to update settings');
+      setError(t('messages.saveFailed'));
+      console.error('Failed to update settings:', err);
+      throw err;
+    }
+  };
+
+  const handleUpdateTaggerSettings = async (taggerSettings: Partial<TaggerSettingsType>) => {
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const updatedSettings = await settingsApi.updateTaggerSettings(taggerSettings);
+      setSettings(updatedSettings);
+      setSuccessMessage(t('messages.saveSuccess'));
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 3000);
+    } catch (err) {
+      setError(t('messages.saveFailed'));
       console.error('Failed to update settings:', err);
       throw err;
     }
@@ -104,11 +129,11 @@ const SettingsPage: React.FC = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
             <SettingsIcon sx={{ mr: 1, fontSize: 32 }} />
             <Typography variant="h4" component="h1">
-              설정
+              {t('title')}
             </Typography>
           </Box>
           <Typography variant="body1" color="text.secondary">
-            ComfyUI Image Manager 애플리케이션 설정을 관리합니다.
+            {t('subtitle')}
           </Typography>
         </Box>
 
@@ -122,30 +147,59 @@ const SettingsPage: React.FC = () => {
         {/* Tabs */}
         <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
           <Tabs value={tabValue} onChange={handleTabChange}>
-            <Tab label="Tagger 설정" />
-            <Tab label="Rating 점수 설정" />
-            <Tab label="이미지 유사도 검색" />
-            <Tab label="고급 설정" disabled />
+            <Tab label={t('tabs.general')} />
+            <Tab label={t('tabs.tagger')} />
+            <Tab label={t('tabs.rating')} />
+            <Tab label={t('tabs.similarity')} />
+            <Tab label={t('tabs.prompts')} />
+            <Tab label={t('tabs.advanced')} disabled />
           </Tabs>
         </Box>
 
         {/* Tab Panels */}
         <TabPanel value={tabValue} index={0}>
+          <GeneralSettings
+            settings={settings.general}
+            onUpdate={handleUpdateGeneralSettings}
+          />
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={1}>
           <TaggerSettings
             settings={settings.tagger}
             onUpdate={handleUpdateTaggerSettings}
           />
         </TabPanel>
 
-        <TabPanel value={tabValue} index={1}>
+        <TabPanel value={tabValue} index={2}>
           <RatingScoreSettings />
         </TabPanel>
 
-        <TabPanel value={tabValue} index={2}>
+        <TabPanel value={tabValue} index={3}>
           <SimilaritySettings />
         </TabPanel>
 
-        <TabPanel value={tabValue} index={3}>
+        <TabPanel value={tabValue} index={4}>
+          <Paper sx={{ width: '100%' }}>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs
+                value={promptTabValue}
+                onChange={(_event, newValue) => setPromptTabValue(newValue)}
+                aria-label="prompt management tabs"
+              >
+                <Tab label="Positive 프롬프트" />
+                <Tab label="Negative 프롬프트" />
+              </Tabs>
+            </Box>
+
+            <Box sx={{ p: 3 }}>
+              {promptTabValue === 0 && <PromptList type="positive" />}
+              {promptTabValue === 1 && <PromptList type="negative" />}
+            </Box>
+          </Paper>
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={5}>
           <Alert severity="info">
             고급 설정 기능은 향후 추가될 예정입니다.
           </Alert>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Typography, Chip } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../../types/image';
 
 type ImageGroupInfo = NonNullable<ImageRecord['groups']>[number];
@@ -13,12 +14,14 @@ interface GroupInfoSectionProps {
  * Group information section with clickable chips
  */
 export const GroupInfoSection: React.FC<GroupInfoSectionProps> = ({ groups, onGroupClick }) => {
+  const { t } = useTranslation();
+
   if (!groups || groups.length === 0) return null;
 
   return (
     <Box sx={{ mb: 3 }}>
       <Typography variant="subtitle2" gutterBottom color="primary">
-        소속 그룹
+        {t('imageDetail:sections.groups')}
       </Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
         {groups.map((group, index) => (

@@ -10,6 +10,7 @@ import {
   Stack,
   Divider,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import type { ImageRecord, PageSize } from '../../types/image';
 import ImageCard from '../ImageCard/ImageCard';
 import PageSizeSelector from '../PageSizeSelector/PageSizeSelector';
@@ -49,6 +50,7 @@ const ImageGrid: React.FC<ImageGridProps> = ({
   showCollectionType = false,
   currentGroupId,
 }) => {
+  const { t } = useTranslation(['common', 'gallery']);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [lastClickedIndex, setLastClickedIndex] = useState<number>(-1);
@@ -176,10 +178,10 @@ const ImageGrid: React.FC<ImageGridProps> = ({
     return (
       <Box sx={{ textAlign: 'center', py: 8 }}>
         <Typography variant="h6" color="text.secondary">
-          이미지가 없습니다
+          {t('gallery:status.noImages')}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          이미지를 업로드하거나 검색 조건을 변경해보세요.
+          {t('gallery:status.uploadPrompt', '이미지를 업로드하거나 검색 조건을 변경해보세요.')}
         </Typography>
       </Box>
     );
@@ -208,10 +210,17 @@ const ImageGrid: React.FC<ImageGridProps> = ({
                   disabled={!selectable}
                 />
               }
-              label={`전체 선택 (${selectedIds.length}/${safeImages.length})`}
+              label={t('gallery:selectAllLabel', {
+                selected: selectedIds.length,
+                total: safeImages.length,
+                defaultValue: `전체 선택 (${selectedIds.length}/${safeImages.length})`
+              })}
             />
             <Typography variant="body2" color="text.secondary">
-              총 {total.toLocaleString()}개 이미지
+              {t('gallery:totalImages', {
+                count: total,
+                defaultValue: `총 ${total.toLocaleString()}개 이미지`
+              })}
             </Typography>
           </Box>
 

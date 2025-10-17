@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   TextField,
@@ -46,6 +47,7 @@ interface SearchBarProps {
 }
 
 const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
+  const { t } = useTranslation('search');
   const [searchParams, setSearchParams] = useState<ImageSearchParams>({
     search_text: '',
     negative_text: '',
@@ -264,7 +266,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
         <TextField
           fullWidth
           variant="outlined"
-          placeholder="프롬프트 키워드로 검색..."
+          placeholder={t('searchInput.placeholder')}
           value={searchParams.search_text || ''}
           onChange={handleInputChange('search_text')}
           onKeyPress={handleKeyPress}
@@ -283,7 +285,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
                   disabled={loading}
                   sx={{ minWidth: 'auto', px: 2 }}
                 >
-                  검색
+                  {t('searchInput.button')}
                 </Button>
               </Box>
             ),
@@ -295,13 +297,13 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <FormControl fullWidth size="small">
-            <InputLabel>AI 도구</InputLabel>
+            <InputLabel>{t('filters.basic.aiTool.label')}</InputLabel>
             <Select
               value={searchParams.ai_tool || ''}
-              label="AI 도구"
+              label={t('filters.basic.aiTool.label')}
               onChange={handleInputChange('ai_tool')}
             >
-              <MenuItem value="">전체</MenuItem>
+              <MenuItem value="">{t('filters.basic.aiTool.all')}</MenuItem>
               {aiTools.map(tool => (
                 <MenuItem key={tool} value={tool}>{tool}</MenuItem>
               ))}
@@ -313,10 +315,10 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
           <TextField
             fullWidth
             size="small"
-            label="모델명"
+            label={t('filters.basic.modelName.label')}
             value={searchParams.model_name || ''}
             onChange={handleInputChange('model_name')}
-            placeholder="예: sd_xl_base_1.0"
+            placeholder={t('filters.basic.modelName.placeholder')}
           />
         </Grid>
 
@@ -325,7 +327,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
             fullWidth
             size="small"
             type="date"
-            label="시작 날짜"
+            label={t('filters.basic.startDate.label')}
             value={searchParams.start_date || ''}
             onChange={handleInputChange('start_date')}
             InputLabelProps={{ shrink: true }}
@@ -337,7 +339,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
             fullWidth
             size="small"
             type="date"
-            label="종료 날짜"
+            label={t('filters.basic.endDate.label')}
             value={searchParams.end_date || ''}
             onChange={handleInputChange('end_date')}
             InputLabelProps={{ shrink: true }}
@@ -347,40 +349,40 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
 
       {/* 빠른 날짜 필터 */}
       <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-        <Tooltip title="오늘 업로드된 이미지">
+        <Tooltip title={t('filters.quickDate.todayTooltip')}>
           <Chip
             icon={<TodayIcon />}
-            label="오늘"
+            label={t('filters.quickDate.today')}
             size="small"
             onClick={() => setQuickDateRange(0)}
             variant="outlined"
             sx={{ cursor: 'pointer' }}
           />
         </Tooltip>
-        <Tooltip title="최근 7일">
+        <Tooltip title={t('filters.quickDate.7daysTooltip')}>
           <Chip
             icon={<DateRangeIcon />}
-            label="7일"
+            label={t('filters.quickDate.7days')}
             size="small"
             onClick={() => setQuickDateRange(7)}
             variant="outlined"
             sx={{ cursor: 'pointer' }}
           />
         </Tooltip>
-        <Tooltip title="최근 30일">
+        <Tooltip title={t('filters.quickDate.30daysTooltip')}>
           <Chip
             icon={<DateRangeIcon />}
-            label="30일"
+            label={t('filters.quickDate.30days')}
             size="small"
             onClick={() => setQuickDateRange(30)}
             variant="outlined"
             sx={{ cursor: 'pointer' }}
           />
         </Tooltip>
-        <Tooltip title="최근 90일">
+        <Tooltip title={t('filters.quickDate.90daysTooltip')}>
           <Chip
             icon={<DateRangeIcon />}
-            label="90일"
+            label={t('filters.quickDate.90days')}
             size="small"
             onClick={() => setQuickDateRange(90)}
             variant="outlined"
@@ -393,7 +395,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
       {searchHistory.length > 0 && (
         <Box sx={{ mb: 2 }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            최근 검색어
+            {t('searchHistory.title')}
           </Typography>
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
             {searchHistory.map((query, index) => (
@@ -420,10 +422,10 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <FilterIcon color="primary" />
-            <Typography fontWeight="medium">고급 필터</Typography>
+            <Typography fontWeight="medium">{t('filters.advanced.title')}</Typography>
             {hasAdvancedFilters && (
               <Badge badgeContent={getActiveFilterCount()} color="primary">
-                <Chip label="활성" size="small" color="primary" variant="outlined" />
+                <Chip label={t('filters.advanced.active')} size="small" color="primary" variant="outlined" />
               </Badge>
             )}
           </Box>
@@ -434,10 +436,10 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
               <TextField
                 fullWidth
                 size="small"
-                label="네거티브 프롬프트"
+                label={t('filters.advanced.negativePrompt.label')}
                 value={searchParams.negative_text || ''}
                 onChange={handleInputChange('negative_text')}
-                placeholder="제외할 키워드 입력 (예: ugly, blurry)"
+                placeholder={t('filters.advanced.negativePrompt.placeholder')}
               />
             </Grid>
           </Grid>
@@ -453,13 +455,13 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <LabelIcon color="secondary" />
-            <Typography fontWeight="medium">오토태그 필터</Typography>
+            <Typography fontWeight="medium">{t('filters.autoTag.title')}</Typography>
             <Typography variant="caption" color="text.secondary">
-              (WD v3 Tagger)
+              {t('filters.autoTag.subtitle')}
             </Typography>
             {hasAutoTagFilters && (
               <Badge badgeContent={getAutoTagFilterCount()} color="secondary">
-                <Chip label="활성" size="small" color="secondary" variant="outlined" />
+                <Chip label={t('filters.autoTag.active')} size="small" color="secondary" variant="outlined" />
               </Badge>
             )}
           </Box>
@@ -475,17 +477,17 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
             >
               <Tab
                 icon={<StarIcon />}
-                label="Rating"
+                label={t('filters.autoTag.tabs.rating')}
                 iconPosition="start"
               />
               <Tab
                 icon={<PersonIcon />}
-                label="Character"
+                label={t('filters.autoTag.tabs.character')}
                 iconPosition="start"
               />
               <Tab
                 icon={<TagIcon />}
-                label="General Tags"
+                label={t('filters.autoTag.tabs.generalTags')}
                 iconPosition="start"
               />
             </Tabs>
@@ -498,33 +500,33 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
                   onChange={(_, newValue) => setRatingMode(newValue)}
                   sx={{ mb: 3 }}
                 >
-                  <Tab label="Type별 필터" />
-                  <Tab label="Score 기반 필터" />
+                  <Tab label={t('filters.autoTag.rating.typeMode')} />
+                  <Tab label={t('filters.autoTag.rating.scoreMode')} />
                 </Tabs>
 
                 {ratingMode === 0 && (
                   <Card variant="outlined">
                     <CardContent>
                       <Typography variant="subtitle2" gutterBottom color="text.secondary">
-                        특정 Rating 타입의 신뢰도 범위로 필터링
+                        {t('filters.autoTag.rating.typeDescription')}
                       </Typography>
                       <Grid container spacing={2} sx={{ mt: 1 }}>
                         <Grid size={{ xs: 12, md: 4 }}>
                           <FormControl fullWidth size="small">
-                            <InputLabel>Rating 타입</InputLabel>
+                            <InputLabel>{t('filters.autoTag.rating.type.label')}</InputLabel>
                             <Select
                               value={ratingType}
-                              label="Rating 타입"
+                              label={t('filters.autoTag.rating.type.label')}
                               onChange={(e) => {
                                 setRatingType(e.target.value);
                                 setRatingRange([0, 1]);
                               }}
                             >
-                              <MenuItem value="">선택 안함</MenuItem>
-                              <MenuItem value="general">General</MenuItem>
-                              <MenuItem value="sensitive">Sensitive</MenuItem>
-                              <MenuItem value="questionable">Questionable</MenuItem>
-                              <MenuItem value="explicit">Explicit</MenuItem>
+                              <MenuItem value="">{t('filters.autoTag.rating.type.none')}</MenuItem>
+                              <MenuItem value="general">{t('filters.autoTag.rating.type.general')}</MenuItem>
+                              <MenuItem value="sensitive">{t('filters.autoTag.rating.type.sensitive')}</MenuItem>
+                              <MenuItem value="questionable">{t('filters.autoTag.rating.type.questionable')}</MenuItem>
+                              <MenuItem value="explicit">{t('filters.autoTag.rating.type.explicit')}</MenuItem>
                             </Select>
                           </FormControl>
                         </Grid>
@@ -533,7 +535,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
                             <Box sx={{ px: 2 }}>
                               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                                 <Typography variant="caption" color="text.secondary">
-                                  신뢰도 범위
+                                  {t('filters.autoTag.rating.confidenceRange')}
                                 </Typography>
                                 <Typography variant="caption" fontWeight="bold">
                                   {ratingRange[0].toFixed(2)} ~ {ratingRange[1].toFixed(2)}
@@ -564,12 +566,12 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
                   <Card variant="outlined">
                     <CardContent>
                       <Typography variant="subtitle2" gutterBottom color="text.secondary">
-                        설정에서 구성한 가중치가 적용된 종합 점수로 필터링
+                        {t('filters.autoTag.rating.scoreDescription')}
                       </Typography>
                       <Box sx={{ px: 2, mt: 3 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                           <Typography variant="caption" color="text.secondary">
-                            점수 범위
+                            {t('filters.autoTag.rating.scoreRange')}
                           </Typography>
                           <Typography variant="caption" fontWeight="bold">
                             {ratingScoreMin} ~ {ratingScoreMax}
@@ -606,15 +608,15 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
               <Card variant="outlined">
                 <CardContent>
                   <Typography variant="subtitle2" gutterBottom color="text.secondary">
-                    캐릭터 태그로 이미지 필터링
+                    {t('filters.autoTag.character.description')}
                   </Typography>
                   <Grid container spacing={2} sx={{ mt: 1 }}>
                     <Grid size={{ xs: 12, sm: 4 }}>
                       <FormControl fullWidth size="small">
-                        <InputLabel>캐릭터 존재</InputLabel>
+                        <InputLabel>{t('filters.autoTag.character.existence.label')}</InputLabel>
                         <Select
                           value={hasCharacter === undefined ? 'all' : hasCharacter ? 'true' : 'false'}
-                          label="캐릭터 존재"
+                          label={t('filters.autoTag.character.existence.label')}
                           onChange={(e) => {
                             const val = e.target.value;
                             setHasCharacter(val === 'all' ? undefined : val === 'true');
@@ -624,9 +626,9 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
                             }
                           }}
                         >
-                          <MenuItem value="all">전체</MenuItem>
-                          <MenuItem value="true">있음</MenuItem>
-                          <MenuItem value="false">없음</MenuItem>
+                          <MenuItem value="all">{t('filters.autoTag.character.existence.all')}</MenuItem>
+                          <MenuItem value="true">{t('filters.autoTag.character.existence.true')}</MenuItem>
+                          <MenuItem value="false">{t('filters.autoTag.character.existence.false')}</MenuItem>
                         </Select>
                       </FormControl>
                     </Grid>
@@ -636,10 +638,10 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
                           <TextField
                             fullWidth
                             size="small"
-                            label="캐릭터명"
+                            label={t('filters.autoTag.character.name.label')}
                             value={characterName}
                             onChange={(e) => setCharacterName(e.target.value)}
-                            placeholder="예: hatsune_miku"
+                            placeholder={t('filters.autoTag.character.name.placeholder')}
                           />
                         </Grid>
                         {characterName && (
@@ -647,7 +649,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
                             <Box sx={{ px: 2 }}>
                               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                                 <Typography variant="caption" color="text.secondary">
-                                  신뢰도 범위
+                                  {t('filters.autoTag.character.confidenceRange')}
                                 </Typography>
                                 <Typography variant="caption" fontWeight="bold">
                                   {characterScoreRange[0].toFixed(2)} ~ {characterScoreRange[1].toFixed(2)}
@@ -681,14 +683,14 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
               <Card variant="outlined">
                 <CardContent>
                   <Typography variant="subtitle2" gutterBottom color="text.secondary">
-                    일반 태그와 신뢰도 범위로 필터링
+                    {t('filters.autoTag.generalTags.description')}
                   </Typography>
                   <Grid container spacing={2} sx={{ mt: 1 }}>
                     <Grid size={{ xs: 12, sm: 6 }}>
                       <TextField
                         fullWidth
                         size="small"
-                        label="태그명"
+                        label={t('filters.autoTag.generalTags.tagName.label')}
                         value={newTagName}
                         onChange={(e) => setNewTagName(e.target.value)}
                         onKeyPress={(e) => {
@@ -696,14 +698,17 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
                             handleAddTag();
                           }
                         }}
-                        placeholder="예: 1girl, solo, landscape"
+                        placeholder={t('filters.autoTag.generalTags.tagName.placeholder')}
                       />
                     </Grid>
                     <Grid size={{ xs: 12, sm: 6 }}>
                       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                         <Box sx={{ flex: 1 }}>
                           <Typography variant="caption" color="text.secondary" display="block">
-                            신뢰도: {newTagScoreRange[0].toFixed(2)} ~ {newTagScoreRange[1].toFixed(2)}
+                            {t('filters.autoTag.generalTags.confidence', {
+                              min: newTagScoreRange[0].toFixed(2),
+                              max: newTagScoreRange[1].toFixed(2)
+                            })}
                           </Typography>
                           <Slider
                             value={newTagScoreRange}
@@ -729,7 +734,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
                       <Grid size={{ xs: 12 }}>
                         <Divider sx={{ my: 1 }} />
                         <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                          추가된 태그 ({generalTags.length}개)
+                          {t('filters.autoTag.generalTags.addedTags', { count: generalTags.length })}
                         </Typography>
                         <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
                           {generalTags.map((tag, index) => (
@@ -762,7 +767,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
           disabled={loading}
           startIcon={<ClearIcon />}
         >
-          전체 초기화
+          {t('searchInput.clear')}
         </Button>
         <Button
           variant="contained"
@@ -771,7 +776,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
           startIcon={<SearchIcon />}
           size="large"
         >
-          검색 실행
+          {t('searchInput.execute')}
         </Button>
       </Box>
     </Paper>

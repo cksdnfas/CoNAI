@@ -34,6 +34,7 @@ import {
   CloudUpload as CloudUploadIcon,
   CloudOff as CloudOffIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { settingsApi, taggerBatchApi, type TaggerSettings as TaggerSettingsType, type TaggerModel, type TaggerDevice, type TaggerServerStatus } from '../../../services/settingsApi';
 
 interface TaggerSettingsProps {
@@ -42,6 +43,7 @@ interface TaggerSettingsProps {
 }
 
 const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) => {
+  const { t } = useTranslation('settings');
   const [localSettings, setLocalSettings] = useState<TaggerSettingsType>(settings);
   const [models, setModels] = useState<TaggerModel[]>([]);
   const [loading, setLoading] = useState(false);
@@ -125,9 +127,9 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
     try {
       await settingsApi.loadModel(localSettings.model);
       await loadModelStatus();
-      alert('모델이 로드되었습니다');
+      alert(t('tagger.alerts.modelLoaded'));
     } catch (error) {
-      alert('모델 로드 실패');
+      alert(t('tagger.alerts.loadFailed'));
       console.error('Failed to load model:', error);
     } finally {
       setLoading(false);
@@ -139,9 +141,9 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
     try {
       await settingsApi.unloadModel();
       await loadModelStatus();
-      alert('모델이 언로드되었습니다');
+      alert(t('tagger.alerts.modelUnloaded'));
     } catch (error) {
-      alert('모델 언로드 실패');
+      alert(t('tagger.alerts.unloadFailed'));
       console.error('Failed to unload model:', error);
     } finally {
       setLoading(false);
@@ -183,7 +185,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
       await onUpdate(localSettings);
       setHasChanges(false);
     } catch (error) {
-      alert('Failed to save settings');
+      alert(t('tagger.alerts.saveFailed'));
       console.error('Failed to save settings:', error);
     } finally {
       setLoading(false);
@@ -203,10 +205,10 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
       const result = await taggerBatchApi.tagUnprocessed(100);
       setBatchTotal(result.total);
       setBatchProgress(result.success_count);
-      alert(`완료: 성공 ${result.success_count}개, 실패 ${result.fail_count}개`);
+      alert(t('tagger.batch.alerts.complete', { success: result.success_count, failed: result.fail_count }));
       await loadUntaggedCount();
     } catch (error) {
-      alert('미처리 이미지 태깅 실패');
+      alert(t('tagger.batch.alerts.failed'));
       console.error('Failed to batch tag unprocessed:', error);
     } finally {
       setBatchProcessing(false);
@@ -222,10 +224,10 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
       const result = await taggerBatchApi.tagAll(100, true);
       setBatchTotal(result.total);
       setBatchProgress(result.success_count);
-      alert(`완료: 성공 ${result.success_count}개, 실패 ${result.fail_count}개`);
+      alert(t('tagger.batch.alerts.complete', { success: result.success_count, failed: result.fail_count }));
       await loadUntaggedCount();
     } catch (error) {
-      alert('전체 재태깅 실패');
+      alert(t('tagger.batch.alerts.tagAllFailed'));
       console.error('Failed to batch tag all:', error);
     } finally {
       setBatchProcessing(false);
@@ -235,7 +237,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
   const handleTestImage = async () => {
     const imageId = parseInt(testImageId);
     if (isNaN(imageId) || imageId <= 0) {
-      alert('유효한 이미지 ID를 입력하세요');
+      alert(t('tagger.test.invalidId'));
       return;
     }
 
@@ -245,7 +247,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
       const result = await taggerBatchApi.testImage(imageId);
       setTestResult(result);
     } catch (error) {
-      alert('테스트 실패');
+      alert(t('tagger.test.failed'));
       console.error('Failed to test image:', error);
     } finally {
       setTestProcessing(false);
@@ -257,18 +259,18 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
 
   // Format relative time
   const formatRelativeTime = (isoString: string | null): string => {
-    if (!isoString) return '없음';
+    if (!isoString) return t('tagger.modelStatus.none');
     const date = new Date(isoString);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
 
-    if (diffMins < 1) return '방금 전';
-    if (diffMins < 60) return `${diffMins}분 전`;
+    if (diffMins < 1) return t('tagger.modelStatus.justNow');
+    if (diffMins < 60) return t('tagger.modelStatus.minutesAgo', { minutes: diffMins });
     const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}시간 전`;
+    if (diffHours < 24) return t('tagger.modelStatus.hoursAgo', { hours: diffHours });
     const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}일 전`;
+    return t('tagger.modelStatus.daysAgo', { days: diffDays });
   };
 
   return (
@@ -276,10 +278,10 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
       <Card>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            WD v3 Tagger 설정
+            {t('tagger.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary" paragraph>
-            AI 기반 이미지 자동 태깅 기능을 설정합니다.
+            {t('tagger.description')}
           </Typography>
 
           <Stack spacing={3} sx={{ mt: 3 }}>
@@ -290,11 +292,11 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                   <Stack direction="row" justifyContent="space-between" alignItems="center">
                     <Box flex={1}>
                       <Typography variant="subtitle1" gutterBottom>
-                        모델 상태
+                        {t('tagger.modelStatus.title')}
                       </Typography>
                       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                         <Chip
-                          label={modelStatus?.modelLoaded ? '로드됨' : '언로드됨'}
+                          label={modelStatus?.modelLoaded ? t('tagger.modelStatus.loaded') : t('tagger.modelStatus.unloaded')}
                           color={modelStatus?.modelLoaded ? 'success' : 'default'}
                           size="small"
                           icon={modelStatus?.modelLoaded ? <CheckCircleIcon /> : undefined}
@@ -318,7 +320,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                       </Stack>
                       {modelStatus?.lastUsedAt && (
                         <Typography variant="caption" color="text.secondary">
-                          마지막 사용: {formatRelativeTime(modelStatus.lastUsedAt)}
+                          {t('tagger.modelStatus.lastUsed')}: {formatRelativeTime(modelStatus.lastUsedAt)}
                         </Typography>
                       )}
                     </Box>
@@ -329,7 +331,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                         startIcon={<CloudUploadIcon />}
                         size="small"
                       >
-                        로드
+                        {t('tagger.buttons.load')}
                       </Button>
                       <Button
                         onClick={handleUnloadModel}
@@ -338,7 +340,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                         color="warning"
                         size="small"
                       >
-                        언로드
+                        {t('tagger.buttons.unload')}
                       </Button>
                       <Button
                         onClick={loadModelStatus}
@@ -347,7 +349,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                         size="small"
                         variant="outlined"
                       >
-                        새로고침
+                        {t('tagger.buttons.refresh')}
                       </Button>
                     </Stack>
                   </Stack>
@@ -364,7 +366,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                   onChange={(e) => setLocalSettings({ ...localSettings, enabled: e.target.checked })}
                 />
               }
-              label="Tagger 활성화"
+              label={t('tagger.enabled')}
             />
 
             {/* Auto Tag on Upload */}
@@ -376,16 +378,16 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                   disabled={!localSettings.enabled}
                 />
               }
-              label="업로드 시 자동 태깅"
+              label={t('tagger.autoTagOnUpload')}
             />
 
             {/* Model Selection */}
             {models.length > 0 ? (
               <FormControl fullWidth disabled={!localSettings.enabled}>
-                <InputLabel>모델 선택</InputLabel>
+                <InputLabel>{t('tagger.model.label')}</InputLabel>
                 <Select
                   value={localSettings.model}
-                  label="모델 선택"
+                  label={t('tagger.model.label')}
                   onChange={(e) => setLocalSettings({ ...localSettings, model: e.target.value as any })}
                 >
                   {models.map((model) => (
@@ -401,7 +403,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                           <Chip
                             size="small"
                             icon={<CheckCircleIcon />}
-                            label="Downloaded"
+                            label={t('tagger.model.downloaded')}
                             color="success"
                             sx={{ ml: 2 }}
                           />
@@ -414,39 +416,39 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
             ) : (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <CircularProgress size={20} />
-                <Typography variant="body2" color="text.secondary">모델 목록 로딩 중...</Typography>
+                <Typography variant="body2" color="text.secondary">{t('tagger.model.loading')}</Typography>
               </Box>
             )}
 
             {/* Device Selection */}
             <FormControl fullWidth disabled={!localSettings.enabled}>
-              <InputLabel>디바이스 선택</InputLabel>
+              <InputLabel>{t('tagger.device.label')}</InputLabel>
               <Select
                 value={localSettings.device}
-                label="디바이스 선택"
+                label={t('tagger.device.label')}
                 onChange={(e) => setLocalSettings({ ...localSettings, device: e.target.value as TaggerDevice })}
               >
                 <MenuItem value="auto">
                   <Box>
-                    <Typography variant="body1">자동 (Auto)</Typography>
+                    <Typography variant="body1">{t('tagger.device.auto.title')}</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      GPU 사용 가능하면 GPU, 없으면 CPU 사용
+                      {t('tagger.device.auto.description')}
                     </Typography>
                   </Box>
                 </MenuItem>
                 <MenuItem value="cpu">
                   <Box>
-                    <Typography variant="body1">CPU</Typography>
+                    <Typography variant="body1">{t('tagger.device.cpu.title')}</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      CPU만 사용 (느리지만 안정적)
+                      {t('tagger.device.cpu.description')}
                     </Typography>
                   </Box>
                 </MenuItem>
                 <MenuItem value="cuda">
                   <Box>
-                    <Typography variant="body1">GPU (CUDA)</Typography>
+                    <Typography variant="body1">{t('tagger.device.cuda.title')}</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      NVIDIA GPU 사용 (빠름, GPU 필요)
+                      {t('tagger.device.cuda.description')}
                     </Typography>
                   </Box>
                 </MenuItem>
@@ -458,13 +460,9 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
               <Box>
                 <Alert severity={isModelDownloaded ? 'success' : 'warning'} sx={{ mb: 2 }}>
                   {isModelDownloaded ? (
-                    <>
-                      <strong>{currentModel?.label}</strong> 모델이 다운로드되어 있습니다.
-                    </>
+                    <span dangerouslySetInnerHTML={{ __html: t('tagger.alerts.modelDownloaded', { model: currentModel?.label }) }} />
                   ) : (
-                    <>
-                      <strong>{currentModel?.label}</strong> 모델이 다운로드되지 않았습니다. 첫 사용 시 자동으로 다운로드됩니다.
-                    </>
+                    <span dangerouslySetInnerHTML={{ __html: t('tagger.alerts.modelNotDownloaded', { model: currentModel?.label }) }} />
                   )}
                 </Alert>
 
@@ -476,7 +474,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                     onClick={handleDownloadModel}
                     disabled={downloading || isModelDownloaded}
                   >
-                    {downloading ? '다운로드 정보 확인 중...' : '모델 다운로드'}
+                    {downloading ? t('tagger.buttons.downloading') : t('tagger.buttons.download')}
                   </Button>
                   <Button
                     fullWidth
@@ -484,7 +482,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                     startIcon={<RefreshIcon />}
                     onClick={loadModels}
                   >
-                    상태 새로고침
+                    {t('tagger.buttons.refreshStatus')}
                   </Button>
                 </Stack>
               </Box>
@@ -493,7 +491,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
             {/* General Threshold */}
             <Box>
               <Typography gutterBottom>
-                General Tags Threshold: {localSettings.generalThreshold.toFixed(2)}
+                {t('tagger.threshold.general.label', { value: localSettings.generalThreshold.toFixed(2) })}
               </Typography>
               <Slider
                 value={localSettings.generalThreshold}
@@ -509,14 +507,14 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                 disabled={!localSettings.enabled}
               />
               <Typography variant="caption" color="text.secondary">
-                낮을수록 더 많은 태그 추출 (노이즈 증가 가능)
+                {t('tagger.threshold.general.description')}
               </Typography>
             </Box>
 
             {/* Character Threshold */}
             <Box>
               <Typography gutterBottom>
-                Character Tags Threshold: {localSettings.characterThreshold.toFixed(2)}
+                {t('tagger.threshold.character.label', { value: localSettings.characterThreshold.toFixed(2) })}
               </Typography>
               <Slider
                 value={localSettings.characterThreshold}
@@ -532,18 +530,18 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                 disabled={!localSettings.enabled}
               />
               <Typography variant="caption" color="text.secondary">
-                낮을수록 더 많은 캐릭터 인식 (오인식 증가 가능)
+                {t('tagger.threshold.character.description')}
               </Typography>
             </Box>
 
             {/* Python Path */}
             <TextField
-              label="Python 실행 경로"
+              label={t('tagger.pythonPath.label')}
               value={localSettings.pythonPath}
               onChange={(e) => setLocalSettings({ ...localSettings, pythonPath: e.target.value })}
               fullWidth
               disabled={!localSettings.enabled}
-              helperText="Python 실행 파일 경로 (예: python, python3, C:\\Python39\\python.exe)"
+              helperText={t('tagger.pythonPath.helper')}
             />
 
             <Divider sx={{ my: 2 }} />
@@ -552,10 +550,10 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
             {localSettings.enabled && (
               <Box>
                 <Typography variant="h6" gutterBottom>
-                  메모리 관리
+                  {t('tagger.memoryManagement.title')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" paragraph>
-                  모델의 메모리 유지 방식을 설정합니다.
+                  {t('tagger.memoryManagement.description')}
                 </Typography>
 
                 <Stack spacing={2}>
@@ -566,25 +564,21 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                         onChange={(e) => setLocalSettings({ ...localSettings, keepModelLoaded: e.target.checked })}
                       />
                     }
-                    label="작업 후 모델 메모리 유지"
+                    label={t('tagger.memoryManagement.keepModelLoaded')}
                   />
 
                   <Alert severity="info">
                     {localSettings.keepModelLoaded ? (
-                      <>
-                        모델이 메모리에 유지됩니다. 설정한 시간이 지나면 자동으로 언로드됩니다.
-                      </>
+                      t('tagger.memoryManagement.keepLoadedAlert')
                     ) : (
-                      <>
-                        모델이 메모리에 유지되지 않습니다. 작업 시작 시 자동으로 로드되며, 프로그램 종료 시 언로드됩니다.
-                      </>
+                      t('tagger.memoryManagement.notKeepLoadedAlert')
                     )}
                   </Alert>
 
                   {localSettings.keepModelLoaded && (
                     <Box>
                       <Typography gutterBottom>
-                        자동 언로드 시간: {localSettings.autoUnloadMinutes}분
+                        {t('tagger.memoryManagement.autoUnloadMinutes', { minutes: localSettings.autoUnloadMinutes })}
                       </Typography>
                       <Slider
                         value={localSettings.autoUnloadMinutes}
@@ -593,14 +587,14 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                         max={60}
                         step={1}
                         marks={[
-                          { value: 1, label: '1분' },
-                          { value: 15, label: '15분' },
-                          { value: 30, label: '30분' },
-                          { value: 60, label: '60분' },
+                          { value: 1, label: '1min' },
+                          { value: 15, label: '15min' },
+                          { value: 30, label: '30min' },
+                          { value: 60, label: '60min' },
                         ]}
                       />
                       <Typography variant="caption" color="text.secondary">
-                        마지막 사용 후 설정한 시간이 지나면 자동으로 메모리에서 언로드됩니다.
+                        {t('tagger.memoryManagement.autoUnloadDescription')}
                       </Typography>
                     </Box>
                   )}
@@ -619,7 +613,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                 disabled={checking || !localSettings.enabled}
                 fullWidth
               >
-                {checking ? 'Python 의존성 확인 중...' : 'Python 의존성 확인'}
+                {checking ? t('tagger.buttons.checking') : t('tagger.buttons.checkDependencies')}
               </Button>
 
               {dependencyStatus && (
@@ -635,22 +629,22 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
             {localSettings.enabled && (
               <Box>
                 <Typography variant="h6" gutterBottom>
-                  배치 작업
+                  {t('tagger.batch.title')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" paragraph>
-                  이미지 일괄 처리 작업을 실행합니다.
+                  {t('tagger.batch.description')}
                 </Typography>
 
                 {untaggedCount !== null && (
                   <Alert severity="info" sx={{ mb: 2 }}>
-                    미처리 이미지: {untaggedCount}개
+                    {t('tagger.batch.untaggedCount', { count: untaggedCount })}
                   </Alert>
                 )}
 
                 {batchProcessing && batchTotal > 0 && (
                   <Box sx={{ mb: 2 }}>
                     <Typography variant="body2" gutterBottom>
-                      진행 상황: {batchProgress} / {batchTotal}
+                      {t('tagger.batch.progress', { current: batchProgress, total: batchTotal })}
                     </Typography>
                     <LinearProgress
                       variant="determinate"
@@ -667,7 +661,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                     disabled={batchProcessing}
                     fullWidth
                   >
-                    {batchProcessing ? '처리 중...' : '미처리 이미지 태깅 (최대 100개)'}
+                    {batchProcessing ? t('tagger.batch.buttons.processing') : t('tagger.batch.buttons.tagUnprocessed')}
                   </Button>
 
                   <Button
@@ -678,7 +672,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                     disabled={batchProcessing}
                     fullWidth
                   >
-                    전체 재태깅 (최대 100개)
+                    {t('tagger.batch.buttons.tagAll')}
                   </Button>
                 </Stack>
               </Box>
@@ -690,20 +684,20 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
             {localSettings.enabled && (
               <Box>
                 <Typography variant="h6" gutterBottom>
-                  테스트
+                  {t('tagger.test.title')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" paragraph>
-                  특정 이미지로 현재 설정을 테스트합니다.
+                  {t('tagger.test.description')}
                 </Typography>
 
                 <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
                   <TextField
-                    label="이미지 ID"
+                    label={t('tagger.test.imageId')}
                     value={testImageId}
                     onChange={(e) => setTestImageId(e.target.value)}
                     type="number"
                     fullWidth
-                    placeholder="예: 123"
+                    placeholder={t('tagger.test.placeholder')}
                   />
                   <Button
                     variant="contained"
@@ -712,14 +706,14 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                     disabled={testProcessing || !testImageId}
                     sx={{ minWidth: 150 }}
                   >
-                    {testProcessing ? '처리 중...' : '테스트 실행'}
+                    {testProcessing ? t('tagger.test.processing') : t('tagger.test.button')}
                   </Button>
                 </Stack>
 
                 {testResult && (
                   <Alert severity="success" sx={{ mt: 2 }}>
                     <Typography variant="subtitle2" gutterBottom>
-                      태깅 결과:
+                      {t('tagger.test.result')}
                     </Typography>
                     <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>
                       {JSON.stringify(testResult.auto_tags, null, 2)}
@@ -737,7 +731,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                 disabled={!hasChanges || loading}
                 fullWidth
               >
-                {loading ? <CircularProgress size={24} /> : '저장'}
+                {loading ? <CircularProgress size={24} /> : t('tagger.buttons.save')}
               </Button>
               <Button
                 variant="outlined"
@@ -745,7 +739,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                 disabled={!hasChanges || loading}
                 fullWidth
               >
-                취소
+                {t('tagger.buttons.cancel')}
               </Button>
             </Stack>
           </Stack>
@@ -754,17 +748,16 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
 
       {/* Confirmation Dialog for Batch Tag All */}
       <Dialog open={confirmDialog} onClose={() => setConfirmDialog(false)}>
-        <DialogTitle>전체 재태깅 확인</DialogTitle>
+        <DialogTitle>{t('tagger.batch.confirmDialog.title')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            모든 이미지의 태그를 덮어쓰시겠습니까? 이 작업은 취소할 수 없습니다.
-            (최대 100개 처리)
+            {t('tagger.batch.confirmDialog.message')}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmDialog(false)}>취소</Button>
+          <Button onClick={() => setConfirmDialog(false)}>{t('tagger.batch.confirmDialog.cancel')}</Button>
           <Button onClick={handleBatchTagAll} color="warning" variant="contained">
-            확인
+            {t('tagger.batch.confirmDialog.confirm')}
           </Button>
         </DialogActions>
       </Dialog>

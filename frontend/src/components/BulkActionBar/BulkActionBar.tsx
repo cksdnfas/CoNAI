@@ -14,6 +14,7 @@ import {
   FolderOpen as FolderOpenIcon,
   Close as CloseIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { useBulkActions } from '../../hooks/useBulkActions';
 import GroupAssignModal from '../GroupAssignModal';
 import type { ImageRecord } from '../../types/image';
@@ -35,6 +36,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
   onActionComplete,
   onModalStateChange,
 }) => {
+  const { t } = useTranslation(['common']);
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
   const { loading, error, deleteImages, downloadImages, assignToGroup, clearError } = useBulkActions();
 
@@ -51,15 +53,17 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
     const hasVideo = selectedImages.some(img => img.mime_type?.startsWith('video/'));
     const hasImage = selectedImages.some(img => !img.mime_type?.startsWith('video/'));
 
-    let confirmMessage = `선택된 ${selectedCount}개 파일을 삭제하시겠습니까?`;
+    let confirmMessage: string;
 
     // 더 구체적인 메시지 표시
     if (hasVideo && hasImage) {
-      confirmMessage = `선택된 ${selectedCount}개 파일(이미지/비디오)을 삭제하시겠습니까?`;
+      confirmMessage = t('common:bulkActions.confirmDelete.mixed', { count: selectedCount });
     } else if (hasVideo) {
-      confirmMessage = `선택된 ${selectedCount}개 비디오를 삭제하시겠습니까?`;
+      confirmMessage = t('common:bulkActions.confirmDelete.videos', { count: selectedCount });
     } else if (hasImage) {
-      confirmMessage = `선택된 ${selectedCount}개 이미지를 삭제하시겠습니까?`;
+      confirmMessage = t('common:bulkActions.confirmDelete.images', { count: selectedCount });
+    } else {
+      confirmMessage = t('common:bulkActions.confirmDelete.files', { count: selectedCount });
     }
 
     if (!window.confirm(confirmMessage)) {
@@ -126,12 +130,12 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
         }}
       >
         <Typography variant="body1" sx={{ flexGrow: 1 }}>
-          {selectedCount}개 이미지 선택됨
+          {t('common:bulkActions.selectedCountImages', { count: selectedCount })}
         </Typography>
 
         {loading && <CircularProgress size={24} />}
 
-        <Tooltip title="다운로드">
+        <Tooltip title={t('common:bulkActions.tooltips.download')}>
           <IconButton
             onClick={handleDownload}
             disabled={loading}
@@ -141,7 +145,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
           </IconButton>
         </Tooltip>
 
-        <Tooltip title="그룹에 추가">
+        <Tooltip title={t('common:bulkActions.tooltips.addToGroup')}>
           <IconButton
             onClick={() => handleSetGroupDialogOpen(true)}
             disabled={loading}
@@ -151,7 +155,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
           </IconButton>
         </Tooltip>
 
-        <Tooltip title="삭제">
+        <Tooltip title={t('common:bulkActions.tooltips.delete')}>
           <IconButton
             onClick={handleDelete}
             disabled={loading}
@@ -161,7 +165,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
           </IconButton>
         </Tooltip>
 
-        <Tooltip title="선택 해제">
+        <Tooltip title={t('common:bulkActions.tooltips.clearSelection')}>
           <IconButton
             onClick={onSelectionClear}
             size="small"

@@ -10,8 +10,10 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
+const SHARED_DIR = path.join(ROOT_DIR, 'shared');
 const FRONTEND_DIR = path.join(ROOT_DIR, 'frontend');
 const BACKEND_DIR = path.join(ROOT_DIR, 'backend');
+const SHARED_DIST = path.join(SHARED_DIR, 'dist');
 const FRONTEND_DIST = path.join(FRONTEND_DIR, 'dist');
 const BACKEND_DIST = path.join(BACKEND_DIR, 'dist');
 const INTEGRATED_DIST = path.join(BACKEND_DIST, 'frontend');
@@ -21,6 +23,7 @@ console.log('🚀 ComfyUI Image Manager - Integrated Build\n');
 // Step 1: Clean previous builds
 console.log('🧹 Cleaning previous builds...');
 try {
+  fs.removeSync(SHARED_DIST);
   fs.removeSync(FRONTEND_DIST);
   fs.removeSync(BACKEND_DIST);
   console.log('✅ Cleaned successfully\n');
@@ -28,7 +31,20 @@ try {
   console.warn('⚠️  Clean failed (might be first build):', error.message, '\n');
 }
 
-// Step 2: Build Frontend
+// Step 2: Build Shared package
+console.log('📦 Building Shared package...');
+try {
+  execSync('npm run build', {
+    cwd: SHARED_DIR,
+    stdio: 'inherit'
+  });
+  console.log('✅ Shared package build completed\n');
+} catch (error) {
+  console.error('❌ Shared package build failed:', error.message);
+  process.exit(1);
+}
+
+// Step 3: Build Frontend
 console.log('🎨 Building Frontend...');
 try {
   execSync('npm run build', {
@@ -41,7 +57,7 @@ try {
   process.exit(1);
 }
 
-// Step 3: Build Backend
+// Step 4: Build Backend
 console.log('🔧 Building Backend...');
 try {
   execSync('npm run build', {
@@ -54,7 +70,7 @@ try {
   process.exit(1);
 }
 
-// Step 4: Copy Frontend to Backend dist
+// Step 5: Copy Frontend to Backend dist
 console.log('📦 Integrating Frontend into Backend...');
 try {
   if (!fs.existsSync(FRONTEND_DIST)) {
@@ -74,7 +90,7 @@ try {
   process.exit(1);
 }
 
-// Step 5: Create environment template
+// Step 6: Create environment template
 console.log('⚙️  Creating environment template...');
 try {
   const envTemplate = `# ComfyUI Image Manager Configuration
@@ -107,7 +123,7 @@ NODE_ENV=production
   console.warn('⚠️  Environment template creation failed:', error.message, '\n');
 }
 
-// Step 6: Display build summary
+// Step 7: Display build summary
 console.log('📊 Build Summary:');
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 

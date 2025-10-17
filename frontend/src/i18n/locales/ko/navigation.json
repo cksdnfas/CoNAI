@@ -1,0 +1,27 @@
+{
+  "header": {
+    "title": "ComfyUI Image Manager",
+    "menu": {
+      "home": "홈",
+      "gallery": "갤러리",
+      "imageGroups": "이미지 그룹",
+      "search": "검색",
+      "upload": "업로드",
+      "imageGeneration": "이미지 생성",
+      "settings": "설정"
+    },
+    "theme": {
+      "light": "라이트 모드",
+      "dark": "다크 모드",
+      "toggle": "테마 전환"
+    },
+    "mobileMenu": {
+      "open": "메뉴 열기",
+      "close": "메뉴 닫기"
+    }
+  },
+  "footer": {
+    "copyright": "© 2024 ComfyUI Image Manager. All rights reserved.",
+    "version": "버전"
+  }
+}

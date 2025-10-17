@@ -1,0 +1,120 @@
+{
+  "title": "Image Search",
+  "description": "Search for images by prompts, AI tools, model names, auto tags, and more.",
+
+  "searchInput": {
+    "placeholder": "Search by prompt keywords...",
+    "button": "Search",
+    "clear": "Reset All",
+    "execute": "Execute Search"
+  },
+
+  "results": {
+    "title": "Search Results",
+    "searching": "Searching...",
+    "found": "Found {{count}} images.",
+    "noResults": "No results found",
+    "noResultsHint": "Try different keywords or adjust filters.",
+    "initialMessage": "Enter keywords to search for images",
+    "initialHint": "You can search by prompts, AI tools, model names, auto tags, dates, and more.",
+    "reset": "Reset Search",
+    "refresh": "Refresh"
+  },
+
+  "filters": {
+    "basic": {
+      "aiTool": {
+        "label": "AI Tool",
+        "all": "All"
+      },
+      "modelName": {
+        "label": "Model Name",
+        "placeholder": "e.g. sd_xl_base_1.0"
+      },
+      "startDate": {
+        "label": "Start Date"
+      },
+      "endDate": {
+        "label": "End Date"
+      }
+    },
+
+    "quickDate": {
+      "today": "Today",
+      "todayTooltip": "Images uploaded today",
+      "7days": "7 Days",
+      "7daysTooltip": "Last 7 days",
+      "30days": "30 Days",
+      "30daysTooltip": "Last 30 days",
+      "90days": "90 Days",
+      "90daysTooltip": "Last 90 days"
+    },
+
+    "advanced": {
+      "title": "Advanced Filters",
+      "active": "Active",
+      "negativePrompt": {
+        "label": "Negative Prompt",
+        "placeholder": "Enter keywords to exclude (e.g., ugly, blurry)"
+      }
+    },
+
+    "autoTag": {
+      "title": "Auto Tag Filters",
+      "subtitle": "(WD v3 Tagger)",
+      "active": "Active",
+
+      "tabs": {
+        "rating": "Rating",
+        "character": "Character",
+        "generalTags": "General Tags"
+      },
+
+      "rating": {
+        "typeMode": "Filter by Type",
+        "scoreMode": "Filter by Score",
+        "typeDescription": "Filter by confidence range of specific rating type",
+        "scoreDescription": "Filter by weighted total score configured in settings",
+        "type": {
+          "label": "Rating Type",
+          "none": "None",
+          "general": "General",
+          "sensitive": "Sensitive",
+          "questionable": "Questionable",
+          "explicit": "Explicit"
+        },
+        "confidenceRange": "Confidence Range",
+        "scoreRange": "Score Range"
+      },
+
+      "character": {
+        "description": "Filter images by character tags",
+        "existence": {
+          "label": "Character Presence",
+          "all": "All",
+          "true": "Present",
+          "false": "Absent"
+        },
+        "name": {
+          "label": "Character Name",
+          "placeholder": "e.g., hatsune_miku"
+        },
+        "confidenceRange": "Confidence Range"
+      },
+
+      "generalTags": {
+        "description": "Filter by general tags and confidence range",
+        "tagName": {
+          "label": "Tag Name",
+          "placeholder": "e.g., 1girl, solo, landscape"
+        },
+        "confidence": "Confidence: {{min}} ~ {{max}}",
+        "addedTags": "Added Tags ({{count}})"
+      }
+    }
+  },
+
+  "searchHistory": {
+    "title": "Recent Searches"
+  }
+}

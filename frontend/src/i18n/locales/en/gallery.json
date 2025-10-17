@@ -1,0 +1,35 @@
+{
+  "page": {
+    "title": "Image Gallery",
+    "description": "View and manage all uploaded images."
+  },
+  "filters": {
+    "aiTool": "AI Tool",
+    "sortBy": "Sort By",
+    "sortOrder": "Order",
+    "all": "All",
+    "clearFilters": "Clear Filters"
+  },
+  "sorting": {
+    "uploadDate": "Upload Date",
+    "filename": "Filename",
+    "fileSize": "File Size",
+    "width": "Width",
+    "height": "Height",
+    "ascending": "Ascending",
+    "descending": "Descending"
+  },
+  "actions": {
+    "refresh": "Refresh",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All"
+  },
+  "status": {
+    "loading": "Loading images...",
+    "noImages": "No images found.",
+    "error": "An error occurred while loading images."
+  },
+  "chips": {
+    "aiToolLabel": "AI Tool: {{tool}}"
+  }
+}

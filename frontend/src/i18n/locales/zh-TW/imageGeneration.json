@@ -1,0 +1,11 @@
+{
+  "page": {
+    "title": "圖片產生",
+    "subtitle": "管理ComfyUI工作流程並產生圖片"
+  },
+  "tabs": {
+    "workflows": "工作流程管理",
+    "servers": "伺服器管理",
+    "ariaLabel": "圖片產生分頁"
+  }
+}

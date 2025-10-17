@@ -1,0 +1,142 @@
+{
+  "page": {
+    "title": "图像分组",
+    "description": "按组管理图像并配置自动收集规则。",
+    "emptyTitle": "尚未创建任何组",
+    "emptyDescription": "创建新组以系统地管理您的图像。"
+  },
+  "groupCard": {
+    "imageCount": "{{count}}张图像",
+    "autoCollect": "自动收集",
+    "stats": "自动：{{auto}} | 手动：{{manual}}"
+  },
+  "menu": {
+    "edit": "编辑",
+    "delete": "删除",
+    "runAutoCollection": "运行自动收集"
+  },
+  "modal": {
+    "createTitle": "创建新组",
+    "editTitle": "编辑组",
+    "basicInfo": "基本信息",
+    "groupName": "组名",
+    "description": "描述",
+    "groupColor": "组颜色",
+    "autoCollectEnable": "启用自动收集",
+    "autoCollectDescription": "将符合配置条件的图像自动添加到此组。",
+    "orConditionInfo": "OR条件：多个条件将收集满足至少一个条件的图像。",
+    "orConditionExample": "例如：\"提示词包含'anime'\" + \"自动标签有角色\" → 满足任一条件即可收集",
+    "conditionsTitle": "自动收集条件",
+    "addCondition": "添加条件",
+    "conditionType": "条件类型",
+    "conditionValue": "值",
+    "emptyConditions": "添加条件以配置自动收集规则。",
+    "buttonCreate": "创建",
+    "buttonUpdate": "更新",
+    "buttonCancel": "取消"
+  },
+  "conditions": {
+    "groups": {
+      "basic": "基本",
+      "prompt": "提示词",
+      "autoTag": "自动标签"
+    },
+    "types": {
+      "aiTool": "AI工具",
+      "modelName": "模型名称（元数据）",
+      "promptContains": "提示词包含",
+      "promptRegex": "提示词正则表达式",
+      "negativePromptContains": "负面提示词包含",
+      "negativePromptRegex": "负面提示词正则表达式",
+      "autoTagExists": "自动标签存在",
+      "autoTagRating": "自动标签：评级",
+      "autoTagRatingScore": "自动标签：评级分数（加权）",
+      "autoTagGeneral": "自动标签：通用标签",
+      "autoTagCharacter": "自动标签：角色",
+      "autoTagHasCharacter": "自动标签：有角色",
+      "autoTagModel": "自动标签：模型名称"
+    },
+    "values": {
+      "exists": "存在",
+      "notExists": "不存在"
+    },
+    "ratings": {
+      "general": "General",
+      "sensitive": "Sensitive",
+      "questionable": "Questionable",
+      "explicit": "Explicit"
+    },
+    "fields": {
+      "ratingType": "评级类型",
+      "minScore": "最小分数",
+      "maxScore": "最大分数",
+      "tagName": "标签名称",
+      "characterName": "角色名称",
+      "caseSensitive": "区分大小写",
+      "weightedScore": "加权总分",
+      "maxWeightInfo": "通常最多200",
+      "confidenceRange": "置信度分数范围（0.0〜1.0）：{{min}}〜{{max}}",
+      "confidenceInfo": "💡 分数越高表示标签置信度越高"
+    },
+    "placeholders": {
+      "regex": "输入正则表达式模式",
+      "modelName": "输入模型名称（例如：wd-v1-4-moat-tagger-v2）",
+      "text": "输入要搜索的文本",
+      "tagName": "输入标签名称",
+      "characterName": "输入角色名称"
+    }
+  },
+  "validation": {
+    "nameRequired": "请输入组名。",
+    "conditionRequired": "启用自动收集至少需要一个条件。",
+    "valueRequired": "请输入条件{{index}}的值。",
+    "ratingTypeRequired": "条件{{index}}：请选择评级类型。",
+    "ratingScoreRequired": "条件{{index}}：必须设置最小分数或最大分数之一。",
+    "minScoreInvalid": "条件{{index}}：最小分数必须为0或更大。",
+    "maxScoreInvalid": "条件{{index}}：最大分数必须为0或更大。",
+    "scoreRangeInvalid": "条件{{index}}：最小分数必须小于最大分数。",
+    "confidenceScoreRange": "条件{{index}}：最小分数必须在0.0到1.0之间。",
+    "confidenceMaxScoreRange": "条件{{index}}：最大分数必须在0.0到1.0之间。",
+    "confidenceMinMaxInvalid": "条件{{index}}：最小分数不能大于最大分数。"
+  },
+  "messages": {
+    "loadFailed": "加载组列表失败。",
+    "imageLoadFailed": "加载组图像失败。",
+    "deleteSuccess": "组已删除。",
+    "deleteFailed": "删除组失败。",
+    "autoCollectSuccess": "自动收集完成：添加{{added}}，移除{{removed}}",
+    "autoCollectFailed": "运行自动收集失败。",
+    "createSuccess": "组已创建。",
+    "createFailed": "创建组失败。",
+    "updateSuccess": "组已更新。",
+    "updateFailed": "更新组失败。",
+    "removeWarning": "没有可移除的图像。",
+    "removeSuccess": "已移除{{count}}张图像。",
+    "removePartialSuccess": "已移除{{removed}}张图像。{{failed}}个失败。",
+    "removeError": "移除图像时发生错误。",
+    "assignSuccess": "添加{{added}}，转换{{converted}}，跳过{{skipped}}",
+    "assignFailed": "分配图像失败。",
+    "assignError": "分配图像时发生错误。"
+  },
+  "imageModal": {
+    "title": "{{name}}（{{count}}张图像）",
+    "selectedCount": "已选择{{count}}",
+    "buttonRemove": "移除",
+    "buttonAssign": "分配到组",
+    "infoMixedSelection": "已同时选择手动收集和自动收集的图像。只能移除手动收集的图像，而组分配将应用于所有选定的图像。",
+    "warningAutoOnly": "无法直接从组中移除自动收集的图像。请更改或禁用自动收集条件。",
+    "confirmRemoveTitle": "确认移除图像",
+    "confirmRemoveMessage": "从组中移除{{count}}张手动收集的图像？",
+    "confirmRemoveNote": "图像文件本身不会被删除。"
+  },
+  "assignModal": {
+    "title": "分配到组",
+    "description": "将{{count}}张选定的图像分配到组。",
+    "currentGroup": "当前组",
+    "emptyGroups": "未创建任何组",
+    "loadError": "加载组列表失败。",
+    "loadingError": "加载组时发生错误。",
+    "buttonAssign": "分配",
+    "buttonCancel": "取消"
+  }
+}

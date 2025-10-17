@@ -1,0 +1,11 @@
+{
+  "page": {
+    "title": "Image Generation",
+    "subtitle": "Manage ComfyUI workflows and generate images"
+  },
+  "tabs": {
+    "workflows": "Workflow Management",
+    "servers": "Server Management",
+    "ariaLabel": "Image generation tabs"
+  }
+}

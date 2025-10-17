@@ -1,0 +1,331 @@
+{
+  "title": "設定",
+  "subtitle": "ComfyUI Image Managerアプリケーションの設定を管理します",
+  "tabs": {
+    "general": "一般設定",
+    "tagger": "Tagger設定",
+    "rating": "レーティングスコア設定",
+    "similarity": "画像類似度検索",
+    "prompts": "プロンプト管理",
+    "advanced": "詳細設定"
+  },
+  "general": {
+    "title": "一般設定",
+    "language": {
+      "label": "言語",
+      "description": "アプリケーションの表示言語を選択します",
+      "ko": "한국어",
+      "en": "English",
+      "ja": "日本語",
+      "zh-CN": "简体中文",
+      "zh-TW": "繁體中文"
+    }
+  },
+  "tagger": {
+    "title": "WD Tagger設定",
+    "description": "AI画像自動タグ付け機能を設定します。",
+    "enabled": "Taggerを有効化",
+    "autoTagOnUpload": "アップロード時に自動タグ付け",
+    "model": {
+      "label": "モデル選択",
+      "loading": "モデルリストを読み込み中...",
+      "downloaded": "ダウンロード済み"
+    },
+    "device": {
+      "label": "デバイス選択",
+      "auto": {
+        "title": "自動 (Auto)",
+        "description": "GPU利用可能ならGPU、なければCPU使用"
+      },
+      "cpu": {
+        "title": "CPU",
+        "description": "CPUのみ使用（遅いが安定）"
+      },
+      "cuda": {
+        "title": "GPU (CUDA)",
+        "description": "NVIDIA GPU使用（高速、GPU必須）"
+      }
+    },
+    "modelStatus": {
+      "title": "モデルステータス",
+      "loaded": "ロード済み",
+      "unloaded": "アンロード済み",
+      "lastUsed": "最終使用",
+      "justNow": "たった今",
+      "minutesAgo": "{{minutes}}分前",
+      "hoursAgo": "{{hours}}時間前",
+      "daysAgo": "{{days}}日前",
+      "none": "なし"
+    },
+    "buttons": {
+      "load": "ロード",
+      "unload": "アンロード",
+      "refresh": "更新",
+      "download": "モデルダウンロード",
+      "downloading": "ダウンロード情報確認中...",
+      "refreshStatus": "ステータス更新",
+      "checkDependencies": "Python依存関係確認",
+      "checking": "Python依存関係確認中...",
+      "save": "保存",
+      "cancel": "キャンセル"
+    },
+    "alerts": {
+      "modelDownloaded": "<strong>{{model}}</strong>モデルがダウンロードされています。",
+      "modelNotDownloaded": "<strong>{{model}}</strong>モデルがダウンロードされていません。初回使用時に自動ダウンロードされます。",
+      "modelLoaded": "モデルがロードされました",
+      "modelUnloaded": "モデルがアンロードされました",
+      "loadFailed": "モデルロード失敗",
+      "unloadFailed": "モデルアンロード失敗",
+      "saveFailed": "設定保存失敗",
+      "dependencyCheckFailed": "依存関係確認失敗"
+    },
+    "threshold": {
+      "general": {
+        "label": "一般タグ閾値: {{value}}",
+        "description": "低いほど多くのタグを抽出（ノイズ増加の可能性）"
+      },
+      "character": {
+        "label": "キャラクタータグ閾値: {{value}}",
+        "description": "低いほど多くのキャラクター認識（誤認識増加の可能性）"
+      }
+    },
+    "pythonPath": {
+      "label": "Python実行パス",
+      "helper": "Python実行ファイルパス（例: python, python3, C:\\Python39\\python.exe）"
+    },
+    "memoryManagement": {
+      "title": "メモリ管理",
+      "description": "モデルのメモリ保持方式を設定します。",
+      "keepModelLoaded": "作業後モデルメモリ保持",
+      "autoUnloadMinutes": "自動アンロード時間: {{minutes}}分",
+      "autoUnloadDescription": "最終使用後、設定時間経過で自動的にメモリからアンロードされます。",
+      "keepLoadedAlert": "モデルがメモリに保持されます。設定時間経過後、自動的にアンロードされます。",
+      "notKeepLoadedAlert": "モデルがメモリに保持されません。作業開始時に自動ロード、プログラム終了時にアンロードされます。"
+    },
+    "batch": {
+      "title": "バッチ作業",
+      "description": "画像一括処理を実行します。",
+      "untaggedCount": "未処理画像: {{count}}枚",
+      "progress": "進行状況: {{current}} / {{total}}",
+      "buttons": {
+        "tagUnprocessed": "未処理画像タグ付け（最大100枚）",
+        "tagAll": "全体再タグ付け（最大100枚）",
+        "processing": "処理中..."
+      },
+      "alerts": {
+        "complete": "完了: 成功{{success}}枚、失敗{{failed}}枚",
+        "failed": "未処理画像タグ付け失敗",
+        "tagAllFailed": "全体再タグ付け失敗"
+      },
+      "confirmDialog": {
+        "title": "全体再タグ付け確認",
+        "message": "すべての画像のタグを上書きしますか？この操作は取り消せません。\n（最大100枚処理）",
+        "confirm": "確認",
+        "cancel": "キャンセル"
+      }
+    },
+    "test": {
+      "title": "テスト",
+      "description": "特定の画像で現在の設定をテストします。",
+      "imageId": "画像ID",
+      "placeholder": "例: 123",
+      "button": "テスト実行",
+      "processing": "処理中...",
+      "result": "タグ付け結果:",
+      "failed": "テスト失敗",
+      "invalidId": "有効な画像IDを入力してください"
+    }
+  },
+  "rating": {
+    "title": "レーティングスコア設定",
+    "description": "画像評価スコアシステムを設定します",
+    "weights": {
+      "title": "重み設定",
+      "description": "各レーティング項目のスコア重みを設定します。",
+      "general": "General: {{value}}",
+      "sensitive": "Sensitive: {{value}}",
+      "questionable": "Questionable: {{value}}",
+      "explicit": "Explicit: {{value}}",
+      "preview": {
+        "title": "リアルタイムプレビュー（例: general=0.001, sensitive=0.045, questionable=0.735, explicit=0.470）",
+        "score": "合計: <strong>{{score}}点</strong>"
+      },
+      "buttons": {
+        "save": "重み保存",
+        "cancel": "キャンセル",
+        "saving": "保存中..."
+      },
+      "alerts": {
+        "saveSuccess": "重み設定が保存されました。",
+        "saveFailed": "重み保存に失敗しました。",
+        "loadFailed": "重み設定の読み込みに失敗しました。"
+      }
+    },
+    "tiers": {
+      "title": "等級区間設定",
+      "description": "スコア区間別等級を設定します。",
+      "addButton": "等級追加",
+      "table": {
+        "order": "順序",
+        "name": "等級名",
+        "scoreRange": "スコア区間",
+        "color": "カラー",
+        "actions": "操作",
+        "empty": "等級がありません。等級を追加してください。",
+        "scoreFormat": "{{min}}点 ~ {{max}}点",
+        "infinity": "∞"
+      },
+      "dialog": {
+        "createTitle": "等級追加",
+        "editTitle": "等級編集",
+        "tierName": "等級名",
+        "minScore": "最小スコア",
+        "maxScore": "最大スコア（空 = 無限大）",
+        "order": "順序",
+        "color": "カラー (Hex)",
+        "colorPlaceholder": "#2196f3",
+        "colorHelper": "例: #22c55e, #3b82f6, #f59e0b, #ef4444",
+        "save": "保存",
+        "cancel": "キャンセル",
+        "saving": "保存中...",
+        "requiredFields": "すべての必須項目を入力してください。"
+      },
+      "alerts": {
+        "created": "等級が追加されました。",
+        "updated": "等級が編集されました。",
+        "deleted": "等級が削除されました。",
+        "saveFailed": "等級保存に失敗しました。",
+        "deleteFailed": "等級削除に失敗しました。",
+        "loadFailed": "等級設定の読み込みに失敗しました。",
+        "deleteConfirm": "この等級を削除しますか？"
+      }
+    },
+    "calculator": {
+      "title": "スコア計算テスト",
+      "description": "レーティング値を入力してスコアを計算してみましょう。",
+      "general": "General: {{value}}",
+      "sensitive": "Sensitive: {{value}}",
+      "questionable": "Questionable: {{value}}",
+      "explicit": "Explicit: {{value}}",
+      "calculate": "スコア計算",
+      "calculating": "計算中...",
+      "result": {
+        "title": "計算結果",
+        "score": "合計: <strong>{{score}}点</strong>",
+        "breakdown": "詳細スコア:",
+        "generalScore": "General: {{score}}点",
+        "sensitiveScore": "Sensitive: {{score}}点",
+        "questionableScore": "Questionable: {{score}}点",
+        "explicitScore": "Explicit: {{score}}点"
+      },
+      "failed": "スコア計算に失敗しました。"
+    }
+  },
+  "similarity": {
+    "title": "画像類似度検索設定",
+    "description": "類似画像検索用のハッシュを自動生成します",
+    "systemStatus": {
+      "title": "システムステータス",
+      "description": "画像類似度検索システムの現在のステータスです。",
+      "totalImages": "全画像: {{count}}枚",
+      "withHash": "ハッシュ生成済み: {{count}}枚",
+      "withoutHash": "未生成: {{count}}枚",
+      "completion": "完了率: {{percent}}%",
+      "autoGenerateHash": "アップロード時に自動ハッシュ生成",
+      "rebuildButton": "全未生成画像ハッシュ生成（{{count}}枚）",
+      "rebuildingButton": "生成中...",
+      "refreshButton": "統計更新",
+      "rebuildProgress": "ハッシュ生成進行中... {{processed}}枚完了/{{total}}枚全体（{{percent}}%完了）",
+      "allComplete": "すべての画像のハッシュが生成されました！",
+      "rebuildComplete": "処理完了: {{processed}}枚の画像ハッシュが生成されました。",
+      "rebuildCompleteWithErrors": "処理完了: {{success}}枚成功、{{failed}}枚失敗",
+      "rebuildFailed": "ハッシュ再生成失敗",
+      "noImagesToProcess": "処理する画像がありません。",
+      "autoGenerateUpdateFailed": "設定更新失敗"
+    },
+    "test": {
+      "title": "テスト & プレビュー",
+      "description": "特定の画像で類似度検索をテストします。",
+      "imageId": "画像ID",
+      "placeholder": "例: 123",
+      "searchType": "検索タイプ",
+      "types": {
+        "duplicates": "重複検索",
+        "similar": "類似検索",
+        "color": "色感検索"
+      },
+      "searchButton": "検索実行",
+      "searching": "検索中...",
+      "queryImage": "検索元画像",
+      "results": "検索結果: {{count}}枚",
+      "noResults": "類似画像がありません。",
+      "searchFailed": "検索失敗",
+      "imageDetails": {
+        "id": "ID:",
+        "filename": "ファイル名:",
+        "size": "サイズ:",
+        "aiTool": "AIツール:"
+      },
+      "matchTypes": {
+        "exact": "完全一致",
+        "nearDuplicate": "ほぼ一致",
+        "similar": "類似",
+        "colorSimilar": "色感類似"
+      },
+      "similarity": "{{percent}}%",
+      "colorSimilarity": "色感: {{percent}}%"
+    },
+    "duplicateScan": {
+      "title": "全体重複分析",
+      "description": "データベース全体で重複画像グループを検索します。",
+      "scanButton": "全体スキャン実行",
+      "scanning": "スキャン中...",
+      "foundGroups": "発見された重複グループ: {{count}}個",
+      "groupLabel": "グループ{{id}} • {{count}}枚画像",
+      "similarityLabel": "{{percent}}%類似",
+      "moreImages": "+{{count}}枚追加",
+      "noResults": "スキャンを実行すると重複画像グループが表示されます。",
+      "id": "ID: {{id}}"
+    },
+    "thresholds": {
+      "title": "閾値設定",
+      "description": "類似度検索の感度を調整します。",
+      "duplicate": {
+        "label": "重複検索閾値: {{value}}",
+        "description": "低いほど厳格（0=完全一致、5=ほぼ一致、10=若干異なる可能性）",
+        "strict": "0（厳格）",
+        "recommended": "5（推奨）",
+        "lenient": "10（寛容）"
+      },
+      "similar": {
+        "label": "類似検索閾値: {{value}}",
+        "description": "低いほど厳格、高いほど多くの類似画像を検索",
+        "strict": "5（厳格）",
+        "recommended": "15（推奨）",
+        "lenient": "25（寛容）"
+      },
+      "color": {
+        "label": "色相類似度閾値: {{value}}%",
+        "description": "色感類似度基準（高いほど厳格）",
+        "min": "70%",
+        "recommended": "85%（推奨）",
+        "max": "100%"
+      },
+      "searchLimit": {
+        "label": "検索結果制限",
+        "options": {
+          "10": "10枚",
+          "20": "20枚（推奨）",
+          "50": "50枚",
+          "100": "100枚"
+        }
+      },
+      "localStorageNote": "設定値はローカルにのみ保存され、検索時にリアルタイムで適用されます。"
+    }
+  },
+  "messages": {
+    "saveSuccess": "設定が正常に保存されました",
+    "saveFailed": "設定の保存に失敗しました",
+    "loadFailed": "設定の読み込みに失敗しました"
+  }
+}

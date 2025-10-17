@@ -13,6 +13,7 @@ import {
   DialogActions,
   DialogContentText,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import {
   Close as CloseIcon,
   Delete as DeleteIcon,
@@ -56,6 +57,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   onImagesRemoved,
   onImagesAssigned,
 }) => {
+  const { t } = useTranslation(['imageGroups', 'common']);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
@@ -128,8 +130,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
     if (hasManualSelected && hasAutoSelected) {
       return (
         <Alert severity="info" sx={{ mb: 2 }}>
-          수동 수집 이미지와 자동 수집 이미지가 함께 선택되었습니다.
-          제거는 수동 수집 이미지만 가능하며, 그룹 할당은 모든 선택된 이미지에 적용됩니다.
+          {t('imageGroups:imageModal.infoMixedSelection')}
         </Alert>
       );
     }
@@ -137,8 +138,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
     if (hasAutoSelected && !hasManualSelected) {
       return (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          자동 수집 이미지는 그룹에서 직접 제거할 수 없습니다.
-          자동 수집 조건을 변경하거나 비활성화해주세요.
+          {t('imageGroups:imageModal.warningAutoOnly')}
         </Alert>
       );
     }
@@ -163,7 +163,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="h6">
-              {currentGroup?.name} ({total}개 이미지)
+              {t('imageGroups:imageModal.title', { name: currentGroup?.name, count: total })}
             </Typography>
             <IconButton
               aria-label="close"
@@ -188,7 +188,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
             }}
           >
             <Typography variant="body2" sx={{ flex: 1 }}>
-              {selectedIds.length}개 선택됨
+              {t('imageGroups:imageModal.selectedCount', { count: selectedIds.length })}
             </Typography>
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Button
@@ -198,7 +198,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
                 onClick={handleRemoveClick}
                 disabled={!canRemove}
               >
-                제거
+                {t('imageGroups:imageModal.buttonRemove')}
               </Button>
               <Button
                 variant="outlined"
@@ -207,7 +207,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
                 onClick={handleAssignClick}
                 disabled={!canAssign}
               >
-                그룹 할당
+                {t('imageGroups:imageModal.buttonAssign')}
               </Button>
             </Box>
           </Toolbar>
@@ -245,21 +245,23 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
         open={removeDialogOpen}
         onClose={() => setRemoveDialogOpen(false)}
       >
-        <DialogTitle>이미지 제거 확인</DialogTitle>
+        <DialogTitle>{t('imageGroups:imageModal.confirmRemoveTitle')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            선택된 {selectedImages.filter(img => {
-              const groupInfo = img.groups?.find(g => g.id === currentGroup?.id);
-              return groupInfo?.collection_type === 'manual';
-            }).length}개의 수동 수집 이미지를 그룹에서 제거하시겠습니까?
+            {t('imageGroups:imageModal.confirmRemoveMessage', {
+              count: selectedImages.filter(img => {
+                const groupInfo = img.groups?.find(g => g.id === currentGroup?.id);
+                return groupInfo?.collection_type === 'manual';
+              }).length
+            })}
             <br />
-            <strong>이미지 파일 자체는 삭제되지 않습니다.</strong>
+            <strong>{t('imageGroups:imageModal.confirmRemoveNote')}</strong>
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setRemoveDialogOpen(false)}>취소</Button>
+          <Button onClick={() => setRemoveDialogOpen(false)}>{t('common:buttons.cancel')}</Button>
           <Button onClick={handleRemoveConfirm} color="error" variant="contained">
-            제거
+            {t('imageGroups:imageModal.buttonRemove')}
           </Button>
         </DialogActions>
       </ConfirmDialog>

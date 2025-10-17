@@ -29,9 +29,10 @@ import {
   VisibilityOff as VisibilityOffIcon,
   DragIndicator as DragIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 
 import { promptGroupApi } from '../../../services/api';
-import type { PromptGroupWithPrompts, PromptGroupData } from '../../../types/promptCollection';
+import type { PromptGroupWithPrompts, PromptGroupData } from '@comfyui-image-manager/shared';
 
 interface PromptGroupManagementModalProps {
   open: boolean;
@@ -53,6 +54,7 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
   type,
   onGroupsChange
 }) => {
+  const { t } = useTranslation('promptManagement');
   const [groups, setGroups] = useState<PromptGroupWithPrompts[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingGroup, setEditingGroup] = useState<EditingGroup | null>(null);
@@ -79,11 +81,11 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
         const sortedGroups = response.data.sort((a, b) => a.display_order - b.display_order);
         setGroups(sortedGroups);
       } else {
-        showSnackbar('그룹 목록을 불러오는데 실패했습니다.', 'error');
+        showSnackbar(t('groupManagement.messages.loadFailed'), 'error');
       }
     } catch (error) {
       console.error('Error fetching groups:', error);
-      showSnackbar('그룹 목록을 불러오는데 실패했습니다.', 'error');
+      showSnackbar(t('groupManagement.messages.loadFailed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -136,7 +138,7 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
   // 그룹 저장
   const handleSaveGroup = async () => {
     if (!editingGroup || !editingGroup.group_name.trim()) {
-      showSnackbar('그룹명을 입력해주세요.', 'error');
+      showSnackbar(t('groupManagement.editForm.groupName.required'), 'error');
       return;
     }
 
@@ -158,7 +160,7 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
 
       if (response.success) {
         showSnackbar(
-          `그룹이 ${editingGroup.id ? '수정' : '생성'}되었습니다.`,
+          editingGroup.id ? t('groupManagement.messages.updateSuccess') : t('groupManagement.messages.createSuccess'),
           'success'
         );
         fetchGroups();
@@ -166,34 +168,34 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
         handleCancelEdit();
       } else {
         showSnackbar(
-          response.error || `그룹 ${editingGroup.id ? '수정' : '생성'}에 실패했습니다.`,
+          response.error || (editingGroup.id ? t('groupManagement.messages.updateFailed') : t('groupManagement.messages.createFailed')),
           'error'
         );
       }
     } catch (error) {
       console.error('Error saving group:', error);
-      showSnackbar(`그룹 ${editingGroup?.id ? '수정' : '생성'}에 실패했습니다.`, 'error');
+      showSnackbar(editingGroup?.id ? t('groupManagement.messages.updateFailed') : t('groupManagement.messages.createFailed'), 'error');
     }
   };
 
   // 그룹 삭제
   const handleDeleteGroup = async (groupId: number) => {
-    if (!confirm('정말로 이 그룹을 삭제하시겠습니까?')) {
+    if (!confirm(t('groupManagement.actions.deleteConfirm'))) {
       return;
     }
 
     try {
       const response = await promptGroupApi.deleteGroup(groupId, type);
       if (response.success) {
-        showSnackbar('그룹이 삭제되었습니다.', 'success');
+        showSnackbar(t('groupManagement.messages.deleteSuccess'), 'success');
         fetchGroups();
         onGroupsChange();
       } else {
-        showSnackbar(response.error || '그룹 삭제에 실패했습니다.', 'error');
+        showSnackbar(response.error || t('groupManagement.messages.deleteFailed'), 'error');
       }
     } catch (error) {
       console.error('Error deleting group:', error);
-      showSnackbar('그룹 삭제에 실패했습니다.', 'error');
+      showSnackbar(t('groupManagement.messages.deleteFailed'), 'error');
     }
   };
 
@@ -211,11 +213,11 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
         fetchGroups();
         onGroupsChange();
       } else {
-        showSnackbar(response.error || '그룹 설정 변경에 실패했습니다.', 'error');
+        showSnackbar(response.error || t('groupManagement.messages.visibilityFailed'), 'error');
       }
     } catch (error) {
       console.error('Error toggling visibility:', error);
-      showSnackbar('그룹 설정 변경에 실패했습니다.', 'error');
+      showSnackbar(t('groupManagement.messages.visibilityFailed'), 'error');
     }
   };
 
@@ -229,7 +231,7 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
     <>
       <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
         <DialogTitle>
-          {type === 'positive' ? 'Positive' : 'Negative'} 프롬프트 그룹 관리
+          {t('groupManagement.title', { type: type === 'positive' ? 'Positive' : 'Negative' })}
         </DialogTitle>
 
         <DialogContent dividers sx={{ minHeight: 400 }}>
@@ -243,11 +245,11 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
               {isEditing && editingGroup && (
                 <Box sx={{ mb: 3, p: 2, border: '1px solid', borderColor: 'primary.main', borderRadius: 1 }}>
                   <Typography variant="h6" gutterBottom>
-                    {editingGroup.id ? '그룹 편집' : '새 그룹 추가'}
+                    {editingGroup.id ? t('groupManagement.editForm.titleEdit') : t('groupManagement.editForm.titleAdd')}
                   </Typography>
 
                   <TextField
-                    label="그룹명"
+                    label={t('groupManagement.editForm.groupName.label')}
                     fullWidth
                     value={editingGroup.group_name}
                     onChange={(e) => setEditingGroup({
@@ -258,7 +260,7 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
                   />
 
                   <TextField
-                    label="표시 순서"
+                    label={t('groupManagement.editForm.displayOrder.label')}
                     type="number"
                     value={editingGroup.display_order}
                     onChange={(e) => setEditingGroup({
@@ -278,15 +280,15 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
                         })}
                       />
                     }
-                    label="표시"
+                    label={t('groupManagement.editForm.visibility.label')}
                   />
 
                   <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
                     <Button variant="contained" onClick={handleSaveGroup}>
-                      저장
+                      {t('groupManagement.editForm.actions.save')}
                     </Button>
                     <Button onClick={handleCancelEdit}>
-                      취소
+                      {t('groupManagement.editForm.actions.cancel')}
                     </Button>
                   </Box>
                 </Box>
@@ -295,7 +297,7 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
               {/* 그룹 목록 */}
               <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="h6">
-                  그룹 목록 ({groups.length}개)
+                  {t('groupManagement.groupList.title', { count: groups.length })}
                 </Typography>
                 {!isEditing && (
                   <Button
@@ -303,7 +305,7 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
                     startIcon={<AddIcon />}
                     onClick={handleAddGroup}
                   >
-                    그룹 추가
+                    {t('groupManagement.groupList.add')}
                   </Button>
                 )}
               </Box>
@@ -311,7 +313,7 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
               {groups.length === 0 ? (
                 <Box textAlign="center" py={4}>
                   <Typography color="text.secondary">
-                    생성된 그룹이 없습니다.
+                    {t('groupManagement.groupList.empty')}
                   </Typography>
                 </Box>
               ) : (
@@ -333,21 +335,21 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
                                 {group.group_name}
                               </Typography>
                               <Chip
-                                label={`${group.prompt_count}개`}
+                                label={t('groupManagement.groupList.promptCount', { count: group.prompt_count })}
                                 size="small"
                                 variant="outlined"
                                 color="primary"
                               />
                               {!group.is_visible && (
                                 <Chip
-                                  label="숨김"
+                                  label={t('groupManagement.editForm.visibility.hidden')}
                                   size="small"
                                   color="default"
                                 />
                               )}
                             </Box>
                           }
-                          secondary={`표시 순서: ${group.display_order}`}
+                          secondary={t('groupManagement.groupList.displayOrder', { order: group.display_order })}
                         />
 
                         <ListItemSecondaryAction>
@@ -387,7 +389,7 @@ const PromptGroupManagementModal: React.FC<PromptGroupManagementModalProps> = ({
 
         <DialogActions>
           <Button onClick={handleClose}>
-            닫기
+            {t('groupManagement.actions.close')}
           </Button>
         </DialogActions>
       </Dialog>

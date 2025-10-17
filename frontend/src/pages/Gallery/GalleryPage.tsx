@@ -17,6 +17,7 @@ import {
   Refresh as RefreshIcon,
   FilterAlt as FilterIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import ImageGrid from '../../components/ImageGrid/ImageGrid';
 import BulkActionBar from '../../components/BulkActionBar/BulkActionBar';
 import { useImages } from '../../hooks/useImages';
@@ -26,6 +27,8 @@ type SortBy = 'upload_date' | 'filename' | 'file_size' | 'width' | 'height';
 type SortOrder = 'asc' | 'desc';
 
 const GalleryPage: React.FC = () => {
+  const { t } = useTranslation(['gallery', 'common']);
+
   const {
     images,
     loading,
@@ -123,7 +126,7 @@ const GalleryPage: React.FC = () => {
             fontWeight: 600,
           }}
         >
-          이미지 갤러리
+          {t('gallery:page.title')}
         </Typography>
         <Typography
           variant="body1"
@@ -132,7 +135,7 @@ const GalleryPage: React.FC = () => {
             fontSize: { xs: '0.875rem', sm: '1rem' },
           }}
         >
-          업로드된 모든 이미지를 확인하고 관리할 수 있습니다.
+          {t('gallery:page.description')}
         </Typography>
       </Box>
 
@@ -153,13 +156,13 @@ const GalleryPage: React.FC = () => {
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', flex: 1 }}>
             {/* AI 도구 필터 */}
             <FormControl size="small" sx={{ minWidth: 150 }}>
-              <InputLabel>AI 도구</InputLabel>
+              <InputLabel>{t('gallery:filters.aiTool')}</InputLabel>
               <Select
                 value={filterAiTool}
-                label="AI 도구"
+                label={t('gallery:filters.aiTool')}
                 onChange={(e) => setFilterAiTool(e.target.value)}
               >
-                <MenuItem value="">전체</MenuItem>
+                <MenuItem value="">{t('gallery:filters.all')}</MenuItem>
                 {aiTools.map((tool) => tool && (
                   <MenuItem key={tool} value={tool}>
                     {tool}
@@ -170,30 +173,30 @@ const GalleryPage: React.FC = () => {
 
             {/* 정렬 기준 */}
             <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>정렬 기준</InputLabel>
+              <InputLabel>{t('gallery:filters.sortBy')}</InputLabel>
               <Select
                 value={sortBy}
-                label="정렬 기준"
+                label={t('gallery:filters.sortBy')}
                 onChange={(e) => setSortBy(e.target.value as SortBy)}
               >
-                <MenuItem value="upload_date">업로드 날짜</MenuItem>
-                <MenuItem value="filename">파일명</MenuItem>
-                <MenuItem value="file_size">파일 크기</MenuItem>
-                <MenuItem value="width">가로 크기</MenuItem>
-                <MenuItem value="height">세로 크기</MenuItem>
+                <MenuItem value="upload_date">{t('gallery:sorting.uploadDate')}</MenuItem>
+                <MenuItem value="filename">{t('gallery:sorting.filename')}</MenuItem>
+                <MenuItem value="file_size">{t('gallery:sorting.fileSize')}</MenuItem>
+                <MenuItem value="width">{t('gallery:sorting.width')}</MenuItem>
+                <MenuItem value="height">{t('gallery:sorting.height')}</MenuItem>
               </Select>
             </FormControl>
 
             {/* 정렬 순서 */}
             <FormControl size="small" sx={{ minWidth: 100 }}>
-              <InputLabel>순서</InputLabel>
+              <InputLabel>{t('gallery:filters.order')}</InputLabel>
               <Select
                 value={sortOrder}
-                label="순서"
+                label={t('gallery:filters.order')}
                 onChange={(e) => setSortOrder(e.target.value as SortOrder)}
               >
-                <MenuItem value="desc">내림차순</MenuItem>
-                <MenuItem value="asc">오름차순</MenuItem>
+                <MenuItem value="desc">{t('gallery:sorting.descending')}</MenuItem>
+                <MenuItem value="asc">{t('gallery:sorting.ascending')}</MenuItem>
               </Select>
             </FormControl>
           </Box>
@@ -206,11 +209,11 @@ const GalleryPage: React.FC = () => {
                 onClick={clearFilters}
                 startIcon={<FilterIcon />}
               >
-                필터 초기화
+                {t('gallery:actions.clearFilters')}
               </Button>
             )}
 
-            <Tooltip title="새로고침">
+            <Tooltip title={t('gallery:actions.refresh')}>
               <span>
                 <IconButton onClick={refreshImages} disabled={loading}>
                   <RefreshIcon />
@@ -225,7 +228,7 @@ const GalleryPage: React.FC = () => {
           <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             {filterAiTool && (
               <Chip
-                label={`AI 도구: ${filterAiTool}`}
+                label={t('gallery:filters.aiToolLabel', { tool: filterAiTool })}
                 onDelete={() => setFilterAiTool('')}
                 size="small"
                 variant="outlined"

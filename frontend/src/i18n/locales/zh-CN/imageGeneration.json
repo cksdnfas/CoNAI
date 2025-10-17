@@ -1,0 +1,11 @@
+{
+  "page": {
+    "title": "图像生成",
+    "subtitle": "管理ComfyUI工作流并生成图像"
+  },
+  "tabs": {
+    "workflows": "工作流管理",
+    "servers": "服务器管理",
+    "ariaLabel": "图像生成标签页"
+  }
+}

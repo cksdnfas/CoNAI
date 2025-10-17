@@ -1,0 +1,120 @@
+{
+  "title": "이미지 검색",
+  "description": "프롬프트, AI 도구, 모델명, 오토태그 등으로 이미지를 검색할 수 있습니다.",
+
+  "searchInput": {
+    "placeholder": "프롬프트 키워드로 검색...",
+    "button": "검색",
+    "clear": "전체 초기화",
+    "execute": "검색 실행"
+  },
+
+  "results": {
+    "title": "검색 결과",
+    "searching": "검색 중...",
+    "found": "총 {{count}}개의 이미지를 찾았습니다.",
+    "noResults": "검색 결과가 없습니다",
+    "noResultsHint": "다른 검색어를 시도하거나 필터를 조정해보세요.",
+    "initialMessage": "검색어를 입력하여 이미지를 찾아보세요",
+    "initialHint": "프롬프트, AI 도구, 모델명, 오토태그, 날짜 등으로 검색할 수 있습니다.",
+    "reset": "검색 초기화",
+    "refresh": "새로고침"
+  },
+
+  "filters": {
+    "basic": {
+      "aiTool": {
+        "label": "AI 도구",
+        "all": "전체"
+      },
+      "modelName": {
+        "label": "모델명",
+        "placeholder": "예: sd_xl_base_1.0"
+      },
+      "startDate": {
+        "label": "시작 날짜"
+      },
+      "endDate": {
+        "label": "종료 날짜"
+      }
+    },
+
+    "quickDate": {
+      "today": "오늘",
+      "todayTooltip": "오늘 업로드된 이미지",
+      "7days": "7일",
+      "7daysTooltip": "최근 7일",
+      "30days": "30일",
+      "30daysTooltip": "최근 30일",
+      "90days": "90일",
+      "90daysTooltip": "최근 90일"
+    },
+
+    "advanced": {
+      "title": "고급 필터",
+      "active": "활성",
+      "negativePrompt": {
+        "label": "네거티브 프롬프트",
+        "placeholder": "제외할 키워드 입력 (예: ugly, blurry)"
+      }
+    },
+
+    "autoTag": {
+      "title": "오토태그 필터",
+      "subtitle": "(WD v3 Tagger)",
+      "active": "활성",
+
+      "tabs": {
+        "rating": "Rating",
+        "character": "Character",
+        "generalTags": "General Tags"
+      },
+
+      "rating": {
+        "typeMode": "Type별 필터",
+        "scoreMode": "Score 기반 필터",
+        "typeDescription": "특정 Rating 타입의 신뢰도 범위로 필터링",
+        "scoreDescription": "설정에서 구성한 가중치가 적용된 종합 점수로 필터링",
+        "type": {
+          "label": "Rating 타입",
+          "none": "선택 안함",
+          "general": "General",
+          "sensitive": "Sensitive",
+          "questionable": "Questionable",
+          "explicit": "Explicit"
+        },
+        "confidenceRange": "신뢰도 범위",
+        "scoreRange": "점수 범위"
+      },
+
+      "character": {
+        "description": "캐릭터 태그로 이미지 필터링",
+        "existence": {
+          "label": "캐릭터 존재",
+          "all": "전체",
+          "true": "있음",
+          "false": "없음"
+        },
+        "name": {
+          "label": "캐릭터명",
+          "placeholder": "예: hatsune_miku"
+        },
+        "confidenceRange": "신뢰도 범위"
+      },
+
+      "generalTags": {
+        "description": "일반 태그와 신뢰도 범위로 필터링",
+        "tagName": {
+          "label": "태그명",
+          "placeholder": "예: 1girl, solo, landscape"
+        },
+        "confidence": "신뢰도: {{min}} ~ {{max}}",
+        "addedTags": "추가된 태그 ({{count}}개)"
+      }
+    }
+  },
+
+  "searchHistory": {
+    "title": "최근 검색어"
+  }
+}

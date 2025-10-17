@@ -1,0 +1,35 @@
+{
+  "page": {
+    "title": "图像画廊",
+    "description": "查看和管理所有已上传的图像。"
+  },
+  "filters": {
+    "aiTool": "AI 工具",
+    "sortBy": "排序方式",
+    "sortOrder": "顺序",
+    "all": "全部",
+    "clearFilters": "清除筛选"
+  },
+  "sorting": {
+    "uploadDate": "上传日期",
+    "filename": "文件名",
+    "fileSize": "文件大小",
+    "width": "宽度",
+    "height": "高度",
+    "ascending": "升序",
+    "descending": "降序"
+  },
+  "actions": {
+    "refresh": "刷新",
+    "selectAll": "全选",
+    "deselectAll": "取消选择"
+  },
+  "status": {
+    "loading": "正在加载图像...",
+    "noImages": "没有找到图像。",
+    "error": "加载图像时发生错误。"
+  },
+  "chips": {
+    "aiToolLabel": "AI 工具: {{tool}}"
+  }
+}

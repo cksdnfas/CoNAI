@@ -1,0 +1,120 @@
+{
+  "title": "画像検索",
+  "description": "プロンプト、AIツール、モデル名、自動タグなどで画像を検索できます。",
+
+  "searchInput": {
+    "placeholder": "プロンプトキーワードで検索...",
+    "button": "検索",
+    "clear": "すべてリセット",
+    "execute": "検索実行"
+  },
+
+  "results": {
+    "title": "検索結果",
+    "searching": "検索中...",
+    "found": "合計{{count}}件の画像が見つかりました。",
+    "noResults": "検索結果がありません",
+    "noResultsHint": "別のキーワードを試すか、フィルターを調整してください。",
+    "initialMessage": "検索キーワードを入力して画像を検索してください",
+    "initialHint": "プロンプト、AIツール、モデル名、自動タグ、日付などで検索できます。",
+    "reset": "検索をリセット",
+    "refresh": "更新"
+  },
+
+  "filters": {
+    "basic": {
+      "aiTool": {
+        "label": "AIツール",
+        "all": "すべて"
+      },
+      "modelName": {
+        "label": "モデル名",
+        "placeholder": "例: sd_xl_base_1.0"
+      },
+      "startDate": {
+        "label": "開始日"
+      },
+      "endDate": {
+        "label": "終了日"
+      }
+    },
+
+    "quickDate": {
+      "today": "今日",
+      "todayTooltip": "今日アップロードされた画像",
+      "7days": "7日間",
+      "7daysTooltip": "過去7日間",
+      "30days": "30日間",
+      "30daysTooltip": "過去30日間",
+      "90days": "90日間",
+      "90daysTooltip": "過去90日間"
+    },
+
+    "advanced": {
+      "title": "高度なフィルター",
+      "active": "有効",
+      "negativePrompt": {
+        "label": "ネガティブプロンプト",
+        "placeholder": "除外するキーワードを入力 (例: ugly, blurry)"
+      }
+    },
+
+    "autoTag": {
+      "title": "自動タグフィルター",
+      "subtitle": "(WD v3 Tagger)",
+      "active": "有効",
+
+      "tabs": {
+        "rating": "レーティング",
+        "character": "キャラクター",
+        "generalTags": "一般タグ"
+      },
+
+      "rating": {
+        "typeMode": "タイプ別フィルター",
+        "scoreMode": "スコアベースフィルター",
+        "typeDescription": "特定のレーティングタイプの信頼度範囲でフィルタリング",
+        "scoreDescription": "設定で構成された重み付き総合スコアでフィルタリング",
+        "type": {
+          "label": "レーティングタイプ",
+          "none": "選択なし",
+          "general": "一般",
+          "sensitive": "センシティブ",
+          "questionable": "疑わしい",
+          "explicit": "露骨"
+        },
+        "confidenceRange": "信頼度範囲",
+        "scoreRange": "スコア範囲"
+      },
+
+      "character": {
+        "description": "キャラクタータグで画像をフィルタリング",
+        "existence": {
+          "label": "キャラクターの存在",
+          "all": "すべて",
+          "true": "あり",
+          "false": "なし"
+        },
+        "name": {
+          "label": "キャラクター名",
+          "placeholder": "例: hatsune_miku"
+        },
+        "confidenceRange": "信頼度範囲"
+      },
+
+      "generalTags": {
+        "description": "一般タグと信頼度範囲でフィルタリング",
+        "tagName": {
+          "label": "タグ名",
+          "placeholder": "例: 1girl, solo, landscape"
+        },
+        "confidence": "信頼度: {{min}} ~ {{max}}",
+        "addedTags": "追加されたタグ ({{count}}個)"
+      }
+    }
+  },
+
+  "searchHistory": {
+    "title": "最近の検索"
+  }
+}

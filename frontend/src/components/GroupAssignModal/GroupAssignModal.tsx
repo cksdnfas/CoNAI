@@ -19,6 +19,7 @@ import {
   AutoAwesome as AutoIcon,
 } from '@mui/icons-material';
 import { Alert } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { groupApi } from '../../services/api';
 import type { GroupWithStats } from '@comfyui-image-manager/shared';
 
@@ -37,6 +38,7 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
   onAssign,
   currentGroupId,
 }) => {
+  const { t } = useTranslation(['common', 'imageGroups']);
   const [groups, setGroups] = useState<GroupWithStats[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<number | ''>('');
@@ -64,11 +66,11 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
         setGroups(response.data);
       } else {
         console.error('❌ API 응답 실패:', response);
-        setError('그룹 목록을 불러오는데 실패했습니다.');
+        setError(t('imageGroups:assignModal.loadError'));
       }
     } catch (error) {
       console.error('❌ 그룹 로딩 에러:', error);
-      setError('그룹 목록을 불러오는 중 오류가 발생했습니다.');
+      setError(t('imageGroups:assignModal.loadingError'));
     } finally {
       setLoading(false);
     }
@@ -98,10 +100,10 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
       onMouseDown={handleDialogMouseDown}
       onPointerDown={handleDialogPointerDown}
     >
-      <DialogTitle>그룹에 할당</DialogTitle>
+      <DialogTitle>{t('imageGroups:assignModal.title')}</DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ mb: 2 }}>
-          선택된 {selectedImageCount}개의 이미지를 그룹에 할당합니다.
+          {t('imageGroups:assignModal.description', { count: selectedImageCount })}
         </DialogContentText>
 
         {error && (
@@ -117,7 +119,7 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
         ) : groups.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <Typography color="text.secondary">
-              생성된 그룹이 없습니다
+              {t('imageGroups:assignModal.emptyGroups')}
             </Typography>
           </Box>
         ) : (
@@ -208,7 +210,7 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
                         </Typography>
                         {isCurrentGroup && (
                           <Chip
-                            label="현재 그룹"
+                            label={t('imageGroups:assignModal.currentGroup')}
                             size="small"
                             color="info"
                             sx={{ height: 20, fontSize: '0.7rem' }}
@@ -236,7 +238,7 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
                       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                         <Chip
                           icon={<GroupIcon />}
-                          label={`${group.image_count}개`}
+                          label={t('imageGroups:groupCard.imageCount', { count: group.image_count })}
                           size="small"
                           variant="outlined"
                           sx={{ height: 22, fontSize: '0.7rem' }}
@@ -244,7 +246,7 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
                         {group.auto_collect_enabled && (
                           <Chip
                             icon={<AutoIcon />}
-                            label="자동수집"
+                            label={t('imageGroups:groupCard.autoCollect')}
                             size="small"
                             color="primary"
                             variant="outlined"
@@ -260,14 +262,14 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>취소</Button>
+        <Button onClick={onClose}>{t('imageGroups:assignModal.buttonCancel')}</Button>
         <Button
           onClick={handleAssign}
           color="primary"
           variant="contained"
           disabled={!selectedGroupId}
         >
-          할당
+          {t('imageGroups:assignModal.buttonAssign')}
         </Button>
       </DialogActions>
     </Dialog>

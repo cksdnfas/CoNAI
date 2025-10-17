@@ -1,0 +1,86 @@
+{
+  "page": {
+    "title": "图像详细信息",
+    "notFound": "未找到图像。",
+    "errorLoading": "加载图像时发生错误。",
+    "noIdProvided": "未提供图像 ID。"
+  },
+  "actions": {
+    "download": "下载",
+    "share": "分享",
+    "back": "返回",
+    "goToDetail": "详情页面"
+  },
+  "sections": {
+    "fileInfo": "文件信息",
+    "imageInfo": "图像信息",
+    "videoInfo": "视频信息",
+    "aiInfo": "AI 生成信息",
+    "promptInfo": "提示词信息",
+    "groupInfo": "所属分组",
+    "fullMetadata": "完整元数据"
+  },
+  "fileInfo": {
+    "originalFilename": "原始文件名",
+    "filename": "文件名",
+    "size": "大小",
+    "fileSize": "文件大小",
+    "mimeType": "MIME 类型",
+    "uploadDate": "上传日期"
+  },
+  "imageInfo": {
+    "dimensions": "尺寸",
+    "dimensionsValue": "{{width}} × {{height}}"
+  },
+  "videoInfo": {
+    "duration": "播放时长",
+    "durationValue": "{{minutes}}分 {{seconds}}秒",
+    "fps": "帧率",
+    "fpsValue": "{{fps}} fps",
+    "videoCodec": "视频编解码器",
+    "audioCodec": "音频编解码器",
+    "bitrate": "比特率",
+    "bitrateValue": "{{bitrate}} Mbps"
+  },
+  "aiInfo": {
+    "tool": "AI 工具",
+    "toolShort": "工具",
+    "model": "模型",
+    "lora": "LoRA",
+    "steps": "步数",
+    "cfgScale": "CFG Scale",
+    "cfgShort": "CFG",
+    "sampler": "采样器",
+    "scheduler": "调度器",
+    "seed": "种子",
+    "denoiseStrength": "去噪强度",
+    "generationTime": "生成时间",
+    "generationTimeValue": "{{time}}秒",
+    "batchSize": "批次大小",
+    "batchIndex": "批次索引"
+  },
+  "groupInfo": {
+    "autoType": "自动",
+    "manualType": "手动",
+    "groupLabel": "{{name}} ({{type}})"
+  },
+  "viewer": {
+    "controls": {
+      "zoomIn": "放大",
+      "zoomOut": "缩小",
+      "rotateLeft": "向左旋转",
+      "rotateRight": "向右旋转",
+      "flipHorizontal": "水平翻转",
+      "flipVertical": "垂直翻转",
+      "reset": "重置",
+      "info": "信息",
+      "close": "关闭"
+    },
+    "navigation": {
+      "previous": "上一张图像 (←)",
+      "next": "下一张图像 (→)",
+      "random": "随机图像 (Space)",
+      "currentPosition": "{{current}} / {{total}}"
+    }
+  }
+}

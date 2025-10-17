@@ -1,0 +1,331 @@
+{
+  "title": "設定",
+  "subtitle": "管理ComfyUI Image Manager應用程式設定",
+  "tabs": {
+    "general": "一般設定",
+    "tagger": "Tagger設定",
+    "rating": "評分設定",
+    "similarity": "圖像相似度搜尋",
+    "prompts": "提示詞管理",
+    "advanced": "進階設定"
+  },
+  "general": {
+    "title": "一般設定",
+    "language": {
+      "label": "語言",
+      "description": "選擇應用程式顯示語言",
+      "ko": "한국어",
+      "en": "English",
+      "ja": "日本語",
+      "zh-CN": "简体中文",
+      "zh-TW": "繁體中文"
+    }
+  },
+  "tagger": {
+    "title": "WD Tagger設定",
+    "description": "設定基於AI的圖像自動標記功能。",
+    "enabled": "啟用Tagger",
+    "autoTagOnUpload": "上傳時自動標記",
+    "model": {
+      "label": "模型選擇",
+      "loading": "正在載入模型清單...",
+      "downloaded": "已下載"
+    },
+    "device": {
+      "label": "裝置選擇",
+      "auto": {
+        "title": "自動 (Auto)",
+        "description": "若GPU可用則使用GPU，否則使用CPU"
+      },
+      "cpu": {
+        "title": "CPU",
+        "description": "僅使用CPU（速度慢但穩定）"
+      },
+      "cuda": {
+        "title": "GPU (CUDA)",
+        "description": "使用NVIDIA GPU（速度快，需要GPU）"
+      }
+    },
+    "modelStatus": {
+      "title": "模型狀態",
+      "loaded": "已載入",
+      "unloaded": "已卸載",
+      "lastUsed": "最後使用",
+      "justNow": "剛剛",
+      "minutesAgo": "{{minutes}}分鐘前",
+      "hoursAgo": "{{hours}}小時前",
+      "daysAgo": "{{days}}天前",
+      "none": "無"
+    },
+    "buttons": {
+      "load": "載入",
+      "unload": "卸載",
+      "refresh": "重新整理",
+      "download": "下載模型",
+      "downloading": "正在確認下載資訊...",
+      "refreshStatus": "重新整理狀態",
+      "checkDependencies": "檢查Python依賴",
+      "checking": "正在檢查Python依賴...",
+      "save": "儲存",
+      "cancel": "取消"
+    },
+    "alerts": {
+      "modelDownloaded": "<strong>{{model}}</strong>模型已下載。",
+      "modelNotDownloaded": "<strong>{{model}}</strong>模型尚未下載。首次使用時將自動下載。",
+      "modelLoaded": "模型已載入",
+      "modelUnloaded": "模型已卸載",
+      "loadFailed": "模型載入失敗",
+      "unloadFailed": "模型卸載失敗",
+      "saveFailed": "設定儲存失敗",
+      "dependencyCheckFailed": "依賴檢查失敗"
+    },
+    "threshold": {
+      "general": {
+        "label": "一般標籤閾值: {{value}}",
+        "description": "越低提取越多標籤（可能增加雜訊）"
+      },
+      "character": {
+        "label": "角色標籤閾值: {{value}}",
+        "description": "越低識別越多角色（可能增加誤識別）"
+      }
+    },
+    "pythonPath": {
+      "label": "Python執行路徑",
+      "helper": "Python可執行檔路徑（例如: python, python3, C:\\Python39\\python.exe）"
+    },
+    "memoryManagement": {
+      "title": "記憶體管理",
+      "description": "設定模型的記憶體保留方式。",
+      "keepModelLoaded": "任務後保留模型記憶體",
+      "autoUnloadMinutes": "自動卸載時間: {{minutes}}分鐘",
+      "autoUnloadDescription": "最後使用後經過設定時間將自動從記憶體中卸載。",
+      "keepLoadedAlert": "模型將保留在記憶體中。經過設定時間後將自動卸載。",
+      "notKeepLoadedAlert": "模型不會保留在記憶體中。任務開始時自動載入，程式關閉時卸載。"
+    },
+    "batch": {
+      "title": "批次作業",
+      "description": "執行批次圖像處理任務。",
+      "untaggedCount": "未處理圖像: {{count}}張",
+      "progress": "進度: {{current}} / {{total}}",
+      "buttons": {
+        "tagUnprocessed": "標記未處理圖像（最多100張）",
+        "tagAll": "重新標記全部（最多100張）",
+        "processing": "處理中..."
+      },
+      "alerts": {
+        "complete": "完成: 成功{{success}}張，失敗{{failed}}張",
+        "failed": "未處理圖像標記失敗",
+        "tagAllFailed": "全部重新標記失敗"
+      },
+      "confirmDialog": {
+        "title": "確認重新標記全部",
+        "message": "是否覆蓋所有圖像的標籤？此操作無法復原。\n（最多處理100張）",
+        "confirm": "確認",
+        "cancel": "取消"
+      }
+    },
+    "test": {
+      "title": "測試",
+      "description": "使用特定圖像測試目前設定。",
+      "imageId": "圖像ID",
+      "placeholder": "例如: 123",
+      "button": "執行測試",
+      "processing": "處理中...",
+      "result": "標記結果:",
+      "failed": "測試失敗",
+      "invalidId": "請輸入有效的圖像ID"
+    }
+  },
+  "rating": {
+    "title": "評分設定",
+    "description": "設定圖像評分系統",
+    "weights": {
+      "title": "權重設定",
+      "description": "設定各評分項的分數權重。",
+      "general": "General: {{value}}",
+      "sensitive": "Sensitive: {{value}}",
+      "questionable": "Questionable: {{value}}",
+      "explicit": "Explicit: {{value}}",
+      "preview": {
+        "title": "即時預覽（範例評分: general=0.001, sensitive=0.045, questionable=0.735, explicit=0.470）",
+        "score": "總分: <strong>{{score}}分</strong>"
+      },
+      "buttons": {
+        "save": "儲存權重",
+        "cancel": "取消",
+        "saving": "儲存中..."
+      },
+      "alerts": {
+        "saveSuccess": "權重設定已儲存。",
+        "saveFailed": "權重儲存失敗。",
+        "loadFailed": "權重設定載入失敗。"
+      }
+    },
+    "tiers": {
+      "title": "等級區間設定",
+      "description": "按分數區間設定等級。",
+      "addButton": "新增等級",
+      "table": {
+        "order": "順序",
+        "name": "等級名稱",
+        "scoreRange": "分數區間",
+        "color": "顏色",
+        "actions": "操作",
+        "empty": "沒有等級。請新增等級。",
+        "scoreFormat": "{{min}}分 ~ {{max}}分",
+        "infinity": "∞"
+      },
+      "dialog": {
+        "createTitle": "新增等級",
+        "editTitle": "編輯等級",
+        "tierName": "等級名稱",
+        "minScore": "最低分數",
+        "maxScore": "最高分數（空 = 無限）",
+        "order": "順序",
+        "color": "顏色 (Hex)",
+        "colorPlaceholder": "#2196f3",
+        "colorHelper": "例如: #22c55e, #3b82f6, #f59e0b, #ef4444",
+        "save": "儲存",
+        "cancel": "取消",
+        "saving": "儲存中...",
+        "requiredFields": "請填寫所有必填項目。"
+      },
+      "alerts": {
+        "created": "等級已新增。",
+        "updated": "等級已更新。",
+        "deleted": "等級已刪除。",
+        "saveFailed": "等級儲存失敗。",
+        "deleteFailed": "等級刪除失敗。",
+        "loadFailed": "等級設定載入失敗。",
+        "deleteConfirm": "確定要刪除此等級嗎？"
+      }
+    },
+    "calculator": {
+      "title": "分數計算測試",
+      "description": "輸入評分值以計算分數。",
+      "general": "General: {{value}}",
+      "sensitive": "Sensitive: {{value}}",
+      "questionable": "Questionable: {{value}}",
+      "explicit": "Explicit: {{value}}",
+      "calculate": "計算分數",
+      "calculating": "計算中...",
+      "result": {
+        "title": "計算結果",
+        "score": "總分: <strong>{{score}}分</strong>",
+        "breakdown": "詳細分數:",
+        "generalScore": "General: {{score}}分",
+        "sensitiveScore": "Sensitive: {{score}}分",
+        "questionableScore": "Questionable: {{score}}分",
+        "explicitScore": "Explicit: {{score}}分"
+      },
+      "failed": "分數計算失敗。"
+    }
+  },
+  "similarity": {
+    "title": "圖像相似度搜尋設定",
+    "description": "自動產生用於相似圖像搜尋的雜湊值",
+    "systemStatus": {
+      "title": "系統狀態",
+      "description": "圖像相似度搜尋系統的目前狀態。",
+      "totalImages": "總圖像: {{count}}張",
+      "withHash": "已產生雜湊: {{count}}張",
+      "withoutHash": "未產生: {{count}}張",
+      "completion": "完成率: {{percent}}%",
+      "autoGenerateHash": "上傳時自動產生雜湊",
+      "rebuildButton": "產生所有未產生圖像的雜湊（{{count}}張）",
+      "rebuildingButton": "產生中...",
+      "refreshButton": "重新整理統計",
+      "rebuildProgress": "雜湊產生進行中... {{processed}}張完成/{{total}}張總計（{{percent}}%完成）",
+      "allComplete": "所有圖像的雜湊已產生！",
+      "rebuildComplete": "處理完成: {{processed}}張圖像雜湊已產生。",
+      "rebuildCompleteWithErrors": "處理完成: {{success}}張成功，{{failed}}張失敗",
+      "rebuildFailed": "雜湊重新產生失敗",
+      "noImagesToProcess": "沒有要處理的圖像。",
+      "autoGenerateUpdateFailed": "設定更新失敗"
+    },
+    "test": {
+      "title": "測試與預覽",
+      "description": "使用特定圖像測試相似度搜尋。",
+      "imageId": "圖像ID",
+      "placeholder": "例如: 123",
+      "searchType": "搜尋類型",
+      "types": {
+        "duplicates": "重複搜尋",
+        "similar": "相似搜尋",
+        "color": "色彩搜尋"
+      },
+      "searchButton": "執行搜尋",
+      "searching": "搜尋中...",
+      "queryImage": "搜尋來源圖像",
+      "results": "搜尋結果: {{count}}張",
+      "noResults": "沒有相似圖像。",
+      "searchFailed": "搜尋失敗",
+      "imageDetails": {
+        "id": "ID:",
+        "filename": "檔案名稱:",
+        "size": "大小:",
+        "aiTool": "AI工具:"
+      },
+      "matchTypes": {
+        "exact": "完全相同",
+        "nearDuplicate": "幾乎相同",
+        "similar": "相似",
+        "colorSimilar": "色彩相似"
+      },
+      "similarity": "{{percent}}%",
+      "colorSimilarity": "色彩: {{percent}}%"
+    },
+    "duplicateScan": {
+      "title": "全域重複分析",
+      "description": "在整個資料庫中尋找重複圖像組。",
+      "scanButton": "執行全域掃描",
+      "scanning": "掃描中...",
+      "foundGroups": "發現的重複組: {{count}}個",
+      "groupLabel": "組{{id}} • {{count}}張圖像",
+      "similarityLabel": "{{percent}}%相似",
+      "moreImages": "+{{count}}張更多",
+      "noResults": "執行掃描後將顯示重複圖像組。",
+      "id": "ID: {{id}}"
+    },
+    "thresholds": {
+      "title": "閾值設定",
+      "description": "調整相似度搜尋的靈敏度。",
+      "duplicate": {
+        "label": "重複搜尋閾值: {{value}}",
+        "description": "越低越嚴格（0=完全相同，5=幾乎相同，10=可能略有不同）",
+        "strict": "0（嚴格）",
+        "recommended": "5（建議）",
+        "lenient": "10（寬鬆）"
+      },
+      "similar": {
+        "label": "相似搜尋閾值: {{value}}",
+        "description": "越低越嚴格，越高搜尋越多相似圖像",
+        "strict": "5（嚴格）",
+        "recommended": "15（建議）",
+        "lenient": "25（寬鬆）"
+      },
+      "color": {
+        "label": "色彩相似度閾值: {{value}}%",
+        "description": "色彩相似度標準（越高越嚴格）",
+        "min": "70%",
+        "recommended": "85%（建議）",
+        "max": "100%"
+      },
+      "searchLimit": {
+        "label": "搜尋結果限制",
+        "options": {
+          "10": "10張",
+          "20": "20張（建議）",
+          "50": "50張",
+          "100": "100張"
+        }
+      },
+      "localStorageNote": "設定值僅本機儲存，搜尋時即時套用。"
+    }
+  },
+  "messages": {
+    "saveSuccess": "設定儲存成功",
+    "saveFailed": "設定儲存失敗",
+    "loadFailed": "設定載入失敗"
+  }
+}

@@ -16,6 +16,7 @@ import {
   CheckCircle as CheckCircleIcon,
   VideoLibrary as VideoLibraryIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../types/image';
 import { getBackendOrigin } from '../../utils/backend';
 
@@ -40,6 +41,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
   showCollectionType = false,
   currentGroupId,
 }) => {
+  const { t } = useTranslation(['common']);
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const backendOrigin = getBackendOrigin();
@@ -70,7 +72,9 @@ const ImageCard: React.FC<ImageCardProps> = ({
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation(); // 이벤트 전파 방지
     const isVideo = image.mime_type?.startsWith('video/');
-    const confirmMessage = isVideo ? '비디오를 삭제하시겠습니까?' : '이미지를 삭제하시겠습니까?';
+    const confirmMessage = isVideo
+      ? t('common:imageCard.confirmDelete.video')
+      : t('common:imageCard.confirmDelete.image');
     if (onDelete && window.confirm(confirmMessage)) {
       onDelete(image.id);
     }
@@ -179,7 +183,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
           <Box sx={{ position: 'absolute', top: selectable ? 54 : 8, left: 8, zIndex: 1 }}>
             <Chip
               icon={<AutoAwesomeIcon sx={{ fontSize: '0.9rem' }} />}
-              label="자동"
+              label={t('common:imageCard.badges.auto')}
               size="small"
               color="info"
               sx={{
@@ -222,7 +226,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
 
         <Box className="image-card-actions" sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
           <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <Tooltip title="상세 정보">
+            <Tooltip title={t('common:imageCard.tooltips.viewDetails')}>
               <IconButton
                 size="small"
                 onClick={handleInfoClick}
@@ -241,7 +245,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
                 <InfoIcon fontSize="small" />
               </IconButton>
             </Tooltip>
-            <Tooltip title="다운로드">
+            <Tooltip title={t('common:imageCard.tooltips.download')}>
               <IconButton
                 size="small"
                 onClick={handleDownload}
@@ -261,7 +265,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
               </IconButton>
             </Tooltip>
             {onDelete && (
-              <Tooltip title="삭제">
+              <Tooltip title={t('common:imageCard.tooltips.delete')}>
                 <IconButton
                   size="small"
                   onClick={handleDelete}

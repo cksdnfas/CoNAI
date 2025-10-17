@@ -25,6 +25,7 @@ import {
   Collections as GroupIcon,
   AutoAwesome as AutoIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 
 import { groupApi } from '../../services/api';
 import type { GroupWithStats } from '@comfyui-image-manager/shared';
@@ -33,6 +34,7 @@ import GroupCreateEditModal from './components/GroupCreateEditModal';
 import GroupImageGridModal from './components/GroupImageGridModal';
 
 const ImageGroupsPage: React.FC = () => {
+  const { t } = useTranslation(['imageGroups', 'common']);
   const [groups, setGroups] = useState<GroupWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedGroup, setSelectedGroup] = useState<GroupWithStats | null>(null);
@@ -68,11 +70,11 @@ const ImageGroupsPage: React.FC = () => {
       if (response.success && response.data) {
         setGroups(response.data);
       } else {
-        showSnackbar('그룹 목록을 불러오는데 실패했습니다.', 'error');
+        showSnackbar(t('imageGroups:messages.loadFailed'), 'error');
       }
     } catch (error) {
       console.error('Error fetching groups:', error);
-      showSnackbar('그룹 목록을 불러오는데 실패했습니다.', 'error');
+      showSnackbar(t('imageGroups:messages.loadFailed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -95,12 +97,12 @@ const ImageGroupsPage: React.FC = () => {
         setGroupImagesTotalPages(response.data.pagination?.totalPages || 1);
         setGroupImagesTotal(response.data.pagination?.total || 0);
       } else {
-        showSnackbar('그룹 이미지를 불러오는데 실패했습니다.', 'error');
+        showSnackbar(t('imageGroups:messages.imageLoadFailed'), 'error');
         setGroupImages([]);
       }
     } catch (error) {
       console.error('Error fetching group images:', error);
-      showSnackbar('그룹 이미지를 불러오는데 실패했습니다.', 'error');
+      showSnackbar(t('imageGroups:messages.imageLoadFailed'), 'error');
       setGroupImages([]);
     } finally {
       setGroupImagesLoading(false);
@@ -146,14 +148,14 @@ const ImageGroupsPage: React.FC = () => {
     try {
       const response = await groupApi.deleteGroup(menuGroupId);
       if (response.success) {
-        showSnackbar('그룹이 삭제되었습니다.', 'success');
+        showSnackbar(t('imageGroups:messages.deleteSuccess'), 'success');
         fetchGroups();
       } else {
-        showSnackbar(response.error || '그룹 삭제에 실패했습니다.', 'error');
+        showSnackbar(response.error || t('imageGroups:messages.deleteFailed'), 'error');
       }
     } catch (error) {
       console.error('Error deleting group:', error);
-      showSnackbar('그룹 삭제에 실패했습니다.', 'error');
+      showSnackbar(t('imageGroups:messages.deleteFailed'), 'error');
     }
     handleMenuClose();
   };
@@ -167,16 +169,19 @@ const ImageGroupsPage: React.FC = () => {
       if (response.success && response.data) {
         const result = response.data;
         showSnackbar(
-          `자동수집 완료: ${result.images_added}개 추가, ${result.images_removed}개 제거`,
+          t('imageGroups:messages.autoCollectSuccess', {
+            added: result.images_added,
+            removed: result.images_removed
+          }),
           'success'
         );
         fetchGroups();
       } else {
-        showSnackbar(response.error || '자동수집 실행에 실패했습니다.', 'error');
+        showSnackbar(response.error || t('imageGroups:messages.autoCollectFailed'), 'error');
       }
     } catch (error) {
       console.error('Error running auto collection:', error);
-      showSnackbar('자동수집 실행에 실패했습니다.', 'error');
+      showSnackbar(t('imageGroups:messages.autoCollectFailed'), 'error');
     }
     handleMenuClose();
   };
@@ -185,7 +190,7 @@ const ImageGroupsPage: React.FC = () => {
   const handleGroupCreated = () => {
     setIsCreateModalOpen(false);
     fetchGroups();
-    showSnackbar('그룹이 생성되었습니다.', 'success');
+    showSnackbar(t('imageGroups:messages.createSuccess'), 'success');
   };
 
   // 그룹 수정 성공 핸들러
@@ -193,7 +198,7 @@ const ImageGroupsPage: React.FC = () => {
     setIsEditModalOpen(false);
     setSelectedGroup(null);
     fetchGroups();
-    showSnackbar('그룹이 수정되었습니다.', 'success');
+    showSnackbar(t('imageGroups:messages.updateSuccess'), 'success');
   };
 
   // 그룹 카드 클릭 핸들러 (이미지 보기)
@@ -235,17 +240,20 @@ const ImageGroupsPage: React.FC = () => {
 
     try {
       if (manualImageIds.length === 0) {
-        showSnackbar('제거할 수 있는 이미지가 없습니다.', 'warning');
+        showSnackbar(t('imageGroups:messages.removeWarning'), 'warning');
         return;
       }
 
       const result = await groupApi.removeImagesFromGroup(selectedGroupForImages.id, manualImageIds);
 
       if (result.success) {
-        showSnackbar(`${result.removed}개 이미지가 제거되었습니다.`, 'success');
+        showSnackbar(t('imageGroups:messages.removeSuccess', { count: result.removed }), 'success');
       } else {
         showSnackbar(
-          `${result.removed}개 이미지가 제거되었습니다. ${result.errors.length}개 실패.`,
+          t('imageGroups:messages.removePartialSuccess', {
+            removed: result.removed,
+            failed: result.errors.length
+          }),
           'warning'
         );
       }
@@ -279,7 +287,7 @@ const ImageGroupsPage: React.FC = () => {
       fetchGroups();
     } catch (error) {
       console.error('Error removing images:', error);
-      showSnackbar('이미지 제거 중 오류가 발생했습니다.', 'error');
+      showSnackbar(t('imageGroups:messages.removeError'), 'error');
     }
   };
 
@@ -291,18 +299,22 @@ const ImageGroupsPage: React.FC = () => {
       if (response.success && response.data) {
         const { added_count, converted_count, skipped_count } = response.data;
         showSnackbar(
-          `${added_count}개 추가, ${converted_count}개 변환, ${skipped_count}개 스킵`,
+          t('imageGroups:messages.assignSuccess', {
+            added: added_count,
+            converted: converted_count,
+            skipped: skipped_count
+          }),
           'success'
         );
       } else {
-        showSnackbar(response.error || '이미지 할당에 실패했습니다.', 'error');
+        showSnackbar(response.error || t('imageGroups:messages.assignFailed'), 'error');
       }
 
       // 그룹 목록 새로고침
       fetchGroups();
     } catch (error) {
       console.error('Error assigning images:', error);
-      showSnackbar('이미지 할당 중 오류가 발생했습니다.', 'error');
+      showSnackbar(t('imageGroups:messages.assignError'), 'error');
     }
   };
 
@@ -346,10 +358,10 @@ const ImageGroupsPage: React.FC = () => {
     <Container maxWidth="xl" sx={{ py: 3 }}>
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4" component="h1" gutterBottom>
-          이미지 그룹
+          {t('imageGroups:page.title')}
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          이미지를 그룹별로 관리하고 자동 수집 규칙을 설정할 수 있습니다.
+          {t('imageGroups:page.description')}
         </Typography>
       </Box>
 
@@ -357,10 +369,10 @@ const ImageGroupsPage: React.FC = () => {
         <Box textAlign="center" py={8}>
           <GroupIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            아직 생성된 그룹이 없습니다
+            {t('imageGroups:page.emptyTitle')}
           </Typography>
           <Typography variant="body2" color="text.secondary" mb={3}>
-            새 그룹을 만들어서 이미지를 체계적으로 관리해보세요.
+            {t('imageGroups:page.emptyDescription')}
           </Typography>
         </Box>
       ) : (
@@ -440,14 +452,14 @@ const ImageGroupsPage: React.FC = () => {
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
                     <Chip
                       icon={<GroupIcon />}
-                      label={`${group.image_count}개 이미지`}
+                      label={t('imageGroups:groupCard.imageCount', { count: group.image_count })}
                       size="small"
                       variant="outlined"
                     />
                     {group.auto_collect_enabled ? (
                       <Chip
                         icon={<AutoIcon />}
-                        label="자동수집"
+                        label={t('imageGroups:groupCard.autoCollect')}
                         size="small"
                         color="primary"
                         variant="outlined"
@@ -457,7 +469,10 @@ const ImageGroupsPage: React.FC = () => {
 
                   {group.auto_collect_enabled && group.image_count > 0 ? (
                     <Typography variant="caption" color="text.secondary">
-                      자동: {group.auto_collected_count || 0}개 | 수동: {group.manual_added_count || 0}개
+                      {t('imageGroups:groupCard.stats', {
+                        auto: group.auto_collected_count || 0,
+                        manual: group.manual_added_count || 0
+                      })}
                     </Typography>
                   ) : null}
                 </CardContent>
@@ -489,17 +504,17 @@ const ImageGroupsPage: React.FC = () => {
       >
         <MenuItem onClick={handleEditGroup}>
           <EditIcon sx={{ mr: 1 }} fontSize="small" />
-          편집
+          {t('common:edit')}
         </MenuItem>
         {groups.find(g => g.id === menuGroupId)?.auto_collect_enabled ? (
           <MenuItem onClick={handleRunAutoCollection}>
             <PlayIcon sx={{ mr: 1 }} fontSize="small" />
-            자동수집 실행
+            {t('imageGroups:menu.runAutoCollection')}
           </MenuItem>
         ) : null}
         <MenuItem onClick={handleDeleteGroup} sx={{ color: 'error.main' }}>
           <DeleteIcon sx={{ mr: 1 }} fontSize="small" />
-          삭제
+          {t('common:delete')}
         </MenuItem>
       </Menu>
 

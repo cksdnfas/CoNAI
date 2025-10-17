@@ -1,4 +1,7 @@
 {
+  "general": {
+    "language": "ja"
+  },
   "tagger": {
     "enabled": true,
     "model": "swinv2",

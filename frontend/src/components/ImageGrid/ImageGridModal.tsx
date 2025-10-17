@@ -8,6 +8,7 @@ import {
   Typography,
 } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import type { ImageRecord, PageSize } from '../../types/image';
 import ImageGrid from './ImageGrid';
 
@@ -44,8 +45,11 @@ const ImageGridModal: React.FC<ImageGridModalProps> = ({
   total = 0,
   onPageChange,
   onImageDelete,
-  title = '이미지 그리드',
+  title,
 }) => {
+  const { t } = useTranslation(['gallery']);
+  const modalTitle = title || t('gallery:imageGridModal.title', '이미지 그리드');
+
   return (
     <Dialog
       open={open}
@@ -61,7 +65,7 @@ const ImageGridModal: React.FC<ImageGridModalProps> = ({
     >
       <DialogTitle>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6">{title}</Typography>
+          <Typography variant="h6">{modalTitle}</Typography>
           <IconButton
             aria-label="close"
             onClick={onClose}

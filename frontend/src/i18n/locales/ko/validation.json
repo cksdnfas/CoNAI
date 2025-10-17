@@ -1,0 +1,46 @@
+{
+  "required": {
+    "field": "필수 입력 항목입니다",
+    "name": "이름을 입력해주세요",
+    "description": "설명을 입력해주세요",
+    "file": "파일을 선택해주세요",
+    "image": "이미지를 선택해주세요",
+    "group": "그룹을 선택해주세요"
+  },
+  "format": {
+    "invalid": "올바르지 않은 형식입니다",
+    "email": "올바른 이메일 형식이 아닙니다",
+    "url": "올바른 URL 형식이 아닙니다",
+    "number": "숫자를 입력해주세요",
+    "integer": "정수를 입력해주세요"
+  },
+  "length": {
+    "min": "최소 {{min}}자 이상 입력해주세요",
+    "max": "최대 {{max}}자까지 입력 가능합니다",
+    "exact": "정확히 {{length}}자를 입력해주세요",
+    "between": "{{min}}자에서 {{max}}자 사이로 입력해주세요"
+  },
+  "size": {
+    "fileSize": "파일 크기는 {{max}}를 초과할 수 없습니다",
+    "imageSize": "이미지 크기는 {{width}}×{{height}}를 초과할 수 없습니다",
+    "fileTooLarge": "파일이 너무 큽니다 (최대: {{max}})",
+    "fileTooSmall": "파일이 너무 작습니다 (최소: {{min}})"
+  },
+  "range": {
+    "min": "값은 최소 {{min}} 이상이어야 합니다",
+    "max": "값은 최대 {{max}}를 초과할 수 없습니다",
+    "between": "값은 {{min}}에서 {{max}} 사이여야 합니다"
+  },
+  "fileType": {
+    "invalid": "지원하지 않는 파일 형식입니다",
+    "imageOnly": "이미지 파일만 업로드 가능합니다",
+    "videoOnly": "비디오 파일만 업로드 가능합니다",
+    "imageOrVideo": "이미지 또는 비디오 파일만 업로드 가능합니다",
+    "allowedTypes": "허용된 형식: {{types}}"
+  },
+  "duplicate": {
+    "exists": "이미 존재합니다",
+    "name": "이미 존재하는 이름입니다",
+    "value": "이미 존재하는 값입니다"
+  }
+}

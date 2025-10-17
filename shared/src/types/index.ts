@@ -7,3 +7,4 @@ export * from './group';
 export * from './promptCollection';
 export * from './image';
 export * from './rating';
+export * from './settings';

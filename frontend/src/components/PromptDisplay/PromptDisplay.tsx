@@ -6,6 +6,7 @@ import {
   Tabs,
   Tab,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { groupPromptTerms, type GroupedPromptResult } from '../../utils/promptGrouping';
 import type { AutoTagsData } from '../../types/image';
 import AutoTagDisplay from './AutoTagDisplay';
@@ -68,6 +69,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
   isTaggerEnabled = false,
   onAutoTagGenerated,
 }) => {
+  const { t } = useTranslation('promptManagement');
   const [tabValue, setTabValue] = useState(0);
   const [positiveGrouped, setPositiveGrouped] = useState<GroupedPromptResult | null>(null);
   const [negativeGrouped, setNegativeGrouped] = useState<GroupedPromptResult | null>(null);
@@ -152,7 +154,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
                 fontSize: '0.9rem',
               }}
             >
-              Unclassified
+              {t('promptDisplay.unclassified')}
             </Typography>
             <Typography
               variant="body2"
@@ -179,7 +181,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
     return (
       <Box sx={{ py: 2, textAlign: 'center', height: containerHeight, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          프롬프트 정보가 없습니다.
+          {t('promptDisplay.noPrompt')}
         </Typography>
       </Box>
     );
@@ -198,7 +200,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
       loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
           <Typography variant="body2" color="text.secondary">
-            로딩 중...
+            {t('promptDisplay.loading')}
           </Typography>
         </Box>
       ) : positiveGrouped ? (
@@ -206,7 +208,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
       ) : (
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
           <Typography variant="body2" color="text.secondary">
-            그룹 정보를 로드할 수 없습니다.
+            {t('promptDisplay.loadFailed')}
           </Typography>
         </Box>
       )
@@ -242,7 +244,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
                   mb: 1,
                 }}
               >
-                프롬프트
+                {t('promptDisplay.labels.prompt')}
               </Typography>
             )}
             <Typography
@@ -285,7 +287,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
       loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
           <Typography variant="body2" color="text.secondary">
-            로딩 중...
+            {t('promptDisplay.loading')}
           </Typography>
         </Box>
       ) : negativeGrouped ? (
@@ -293,7 +295,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
       ) : (
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
           <Typography variant="body2" color="text.secondary">
-            그룹 정보를 로드할 수 없습니다.
+            {t('promptDisplay.loadFailed')}
           </Typography>
         </Box>
       )
@@ -329,7 +331,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
                   mb: 1,
                 }}
               >
-                네거티브 프롬프트
+                {t('promptDisplay.labels.negativePrompt')}
               </Typography>
             )}
             <Typography
@@ -386,7 +388,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
         >
           {hasPrompt && (
             <Tab
-              label="긍정"
+              label={t('promptDisplay.tabs.positive')}
               id="prompt-tab-0"
               aria-controls="prompt-tabpanel-0"
               sx={{
@@ -400,7 +402,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
           )}
           {hasNegativePrompt && (
             <Tab
-              label="부정"
+              label={t('promptDisplay.tabs.negative')}
               id={`prompt-tab-${hasPrompt ? 1 : 0}`}
               aria-controls={`prompt-tabpanel-${hasPrompt ? 1 : 0}`}
               sx={{
@@ -414,7 +416,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
           )}
           {showAutoTab && (
             <Tab
-              label="AUTO"
+              label={t('promptDisplay.tabs.auto')}
               id={`prompt-tab-${(hasPrompt ? 1 : 0) + (hasNegativePrompt ? 1 : 0)}`}
               aria-controls={`prompt-tabpanel-${(hasPrompt ? 1 : 0) + (hasNegativePrompt ? 1 : 0)}`}
               sx={{
@@ -435,7 +437,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
               loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                   <Typography variant="body2" color="text.secondary">
-                    로딩 중...
+                    {t('promptDisplay.loading')}
                   </Typography>
                 </Box>
               ) : positiveGrouped ? (
@@ -443,7 +445,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
               ) : (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                   <Typography variant="body2" color="text.secondary">
-                    그룹 정보를 로드할 수 없습니다.
+                    {t('promptDisplay.loadFailed')}
                   </Typography>
                 </Box>
               )
@@ -489,7 +491,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
               loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                   <Typography variant="body2" color="text.secondary">
-                    로딩 중...
+                    {t('promptDisplay.loading')}
                   </Typography>
                 </Box>
               ) : negativeGrouped ? (
@@ -497,7 +499,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
               ) : (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                   <Typography variant="body2" color="text.secondary">
-                    그룹 정보를 로드할 수 없습니다.
+                    {t('promptDisplay.loadFailed')}
                   </Typography>
                 </Box>
               )

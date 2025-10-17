@@ -10,6 +10,7 @@ import {
   Refresh as RefreshIcon,
   Clear as ClearIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import SearchBar from '../../components/SearchBar/SearchBar';
 import ImageGrid from '../../components/ImageGrid/ImageGrid';
 import BulkActionBar from '../../components/BulkActionBar/BulkActionBar';
@@ -18,6 +19,8 @@ import { useSelection } from '../../hooks/useSelection';
 import type { ImageSearchParams, AutoTagSearchParams } from '../../types/image';
 
 const SearchPage: React.FC = () => {
+  const { t } = useTranslation(['search', 'common']);
+
   const {
     images,
     loading,
@@ -95,7 +98,7 @@ const SearchPage: React.FC = () => {
             fontWeight: 600,
           }}
         >
-          이미지 검색
+          {t('search:title')}
         </Typography>
         <Typography
           variant="body1"
@@ -104,7 +107,7 @@ const SearchPage: React.FC = () => {
             fontSize: { xs: '0.875rem', sm: '1rem' },
           }}
         >
-          프롬프트, AI 도구, 모델명, 오토태그 등으로 이미지를 검색할 수 있습니다.
+          {t('search:description')}
         </Typography>
       </Box>
 
@@ -124,10 +127,10 @@ const SearchPage: React.FC = () => {
           >
             <Box>
               <Typography variant="h6">
-                검색 결과
+                {t('search:results.title')}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {loading ? '검색 중...' : `총 ${total.toLocaleString()}개의 이미지를 찾았습니다.`}
+                {loading ? t('search:results.searching') : t('search:results.found', { count: total })}
               </Typography>
             </Box>
 
@@ -138,7 +141,7 @@ const SearchPage: React.FC = () => {
                 onClick={clearSearch}
                 startIcon={<ClearIcon />}
               >
-                검색 초기화
+                {t('search:results.reset')}
               </Button>
               {hasResults && (
                 <Button
@@ -148,7 +151,7 @@ const SearchPage: React.FC = () => {
                   disabled={loading}
                   startIcon={<RefreshIcon />}
                 >
-                  새로고침
+                  {t('search:results.refresh')}
                 </Button>
               )}
             </Box>
@@ -173,10 +176,10 @@ const SearchPage: React.FC = () => {
       {!hasSearched ? (
         <Box sx={{ textAlign: 'center', py: 8 }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            검색어를 입력하여 이미지를 찾아보세요
+            {t('search:results.initialMessage')}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            프롬프트, AI 도구, 모델명, 오토태그, 날짜 등으로 검색할 수 있습니다.
+            {t('search:results.initialHint')}
           </Typography>
         </Box>
       ) : hasResults ? (
@@ -197,10 +200,10 @@ const SearchPage: React.FC = () => {
       ) : !loading ? (
         <Box sx={{ textAlign: 'center', py: 8 }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            검색 결과가 없습니다
+            {t('search:results.noResults')}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            다른 검색어를 시도하거나 필터를 조정해보세요.
+            {t('search:results.noResultsHint')}
           </Typography>
         </Box>
       ) : null}

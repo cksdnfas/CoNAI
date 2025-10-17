@@ -1,0 +1,142 @@
+{
+  "page": {
+    "title": "圖像分組",
+    "description": "按組管理圖像並設定自動收集規則。",
+    "emptyTitle": "尚未建立任何群組",
+    "emptyDescription": "建立新群組以系統化管理您的圖像。"
+  },
+  "groupCard": {
+    "imageCount": "{{count}}張圖像",
+    "autoCollect": "自動收集",
+    "stats": "自動：{{auto}} | 手動：{{manual}}"
+  },
+  "menu": {
+    "edit": "編輯",
+    "delete": "刪除",
+    "runAutoCollection": "執行自動收集"
+  },
+  "modal": {
+    "createTitle": "建立新群組",
+    "editTitle": "編輯群組",
+    "basicInfo": "基本資訊",
+    "groupName": "群組名稱",
+    "description": "描述",
+    "groupColor": "群組顏色",
+    "autoCollectEnable": "啟用自動收集",
+    "autoCollectDescription": "將符合設定條件的圖像自動新增到此群組。",
+    "orConditionInfo": "OR條件：多個條件將收集滿足至少一個條件的圖像。",
+    "orConditionExample": "例如：「提示詞包含'anime'」+「自動標籤有角色」→ 滿足任一條件即可收集",
+    "conditionsTitle": "自動收集條件",
+    "addCondition": "新增條件",
+    "conditionType": "條件類型",
+    "conditionValue": "值",
+    "emptyConditions": "新增條件以設定自動收集規則。",
+    "buttonCreate": "建立",
+    "buttonUpdate": "更新",
+    "buttonCancel": "取消"
+  },
+  "conditions": {
+    "groups": {
+      "basic": "基本",
+      "prompt": "提示詞",
+      "autoTag": "自動標籤"
+    },
+    "types": {
+      "aiTool": "AI工具",
+      "modelName": "模型名稱（後設資料）",
+      "promptContains": "提示詞包含",
+      "promptRegex": "提示詞正規表示式",
+      "negativePromptContains": "負面提示詞包含",
+      "negativePromptRegex": "負面提示詞正規表示式",
+      "autoTagExists": "自動標籤存在",
+      "autoTagRating": "自動標籤：評級",
+      "autoTagRatingScore": "自動標籤：評級分數（加權）",
+      "autoTagGeneral": "自動標籤：通用標籤",
+      "autoTagCharacter": "自動標籤：角色",
+      "autoTagHasCharacter": "自動標籤：有角色",
+      "autoTagModel": "自動標籤：模型名稱"
+    },
+    "values": {
+      "exists": "存在",
+      "notExists": "不存在"
+    },
+    "ratings": {
+      "general": "General",
+      "sensitive": "Sensitive",
+      "questionable": "Questionable",
+      "explicit": "Explicit"
+    },
+    "fields": {
+      "ratingType": "評級類型",
+      "minScore": "最小分數",
+      "maxScore": "最大分數",
+      "tagName": "標籤名稱",
+      "characterName": "角色名稱",
+      "caseSensitive": "區分大小寫",
+      "weightedScore": "加權總分",
+      "maxWeightInfo": "通常最多200",
+      "confidenceRange": "信賴度分數範圍（0.0〜1.0）：{{min}}〜{{max}}",
+      "confidenceInfo": "💡 分數越高表示標籤信賴度越高"
+    },
+    "placeholders": {
+      "regex": "輸入正規表示式模式",
+      "modelName": "輸入模型名稱（例如：wd-v1-4-moat-tagger-v2）",
+      "text": "輸入要搜尋的文字",
+      "tagName": "輸入標籤名稱",
+      "characterName": "輸入角色名稱"
+    }
+  },
+  "validation": {
+    "nameRequired": "請輸入群組名稱。",
+    "conditionRequired": "啟用自動收集至少需要一個條件。",
+    "valueRequired": "請輸入條件{{index}}的值。",
+    "ratingTypeRequired": "條件{{index}}：請選擇評級類型。",
+    "ratingScoreRequired": "條件{{index}}：必須設定最小分數或最大分數之一。",
+    "minScoreInvalid": "條件{{index}}：最小分數必須為0或更大。",
+    "maxScoreInvalid": "條件{{index}}：最大分數必須為0或更大。",
+    "scoreRangeInvalid": "條件{{index}}：最小分數必須小於最大分數。",
+    "confidenceScoreRange": "條件{{index}}：最小分數必須在0.0到1.0之間。",
+    "confidenceMaxScoreRange": "條件{{index}}：最大分數必須在0.0到1.0之間。",
+    "confidenceMinMaxInvalid": "條件{{index}}：最小分數不能大於最大分數。"
+  },
+  "messages": {
+    "loadFailed": "載入群組清單失敗。",
+    "imageLoadFailed": "載入群組圖像失敗。",
+    "deleteSuccess": "群組已刪除。",
+    "deleteFailed": "刪除群組失敗。",
+    "autoCollectSuccess": "自動收集完成：新增{{added}}，移除{{removed}}",
+    "autoCollectFailed": "執行自動收集失敗。",
+    "createSuccess": "群組已建立。",
+    "createFailed": "建立群組失敗。",
+    "updateSuccess": "群組已更新。",
+    "updateFailed": "更新群組失敗。",
+    "removeWarning": "沒有可移除的圖像。",
+    "removeSuccess": "已移除{{count}}張圖像。",
+    "removePartialSuccess": "已移除{{removed}}張圖像。{{failed}}個失敗。",
+    "removeError": "移除圖像時發生錯誤。",
+    "assignSuccess": "新增{{added}}，轉換{{converted}}，跳過{{skipped}}",
+    "assignFailed": "指派圖像失敗。",
+    "assignError": "指派圖像時發生錯誤。"
+  },
+  "imageModal": {
+    "title": "{{name}}（{{count}}張圖像）",
+    "selectedCount": "已選擇{{count}}",
+    "buttonRemove": "移除",
+    "buttonAssign": "指派到群組",
+    "infoMixedSelection": "已同時選擇手動收集和自動收集的圖像。僅能移除手動收集的圖像，而群組指派將套用於所有選定的圖像。",
+    "warningAutoOnly": "無法直接從群組中移除自動收集的圖像。請變更或停用自動收集條件。",
+    "confirmRemoveTitle": "確認移除圖像",
+    "confirmRemoveMessage": "從群組中移除{{count}}張手動收集的圖像？",
+    "confirmRemoveNote": "圖像檔案本身不會被刪除。"
+  },
+  "assignModal": {
+    "title": "指派到群組",
+    "description": "將{{count}}張選定的圖像指派到群組。",
+    "currentGroup": "目前群組",
+    "emptyGroups": "未建立任何群組",
+    "loadError": "載入群組清單失敗。",
+    "loadingError": "載入群組時發生錯誤。",
+    "buttonAssign": "指派",
+    "buttonCancel": "取消"
+  }
+}

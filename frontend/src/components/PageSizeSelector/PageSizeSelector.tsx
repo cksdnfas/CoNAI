@@ -1,5 +1,6 @@
 import React from 'react';
 import { FormControl, Select, MenuItem, Box, Typography } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import type { PageSize } from '../../types/image';
 
 interface PageSizeSelectorProps {
@@ -9,6 +10,8 @@ interface PageSizeSelectorProps {
 }
 
 const PageSizeSelector: React.FC<PageSizeSelectorProps> = ({ value, onChange, disabled = false }) => {
+  const { t } = useTranslation(['common']);
+
   const handleChange = (event: any) => {
     onChange(event.target.value as PageSize);
   };
@@ -16,7 +19,7 @@ const PageSizeSelector: React.FC<PageSizeSelectorProps> = ({ value, onChange, di
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <Typography variant="body2" color="text.secondary">
-        페이지당
+        {t('common:pagination.perPage')}
       </Typography>
       <FormControl size="small" sx={{ minWidth: 80 }}>
         <Select
@@ -31,7 +34,7 @@ const PageSizeSelector: React.FC<PageSizeSelectorProps> = ({ value, onChange, di
         </Select>
       </FormControl>
       <Typography variant="body2" color="text.secondary">
-        개
+        {t('common:pagination.items')}
       </Typography>
     </Box>
   );

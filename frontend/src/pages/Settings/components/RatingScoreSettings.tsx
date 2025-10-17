@@ -31,6 +31,7 @@ import {
   Add as AddIcon,
   Calculate as CalculateIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { ratingApi } from '../../../services/ratingApi';
 import type {
   RatingWeights,
@@ -42,6 +43,8 @@ import type {
 } from '../../../types/rating';
 
 const RatingScoreSettings: React.FC = () => {
+  const { t } = useTranslation('settings');
+
   // Weights state
   const [weights, setWeights] = useState<RatingWeights | null>(null);
   const [localWeights, setLocalWeights] = useState<RatingWeightsUpdate>({});
@@ -114,7 +117,7 @@ const RatingScoreSettings: React.FC = () => {
       setWeights(data);
       setLocalWeights({});
     } catch (err) {
-      setError('가중치 설정을 불러오는데 실패했습니다.');
+      setError(t('rating.weights.alerts.loadFailed'));
       console.error('Failed to load weights:', err);
     } finally {
       setWeightsLoading(false);
@@ -128,7 +131,7 @@ const RatingScoreSettings: React.FC = () => {
       const data = await ratingApi.getAllTiers();
       setTiers(data);
     } catch (err) {
-      setError('등급 설정을 불러오는데 실패했습니다.');
+      setError(t('rating.tiers.alerts.loadFailed'));
       console.error('Failed to load tiers:', err);
     } finally {
       setTiersLoading(false);
@@ -184,10 +187,10 @@ const RatingScoreSettings: React.FC = () => {
       const updated = await ratingApi.updateWeights(localWeights);
       setWeights(updated);
       setLocalWeights({});
-      setSuccessMessage('가중치 설정이 저장되었습니다.');
+      setSuccessMessage(t('rating.weights.alerts.saveSuccess'));
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      setError('가중치 저장에 실패했습니다.');
+      setError(t('rating.weights.alerts.saveFailed'));
       console.error('Failed to save weights:', err);
     } finally {
       setSaving(false);
@@ -236,7 +239,7 @@ const RatingScoreSettings: React.FC = () => {
   const handleSaveTier = async () => {
     const { mode, tier, editId } = tierDialog;
     if (!tier.tier_name || tier.min_score === undefined || tier.tier_order === undefined) {
-      setError('모든 필수 항목을 입력해주세요.');
+      setError(t('rating.tiers.dialog.requiredFields'));
       return;
     }
 
@@ -245,16 +248,16 @@ const RatingScoreSettings: React.FC = () => {
     try {
       if (mode === 'create') {
         await ratingApi.createTier(tier as RatingTierInput);
-        setSuccessMessage('등급이 추가되었습니다.');
+        setSuccessMessage(t('rating.tiers.alerts.created'));
       } else if (editId) {
         await ratingApi.updateTier(editId, tier);
-        setSuccessMessage('등급이 수정되었습니다.');
+        setSuccessMessage(t('rating.tiers.alerts.updated'));
       }
       await loadTiers();
       handleCloseTierDialog();
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      setError('등급 저장에 실패했습니다.');
+      setError(t('rating.tiers.alerts.saveFailed'));
       console.error('Failed to save tier:', err);
     } finally {
       setSaving(false);
@@ -262,17 +265,17 @@ const RatingScoreSettings: React.FC = () => {
   };
 
   const handleDeleteTier = async (id: number) => {
-    if (!window.confirm('이 등급을 삭제하시겠습니까?')) return;
+    if (!window.confirm(t('rating.tiers.alerts.deleteConfirm'))) return;
 
     setSaving(true);
     setError(null);
     try {
       await ratingApi.deleteTier(id);
       await loadTiers();
-      setSuccessMessage('등급이 삭제되었습니다.');
+      setSuccessMessage(t('rating.tiers.alerts.deleted'));
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      setError('등급 삭제에 실패했습니다.');
+      setError(t('rating.tiers.alerts.deleteFailed'));
       console.error('Failed to delete tier:', err);
     } finally {
       setSaving(false);
@@ -286,7 +289,7 @@ const RatingScoreSettings: React.FC = () => {
       const result = await ratingApi.calculateScore(testRating);
       setTestResult(result);
     } catch (err) {
-      setError('점수 계산에 실패했습니다.');
+      setError(t('rating.calculator.failed'));
       console.error('Failed to calculate score:', err);
     } finally {
       setTestLoading(false);
@@ -329,15 +332,17 @@ const RatingScoreSettings: React.FC = () => {
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            가중치 설정
+            {t('rating.weights.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary" paragraph>
-            각 Rating 항목의 점수 가중치를 설정합니다.
+            {t('rating.weights.description')}
           </Typography>
 
           <Stack spacing={3} sx={{ mt: 3 }}>
             <Box>
-              <Typography gutterBottom>General: {getCurrentWeight('general_weight')}</Typography>
+              <Typography gutterBottom>
+                {t('rating.weights.general', { value: getCurrentWeight('general_weight') })}
+              </Typography>
               <Slider
                 value={getCurrentWeight('general_weight')}
                 onChange={(_, value) =>
@@ -355,7 +360,9 @@ const RatingScoreSettings: React.FC = () => {
             </Box>
 
             <Box>
-              <Typography gutterBottom>Sensitive: {getCurrentWeight('sensitive_weight')}</Typography>
+              <Typography gutterBottom>
+                {t('rating.weights.sensitive', { value: getCurrentWeight('sensitive_weight') })}
+              </Typography>
               <Slider
                 value={getCurrentWeight('sensitive_weight')}
                 onChange={(_, value) =>
@@ -374,7 +381,7 @@ const RatingScoreSettings: React.FC = () => {
 
             <Box>
               <Typography gutterBottom>
-                Questionable: {getCurrentWeight('questionable_weight')}
+                {t('rating.weights.questionable', { value: getCurrentWeight('questionable_weight') })}
               </Typography>
               <Slider
                 value={getCurrentWeight('questionable_weight')}
@@ -393,7 +400,9 @@ const RatingScoreSettings: React.FC = () => {
             </Box>
 
             <Box>
-              <Typography gutterBottom>Explicit: {getCurrentWeight('explicit_weight')}</Typography>
+              <Typography gutterBottom>
+                {t('rating.weights.explicit', { value: getCurrentWeight('explicit_weight') })}
+              </Typography>
               <Slider
                 value={getCurrentWeight('explicit_weight')}
                 onChange={(_, value) =>
@@ -414,13 +423,17 @@ const RatingScoreSettings: React.FC = () => {
             {previewResult && (
               <Alert severity="info" icon={<CalculateIcon />}>
                 <Typography variant="subtitle2" gutterBottom>
-                  실시간 미리보기 (예시 Rating: general=0.001, sensitive=0.045, questionable=0.735,
-                  explicit=0.470)
+                  {t('rating.weights.preview.title')}
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                  <Typography variant="body2">
-                    총점: <strong>{previewResult.score.toFixed(2)}점</strong>
-                  </Typography>
+                  <Typography
+                    variant="body2"
+                    dangerouslySetInnerHTML={{
+                      __html: t('rating.weights.preview.score', {
+                        score: previewResult.score.toFixed(2),
+                      }),
+                    }}
+                  />
                   {previewResult.tier && (
                     <Chip
                       label={previewResult.tier.tier_name}
@@ -442,7 +455,7 @@ const RatingScoreSettings: React.FC = () => {
                 disabled={!weightsHasChanges || saving}
                 fullWidth
               >
-                {saving ? <CircularProgress size={24} /> : '가중치 저장'}
+                {saving ? <CircularProgress size={24} /> : t('rating.weights.buttons.save')}
               </Button>
               <Button
                 variant="outlined"
@@ -450,7 +463,7 @@ const RatingScoreSettings: React.FC = () => {
                 disabled={!weightsHasChanges || saving}
                 fullWidth
               >
-                취소
+                {t('rating.weights.buttons.cancel')}
               </Button>
             </Stack>
           </Stack>
@@ -463,10 +476,10 @@ const RatingScoreSettings: React.FC = () => {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Box>
               <Typography variant="h6" gutterBottom>
-                등급 구간 설정
+                {t('rating.tiers.title')}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                점수 구간별 등급을 설정합니다.
+                {t('rating.tiers.description')}
               </Typography>
             </Box>
             <Button
@@ -474,7 +487,7 @@ const RatingScoreSettings: React.FC = () => {
               startIcon={<AddIcon />}
               onClick={() => handleOpenTierDialog('create')}
             >
-              등급 추가
+              {t('rating.tiers.addButton')}
             </Button>
           </Box>
 
@@ -482,11 +495,11 @@ const RatingScoreSettings: React.FC = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>순서</TableCell>
-                  <TableCell>등급명</TableCell>
-                  <TableCell>점수 구간</TableCell>
-                  <TableCell>색상</TableCell>
-                  <TableCell align="right">작업</TableCell>
+                  <TableCell>{t('rating.tiers.table.order')}</TableCell>
+                  <TableCell>{t('rating.tiers.table.name')}</TableCell>
+                  <TableCell>{t('rating.tiers.table.scoreRange')}</TableCell>
+                  <TableCell>{t('rating.tiers.table.color')}</TableCell>
+                  <TableCell align="right">{t('rating.tiers.table.actions')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -503,7 +516,10 @@ const RatingScoreSettings: React.FC = () => {
                       />
                     </TableCell>
                     <TableCell>
-                      {tier.min_score}점 ~ {tier.max_score !== null ? `${tier.max_score}점` : '∞'}
+                      {t('rating.tiers.table.scoreFormat', {
+                        min: tier.min_score,
+                        max: tier.max_score !== null ? tier.max_score : t('rating.tiers.table.infinity'),
+                      })}
                     </TableCell>
                     <TableCell>
                       <Box
@@ -538,7 +554,7 @@ const RatingScoreSettings: React.FC = () => {
                   <TableRow>
                     <TableCell colSpan={5} align="center">
                       <Typography variant="body2" color="text.secondary">
-                        등급이 없습니다. 등급을 추가해주세요.
+                        {t('rating.tiers.table.empty')}
                       </Typography>
                     </TableCell>
                   </TableRow>
@@ -553,15 +569,17 @@ const RatingScoreSettings: React.FC = () => {
       <Card>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            점수 계산 테스트
+            {t('rating.calculator.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary" paragraph>
-            Rating 값을 입력하여 점수를 계산해보세요.
+            {t('rating.calculator.description')}
           </Typography>
 
           <Stack spacing={3} sx={{ mt: 3 }}>
             <Box>
-              <Typography gutterBottom>General: {testRating.general.toFixed(3)}</Typography>
+              <Typography gutterBottom>
+                {t('rating.calculator.general', { value: testRating.general.toFixed(3) })}
+              </Typography>
               <Slider
                 value={testRating.general}
                 onChange={(_, value) =>
@@ -579,7 +597,9 @@ const RatingScoreSettings: React.FC = () => {
             </Box>
 
             <Box>
-              <Typography gutterBottom>Sensitive: {testRating.sensitive.toFixed(3)}</Typography>
+              <Typography gutterBottom>
+                {t('rating.calculator.sensitive', { value: testRating.sensitive.toFixed(3) })}
+              </Typography>
               <Slider
                 value={testRating.sensitive}
                 onChange={(_, value) =>
@@ -598,7 +618,7 @@ const RatingScoreSettings: React.FC = () => {
 
             <Box>
               <Typography gutterBottom>
-                Questionable: {testRating.questionable.toFixed(3)}
+                {t('rating.calculator.questionable', { value: testRating.questionable.toFixed(3) })}
               </Typography>
               <Slider
                 value={testRating.questionable}
@@ -617,7 +637,9 @@ const RatingScoreSettings: React.FC = () => {
             </Box>
 
             <Box>
-              <Typography gutterBottom>Explicit: {testRating.explicit.toFixed(3)}</Typography>
+              <Typography gutterBottom>
+                {t('rating.calculator.explicit', { value: testRating.explicit.toFixed(3) })}
+              </Typography>
               <Slider
                 value={testRating.explicit}
                 onChange={(_, value) =>
@@ -640,19 +662,24 @@ const RatingScoreSettings: React.FC = () => {
               onClick={handleCalculateTest}
               disabled={testLoading}
             >
-              {testLoading ? '계산 중...' : '점수 계산하기'}
+              {testLoading ? t('rating.calculator.calculating') : t('rating.calculator.calculate')}
             </Button>
 
             {testResult && (
               <Alert severity="success">
                 <Typography variant="subtitle2" gutterBottom>
-                  계산 결과
+                  {t('rating.calculator.result.title')}
                 </Typography>
                 <Box sx={{ mt: 2 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                    <Typography variant="body1">
-                      총점: <strong>{testResult.score.toFixed(2)}점</strong>
-                    </Typography>
+                    <Typography
+                      variant="body1"
+                      dangerouslySetInnerHTML={{
+                        __html: t('rating.calculator.result.score', {
+                          score: testResult.score.toFixed(2),
+                        }),
+                      }}
+                    />
                     {testResult.tier && (
                       <Chip
                         label={testResult.tier.tier_name}
@@ -665,20 +692,28 @@ const RatingScoreSettings: React.FC = () => {
                   </Box>
                   <Divider sx={{ my: 1 }} />
                   <Typography variant="caption" color="text.secondary">
-                    상세 점수:
+                    {t('rating.calculator.result.breakdown')}
                   </Typography>
                   <Box sx={{ mt: 1 }}>
                     <Typography variant="body2">
-                      General: {testResult.breakdown.general.toFixed(3)}점
+                      {t('rating.calculator.result.generalScore', {
+                        score: testResult.breakdown.general.toFixed(3),
+                      })}
                     </Typography>
                     <Typography variant="body2">
-                      Sensitive: {testResult.breakdown.sensitive.toFixed(3)}점
+                      {t('rating.calculator.result.sensitiveScore', {
+                        score: testResult.breakdown.sensitive.toFixed(3),
+                      })}
                     </Typography>
                     <Typography variant="body2">
-                      Questionable: {testResult.breakdown.questionable.toFixed(3)}점
+                      {t('rating.calculator.result.questionableScore', {
+                        score: testResult.breakdown.questionable.toFixed(3),
+                      })}
                     </Typography>
                     <Typography variant="body2">
-                      Explicit: {testResult.breakdown.explicit.toFixed(3)}점
+                      {t('rating.calculator.result.explicitScore', {
+                        score: testResult.breakdown.explicit.toFixed(3),
+                      })}
                     </Typography>
                   </Box>
                 </Box>
@@ -691,12 +726,14 @@ const RatingScoreSettings: React.FC = () => {
       {/* Tier Edit/Create Dialog */}
       <Dialog open={tierDialog.open} onClose={handleCloseTierDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {tierDialog.mode === 'create' ? '등급 추가' : '등급 수정'}
+          {tierDialog.mode === 'create'
+            ? t('rating.tiers.dialog.createTitle')
+            : t('rating.tiers.dialog.editTitle')}
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
-              label="등급명"
+              label={t('rating.tiers.dialog.tierName')}
               value={tierDialog.tier.tier_name || ''}
               onChange={(e) =>
                 setTierDialog({
@@ -708,7 +745,7 @@ const RatingScoreSettings: React.FC = () => {
               required
             />
             <TextField
-              label="최소 점수"
+              label={t('rating.tiers.dialog.minScore')}
               type="number"
               value={tierDialog.tier.min_score ?? ''}
               onChange={(e) =>
@@ -721,7 +758,7 @@ const RatingScoreSettings: React.FC = () => {
               required
             />
             <TextField
-              label="최대 점수 (빈 값 = 무한대)"
+              label={t('rating.tiers.dialog.maxScore')}
               type="number"
               value={tierDialog.tier.max_score ?? ''}
               onChange={(e) =>
@@ -736,7 +773,7 @@ const RatingScoreSettings: React.FC = () => {
               fullWidth
             />
             <TextField
-              label="순서"
+              label={t('rating.tiers.dialog.order')}
               type="number"
               value={tierDialog.tier.tier_order ?? ''}
               onChange={(e) =>
@@ -749,7 +786,7 @@ const RatingScoreSettings: React.FC = () => {
               required
             />
             <TextField
-              label="색상 (Hex)"
+              label={t('rating.tiers.dialog.color')}
               value={tierDialog.tier.color || ''}
               onChange={(e) =>
                 setTierDialog({
@@ -758,17 +795,17 @@ const RatingScoreSettings: React.FC = () => {
                 })
               }
               fullWidth
-              placeholder="#2196f3"
-              helperText="예: #22c55e, #3b82f6, #f59e0b, #ef4444"
+              placeholder={t('rating.tiers.dialog.colorPlaceholder')}
+              helperText={t('rating.tiers.dialog.colorHelper')}
             />
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseTierDialog} disabled={saving}>
-            취소
+            {t('rating.tiers.dialog.cancel')}
           </Button>
           <Button onClick={handleSaveTier} variant="contained" disabled={saving}>
-            {saving ? <CircularProgress size={20} /> : '저장'}
+            {saving ? <CircularProgress size={20} /> : t('rating.tiers.dialog.save')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,0 +1,35 @@
+{
+  "page": {
+    "title": "画像ギャラリー",
+    "description": "アップロードされたすべての画像を確認・管理できます。"
+  },
+  "filters": {
+    "aiTool": "AIツール",
+    "sortBy": "並べ替え",
+    "sortOrder": "順序",
+    "all": "すべて",
+    "clearFilters": "フィルターをクリア"
+  },
+  "sorting": {
+    "uploadDate": "アップロード日",
+    "filename": "ファイル名",
+    "fileSize": "ファイルサイズ",
+    "width": "幅",
+    "height": "高さ",
+    "ascending": "昇順",
+    "descending": "降順"
+  },
+  "actions": {
+    "refresh": "更新",
+    "selectAll": "すべて選択",
+    "deselectAll": "選択解除"
+  },
+  "status": {
+    "loading": "画像を読み込んでいます...",
+    "noImages": "画像がありません。",
+    "error": "画像の読み込み中にエラーが発生しました。"
+  },
+  "chips": {
+    "aiToolLabel": "AIツール: {{tool}}"
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "page": {
+    "title": "画像グループ",
+    "description": "画像をグループ別に管理し、自動収集ルールを設定できます。",
+    "emptyTitle": "まだグループが作成されていません",
+    "emptyDescription": "新しいグループを作成して、画像を体系的に管理しましょう。"
+  },
+  "groupCard": {
+    "imageCount": "{{count}}枚の画像",
+    "autoCollect": "自動収集",
+    "stats": "自動：{{auto}} | 手動：{{manual}}"
+  },
+  "menu": {
+    "edit": "編集",
+    "delete": "削除",
+    "runAutoCollection": "自動収集を実行"
+  },
+  "modal": {
+    "createTitle": "新しいグループを作成",
+    "editTitle": "グループを編集",
+    "basicInfo": "基本情報",
+    "groupName": "グループ名",
+    "description": "説明",
+    "groupColor": "グループの色",
+    "autoCollectEnable": "自動収集を有効化",
+    "autoCollectDescription": "設定した条件に合う画像を自動的にこのグループに追加します。",
+    "orConditionInfo": "OR条件：複数の条件を追加すると、いずれか一つでも満たす画像が自動収集されます。",
+    "orConditionExample": "例：「プロンプトに'anime'を含む」+「オートタグにキャラクターが存在」→どちらか一つを満たせば収集",
+    "conditionsTitle": "自動収集条件",
+    "addCondition": "条件を追加",
+    "conditionType": "条件タイプ",
+    "conditionValue": "値",
+    "emptyConditions": "条件を追加して自動収集ルールを設定してください。",
+    "buttonCreate": "作成",
+    "buttonUpdate": "更新",
+    "buttonCancel": "キャンセル"
+  },
+  "conditions": {
+    "groups": {
+      "basic": "基本",
+      "prompt": "プロンプト",
+      "autoTag": "オートタグ"
+    },
+    "types": {
+      "aiTool": "AIツール",
+      "modelName": "モデル名（メタデータ）",
+      "promptContains": "プロンプトに含む",
+      "promptRegex": "プロンプト正規表現",
+      "negativePromptContains": "ネガティブプロンプトに含む",
+      "negativePromptRegex": "ネガティブプロンプト正規表現",
+      "autoTagExists": "オートタグの存在",
+      "autoTagRating": "オートタグ：Rating",
+      "autoTagRatingScore": "オートタグ：Rating スコア（加重）",
+      "autoTagGeneral": "オートタグ：General タグ",
+      "autoTagCharacter": "オートタグ：キャラクター",
+      "autoTagHasCharacter": "オートタグ：キャラクターの存在",
+      "autoTagModel": "オートタグ：モデル名"
+    },
+    "values": {
+      "exists": "存在する",
+      "notExists": "存在しない"
+    },
+    "ratings": {
+      "general": "General",
+      "sensitive": "Sensitive",
+      "questionable": "Questionable",
+      "explicit": "Explicit"
+    },
+    "fields": {
+      "ratingType": "Rating タイプ",
+      "minScore": "最小スコア",
+      "maxScore": "最大スコア",
+      "tagName": "タグ名",
+      "characterName": "キャラクター名",
+      "caseSensitive": "大文字小文字を区別",
+      "weightedScore": "加重合計スコア",
+      "maxWeightInfo": "通常200まで",
+      "confidenceRange": "信頼度スコア範囲（0.0〜1.0）：{{min}}〜{{max}}",
+      "confidenceInfo": "💡 高いスコアほど、そのタグの信頼度が高くなります"
+    },
+    "placeholders": {
+      "regex": "正規表現パターンを入力",
+      "modelName": "モデル名を入力（例：wd-v1-4-moat-tagger-v2）",
+      "text": "検索するテキストを入力",
+      "tagName": "タグ名を入力",
+      "characterName": "キャラクター名を入力"
+    }
+  },
+  "validation": {
+    "nameRequired": "グループ名を入力してください。",
+    "conditionRequired": "自動収集を有効にするには、少なくとも1つの条件を追加してください。",
+    "valueRequired": "条件{{index}}の値を入力してください。",
+    "ratingTypeRequired": "条件{{index}}：Ratingタイプを選択してください。",
+    "ratingScoreRequired": "条件{{index}}：最小スコアまたは最大スコアのいずれかを設定する必要があります。",
+    "minScoreInvalid": "条件{{index}}：最小スコアは0以上である必要があります。",
+    "maxScoreInvalid": "条件{{index}}：最大スコアは0以上である必要があります。",
+    "scoreRangeInvalid": "条件{{index}}：最小スコアは最大スコアより小さくする必要があります。",
+    "confidenceScoreRange": "条件{{index}}：最小スコアは0.0〜1.0の間である必要があります。",
+    "confidenceMaxScoreRange": "条件{{index}}：最大スコアは0.0〜1.0の間である必要があります。",
+    "confidenceMinMaxInvalid": "条件{{index}}：最小スコアは最大スコアより大きくすることはできません。"
+  },
+  "messages": {
+    "loadFailed": "グループリストの読み込みに失敗しました。",
+    "imageLoadFailed": "グループ画像の読み込みに失敗しました。",
+    "deleteSuccess": "グループが削除されました。",
+    "deleteFailed": "グループの削除に失敗しました。",
+    "autoCollectSuccess": "自動収集完了：{{added}}枚追加、{{removed}}枚削除",
+    "autoCollectFailed": "自動収集の実行に失敗しました。",
+    "createSuccess": "グループが作成されました。",
+    "createFailed": "グループの作成に失敗しました。",
+    "updateSuccess": "グループが更新されました。",
+    "updateFailed": "グループの更新に失敗しました。",
+    "removeWarning": "削除できる画像がありません。",
+    "removeSuccess": "{{count}}枚の画像が削除されました。",
+    "removePartialSuccess": "{{removed}}枚の画像が削除されました。{{failed}}枚失敗。",
+    "removeError": "画像の削除中にエラーが発生しました。",
+    "assignSuccess": "{{added}}枚追加、{{converted}}枚変換、{{skipped}}枚スキップ",
+    "assignFailed": "画像の割り当てに失敗しました。",
+    "assignError": "画像の割り当て中にエラーが発生しました。"
+  },
+  "imageModal": {
+    "title": "{{name}}（{{count}}枚の画像）",
+    "selectedCount": "{{count}}枚選択",
+    "buttonRemove": "削除",
+    "buttonAssign": "グループに割り当て",
+    "infoMixedSelection": "手動収集画像と自動収集画像が一緒に選択されています。削除は手動収集画像のみ可能で、グループ割り当ては選択されたすべての画像に適用されます。",
+    "warningAutoOnly": "自動収集画像はグループから直接削除できません。自動収集条件を変更または無効にしてください。",
+    "confirmRemoveTitle": "画像削除の確認",
+    "confirmRemoveMessage": "選択された{{count}}枚の手動収集画像をグループから削除しますか？",
+    "confirmRemoveNote": "画像ファイル自体は削除されません。"
+  },
+  "assignModal": {
+    "title": "グループに割り当て",
+    "description": "選択された{{count}}枚の画像をグループに割り当てます。",
+    "currentGroup": "現在のグループ",
+    "emptyGroups": "作成されたグループがありません",
+    "loadError": "グループリストの読み込みに失敗しました。",
+    "loadingError": "グループの読み込み中にエラーが発生しました。",
+    "buttonAssign": "割り当て",
+    "buttonCancel": "キャンセル"
+  }
+}

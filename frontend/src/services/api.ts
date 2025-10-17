@@ -15,7 +15,7 @@ import type {
   PromptGroupData,
   PromptGroupWithPrompts,
   PromptGroupResponse
-} from '../types/promptCollection';
+} from '@comfyui-image-manager/shared';
 
 export const API_BASE_URL = getBackendOrigin();
 const api = axios.create({

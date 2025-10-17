@@ -11,6 +11,7 @@ import {
   FlipCameraAndroid as FlipVerticalIcon,
   Refresh as ResetIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 
 interface ImageControlsProps {
   scale: number;
@@ -42,6 +43,8 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
   onOpenDrawer,
   onClose,
 }) => {
+  const { t } = useTranslation();
+
   return (
     <Box
       sx={{
@@ -63,7 +66,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
           onClick={onZoomOut}
           sx={{ color: 'white' }}
           size="small"
-          title="축소"
+          title={t('imageDetail:controls.zoomOut')}
         >
           <ZoomOutIcon />
         </IconButton>
@@ -74,7 +77,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
           onClick={onZoomIn}
           sx={{ color: 'white' }}
           size="small"
-          title="확대"
+          title={t('imageDetail:controls.zoomIn')}
         >
           <ZoomInIcon />
         </IconButton>
@@ -82,7 +85,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
           onClick={onRotateLeft}
           sx={{ color: 'white' }}
           size="small"
-          title="왼쪽 회전"
+          title={t('imageDetail:controls.rotateLeft')}
         >
           <RotateLeftIcon />
         </IconButton>
@@ -90,7 +93,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
           onClick={onRotateRight}
           sx={{ color: 'white' }}
           size="small"
-          title="오른쪽 회전"
+          title={t('imageDetail:controls.rotateRight')}
         >
           <RotateRightIcon />
         </IconButton>
@@ -98,7 +101,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
           onClick={onFlipHorizontal}
           sx={{ color: 'white' }}
           size="small"
-          title="좌우 반전"
+          title={t('imageDetail:controls.flipHorizontal')}
         >
           <FlipIcon />
         </IconButton>
@@ -106,7 +109,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
           onClick={onFlipVertical}
           sx={{ color: 'white' }}
           size="small"
-          title="상하 반전"
+          title={t('imageDetail:controls.flipVertical')}
         >
           <FlipVerticalIcon />
         </IconButton>
@@ -114,7 +117,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
           onClick={onReset}
           sx={{ color: 'white' }}
           size="small"
-          title="원본 크기로 되돌리기"
+          title={t('imageDetail:controls.reset')}
         >
           <ResetIcon />
         </IconButton>
@@ -127,6 +130,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
             onClick={onOpenDrawer}
             sx={{ color: 'white' }}
             size="small"
+            title={t('imageDetail:controls.info')}
           >
             <InfoIcon />
           </IconButton>
@@ -135,6 +139,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
           onClick={onClose}
           sx={{ color: 'white' }}
           size="small"
+          title={t('imageDetail:controls.close')}
         >
           <CloseIcon />
         </IconButton>

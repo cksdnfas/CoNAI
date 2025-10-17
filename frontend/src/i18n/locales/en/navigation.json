@@ -1,0 +1,27 @@
+{
+  "header": {
+    "title": "ComfyUI Image Manager",
+    "menu": {
+      "home": "Home",
+      "gallery": "Gallery",
+      "imageGroups": "Image Groups",
+      "search": "Search",
+      "upload": "Upload",
+      "imageGeneration": "Image Generation",
+      "settings": "Settings"
+    },
+    "theme": {
+      "light": "Light Mode",
+      "dark": "Dark Mode",
+      "toggle": "Toggle Theme"
+    },
+    "mobileMenu": {
+      "open": "Open Menu",
+      "close": "Close Menu"
+    }
+  },
+  "footer": {
+    "copyright": "© 2024 ComfyUI Image Manager. All rights reserved.",
+    "version": "Version"
+  }
+}

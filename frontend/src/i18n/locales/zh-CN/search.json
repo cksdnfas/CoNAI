@@ -1,0 +1,120 @@
+{
+  "title": "图像搜索",
+  "description": "可以通过提示词、AI工具、模型名称、自动标签等搜索图像。",
+
+  "searchInput": {
+    "placeholder": "按提示词关键字搜索...",
+    "button": "搜索",
+    "clear": "全部重置",
+    "execute": "执行搜索"
+  },
+
+  "results": {
+    "title": "搜索结果",
+    "searching": "搜索中...",
+    "found": "找到{{count}}张图像。",
+    "noResults": "未找到搜索结果",
+    "noResultsHint": "尝试其他关键词或调整过滤器。",
+    "initialMessage": "输入关键词搜索图像",
+    "initialHint": "可以通过提示词、AI工具、模型名称、自动标签、日期等搜索。",
+    "reset": "重置搜索",
+    "refresh": "刷新"
+  },
+
+  "filters": {
+    "basic": {
+      "aiTool": {
+        "label": "AI工具",
+        "all": "全部"
+      },
+      "modelName": {
+        "label": "模型名称",
+        "placeholder": "例如: sd_xl_base_1.0"
+      },
+      "startDate": {
+        "label": "开始日期"
+      },
+      "endDate": {
+        "label": "结束日期"
+      }
+    },
+
+    "quickDate": {
+      "today": "今天",
+      "todayTooltip": "今天上传的图像",
+      "7days": "7天",
+      "7daysTooltip": "最近7天",
+      "30days": "30天",
+      "30daysTooltip": "最近30天",
+      "90days": "90天",
+      "90daysTooltip": "最近90天"
+    },
+
+    "advanced": {
+      "title": "高级过滤器",
+      "active": "活动",
+      "negativePrompt": {
+        "label": "负面提示词",
+        "placeholder": "输入要排除的关键词 (例如: ugly, blurry)"
+      }
+    },
+
+    "autoTag": {
+      "title": "自动标签过滤器",
+      "subtitle": "(WD v3 Tagger)",
+      "active": "活动",
+
+      "tabs": {
+        "rating": "评级",
+        "character": "角色",
+        "generalTags": "通用标签"
+      },
+
+      "rating": {
+        "typeMode": "按类型过滤",
+        "scoreMode": "按分数过滤",
+        "typeDescription": "按特定评级类型的置信度范围过滤",
+        "scoreDescription": "按设置中配置的加权总分过滤",
+        "type": {
+          "label": "评级类型",
+          "none": "无选择",
+          "general": "一般",
+          "sensitive": "敏感",
+          "questionable": "可疑",
+          "explicit": "露骨"
+        },
+        "confidenceRange": "置信度范围",
+        "scoreRange": "分数范围"
+      },
+
+      "character": {
+        "description": "按角色标签过滤图像",
+        "existence": {
+          "label": "角色存在",
+          "all": "全部",
+          "true": "存在",
+          "false": "不存在"
+        },
+        "name": {
+          "label": "角色名称",
+          "placeholder": "例如: hatsune_miku"
+        },
+        "confidenceRange": "置信度范围"
+      },
+
+      "generalTags": {
+        "description": "按通用标签和置信度范围过滤",
+        "tagName": {
+          "label": "标签名称",
+          "placeholder": "例如: 1girl, solo, landscape"
+        },
+        "confidence": "置信度: {{min}} ~ {{max}}",
+        "addedTags": "已添加标签 ({{count}}个)"
+      }
+    }
+  },
+
+  "searchHistory": {
+    "title": "最近搜索"
+  }
+}

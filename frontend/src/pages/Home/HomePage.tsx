@@ -56,9 +56,9 @@ const HomePage: React.FC = () => {
               fontWeight: 600,
             }}
           >
-            홈
+            Home
           </Typography>
-          <Typography
+          {/* <Typography
             variant="body1"
             color="text.secondary"
             sx={{
@@ -66,7 +66,7 @@ const HomePage: React.FC = () => {
             }}
           >
             최근 업로드된 이미지를 확인하세요.
-          </Typography>
+          </Typography> */}
         </Box>
 
         <Tooltip title="새로고침">

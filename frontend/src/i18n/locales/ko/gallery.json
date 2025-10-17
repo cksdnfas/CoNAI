@@ -1,0 +1,41 @@
+{
+  "page": {
+    "title": "이미지 갤러리",
+    "description": "업로드된 모든 이미지를 확인하고 관리할 수 있습니다."
+  },
+  "filters": {
+    "aiTool": "AI 도구",
+    "sortBy": "정렬 기준",
+    "sortOrder": "순서",
+    "all": "전체",
+    "clearFilters": "필터 초기화"
+  },
+  "sorting": {
+    "uploadDate": "업로드 날짜",
+    "filename": "파일명",
+    "fileSize": "파일 크기",
+    "width": "가로 크기",
+    "height": "세로 크기",
+    "ascending": "오름차순",
+    "descending": "내림차순"
+  },
+  "actions": {
+    "refresh": "새로고침",
+    "selectAll": "전체 선택",
+    "deselectAll": "선택 해제"
+  },
+  "status": {
+    "loading": "이미지를 불러오는 중...",
+    "noImages": "이미지가 없습니다.",
+    "uploadPrompt": "이미지를 업로드하거나 검색 조건을 변경해보세요.",
+    "error": "이미지를 불러오는 중 오류가 발생했습니다."
+  },
+  "chips": {
+    "aiToolLabel": "AI 도구: {{tool}}"
+  },
+  "selectAllLabel": "전체 선택 ({{selected}}/{{total}})",
+  "totalImages": "총 {{count}}개 이미지",
+  "imageGridModal": {
+    "title": "이미지 그리드"
+  }
+}

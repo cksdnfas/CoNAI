@@ -13,7 +13,8 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "cd frontend && npm run dev",
     "dev:backend": "cd backend && npm run dev",
-    "build": "npm run build:backend && npm run build:frontend",
+    "build": "npm run build:shared && npm run build:backend && npm run build:frontend",
+    "build:shared": "cd shared && npm run build",
     "build:frontend": "cd frontend && npm run build",
     "build:backend": "cd backend && npm run build",
     "build:integrated": "node scripts/build-integrated.js",
@@ -25,7 +26,7 @@
     "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
     "start:frontend": "cd frontend && npm run preview",
     "start:backend": "cd backend && npm run start",
-    "clean": "rm -rf frontend/dist backend/dist frontend/node_modules backend/node_modules node_modules pkg-output portable-output",
+    "clean": "rm -rf shared/dist frontend/dist backend/dist frontend/node_modules backend/node_modules shared/node_modules node_modules pkg-output portable-output",
     "db:reset": "rm -f database/*.db && cd backend && npm run db:migrate"
   },
   "devDependencies": {

@@ -41,8 +41,11 @@ import { imageApi } from '../../../services/api';
 import { buildUploadsUrl } from '../../../utils/backend';
 import type { ImageRecord } from '../../../types/image';
 import { settingsApi } from '../../../services/settingsApi';
+import { useTranslation } from 'react-i18next';
 
 const SimilaritySettings: React.FC = () => {
+  const { t } = useTranslation('settings');
+
   // 상태 관리
   const [stats, setStats] = useState<SimilarityStats | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
@@ -101,7 +104,7 @@ const SimilaritySettings: React.FC = () => {
       await settingsApi.updateSimilaritySettings({ autoGenerateHashOnUpload: newValue });
     } catch (error) {
       console.error('Failed to update similarity settings:', error);
-      alert('설정 업데이트 실패');
+      alert(t('similarity.systemStatus.autoGenerateUpdateFailed'));
       // 실패 시 원래 값으로 복원
       setAutoGenerateHash(!newValue);
     }
@@ -120,7 +123,7 @@ const SimilaritySettings: React.FC = () => {
       setRebuildTotal(totalToProcess);
 
       if (totalToProcess === 0) {
-        alert('처리할 이미지가 없습니다.');
+        alert(t('similarity.systemStatus.noImagesToProcess'));
         return;
       }
 
@@ -147,14 +150,14 @@ const SimilaritySettings: React.FC = () => {
 
       // 완료 메시지
       if (totalFailed > 0) {
-        alert(`처리 완료: ${totalProcessed}개 성공, ${totalFailed}개 실패`);
+        alert(t('similarity.systemStatus.rebuildCompleteWithErrors', { success: totalProcessed, failed: totalFailed }));
       } else {
-        alert(`처리 완료: ${totalProcessed}개의 이미지 해시가 생성되었습니다.`);
+        alert(t('similarity.systemStatus.rebuildComplete', { processed: totalProcessed }));
       }
 
       await loadStats();
     } catch (error) {
-      alert('해시 재생성 실패');
+      alert(t('similarity.systemStatus.rebuildFailed'));
       console.error('Failed to rebuild hashes:', error);
     } finally {
       setRebuilding(false);
@@ -164,7 +167,7 @@ const SimilaritySettings: React.FC = () => {
   const handleTestSearch = async () => {
     const imageId = parseInt(testImageId);
     if (isNaN(imageId) || imageId <= 0) {
-      alert('유효한 이미지 ID를 입력하세요');
+      alert(t('tagger.test.invalidId'));
       return;
     }
 
@@ -194,7 +197,7 @@ const SimilaritySettings: React.FC = () => {
 
       setTestResults(results);
     } catch (error: any) {
-      alert(error.response?.data?.error || '검색 실패');
+      alert(error.response?.data?.error || t('similarity.test.searchFailed'));
       console.error('Failed to search:', error);
     } finally {
       setTestLoading(false);
@@ -211,7 +214,7 @@ const SimilaritySettings: React.FC = () => {
       });
       setDuplicateGroups(groups);
     } catch (error) {
-      alert('중복 스캔 실패');
+      alert(t('similarity.test.searchFailed'));
       console.error('Failed to scan duplicates:', error);
     } finally {
       setScanLoading(false);
@@ -234,11 +237,11 @@ const SimilaritySettings: React.FC = () => {
 
   const getMatchTypeLabel = (matchType: string): string => {
     switch (matchType) {
-      case 'exact': return '완전 동일';
-      case 'near-duplicate': return '거의 동일';
-      case 'similar': return '유사';
-      case 'color-similar': return '색감 유사';
-      default: return '유사';
+      case 'exact': return t('similarity.test.matchTypes.exact');
+      case 'near-duplicate': return t('similarity.test.matchTypes.nearDuplicate');
+      case 'similar': return t('similarity.test.matchTypes.similar');
+      case 'color-similar': return t('similarity.test.matchTypes.colorSimilar');
+      default: return t('similarity.test.matchTypes.similar');
     }
   };
 
@@ -248,31 +251,31 @@ const SimilaritySettings: React.FC = () => {
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            시스템 상태
+            {t('similarity.systemStatus.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary" paragraph>
-            이미지 유사도 검색 시스템의 현재 상태입니다.
+            {t('similarity.systemStatus.description')}
           </Typography>
 
           {stats ? (
             <Stack spacing={2}>
               <Stack direction="row" spacing={1} flexWrap="wrap">
                 <Chip
-                  label={`전체 이미지: ${stats.totalImages}개`}
+                  label={t('similarity.systemStatus.totalImages', { count: stats.totalImages })}
                   color="primary"
                   variant="outlined"
                 />
                 <Chip
-                  label={`해시 생성됨: ${stats.imagesWithHash}개`}
+                  label={t('similarity.systemStatus.withHash', { count: stats.imagesWithHash })}
                   color="success"
                   icon={<CheckCircleIcon />}
                 />
                 <Chip
-                  label={`미생성: ${stats.imagesWithoutHash}개`}
+                  label={t('similarity.systemStatus.withoutHash', { count: stats.imagesWithoutHash })}
                   color="warning"
                 />
                 <Chip
-                  label={`완료율: ${stats.completionPercentage}%`}
+                  label={t('similarity.systemStatus.completion', { percent: stats.completionPercentage })}
                   color={stats.completionPercentage === 100 ? 'success' : 'info'}
                 />
               </Stack>
@@ -280,7 +283,11 @@ const SimilaritySettings: React.FC = () => {
               {rebuilding && (
                 <Box>
                   <Typography variant="body2" gutterBottom>
-                    해시 생성 진행 중... {rebuildProcessed}개 완료/{rebuildTotal}개 전체 ({rebuildProgress.toFixed(0)}% 완료)
+                    {t('similarity.systemStatus.rebuildProgress', {
+                      processed: rebuildProcessed,
+                      total: rebuildTotal,
+                      percent: rebuildProgress.toFixed(0)
+                    })}
                   </Typography>
                   <LinearProgress variant="determinate" value={rebuildProgress} />
                 </Box>
@@ -294,7 +301,7 @@ const SimilaritySettings: React.FC = () => {
                     color="primary"
                   />
                 }
-                label="업로드 시 자동 해시 생성"
+                label={t('similarity.systemStatus.autoGenerateHash')}
               />
 
               <Stack direction="row" spacing={2}>
@@ -304,20 +311,20 @@ const SimilaritySettings: React.FC = () => {
                   onClick={handleRebuildHashes}
                   disabled={rebuilding || stats.imagesWithoutHash === 0}
                 >
-                  {rebuilding ? '생성 중...' : `모든 미생성 이미지 해시 생성 (${stats.imagesWithoutHash}개)`}
+                  {rebuilding ? t('similarity.systemStatus.rebuildingButton') : t('similarity.systemStatus.rebuildButton', { count: stats.imagesWithoutHash })}
                 </Button>
                 <Button
                   variant="outlined"
                   startIcon={<RefreshIcon />}
                   onClick={loadStats}
                 >
-                  통계 새로고침
+                  {t('similarity.systemStatus.refreshButton')}
                 </Button>
               </Stack>
 
               {stats.imagesWithoutHash === 0 && (
                 <Alert severity="success">
-                  모든 이미지의 해시가 생성되었습니다!
+                  {t('similarity.systemStatus.allComplete')}
                 </Alert>
               )}
             </Stack>
@@ -333,32 +340,32 @@ const SimilaritySettings: React.FC = () => {
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            테스트 & 미리보기
+            {t('similarity.test.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary" paragraph>
-            특정 이미지로 유사도 검색을 테스트합니다.
+            {t('similarity.test.description')}
           </Typography>
 
           <Stack spacing={2}>
             <Stack direction="row" spacing={2} alignItems="flex-end">
               <TextField
-                label="이미지 ID"
+                label={t('similarity.test.imageId')}
                 value={testImageId}
                 onChange={(e) => setTestImageId(e.target.value)}
                 type="number"
-                placeholder="예: 123"
+                placeholder={t('similarity.test.placeholder')}
                 fullWidth
               />
               <FormControl sx={{ minWidth: 150 }}>
-                <InputLabel>검색 타입</InputLabel>
+                <InputLabel>{t('similarity.test.searchType')}</InputLabel>
                 <Select
                   value={testType}
-                  label="검색 타입"
+                  label={t('similarity.test.searchType')}
                   onChange={(e) => setTestType(e.target.value as any)}
                 >
-                  <MenuItem value="duplicates">중복 검색</MenuItem>
-                  <MenuItem value="similar">유사 검색</MenuItem>
-                  <MenuItem value="color">색감 검색</MenuItem>
+                  <MenuItem value="duplicates">{t('similarity.test.types.duplicates')}</MenuItem>
+                  <MenuItem value="similar">{t('similarity.test.types.similar')}</MenuItem>
+                  <MenuItem value="color">{t('similarity.test.types.color')}</MenuItem>
                 </Select>
               </FormControl>
             </Stack>
@@ -371,7 +378,7 @@ const SimilaritySettings: React.FC = () => {
                 disabled={testLoading || !testImageId}
                 fullWidth
               >
-                {testLoading ? '검색 중...' : '검색 실행'}
+                {testLoading ? t('similarity.test.searching') : t('similarity.test.searchButton')}
               </Button>
             </Stack>
 
@@ -379,7 +386,7 @@ const SimilaritySettings: React.FC = () => {
             {queryImage && (
               <Box>
                 <Typography variant="subtitle2" gutterBottom>
-                  검색 원본 이미지
+                  {t('similarity.test.queryImage')}
                 </Typography>
                 <Card variant="outlined" sx={{ maxWidth: 400, mx: 'auto' }}>
                   <Box
@@ -395,17 +402,17 @@ const SimilaritySettings: React.FC = () => {
                   />
                   <CardContent>
                     <Typography variant="body2">
-                      <strong>ID:</strong> {queryImage.id}
+                      <strong>{t('similarity.test.imageDetails.id')}</strong> {queryImage.id}
                     </Typography>
                     <Typography variant="body2" noWrap>
-                      <strong>파일명:</strong> {queryImage.filename}
+                      <strong>{t('similarity.test.imageDetails.filename')}</strong> {queryImage.filename}
                     </Typography>
                     <Typography variant="body2">
-                      <strong>크기:</strong> {queryImage.width} × {queryImage.height}
+                      <strong>{t('similarity.test.imageDetails.size')}</strong> {queryImage.width} × {queryImage.height}
                     </Typography>
                     {queryImage.ai_tool && (
                       <Typography variant="body2">
-                        <strong>AI 도구:</strong> {queryImage.ai_tool}
+                        <strong>{t('similarity.test.imageDetails.aiTool')}</strong> {queryImage.ai_tool}
                       </Typography>
                     )}
                   </CardContent>
@@ -417,7 +424,7 @@ const SimilaritySettings: React.FC = () => {
             {testResults.length > 0 && (
               <Box>
                 <Typography variant="subtitle2" gutterBottom>
-                  검색 결과: {testResults.length}개
+                  {t('similarity.test.results', { count: testResults.length })}
                 </Typography>
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' }, gap: 2 }}>
                   {testResults.slice(0, 12).map((result) => (
@@ -439,7 +446,7 @@ const SimilaritySettings: React.FC = () => {
                           </Typography>
                           <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
                             <Chip
-                              label={`${result.similarity.toFixed(1)}%`}
+                              label={t('similarity.test.similarity', { percent: result.similarity.toFixed(1) })}
                               size="small"
                               color="primary"
                             />
@@ -451,7 +458,7 @@ const SimilaritySettings: React.FC = () => {
                           </Stack>
                           {result.colorSimilarity && (
                             <Typography variant="caption" color="text.secondary">
-                              색감: {result.colorSimilarity.toFixed(1)}%
+                              {t('similarity.test.colorSimilarity', { percent: result.colorSimilarity.toFixed(1) })}
                             </Typography>
                           )}
                         </CardContent>
@@ -464,7 +471,7 @@ const SimilaritySettings: React.FC = () => {
 
             {testResults.length === 0 && testImageId && !testLoading && (
               <Alert severity="info">
-                유사한 이미지가 없습니다.
+                {t('similarity.test.noResults')}
               </Alert>
             )}
           </Stack>
@@ -477,10 +484,10 @@ const SimilaritySettings: React.FC = () => {
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            전체 중복 분석
+            {t('similarity.duplicateScan.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary" paragraph>
-            데이터베이스 전체에서 중복 이미지 그룹을 찾습니다.
+            {t('similarity.duplicateScan.description')}
           </Typography>
 
           <Stack spacing={2}>
@@ -491,13 +498,13 @@ const SimilaritySettings: React.FC = () => {
               onClick={handleScanDuplicates}
               disabled={scanLoading}
             >
-              {scanLoading ? '스캔 중...' : '전체 스캔 실행'}
+              {scanLoading ? t('similarity.duplicateScan.scanning') : t('similarity.duplicateScan.scanButton')}
             </Button>
 
             {duplicateGroups.length > 0 && (
               <Box>
                 <Typography variant="subtitle2" gutterBottom>
-                  발견된 중복 그룹: {duplicateGroups.length}개
+                  {t('similarity.duplicateScan.foundGroups', { count: duplicateGroups.length })}
                 </Typography>
                 {duplicateGroups.map((group) => (
                   <Accordion key={group.groupId}>
@@ -505,10 +512,10 @@ const SimilaritySettings: React.FC = () => {
                       <Stack direction="row" spacing={2} alignItems="center">
                         <ContentCopyIcon color="warning" />
                         <Typography>
-                          그룹 {group.groupId} • {group.images.length}개 이미지
+                          {t('similarity.duplicateScan.groupLabel', { id: group.groupId, count: group.images.length })}
                         </Typography>
                         <Chip
-                          label={`${group.similarity.toFixed(1)}% 유사`}
+                          label={t('similarity.duplicateScan.similarityLabel', { percent: group.similarity.toFixed(1) })}
                           size="small"
                           color="warning"
                         />
@@ -530,14 +537,14 @@ const SimilaritySettings: React.FC = () => {
                               }}
                             />
                             <Typography variant="caption" display="block" align="center">
-                              ID: {image.id}
+                              {t('similarity.duplicateScan.id', { id: image.id })}
                             </Typography>
                           </Box>
                         ))}
                       </Box>
                       {group.images.length > 5 && (
                         <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                          +{group.images.length - 5}개 더 있음
+                          {t('similarity.duplicateScan.moreImages', { count: group.images.length - 5 })}
                         </Typography>
                       )}
                     </AccordionDetails>
@@ -548,7 +555,7 @@ const SimilaritySettings: React.FC = () => {
 
             {duplicateGroups.length === 0 && !scanLoading && (
               <Alert severity="info">
-                스캔을 실행하면 중복 이미지 그룹이 표시됩니다.
+                {t('similarity.duplicateScan.noResults')}
               </Alert>
             )}
           </Stack>
@@ -561,17 +568,17 @@ const SimilaritySettings: React.FC = () => {
       <Card>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            임계값 설정
+            {t('similarity.thresholds.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary" paragraph>
-            유사도 검색의 민감도를 조정합니다.
+            {t('similarity.thresholds.description')}
           </Typography>
 
           <Stack spacing={3}>
             {/* 중복 검색 임계값 */}
             <Box>
               <Typography gutterBottom>
-                중복 검색 임계값: {duplicateThreshold}
+                {t('similarity.thresholds.duplicate.label', { value: duplicateThreshold })}
               </Typography>
               <Slider
                 value={duplicateThreshold}
@@ -580,20 +587,20 @@ const SimilaritySettings: React.FC = () => {
                 max={10}
                 step={1}
                 marks={[
-                  { value: 0, label: '0 (엄격)' },
-                  { value: 5, label: '5 (권장)' },
-                  { value: 10, label: '10 (관대)' },
+                  { value: 0, label: t('similarity.thresholds.duplicate.strict') },
+                  { value: 5, label: t('similarity.thresholds.duplicate.recommended') },
+                  { value: 10, label: t('similarity.thresholds.duplicate.lenient') },
                 ]}
               />
               <Typography variant="caption" color="text.secondary">
-                낮을수록 엄격 (0=완전 동일, 5=거의 동일, 10=약간 다를 수 있음)
+                {t('similarity.thresholds.duplicate.description')}
               </Typography>
             </Box>
 
             {/* 유사 검색 임계값 */}
             <Box>
               <Typography gutterBottom>
-                유사 검색 임계값: {similarThreshold}
+                {t('similarity.thresholds.similar.label', { value: similarThreshold })}
               </Typography>
               <Slider
                 value={similarThreshold}
@@ -602,20 +609,20 @@ const SimilaritySettings: React.FC = () => {
                 max={25}
                 step={1}
                 marks={[
-                  { value: 5, label: '5 (엄격)' },
-                  { value: 15, label: '15 (권장)' },
-                  { value: 25, label: '25 (관대)' },
+                  { value: 5, label: t('similarity.thresholds.similar.strict') },
+                  { value: 15, label: t('similarity.thresholds.similar.recommended') },
+                  { value: 25, label: t('similarity.thresholds.similar.lenient') },
                 ]}
               />
               <Typography variant="caption" color="text.secondary">
-                낮을수록 엄격, 높을수록 더 많은 유사 이미지 검색
+                {t('similarity.thresholds.similar.description')}
               </Typography>
             </Box>
 
             {/* 색상 유사도 임계값 */}
             <Box>
               <Typography gutterBottom>
-                색상 유사도 임계값: {colorThreshold}%
+                {t('similarity.thresholds.color.label', { value: colorThreshold })}
               </Typography>
               <Slider
                 value={colorThreshold}
@@ -624,33 +631,33 @@ const SimilaritySettings: React.FC = () => {
                 max={100}
                 step={5}
                 marks={[
-                  { value: 70, label: '70%' },
-                  { value: 85, label: '85% (권장)' },
-                  { value: 100, label: '100%' },
+                  { value: 70, label: t('similarity.thresholds.color.min') },
+                  { value: 85, label: t('similarity.thresholds.color.recommended') },
+                  { value: 100, label: t('similarity.thresholds.color.max') },
                 ]}
               />
               <Typography variant="caption" color="text.secondary">
-                색감 유사도 기준 (높을수록 엄격)
+                {t('similarity.thresholds.color.description')}
               </Typography>
             </Box>
 
             {/* 검색 결과 제한 */}
             <FormControl fullWidth>
-              <InputLabel>검색 결과 제한</InputLabel>
+              <InputLabel>{t('similarity.thresholds.searchLimit.label')}</InputLabel>
               <Select
                 value={searchLimit}
-                label="검색 결과 제한"
+                label={t('similarity.thresholds.searchLimit.label')}
                 onChange={(e) => setSearchLimit(e.target.value as number)}
               >
-                <MenuItem value={10}>10개</MenuItem>
-                <MenuItem value={20}>20개 (권장)</MenuItem>
-                <MenuItem value={50}>50개</MenuItem>
-                <MenuItem value={100}>100개</MenuItem>
+                <MenuItem value={10}>{t('similarity.thresholds.searchLimit.options.10')}</MenuItem>
+                <MenuItem value={20}>{t('similarity.thresholds.searchLimit.options.20')}</MenuItem>
+                <MenuItem value={50}>{t('similarity.thresholds.searchLimit.options.50')}</MenuItem>
+                <MenuItem value={100}>{t('similarity.thresholds.searchLimit.options.100')}</MenuItem>
               </Select>
             </FormControl>
 
             <Alert severity="info">
-              설정값은 로컬에만 저장되며, 검색 시 실시간으로 적용됩니다.
+              {t('similarity.thresholds.localStorageNote')}
             </Alert>
           </Stack>
         </CardContent>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Typography, IconButton, Collapse } from '@mui/material';
 import { ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../../types/image';
 import { formatFileSize, formatDate, truncateFilename } from '@comfyui-image-manager/shared';
 
@@ -12,6 +13,7 @@ interface FileInfoSectionProps {
  * Collapsible file information section
  */
 export const FileInfoSection: React.FC<FileInfoSectionProps> = ({ image }) => {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -31,7 +33,7 @@ export const FileInfoSection: React.FC<FileInfoSectionProps> = ({ image }) => {
         onClick={() => setExpanded(!expanded)}
       >
         <Typography variant="subtitle2" color="primary">
-          파일 정보
+          {t('imageDetail:sections.fileInfo')}
         </Typography>
         <IconButton size="small" sx={{ p: 0 }}>
           {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
@@ -40,16 +42,16 @@ export const FileInfoSection: React.FC<FileInfoSectionProps> = ({ image }) => {
       <Collapse in={expanded}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, pl: 1 }}>
           <Typography variant="body2" title={image.original_name}>
-            파일명: {truncateFilename(image.original_name)}
+            {t('imageDetail:fileInfo.filename')}: {truncateFilename(image.original_name)}
           </Typography>
           <Typography variant="body2">
-            크기: {image.width} × {image.height}
+            {t('imageDetail:imageInfo.dimensions')}: {image.width} × {image.height}
           </Typography>
           <Typography variant="body2">
-            파일 크기: {formatFileSize(image.file_size)}
+            {t('imageDetail:fileInfo.fileSize')}: {formatFileSize(image.file_size)}
           </Typography>
           <Typography variant="body2">
-            업로드: {formatDate(image.upload_date)}
+            {t('imageDetail:fileInfo.uploadDate')}: {formatDate(image.upload_date)}
           </Typography>
         </Box>
       </Collapse>

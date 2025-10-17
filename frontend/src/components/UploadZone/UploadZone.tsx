@@ -26,6 +26,7 @@ import {
   AutoAwesome as AutoAwesomeIcon,
   VideoLibrary as VideoLibraryIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { imageApi } from '../../services/api';
 import type { UploadProgressEvent, UploadStage } from '../../types/image';
 
@@ -42,19 +43,20 @@ interface FileProgress {
   error?: string;
 }
 
-const stageLabels: Record<UploadStage, string> = {
-  'upload': '업로드 중',
-  'metadata': '메타데이터 추출',
-  'thumbnail': '썸네일 생성',
-  'auto-collect': '자동 그룹 분류',
-  'auto-tag': '자동 태깅'
-};
-
 const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
+  const { t } = useTranslation('upload');
   const [fileProgressList, setFileProgressList] = useState<FileProgress[]>([]);
   const [uploading, setUploading] = useState(false);
   const [currentFileIndex, setCurrentFileIndex] = useState<number>(0);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+
+  const stageLabels: Record<UploadStage, string> = {
+    'upload': t('stages.upload'),
+    'metadata': t('stages.metadata'),
+    'thumbnail': t('stages.thumbnail'),
+    'auto-collect': t('stages.autoCollect'),
+    'auto-tag': t('stages.autoTag')
+  };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
@@ -78,17 +80,17 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
           setFileProgressList([{
             filename: acceptedFiles[0].name,
             status: 'complete',
-            message: '업로드 완료',
+            message: t('messages.uploadComplete'),
             imageId: response.data?.id
           }]);
-          setMessage({ type: 'success', text: '이미지 업로드가 완료되었습니다.' });
+          setMessage({ type: 'success', text: t('messages.uploadSuccess') });
         } else {
           setFileProgressList([{
             filename: acceptedFiles[0].name,
             status: 'error',
             error: response.error
           }]);
-          setMessage({ type: 'error', text: response.error || '업로드에 실패했습니다.' });
+          setMessage({ type: 'error', text: response.error || t('messages.uploadFailed') });
         }
       } else {
         // 다중 파일 업로드 (SSE 스트리밍)
@@ -127,13 +129,13 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
 
         // 최종 메시지
         if (failed === 0) {
-          setMessage({ type: 'success', text: `${completed}개 이미지 업로드가 완료되었습니다.` });
+          setMessage({ type: 'success', text: t('messages.multipleSuccess', { count: completed }) });
         } else if (completed === 0) {
-          setMessage({ type: 'error', text: '모든 이미지 업로드에 실패했습니다.' });
+          setMessage({ type: 'error', text: t('messages.allFailed') });
         } else {
           setMessage({
             type: 'info',
-            text: `${completed}개 성공, ${failed}개 실패했습니다.`
+            text: t('messages.partialSuccess', { success: completed, failed })
           });
         }
       }
@@ -142,12 +144,12 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
         onUploadComplete();
       }
     } catch (error) {
-      setMessage({ type: 'error', text: '업로드 중 오류가 발생했습니다.' });
+      setMessage({ type: 'error', text: t('messages.uploadError') });
       console.error('Upload error:', error);
     } finally {
       setUploading(false);
     }
-  }, [onUploadComplete]);
+  }, [onUploadComplete, t, stageLabels]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -226,34 +228,34 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
         <input {...getInputProps()} />
         <CloudUploadIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
         <Typography variant="h5" gutterBottom>
-          {isDragActive ? '파일을 여기에 놓으세요' : '이미지 및 비디오를 드래그하거나 클릭하여 업로드'}
+          {isDragActive ? t('dropzone.dragActive') : t('dropzone.dragInactive')}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          이미지: JPG, PNG, GIF, BMP, WebP, TIFF | 비디오: MP4, WebM, MOV, AVI, MKV (최대 500MB, 파일 개수 제한 없음)
+          {t('dropzone.supportedFormats')}
         </Typography>
 
         <Stack direction="row" spacing={2} justifyContent="center" flexWrap="wrap">
           <Chip
             icon={<ImageIcon />}
-            label="이미지 지원"
+            label={t('dropzone.imageSupport')}
             variant="outlined"
             size="small"
           />
           <Chip
             icon={<VideoLibraryIcon />}
-            label="비디오 지원"
+            label={t('dropzone.videoSupport')}
             variant="outlined"
             size="small"
           />
           <Chip
-            label="다중 선택 가능"
+            label={t('dropzone.multipleSelection')}
             variant="outlined"
             size="small"
           />
         </Stack>
       </Paper>
 
-      <Divider sx={{ my: 3 }}>또는</Divider>
+      <Divider sx={{ my: 3 }}>{t('dropzone.divider')}</Divider>
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6 }}>
@@ -265,7 +267,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
             onClick={handleFileSelect}
             disabled={uploading}
           >
-            파일 선택
+            {t('buttons.selectFiles')}
           </Button>
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
@@ -277,7 +279,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
             onClick={handleFolderSelect}
             disabled={uploading}
           >
-            폴더 선택
+            {t('buttons.selectFolder')}
           </Button>
         </Grid>
       </Grid>
@@ -285,7 +287,10 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
       {uploading && fileProgressList.length > 0 && (
         <Box sx={{ mt: 3 }}>
           <Typography variant="body2" color="text.secondary" gutterBottom>
-            전체 진행도: {fileProgressList.filter(f => f.status === 'complete' || f.status === 'error').length}/{fileProgressList.length}
+            {t('progress.title')}: {t('progress.fileCount', {
+              completed: fileProgressList.filter(f => f.status === 'complete' || f.status === 'error').length,
+              total: fileProgressList.length
+            })}
           </Typography>
           <LinearProgress
             variant="determinate"
@@ -349,9 +354,11 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
       {fileProgressList.length > 0 && !uploading && (
         <Box sx={{ mt: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            총 {fileProgressList.length}개 파일 -
-            성공: {fileProgressList.filter(f => f.status === 'complete').length}개,
-            실패: {fileProgressList.filter(f => f.status === 'error').length}개
+            {t('progress.summary', {
+              total: fileProgressList.length,
+              success: fileProgressList.filter(f => f.status === 'complete').length,
+              failed: fileProgressList.filter(f => f.status === 'error').length
+            })}
           </Typography>
         </Box>
       )}

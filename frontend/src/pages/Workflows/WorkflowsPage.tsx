@@ -20,10 +20,12 @@ import {
   Workspaces as WorkflowIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { workflowApi, type Workflow } from '../../services/api/workflowApi';
 
 export default function WorkflowsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation(['workflows', 'common']);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +47,7 @@ export default function WorkflowsPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('정말 이 워크플로우를 삭제하시겠습니까?')) {
+    if (confirm(t('workflows:actions.confirmDelete'))) {
       try {
         await workflowApi.deleteWorkflow(id);
         loadWorkflows();
@@ -68,14 +70,14 @@ export default function WorkflowsPage() {
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h4">
           <WorkflowIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-          워크플로우 관리
+          {t('workflows:page.title')}
         </Typography>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => navigate('/workflows/new')}
         >
-          워크플로우 추가
+          {t('workflows:page.addButton')}
         </Button>
       </Box>
 
@@ -95,7 +97,7 @@ export default function WorkflowsPage() {
                     {workflow.name}
                   </Typography>
                   <Chip
-                    label={workflow.is_active ? '활성' : '비활성'}
+                    label={workflow.is_active ? t('workflows:card.active') : t('workflows:card.inactive')}
                     color={workflow.is_active ? 'success' : 'default'}
                     size="small"
                   />
@@ -110,7 +112,7 @@ export default function WorkflowsPage() {
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                   {workflow.marked_fields && workflow.marked_fields.length > 0 && (
                     <Chip
-                      label={`${workflow.marked_fields.length}개 필드`}
+                      label={t('workflows:card.fieldsCount', { count: workflow.marked_fields.length })}
                       size="small"
                       variant="outlined"
                     />
@@ -118,7 +120,7 @@ export default function WorkflowsPage() {
                 </Box>
 
                 <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 2 }}>
-                  생성일: {new Date(workflow.created_date).toLocaleDateString()}
+                  {t('workflows:card.createdDate', { date: new Date(workflow.created_date).toLocaleDateString() })}
                 </Typography>
               </CardContent>
               <CardActions sx={{ justifyContent: 'space-between', px: 2, pb: 2 }}>
@@ -128,7 +130,7 @@ export default function WorkflowsPage() {
                   onClick={() => navigate(`/workflows/${workflow.id}/generate`)}
                   disabled={!workflow.is_active}
                 >
-                  이미지 생성
+                  {t('workflows:card.generateImage')}
                 </Button>
                 <Box>
                   <IconButton
@@ -154,10 +156,10 @@ export default function WorkflowsPage() {
       {workflows.length === 0 && (
         <Box sx={{ textAlign: 'center', py: 8 }}>
           <Typography variant="h6" color="text.secondary">
-            등록된 워크플로우가 없습니다
+            {t('workflows:page.noWorkflows')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            "워크플로우 추가" 버튼을 클릭하여 ComfyUI 워크플로우를 추가하세요
+            {t('workflows:page.noWorkflowsDesc')}
           </Typography>
         </Box>
       )}

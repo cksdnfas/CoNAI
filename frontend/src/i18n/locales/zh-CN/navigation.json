@@ -1,0 +1,27 @@
+{
+  "header": {
+    "title": "ComfyUI Image Manager",
+    "menu": {
+      "home": "首页",
+      "gallery": "图库",
+      "imageGroups": "图像分组",
+      "search": "搜索",
+      "upload": "上传",
+      "imageGeneration": "图像生成",
+      "settings": "设置"
+    },
+    "theme": {
+      "light": "浅色模式",
+      "dark": "深色模式",
+      "toggle": "切换主题"
+    },
+    "mobileMenu": {
+      "open": "打开菜单",
+      "close": "关闭菜单"
+    }
+  },
+  "footer": {
+    "copyright": "© 2024 ComfyUI Image Manager. 保留所有权利。",
+    "version": "版本"
+  }
+}
