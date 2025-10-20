@@ -492,7 +492,7 @@ router.get('/tagger/check', asyncHandler(async (req: Request, res: Response) => 
 }));
 
 /**
- * 오토태그 기반 이미지 검색
+ * 오토태그 기반 이미지 검색 (기본 검색 조건 결합 지원)
  * POST /api/images/search-by-autotags
  */
 router.post('/search-by-autotags', asyncHandler(async (req: Request, res: Response) => {
@@ -510,6 +510,16 @@ router.post('/search-by-autotags', asyncHandler(async (req: Request, res: Respon
       sortOrder: req.body.sortOrder || 'DESC'
     };
 
+    // 기본 검색 파라미터 (선택적)
+    const basicSearchParams = {
+      search_text: req.body.search_text,
+      negative_text: req.body.negative_text,
+      ai_tool: req.body.ai_tool,
+      model_name: req.body.model_name,
+      start_date: req.body.start_date,
+      end_date: req.body.end_date
+    };
+
     // 검색 파라미터 유효성 검증
     const validation = AutoTagSearchService.validateSearchParams(searchParams);
     if (!validation.valid) {
@@ -519,8 +529,8 @@ router.post('/search-by-autotags', asyncHandler(async (req: Request, res: Respon
       });
     }
 
-    // 오토태그 검색 실행
-    const result = await ImageModel.searchByAutoTags(searchParams);
+    // 오토태그 검색 실행 (기본 검색 조건 포함)
+    const result = await ImageModel.searchByAutoTags(searchParams, basicSearchParams);
 
     // URL과 구조화된 메타데이터 추가
     const enrichedImages = result.images.map(enrichImageRecord);

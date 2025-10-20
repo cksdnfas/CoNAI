@@ -257,10 +257,10 @@ export class RatingScoreService {
 
     // 점수 계산 식 생성
     const scoreExpression = `
-      (ROUND(json_extract(auto_tags, '$.rating.general') * 1000) / 1000 * ${weights.general_weight} +
-       ROUND(json_extract(auto_tags, '$.rating.sensitive') * 1000) / 1000 * ${weights.sensitive_weight} +
-       ROUND(json_extract(auto_tags, '$.rating.questionable') * 1000) / 1000 * ${weights.questionable_weight} +
-       ROUND(json_extract(auto_tags, '$.rating.explicit') * 1000) / 1000 * ${weights.explicit_weight})
+      (ROUND(json_extract(i.auto_tags, '$.rating.general') * 1000) / 1000 * ${weights.general_weight} +
+       ROUND(json_extract(i.auto_tags, '$.rating.sensitive') * 1000) / 1000 * ${weights.sensitive_weight} +
+       ROUND(json_extract(i.auto_tags, '$.rating.questionable') * 1000) / 1000 * ${weights.questionable_weight} +
+       ROUND(json_extract(i.auto_tags, '$.rating.explicit') * 1000) / 1000 * ${weights.explicit_weight})
     `.trim();
 
     if (filter.min_score !== undefined) {

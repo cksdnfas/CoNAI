@@ -15,6 +15,10 @@
     "delete": "Delete",
     "runAutoCollection": "Run Auto-collection"
   },
+  "tabs": {
+    "basicInfo": "Basic Information",
+    "autoCollect": "Auto-collection Settings"
+  },
   "modal": {
     "createTitle": "Create New Group",
     "editTitle": "Edit Group",
@@ -36,10 +40,15 @@
     "buttonCancel": "Cancel"
   },
   "conditions": {
+    "conditionNumber": "Condition {{number}}",
+    "removeCondition": "Remove Condition",
+    "addFirstCondition": "Add First Condition",
+    "autoCollectDisabled": "Enable auto-collection to configure conditions.",
     "groups": {
       "basic": "Basic",
       "prompt": "Prompt",
-      "autoTag": "Auto-tag"
+      "autotag": "Auto-tag",
+      "duplicate": "Duplicate Images"
     },
     "types": {
       "aiTool": "AI Tool",
@@ -54,7 +63,11 @@
       "autoTagGeneral": "Auto-tag: General Tag",
       "autoTagCharacter": "Auto-tag: Character",
       "autoTagHasCharacter": "Auto-tag: Has Character",
-      "autoTagModel": "Auto-tag: Model Name"
+      "autoTagModel": "Auto-tag: Model Name",
+      "duplicateExact": "Exact Duplicate",
+      "duplicateNear": "Near Duplicate",
+      "duplicateSimilar": "Similar Images",
+      "duplicateCustom": "Custom Duplicate Detection"
     },
     "values": {
       "exists": "Exists",
@@ -67,16 +80,28 @@
       "explicit": "Explicit"
     },
     "fields": {
+      "value": "Value",
       "ratingType": "Rating Type",
       "minScore": "Min Score",
       "maxScore": "Max Score",
       "tagName": "Tag Name",
       "characterName": "Character Name",
       "caseSensitive": "Case Sensitive",
+      "exactMatch": "Exact Match",
+      "exactMatchHelp": "When checked, only exact word matches are searched (e.g., 'asd' won't match 'aasd' or 'asdf')",
       "weightedScore": "Weighted Total Score",
       "maxWeightInfo": "Usually up to 200",
       "confidenceRange": "Confidence Score Range (0.0 ~ 1.0): {{min}} ~ {{max}}",
-      "confidenceInfo": "💡 Higher scores indicate higher confidence in the tag"
+      "confidenceInfo": "💡 Higher scores indicate higher confidence in the tag",
+      "hammingThreshold": "Hamming Distance Threshold",
+      "hammingThresholdHelp": "Value between 0-64 (lower = stricter matching)",
+      "hammingInfo": "💡 Hamming Distance measures bit differences between perceptual hashes. Lower values find more similar images.",
+      "duplicateNote": "⚠️ This condition only searches images with perceptual_hash."
+    },
+    "duplicateInfo": {
+      "duplicate_exact": "📷 Finds exact duplicates (Hamming Distance = 0). Detects identical images even with different filenames or metadata.",
+      "duplicate_near": "🔍 Finds near duplicates (Hamming Distance ≤ 5). Detects images with resizing, compression, or minor edits.",
+      "duplicate_similar": "🎨 Finds similar images (Hamming Distance ≤ 15). Detects images with similar composition or content."
     },
     "placeholders": {
       "regex": "Enter regex pattern",
@@ -97,7 +122,9 @@
     "scoreRangeInvalid": "Condition {{index}}: Min score must be less than max score.",
     "confidenceScoreRange": "Condition {{index}}: Min score must be between 0.0 and 1.0.",
     "confidenceMaxScoreRange": "Condition {{index}}: Max score must be between 0.0 and 1.0.",
-    "confidenceMinMaxInvalid": "Condition {{index}}: Min score cannot be greater than max score."
+    "confidenceMinMaxInvalid": "Condition {{index}}: Min score cannot be greater than max score.",
+    "hammingThresholdRequired": "Condition {{index}}: Hamming Distance threshold is required.",
+    "hammingThresholdRange": "Condition {{index}}: Hamming Distance must be between 0 and 64."
   },
   "messages": {
     "loadFailed": "Failed to load group list.",

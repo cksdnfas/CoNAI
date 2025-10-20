@@ -21,7 +21,7 @@ export const GroupInfoSection: React.FC<GroupInfoSectionProps> = ({ groups, onGr
   return (
     <Box sx={{ mb: 3 }}>
       <Typography variant="subtitle2" gutterBottom color="primary">
-        {t('imageDetail:sections.groups')}
+        {t('imageDetail:sections.groupInfo')}
       </Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
         {groups.map((group, index) => (

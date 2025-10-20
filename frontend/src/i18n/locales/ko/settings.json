@@ -285,7 +285,21 @@
       "similarityLabel": "{{percent}}% 유사",
       "moreImages": "+{{count}}개 더 있음",
       "noResults": "스캔을 실행하면 중복 이미지 그룹이 표시됩니다.",
-      "id": "ID: {{id}}"
+      "id": "ID: {{id}}",
+      "selectAll": "전체 선택",
+      "deselectAll": "선택 해제",
+      "keepOne": "1개만 유지",
+      "keepOneDelete": "첫 번째 이미지만 남기고 나머지 선택",
+      "deleteSelected": "선택한 {{count}}개 삭제",
+      "deleteConfirmTitle": "이미지 삭제 확인",
+      "deleteConfirmMessage": "선택한 {{count}}개의 이미지를 삭제하시겠습니까?",
+      "deleteWarning": "삭제된 이미지는 복구할 수 없습니다!",
+      "cancel": "취소",
+      "confirmDelete": "삭제",
+      "deleting": "삭제 중...",
+      "deleteSuccess": "{{count}}개의 이미지가 삭제되었습니다.",
+      "deletePartialSuccess": "{{success}}개 성공, {{failed}}개 실패",
+      "deleteFailed": "이미지 삭제에 실패했습니다."
     },
     "thresholds": {
       "title": "임계값 설정",

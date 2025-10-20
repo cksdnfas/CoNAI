@@ -40,7 +40,33 @@
   "similarity": {
     "title": "Image Similarity Search Settings",
     "autoGenerateHash": "Auto-generate Hash on Upload",
-    "description": "Automatically generate hashes for similar image search"
+    "description": "Automatically generate hashes for similar image search",
+    "duplicateScan": {
+      "title": "Full Duplicate Analysis",
+      "description": "Find duplicate image groups across the entire database.",
+      "scanButton": "Run Full Scan",
+      "scanning": "Scanning...",
+      "foundGroups": "Found Duplicate Groups: {{count}}",
+      "groupLabel": "Group {{id}} • {{count}} images",
+      "similarityLabel": "{{percent}}% similar",
+      "moreImages": "+{{count}} more",
+      "noResults": "Run scan to display duplicate image groups.",
+      "id": "ID: {{id}}",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "keepOne": "Keep 1",
+      "keepOneDelete": "Keep first image and select rest for deletion",
+      "deleteSelected": "Delete {{count}} Selected",
+      "deleteConfirmTitle": "Confirm Image Deletion",
+      "deleteConfirmMessage": "Are you sure you want to delete {{count}} selected images?",
+      "deleteWarning": "Deleted images cannot be recovered!",
+      "cancel": "Cancel",
+      "confirmDelete": "Delete",
+      "deleting": "Deleting...",
+      "deleteSuccess": "{{count}} images deleted successfully.",
+      "deletePartialSuccess": "{{success}} succeeded, {{failed}} failed",
+      "deleteFailed": "Failed to delete images."
+    }
   },
   "messages": {
     "saveSuccess": "Settings saved successfully",

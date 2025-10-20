@@ -73,6 +73,7 @@
 
   "groupManagement": {
     "title": "{{type}}プロンプトグループ管理",
+    "dragHint": "ドラッグして順序を変更できます",
 
     "editForm": {
       "titleAdd": "新しいグループを追加",
@@ -118,7 +119,9 @@
       "updateFailed": "グループの更新に失敗しました。",
       "deleteSuccess": "グループが削除されました。",
       "deleteFailed": "グループの削除に失敗しました。",
-      "visibilityFailed": "グループ設定の変更に失敗しました。"
+      "visibilityFailed": "グループ設定の変更に失敗しました。",
+      "reorderSuccess": "グループの順序が変更されました。",
+      "reorderFailed": "グループの順序変更に失敗しました。"
     }
   },
 

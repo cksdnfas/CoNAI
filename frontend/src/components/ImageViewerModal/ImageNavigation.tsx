@@ -4,6 +4,7 @@ import {
   IconButton,
   Tooltip,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import {
   NavigateBefore as PrevIcon,
@@ -11,6 +12,7 @@ import {
   Shuffle as RandomIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import type { ImageRecord } from '../../types/image';
 
 interface ImageNavigationProps {
   currentIndex: number;
@@ -19,6 +21,8 @@ interface ImageNavigationProps {
   onNext: () => void;
   onRandom: () => void;
   disabled?: boolean;
+  isRandomMode?: boolean;
+  currentImage?: ImageRecord | null;
 }
 
 const ImageNavigation: React.FC<ImageNavigationProps> = ({
@@ -28,14 +32,17 @@ const ImageNavigation: React.FC<ImageNavigationProps> = ({
   onNext,
   onRandom,
   disabled = false,
+  isRandomMode = false,
+  currentImage = null,
 }) => {
   const { t } = useTranslation();
+  const isNarrow = useMediaQuery('(max-width:420px)');
   const hasPrevious = currentIndex > 0;
   const hasNext = currentIndex < totalCount - 1;
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-      <Tooltip title={t('imageDetail:navigation.previous')}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: isNarrow ? 0.25 : 1 }}>
+      <Tooltip title={t('imageDetail:viewer.navigation.previous')}>
         <span>
           <IconButton
             onClick={onPrevious}
@@ -51,15 +58,20 @@ const ImageNavigation: React.FC<ImageNavigationProps> = ({
         variant="body2"
         color="text.secondary"
         sx={{
-          minWidth: '80px',
+          minWidth: isNarrow ? '60px' : '80px',
           textAlign: 'center',
-          fontSize: '0.875rem'
+          fontSize: isNarrow ? '0.75rem' : '0.875rem'
         }}
       >
-        {totalCount > 0 ? `${currentIndex + 1} / ${totalCount}` : '0 / 0'}
+        {isRandomMode && currentImage
+          ? `image/${currentImage.id}`
+          : totalCount > 0
+            ? `${currentIndex + 1} / ${totalCount}`
+            : '0 / 0'
+        }
       </Typography>
 
-      <Tooltip title={t('imageDetail:navigation.next')}>
+      <Tooltip title={t('imageDetail:viewer.navigation.next')}>
         <span>
           <IconButton
             onClick={onNext}
@@ -71,7 +83,7 @@ const ImageNavigation: React.FC<ImageNavigationProps> = ({
         </span>
       </Tooltip>
 
-      <Tooltip title={t('imageDetail:navigation.random')}>
+      <Tooltip title={t('imageDetail:viewer.navigation.random')}>
         <span>
           <IconButton
             onClick={onRandom}

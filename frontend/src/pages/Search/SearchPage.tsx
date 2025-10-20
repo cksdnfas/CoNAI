@@ -196,6 +196,7 @@ const SearchPage: React.FC = () => {
           total={total}
           onPageChange={changePage}
           onImageDelete={handleImageDelete}
+          searchParams={lastSearchParams || undefined}
         />
       ) : !loading ? (
         <Box sx={{ textAlign: 'center', py: 8 }}>

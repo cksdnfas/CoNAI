@@ -50,6 +50,82 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
+ * 랜덤 이미지 조회
+ * GET /api/images/random
+ */
+router.get('/random', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const image = await ImageModel.getRandomImage();
+
+    if (!image) {
+      return res.status(404).json({
+        success: false,
+        error: 'No images found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: enrichImageRecord(image)
+    });
+    return;
+  } catch (error) {
+    console.error('Get random image error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get random image'
+    });
+    return;
+  }
+}));
+
+/**
+ * 검색 조건에 맞는 랜덤 이미지 조회
+ * POST /api/images/random-from-search
+ */
+router.post('/random-from-search', asyncHandler(async (req: Request, res: Response) => {
+  const searchParams = {
+    search_text: req.body.search_text,
+    negative_text: req.body.negative_text,
+    ai_tool: req.body.ai_tool,
+    model_name: req.body.model_name,
+    min_width: req.body.min_width ? parseInt(req.body.min_width) : undefined,
+    max_width: req.body.max_width ? parseInt(req.body.max_width) : undefined,
+    min_height: req.body.min_height ? parseInt(req.body.min_height) : undefined,
+    max_height: req.body.max_height ? parseInt(req.body.max_height) : undefined,
+    min_file_size: req.body.min_file_size ? parseInt(req.body.min_file_size) : undefined,
+    max_file_size: req.body.max_file_size ? parseInt(req.body.max_file_size) : undefined,
+    start_date: req.body.start_date,
+    end_date: req.body.end_date,
+    group_id: req.body.group_id !== undefined ? parseInt(req.body.group_id) : undefined
+  };
+
+  try {
+    const image = await ImageModel.getRandomFromSearch(searchParams);
+
+    if (!image) {
+      return res.status(404).json({
+        success: false,
+        error: 'No images found matching search criteria'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: enrichImageRecord(image)
+    });
+    return;
+  } catch (error) {
+    console.error('Get random from search error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get random image from search'
+    });
+    return;
+  }
+}));
+
+/**
  * 고급 이미지 검색 (프롬프트 중심)
  * POST /api/images/search
  */

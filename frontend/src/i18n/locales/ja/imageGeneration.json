@@ -6,6 +6,41 @@
   "tabs": {
     "workflows": "ワークフロー管理",
     "servers": "サーバー管理",
+    "novelai": "NovelAI",
     "ariaLabel": "画像生成タブ"
+  },
+  "nai": {
+    "login": {
+      "title": "NovelAIログイン",
+      "subtitle": "NovelAIアカウントでログインしてください",
+      "username": "メールアドレス",
+      "password": "パスワード",
+      "loginButton": "ログイン",
+      "loggingIn": "ログイン中...",
+      "error": "ログインに失敗しました"
+    },
+    "generate": {
+      "title": "NovelAI画像生成",
+      "logout": "ログアウト",
+      "prompt": "プロンプト",
+      "negativePrompt": "ネガティブプロンプト",
+      "resolution": "解像度",
+      "sampler": "サンプラー",
+      "steps": "ステップ",
+      "guidance": "ガイダンス",
+      "samples": "サンプル数",
+      "ucPreset": "品質プリセット",
+      "generateButton": "画像を生成",
+      "generating": "生成中...",
+      "resultTitle": "生成された画像",
+      "download": "ダウンロード",
+      "upload": "アップロード",
+      "metadata": "メタデータ",
+      "tokenExpired": "トークンが期限切れです。再度ログインしてください。",
+      "subscriptionRequired": "有効なサブスクリプションが必要です",
+      "error": "画像生成に失敗しました",
+      "uploadSuccess": "画像が正常にアップロードされました",
+      "uploadError": "画像のアップロードに失敗しました"
+    }
   }
 }

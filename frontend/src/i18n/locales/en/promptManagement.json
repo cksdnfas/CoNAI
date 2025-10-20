@@ -73,6 +73,7 @@
 
   "groupManagement": {
     "title": "{{type}} Prompt Group Management",
+    "dragHint": "Drag to reorder groups",
 
     "editForm": {
       "titleAdd": "Add New Group",
@@ -118,7 +119,9 @@
       "updateFailed": "Failed to update group.",
       "deleteSuccess": "Group deleted successfully.",
       "deleteFailed": "Failed to delete group.",
-      "visibilityFailed": "Failed to change group settings."
+      "visibilityFailed": "Failed to change group settings.",
+      "reorderSuccess": "Group order updated successfully.",
+      "reorderFailed": "Failed to update group order."
     }
   },
 

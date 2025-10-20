@@ -28,18 +28,21 @@ import {
   ListItemIcon,
   ListItemText,
   Tooltip,
+  Checkbox,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
   CallSplit as GroupIcon,
   Search as SearchIcon,
   Settings as SettingsIcon,
+  PlaylistAdd as BulkAssignIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 
 import { promptCollectionApi, promptGroupApi } from '../../../services/api';
 import type { PromptSearchResult, PromptGroupWithPrompts } from '@comfyui-image-manager/shared';
 import PromptGroupManagementModal from './PromptGroupManagementModal';
+import { BulkAssignModal } from './BulkAssignModal';
 
 interface PromptListProps {
   type: 'positive' | 'negative';
@@ -61,6 +64,10 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedPromptId, setSelectedPromptId] = useState<number | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
+  const [bulkAssignModalOpen, setBulkAssignModalOpen] = useState(false);
+
+  // 체크박스 선택 상태
+  const [selectedPrompts, setSelectedPrompts] = useState<Set<number>>(new Set());
 
   // 메뉴 상태
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -226,6 +233,40 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
     return prompt.usage_count === 0;
   };
 
+  // 체크박스 선택 핸들러
+  const handleSelectPrompt = (promptId: number) => {
+    setSelectedPrompts((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(promptId)) {
+        newSet.delete(promptId);
+      } else {
+        newSet.add(promptId);
+      }
+      return newSet;
+    });
+  };
+
+  // 전체 선택/해제
+  const handleSelectAll = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.checked) {
+      setSelectedPrompts(new Set(prompts.map((p) => p.id)));
+    } else {
+      setSelectedPrompts(new Set());
+    }
+  };
+
+  // 선택된 프롬프트 할당
+  const handleBulkAssignSelected = () => {
+    if (selectedPrompts.size === 0) return;
+    setBulkAssignModalOpen(true);
+  };
+
+  // 대량 할당 성공 시
+  const handleBulkAssignSuccess = () => {
+    setSelectedPrompts(new Set());
+    fetchPrompts();
+  };
+
   return (
     <Box>
       {/* 검색 및 필터 */}
@@ -270,11 +311,54 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
         </Button>
       </Box>
 
+      {/* 대량 작업 버튼 */}
+      {selectedPrompts.size > 0 && (
+        <Box sx={{ mb: 2, p: 2, bgcolor: 'primary.light', borderRadius: 1, display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Typography variant="body2" sx={{ color: 'primary.contrastText', fontWeight: 500 }}>
+            {t('promptList.bulkActions.selectedCount', { count: selectedPrompts.size })}
+          </Typography>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<BulkAssignIcon />}
+            onClick={handleBulkAssignSelected}
+            sx={{ bgcolor: 'white', color: 'primary.main', '&:hover': { bgcolor: 'grey.100' } }}
+          >
+            {t('promptList.bulkActions.assignSelected')}
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => setSelectedPrompts(new Set())}
+            sx={{ borderColor: 'white', color: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+          >
+            취소
+          </Button>
+        </Box>
+      )}
+
+      <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
+        <Button
+          variant="outlined"
+          startIcon={<BulkAssignIcon />}
+          onClick={() => setBulkAssignModalOpen(true)}
+        >
+          {t('promptList.bulkActions.bulkAssign')}
+        </Button>
+      </Box>
+
       {/* 테이블 */}
       <TableContainer>
         <Table>
           <TableHead>
             <TableRow>
+              <TableCell padding="checkbox">
+                <Checkbox
+                  indeterminate={selectedPrompts.size > 0 && selectedPrompts.size < prompts.length}
+                  checked={prompts.length > 0 && selectedPrompts.size === prompts.length}
+                  onChange={handleSelectAll}
+                />
+              </TableCell>
               <TableCell>{t('promptList.table.headers.prompt')}</TableCell>
               <TableCell align="center">{t('promptList.table.headers.usageCount')}</TableCell>
               <TableCell align="center">{t('promptList.table.headers.assignedGroup')}</TableCell>
@@ -284,13 +368,13 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
                   <CircularProgress />
                 </TableCell>
               </TableRow>
             ) : prompts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
                   <Typography color="text.secondary">
                     {t('promptList.table.empty')}
                   </Typography>
@@ -298,7 +382,13 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
               </TableRow>
             ) : (
               prompts.map((prompt) => (
-                <TableRow key={prompt.id} hover>
+                <TableRow key={prompt.id} hover selected={selectedPrompts.has(prompt.id)}>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={selectedPrompts.has(prompt.id)}
+                      onChange={() => handleSelectPrompt(prompt.id)}
+                    />
+                  </TableCell>
                   <TableCell>
                     <Typography variant="body2" sx={{ maxWidth: 400 }}>
                       {prompt.prompt}
@@ -440,6 +530,18 @@ const PromptList: React.FC<PromptListProps> = ({ type }) => {
         onClose={() => setIsGroupManagementOpen(false)}
         type={type}
         onGroupsChange={fetchGroups}
+      />
+
+      {/* 대량 할당 모달 */}
+      <BulkAssignModal
+        open={bulkAssignModalOpen}
+        onClose={() => setBulkAssignModalOpen(false)}
+        type={type}
+        groups={groups}
+        onSuccess={handleBulkAssignSuccess}
+        selectedPromptTexts={prompts
+          .filter((p) => selectedPrompts.has(p.id))
+          .map((p) => p.prompt)}
       />
 
       {/* 스낵바 */}

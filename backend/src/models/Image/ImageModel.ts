@@ -148,4 +148,110 @@ export class ImageModel {
     ).run(autoTags, id);
     return info.changes > 0;
   }
+
+  /**
+   * 랜덤 이미지 조회 (전체 이미지에서)
+   */
+  static async getRandomImage(): Promise<ImageRecord | null> {
+    const row = db.prepare(`
+      SELECT * FROM images
+      ORDER BY RANDOM()
+      LIMIT 1
+    `).get() as ImageRecord | undefined;
+    return row || null;
+  }
+
+  /**
+   * 검색 조건에 맞는 이미지 중 랜덤 조회
+   */
+  static async getRandomFromSearch(searchParams: any): Promise<ImageRecord | null> {
+    const {
+      search_text,
+      negative_text,
+      ai_tool,
+      model_name,
+      min_width,
+      max_width,
+      min_height,
+      max_height,
+      min_file_size,
+      max_file_size,
+      start_date,
+      end_date,
+      group_id
+    } = searchParams;
+
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    // 프롬프트 검색 (긍정)
+    if (search_text) {
+      conditions.push('prompt LIKE ?');
+      params.push(`%${search_text}%`);
+    }
+
+    // 네거티브 프롬프트 검색
+    if (negative_text) {
+      conditions.push('negative_prompt LIKE ?');
+      params.push(`%${negative_text}%`);
+    }
+
+    // AI 도구
+    if (ai_tool) {
+      conditions.push('ai_tool = ?');
+      params.push(ai_tool);
+    }
+
+    // 모델명
+    if (model_name) {
+      conditions.push('model_name = ?');
+      params.push(model_name);
+    }
+
+    // 이미지 크기 필터
+    if (min_width) {
+      conditions.push('width >= ?');
+      params.push(min_width);
+    }
+    if (max_width) {
+      conditions.push('width <= ?');
+      params.push(max_width);
+    }
+    if (min_height) {
+      conditions.push('height >= ?');
+      params.push(min_height);
+    }
+    if (max_height) {
+      conditions.push('height <= ?');
+      params.push(max_height);
+    }
+
+    // 파일 크기 필터
+    if (min_file_size) {
+      conditions.push('file_size >= ?');
+      params.push(min_file_size);
+    }
+    if (max_file_size) {
+      conditions.push('file_size <= ?');
+      params.push(max_file_size);
+    }
+
+    // 날짜 범위 필터
+    if (start_date && end_date) {
+      conditions.push('upload_date BETWEEN ? AND ?');
+      params.push(start_date, end_date);
+    }
+
+    // 그룹 ID 필터
+    if (group_id !== undefined && group_id !== null) {
+      conditions.push(`id IN (SELECT image_id FROM image_groups WHERE group_id = ?)`);
+      params.push(group_id);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const query = `SELECT * FROM images ${whereClause} ORDER BY RANDOM() LIMIT 1`;
+
+    const row = db.prepare(query).get(...params) as ImageRecord | undefined;
+    return row || null;
+  }
 }

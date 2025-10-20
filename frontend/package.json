@@ -11,6 +11,9 @@
   },
   "dependencies": {
     "@comfyui-image-manager/shared": "file:../shared",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.3.2",
@@ -23,6 +26,7 @@
     "react-dom": "^19.1.1",
     "react-dropzone": "^14.3.8",
     "react-i18next": "^16.0.1",
+    "react-icons": "^5.5.0",
     "react-infinite-scroll-component": "^6.1.0",
     "react-masonry-css": "^1.0.16",
     "react-router-dom": "^7.9.3"

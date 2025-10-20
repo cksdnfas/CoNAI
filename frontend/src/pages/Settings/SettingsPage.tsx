@@ -12,9 +12,9 @@ import {
 import { Settings as SettingsIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import GeneralSettings from './components/GeneralSettings';
-import TaggerSettings from './components/TaggerSettings';
-import RatingScoreSettings from './components/RatingScoreSettings';
-import SimilaritySettings from './components/SimilaritySettings';
+import TaggerSettings from './features/Tagger/TaggerSettings';
+import RatingScoreSettings from './features/Rating/RatingScoreSettings';
+import SimilaritySettings from './features/Similarity/SimilaritySettings';
 import PromptList from '../PromptManagement/components/PromptList';
 import { settingsApi, type AppSettings, type GeneralSettings as GeneralSettingsType, type TaggerSettings as TaggerSettingsType } from '../../services/settingsApi';
 

@@ -15,6 +15,10 @@
     "delete": "削除",
     "runAutoCollection": "自動収集を実行"
   },
+  "tabs": {
+    "basicInfo": "基本情報",
+    "autoCollect": "自動収集設定"
+  },
   "modal": {
     "createTitle": "新しいグループを作成",
     "editTitle": "グループを編集",
@@ -36,10 +40,15 @@
     "buttonCancel": "キャンセル"
   },
   "conditions": {
+    "conditionNumber": "条件{{number}}",
+    "removeCondition": "条件を削除",
+    "addFirstCondition": "最初の条件を追加",
+    "autoCollectDisabled": "自動収集を有効にすると条件を設定できます。",
     "groups": {
       "basic": "基本",
       "prompt": "プロンプト",
-      "autoTag": "オートタグ"
+      "autotag": "Auto Tag",
+      "duplicate": "重複画像"
     },
     "types": {
       "aiTool": "AIツール",
@@ -48,13 +57,17 @@
       "promptRegex": "プロンプト正規表現",
       "negativePromptContains": "ネガティブプロンプトに含む",
       "negativePromptRegex": "ネガティブプロンプト正規表現",
-      "autoTagExists": "オートタグの存在",
-      "autoTagRating": "オートタグ：Rating",
-      "autoTagRatingScore": "オートタグ：Rating スコア（加重）",
-      "autoTagGeneral": "オートタグ：General タグ",
-      "autoTagCharacter": "オートタグ：キャラクター",
-      "autoTagHasCharacter": "オートタグ：キャラクターの存在",
-      "autoTagModel": "オートタグ：モデル名"
+      "autoTagExists": "Auto Tag の存在",
+      "autoTagRating": "Auto Tag: Rating",
+      "autoTagRatingScore": "Auto Tag: Rating スコア（加重）",
+      "autoTagGeneral": "Auto Tag: General タグ",
+      "autoTagCharacter": "Auto Tag: キャラクター",
+      "autoTagHasCharacter": "Auto Tag: キャラクターの存在",
+      "autoTagModel": "Auto Tag: モデル名",
+      "duplicateExact": "完全一致の画像",
+      "duplicateNear": "ほぼ同一の画像",
+      "duplicateSimilar": "類似画像",
+      "duplicateCustom": "カスタム重複検索"
     },
     "values": {
       "exists": "存在する",
@@ -67,16 +80,28 @@
       "explicit": "Explicit"
     },
     "fields": {
+      "value": "値",
       "ratingType": "Rating タイプ",
       "minScore": "最小スコア",
       "maxScore": "最大スコア",
       "tagName": "タグ名",
       "characterName": "キャラクター名",
       "caseSensitive": "大文字小文字を区別",
+      "exactMatch": "完全一致",
+      "exactMatchHelp": "チェックすると完全に一致する単語のみ検索されます（例：「asd」検索時「aasd」、「asdf」は除外）",
       "weightedScore": "加重合計スコア",
       "maxWeightInfo": "通常200まで",
       "confidenceRange": "信頼度スコア範囲（0.0〜1.0）：{{min}}〜{{max}}",
-      "confidenceInfo": "💡 高いスコアほど、そのタグの信頼度が高くなります"
+      "confidenceInfo": "💡 高いスコアほど、そのタグの信頼度が高くなります",
+      "hammingThreshold": "ハミング距離閾値",
+      "hammingThresholdHelp": "0〜64の値（低いほど厳密な検索）",
+      "hammingInfo": "💡 ハミング距離は、パーセプチュアルハッシュ間のビット差を測定します。値が低いほど、より類似した画像を見つけます。",
+      "duplicateNote": "⚠️ この条件は、perceptual_hashがある画像のみ検索されます。"
+    },
+    "duplicateInfo": {
+      "duplicate_exact": "📷 完全に一致する画像を見つけます（ハミング距離 = 0）。ファイル名やメタデータが異なる同一画像も検出します。",
+      "duplicate_near": "🔍 ほぼ同一の画像を見つけます（ハミング距離 ≤ 5）。リサイズ、圧縮、わずかな編集がある画像も検出します。",
+      "duplicate_similar": "🎨 類似した画像を見つけます（ハミング距離 ≤ 15）。構図や内容が似ている画像も検出します。"
     },
     "placeholders": {
       "regex": "正規表現パターンを入力",
@@ -97,7 +122,9 @@
     "scoreRangeInvalid": "条件{{index}}：最小スコアは最大スコアより小さくする必要があります。",
     "confidenceScoreRange": "条件{{index}}：最小スコアは0.0〜1.0の間である必要があります。",
     "confidenceMaxScoreRange": "条件{{index}}：最大スコアは0.0〜1.0の間である必要があります。",
-    "confidenceMinMaxInvalid": "条件{{index}}：最小スコアは最大スコアより大きくすることはできません。"
+    "confidenceMinMaxInvalid": "条件{{index}}：最小スコアは最大スコアより大きくすることはできません。",
+    "hammingThresholdRequired": "条件{{index}}：ハミング距離閾値を設定してください。",
+    "hammingThresholdRange": "条件{{index}}：ハミング距離は0から64の間である必要があります。"
   },
   "messages": {
     "loadFailed": "グループリストの読み込みに失敗しました。",

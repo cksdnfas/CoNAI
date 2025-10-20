@@ -15,6 +15,10 @@
     "delete": "삭제",
     "runAutoCollection": "자동수집 실행"
   },
+  "tabs": {
+    "basicInfo": "기본 정보",
+    "autoCollect": "자동수집 설정"
+  },
   "modal": {
     "createTitle": "새 그룹 생성",
     "editTitle": "그룹 편집",
@@ -36,10 +40,15 @@
     "buttonCancel": "취소"
   },
   "conditions": {
+    "conditionNumber": "조건 {{number}}",
+    "removeCondition": "조건 삭제",
+    "addFirstCondition": "첫 번째 조건 추가",
+    "autoCollectDisabled": "자동수집을 활성화하면 조건을 설정할 수 있습니다.",
     "groups": {
       "basic": "기본",
       "prompt": "프롬프트",
-      "autoTag": "오토태그"
+      "autotag": "Auto Tag",
+      "duplicate": "중복 이미지"
     },
     "types": {
       "aiTool": "AI 도구",
@@ -48,13 +57,17 @@
       "promptRegex": "프롬프트 정규식",
       "negativePromptContains": "네거티브 프롬프트 포함",
       "negativePromptRegex": "네거티브 프롬프트 정규식",
-      "autoTagExists": "오토태그 존재 여부",
-      "autoTagRating": "오토태그: Rating",
-      "autoTagRatingScore": "오토태그: Rating 점수 (가중치)",
-      "autoTagGeneral": "오토태그: General 태그",
-      "autoTagCharacter": "오토태그: 캐릭터",
-      "autoTagHasCharacter": "오토태그: 캐릭터 존재 여부",
-      "autoTagModel": "오토태그: 모델명"
+      "autoTagExists": "Auto Tag 존재 여부",
+      "autoTagRating": "Auto Tag: Rating",
+      "autoTagRatingScore": "Auto Tag: Rating 점수 (가중치)",
+      "autoTagGeneral": "Auto Tag: General 태그",
+      "autoTagCharacter": "Auto Tag: 캐릭터",
+      "autoTagHasCharacter": "Auto Tag: 캐릭터 존재 여부",
+      "autoTagModel": "Auto Tag: 모델명",
+      "duplicateExact": "완전히 동일한 이미지",
+      "duplicateNear": "거의 동일한 이미지",
+      "duplicateSimilar": "유사한 이미지",
+      "duplicateCustom": "사용자 지정 중복 검색"
     },
     "values": {
       "exists": "있음",
@@ -67,16 +80,28 @@
       "explicit": "Explicit"
     },
     "fields": {
+      "value": "값",
       "ratingType": "Rating 유형",
       "minScore": "최소 점수",
       "maxScore": "최대 점수",
       "tagName": "태그명",
       "characterName": "캐릭터명",
       "caseSensitive": "대소문자 구분",
+      "exactMatch": "정확히 일치",
+      "exactMatchHelp": "체크 시 정확히 일치하는 단어만 검색됩니다 (예: 'asd' 검색 시 'aasd', 'asdf' 제외)",
       "weightedScore": "가중치 합산 점수",
       "maxWeightInfo": "일반적으로 200까지",
       "confidenceRange": "신뢰도 점수 범위 (0.0 ~ 1.0): {{min}} ~ {{max}}",
-      "confidenceInfo": "💡 높은 점수일수록 해당 태그의 신뢰도가 높습니다"
+      "confidenceInfo": "💡 높은 점수일수록 해당 태그의 신뢰도가 높습니다",
+      "hammingThreshold": "Hamming Distance 임계값",
+      "hammingThresholdHelp": "0-64 사이의 값 (낮을수록 엄격한 검색)",
+      "hammingInfo": "💡 Hamming Distance는 두 이미지의 perceptual hash 간 비트 차이를 측정합니다. 낮은 값일수록 더 유사한 이미지를 찾습니다.",
+      "duplicateNote": "⚠️ 이 조건은 perceptual_hash가 있는 이미지만 검색됩니다."
+    },
+    "duplicateInfo": {
+      "duplicate_exact": "📷 완전히 동일한 이미지를 찾습니다 (Hamming Distance = 0). 파일명이 다르거나 메타데이터가 다른 동일 이미지도 감지됩니다.",
+      "duplicate_near": "🔍 거의 동일한 이미지를 찾습니다 (Hamming Distance ≤ 5). 크기 조정, 압축, 약간의 편집이 있는 이미지도 감지됩니다.",
+      "duplicate_similar": "🎨 유사한 이미지를 찾습니다 (Hamming Distance ≤ 15). 구도나 내용이 비슷한 이미지도 감지됩니다."
     },
     "placeholders": {
       "regex": "정규식 패턴을 입력하세요",
@@ -97,7 +122,9 @@
     "scoreRangeInvalid": "조건 {{index}}: 최소 점수는 최대 점수보다 작아야 합니다.",
     "confidenceScoreRange": "조건 {{index}}: 최소 점수는 0.0 ~ 1.0 사이여야 합니다.",
     "confidenceMaxScoreRange": "조건 {{index}}: 최대 점수는 0.0 ~ 1.0 사이여야 합니다.",
-    "confidenceMinMaxInvalid": "조건 {{index}}: 최소 점수가 최대 점수보다 클 수 없습니다."
+    "confidenceMinMaxInvalid": "조건 {{index}}: 최소 점수가 최대 점수보다 클 수 없습니다.",
+    "hammingThresholdRequired": "조건 {{index}}: Hamming Distance 임계값을 설정해주세요.",
+    "hammingThresholdRange": "조건 {{index}}: Hamming Distance는 0에서 64 사이의 값이어야 합니다."
   },
   "messages": {
     "loadFailed": "그룹 목록을 불러오는데 실패했습니다.",

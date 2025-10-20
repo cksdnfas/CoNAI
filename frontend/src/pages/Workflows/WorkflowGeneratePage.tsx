@@ -10,13 +10,11 @@ import {
   Divider,
   IconButton,
   LinearProgress,
-  Card,
-  CardMedia,
-  CardContent,
   Chip,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  Grid
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -29,6 +27,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { workflowApi, type Workflow, type MarkedField } from '../../services/api/workflowApi';
 import { comfyuiServerApi, type ComfyUIServer } from '../../services/api/comfyuiServerApi';
+import WorkflowImageGallery from './components/WorkflowImageGallery';
 
 interface ServerGenerationStatus {
   status: 'idle' | 'generating' | 'completed' | 'failed';
@@ -59,6 +58,16 @@ export default function WorkflowGeneratePage() {
     error?: string;
   }>>({});
   const [generationStatus, setGenerationStatus] = useState<Record<number, ServerGenerationStatus>>({});
+
+  // 생성된 이미지 누적 배열
+  const [generatedImages, setGeneratedImages] = useState<Array<{
+    imageId: number;
+    serverId: number;
+    serverName: string;
+    generatedImage: any;
+    executionTime?: number;
+    timestamp: string;
+  }>>([]);
 
   useEffect(() => {
     loadWorkflow();
@@ -254,6 +263,19 @@ export default function WorkflowGeneratePage() {
               executionTime: data.execution_time
             }
           }));
+
+          // 성공 시 이미지 배열에 추가
+          if (data.status === 'completed' && data.generated_image_id) {
+            const server = servers.find(s => s.id === serverId);
+            setGeneratedImages(prev => [{
+              imageId: data.generated_image_id,
+              serverId: serverId,
+              serverName: server?.name || `Server ${serverId}`,
+              generatedImage: data.generated_image,
+              executionTime: data.execution_time,
+              timestamp: new Date().toISOString()
+            }, ...prev]);
+          }
         } else {
           // 계속 폴링
           setTimeout(checkStatus, 2000);
@@ -377,7 +399,7 @@ export default function WorkflowGeneratePage() {
   const promptData = buildPromptData();
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
+    <Box sx={{ p: 3 }}>
       {/* 헤더 */}
       <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
         <IconButton onClick={() => navigate('/image-generation?tab=workflows')}>
@@ -403,190 +425,134 @@ export default function WorkflowGeneratePage() {
         </Alert>
       )}
 
-      {/* 입력 폼 */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          {t('workflows:generate.settingsTitle')}
-        </Typography>
-        <Divider sx={{ mb: 3 }} />
+      {/* 2열 레이아웃 */}
+      <Grid container spacing={3}>
+        {/* 왼쪽: 워크플로우 설정 */}
+        <Grid size={{ xs: 12, md: 12, lg: 4 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
 
-        {workflow.marked_fields && workflow.marked_fields.length > 0 ? (
-          <Box>
-            {workflow.marked_fields.map((field: MarkedField) => renderField(field))}
-          </Box>
-        ) : (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            {t('workflows:alerts.noConfigurableFields')}
-          </Alert>
-        )}
-
-        {/* 전송 데이터 미리보기 */}
-        <Accordion>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography variant="body2">
-              {t('workflows:generate.previewTitle')}
-            </Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <Box
-              component="pre"
-              sx={{
-                p: 2,
-                borderRadius: 1,
-                overflow: 'auto',
-                maxHeight: 400,
-                fontSize: '0.75rem',
-                fontFamily: 'monospace'
-              }}
-            >
-              {JSON.stringify(promptData, null, 2)}
-            </Box>
-          </AccordionDetails>
-        </Accordion>
-      </Paper>
-
-      {/* 모든 서버 동시 생성 버튼 */}
-      <Button
-        fullWidth
-        variant="outlined"
-        size="large"
-        startIcon={<PlayIcon />}
-        onClick={handleGenerateOnAllServers}
-        disabled={
-          servers.filter(s => serverStatus[s.id]?.connected).length === 0 ||
-          !workflow.is_active
-        }
-        sx={{ mb: 3 }}
-      >
-        {t('workflows:generate.generateAll', { count: servers.filter(s => serverStatus[s.id]?.connected).length })}
-      </Button>
-
-      {/* 서버 목록 */}
-      <Typography variant="h6" gutterBottom>
-        {t('workflows:generate.serversListTitle')}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        {t('workflows:generate.serversListDesc')}
-      </Typography>
-
-      {servers.length === 0 && (
-        <Alert severity="info">
-          {t('workflows:generate.noServers')}
-        </Alert>
-      )}
-
-      {servers.map(server => {
-        const status = serverStatus[server.id];
-        const genStatus = generationStatus[server.id];
-
-        return (
-          <Card key={server.id} sx={{ mb: 2 }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                {status?.connected ? (
-                  <CheckCircleIcon color="success" fontSize="small" />
-                ) : (
-                  <ErrorIcon color="error" fontSize="small" />
-                )}
-                <Typography variant="h6">{server.name}</Typography>
-                {server.description && (
-                  <Chip label={server.description} size="small" sx={{ ml: 1 }} />
-                )}
-              </Box>
-
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                {server.endpoint}
+            {/* 입력 폼 */}
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                {t('workflows:generate.settingsTitle')}
               </Typography>
+              <Divider sx={{ mb: 3 }} />
 
-              {status?.responseTime && (
-                <Typography variant="caption" color="text.secondary" display="block">
-                  {t('workflows:generate.responseTime', { time: status.responseTime })}
-                </Typography>
-              )}
-
-              {status?.error && (
-                <Typography variant="caption" color="error" display="block">
-                  {status.error}
-                </Typography>
-              )}
-
-              <Divider sx={{ my: 2 }} />
-
-              {/* 생성 버튼 */}
-              <Button
-                fullWidth
-                variant="contained"
-                startIcon={genStatus?.status === 'generating' ? <CircularProgress size={20} /> : <PlayIcon />}
-                onClick={() => handleGenerateOnServer(server.id)}
-                disabled={
-                  !status?.connected ||
-                  !workflow.is_active ||
-                  genStatus?.status === 'generating'
-                }
-              >
-                {genStatus?.status === 'generating' ? t('workflows:generate.generating') : t('workflows:generate.generateButton')}
-              </Button>
-
-              {/* 생성 상태 표시 */}
-              {genStatus?.status === 'generating' && (
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="body2" gutterBottom>
-                    {t('workflows:generate.generating')}
-                  </Typography>
-                  <LinearProgress />
+              {workflow.marked_fields && workflow.marked_fields.length > 0 ? (
+                <Box>
+                  {workflow.marked_fields.map((field: MarkedField) => renderField(field))}
                 </Box>
-              )}
-
-              {genStatus?.status === 'completed' && genStatus.generatedImage && (
-                <Box sx={{ mt: 2 }}>
-                  <Alert severity="success" sx={{ mb: 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Typography variant="body2">
-                        {t('workflows:generate.generationComplete')}
-                      </Typography>
-                      {genStatus.executionTime && (
-                        <Typography variant="caption" color="text.secondary">
-                          {t('workflows:generate.executionTime', { time: genStatus.executionTime })}
-                        </Typography>
-                      )}
-                    </Box>
-                  </Alert>
-                  <Card>
-                    <CardMedia
-                      component="img"
-                      image={genStatus.generatedImage.thumbnail_url}
-                      alt="Generated image"
-                      sx={{ maxHeight: 300, objectFit: 'contain' }}
-                    />
-                    <CardContent>
-                      <Button
-                        fullWidth
-                        variant="outlined"
-                        onClick={() => navigate(`/image/${genStatus.imageId}`)}
-                      >
-                        {t('workflows:generate.viewImage')}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </Box>
-              )}
-
-              {genStatus?.status === 'failed' && (
-                <Alert severity="error" sx={{ mt: 2 }}>
-                  {genStatus.error || t('workflows:generate.generationFailed')}
+              ) : (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  {t('workflows:alerts.noConfigurableFields')}
                 </Alert>
               )}
-            </CardContent>
-          </Card>
-        );
-      })}
 
-      {/* 워크플로우가 비활성 상태일 때 */}
-      {!workflow.is_active && (
-        <Alert severity="warning" sx={{ mt: 2 }}>
-          {t('workflows:alerts.inactiveWarning')}
-        </Alert>
-      )}
+              {/* 전송 데이터 미리보기 */}
+              <Accordion>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="body2">
+                    {t('workflows:generate.previewTitle')}
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Box
+                    component="pre"
+                    sx={{
+                      p: 2,
+                      borderRadius: 1,
+                      overflow: 'auto',
+                      maxHeight: 400,
+                      fontSize: '0.75rem',
+                      fontFamily: 'monospace'
+                    }}
+                  >
+                    {JSON.stringify(promptData, null, 2)}
+                  </Box>
+                </AccordionDetails>
+              </Accordion>
+            </Paper>
+
+            {/* 모든 서버 동시 생성 버튼 */}
+            <Button
+              fullWidth
+              variant="contained"
+              size="large"
+              startIcon={<PlayIcon />}
+              onClick={handleGenerateOnAllServers}
+              disabled={
+                servers.filter(s => serverStatus[s.id]?.connected).length === 0 ||
+                !workflow.is_active
+              }
+            >
+              {t('workflows:generate.generateAll', { count: servers.filter(s => serverStatus[s.id]?.connected).length })}
+            </Button>
+
+            {/* 서버 상태 */}
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                {t('workflows:generate.serversListTitle')}
+              </Typography>
+              <Divider sx={{ mb: 2 }} />
+
+              {servers.length === 0 && (
+                <Alert severity="info">
+                  {t('workflows:generate.noServers')}
+                </Alert>
+              )}
+
+              {servers.map(server => {
+                const status = serverStatus[server.id];
+                const genStatus = generationStatus[server.id];
+
+                return (
+                  <Box key={server.id} sx={{ mb: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                      {status?.connected ? (
+                        <CheckCircleIcon color="success" fontSize="small" />
+                      ) : (
+                        <ErrorIcon color="error" fontSize="small" />
+                      )}
+                      <Typography variant="body2" fontWeight="bold">{server.name}</Typography>
+                      {genStatus?.status === 'generating' && (
+                        <CircularProgress size={16} />
+                      )}
+                    </Box>
+
+                    {status?.responseTime && (
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        {t('workflows:generate.responseTime', { time: status.responseTime })}
+                      </Typography>
+                    )}
+
+                    {genStatus?.status === 'generating' && (
+                      <LinearProgress sx={{ mt: 1 }} />
+                    )}
+
+                    {genStatus?.status === 'failed' && (
+                      <Alert severity="error" sx={{ mt: 1 }}>
+                        {genStatus.error || t('workflows:generate.generationFailed')}
+                      </Alert>
+                    )}
+                  </Box>
+                );
+              })}
+            </Paper>
+
+            {/* 워크플로우 비활성 경고 */}
+            {!workflow.is_active && (
+              <Alert severity="warning">
+                {t('workflows:alerts.inactiveWarning')}
+              </Alert>
+            )}
+          </Box>
+        </Grid>
+
+        {/* 오른쪽: 생성 이미지 갤러리 */}
+        <Grid size={{ xs: 12, md: 12, lg: 8 }}>
+          <WorkflowImageGallery images={generatedImages} />
+        </Grid>
+      </Grid>
     </Box>
   );
 }

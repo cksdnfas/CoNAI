@@ -7,6 +7,13 @@ import { AutoTagSearchParams } from '../types/autoTag';
 
 export class AutoCollectionService {
   /**
+   * 정규식에서 사용할 특수 문자를 이스케이프
+   */
+  private static escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /**
    * 단일 이미지가 그룹 조건에 맞는지 확인
    */
   static async checkImageMatchesConditions(
@@ -47,6 +54,12 @@ export class AutoCollectionService {
     switch (type) {
       case 'prompt_contains':
         targetText = case_sensitive ? (image.prompt || '') : (image.prompt || '').toLowerCase();
+        if (condition.exact_match && typeof value === 'string') {
+          const pattern = case_sensitive
+            ? new RegExp(`\\b${this.escapeRegex(value)}\\b`)
+            : new RegExp(`\\b${this.escapeRegex(value)}\\b`, 'i');
+          return pattern.test(image.prompt || '');
+        }
         return targetText.includes(searchValue);
 
       case 'prompt_regex':
@@ -62,6 +75,12 @@ export class AutoCollectionService {
 
       case 'negative_prompt_contains':
         targetText = case_sensitive ? (image.negative_prompt || '') : (image.negative_prompt || '').toLowerCase();
+        if (condition.exact_match && typeof value === 'string') {
+          const pattern = case_sensitive
+            ? new RegExp(`\\b${this.escapeRegex(value)}\\b`)
+            : new RegExp(`\\b${this.escapeRegex(value)}\\b`, 'i');
+          return pattern.test(image.negative_prompt || '');
+        }
         return targetText.includes(searchValue);
 
       case 'negative_prompt_regex':
@@ -81,6 +100,12 @@ export class AutoCollectionService {
 
       case 'model_name':
         targetText = case_sensitive ? (image.model_name || '') : (image.model_name || '').toLowerCase();
+        if (condition.exact_match && typeof value === 'string') {
+          const pattern = case_sensitive
+            ? new RegExp(`\\b${this.escapeRegex(value)}\\b`)
+            : new RegExp(`\\b${this.escapeRegex(value)}\\b`, 'i');
+          return pattern.test(image.model_name || '');
+        }
         return targetText.includes(searchValue);
 
       // 오토태그 관련 조건 평가
@@ -107,6 +132,20 @@ export class AutoCollectionService {
 
       case 'auto_tag_rating_score':
         return await this.evaluateRatingScoreCondition(image, condition);
+
+      // 중복 이미지 검색 조건
+      case 'duplicate_exact':
+        return await this.evaluateDuplicateCondition(image, condition, 0);
+
+      case 'duplicate_near':
+        return await this.evaluateDuplicateCondition(image, condition, 5);
+
+      case 'duplicate_similar':
+        return await this.evaluateDuplicateCondition(image, condition, 15);
+
+      case 'duplicate_custom':
+        if (condition.hamming_threshold === undefined) return false;
+        return await this.evaluateDuplicateCondition(image, condition, condition.hamming_threshold);
 
       default:
         return false;
@@ -303,6 +342,38 @@ export class AutoCollectionService {
   }
 
   /**
+   * 중복 이미지 조건 평가
+   * perceptual_hash를 사용하여 Hamming distance 기반 중복 검색
+   */
+  private static async evaluateDuplicateCondition(
+    image: ImageRecord,
+    condition: AutoCollectCondition,
+    threshold: number
+  ): Promise<boolean> {
+    // perceptual_hash가 없으면 평가 불가
+    if (!image.perceptual_hash) {
+      return false;
+    }
+
+    try {
+      // ImageSimilarityModel을 동적 임포트하여 순환 참조 방지
+      const { ImageSimilarityModel } = await import('../models/Image/ImageSimilarityModel');
+
+      // 중복 이미지 검색
+      const duplicates = await ImageSimilarityModel.findDuplicates(image.id, {
+        threshold,
+        includeMetadata: true
+      });
+
+      // 중복 이미지가 하나라도 있으면 true
+      return duplicates.length > 0;
+    } catch (error) {
+      console.warn('Failed to evaluate duplicate condition:', error);
+      return false;
+    }
+  }
+
+  /**
    * 특정 그룹의 자동수집 실행
    * - 수동으로 추가된 이미지는 삭제하지 않음
    * - 자동수집 조건 변경 시에도 수동 추가 이미지 유지
@@ -487,7 +558,10 @@ export class AutoCollectionService {
         'auto_tag_rating', 'auto_tag_general',
         'auto_tag_character', 'auto_tag_model',
         'auto_tag_has_character', 'auto_tag_exists',
-        'auto_tag_rating_score'  // 가중치 기반 rating 점수 조건
+        'auto_tag_rating_score',  // 가중치 기반 rating 점수 조건
+        // 중복 이미지 검색 조건
+        'duplicate_exact', 'duplicate_near',
+        'duplicate_similar', 'duplicate_custom'
       ];
 
       if (!validTypes.includes(condition.type)) {
@@ -573,6 +647,21 @@ export class AutoCollectionService {
             errors.push(`Condition ${i + 1}: min_score must be less than max_score`);
           }
         }
+      }
+
+      // 중복 이미지 조건 검증
+      if (condition.type.startsWith('duplicate_')) {
+        // duplicate_custom은 hamming_threshold가 필수
+        if (condition.type === 'duplicate_custom') {
+          if (condition.hamming_threshold === undefined) {
+            errors.push(`Condition ${i + 1}: hamming_threshold is required for duplicate_custom`);
+          } else if (condition.hamming_threshold < 0 || condition.hamming_threshold > 64) {
+            errors.push(`Condition ${i + 1}: hamming_threshold must be between 0 and 64`);
+          }
+        }
+
+        // value 필드는 중복 조건에서 사용되지 않으므로 빈 문자열로 설정 가능
+        // 하지만 타입 시스템 때문에 필수이므로 검증하지 않음
       }
     }
 

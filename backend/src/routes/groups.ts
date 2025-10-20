@@ -453,4 +453,27 @@ router.post('/auto-collect-all', asyncHandler(async (req: Request, res: Response
   }
 }));
 
+/**
+ * 그룹의 랜덤 이미지 조회 (전체 이미지 정보 포함)
+ * GET /api/groups/:id/random-image
+ */
+router.get('/:id/random-image', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const id = validateId(req.params.id, 'Group ID');
+
+    const randomImage = await ImageGroupModel.findRandomImageForGroup(id);
+
+    if (!randomImage) {
+      return res.status(404).json(errorResponse('No images found in group'));
+    }
+
+    return res.json(successResponse(enrichImageRecord(randomImage)));
+  } catch (error) {
+    console.error('Error getting random image from group:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get random image from group';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
+  }
+}));
+
 export { router as groupRoutes };

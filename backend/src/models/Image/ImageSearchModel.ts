@@ -149,19 +149,37 @@ export class ImageSearchModel {
     return { images: enrichedImages, total };
   }
 
-  static async searchByAutoTags(searchParams: AutoTagSearchParams): Promise<{ images: any[], total: number }> {
+  static async searchByAutoTags(
+    searchParams: AutoTagSearchParams,
+    basicSearchParams?: {
+      search_text?: string;
+      negative_text?: string;
+      ai_tool?: string;
+      model_name?: string;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<{ images: any[], total: number }> {
     const page = searchParams.page || 1;
     const limit = searchParams.limit || 20;
     const sortBy = searchParams.sortBy || 'upload_date';
     const sortOrder = searchParams.sortOrder || 'DESC';
     const offset = (page - 1) * limit;
 
-    const queryBuilder = await AutoTagSearchService.buildAutoTagSearchQuery(searchParams);
+    const queryBuilder = await AutoTagSearchService.buildAutoTagSearchQuery(searchParams, basicSearchParams);
     const whereClause = queryBuilder.conditions.length > 0 ? `WHERE ${queryBuilder.conditions.join(' AND ')}` : '';
 
     const countQuery = `SELECT COUNT(DISTINCT i.id) as total FROM images i ${whereClause}`;
+
+    // 디버깅: 생성된 쿼리와 파라미터 출력
+    console.log('[AutoTagSearch] Generated Query:', countQuery);
+    console.log('[AutoTagSearch] Query Params:', queryBuilder.params);
+    console.log('[AutoTagSearch] Search Params:', JSON.stringify(searchParams, null, 2));
+
     const countRow = db.prepare(countQuery).get(...queryBuilder.params) as any;
     const total = countRow.total;
+
+    console.log('[AutoTagSearch] Total Results:', total);
 
     const dataQuery = `
       SELECT i.*, GROUP_CONCAT(DISTINCT g.id) as group_ids, GROUP_CONCAT(DISTINCT g.name) as group_names,

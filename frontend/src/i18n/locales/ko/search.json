@@ -1,6 +1,6 @@
 {
   "title": "이미지 검색",
-  "description": "프롬프트, AI 도구, 모델명, 오토태그 등으로 이미지를 검색할 수 있습니다.",
+  "description": "프롬프트, AI 도구, 모델명, Auto Tag 등으로 이미지를 검색할 수 있습니다.",
 
   "searchInput": {
     "placeholder": "프롬프트 키워드로 검색...",
@@ -16,7 +16,7 @@
     "noResults": "검색 결과가 없습니다",
     "noResultsHint": "다른 검색어를 시도하거나 필터를 조정해보세요.",
     "initialMessage": "검색어를 입력하여 이미지를 찾아보세요",
-    "initialHint": "프롬프트, AI 도구, 모델명, 오토태그, 날짜 등으로 검색할 수 있습니다.",
+    "initialHint": "프롬프트, AI 도구, 모델명, Auto Tag, 날짜 등으로 검색할 수 있습니다.",
     "reset": "검색 초기화",
     "refresh": "새로고침"
   },
@@ -60,7 +60,7 @@
     },
 
     "autoTag": {
-      "title": "오토태그 필터",
+      "title": "Auto Tag 필터",
       "subtitle": "(WD v3 Tagger)",
       "active": "활성",
 

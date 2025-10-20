@@ -50,6 +50,14 @@ export class ImageModel {
     return BaseImageModel.updateAutoTags(id, autoTags);
   }
 
+  static getRandomImage(): Promise<ImageRecord | null> {
+    return BaseImageModel.getRandomImage();
+  }
+
+  static getRandomFromSearch(searchParams: any): Promise<ImageRecord | null> {
+    return BaseImageModel.getRandomFromSearch(searchParams);
+  }
+
   // ==================== 검색 (ImageSearchModel) ====================
 
   static advancedSearch(
@@ -86,9 +94,17 @@ export class ImageModel {
   }
 
   static searchByAutoTags(
-    searchParams: AutoTagSearchParams
+    searchParams: AutoTagSearchParams,
+    basicSearchParams?: {
+      search_text?: string;
+      negative_text?: string;
+      ai_tool?: string;
+      model_name?: string;
+      start_date?: string;
+      end_date?: string;
+    }
   ): Promise<{ images: any[], total: number }> {
-    return ImageSearchModel.searchByAutoTags(searchParams);
+    return ImageSearchModel.searchByAutoTags(searchParams, basicSearchParams);
   }
 
   // ==================== 태깅 (ImageTaggingModel) ====================

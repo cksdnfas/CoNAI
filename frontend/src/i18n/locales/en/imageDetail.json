@@ -9,13 +9,17 @@
     "download": "Download",
     "share": "Share",
     "back": "Back",
-    "goToDetail": "Detail Page"
+    "goToDetail": "Detail Page",
+    "delete": "Delete",
+    "deleteConfirm": "Are you sure you want to delete this image?",
+    "deleteSuccess": "Image deleted successfully.",
+    "deleteError": "Failed to delete image."
   },
   "sections": {
     "fileInfo": "File Information",
     "imageInfo": "Image Information",
     "videoInfo": "Video Information",
-    "aiInfo": "AI Generation Info",
+    "aiInfo": "Generation Info",
     "promptInfo": "Prompt Information",
     "groupInfo": "Groups",
     "fullMetadata": "Full Metadata"

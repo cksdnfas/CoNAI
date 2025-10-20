@@ -11,7 +11,7 @@ import {
   Divider,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import type { ImageRecord, PageSize } from '../../types/image';
+import type { ImageRecord, PageSize, ImageSearchParams } from '../../types/image';
 import ImageCard from '../ImageCard/ImageCard';
 import PageSizeSelector from '../PageSizeSelector/PageSizeSelector';
 import ImageViewerModal from '../ImageViewerModal';
@@ -32,6 +32,7 @@ export interface ImageGridProps {
   onImageDelete?: (id: number) => void;
   showCollectionType?: boolean;
   currentGroupId?: number;
+  searchParams?: ImageSearchParams;
 }
 
 const ImageGrid: React.FC<ImageGridProps> = ({
@@ -49,6 +50,7 @@ const ImageGrid: React.FC<ImageGridProps> = ({
   onImageDelete,
   showCollectionType = false,
   currentGroupId,
+  searchParams,
 }) => {
   const { t } = useTranslation(['common', 'gallery']);
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -277,6 +279,10 @@ const ImageGrid: React.FC<ImageGridProps> = ({
         images={safeImages}
         currentIndex={currentImageIndex}
         onImageChange={handleImageChange}
+        onImageDeleted={onImageDelete}
+        searchContext={searchParams ? 'search' : currentGroupId ? 'group' : 'all'}
+        searchParams={searchParams}
+        groupId={currentGroupId}
       />
     </Box>
   );

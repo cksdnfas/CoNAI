@@ -8,14 +8,22 @@ import {
   Drawer,
   useMediaQuery,
   useTheme,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  Snackbar,
+  Alert,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 import {
   Download as DownloadIcon,
-  Link as LinkIcon,
+  InfoOutlined as InfoIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import type { ImageRecord } from '../../types/image';
+import type { ImageRecord, ImageSearchParams } from '../../types/image';
 import ImageNavigation from './ImageNavigation';
 import { ImageGridModal } from '../ImageGrid';
 import { getBackendOrigin } from '../../utils/backend';
@@ -35,6 +43,10 @@ interface ImageViewerModalProps {
   images?: ImageRecord[];
   currentIndex?: number;
   onImageChange?: (index: number) => void;
+  onImageDeleted?: (imageId: number) => void;
+  searchContext?: 'all' | 'search' | 'group';
+  searchParams?: ImageSearchParams;
+  groupId?: number;
 }
 
 const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
@@ -44,6 +56,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   images = [],
   currentIndex = 0,
   onImageChange,
+  onImageDeleted,
+  searchContext = 'all',
+  searchParams,
+  groupId,
 }) => {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -54,6 +70,13 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [drawerOpen, setDrawerOpen] = useState(!isMobile);
   const [isTaggerEnabled, setIsTaggerEnabled] = useState(false);
   const [currentImage, setCurrentImage] = useState<ImageRecord | null>(image);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isRandomMode, setIsRandomMode] = useState(false);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
 
   // Custom hooks
   const transform = useImageTransform(image?.id, open);
@@ -63,6 +86,15 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     onImageChange,
     isOpen: open,
     onClose,
+    searchContext,
+    searchParams,
+    groupId,
+    onRandomImageLoaded: (newImage: ImageRecord) => {
+      setCurrentImage(newImage);
+    },
+    onRandomModeChange: (isRandom: boolean) => {
+      setIsRandomMode(isRandom);
+    },
   });
   const groupImages = useGroupImages();
 
@@ -115,6 +147,70 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       navigate(`/image/${image.id}`);
       onClose();
     }
+  };
+
+  const handleDeleteClick = () => {
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!currentImage) return;
+
+    try {
+      const response = await imageApi.deleteImage(currentImage.id);
+      if (response.success) {
+        setSnackbar({
+          open: true,
+          message: t('imageDetail:actions.deleteSuccess'),
+          severity: 'success',
+        });
+
+        // Notify parent component
+        if (onImageDeleted) {
+          onImageDeleted(currentImage.id);
+        }
+
+        // Navigate to next/previous image or close modal
+        if (images.length > 1) {
+          if (currentIndex < images.length - 1) {
+            // Move to next image
+            navigation.handleNext();
+          } else if (currentIndex > 0) {
+            // Move to previous image
+            navigation.handlePrevious();
+          } else {
+            // Only one image, close modal
+            onClose();
+          }
+        } else {
+          // No other images, close modal
+          onClose();
+        }
+      } else {
+        setSnackbar({
+          open: true,
+          message: response.error || t('imageDetail:actions.deleteError'),
+          severity: 'error',
+        });
+      }
+    } catch (error) {
+      console.error('Failed to delete image:', error);
+      setSnackbar({
+        open: true,
+        message: t('imageDetail:actions.deleteError'),
+        severity: 'error',
+      });
+    } finally {
+      setDeleteDialogOpen(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+  };
+
+  const handleSnackbarClose = () => {
+    setSnackbar({ ...snackbar, open: false });
   };
 
   if (!currentImage) return null;
@@ -246,23 +342,26 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           onPrevious={navigation.handlePrevious}
           onNext={navigation.handleNext}
           onRandom={navigation.handleRandom}
+          isRandomMode={isRandomMode}
+          currentImage={currentImage}
         />
 
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            size="small"
-            startIcon={<LinkIcon />}
-            onClick={handleGoToDetail}
-          >
-            {t('imageDetail:actions.goToDetail')}
-          </Button>
-          <Button
-            size="small"
-            startIcon={<DownloadIcon />}
-            onClick={handleDownload}
-          >
-            {t('imageDetail:actions.download')}
-          </Button>
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <Tooltip title={t('imageDetail:actions.goToDetail')}>
+            <IconButton size="small" onClick={handleGoToDetail}>
+              <InfoIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t('imageDetail:actions.download')}>
+            <IconButton size="small" onClick={handleDownload}>
+              <DownloadIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t('imageDetail:actions.delete')}>
+            <IconButton size="small" onClick={handleDeleteClick} color="error">
+              <DeleteIcon />
+            </IconButton>
+          </Tooltip>
         </Box>
       </DialogActions>
 
@@ -282,6 +381,41 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           onPageChange={groupImages.handleGroupImagesPageChange}
         />
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{t('imageDetail:actions.delete')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {t('imageDetail:actions.deleteConfirm')}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} color="primary">
+            {t('common:actions.cancel')}
+          </Button>
+          <Button onClick={handleDeleteConfirm} color="error" variant="contained">
+            {t('imageDetail:actions.delete')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleSnackbarClose} severity={snackbar.severity} variant="filled">
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Dialog>
   );
 };

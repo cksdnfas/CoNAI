@@ -405,4 +405,61 @@ export class PromptCollectionService {
       throw error;
     }
   }
+
+  /**
+   * 프롬프트 대량 할당
+   * @param prompts 프롬프트 텍스트 배열
+   * @param groupId 할당할 그룹 ID (null이면 미할당)
+   * @param type 프롬프트 타입
+   * @returns 생성된 개수, 업데이트된 개수, 실패한 프롬프트 목록
+   */
+  static async batchAssignPromptsToGroup(
+    prompts: string[],
+    groupId: number | null,
+    type: 'positive' | 'negative' = 'positive'
+  ): Promise<{ created: number; updated: number; failed: string[] }> {
+    try {
+      let created = 0;
+      let updated = 0;
+      const failed: string[] = [];
+
+      const addMethod = type === 'positive'
+        ? PromptCollectionModel.addOrIncrement.bind(PromptCollectionModel)
+        : PromptCollectionModel.addOrIncrementNegative.bind(PromptCollectionModel);
+
+      for (const promptText of prompts) {
+        const trimmedPrompt = promptText.trim();
+        if (!trimmedPrompt) continue;
+
+        try {
+          // DB에서 해당 프롬프트 검색
+          const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+          const { db } = require('../database/init');
+          const existing = db.prepare(`SELECT id FROM ${tableName} WHERE prompt = ?`).get(trimmedPrompt) as any;
+
+          if (existing) {
+            // 이미 존재하면 그룹 ID만 업데이트
+            const success = await PromptCollectionModel.setGroupId(existing.id, groupId, type);
+            if (success) {
+              updated++;
+            } else {
+              failed.push(trimmedPrompt);
+            }
+          } else {
+            // 존재하지 않으면 새로 생성하고 그룹 할당
+            await addMethod(trimmedPrompt, groupId || undefined);
+            created++;
+          }
+        } catch (error) {
+          console.error(`Error assigning prompt "${trimmedPrompt}":`, error);
+          failed.push(trimmedPrompt);
+        }
+      }
+
+      return { created, updated, failed };
+    } catch (error) {
+      console.error('Error batch assigning prompts:', error);
+      throw error;
+    }
+  }
 }

@@ -6,6 +6,138 @@
   "tabs": {
     "workflows": "워크플로우 관리",
     "servers": "서버 관리",
+    "novelai": "NovelAI",
     "ariaLabel": "이미지 생성 탭"
+  },
+  "nai": {
+    "login": {
+      "title": "NovelAI 로그인",
+      "subtitle": "NovelAI 계정으로 로그인하세요",
+      "username": "이메일",
+      "password": "비밀번호",
+      "loginButton": "로그인",
+      "loggingIn": "로그인 중...",
+      "error": "로그인에 실패했습니다"
+    },
+    "tabs": {
+      "basic": "기본 설정",
+      "advanced": "고급 설정",
+      "helper": "프롬프트 도우미"
+    },
+    "sections": {
+      "preset": "품질 프리셋",
+      "prompts": "프롬프트",
+      "output": "출력 설정",
+      "advanced": "고급 설정",
+      "sampling": "샘플링 설정",
+      "quality": "품질 설정",
+      "model": "모델 선택"
+    },
+    "anlas": {
+      "balance": "Anlas 잔액",
+      "refresh": "새로고침",
+      "subscription": "구독",
+      "free": "무료",
+      "tablet": "Tablet",
+      "scroll": "Scroll",
+      "opus": "Opus"
+    },
+    "cost": {
+      "title": "예상 비용",
+      "anlas": "Anlas",
+      "balance": "잔액",
+      "sufficient": "충분",
+      "insufficient": "부족",
+      "opusFree": "Opus 무료 생성 가능",
+      "maxSamples": "최대 샘플 수"
+    },
+    "models": {
+      "label": "모델 선택",
+      "v45curated": "V4.5 Curated (추천)",
+      "v45full": "V4.5 Full",
+      "v4curated": "V4 Curated",
+      "v4full": "V4 Full",
+      "v3": "V3 (구버전)",
+      "v3furry": "V3 Furry"
+    },
+    "advanced": {
+      "cfgRescale": "Prompt Guidance Rescale",
+      "noiseSchedule": "Noise Schedule",
+      "uncondScale": "Undesired Content Strength"
+    },
+    "presets": {
+      "title": "품질 프리셋",
+      "label": "품질 프리셋",
+      "quality": {
+        "name": "기본 품질",
+        "description": "균형잡힌 품질과 속도 (28 steps, Euler)"
+      },
+      "fast": {
+        "name": "빠름",
+        "description": "빠른 생성 (15 steps, Euler)"
+      },
+      "artistic": {
+        "name": "예술적",
+        "description": "창의적인 결과물 (35 steps, DPM++ 2S Ancestral, SMEA DYN)"
+      },
+      "realistic": {
+        "name": "사실적",
+        "description": "사실적인 이미지 (40 steps, DPM++ 2M, SMEA)"
+      },
+      "detail": {
+        "name": "디테일",
+        "description": "최고 디테일 (50 steps, DPM++ SDE, SMEA DYN)"
+      }
+    },
+    "promptHelper": {
+      "title": "프롬프트 도우미",
+      "examples": "예제 프롬프트",
+      "characters": "캐릭터",
+      "styles": "스타일",
+      "environments": "환경",
+      "lighting": "조명",
+      "copy": "복사",
+      "use": "사용",
+      "backToGenerate": "생성 화면으로 돌아가기"
+    },
+    "gallery": {
+      "images": "이미지",
+      "showMetadata": "메타데이터 표시",
+      "hideMetadata": "메타데이터 숨기기",
+      "downloadAll": "모두 다운로드"
+    },
+    "settings": {
+      "qualityToggle": "품질 태그 자동 추가"
+    },
+    "generate": {
+      "title": "NovelAI 이미지 생성",
+      "logout": "로그아웃",
+      "prompt": "프롬프트",
+      "negativePrompt": "네거티브 프롬프트",
+      "resolution": "해상도",
+      "sampler": "샘플러",
+      "steps": "스텝",
+      "guidance": "가이던스",
+      "samples": "샘플 수",
+      "ucPreset": "품질 프리셋",
+      "generateButton": "이미지 생성",
+      "generating": "생성 중...",
+      "resultTitle": "생성된 이미지",
+      "download": "다운로드",
+      "upload": "업로드",
+      "metadata": "메타데이터",
+      "tokenExpired": "토큰이 만료되었습니다. 다시 로그인하세요.",
+      "subscriptionRequired": "활성 구독이 필요합니다",
+      "error": "이미지 생성에 실패했습니다",
+      "uploadSuccess": "이미지가 성공적으로 업로드되었습니다",
+      "uploadError": "이미지 업로드에 실패했습니다",
+      "autoUploadSuccess": "{{count}}개의 이미지가 자동으로 업로드되었습니다",
+      "autoUploadPartial": "{{success}}개 업로드 성공, {{fail}}개 실패"
+    },
+    "history": {
+      "title": "생성 히스토리",
+      "comingSoon": "이 기능은 곧 추가될 예정입니다.",
+      "description": "과거 생성한 이미지와 설정을 확인할 수 있습니다."
+    }
   }
 }

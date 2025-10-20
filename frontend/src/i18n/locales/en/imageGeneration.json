@@ -6,6 +6,138 @@
   "tabs": {
     "workflows": "Workflow Management",
     "servers": "Server Management",
+    "novelai": "NovelAI",
     "ariaLabel": "Image generation tabs"
+  },
+  "nai": {
+    "login": {
+      "title": "NovelAI Login",
+      "subtitle": "Sign in with your NovelAI account",
+      "username": "Email",
+      "password": "Password",
+      "loginButton": "Login",
+      "loggingIn": "Logging in...",
+      "error": "Login failed"
+    },
+    "tabs": {
+      "basic": "Basic Settings",
+      "advanced": "Advanced Settings",
+      "helper": "Prompt Helper"
+    },
+    "sections": {
+      "preset": "Quality Presets",
+      "prompts": "Prompts",
+      "output": "Output Settings",
+      "advanced": "Advanced Settings",
+      "sampling": "Sampling Settings",
+      "quality": "Quality Settings",
+      "model": "Model Selection"
+    },
+    "anlas": {
+      "balance": "Anlas Balance",
+      "refresh": "Refresh",
+      "subscription": "Subscription",
+      "free": "Free",
+      "tablet": "Tablet",
+      "scroll": "Scroll",
+      "opus": "Opus"
+    },
+    "cost": {
+      "title": "Cost Estimate",
+      "anlas": "Anlas",
+      "balance": "Balance",
+      "sufficient": "Sufficient",
+      "insufficient": "Insufficient",
+      "opusFree": "Opus Free Generation",
+      "maxSamples": "Max Samples"
+    },
+    "models": {
+      "label": "Model Selection",
+      "v45curated": "V4.5 Curated (Recommended)",
+      "v45full": "V4.5 Full",
+      "v4curated": "V4 Curated",
+      "v4full": "V4 Full",
+      "v3": "V3 (Legacy)",
+      "v3furry": "V3 Furry"
+    },
+    "advanced": {
+      "cfgRescale": "Prompt Guidance Rescale",
+      "noiseSchedule": "Noise Schedule",
+      "uncondScale": "Undesired Content Strength"
+    },
+    "settings": {
+      "qualityToggle": "Auto-add quality tags"
+    },
+    "presets": {
+      "title": "Quality Presets",
+      "label": "Quality Presets",
+      "quality": {
+        "name": "Quality",
+        "description": "Balanced quality and speed (28 steps, Euler)"
+      },
+      "fast": {
+        "name": "Fast",
+        "description": "Quick generation (15 steps, Euler)"
+      },
+      "artistic": {
+        "name": "Artistic",
+        "description": "Creative results (35 steps, DPM++ 2S Ancestral, SMEA DYN)"
+      },
+      "realistic": {
+        "name": "Realistic",
+        "description": "Realistic images (40 steps, DPM++ 2M, SMEA)"
+      },
+      "detail": {
+        "name": "Detail",
+        "description": "Maximum detail (50 steps, DPM++ SDE, SMEA DYN)"
+      }
+    },
+    "promptHelper": {
+      "title": "Prompt Helper",
+      "examples": "Example Prompts",
+      "characters": "Characters",
+      "styles": "Styles",
+      "environments": "Environments",
+      "lighting": "Lighting",
+      "copy": "Copy",
+      "use": "Use",
+      "backToGenerate": "Back to Generate"
+    },
+    "gallery": {
+      "images": "Images",
+      "showMetadata": "Show Metadata",
+      "hideMetadata": "Hide Metadata",
+      "downloadAll": "Download All"
+    },
+    "generate": {
+      "title": "NovelAI Image Generation",
+      "logout": "Logout",
+      "prompt": "Prompt",
+      "negativePrompt": "Negative Prompt",
+      "resolution": "Resolution",
+      "sampler": "Sampler",
+      "steps": "Steps",
+      "guidance": "Guidance",
+      "samples": "Samples",
+      "ucPreset": "Quality Preset",
+      "generateButton": "Generate Image",
+      "generating": "Generating...",
+      "resultTitle": "Generated Images",
+      "download": "Download",
+      "upload": "Upload",
+      "metadata": "Metadata",
+      "tokenExpired": "Token expired. Please login again.",
+      "subscriptionRequired": "Active subscription required",
+      "error": "Image generation failed",
+      "uploadSuccess": "Image uploaded successfully",
+      "uploadError": "Image upload failed",
+      "autoUploadSuccess": "{{count}} image(s) uploaded automatically",
+      "autoUploadPartial": "{{success}} uploaded, {{fail}} failed"
+    },
+    "history": {
+      "title": "Generation History",
+      "comingSoon": "This feature is coming soon.",
+      "description": "View your previously generated images and settings."
+    }
   }
 }

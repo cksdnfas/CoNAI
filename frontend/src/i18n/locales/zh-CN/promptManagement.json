@@ -73,6 +73,7 @@
 
   "groupManagement": {
     "title": "{{type}}提示词组管理",
+    "dragHint": "拖动以更改顺序",
 
     "editForm": {
       "titleAdd": "添加新组",
@@ -118,7 +119,9 @@
       "updateFailed": "更新组失败。",
       "deleteSuccess": "组已删除。",
       "deleteFailed": "删除组失败。",
-      "visibilityFailed": "更改组设置失败。"
+      "visibilityFailed": "更改组设置失败。",
+      "reorderSuccess": "组顺序已更新。",
+      "reorderFailed": "更新组顺序失败。"
     }
   },
 

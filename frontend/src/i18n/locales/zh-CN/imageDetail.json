@@ -9,13 +9,17 @@
     "download": "下载",
     "share": "分享",
     "back": "返回",
-    "goToDetail": "详情页面"
+    "goToDetail": "详情页面",
+    "delete": "删除",
+    "deleteConfirm": "确定要删除此图像吗？",
+    "deleteSuccess": "图像删除成功。",
+    "deleteError": "删除图像失败。"
   },
   "sections": {
     "fileInfo": "文件信息",
     "imageInfo": "图像信息",
     "videoInfo": "视频信息",
-    "aiInfo": "AI 生成信息",
+    "aiInfo": "生成信息",
     "promptInfo": "提示词信息",
     "groupInfo": "所属分组",
     "fullMetadata": "完整元数据"

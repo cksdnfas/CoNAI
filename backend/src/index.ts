@@ -27,6 +27,7 @@ import { groupRoutes } from './routes/groups';
 import { settingsRoutes } from './routes/settings';
 import { workflowRoutes } from './routes/workflows';
 import { comfyuiServerRoutes } from './routes/comfyuiServers';
+import naiRoutes from './routes/nai';
 import { initializeDatabase } from './database/init';
 import { errorHandler } from './middleware/errorHandler';
 import { imageTaggerService } from './services/imageTaggerService';
@@ -129,6 +130,7 @@ app.use('/api/groups', groupRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/workflows', workflowRoutes);
 app.use('/api/comfyui-servers', comfyuiServerRoutes);
+app.use('/api/nai', naiRoutes);
 
 // Frontend static file serving
 const frontendDistPath = process.env.FRONTEND_DIST_PATH

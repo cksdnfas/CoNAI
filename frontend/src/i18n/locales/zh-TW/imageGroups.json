@@ -15,6 +15,10 @@
     "delete": "刪除",
     "runAutoCollection": "執行自動收集"
   },
+  "tabs": {
+    "basicInfo": "基本資訊",
+    "autoCollect": "自動收集設定"
+  },
   "modal": {
     "createTitle": "建立新群組",
     "editTitle": "編輯群組",
@@ -36,10 +40,15 @@
     "buttonCancel": "取消"
   },
   "conditions": {
+    "conditionNumber": "條件{{number}}",
+    "removeCondition": "刪除條件",
+    "addFirstCondition": "新增第一個條件",
+    "autoCollectDisabled": "啟用自動收集以設定條件。",
     "groups": {
       "basic": "基本",
       "prompt": "提示詞",
-      "autoTag": "自動標籤"
+      "autotag": "Auto Tag",
+      "duplicate": "重複圖像"
     },
     "types": {
       "aiTool": "AI工具",
@@ -48,13 +57,17 @@
       "promptRegex": "提示詞正規表示式",
       "negativePromptContains": "負面提示詞包含",
       "negativePromptRegex": "負面提示詞正規表示式",
-      "autoTagExists": "自動標籤存在",
-      "autoTagRating": "自動標籤：評級",
-      "autoTagRatingScore": "自動標籤：評級分數（加權）",
-      "autoTagGeneral": "自動標籤：通用標籤",
-      "autoTagCharacter": "自動標籤：角色",
-      "autoTagHasCharacter": "自動標籤：有角色",
-      "autoTagModel": "自動標籤：模型名稱"
+      "autoTagExists": "Auto Tag 存在",
+      "autoTagRating": "Auto Tag: 評級",
+      "autoTagRatingScore": "Auto Tag: 評級分數（加權）",
+      "autoTagGeneral": "Auto Tag: 通用標籤",
+      "autoTagCharacter": "Auto Tag: 角色",
+      "autoTagHasCharacter": "Auto Tag: 有角色",
+      "autoTagModel": "Auto Tag: 模型名稱",
+      "duplicateExact": "完全相同圖像",
+      "duplicateNear": "近似重複圖像",
+      "duplicateSimilar": "相似圖像",
+      "duplicateCustom": "自訂重複偵測"
     },
     "values": {
       "exists": "存在",
@@ -67,16 +80,28 @@
       "explicit": "Explicit"
     },
     "fields": {
+      "value": "值",
       "ratingType": "評級類型",
       "minScore": "最小分數",
       "maxScore": "最大分數",
       "tagName": "標籤名稱",
       "characterName": "角色名稱",
       "caseSensitive": "區分大小寫",
+      "exactMatch": "完全符合",
+      "exactMatchHelp": "勾選時僅搜尋完全符合的單字（例如：搜尋'asd'時不會符合'aasd'或'asdf'）",
       "weightedScore": "加權總分",
       "maxWeightInfo": "通常最多200",
       "confidenceRange": "信賴度分數範圍（0.0〜1.0）：{{min}}〜{{max}}",
-      "confidenceInfo": "💡 分數越高表示標籤信賴度越高"
+      "confidenceInfo": "💡 分數越高表示標籤信賴度越高",
+      "hammingThreshold": "漢明距離閾值",
+      "hammingThresholdHelp": "0-64之間的值（越低配對越嚴格）",
+      "hammingInfo": "💡 漢明距離衡量感知雜湊之間的位元差異。值越低，找到的圖像越相似。",
+      "duplicateNote": "⚠️ 此條件僅搜尋具有perceptual_hash的圖像。"
+    },
+    "duplicateInfo": {
+      "duplicate_exact": "📷 尋找完全相同的圖像（漢明距離 = 0）。即使檔案名稱或後設資料不同，也能偵測到相同的圖像。",
+      "duplicate_near": "🔍 尋找近似重複的圖像（漢明距離 ≤ 5）。可偵測經過調整大小、壓縮或輕微編輯的圖像。",
+      "duplicate_similar": "🎨 尋找相似的圖像（漢明距離 ≤ 15）。可偵測構圖或內容相似的圖像。"
     },
     "placeholders": {
       "regex": "輸入正規表示式模式",
@@ -97,7 +122,9 @@
     "scoreRangeInvalid": "條件{{index}}：最小分數必須小於最大分數。",
     "confidenceScoreRange": "條件{{index}}：最小分數必須在0.0到1.0之間。",
     "confidenceMaxScoreRange": "條件{{index}}：最大分數必須在0.0到1.0之間。",
-    "confidenceMinMaxInvalid": "條件{{index}}：最小分數不能大於最大分數。"
+    "confidenceMinMaxInvalid": "條件{{index}}：最小分數不能大於最大分數。",
+    "hammingThresholdRequired": "條件{{index}}：請設定漢明距離閾值。",
+    "hammingThresholdRange": "條件{{index}}：漢明距離必須在0到64之間。"
   },
   "messages": {
     "loadFailed": "載入群組清單失敗。",

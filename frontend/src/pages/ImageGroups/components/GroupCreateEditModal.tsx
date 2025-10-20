@@ -4,29 +4,19 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
   Button,
-  FormControlLabel,
-  Switch,
-  Box,
-  Typography,
-  IconButton,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Alert,
   CircularProgress,
-  Slider,
+  Tabs,
+  Tab,
+  Box,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import {
-  Add as AddIcon,
-  Delete as DeleteIcon,
-} from '@mui/icons-material';
 
 import { groupApi } from '../../../services/api';
 import type { GroupWithStats, GroupCreateData, GroupUpdateData, AutoCollectCondition } from '@comfyui-image-manager/shared';
+import BasicInfoTab from './BasicInfoTab';
+import AutoCollectTab from './AutoCollectTab';
 
 interface GroupCreateEditModalProps {
   open: boolean;
@@ -35,40 +25,24 @@ interface GroupCreateEditModalProps {
   group?: GroupWithStats;
 }
 
-const CONDITION_TYPES = [
-  // 기본 조건
-  { value: 'ai_tool', label: 'AI 도구', group: '기본' },
-  { value: 'model_name', label: '모델명 (메타데이터)', group: '기본' },
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
 
-  // 프롬프트 조건
-  { value: 'prompt_contains', label: '프롬프트 포함', group: '프롬프트' },
-  { value: 'prompt_regex', label: '프롬프트 정규식', group: '프롬프트' },
-  { value: 'negative_prompt_contains', label: '네거티브 프롬프트 포함', group: '프롬프트' },
-  { value: 'negative_prompt_regex', label: '네거티브 프롬프트 정규식', group: '프롬프트' },
-
-  // 오토태그 조건
-  { value: 'auto_tag_exists', label: '오토태그 존재 여부', group: '오토태그' },
-  { value: 'auto_tag_rating', label: '오토태그: Rating', group: '오토태그' },
-  { value: 'auto_tag_rating_score', label: '오토태그: Rating 점수 (가중치)', group: '오토태그' },
-  { value: 'auto_tag_general', label: '오토태그: General 태그', group: '오토태그' },
-  { value: 'auto_tag_character', label: '오토태그: 캐릭터', group: '오토태그' },
-  { value: 'auto_tag_has_character', label: '오토태그: 캐릭터 존재 여부', group: '오토태그' },
-  { value: 'auto_tag_model', label: '오토태그: 모델명', group: '오토태그' },
-];
-
-const RATING_TYPES = [
-  { value: 'general', label: 'General' },
-  { value: 'sensitive', label: 'Sensitive' },
-  { value: 'questionable', label: 'Questionable' },
-  { value: 'explicit', label: 'Explicit' },
-];
-
-const PRESET_COLORS = [
-  '#f44336', '#e91e63', '#9c27b0', '#673ab7',
-  '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4',
-  '#009688', '#4caf50', '#8bc34a', '#cddc39',
-  '#ffeb3b', '#ffc107', '#ff9800', '#ff5722',
-];
+const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`group-tabpanel-${index}`}
+      aria-labelledby={`group-tab-${index}`}
+    >
+      {value === index && <Box sx={{ py: 2 }}>{children}</Box>}
+    </div>
+  );
+};
 
 const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   open,
@@ -77,6 +51,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   group
 }) => {
   const { t } = useTranslation(['imageGroups', 'common']);
+  const [activeTab, setActiveTab] = useState(0);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -120,6 +95,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
       setConditions([]);
     }
     setError(null);
+    setActiveTab(0);
   }, [group, open]);
 
   // 폼 데이터 변경
@@ -155,74 +131,29 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   ) => {
     setConditions(prev => prev.map((condition, i) => {
       if (i === index) {
-        const updated = { ...condition, [field]: value };
-
-        // 타입이 변경될 때 관련 필드 초기화
-        if (field === 'type') {
-          const newType = value as AutoCollectCondition['type'];
-
-          // Boolean 타입 조건
-          if (newType === 'auto_tag_exists' || newType === 'auto_tag_has_character') {
-            updated.value = true;
-            delete updated.min_score;
-            delete updated.max_score;
-            delete updated.rating_type;
-            delete updated.case_sensitive;
-          }
-          // Rating 조건
-          else if (newType === 'auto_tag_rating') {
-            updated.value = '';
-            updated.rating_type = 'general';
-            delete updated.case_sensitive;
-          }
-          // Rating Score 조건 (가중치 기반)
-          else if (newType === 'auto_tag_rating_score') {
-            updated.value = '';  // value는 사용하지 않지만 빈 문자열로 설정
-            updated.min_score = 0;
-            updated.max_score = 200;
-            delete updated.rating_type;
-            delete updated.case_sensitive;
-          }
-          // 점수 범위가 있는 조건
-          else if (newType === 'auto_tag_general' || newType === 'auto_tag_character') {
-            updated.value = '';
-            delete updated.rating_type;
-            delete updated.case_sensitive;
-          }
-          // 문자열 조건
-          else {
-            updated.value = '';
-            delete updated.min_score;
-            delete updated.max_score;
-            delete updated.rating_type;
-          }
-        }
-
-        return updated;
+        return { ...condition, [field]: value };
       }
       return condition;
     }));
   };
 
   // 조건 타입에 따른 입력 필드 결정
-  const getConditionFieldType = (type: AutoCollectCondition['type']): 'string' | 'boolean' | 'score' | 'rating' | 'rating_score' => {
-    // Boolean 타입: 존재 여부 확인
+  const getConditionFieldType = (type: AutoCollectCondition['type']): 'string' | 'boolean' | 'score' | 'rating' | 'rating_score' | 'duplicate' => {
     if (type === 'auto_tag_exists' || type === 'auto_tag_has_character') {
       return 'boolean';
     }
-    // Rating 타입: Rating 유형 선택 (General, Sensitive, etc.)
     if (type === 'auto_tag_rating') {
       return 'rating';
     }
-    // Rating Score 타입: 가중치 기반 점수 범위 (0-200)
     if (type === 'auto_tag_rating_score') {
       return 'rating_score';
     }
-    // Score 타입: 태그명/캐릭터명 + 신뢰도 점수 (0.0-1.0)
     if (type === 'auto_tag_general' || type === 'auto_tag_character') {
       return 'score';
     }
-    // String 타입: 문자열 검색 (프롬프트, 모델명 등)
+    if (type.startsWith('duplicate_')) {
+      return 'duplicate';
+    }
     return 'string';
   };
 
@@ -245,55 +176,69 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
 
         // 값 검증
         if (fieldType === 'string' && typeof condition.value === 'string' && !condition.value.trim()) {
-          setError(`조건 ${i + 1}의 값을 입력해주세요.`);
+          setError(t('imageGroups:validation.valueRequired', { index: i + 1 }));
           return false;
         }
 
         // Rating 조건 검증
         if (condition.type === 'auto_tag_rating' && !condition.rating_type) {
-          setError(`조건 ${i + 1}: Rating 유형을 선택해주세요.`);
+          setError(t('imageGroups:validation.ratingTypeRequired', { index: i + 1 }));
           return false;
         }
 
-        // Rating Score 조건 검증 (가중치 기반)
+        // Rating Score 조건 검증
         if (condition.type === 'auto_tag_rating_score') {
           if (condition.min_score === undefined && condition.max_score === undefined) {
-            setError(`조건 ${i + 1}: 최소 점수 또는 최대 점수 중 하나는 설정해야 합니다.`);
+            setError(t('imageGroups:validation.ratingScoreRequired', { index: i + 1 }));
             return false;
           }
           if (condition.min_score !== undefined && condition.min_score < 0) {
-            setError(`조건 ${i + 1}: 최소 점수는 0 이상이어야 합니다.`);
+            setError(t('imageGroups:validation.minScoreInvalid', { index: i + 1 }));
             return false;
           }
           if (condition.max_score !== undefined && condition.max_score < 0) {
-            setError(`조건 ${i + 1}: 최대 점수는 0 이상이어야 합니다.`);
+            setError(t('imageGroups:validation.maxScoreInvalid', { index: i + 1 }));
             return false;
           }
           if (condition.min_score !== undefined && condition.max_score !== undefined && condition.min_score >= condition.max_score) {
-            setError(`조건 ${i + 1}: 최소 점수는 최대 점수보다 작아야 합니다.`);
+            setError(t('imageGroups:validation.scoreRangeInvalid', { index: i + 1 }));
             return false;
           }
         }
 
-        // 일반 점수 범위 검증 (Rating, General 태그, 캐릭터만 해당)
+        // 일반 점수 범위 검증
         if (fieldType === 'rating' || fieldType === 'score') {
           if (condition.min_score !== undefined) {
             if (condition.min_score < 0 || condition.min_score > 1) {
-              setError(`조건 ${i + 1}: 최소 점수는 0.0 ~ 1.0 사이여야 합니다.`);
+              setError(t('imageGroups:validation.confidenceScoreRange', { index: i + 1 }));
               return false;
             }
           }
 
           if (condition.max_score !== undefined) {
             if (condition.max_score < 0 || condition.max_score > 1) {
-              setError(`조건 ${i + 1}: 최대 점수는 0.0 ~ 1.0 사이여야 합니다.`);
+              setError(t('imageGroups:validation.confidenceMaxScoreRange', { index: i + 1 }));
               return false;
             }
           }
 
           if (condition.min_score !== undefined && condition.max_score !== undefined) {
             if (condition.min_score > condition.max_score) {
-              setError(`조건 ${i + 1}: 최소 점수가 최대 점수보다 클 수 없습니다.`);
+              setError(t('imageGroups:validation.confidenceMinMaxInvalid', { index: i + 1 }));
+              return false;
+            }
+          }
+        }
+
+        // 중복 조건 검증
+        if (fieldType === 'duplicate') {
+          if (condition.type === 'duplicate_custom') {
+            if (condition.hamming_threshold === undefined) {
+              setError(t('imageGroups:validation.hammingThresholdRequired', { index: i + 1 }));
+              return false;
+            }
+            if (condition.hamming_threshold < 0 || condition.hamming_threshold > 64) {
+              setError(t('imageGroups:validation.hammingThresholdRange', { index: i + 1 }));
               return false;
             }
           }
@@ -332,11 +277,11 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
       if (response.success) {
         onSuccess();
       } else {
-        setError(response.error || `그룹 ${isEditMode ? '수정' : '생성'}에 실패했습니다.`);
+        setError(response.error || t(`imageGroups:messages.${isEditMode ? 'updateFailed' : 'createFailed'}`));
       }
     } catch (error) {
       console.error('Error saving group:', error);
-      setError(`그룹 ${isEditMode ? '수정' : '생성'}에 실패했습니다.`);
+      setError(t(`imageGroups:messages.${isEditMode ? 'updateFailed' : 'createFailed'}`));
     } finally {
       setLoading(false);
     }
@@ -349,298 +294,42 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
       </DialogTitle>
 
       <DialogContent dividers>
-        {error ? (
+        {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>
-        ) : null}
+        )}
 
-        {/* 기본 정보 */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            {t('imageGroups:modal.basicInfo')}
-          </Typography>
+        {/* 탭 네비게이션 */}
+        <Tabs
+          value={activeTab}
+          onChange={(_, newValue) => setActiveTab(newValue)}
+          aria-label="group editor tabs"
+          sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
+        >
+          <Tab label={t('imageGroups:tabs.basicInfo')} id="group-tab-0" aria-controls="group-tabpanel-0" />
+          <Tab label={t('imageGroups:tabs.autoCollect')} id="group-tab-1" aria-controls="group-tabpanel-1" />
+        </Tabs>
 
-          <TextField
-            label={t('imageGroups:modal.groupName')}
-            fullWidth
-            required
-            value={formData.name}
-            onChange={(e) => handleFormChange('name', e.target.value)}
-            sx={{ mb: 2 }}
+        {/* 기본 정보 탭 */}
+        <TabPanel value={activeTab} index={0}>
+          <BasicInfoTab
+            formData={formData}
+            onFormChange={handleFormChange}
           />
+        </TabPanel>
 
-          <TextField
-            label={t('imageGroups:modal.description')}
-            fullWidth
-            multiline
-            rows={2}
-            value={formData.description}
-            onChange={(e) => handleFormChange('description', e.target.value)}
-            sx={{ mb: 2 }}
+        {/* 자동수집 탭 */}
+        <TabPanel value={activeTab} index={1}>
+          <AutoCollectTab
+            enabled={formData.auto_collect_enabled}
+            conditions={conditions}
+            onEnabledChange={(enabled) => handleFormChange('auto_collect_enabled', enabled)}
+            onAddCondition={addCondition}
+            onUpdateCondition={updateCondition}
+            onRemoveCondition={removeCondition}
           />
-
-          {/* 색상 선택 */}
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              {t('imageGroups:modal.groupColor')}
-            </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {PRESET_COLORS.map((color) => (
-                <Box
-                  key={color}
-                  sx={{
-                    width: 32,
-                    height: 32,
-                    backgroundColor: color,
-                    borderRadius: '50%',
-                    cursor: 'pointer',
-                    border: formData.color === color ? '3px solid #000' : '2px solid #ccc',
-                    '&:hover': {
-                      transform: 'scale(1.1)',
-                    },
-                  }}
-                  onClick={() => handleFormChange('color', color)}
-                />
-              ))}
-            </Box>
-          </Box>
-        </Box>
-
-        {/* 자동수집 설정 */}
-        <Box sx={{ mb: 3 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={formData.auto_collect_enabled}
-                onChange={(e) => handleFormChange('auto_collect_enabled', e.target.checked)}
-              />
-            }
-            label={t('imageGroups:modal.autoCollectEnable')}
-          />
-
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 1 }}>
-            {t('imageGroups:modal.autoCollectDescription')}
-          </Typography>
-          <Alert severity="info" sx={{ mt: 1 }}>
-            <Typography variant="body2">
-              {t('imageGroups:modal.orConditionInfo')}
-            </Typography>
-            <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
-              {t('imageGroups:modal.orConditionExample')}
-            </Typography>
-          </Alert>
-        </Box>
-
-        {/* 자동수집 조건 */}
-        {formData.auto_collect_enabled ? (
-          <Box sx={{ mb: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
-                {t('imageGroups:modal.conditionsTitle')}
-              </Typography>
-              <Button
-                startIcon={<AddIcon />}
-                onClick={addCondition}
-                variant="outlined"
-                size="small"
-              >
-                {t('imageGroups:modal.addCondition')}
-              </Button>
-            </Box>
-
-            {conditions.map((condition, index) => {
-              const fieldType = getConditionFieldType(condition.type);
-
-              return (
-                <Box
-                  key={index}
-                  sx={{
-                    border: '1px solid',
-                    borderColor: 'grey.300',
-                    borderRadius: 1,
-                    p: 2,
-                    mb: 2,
-                  }}
-                >
-                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', mb: 2 }}>
-                    <FormControl sx={{ minWidth: 220 }}>
-                      <InputLabel>조건 유형</InputLabel>
-                      <Select
-                        value={condition.type}
-                        label="조건 유형"
-                        onChange={(e) => updateCondition(index, 'type', e.target.value)}
-                      >
-                        {CONDITION_TYPES.map((type) => (
-                          <MenuItem key={type.value} value={type.value}>
-                            {type.label}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-
-                    {/* Boolean 타입 (존재 여부) */}
-                    {fieldType === 'boolean' && (
-                      <FormControl sx={{ minWidth: 200 }}>
-                        <InputLabel>값</InputLabel>
-                        <Select
-                          value={condition.value === true ? 'true' : 'false'}
-                          label="값"
-                          onChange={(e) => updateCondition(index, 'value', e.target.value === 'true')}
-                        >
-                          <MenuItem value="true">있음</MenuItem>
-                          <MenuItem value="false">없음</MenuItem>
-                        </Select>
-                      </FormControl>
-                    )}
-
-                    {/* Rating 조건 */}
-                    {fieldType === 'rating' && (
-                      <FormControl sx={{ minWidth: 200 }}>
-                        <InputLabel>Rating 유형</InputLabel>
-                        <Select
-                          value={condition.rating_type || 'general'}
-                          label="Rating 유형"
-                          onChange={(e) => updateCondition(index, 'rating_type', e.target.value)}
-                        >
-                          {RATING_TYPES.map((rating) => (
-                            <MenuItem key={rating.value} value={rating.value}>
-                              {rating.label}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    )}
-
-                    {/* Rating Score 조건 (가중치 기반) */}
-                    {fieldType === 'rating_score' && (
-                      <>
-                        <TextField
-                          label="최소 점수"
-                          type="number"
-                          value={condition.min_score !== undefined ? condition.min_score : 0}
-                          onChange={(e) => updateCondition(index, 'min_score', Number(e.target.value))}
-                          sx={{ minWidth: 150 }}
-                          inputProps={{ min: 0, step: 1 }}
-                          helperText="가중치 합산 점수"
-                        />
-                        <TextField
-                          label="최대 점수"
-                          type="number"
-                          value={condition.max_score !== undefined ? condition.max_score : 200}
-                          onChange={(e) => updateCondition(index, 'max_score', Number(e.target.value))}
-                          sx={{ minWidth: 150 }}
-                          inputProps={{ min: 0, step: 1 }}
-                          helperText="일반적으로 200까지"
-                        />
-                      </>
-                    )}
-
-                    {/* 점수 범위 조건 (General 태그, 캐릭터) */}
-                    {fieldType === 'score' && (
-                      <TextField
-                        label={condition.type === 'auto_tag_character' ? '캐릭터명' : '태그명'}
-                        fullWidth
-                        value={condition.value}
-                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                        placeholder={condition.type === 'auto_tag_character' ? '캐릭터명 입력' : '태그명 입력'}
-                      />
-                    )}
-
-                    {/* 문자열 조건 */}
-                    {fieldType === 'string' && (
-                      <>
-                        <TextField
-                          label="값"
-                          fullWidth
-                          value={condition.value}
-                          onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                          placeholder={
-                            condition.type.includes('regex')
-                              ? '정규식 패턴을 입력하세요'
-                              : condition.type === 'auto_tag_model'
-                              ? '모델명 입력 (예: wd-v1-4-moat-tagger-v2)'
-                              : '검색할 텍스트를 입력하세요'
-                          }
-                        />
-
-                        {/* 대소문자 구분 (문자열 조건만) */}
-                        {!condition.type.startsWith('auto_tag_') && (
-                          <FormControlLabel
-                            control={
-                              <Switch
-                                checked={condition.case_sensitive || false}
-                                onChange={(e) => updateCondition(index, 'case_sensitive', e.target.checked)}
-                              />
-                            }
-                            label="대소문자 구분"
-                          />
-                        )}
-
-                        {/* 오토태그 모델명은 case_sensitive 지원 */}
-                        {condition.type === 'auto_tag_model' && (
-                          <FormControlLabel
-                            control={
-                              <Switch
-                                checked={condition.case_sensitive || false}
-                                onChange={(e) => updateCondition(index, 'case_sensitive', e.target.checked)}
-                              />
-                            }
-                            label="대소문자 구분"
-                          />
-                        )}
-                      </>
-                    )}
-
-                    <IconButton
-                      onClick={() => removeCondition(index)}
-                      color="error"
-                      sx={{ mt: 1 }}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </Box>
-
-                  {/* 점수 범위 입력 (Rating, General 태그, 캐릭터) - rating_score는 위에서 직접 입력 */}
-                  {(fieldType === 'rating' || fieldType === 'score') && (
-                    <Box sx={{ mt: 2 }}>
-                      <Typography variant="caption" color="text.secondary" gutterBottom>
-                        신뢰도 점수 범위 (0.0 ~ 1.0): {(condition.min_score ?? 0).toFixed(2)} ~ {(condition.max_score ?? 1).toFixed(2)}
-                      </Typography>
-                      <Slider
-                        value={[condition.min_score ?? 0, condition.max_score ?? 1]}
-                        onChange={(_, newValue) => {
-                          const [min, max] = newValue as [number, number];
-                          updateCondition(index, 'min_score', min);
-                          updateCondition(index, 'max_score', max);
-                        }}
-                        valueLabelDisplay="auto"
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        size="small"
-                        marks={[
-                          { value: 0, label: '0.0' },
-                          { value: 0.5, label: '0.5' },
-                          { value: 1, label: '1.0' },
-                        ]}
-                      />
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                        💡 높은 점수일수록 해당 태그의 신뢰도가 높습니다
-                      </Typography>
-                    </Box>
-                  )}
-                </Box>
-              );
-            })}
-
-            {conditions.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ py: 3 }}>
-                {t('imageGroups:modal.emptyConditions')}
-              </Typography>
-            ) : null}
-          </Box>
-        ) : null}
+        </TabPanel>
       </DialogContent>
 
       <DialogActions>

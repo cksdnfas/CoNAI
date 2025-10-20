@@ -7,12 +7,14 @@ import {
 } from '@mui/material';
 import {
   Workspaces as WorkflowIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  AutoAwesome as NAIIcon
 } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import WorkflowsTab from './WorkflowsTab';
 import ServersTab from './ServersTab';
+import NAITab from './NAI/NAITab';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -45,6 +47,8 @@ export default function ImageGenerationPage() {
   useEffect(() => {
     if (tabParam === 'servers') {
       setCurrentTab(1);
+    } else if (tabParam === 'nai') {
+      setCurrentTab(2);
     } else {
       setCurrentTab(0);
     }
@@ -54,8 +58,10 @@ export default function ImageGenerationPage() {
     setCurrentTab(newValue);
     if (newValue === 0) {
       setSearchParams({ tab: 'workflows' });
-    } else {
+    } else if (newValue === 1) {
       setSearchParams({ tab: 'servers' });
+    } else {
+      setSearchParams({ tab: 'nai' });
     }
   };
 
@@ -86,6 +92,13 @@ export default function ImageGenerationPage() {
             id="image-generation-tab-1"
             aria-controls="image-generation-tabpanel-1"
           />
+          <Tab
+            icon={<NAIIcon />}
+            iconPosition="start"
+            label={t('imageGeneration:tabs.novelai')}
+            id="image-generation-tab-2"
+            aria-controls="image-generation-tabpanel-2"
+          />
         </Tabs>
       </Box>
 
@@ -94,6 +107,9 @@ export default function ImageGenerationPage() {
       </TabPanel>
       <TabPanel value={currentTab} index={1}>
         <ServersTab />
+      </TabPanel>
+      <TabPanel value={currentTab} index={2}>
+        <NAITab />
       </TabPanel>
     </Box>
   );

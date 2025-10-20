@@ -9,13 +9,17 @@
     "download": "다운로드",
     "share": "공유",
     "back": "뒤로",
-    "goToDetail": "상세 페이지"
+    "goToDetail": "상세 페이지",
+    "delete": "삭제",
+    "deleteConfirm": "이미지를 삭제하시겠습니까?",
+    "deleteSuccess": "이미지가 삭제되었습니다.",
+    "deleteError": "이미지 삭제 중 오류가 발생했습니다."
   },
   "sections": {
     "fileInfo": "파일 정보",
     "imageInfo": "이미지 정보",
     "videoInfo": "비디오 정보",
-    "aiInfo": "AI 생성 정보",
+    "aiInfo": "생성 정보",
     "promptInfo": "프롬프트 정보",
     "groupInfo": "소속 그룹",
     "fullMetadata": "전체 메타데이터"

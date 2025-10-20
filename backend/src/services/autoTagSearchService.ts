@@ -14,17 +14,57 @@ import { RatingScoreService } from './ratingScoreService';
 export class AutoTagSearchService {
   /**
    * 오토태그 검색 파라미터를 SQL WHERE 조건으로 변환
+   * @param searchParams 오토태그 검색 파라미터
+   * @param basicSearchParams 기본 검색 파라미터 (선택)
    */
-  static async buildAutoTagSearchQuery(searchParams: AutoTagSearchParams): Promise<QueryBuilderResult> {
+  static async buildAutoTagSearchQuery(
+    searchParams: AutoTagSearchParams,
+    basicSearchParams?: {
+      search_text?: string;
+      negative_text?: string;
+      ai_tool?: string;
+      model_name?: string;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<QueryBuilderResult> {
     const conditions: string[] = [];
     const params: any[] = [];
+
+    // 기본 검색 조건 추가
+    if (basicSearchParams) {
+      if (basicSearchParams.search_text) {
+        conditions.push('i.prompt LIKE ?');
+        params.push(`%${basicSearchParams.search_text}%`);
+      }
+      if (basicSearchParams.negative_text) {
+        conditions.push('i.negative_prompt LIKE ?');
+        params.push(`%${basicSearchParams.negative_text}%`);
+      }
+      if (basicSearchParams.ai_tool) {
+        conditions.push('i.ai_tool = ?');
+        params.push(basicSearchParams.ai_tool);
+      }
+      if (basicSearchParams.model_name) {
+        conditions.push('i.model_name LIKE ?');
+        params.push(`%${basicSearchParams.model_name}%`);
+      }
+      if (basicSearchParams.start_date) {
+        conditions.push('DATE(i.upload_date) >= DATE(?)');
+        params.push(basicSearchParams.start_date);
+      }
+      if (basicSearchParams.end_date) {
+        conditions.push('DATE(i.upload_date) <= DATE(?)');
+        params.push(basicSearchParams.end_date);
+      }
+    }
 
     // 1. 오토태그 존재 여부 필터
     if (searchParams.has_auto_tags !== undefined) {
       if (searchParams.has_auto_tags === true) {
-        conditions.push('auto_tags IS NOT NULL');
+        conditions.push('i.auto_tags IS NOT NULL');
       } else {
-        conditions.push('auto_tags IS NULL');
+        conditions.push('i.auto_tags IS NULL');
       }
     }
 
@@ -63,7 +103,7 @@ export class AutoTagSearchService {
 
     // 5. Model 필터
     if (searchParams.model) {
-      conditions.push(`json_extract(auto_tags, '$.model') = ?`);
+      conditions.push(`json_extract(i.auto_tags, '$.model') = ?`);
       params.push(searchParams.model);
     }
 
@@ -107,12 +147,12 @@ export class AutoTagSearchService {
       const jsonPath = `$.rating.${type}`;
 
       if (filter.min !== undefined) {
-        conditions.push(`json_extract(auto_tags, '${jsonPath}') >= ?`);
+        conditions.push(`json_extract(i.auto_tags, '${jsonPath}') >= ?`);
         params.push(filter.min);
       }
 
       if (filter.max !== undefined) {
-        conditions.push(`json_extract(auto_tags, '${jsonPath}') <= ?`);
+        conditions.push(`json_extract(i.auto_tags, '${jsonPath}') <= ?`);
         params.push(filter.max);
       }
     }
@@ -128,8 +168,11 @@ export class AutoTagSearchService {
     const params: any[] = [];
 
     for (const tagFilter of tags) {
+      // Score 조건이 있으면 더 정확한 매칭 필요 (개별 토큰 제외)
+      const hasScoreFilter = tagFilter.min_score !== undefined || tagFilter.max_score !== undefined;
+
       // 검색어 정규화 및 변형 생성
-      const searchVariants = this.normalizeSearchTerm(tagFilter.tag);
+      const searchVariants = this.normalizeSearchTerm(tagFilter.tag, hasScoreFilter);
 
       // 각 변형에 대한 OR 조건 생성
       const tagOrConditions: string[] = [];
@@ -138,8 +181,8 @@ export class AutoTagSearchService {
         // SQLite JSON 키 검색: json_each로 키를 순회하며 LIKE 패턴 매칭
         const keyMatchCondition = `
           EXISTS (
-            SELECT 1 FROM json_each(auto_tags, '$.general')
-            WHERE LOWER(json_each.key) LIKE ?
+            SELECT 1 FROM json_each(i.auto_tags, '$.general')
+            WHERE LOWER(key) LIKE ?
           )
         `.trim();
 
@@ -150,40 +193,58 @@ export class AutoTagSearchService {
       // 매칭되는 키가 하나라도 있으면 통과 (OR 조건)
       const existsCondition = `(${tagOrConditions.join(' OR ')})`;
 
-      // Score 범위 조건이 있는 경우
-      if (tagFilter.min_score !== undefined || tagFilter.max_score !== undefined) {
+      // Score 범위 조건이 실질적으로 필터링을 하는 경우만 적용
+      // 0~1 범위는 모든 값을 포함하므로 조건이 없는 것과 동일
+      const hasMinFilter = tagFilter.min_score !== undefined && tagFilter.min_score > 0;
+      const hasMaxFilter = tagFilter.max_score !== undefined && tagFilter.max_score < 1;
+
+      if (hasMinFilter || hasMaxFilter) {
         // Score 조건을 위한 서브쿼리
         const scoreConditions: string[] = [];
 
+        console.log('[AutoTagSearch] Building score condition for tag:', tagFilter.tag);
+        console.log('[AutoTagSearch] Score range:', tagFilter.min_score, '~', tagFilter.max_score);
+        console.log('[AutoTagSearch] Search variants:', searchVariants);
+
         for (const variant of searchVariants) {
-          const scoreSubConditions: string[] = [];
-
-          if (tagFilter.min_score !== undefined) {
-            scoreSubConditions.push(`json_each.value >= ?`);
-            params.push(tagFilter.min_score);
+          const scoreCheck: string[] = [];
+          if (hasMinFilter) {
+            scoreCheck.push(`value >= ?`);
+          }
+          if (hasMaxFilter) {
+            scoreCheck.push(`value <= ?`);
           }
 
-          if (tagFilter.max_score !== undefined) {
-            scoreSubConditions.push(`json_each.value <= ?`);
-            params.push(tagFilter.max_score);
-          }
-
-          const scoreCheck = scoreSubConditions.length > 0
-            ? ` AND ${scoreSubConditions.join(' AND ')}`
+          const scoreCheckStr = scoreCheck.length > 0
+            ? ` AND ${scoreCheck.join(' AND ')}`
             : '';
 
-          scoreConditions.push(`
+          const scoreCondition = `
             EXISTS (
-              SELECT 1 FROM json_each(auto_tags, '$.general')
-              WHERE LOWER(json_each.key) LIKE ?${scoreCheck}
+              SELECT 1 FROM json_each(i.auto_tags, '$.general')
+              WHERE LOWER(key) LIKE ?${scoreCheckStr}
             )
-          `.trim());
+          `.trim();
 
+          console.log('[AutoTagSearch] Score condition SQL:', scoreCondition);
+          console.log('[AutoTagSearch] Params for variant:', variant, '- min:', tagFilter.min_score, 'max:', tagFilter.max_score);
+
+          scoreConditions.push(scoreCondition);
+
+          // 파라미터 순서: 문자열(key LIKE), 숫자(min), 숫자(max)
           params.push(`%${variant}%`);
+          if (hasMinFilter) {
+            params.push(tagFilter.min_score);
+          }
+          if (hasMaxFilter) {
+            params.push(tagFilter.max_score);
+          }
         }
 
         // 존재 여부와 Score 조건을 AND로 결합
-        conditions.push(`(${existsCondition} AND (${scoreConditions.join(' OR ')}))`);
+        const finalCondition = `(${existsCondition} AND (${scoreConditions.join(' OR ')}))`;
+        console.log('[AutoTagSearch] Final condition:', finalCondition);
+        conditions.push(finalCondition);
       } else {
         // Score 조건이 없으면 존재 여부만 체크
         conditions.push(existsCondition);
@@ -204,14 +265,14 @@ export class AutoTagSearchService {
     if (character.has_character !== undefined) {
       if (character.has_character === true) {
         // 캐릭터 필드가 존재하고 비어있지 않음
-        conditions.push(`json_extract(auto_tags, '$.character') IS NOT NULL`);
-        conditions.push(`json_type(auto_tags, '$.character') = 'object'`);
+        conditions.push(`json_extract(i.auto_tags, '$.character') IS NOT NULL`);
+        conditions.push(`json_type(i.auto_tags, '$.character') = 'object'`);
       } else {
         // 캐릭터 필드가 없거나 비어있음
         const noCharConditions = [
-          `json_extract(auto_tags, '$.character') IS NULL`,
-          `json_type(auto_tags, '$.character') != 'object'`,
-          `json_extract(auto_tags, '$.character') = '{}'`
+          `json_extract(i.auto_tags, '$.character') IS NULL`,
+          `json_type(i.auto_tags, '$.character') != 'object'`,
+          `json_extract(i.auto_tags, '$.character') = '{}'`
         ];
         conditions.push(`(${noCharConditions.join(' OR ')})`);
       }
@@ -219,8 +280,11 @@ export class AutoTagSearchService {
 
     // 특정 캐릭터명 검색 (부분 매칭 지원)
     if (character.name) {
+      // Score 조건이 있으면 더 정확한 매칭 필요 (개별 토큰 제외)
+      const hasScoreFilter = character.min_score !== undefined || character.max_score !== undefined;
+
       // 검색어 정규화 및 변형 생성
-      const searchVariants = this.normalizeSearchTerm(character.name);
+      const searchVariants = this.normalizeSearchTerm(character.name, hasScoreFilter);
 
       // 각 변형에 대한 OR 조건 생성
       const charOrConditions: string[] = [];
@@ -229,8 +293,8 @@ export class AutoTagSearchService {
         // SQLite JSON 키 검색: json_each로 키를 순회하며 LIKE 패턴 매칭
         const keyMatchCondition = `
           EXISTS (
-            SELECT 1 FROM json_each(auto_tags, '$.character')
-            WHERE LOWER(json_each.key) LIKE ?
+            SELECT 1 FROM json_each(i.auto_tags, '$.character')
+            WHERE LOWER(key) LIKE ?
           )
         `.trim();
 
@@ -241,40 +305,57 @@ export class AutoTagSearchService {
       // 매칭되는 키가 하나라도 있으면 통과 (OR 조건)
       const existsCondition = `(${charOrConditions.join(' OR ')})`;
 
-      // Score 범위 조건이 있는 경우
-      if (character.min_score !== undefined || character.max_score !== undefined) {
+      // Score 범위 조건이 실질적으로 필터링을 하는 경우만 적용
+      // 0~1 범위는 모든 값을 포함하므로 조건이 없는 것과 동일
+      const hasMinFilter = character.min_score !== undefined && character.min_score > 0;
+      const hasMaxFilter = character.max_score !== undefined && character.max_score < 1;
+
+      if (hasMinFilter || hasMaxFilter) {
         // Score 조건을 위한 서브쿼리
         const scoreConditions: string[] = [];
 
+        console.log('[AutoTagSearch] Building character score condition for:', character.name);
+        console.log('[AutoTagSearch] Character score range:', character.min_score, '~', character.max_score);
+        console.log('[AutoTagSearch] Character search variants:', searchVariants);
+
         for (const variant of searchVariants) {
-          const scoreSubConditions: string[] = [];
-
-          if (character.min_score !== undefined) {
-            scoreSubConditions.push(`json_each.value >= ?`);
-            params.push(character.min_score);
+          const scoreCheck: string[] = [];
+          if (hasMinFilter) {
+            scoreCheck.push(`value >= ?`);
+          }
+          if (hasMaxFilter) {
+            scoreCheck.push(`value <= ?`);
           }
 
-          if (character.max_score !== undefined) {
-            scoreSubConditions.push(`json_each.value <= ?`);
-            params.push(character.max_score);
-          }
-
-          const scoreCheck = scoreSubConditions.length > 0
-            ? ` AND ${scoreSubConditions.join(' AND ')}`
+          const scoreCheckStr = scoreCheck.length > 0
+            ? ` AND ${scoreCheck.join(' AND ')}`
             : '';
 
-          scoreConditions.push(`
+          const scoreCondition = `
             EXISTS (
-              SELECT 1 FROM json_each(auto_tags, '$.character')
-              WHERE LOWER(json_each.key) LIKE ?${scoreCheck}
+              SELECT 1 FROM json_each(i.auto_tags, '$.character')
+              WHERE LOWER(key) LIKE ?${scoreCheckStr}
             )
-          `.trim());
+          `.trim();
 
+          console.log('[AutoTagSearch] Character score condition SQL:', scoreCondition);
+
+          scoreConditions.push(scoreCondition);
+
+          // 파라미터 순서: 문자열(key LIKE), 숫자(min), 숫자(max)
           params.push(`%${variant}%`);
+          if (hasMinFilter) {
+            params.push(character.min_score);
+          }
+          if (hasMaxFilter) {
+            params.push(character.max_score);
+          }
         }
 
         // 존재 여부와 Score 조건을 AND로 결합
-        conditions.push(`(${existsCondition} AND (${scoreConditions.join(' OR ')}))`);
+        const finalCondition = `(${existsCondition} AND (${scoreConditions.join(' OR ')}))`;
+        console.log('[AutoTagSearch] Character final condition:', finalCondition);
+        conditions.push(finalCondition);
       } else {
         // Score 조건이 없으면 존재 여부만 체크
         conditions.push(existsCondition);
@@ -309,9 +390,10 @@ export class AutoTagSearchService {
    * 예: "short_hair" → ["short_hair", "short hair", "shorthair", "short", "hair"]
    *
    * @param term 검색어
+   * @param exactMatch Score 필터가 있을 때는 개별 토큰 제외 (더 정확한 매칭)
    * @returns LIKE 패턴으로 사용할 수 있는 검색 변형들
    */
-  private static normalizeSearchTerm(term: string): string[] {
+  private static normalizeSearchTerm(term: string, exactMatch: boolean = false): string[] {
     const variants: Set<string> = new Set();
     const normalized = term.trim().toLowerCase();
 
@@ -332,13 +414,16 @@ export class AutoTagSearchService {
     }
 
     // 3. 토큰 분리 (언더스코어 또는 공백 기준)
-    const tokens = normalized.split(/[_ ]+/).filter(t => t.length >= 2);
+    // exactMatch가 true면 개별 토큰 제외 (Score 필터 사용 시)
+    if (!exactMatch) {
+      const tokens = normalized.split(/[_ ]+/).filter(t => t.length >= 2);
 
-    // 각 토큰을 개별 검색어로 추가 (너무 짧은 토큰 제외)
-    if (tokens.length > 1) {
-      for (const token of tokens) {
-        if (token.length >= 2) {  // 최소 2자 이상만 추가
-          variants.add(token);
+      // 각 토큰을 개별 검색어로 추가 (너무 짧은 토큰 제외)
+      if (tokens.length > 1) {
+        for (const token of tokens) {
+          if (token.length >= 2) {  // 최소 2자 이상만 추가
+            variants.add(token);
+          }
         }
       }
     }

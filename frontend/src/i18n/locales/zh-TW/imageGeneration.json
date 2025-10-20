@@ -6,6 +6,41 @@
   "tabs": {
     "workflows": "工作流程管理",
     "servers": "伺服器管理",
+    "novelai": "NovelAI",
     "ariaLabel": "圖片產生分頁"
+  },
+  "nai": {
+    "login": {
+      "title": "NovelAI登入",
+      "subtitle": "使用您的NovelAI帳戶登入",
+      "username": "電子郵件",
+      "password": "密碼",
+      "loginButton": "登入",
+      "loggingIn": "登入中...",
+      "error": "登入失敗"
+    },
+    "generate": {
+      "title": "NovelAI圖片產生",
+      "logout": "登出",
+      "prompt": "提示詞",
+      "negativePrompt": "負面提示詞",
+      "resolution": "解析度",
+      "sampler": "採樣器",
+      "steps": "步數",
+      "guidance": "引導強度",
+      "samples": "樣本數",
+      "ucPreset": "品質預設",
+      "generateButton": "產生圖片",
+      "generating": "產生中...",
+      "resultTitle": "已產生的圖片",
+      "download": "下載",
+      "upload": "上傳",
+      "metadata": "中繼資料",
+      "tokenExpired": "令牌已過期。請重新登入。",
+      "subscriptionRequired": "需要有效訂閱",
+      "error": "圖片產生失敗",
+      "uploadSuccess": "圖片上傳成功",
+      "uploadError": "圖片上傳失敗"
+    }
   }
 }

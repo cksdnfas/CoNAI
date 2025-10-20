@@ -211,6 +211,18 @@ export const imageApi = {
   getDownloadUrl: (id: number, type: 'original' | 'optimized' = 'original'): string => {
     return `${API_BASE_URL}/api/images/${id}/download/${type}`;
   },
+
+  // 랜덤 이미지 조회
+  getRandomImage: async (): Promise<{ success: boolean; data?: ImageRecord; error?: string }> => {
+    const response = await api.get('/api/images/random');
+    return response.data;
+  },
+
+  // 검색 조건에 맞는 랜덤 이미지 조회
+  getRandomFromSearch: async (params: ImageSearchParams): Promise<{ success: boolean; data?: ImageRecord; error?: string }> => {
+    const response = await api.post('/api/images/random-from-search', params);
+    return response.data;
+  },
 };
 
 // 그룹 관련 API
@@ -324,6 +336,12 @@ export const groupApi = {
   getThumbnailUrl: (id: number): string => {
     return `${API_BASE_URL}/api/groups/${id}/thumbnail`;
   },
+
+  // 그룹의 랜덤 이미지 조회
+  getRandomImageFromGroup: async (id: number): Promise<{ success: boolean; data?: ImageRecord; error?: string }> => {
+    const response = await api.get(`/api/groups/${id}/random-image`);
+    return response.data;
+  },
 };
 
 // 프롬프트 수집 관련 API
@@ -360,6 +378,20 @@ export const promptCollectionApi = {
   ): Promise<PromptCollectionResponse> => {
     const response = await api.put('/api/prompt-collection/assign-group', {
       prompt_id: promptId,
+      group_id: groupId,
+      type
+    });
+    return response.data;
+  },
+
+  // 프롬프트 대량 할당
+  batchAssignPromptsToGroup: async (
+    prompts: string[],
+    groupId: number | null,
+    type: 'positive' | 'negative' = 'positive'
+  ): Promise<PromptCollectionResponse & { created?: number; updated?: number; failed?: string[] }> => {
+    const response = await api.post('/api/prompt-collection/batch-assign', {
+      prompts,
       group_id: groupId,
       type
     });
@@ -492,6 +524,65 @@ export const promptGroupApi = {
     });
     return response.data;
   },
+};
+
+// NovelAI 관련 API
+export const naiApi = {
+  // NovelAI 로그인
+  login: async (username: string, password: string): Promise<{ accessToken: string; expiresAt: string }> => {
+    const response = await api.post('/api/nai/auth/login', { username, password });
+    return response.data;
+  },
+
+  // NovelAI 이미지 생성
+  generateImage: async (
+    token: string,
+    params: {
+      prompt: string;
+      negative_prompt?: string;
+      model?: string;
+      width?: number;
+      height?: number;
+      steps?: number;
+      scale?: number;
+      sampler?: string;
+      n_samples?: number;
+      sm?: boolean;
+      sm_dyn?: boolean;
+      cfg_rescale?: number;
+      noise_schedule?: string;
+      uncond_scale?: number;
+      qualityToggle?: boolean;
+      seed?: number;
+      // img2img/inpaint 관련
+      image?: string;
+      strength?: number;
+      noise?: number;
+      mask?: string;
+      // Vibe Transfer
+      reference_image_multiple?: string[];
+      reference_strength_multiple?: number[];
+    }
+  ): Promise<{
+    images: { filename: string; data: string }[];
+    metadata: {
+      prompt: string;
+      negative_prompt: string;
+      seed: number;
+      resolution: string;
+      steps: number;
+      scale: number;
+      sampler: string;
+      model: string;
+    };
+  }> => {
+    const response = await api.post('/api/nai/generate/image', params, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    return response.data;
+  }
 };
 
 export default api;

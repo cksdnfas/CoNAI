@@ -34,7 +34,7 @@ export class PromptGroupModel {
     `).run(
       data.group_name,
       data.display_order || 0,
-      data.is_visible !== undefined ? data.is_visible : true
+      data.is_visible !== undefined ? (data.is_visible ? 1 : 0) : 1
     );
 
     return info.lastInsertRowid as number;
@@ -127,7 +127,7 @@ export class PromptGroupModel {
 
     if (data.is_visible !== undefined) {
       updateFields.push('is_visible = ?');
-      values.push(data.is_visible);
+      values.push(data.is_visible ? 1 : 0);
     }
 
     if (updateFields.length === 0) {
@@ -179,7 +179,7 @@ export class PromptGroupModel {
            VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`).run(
         group.group_name,
         group.display_order,
-        group.is_visible
+        group.is_visible ? 1 : 0
       );
 
       const newId = info.lastInsertRowid as number;
@@ -202,7 +202,7 @@ export class PromptGroupModel {
            VALUES (?, ?, ?, ?, ?)`).run(
         existingGroup.group_name,
         existingGroup.display_order,
-        existingGroup.is_visible,
+        existingGroup.is_visible ? 1 : 0,
         existingGroup.created_at,
         existingGroup.updated_at
       );

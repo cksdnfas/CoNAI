@@ -96,24 +96,40 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
       localStorage.setItem('searchHistory', JSON.stringify(newHistory));
     }
 
-    // AutoTag 검색 파라미터 생성 (expandedAutoTag이 true일 때만)
+    // AutoTag 검색 파라미터 생성 (expandedAutoTag이 true이고 실제 필터가 있을 때만)
     let autoTagParams: AutoTagSearchParams | undefined = undefined;
-    if (expandedAutoTag) {
-      autoTagParams = {
+    const hasAutoTagFilters = expandedAutoTag && (
+      (ratingMode === 0 && ratingType) ||
+      (ratingMode === 1 && (ratingScoreMin > 0 || ratingScoreMax < 200)) ||
+      generalTags.length > 0 ||
+      characterName ||
+      hasCharacter !== undefined
+    );
+
+    if (hasAutoTagFilters) {
+      const params: AutoTagSearchParams = {
         page: searchParams.page,
         limit: searchParams.limit,
       };
 
+      // 기본 검색 파라미터도 함께 전달
+      (params as any).search_text = searchParams.search_text;
+      (params as any).negative_text = searchParams.negative_text;
+      (params as any).ai_tool = searchParams.ai_tool;
+      (params as any).model_name = searchParams.model_name;
+      (params as any).start_date = searchParams.start_date;
+      (params as any).end_date = searchParams.end_date;
+
       // Rating 필터 - Type별
       if (ratingMode === 0 && ratingType && (ratingRange[0] > 0 || ratingRange[1] < 1)) {
-        autoTagParams.rating = {
+        params.rating = {
           [ratingType]: { min: ratingRange[0], max: ratingRange[1] }
         };
       }
 
       // Rating Score 필터 - Score 기반
       if (ratingMode === 1 && (ratingScoreMin > 0 || ratingScoreMax < 200)) {
-        autoTagParams.rating_score = {
+        params.rating_score = {
           min_score: ratingScoreMin > 0 ? ratingScoreMin : undefined,
           max_score: ratingScoreMax < 200 ? ratingScoreMax : undefined,
         };
@@ -121,18 +137,20 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
 
       // General Tags
       if (generalTags.length > 0) {
-        autoTagParams.general_tags = generalTags;
+        params.general_tags = generalTags;
       }
 
       // Character 필터
       if (characterName || hasCharacter !== undefined) {
-        autoTagParams.character = {
+        params.character = {
           name: characterName || undefined,
           min_score: characterName ? characterScoreRange[0] : undefined,
           max_score: characterName ? characterScoreRange[1] : undefined,
           has_character: hasCharacter,
         };
       }
+
+      autoTagParams = params;
     }
 
     onSearch(searchParams, autoTagParams);
@@ -213,8 +231,8 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
   // 기본 필터 체크 (search_text, ai_tool, model_name 제외)
   const hasAdvancedFilters = searchParams.negative_text || searchParams.start_date || searchParams.end_date;
 
-  // 오토태그 필터 체크
-  const hasAutoTagFilters = expandedAutoTag && (
+  // 오토태그 필터 체크 (실제 필터가 적용되어 있는지 확인)
+  const hasAutoTagFiltersActive = (
     (ratingMode === 0 && ratingType) ||
     (ratingMode === 1 && (ratingScoreMin > 0 || ratingScoreMax < 200)) ||
     generalTags.length > 0 ||
@@ -459,7 +477,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
             <Typography variant="caption" color="text.secondary">
               {t('filters.autoTag.subtitle')}
             </Typography>
-            {hasAutoTagFilters && (
+            {hasAutoTagFiltersActive && (
               <Badge badgeContent={getAutoTagFilterCount()} color="secondary">
                 <Chip label={t('filters.autoTag.active')} size="small" color="secondary" variant="outlined" />
               </Badge>

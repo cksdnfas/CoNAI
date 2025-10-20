@@ -38,14 +38,23 @@ export interface AutoCollectCondition {
         'auto_tag_rating' | 'auto_tag_general' |
         'auto_tag_character' | 'auto_tag_model' |
         'auto_tag_has_character' | 'auto_tag_exists' |
-        'auto_tag_rating_score';  // Weighted rating score condition
+        'auto_tag_rating_score' |  // Weighted rating score condition
+        // Image similarity/duplicate detection conditions
+        'duplicate_exact' |        // Exact duplicate (Hamming distance = 0)
+        'duplicate_near' |         // Near duplicate (Hamming distance ≤ 5)
+        'duplicate_similar' |      // Similar images (Hamming distance ≤ 15)
+        'duplicate_custom';        // Custom Hamming distance threshold
   value: string | number | boolean;
   case_sensitive?: boolean;
+  exact_match?: boolean;  // Exact word matching (for contains conditions)
 
   // Auto-tag additional fields
   min_score?: number;  // Min score (rating: 0.0 ~ 1.0, rating_score: weighted score)
   max_score?: number;  // Max score (rating: 0.0 ~ 1.0, rating_score: weighted score)
   rating_type?: 'general' | 'sensitive' | 'questionable' | 'explicit';  // For rating condition
+
+  // Duplicate detection fields
+  hamming_threshold?: number;  // Custom Hamming distance threshold (0-64, for duplicate_custom type)
 }
 
 export interface GroupCreateData {

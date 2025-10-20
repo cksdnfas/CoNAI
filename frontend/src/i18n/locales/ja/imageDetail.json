@@ -9,13 +9,17 @@
     "download": "ダウンロード",
     "share": "共有",
     "back": "戻る",
-    "goToDetail": "詳細ページ"
+    "goToDetail": "詳細ページ",
+    "delete": "削除",
+    "deleteConfirm": "画像を削除してもよろしいですか？",
+    "deleteSuccess": "画像を削除しました。",
+    "deleteError": "画像の削除中にエラーが発生しました。"
   },
   "sections": {
     "fileInfo": "ファイル情報",
     "imageInfo": "画像情報",
     "videoInfo": "動画情報",
-    "aiInfo": "AI生成情報",
+    "aiInfo": "生成情報",
     "promptInfo": "プロンプト情報",
     "groupInfo": "所属グループ",
     "fullMetadata": "全メタデータ"

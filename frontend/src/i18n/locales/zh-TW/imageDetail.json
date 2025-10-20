@@ -9,13 +9,17 @@
     "download": "下載",
     "share": "分享",
     "back": "返回",
-    "goToDetail": "詳情頁面"
+    "goToDetail": "詳情頁面",
+    "delete": "刪除",
+    "deleteConfirm": "確定要刪除此圖像嗎？",
+    "deleteSuccess": "圖像刪除成功。",
+    "deleteError": "刪除圖像失敗。"
   },
   "sections": {
     "fileInfo": "檔案資訊",
     "imageInfo": "圖像資訊",
     "videoInfo": "影片資訊",
-    "aiInfo": "AI 生成資訊",
+    "aiInfo": "生成資訊",
     "promptInfo": "提示詞資訊",
     "groupInfo": "所屬群組",
     "fullMetadata": "完整中繼資料"

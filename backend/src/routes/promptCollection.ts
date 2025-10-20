@@ -320,4 +320,32 @@ router.get('/group-statistics', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * 프롬프트 대량 할당
+ * POST /api/prompt-collection/batch-assign
+ */
+router.post('/batch-assign', async (req: Request, res: Response) => {
+  try {
+    const { prompts, group_id, type = 'positive' } = req.body;
+
+    if (!Array.isArray(prompts) || prompts.length === 0) {
+      return res.status(400).json(errorResponse('prompts array is required and must not be empty'));
+    }
+
+    const result = await PromptCollectionService.batchAssignPromptsToGroup(
+      prompts,
+      group_id !== undefined && group_id !== null ? parseInt(group_id) : null,
+      type
+    );
+
+    return res.json(successResponse({
+      message: `Batch assignment completed. Created: ${result.created}, Updated: ${result.updated}, Failed: ${result.failed.length}`,
+      ...result
+    }));
+  } catch (error) {
+    console.error('Error batch assigning prompts:', error);
+    return res.status(500).json(errorResponse('Failed to batch assign prompts'));
+  }
+});
+
 export default router;
