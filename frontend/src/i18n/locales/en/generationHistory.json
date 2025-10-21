@@ -1,0 +1,44 @@
+{
+  "title": "Generation History",
+  "count": "{{count}} items",
+  "empty": "No generation history",
+  "loading": "Loading...",
+  "loadingMore": "Loading more history...",
+  "allLoaded": "All history loaded",
+  "noHistory": "No generation history",
+  "noHistoryDescription": "History will appear when you start generating images",
+  "deleteConfirm": "Are you sure you want to delete this generation history?",
+  "deleteFailed": "Failed to delete",
+  "status": {
+    "pending": "Pending",
+    "processing": "Processing",
+    "completed": "Completed",
+    "failed": "Failed"
+  },
+  "service": {
+    "comfyui": "ComfyUI",
+    "novelai": "NovelAI"
+  },
+  "actions": {
+    "regenerate": "Regenerate",
+    "delete": "Delete",
+    "refresh": "Refresh",
+    "confirmDelete": "Are you sure you want to delete this generation history?"
+  },
+  "detail": {
+    "title": "Generation History Details",
+    "status": "Status",
+    "service": "Service",
+    "positivePrompt": "Positive Prompt",
+    "negativePrompt": "Negative Prompt",
+    "size": "Size",
+    "model": "Model",
+    "sampler": "Sampler",
+    "steps": "Steps",
+    "cfgScale": "CFG Scale",
+    "seed": "Seed",
+    "error": "Error",
+    "createdAt": "Created At",
+    "completedAt": "Completed At"
+  }
+}

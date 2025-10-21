@@ -10,14 +10,27 @@
     "ariaLabel": "图像生成标签页"
   },
   "nai": {
+    "subtabs": {
+      "generate": "生成图像",
+      "history": "历史记录",
+      "helper": "提示词助手"
+    },
     "login": {
       "title": "NovelAI登录",
       "subtitle": "使用您的NovelAI账户登录",
+      "tabs": {
+        "credentials": "邮箱/密码",
+        "token": "令牌"
+      },
       "username": "电子邮箱",
       "password": "密码",
+      "token": "访问令牌",
+      "tokenPlaceholder": "请输入您的NovelAI访问令牌",
+      "tokenHint": "请输入从NovelAI网站获取的访问令牌",
       "loginButton": "登录",
       "loggingIn": "登录中...",
-      "error": "登录失败"
+      "error": "登录失败",
+      "tokenError": "令牌认证失败"
     },
     "generate": {
       "title": "NovelAI图像生成",
@@ -40,7 +53,24 @@
       "subscriptionRequired": "需要有效订阅",
       "error": "图像生成失败",
       "uploadSuccess": "图像上传成功",
-      "uploadError": "图像上传失败"
+      "uploadError": "图像上传失败",
+      "autoUploadSuccess": "已自动上传{{count}}张图像",
+      "autoUploadPartial": "成功{{success}}张，失败{{fail}}张",
+      "success": "已开始生成{{count}}张图像。请在历史记录标签页查看。",
+      "completed": "图像生成完成",
+      "failed": "图像生成失败"
+    },
+    "repeat": {
+      "title": "重复执行",
+      "enable": "启用重复执行",
+      "count": "重复次数",
+      "infinite": "无限重复（-1）",
+      "countHelp": "1-999 或 -1（无限）",
+      "delay": "等待时间（秒）",
+      "delayHelp": "生成完成后到下次生成的等待时间（1-300秒）",
+      "progress": "正在执行第{{current}}次",
+      "progressWithTotal": "正在执行第{{current}}/{{total}}次",
+      "stop": "停止"
     }
   }
 }

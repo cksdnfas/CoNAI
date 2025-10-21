@@ -10,14 +10,27 @@
     "ariaLabel": "이미지 생성 탭"
   },
   "nai": {
+    "subtabs": {
+      "generate": "이미지 생성",
+      "history": "히스토리",
+      "helper": "프롬프트 도우미"
+    },
     "login": {
       "title": "NovelAI 로그인",
       "subtitle": "NovelAI 계정으로 로그인하세요",
+      "tabs": {
+        "credentials": "이메일/비밀번호",
+        "token": "토큰"
+      },
       "username": "이메일",
       "password": "비밀번호",
+      "token": "Access Token",
+      "tokenPlaceholder": "NovelAI Access Token을 입력하세요",
+      "tokenHint": "NovelAI 웹사이트에서 발급받은 Access Token을 입력하세요",
       "loginButton": "로그인",
       "loggingIn": "로그인 중...",
-      "error": "로그인에 실패했습니다"
+      "error": "로그인에 실패했습니다",
+      "tokenError": "토큰 인증에 실패했습니다"
     },
     "tabs": {
       "basic": "기본 설정",
@@ -132,7 +145,22 @@
       "uploadSuccess": "이미지가 성공적으로 업로드되었습니다",
       "uploadError": "이미지 업로드에 실패했습니다",
       "autoUploadSuccess": "{{count}}개의 이미지가 자동으로 업로드되었습니다",
-      "autoUploadPartial": "{{success}}개 업로드 성공, {{fail}}개 실패"
+      "autoUploadPartial": "{{success}}개 업로드 성공, {{fail}}개 실패",
+      "success": "{{count}}개의 이미지 생성이 시작되었습니다. 히스토리 탭에서 확인하세요.",
+      "completed": "이미지 생성이 완료되었습니다",
+      "failed": "이미지 생성에 실패했습니다"
+    },
+    "repeat": {
+      "title": "반복 실행",
+      "enable": "반복 실행 활성화",
+      "count": "반복 횟수",
+      "infinite": "무한 반복 (-1)",
+      "countHelp": "1-999 또는 -1 (무한)",
+      "delay": "대기 시간 (초)",
+      "delayHelp": "생성 완료 후 다음 생성까지 대기 시간 (1-300초)",
+      "progress": "{{current}}회 진행 중",
+      "progressWithTotal": "{{current}}/{{total}}회 진행 중",
+      "stop": "중지"
     },
     "history": {
       "title": "생성 히스토리",

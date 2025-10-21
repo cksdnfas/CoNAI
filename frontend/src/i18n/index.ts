@@ -15,6 +15,7 @@ import koSearch from './locales/ko/search.json';
 import koPromptManagement from './locales/ko/promptManagement.json';
 import koWorkflows from './locales/ko/workflows.json';
 import koImageGeneration from './locales/ko/imageGeneration.json';
+import koGenerationHistory from './locales/ko/generationHistory.json';
 import koServers from './locales/ko/servers.json';
 import koErrors from './locales/ko/errors.json';
 import koValidation from './locales/ko/validation.json';
@@ -31,6 +32,7 @@ import enSearch from './locales/en/search.json';
 import enPromptManagement from './locales/en/promptManagement.json';
 import enWorkflows from './locales/en/workflows.json';
 import enImageGeneration from './locales/en/imageGeneration.json';
+import enGenerationHistory from './locales/en/generationHistory.json';
 import enServers from './locales/en/servers.json';
 import enErrors from './locales/en/errors.json';
 import enValidation from './locales/en/validation.json';
@@ -47,6 +49,7 @@ import jaSearch from './locales/ja/search.json';
 import jaPromptManagement from './locales/ja/promptManagement.json';
 import jaWorkflows from './locales/ja/workflows.json';
 import jaImageGeneration from './locales/ja/imageGeneration.json';
+import jaGenerationHistory from './locales/ja/generationHistory.json';
 import jaServers from './locales/ja/servers.json';
 import jaErrors from './locales/ja/errors.json';
 import jaValidation from './locales/ja/validation.json';
@@ -63,6 +66,7 @@ import zhCNSearch from './locales/zh-CN/search.json';
 import zhCNPromptManagement from './locales/zh-CN/promptManagement.json';
 import zhCNWorkflows from './locales/zh-CN/workflows.json';
 import zhCNImageGeneration from './locales/zh-CN/imageGeneration.json';
+import zhCNGenerationHistory from './locales/zh-CN/generationHistory.json';
 import zhCNServers from './locales/zh-CN/servers.json';
 import zhCNErrors from './locales/zh-CN/errors.json';
 import zhCNValidation from './locales/zh-CN/validation.json';
@@ -79,6 +83,7 @@ import zhTWSearch from './locales/zh-TW/search.json';
 import zhTWPromptManagement from './locales/zh-TW/promptManagement.json';
 import zhTWWorkflows from './locales/zh-TW/workflows.json';
 import zhTWImageGeneration from './locales/zh-TW/imageGeneration.json';
+import zhTWGenerationHistory from './locales/zh-TW/generationHistory.json';
 import zhTWServers from './locales/zh-TW/servers.json';
 import zhTWErrors from './locales/zh-TW/errors.json';
 import zhTWValidation from './locales/zh-TW/validation.json';
@@ -97,6 +102,7 @@ const resources = {
     promptManagement: koPromptManagement,
     workflows: koWorkflows,
     imageGeneration: koImageGeneration,
+    generationHistory: koGenerationHistory,
     servers: koServers,
     errors: koErrors,
     validation: koValidation,
@@ -113,6 +119,7 @@ const resources = {
     promptManagement: enPromptManagement,
     workflows: enWorkflows,
     imageGeneration: enImageGeneration,
+    generationHistory: enGenerationHistory,
     servers: enServers,
     errors: enErrors,
     validation: enValidation,
@@ -129,6 +136,7 @@ const resources = {
     promptManagement: jaPromptManagement,
     workflows: jaWorkflows,
     imageGeneration: jaImageGeneration,
+    generationHistory: jaGenerationHistory,
     servers: jaServers,
     errors: jaErrors,
     validation: jaValidation,
@@ -145,6 +153,7 @@ const resources = {
     promptManagement: zhCNPromptManagement,
     workflows: zhCNWorkflows,
     imageGeneration: zhCNImageGeneration,
+    generationHistory: zhCNGenerationHistory,
     servers: zhCNServers,
     errors: zhCNErrors,
     validation: zhCNValidation,
@@ -161,6 +170,7 @@ const resources = {
     promptManagement: zhTWPromptManagement,
     workflows: zhTWWorkflows,
     imageGeneration: zhTWImageGeneration,
+    generationHistory: zhTWGenerationHistory,
     servers: zhTWServers,
     errors: zhTWErrors,
     validation: zhTWValidation,
@@ -187,6 +197,7 @@ i18n
       'promptManagement',
       'workflows',
       'imageGeneration',
+      'generationHistory',
       'servers',
       'errors',
       'validation',

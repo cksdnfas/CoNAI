@@ -1,4 +1,8 @@
 {
+  "subtabs": {
+    "generate": "產生圖片",
+    "history": "歷史記錄"
+  },
   "page": {
     "title": "工作流程管理",
     "listTitle": "工作流程清單",
@@ -137,5 +141,17 @@
     "update": "更新",
     "delete": "刪除",
     "confirmDelete": "確定要刪除此工作流程嗎？"
+  },
+  "repeat": {
+    "title": "重複執行",
+    "enable": "啟用重複執行",
+    "count": "重複次數",
+    "infinite": "無限重複（-1）",
+    "countHelp": "1-999 或 -1（無限）",
+    "delay": "等待時間（秒）",
+    "delayHelp": "所有伺服器產生完成後到下次產生的等待時間（1-300秒）",
+    "progress": "正在執行第{{current}}次",
+    "progressWithTotal": "正在執行第{{current}}/{{total}}次",
+    "stop": "停止"
   }
 }

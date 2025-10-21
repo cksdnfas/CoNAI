@@ -25,10 +25,13 @@ sea-prep.blob
 .env.production.local
 
 # Database files
-database/
+backend/database/
 *.db
 *.sqlite
 *.sqlite3
+
+#test
+test/
 
 # Uploaded images
 uploads/

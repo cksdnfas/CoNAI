@@ -45,9 +45,9 @@ export default function ImageGenerationPage() {
   const [currentTab, setCurrentTab] = useState(0);
 
   useEffect(() => {
-    if (tabParam === 'servers') {
+    if (tabParam === 'workflows') {
       setCurrentTab(1);
-    } else if (tabParam === 'nai') {
+    } else if (tabParam === 'servers') {
       setCurrentTab(2);
     } else {
       setCurrentTab(0);
@@ -57,11 +57,11 @@ export default function ImageGenerationPage() {
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setCurrentTab(newValue);
     if (newValue === 0) {
-      setSearchParams({ tab: 'workflows' });
-    } else if (newValue === 1) {
-      setSearchParams({ tab: 'servers' });
-    } else {
       setSearchParams({ tab: 'nai' });
+    } else if (newValue === 1) {
+      setSearchParams({ tab: 'workflows' });
+    } else {
+      setSearchParams({ tab: 'servers' });
     }
   };
 
@@ -79,23 +79,23 @@ export default function ImageGenerationPage() {
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tabs value={currentTab} onChange={handleTabChange} aria-label={t('imageGeneration:tabs.ariaLabel')}>
           <Tab
+            icon={<NAIIcon />}
+            iconPosition="start"
+            label={t('imageGeneration:tabs.novelai')}
+            id="image-generation-tab-0"
+            aria-controls="image-generation-tabpanel-0"
+          />
+          <Tab
             icon={<WorkflowIcon />}
             iconPosition="start"
             label={t('imageGeneration:tabs.workflows')}
-            id="image-generation-tab-0"
-            aria-controls="image-generation-tabpanel-0"
+            id="image-generation-tab-1"
+            aria-controls="image-generation-tabpanel-1"
           />
           <Tab
             icon={<SettingsIcon />}
             iconPosition="start"
             label={t('imageGeneration:tabs.servers')}
-            id="image-generation-tab-1"
-            aria-controls="image-generation-tabpanel-1"
-          />
-          <Tab
-            icon={<NAIIcon />}
-            iconPosition="start"
-            label={t('imageGeneration:tabs.novelai')}
             id="image-generation-tab-2"
             aria-controls="image-generation-tabpanel-2"
           />
@@ -103,13 +103,13 @@ export default function ImageGenerationPage() {
       </Box>
 
       <TabPanel value={currentTab} index={0}>
-        <WorkflowsTab />
+        <NAITab />
       </TabPanel>
       <TabPanel value={currentTab} index={1}>
-        <ServersTab />
+        <WorkflowsTab />
       </TabPanel>
       <TabPanel value={currentTab} index={2}>
-        <NAITab />
+        <ServersTab />
       </TabPanel>
     </Box>
   );

@@ -1,4 +1,8 @@
 {
+  "subtabs": {
+    "generate": "画像生成",
+    "history": "履歴"
+  },
   "page": {
     "title": "ワークフロー管理",
     "listTitle": "ワークフローリスト",
@@ -137,5 +141,17 @@
     "update": "更新",
     "delete": "削除",
     "confirmDelete": "本当にこのワークフローを削除しますか？"
+  },
+  "repeat": {
+    "title": "繰り返し実行",
+    "enable": "繰り返し実行を有効にする",
+    "count": "繰り返し回数",
+    "infinite": "無限繰り返し (-1)",
+    "countHelp": "1-999 または -1 (無限)",
+    "delay": "待機時間（秒）",
+    "delayHelp": "すべてのサーバーの生成完了後、次の生成までの待機時間（1-300秒）",
+    "progress": "{{current}}回目実行中",
+    "progressWithTotal": "{{current}}/{{total}}回目実行中",
+    "stop": "停止"
   }
 }

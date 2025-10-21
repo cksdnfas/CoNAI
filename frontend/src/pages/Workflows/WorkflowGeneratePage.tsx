@@ -27,7 +27,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { workflowApi, type Workflow, type MarkedField } from '../../services/api/workflowApi';
 import { comfyuiServerApi, type ComfyUIServer } from '../../services/api/comfyuiServerApi';
-import WorkflowImageGallery from './components/WorkflowImageGallery';
+import { generationHistoryApi } from '../../services/api';
+import { GenerationHistoryList } from '../ImageGeneration/components/GenerationHistoryList';
+import RepeatControls from '../ImageGeneration/components/RepeatControls';
+import type { RepeatConfig, RepeatState } from '../ImageGeneration/components/RepeatControls';
 
 interface ServerGenerationStatus {
   status: 'idle' | 'generating' | 'completed' | 'failed';
@@ -59,15 +62,21 @@ export default function WorkflowGeneratePage() {
   }>>({});
   const [generationStatus, setGenerationStatus] = useState<Record<number, ServerGenerationStatus>>({});
 
-  // 생성된 이미지 누적 배열
-  const [generatedImages, setGeneratedImages] = useState<Array<{
-    imageId: number;
-    serverId: number;
-    serverName: string;
-    generatedImage: any;
-    executionTime?: number;
-    timestamp: string;
-  }>>([]);
+  // 반복 실행 관련 상태
+  const [repeatConfig, setRepeatConfig] = useState<RepeatConfig>({
+    enabled: false,
+    count: 3,
+    delaySeconds: 5
+  });
+  const [repeatState, setRepeatState] = useState<RepeatState>({
+    isRunning: false,
+    currentIteration: 0,
+    totalIterations: 0
+  });
+  const [repeatTimeoutId, setRepeatTimeoutId] = useState<number | null>(null);
+
+  // 히스토리 새로고침 트리거
+  const [historyRefreshKey, setHistoryRefreshKey] = useState<number>(0);
 
   useEffect(() => {
     loadWorkflow();
@@ -223,17 +232,24 @@ export default function WorkflowGeneratePage() {
       const promptData = buildPromptData();
       const response = await workflowApi.generateImageOnServer(parseInt(id!), serverId, promptData);
 
-      // historyId 저장하고 폴링 시작
+      // api_history_id 저장하고 폴링 시작
+      const apiHistoryId = response.data.api_history_id;
+      if (!apiHistoryId) {
+        console.error('No api_history_id in response');
+        setError('Failed to start image generation');
+        return;
+      }
+
       setGenerationStatus(prev => ({
         ...prev,
         [serverId]: {
           status: 'generating',
-          historyId: response.data.history_id
+          historyId: apiHistoryId
         }
       }));
 
-      // 폴링 시작
-      pollGenerationStatus(serverId, response.data.history_id);
+      // 폴링 시작 (api_history_id 사용)
+      pollGenerationStatus(serverId, apiHistoryId);
     } catch (err: any) {
       setGenerationStatus(prev => ({
         ...prev,
@@ -245,18 +261,18 @@ export default function WorkflowGeneratePage() {
     }
   };
 
-  const pollGenerationStatus = async (serverId: number, historyId: number) => {
+  const pollGenerationStatus = async (serverId: number, apiHistoryId: number) => {
     const checkStatus = async () => {
       try {
-        const response = await workflowApi.getGenerationStatus(historyId);
-        const data = response.data;
+        const response = await generationHistoryApi.getById(apiHistoryId);
+        const data = response.record;
 
-        if (data.status === 'completed' || data.status === 'failed') {
+        if (data.generation_status === 'completed' || data.generation_status === 'failed') {
           setGenerationStatus(prev => ({
             ...prev,
             [serverId]: {
-              status: data.status,
-              historyId,
+              status: data.generation_status,
+              historyId: apiHistoryId,
               imageId: data.generated_image_id,
               generatedImage: data.generated_image,
               error: data.error_message,
@@ -264,17 +280,9 @@ export default function WorkflowGeneratePage() {
             }
           }));
 
-          // 성공 시 이미지 배열에 추가
-          if (data.status === 'completed' && data.generated_image_id) {
-            const server = servers.find(s => s.id === serverId);
-            setGeneratedImages(prev => [{
-              imageId: data.generated_image_id,
-              serverId: serverId,
-              serverName: server?.name || `Server ${serverId}`,
-              generatedImage: data.generated_image,
-              executionTime: data.execution_time,
-              timestamp: new Date().toISOString()
-            }, ...prev]);
+          // 생성 완료 시 업로드 완료 대기 후 히스토리 목록 새로고침
+          if (data.generation_status === 'completed') {
+            waitForUploadCompletion(apiHistoryId);
           }
         } else {
           // 계속 폴링
@@ -297,10 +305,92 @@ export default function WorkflowGeneratePage() {
       return;
     }
 
+    // 반복 실행 시작 시 상태 초기화
+    const isFirstRepeatExecution = repeatConfig.enabled && !repeatState.isRunning;
+    if (isFirstRepeatExecution) {
+      setRepeatState({
+        isRunning: true,
+        currentIteration: 1,
+        totalIterations: repeatConfig.count === -1 ? -1 : repeatConfig.count
+      });
+    }
+
     // 모든 연결된 서버에 동시 요청
-    connectedServers.forEach(server => {
-      handleGenerateOnServer(server.id);
+    const generationPromises = connectedServers.map(server =>
+      handleGenerateOnServer(server.id)
+    );
+
+    // 모든 생성이 완료될 때까지 대기
+    await Promise.all(generationPromises);
+
+    // 반복 실행 처리
+    if (repeatConfig.enabled) {
+      const currentIteration = isFirstRepeatExecution ? 1 : repeatState.currentIteration;
+      const shouldContinue = repeatConfig.count === -1 || currentIteration < repeatState.totalIterations;
+
+      if (shouldContinue) {
+        // 다음 반복 예약
+        const timeoutId = window.setTimeout(() => {
+          setRepeatState(prev => ({
+            ...prev,
+            currentIteration: prev.currentIteration + 1
+          }));
+          handleGenerateOnAllServers(); // 재귀 호출
+        }, repeatConfig.delaySeconds * 1000);
+
+        setRepeatTimeoutId(timeoutId);
+      } else {
+        // 반복 완료
+        handleStopRepeat();
+      }
+    }
+  };
+
+  const handleStopRepeat = () => {
+    if (repeatTimeoutId) {
+      clearTimeout(repeatTimeoutId);
+      setRepeatTimeoutId(null);
+    }
+    setRepeatState({
+      isRunning: false,
+      currentIteration: 0,
+      totalIterations: 0
     });
+  };
+
+  // 업로드 완료 대기 후 히스토리 새로고침
+  const waitForUploadCompletion = async (historyId: number) => {
+    const maxAttempts = 30; // 최대 30초 대기
+    const pollInterval = 1000; // 1초마다 체크
+    let attempts = 0;
+
+    const checkCompletion = async (): Promise<boolean> => {
+      try {
+        const response = await generationHistoryApi.getById(historyId);
+        return response.record.generation_status === 'completed';
+      } catch {
+        return false;
+      }
+    };
+
+    const poll = async () => {
+      attempts++;
+      const isCompleted = await checkCompletion();
+
+      if (isCompleted) {
+        // 업로드 완료 - 히스토리 새로고침
+        setHistoryRefreshKey(prev => prev + 1);
+      } else if (attempts < maxAttempts) {
+        // 아직 완료 안됨 - 계속 폴링
+        setTimeout(poll, pollInterval);
+      } else {
+        // 타임아웃 - 그냥 새로고침
+        setHistoryRefreshKey(prev => prev + 1);
+      }
+    };
+
+    // 폴링 시작
+    poll();
   };
 
   const renderField = (field: MarkedField) => {
@@ -430,7 +520,6 @@ export default function WorkflowGeneratePage() {
         {/* 왼쪽: 워크플로우 설정 */}
         <Grid size={{ xs: 12, md: 12, lg: 4 }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-
             {/* 입력 폼 */}
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
@@ -473,6 +562,17 @@ export default function WorkflowGeneratePage() {
               </Accordion>
             </Paper>
 
+            {/* 반복 실행 설정 */}
+            <Paper sx={{ p: 3 }}>
+              <RepeatControls
+                config={repeatConfig}
+                state={repeatState}
+                onConfigChange={setRepeatConfig}
+                onStop={handleStopRepeat}
+                namespace="workflows"
+              />
+            </Paper>
+
             {/* 모든 서버 동시 생성 버튼 */}
             <Button
               fullWidth
@@ -482,7 +582,8 @@ export default function WorkflowGeneratePage() {
               onClick={handleGenerateOnAllServers}
               disabled={
                 servers.filter(s => serverStatus[s.id]?.connected).length === 0 ||
-                !workflow.is_active
+                !workflow.is_active ||
+                repeatState.isRunning
               }
             >
               {t('workflows:generate.generateAll', { count: servers.filter(s => serverStatus[s.id]?.connected).length })}
@@ -548,9 +649,13 @@ export default function WorkflowGeneratePage() {
           </Box>
         </Grid>
 
-        {/* 오른쪽: 생성 이미지 갤러리 */}
+        {/* 오른쪽: 히스토리 목록 */}
         <Grid size={{ xs: 12, md: 12, lg: 8 }}>
-          <WorkflowImageGallery images={generatedImages} />
+          <GenerationHistoryList
+            key={historyRefreshKey}
+            serviceType="comfyui"
+            workflowId={parseInt(id!)}
+          />
         </Grid>
       </Grid>
     </Box>

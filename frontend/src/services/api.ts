@@ -14,7 +14,13 @@ import type {
   PromptGroupRecord,
   PromptGroupData,
   PromptGroupWithPrompts,
-  PromptGroupResponse
+  PromptGroupResponse,
+  GenerationHistoryRecord,
+  GenerationHistoryFilters,
+  GenerationHistoryResponse,
+  GenerationHistoryStatistics,
+  CreateComfyUIHistoryRequest,
+  CreateNAIHistoryRequest
 } from '@comfyui-image-manager/shared';
 
 export const API_BASE_URL = getBackendOrigin();
@@ -528,9 +534,15 @@ export const promptGroupApi = {
 
 // NovelAI 관련 API
 export const naiApi = {
-  // NovelAI 로그인
+  // NovelAI 로그인 (이메일/비밀번호)
   login: async (username: string, password: string): Promise<{ accessToken: string; expiresAt: string }> => {
     const response = await api.post('/api/nai/auth/login', { username, password });
+    return response.data;
+  },
+
+  // NovelAI 로그인 (토큰)
+  loginWithToken: async (token: string): Promise<{ accessToken: string; expiresAt: string }> => {
+    const response = await api.post('/api/nai/auth/login-with-token', { token });
     return response.data;
   },
 
@@ -564,7 +576,8 @@ export const naiApi = {
       reference_strength_multiple?: number[];
     }
   ): Promise<{
-    images: { filename: string; data: string }[];
+    historyIds: number[];
+    count: number;
     metadata: {
       prompt: string;
       negative_prompt: string;
@@ -581,6 +594,100 @@ export const naiApi = {
         'Authorization': `Bearer ${token}`
       }
     });
+    return response.data;
+  }
+};
+
+// Generation History API (Image Generation Page only)
+export const generationHistoryApi = {
+  // Get all generation history with filters
+  getAll: async (filters?: GenerationHistoryFilters): Promise<GenerationHistoryResponse> => {
+    const params = new URLSearchParams();
+    if (filters?.service_type) params.append('service_type', filters.service_type);
+    if (filters?.generation_status) params.append('generation_status', filters.generation_status);
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.offset) params.append('offset', filters.offset.toString());
+
+    const response = await api.get(`/api/generation-history?${params.toString()}`);
+    return response.data;
+  },
+
+  // Get recent generation history
+  getRecent: async (limit: number = 50): Promise<{ success: boolean; records: GenerationHistoryRecord[] }> => {
+    const response = await api.get(`/api/generation-history/recent?limit=${limit}`);
+    return response.data;
+  },
+
+  // Get generation statistics
+  getStatistics: async (): Promise<{ success: boolean; statistics: GenerationHistoryStatistics }> => {
+    const response = await api.get('/api/generation-history/statistics');
+    return response.data;
+  },
+
+  // Get specific history by ID
+  getById: async (id: number): Promise<{ success: boolean; record: GenerationHistoryRecord }> => {
+    const response = await api.get(`/api/generation-history/${id}`);
+    return response.data;
+  },
+
+  // Create ComfyUI history
+  createComfyUI: async (data: CreateComfyUIHistoryRequest): Promise<{ success: boolean; historyId: number; message: string }> => {
+    const response = await api.post('/api/generation-history/comfyui', data);
+    return response.data;
+  },
+
+  // Create NovelAI history
+  createNovelAI: async (data: CreateNAIHistoryRequest): Promise<{ success: boolean; historyId: number; message: string }> => {
+    const response = await api.post('/api/generation-history/novelai', data);
+    return response.data;
+  },
+
+  // Upload image for history
+  uploadImage: async (historyId: number, imageBlob: Blob): Promise<{ success: boolean; message: string }> => {
+    const formData = new FormData();
+    formData.append('image', imageBlob, 'generated.png');
+
+    const response = await api.post(`/api/generation-history/${historyId}/upload-image`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  },
+
+  // Delete history
+  delete: async (id: number): Promise<{ success: boolean; message: string }> => {
+    const response = await api.delete(`/api/generation-history/${id}`);
+    return response.data;
+  },
+
+  // Get generation history by workflow ID (ComfyUI only)
+  getByWorkflow: async (
+    workflowId: number,
+    filters?: Omit<GenerationHistoryFilters, 'workflow_id'>
+  ): Promise<GenerationHistoryResponse> => {
+    const params = new URLSearchParams();
+    if (filters?.generation_status) params.append('generation_status', filters.generation_status);
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.offset) params.append('offset', filters.offset.toString());
+
+    const response = await api.get(`/api/generation-history/workflow/${workflowId}?${params.toString()}`);
+    return response.data;
+  },
+
+  // Get workflow statistics (ComfyUI only)
+  getWorkflowStatistics: async (workflowId: number): Promise<{
+    success: boolean;
+    statistics: {
+      total: number;
+      completed: number;
+      failed: number;
+      pending: number;
+      processing: number;
+    };
+    workflowId: number;
+  }> => {
+    const response = await api.get(`/api/generation-history/workflow/${workflowId}/statistics`);
     return response.data;
   }
 };

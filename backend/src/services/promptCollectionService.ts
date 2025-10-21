@@ -10,28 +10,67 @@ import {
 
 export class PromptCollectionService {
   /**
+   * Invalid prompt values that should not be collected
+   */
+  private static readonly INVALID_PROMPTS = [
+    'No prompt information available',
+    'Metadata extraction failed',
+    'Unknown',
+    'Unknown AI Model',
+    'No prompt',
+    ''
+  ];
+
+  /**
+   * Check if prompt is valid for collection
+   */
+  private static isValidPrompt(prompt: string | null | undefined): boolean {
+    if (!prompt || typeof prompt !== 'string') {
+      return false;
+    }
+
+    const trimmed = prompt.trim();
+
+    // Check against invalid prompts
+    if (this.INVALID_PROMPTS.includes(trimmed)) {
+      return false;
+    }
+
+    // Check if it's too short (less than 2 characters)
+    if (trimmed.length < 2) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * 이미지에서 프롬프트를 수집하여 데이터베이스에 저장
    */
   static async collectFromImage(prompt: string | null, negativePrompt: string | null): Promise<void> {
     try {
-      // 포지티브 프롬프트 수집
-      if (prompt) {
-        const terms = parsePromptTerms(prompt);
+      // 포지티브 프롬프트 수집 (유효성 검사 추가)
+      if (this.isValidPrompt(prompt)) {
+        const terms = parsePromptTerms(prompt!);
         for (const term of terms) {
           if (term.trim()) {
             await PromptCollectionModel.addOrIncrement(term.trim());
           }
         }
+      } else if (prompt) {
+        console.log(`⚠️ Skipping invalid prompt: "${prompt}"`);
       }
 
-      // 네거티브 프롬프트 수집
-      if (negativePrompt) {
-        const terms = parsePromptTerms(negativePrompt);
+      // 네거티브 프롬프트 수집 (유효성 검사 추가)
+      if (this.isValidPrompt(negativePrompt)) {
+        const terms = parsePromptTerms(negativePrompt!);
         for (const term of terms) {
           if (term.trim()) {
             await PromptCollectionModel.addOrIncrementNegative(term.trim());
           }
         }
+      } else if (negativePrompt) {
+        console.log(`⚠️ Skipping invalid negative prompt: "${negativePrompt}"`);
       }
     } catch (error) {
       console.error('Error collecting prompts from image:', error);

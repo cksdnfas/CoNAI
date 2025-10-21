@@ -1,4 +1,8 @@
 {
+  "subtabs": {
+    "generate": "Generate",
+    "history": "History"
+  },
   "page": {
     "title": "Workflow Management",
     "listTitle": "Workflow List",
@@ -137,5 +141,17 @@
     "update": "Update",
     "delete": "Delete",
     "confirmDelete": "Are you sure you want to delete this workflow?"
+  },
+  "repeat": {
+    "title": "Repeat Execution",
+    "enable": "Enable repeat execution",
+    "count": "Repeat count",
+    "infinite": "Infinite repeat (-1)",
+    "countHelp": "1-999 or -1 (infinite)",
+    "delay": "Delay (seconds)",
+    "delayHelp": "Wait time before next generation after all servers complete (1-300 seconds)",
+    "progress": "Iteration {{current}} in progress",
+    "progressWithTotal": "Iteration {{current}}/{{total}} in progress",
+    "stop": "Stop"
   }
 }

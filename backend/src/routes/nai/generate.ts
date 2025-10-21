@@ -3,6 +3,7 @@ import axios from 'axios';
 // @ts-ignore - no types available
 import AdmZip from 'adm-zip';
 import { preprocessMetadata, NAIMetadataParams } from '../../utils/nai/metadata';
+import { GenerationHistoryService } from '../../services/generationHistoryService';
 
 const router = Router();
 
@@ -162,8 +163,54 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
       data: entry.getData().toString('base64') // Base64 인코딩
     }));
 
+    // ✅ Generation History 저장 및 백그라운드 업로드
+    const historyIds: number[] = [];
+
+    try {
+      // 배치 생성 시 모든 이미지에 대해 히스토리 생성
+      for (let i = 0; i < images.length; i++) {
+        const historyId = await GenerationHistoryService.createNAIHistory({
+          model: metadata.model || 'unknown',
+          sampler: metadata.sampler || 'unknown',
+          seed: (metadata.seed || 0) + i, // 배치의 각 이미지는 seed가 증가함
+          steps: metadata.steps || 28,
+          scale: metadata.scale || 7.0,
+          parameters: requestBody.parameters, // 전체 파라미터 저장
+          positivePrompt: metadata.prompt,
+          negativePrompt: metadata.negative_prompt,
+          width: metadata.width || 1024,
+          height: metadata.height || 1024,
+          metadata: {
+            action: metadata.action,
+            n_samples: metadata.n_samples,
+            batch_index: i, // 배치 내 인덱스
+            noise_schedule: metadata.noise_schedule
+          }
+        });
+
+        historyIds.push(historyId);
+
+        // 이미지 버퍼로 변환 후 업로드 (백그라운드 - await하지 않음)
+        const imageBuffer = Buffer.from(images[i].data, 'base64');
+        GenerationHistoryService.processAndUploadImage(historyId, imageBuffer, 'novelai')
+          .catch(err => console.error(`[NAI Generate] Background upload failed for history ${historyId}:`, err));
+
+        console.log(`[NAI Generate] History ${historyId} created and queued for background upload (${i + 1}/${images.length})`);
+      }
+    } catch (historyError) {
+      // 히스토리 저장 실패 시 에러 반환
+      console.error('[NAI Generate] Failed to create history:', historyError);
+      res.status(500).json({
+        error: 'Failed to create generation history',
+        details: historyError instanceof Error ? historyError.message : 'Unknown error'
+      });
+      return;
+    }
+
+    // 히스토리 ID 배열만 반환 (이미지는 백그라운드에서 업로드됨)
     res.json({
-      images: images,
+      historyIds: historyIds,
+      count: historyIds.length,
       metadata: {
         prompt: metadata.prompt,
         negative_prompt: metadata.negative_prompt,

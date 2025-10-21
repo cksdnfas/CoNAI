@@ -1,4 +1,8 @@
 {
+  "subtabs": {
+    "generate": "이미지 생성",
+    "history": "히스토리"
+  },
   "page": {
     "title": "워크플로우 관리",
     "listTitle": "워크플로우 목록",
@@ -137,5 +141,17 @@
     "update": "수정",
     "delete": "삭제",
     "confirmDelete": "정말 이 워크플로우를 삭제하시겠습니까?"
+  },
+  "repeat": {
+    "title": "반복 실행",
+    "enable": "반복 실행 활성화",
+    "count": "반복 횟수",
+    "infinite": "무한 반복 (-1)",
+    "countHelp": "1-999 또는 -1 (무한)",
+    "delay": "대기 시간 (초)",
+    "delayHelp": "모든 서버의 생성 완료 후 다음 생성까지 대기 시간 (1-300초)",
+    "progress": "{{current}}회 진행 중",
+    "progressWithTotal": "{{current}}/{{total}}회 진행 중",
+    "stop": "중지"
   }
 }

@@ -10,14 +10,27 @@
     "ariaLabel": "Image generation tabs"
   },
   "nai": {
+    "subtabs": {
+      "generate": "Generate",
+      "history": "History",
+      "helper": "Prompt Helper"
+    },
     "login": {
       "title": "NovelAI Login",
       "subtitle": "Sign in with your NovelAI account",
+      "tabs": {
+        "credentials": "Email/Password",
+        "token": "Token"
+      },
       "username": "Email",
       "password": "Password",
+      "token": "Access Token",
+      "tokenPlaceholder": "Enter your NovelAI Access Token",
+      "tokenHint": "Enter the Access Token obtained from the NovelAI website",
       "loginButton": "Login",
       "loggingIn": "Logging in...",
-      "error": "Login failed"
+      "error": "Login failed",
+      "tokenError": "Token authentication failed"
     },
     "tabs": {
       "basic": "Basic Settings",
@@ -132,7 +145,22 @@
       "uploadSuccess": "Image uploaded successfully",
       "uploadError": "Image upload failed",
       "autoUploadSuccess": "{{count}} image(s) uploaded automatically",
-      "autoUploadPartial": "{{success}} uploaded, {{fail}} failed"
+      "autoUploadPartial": "{{success}} uploaded, {{fail}} failed",
+      "success": "{{count}} image(s) generation started. Check the History tab.",
+      "completed": "Image generation completed",
+      "failed": "Image generation failed"
+    },
+    "repeat": {
+      "title": "Repeat Execution",
+      "enable": "Enable repeat execution",
+      "count": "Repeat count",
+      "infinite": "Infinite repeat (-1)",
+      "countHelp": "1-999 or -1 (infinite)",
+      "delay": "Delay (seconds)",
+      "delayHelp": "Wait time before next generation after completion (1-300 seconds)",
+      "progress": "Iteration {{current}} in progress",
+      "progressWithTotal": "Iteration {{current}}/{{total}} in progress",
+      "stop": "Stop"
     },
     "history": {
       "title": "Generation History",

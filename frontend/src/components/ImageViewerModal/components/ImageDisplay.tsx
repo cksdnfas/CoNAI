@@ -39,9 +39,35 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
     setImageLoading(true);
   }, [image.id]);
 
-  // API 엔드포인트를 통해 이미지 제공 (외부 네트워크 접근 보장)
-  const imageUrl = `${backendOrigin}/api/images/${image.id}/optimized`;
-  const fallbackUrl = `${backendOrigin}/api/images/${image.id}/download/original`;
+  // 이미지 URL 우선순위:
+  // 1. optimized_url → 2. image_url → 3. thumbnail_url
+  // 히스토리 이미지는 업로드 전까지 URL만 존재하므로 직접 경로 사용
+  const getImageUrl = () => {
+    if (image.optimized_url) {
+      return image.optimized_url.startsWith('http') ? image.optimized_url : `${backendOrigin}${image.optimized_url}`;
+    }
+    if (image.image_url) {
+      return image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
+    }
+    if (image.thumbnail_url) {
+      return image.thumbnail_url.startsWith('http') ? image.thumbnail_url : `${backendOrigin}${image.thumbnail_url}`;
+    }
+    // 일반 이미지만 API fallback 사용
+    return `${backendOrigin}/api/images/${image.id}/optimized`;
+  };
+
+  const getFallbackUrl = () => {
+    if (image.image_url) {
+      return image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
+    }
+    if (image.thumbnail_url) {
+      return image.thumbnail_url.startsWith('http') ? image.thumbnail_url : `${backendOrigin}${image.thumbnail_url}`;
+    }
+    return `${backendOrigin}/api/images/${image.id}/download/original`;
+  };
+
+  const imageUrl = getImageUrl();
+  const fallbackUrl = getFallbackUrl();
 
   return (
     <Box

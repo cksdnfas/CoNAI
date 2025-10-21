@@ -1,4 +1,8 @@
 {
+  "subtabs": {
+    "generate": "生成图像",
+    "history": "历史记录"
+  },
   "page": {
     "title": "工作流管理",
     "listTitle": "工作流列表",
@@ -137,5 +141,17 @@
     "update": "更新",
     "delete": "删除",
     "confirmDelete": "确定要删除此工作流吗？"
+  },
+  "repeat": {
+    "title": "重复执行",
+    "enable": "启用重复执行",
+    "count": "重复次数",
+    "infinite": "无限重复（-1）",
+    "countHelp": "1-999 或 -1（无限）",
+    "delay": "等待时间（秒）",
+    "delayHelp": "所有服务器生成完成后到下次生成的等待时间（1-300秒）",
+    "progress": "正在执行第{{current}}次",
+    "progressWithTotal": "正在执行第{{current}}/{{total}}次",
+    "stop": "停止"
   }
 }

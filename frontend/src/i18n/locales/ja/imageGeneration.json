@@ -10,14 +10,27 @@
     "ariaLabel": "画像生成タブ"
   },
   "nai": {
+    "subtabs": {
+      "generate": "画像生成",
+      "history": "履歴",
+      "helper": "プロンプトヘルパー"
+    },
     "login": {
       "title": "NovelAIログイン",
       "subtitle": "NovelAIアカウントでログインしてください",
+      "tabs": {
+        "credentials": "メール/パスワード",
+        "token": "トークン"
+      },
       "username": "メールアドレス",
       "password": "パスワード",
+      "token": "アクセストークン",
+      "tokenPlaceholder": "NovelAI アクセストークンを入力してください",
+      "tokenHint": "NovelAIウェブサイトから取得したアクセストークンを入力してください",
       "loginButton": "ログイン",
       "loggingIn": "ログイン中...",
-      "error": "ログインに失敗しました"
+      "error": "ログインに失敗しました",
+      "tokenError": "トークン認証に失敗しました"
     },
     "generate": {
       "title": "NovelAI画像生成",
@@ -40,7 +53,24 @@
       "subscriptionRequired": "有効なサブスクリプションが必要です",
       "error": "画像生成に失敗しました",
       "uploadSuccess": "画像が正常にアップロードされました",
-      "uploadError": "画像のアップロードに失敗しました"
+      "uploadError": "画像のアップロードに失敗しました",
+      "autoUploadSuccess": "{{count}}枚の画像が自動的にアップロードされました",
+      "autoUploadPartial": "{{success}}枚アップロード成功、{{fail}}枚失敗",
+      "success": "{{count}}枚の画像生成を開始しました。履歴タブで確認してください。",
+      "completed": "画像生成が完了しました",
+      "failed": "画像生成に失敗しました"
+    },
+    "repeat": {
+      "title": "繰り返し実行",
+      "enable": "繰り返し実行を有効にする",
+      "count": "繰り返し回数",
+      "infinite": "無限繰り返し (-1)",
+      "countHelp": "1-999 または -1 (無限)",
+      "delay": "待機時間（秒）",
+      "delayHelp": "生成完了後、次の生成までの待機時間（1-300秒）",
+      "progress": "{{current}}回目実行中",
+      "progressWithTotal": "{{current}}/{{total}}回目実行中",
+      "stop": "停止"
     }
   }
 }

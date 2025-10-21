@@ -1,0 +1,44 @@
+{
+  "title": "生成历史",
+  "count": "{{count}}项",
+  "empty": "没有生成历史",
+  "loading": "加载中...",
+  "loadingMore": "正在加载历史...",
+  "allLoaded": "已加载所有历史",
+  "noHistory": "没有生成历史",
+  "noHistoryDescription": "开始生成图像后将显示历史记录",
+  "deleteConfirm": "确定要删除这条生成历史吗？",
+  "deleteFailed": "删除失败",
+  "status": {
+    "pending": "等待中",
+    "processing": "处理中",
+    "completed": "已完成",
+    "failed": "失败"
+  },
+  "service": {
+    "comfyui": "ComfyUI",
+    "novelai": "NovelAI"
+  },
+  "actions": {
+    "regenerate": "重新生成",
+    "delete": "删除",
+    "refresh": "刷新",
+    "confirmDelete": "确定要删除这条生成历史吗？"
+  },
+  "detail": {
+    "title": "生成历史详情",
+    "status": "状态",
+    "service": "服务",
+    "positivePrompt": "正向提示词",
+    "negativePrompt": "负向提示词",
+    "size": "尺寸",
+    "model": "模型",
+    "sampler": "采样器",
+    "steps": "步数",
+    "cfgScale": "CFG Scale",
+    "seed": "种子",
+    "error": "错误",
+    "createdAt": "创建时间",
+    "completedAt": "完成时间"
+  }
+}

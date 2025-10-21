@@ -3,12 +3,23 @@ import { WorkflowModel, GenerationHistoryModel } from '../models/Workflow';
 import { createComfyUIService, ParallelGenerationService } from '../services/comfyuiService';
 import { WorkflowResponse, WorkflowCreateData, WorkflowUpdateData, GenerationRequest, GenerationStatusResponse } from '../types/workflow';
 import { asyncHandler } from '../middleware/errorHandler';
-import { UploadService } from '../services/uploadService';
 import { ImageModel } from '../models/Image';
 import { enrichImageRecord } from './images/utils';
 import { ComfyUIServerModel, WorkflowServerModel } from '../models/ComfyUIServer';
+import { ImageProcessor } from '../services/imageProcessor';
+import { PromptCollectionService } from '../services/promptCollectionService';
+import { AutoCollectionService } from '../services/autoCollectionService';
+import { imageTaggerService, ImageTaggerService } from '../services/imageTaggerService';
+import { settingsService } from '../services/settingsService';
+import { runtimePaths } from '../config/runtimePaths';
+import path from 'path';
+import fs from 'fs';
+import { GenerationHistoryService } from '../services/generationHistoryService';
+import { ComfyUIWorkflowParser } from '../utils/comfyuiWorkflowParser';
+import { GenerationHistoryModel as APIGenerationHistoryModel } from '../models/GenerationHistory';
 
 const router = Router();
+const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
 
 /**
  * 모든 워크플로우 조회
@@ -317,12 +328,50 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
       prompt_data_size: JSON.stringify(prompt_data).length
     });
 
-    // 생성 히스토리 레코드 생성 (pending 상태)
+    // Parse workflow to extract generation parameters
+    const workflowJson = JSON.parse(workflow.workflow_json);
+    const extractedParams = ComfyUIWorkflowParser.extractWithSubstitution(workflowJson, prompt_data);
+
+    console.log('📊 Extracted workflow parameters:', {
+      positive: extractedParams.positivePrompt.substring(0, 50) + '...',
+      negative: extractedParams.negativePrompt?.substring(0, 30) + '...',
+      dimensions: `${extractedParams.width}x${extractedParams.height}`,
+      steps: extractedParams.steps,
+      sampler: extractedParams.sampler
+    });
+
+    // 생성 히스토리 레코드 생성 (pending 상태) - 기존 시스템 유지
     const historyId = await GenerationHistoryModel.create({
       workflow_id: id,
       prompt_data,
       status: 'pending'
     });
+
+    // ✅ API Generation History 생성 (신규 시스템)
+    let apiHistoryId: number | undefined;
+    try {
+      apiHistoryId = await GenerationHistoryService.createComfyUIHistory({
+        workflow: workflowJson,
+        workflowId: id,
+        workflowName: workflow.name,
+        promptId: '', // Will be updated after ComfyUI submission
+        positivePrompt: extractedParams.positivePrompt,
+        negativePrompt: extractedParams.negativePrompt,
+        width: extractedParams.width,
+        height: extractedParams.height,
+        metadata: {
+          server_endpoint: apiEndpoint,
+          server_name: serverName,
+          sampler: extractedParams.sampler,
+          steps: extractedParams.steps,
+          cfg_scale: extractedParams.cfg_scale,
+          model: extractedParams.model
+        }
+      });
+      console.log(`✅ API History created: ${apiHistoryId}`);
+    } catch (apiHistoryError) {
+      console.error('⚠️ Failed to create API history (non-critical):', apiHistoryError);
+    }
 
     // 백그라운드에서 이미지 생성 프로세스 실행
     (async () => {
@@ -335,30 +384,183 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
         const comfyService = createComfyUIService(apiEndpoint);
         console.log(`📤 Sending to ComfyUI: ${apiEndpoint}`);
 
-        // 이미지 생성
-        const { promptId, imagePaths } = await comfyService.generateImages(workflow, prompt_data);
+        // 이미지 생성 (temp 폴더에 다운로드)
+        const { promptId, imagePaths: tempFilePaths } = await comfyService.generateImages(workflow, prompt_data);
 
         // ComfyUI prompt ID 업데이트
         await GenerationHistoryModel.updateStatus(historyId, 'processing', {
           comfyui_prompt_id: promptId
         });
 
-        // 생성된 이미지를 UploadService로 처리하여 데이터베이스에 저장
+        // ✅ API History에도 promptId 업데이트
+        if (apiHistoryId) {
+          try {
+            const apiHistory = await GenerationHistoryService.getHistory(apiHistoryId);
+            if (apiHistory) {
+              const updatedRecord = {
+                ...apiHistory,
+                comfyui_prompt_id: promptId,
+                generation_status: 'processing' as const
+              };
+              APIGenerationHistoryModel.update(apiHistoryId, updatedRecord);
+              console.log(`✅ API History ${apiHistoryId} updated with promptId: ${promptId}`);
+            }
+          } catch (e) {
+            console.error('⚠️ Failed to update API history with promptId:', e);
+          }
+        }
+
+        // 생성된 이미지를 ImageProcessor로 처리하여 데이터베이스에 저장
         // 완전한 업로드 파이프라인 실행: 썸네일, 최적화, 메타데이터, 프롬프트 수집, 자동 태깅, 자동 그룹 분류
-        // 이미지 메타데이터에서 프롬프트가 자동으로 추출됨
-        const imageIds = await UploadService.processAndUploadMultipleImages(imagePaths, {
-          ai_tool: 'ComfyUI'
-        });
+        const imageIds: number[] = [];
+
+        // ✅ API History 메타데이터 추출을 위해 첫 번째 이미지 Buffer 미리 읽기
+        let firstImageBuffer: Buffer | null = null;
+        if (apiHistoryId && tempFilePaths.length > 0) {
+          try {
+            firstImageBuffer = await fs.promises.readFile(tempFilePaths[0]);
+          } catch (bufferError) {
+            console.warn('⚠️ Failed to read first image buffer for API history:', bufferError);
+          }
+        }
+
+        for (const tempPath of tempFilePaths) {
+          try {
+            // Multer File 객체 생성 (ImageProcessor가 요구하는 형식)
+            const fileStats = fs.statSync(tempPath);
+            const ext = path.extname(tempPath).substring(1);
+            const file: Express.Multer.File = {
+              path: tempPath,
+              originalname: path.basename(tempPath),
+              mimetype: `image/${ext}`,
+              size: fileStats.size,
+              fieldname: 'image',
+              encoding: '7bit',
+              destination: path.dirname(tempPath),
+              filename: path.basename(tempPath),
+              stream: null as any,
+              buffer: Buffer.alloc(0)
+            };
+
+            // ImageProcessor로 처리 (uploads/images/YYYY-MM-DD/Origin|thumbnails|optimized/)
+            console.log('🔄 Processing ComfyUI image with ImageProcessor...');
+            const processed = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
+            console.log('✅ Image processed successfully');
+
+            // DB 저장
+            console.log('💾 Saving to database...');
+            const aiInfo = processed.metadata.ai_info || {};
+            const imageId = await ImageModel.create({
+              filename: processed.filename,
+              original_name: path.basename(tempPath),
+              file_path: processed.originalPath,
+              thumbnail_path: processed.thumbnailPath,
+              optimized_path: processed.optimizedPath,
+              file_size: processed.fileSize,
+              mime_type: `image/${ext}`,
+              width: processed.width,
+              height: processed.height,
+              metadata: JSON.stringify(processed.metadata),
+
+              // AI 메타데이터 필드들
+              ai_tool: 'ComfyUI',
+              model_name: aiInfo.model || null,
+              lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
+              steps: aiInfo.steps || null,
+              cfg_scale: aiInfo.cfg_scale || null,
+              sampler: aiInfo.sampler || null,
+              seed: aiInfo.seed || null,
+              scheduler: aiInfo.scheduler || null,
+              prompt: aiInfo.prompt || null,
+              negative_prompt: aiInfo.negative_prompt || null,
+              denoise_strength: aiInfo.denoise_strength || null,
+              generation_time: aiInfo.generation_time || null,
+              batch_size: aiInfo.batch_size || null,
+              batch_index: aiInfo.batch_index || null,
+              auto_tags: null,
+
+              // 동영상 메타데이터 필드들 (이미지는 null)
+              duration: null,
+              fps: null,
+              video_codec: null,
+              audio_codec: null,
+              bitrate: null,
+
+              // 유사도 검색 필드들
+              perceptual_hash: processed.perceptualHash || null,
+              color_histogram: processed.colorHistogram || null
+            });
+            console.log('✅ Database save successful, ID:', imageId);
+
+            imageIds.push(imageId);
+
+            // 프롬프트 수집 (비동기로 처리, 오류가 있어도 업로드는 계속 진행)
+            try {
+              console.log('🔍 Collecting prompts...');
+              await PromptCollectionService.collectFromImage(
+                aiInfo.prompt || null,
+                aiInfo.negative_prompt || null
+              );
+              console.log('✅ Prompts collected successfully');
+            } catch (promptError) {
+              console.warn('⚠️ Failed to collect prompts (non-critical):', promptError);
+            }
+
+            // 자동 태깅 (설정에서 활성화된 경우)
+            try {
+              const settings = settingsService.loadSettings();
+              if (settings.tagger.enabled && settings.tagger.autoTagOnUpload) {
+                console.log('🏷️ Auto-tagging image...');
+                const fullPath = path.join(UPLOAD_BASE_PATH, processed.originalPath);
+                const taggerResult = await imageTaggerService.tagImage(fullPath);
+
+                if (taggerResult.success) {
+                  const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
+                  await ImageModel.updateAutoTags(imageId, autoTagsJson);
+                  console.log('✅ Auto-tagging completed successfully');
+                } else {
+                  console.warn('⚠️ Auto-tagging failed (non-critical):', taggerResult.error);
+                }
+              }
+            } catch (autoTagError) {
+              console.warn('⚠️ Failed to auto-tag image (non-critical):', autoTagError);
+            }
+
+            // 자동수집 그룹 처리
+            try {
+              console.log('🔍 Running auto collection...');
+              const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(imageId);
+              if (autoCollectResults.length > 0) {
+                console.log(`✅ Image automatically added to ${autoCollectResults.length} groups`);
+              }
+            } catch (autoCollectError) {
+              console.warn('⚠️ Failed to run auto collection (non-critical):', autoCollectError);
+            }
+
+          } catch (error) {
+            console.error(`❌ Failed to process ComfyUI image ${tempPath}:`, error);
+          }
+        }
 
         // 첫 번째 이미지를 히스토리에 연결
         const generatedImageId = imageIds.length > 0 ? imageIds[0] : undefined;
 
-        // 완료 상태로 업데이트
+        // 완료 상태로 업데이트 (기존 시스템)
         const executionTime = Math.floor((Date.now() - startTime) / 1000);
         await GenerationHistoryModel.updateStatus(historyId, 'completed', {
           generated_image_id: generatedImageId,
           execution_time: executionTime
         });
+
+        // ✅ API History 완료 처리 (메타데이터 추출 + 이미지 연결)
+        if (apiHistoryId && generatedImageId && firstImageBuffer) {
+          try {
+            await GenerationHistoryService.processComfyUIHistoryMetadata(apiHistoryId, firstImageBuffer, generatedImageId);
+            console.log(`✅ API History ${apiHistoryId} completed with metadata and linked to image ${generatedImageId}`);
+          } catch (apiError) {
+            console.error(`⚠️ Failed to complete API history ${apiHistoryId}:`, apiError);
+          }
+        }
 
         console.log(`✅ Image generation completed for history ID ${historyId}`);
       } catch (error) {
@@ -368,6 +570,19 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
           error_message: (error as Error).message,
           execution_time: executionTime
         });
+
+        // ✅ API History 실패 처리
+        if (apiHistoryId) {
+          try {
+            const apiHistory = await GenerationHistoryService.getHistory(apiHistoryId);
+            if (apiHistory) {
+              APIGenerationHistoryModel.recordError(apiHistoryId, (error as Error).message);
+              console.log(`✅ API History ${apiHistoryId} marked as failed`);
+            }
+          } catch (apiError) {
+            console.error(`⚠️ Failed to update API history error:`, apiError);
+          }
+        }
       }
     })();
 
@@ -376,8 +591,9 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
       success: true,
       data: {
         history_id: historyId,
+        api_history_id: apiHistoryId,
         status: 'pending',
-        message: 'Image generation started. Check status using /api/workflows/history/:id'
+        message: 'Image generation started. Check status using /api/generation-history/:id'
       }
     };
 
@@ -746,22 +962,115 @@ router.post('/:id/generate-parallel', asyncHandler(async (req: Request, res: Res
               const history = await comfyService.waitForCompletion(result.promptId!);
               const imageInfos = comfyService.extractImageInfo(history, result.promptId!);
 
-              // 이미지 다운로드
-              const imagePaths: string[] = [];
+              // 이미지 다운로드 (temp 폴더로)
+              const tempFilePaths: string[] = [];
               for (const imageInfo of imageInfos) {
-                const localPath = await comfyService.downloadImage(
+                const tempPath = await comfyService.downloadImage(
                   imageInfo.filename,
                   imageInfo.subfolder,
                   imageInfo.type
                 );
-                imagePaths.push(localPath);
+                tempFilePaths.push(tempPath);
               }
 
-              // UploadService로 처리하여 완전한 업로드 파이프라인 실행
-              // 이미지 메타데이터에서 프롬프트가 자동으로 추출됨
-              const imageIds = await UploadService.processAndUploadMultipleImages(imagePaths, {
-                ai_tool: 'ComfyUI'
-              });
+              // ImageProcessor로 처리하여 완전한 업로드 파이프라인 실행
+              const imageIds: number[] = [];
+              for (const tempPath of tempFilePaths) {
+                try {
+                  // Multer File 객체 생성
+                  const fileStats = fs.statSync(tempPath);
+                  const ext = path.extname(tempPath).substring(1);
+                  const file: Express.Multer.File = {
+                    path: tempPath,
+                    originalname: path.basename(tempPath),
+                    mimetype: `image/${ext}`,
+                    size: fileStats.size,
+                    fieldname: 'image',
+                    encoding: '7bit',
+                    destination: path.dirname(tempPath),
+                    filename: path.basename(tempPath),
+                    stream: null as any,
+                    buffer: Buffer.alloc(0)
+                  };
+
+                  // ImageProcessor로 처리
+                  const processed = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
+                  const aiInfo = processed.metadata.ai_info || {};
+
+                  // DB 저장
+                  const imageId = await ImageModel.create({
+                    filename: processed.filename,
+                    original_name: path.basename(tempPath),
+                    file_path: processed.originalPath,
+                    thumbnail_path: processed.thumbnailPath,
+                    optimized_path: processed.optimizedPath,
+                    file_size: processed.fileSize,
+                    mime_type: `image/${ext}`,
+                    width: processed.width,
+                    height: processed.height,
+                    metadata: JSON.stringify(processed.metadata),
+                    ai_tool: 'ComfyUI',
+                    model_name: aiInfo.model || null,
+                    lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
+                    steps: aiInfo.steps || null,
+                    cfg_scale: aiInfo.cfg_scale || null,
+                    sampler: aiInfo.sampler || null,
+                    seed: aiInfo.seed || null,
+                    scheduler: aiInfo.scheduler || null,
+                    prompt: aiInfo.prompt || null,
+                    negative_prompt: aiInfo.negative_prompt || null,
+                    denoise_strength: aiInfo.denoise_strength || null,
+                    generation_time: aiInfo.generation_time || null,
+                    batch_size: aiInfo.batch_size || null,
+                    batch_index: aiInfo.batch_index || null,
+                    auto_tags: null,
+                    duration: null,
+                    fps: null,
+                    video_codec: null,
+                    audio_codec: null,
+                    bitrate: null,
+                    perceptual_hash: processed.perceptualHash || null,
+                    color_histogram: processed.colorHistogram || null
+                  });
+
+                  imageIds.push(imageId);
+
+                  // 프롬프트 수집
+                  try {
+                    await PromptCollectionService.collectFromImage(
+                      aiInfo.prompt || null,
+                      aiInfo.negative_prompt || null
+                    );
+                  } catch (promptError) {
+                    console.warn('⚠️ Failed to collect prompts:', promptError);
+                  }
+
+                  // 자동 태깅
+                  try {
+                    const settings = settingsService.loadSettings();
+                    if (settings.tagger.enabled && settings.tagger.autoTagOnUpload) {
+                      const fullPath = path.join(UPLOAD_BASE_PATH, processed.originalPath);
+                      const taggerResult = await imageTaggerService.tagImage(fullPath);
+                      if (taggerResult.success) {
+                        const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
+                        await ImageModel.updateAutoTags(imageId, autoTagsJson);
+                      }
+                    }
+                  } catch (autoTagError) {
+                    console.warn('⚠️ Failed to auto-tag image:', autoTagError);
+                  }
+
+                  // 자동수집 그룹 처리
+                  try {
+                    await AutoCollectionService.runAutoCollectionForNewImage(imageId);
+                  } catch (autoCollectError) {
+                    console.warn('⚠️ Failed to run auto collection:', autoCollectError);
+                  }
+
+                } catch (error) {
+                  console.error(`❌ Failed to process image ${tempPath}:`, error);
+                }
+              }
 
               const generatedImageId = imageIds.length > 0 ? imageIds[0] : undefined;
 

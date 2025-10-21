@@ -64,14 +64,19 @@ router.get('/data', async (req: Request, res: Response) => {
       let anlasBalance = 0;
       if (anlasResponse.ok) {
         const subscriptionData: any = await anlasResponse.json();
+        // Anlas 잔액 추출 (trainingStepsLeft는 학습 스텝이며, Anlas와 다를 수 있음)
+        // NovelAI API는 trainingStepsLeft.fixedTrainingStepsLeft를 Anlas로 사용
         anlasBalance = subscriptionData.trainingStepsLeft?.fixedTrainingStepsLeft || 0;
       }
 
+      // 구독 정보 추출
+      const subscription = userData.subscription || {};
+
       res.json({
         subscription: {
-          tier: userData.subscription?.tier || 0,
-          active: userData.subscription?.active || false,
-          tierName: getTierName(userData.subscription?.tier || 0),
+          tier: subscription.tier ?? 0,
+          active: subscription.active ?? false,
+          tierName: getTierName(subscription.tier ?? 0),
         },
         anlasBalance,
       });

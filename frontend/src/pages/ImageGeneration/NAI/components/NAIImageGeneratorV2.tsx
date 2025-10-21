@@ -15,28 +15,26 @@ import {
   FormControlLabel,
   Checkbox,
   CircularProgress,
-  Tabs,
-  Tab,
   LinearProgress,
-  Divider,
-  Snackbar,
-  Chip
+  Divider
 } from '@mui/material';
 import {
-  AutoAwesome as GenerateIcon,
-  Help as HelpIcon
+  AutoAwesome as GenerateIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { naiApi, imageApi } from '../../../../services/api';
+import { naiApi } from '../../../../services/api';
 import api from '../../../../services/api';
-import NAIPromptHelper from './NAIPromptHelper';
-import NAIImageGallery from './NAIImageGallery';
 import NAIAnlasDisplay from './NAIAnlasDisplay';
 import NAICostEstimator from './NAICostEstimator';
+import RepeatControls from '../../components/RepeatControls';
+import type { RepeatConfig, RepeatState } from '../../components/RepeatControls';
+import { GenerationHistoryList } from '../../components/GenerationHistoryList';
 
 interface NAIImageGeneratorV2Props {
   token: string;
   onLogout: () => void;
+  externalPrompt?: string;
+  onPromptChange?: (prompt: string) => void;
 }
 
 const RESOLUTIONS = {
@@ -77,62 +75,125 @@ const NOISE_SCHEDULES = [
   { value: 'polyexponential', label: 'Polyexponential' }
 ];
 
-export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGeneratorV2Props) {
+const PARAMS_STORAGE_KEY = 'nai_generation_params';
+
+export default function NAIImageGeneratorV2({ token, onLogout, externalPrompt, onPromptChange }: NAIImageGeneratorV2Props) {
   const { t } = useTranslation(['imageGeneration']);
-  const [currentTab, setCurrentTab] = useState(0);
-  const [params, setParams] = useState({
-    model: 'nai-diffusion-4-5-curated',
-    prompt: '',
-    negative_prompt: '',
-    resolution: 'Normal Portrait',
-    steps: 28,
-    scale: 6.0,
-    sampler: 'k_euler',
-    n_samples: 1,
-    sm: true,
-    sm_dyn: false,
-    qualityToggle: true,
-    cfg_rescale: 0.7,
-    noise_schedule: 'karras',
-    uncond_scale: 1.0
-  });
+
+  // LocalStorage에서 저장된 파라미터 불러오기
+  const getInitialParams = () => {
+    try {
+      const saved = localStorage.getItem(PARAMS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // 프롬프트는 저장하지 않으므로 제외
+        const { prompt: _, negative_prompt: __, ...savedParams } = parsed;
+        // 기본값과 병합 (새로운 파라미터가 추가될 경우를 대비)
+        return {
+          model: 'nai-diffusion-4-5-curated',
+          prompt: '',
+          negative_prompt: '',
+          resolution: 'Normal Portrait',
+          steps: 28,
+          scale: 6.0,
+          sampler: 'k_euler',
+          n_samples: 1,
+          sm: true,
+          sm_dyn: false,
+          qualityToggle: true,
+          cfg_rescale: 0.7,
+          noise_schedule: 'karras',
+          uncond_scale: 1.0,
+          ...savedParams
+        };
+      }
+    } catch (e) {
+      console.error('Failed to load saved params:', e);
+    }
+    // 기본값
+    return {
+      model: 'nai-diffusion-4-5-curated',
+      prompt: '',
+      negative_prompt: '',
+      resolution: 'Normal Portrait',
+      steps: 28,
+      scale: 6.0,
+      sampler: 'k_euler',
+      n_samples: 1,
+      sm: true,
+      sm_dyn: false,
+      qualityToggle: true,
+      cfg_rescale: 0.7,
+      noise_schedule: 'karras',
+      uncond_scale: 1.0
+    };
+  };
+
+  const [params, setParams] = useState(getInitialParams());
 
   const [generating, setGenerating] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [results, setResults] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [uploadStatus, setUploadStatus] = useState<{[key: number]: 'pending' | 'uploading' | 'success' | 'error'}>({});
-  const [snackbar, setSnackbar] = useState<{open: boolean; message: string; severity: 'success' | 'error'}>({
-    open: false,
-    message: '',
-    severity: 'success'
-  });
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   const [userData, setUserData] = useState<{
     subscription: { tier: number; active: boolean; tierName: string };
     anlasBalance: number;
   } | null>(null);
 
-  const handlePromptAdd = (tag: string) => {
-    const currentPrompt = params.prompt.trim();
-    setParams({
-      ...params,
-      prompt: currentPrompt ? `${currentPrompt}, ${tag}` : tag
-    });
-  };
+  // 반복 실행 관련 상태
+  const [repeatConfig, setRepeatConfig] = useState<RepeatConfig>({
+    enabled: false,
+    count: 3,
+    delaySeconds: 5
+  });
+  const [repeatState, setRepeatState] = useState<RepeatState>({
+    isRunning: false,
+    currentIteration: 0,
+    totalIterations: 0
+  });
+  const [repeatTimeoutId, setRepeatTimeoutId] = useState<number | null>(null);
 
-  const handlePromptReplace = (prompt: string) => {
-    setParams({
-      ...params,
-      prompt: prompt
-    });
-  };
+  // 외부 프롬프트와 동기화
+  useEffect(() => {
+    if (externalPrompt !== undefined && externalPrompt !== params.prompt) {
+      setParams((prev: typeof params) => ({ ...prev, prompt: externalPrompt }));
+    }
+  }, [externalPrompt]);
 
-  const handleGenerate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // 프롬프트 변경 시 외부로 전달
+  // Note: externalPrompt is intentionally NOT in deps - we only sync when user changes params.prompt internally
+  useEffect(() => {
+    if (onPromptChange && params.prompt !== externalPrompt) {
+      onPromptChange(params.prompt);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.prompt, onPromptChange]);
+
+  // 파라미터 변경 시 LocalStorage에 저장 (프롬프트 제외)
+  useEffect(() => {
+    try {
+      const { prompt, negative_prompt, ...paramsToSave } = params;
+      localStorage.setItem(PARAMS_STORAGE_KEY, JSON.stringify(paramsToSave));
+    } catch (e) {
+      console.error('Failed to save params:', e);
+    }
+  }, [params]);
+
+  const handleGenerate = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    // 반복 실행 시작 시 상태 초기화
+    const isFirstRepeatExecution = repeatConfig.enabled && !repeatState.isRunning;
+    if (isFirstRepeatExecution) {
+      setRepeatState({
+        isRunning: true,
+        currentIteration: 1,
+        totalIterations: repeatConfig.count === -1 ? -1 : repeatConfig.count
+      });
+    }
+
     setGenerating(true);
     setError(null);
-    setUploadStatus({});
 
     try {
       const resolution = RESOLUTIONS[params.resolution as keyof typeof RESOLUTIONS];
@@ -146,18 +207,35 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
         uncond_scale: params.uncond_scale
       });
 
-      // 새로운 결과를 배열 맨 앞에 추가 (최신순)
-      const newResult = {
-        ...response,
-        timestamp: new Date().toISOString(),
-        id: Date.now() // 고유 ID
-      };
-      setResults(prev => [newResult, ...prev]);
-      fetchUserData();
+      // 응답: { historyIds: number[], count: number, metadata: {...} }
+      if (response.historyIds && response.historyIds.length > 0) {
+        // 사용자 데이터 갱신
+        fetchUserData();
 
-      // 자동 업로드 시작
-      if (response.images && response.images.length > 0) {
-        autoUploadImages(response.images);
+        // 모든 히스토리 ID의 업로드 완료 대기
+        waitForUploadCompletion(response.historyIds);
+
+        // 반복 실행 처리
+        if (repeatConfig.enabled) {
+          const currentIteration = isFirstRepeatExecution ? 1 : repeatState.currentIteration;
+          const shouldContinue = repeatConfig.count === -1 || currentIteration < repeatState.totalIterations;
+
+          if (shouldContinue) {
+            // 다음 반복 예약
+            const timeoutId = window.setTimeout(() => {
+              setRepeatState(prev => ({
+                ...prev,
+                currentIteration: prev.currentIteration + 1
+              }));
+              handleGenerate(); // 재귀 호출
+            }, repeatConfig.delaySeconds * 1000);
+
+            setRepeatTimeoutId(timeoutId);
+          } else {
+            // 반복 완료
+            handleStopRepeat();
+          }
+        }
       }
     } catch (err: any) {
       if (err.response?.status === 401) {
@@ -169,9 +247,72 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
       } else {
         setError(err.response?.data?.error || err.response?.data?.details || t('imageGeneration:nai.generate.error'));
       }
+      // 에러 발생 시 반복 중지
+      if (repeatState.isRunning || isFirstRepeatExecution) {
+        handleStopRepeat();
+      }
     } finally {
       setGenerating(false);
     }
+  };
+
+  const handleStopRepeat = () => {
+    if (repeatTimeoutId) {
+      clearTimeout(repeatTimeoutId);
+      setRepeatTimeoutId(null);
+    }
+    setRepeatState({
+      isRunning: false,
+      currentIteration: 0,
+      totalIterations: 0
+    });
+  };
+
+  // 업로드 완료 대기 후 히스토리 새로고침
+  const waitForUploadCompletion = async (historyIds: number[]) => {
+    const maxAttempts = 30; // 최대 30초 대기
+    const pollInterval = 1000; // 1초마다 체크
+    let attempts = 0;
+
+    const checkCompletion = async (): Promise<boolean> => {
+      try {
+        // 모든 히스토리 ID의 상태 확인
+        const statuses = await Promise.all(
+          historyIds.map(async (id) => {
+            try {
+              const response = await api.get(`/api/generation-history/${id}`);
+              return response.data.record.generation_status === 'completed';
+            } catch {
+              return false;
+            }
+          })
+        );
+
+        // 모두 완료되었는지 확인
+        return statuses.every(status => status);
+      } catch {
+        return false;
+      }
+    };
+
+    const poll = async () => {
+      attempts++;
+      const allCompleted = await checkCompletion();
+
+      if (allCompleted) {
+        // 모든 업로드 완료 - 히스토리 새로고침
+        setHistoryRefreshKey(prev => prev + 1);
+      } else if (attempts < maxAttempts) {
+        // 아직 완료 안됨 - 계속 폴링
+        setTimeout(poll, pollInterval);
+      } else {
+        // 타임아웃 - 그냥 새로고침
+        setHistoryRefreshKey(prev => prev + 1);
+      }
+    };
+
+    // 폴링 시작
+    poll();
   };
 
   const fetchUserData = async () => {
@@ -199,101 +340,6 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
     }
   }, [token]);
 
-  const autoUploadImages = async (images: any[]) => {
-    let successCount = 0;
-    let failCount = 0;
-
-    for (let i = 0; i < images.length; i++) {
-      setUploadStatus(prev => ({ ...prev, [i]: 'uploading' }));
-
-      try {
-        const img = images[i];
-        const byteString = atob(img.data);
-        const arrayBuffer = new ArrayBuffer(byteString.length);
-        const uint8Array = new Uint8Array(arrayBuffer);
-        for (let j = 0; j < byteString.length; j++) {
-          uint8Array[j] = byteString.charCodeAt(j);
-        }
-        const blob = new Blob([uint8Array], { type: 'image/png' });
-        const file = new File([blob], img.filename, { type: 'image/png' });
-
-        const uploadResponse = await imageApi.uploadImage(file);
-
-        if (uploadResponse.success) {
-          setUploadStatus(prev => ({ ...prev, [i]: 'success' }));
-          successCount++;
-        } else {
-          setUploadStatus(prev => ({ ...prev, [i]: 'error' }));
-          failCount++;
-        }
-      } catch (err: any) {
-        setUploadStatus(prev => ({ ...prev, [i]: 'error' }));
-        failCount++;
-      }
-    }
-
-    // 최종 결과 알림
-    if (successCount > 0 && failCount === 0) {
-      setSnackbar({
-        open: true,
-        message: t('imageGeneration:nai.generate.autoUploadSuccess', { count: successCount }),
-        severity: 'success'
-      });
-    } else if (failCount > 0) {
-      setSnackbar({
-        open: true,
-        message: t('imageGeneration:nai.generate.autoUploadPartial', { success: successCount, fail: failCount }),
-        severity: 'error'
-      });
-    }
-  };
-
-  const handleUploadImage = async (imageIndex: number) => {
-    if (!results || !results.images[imageIndex]) return;
-
-    setUploading(true);
-    setUploadStatus(prev => ({ ...prev, [imageIndex]: 'uploading' }));
-
-    try {
-      const img = results.images[imageIndex];
-      const byteString = atob(img.data);
-      const arrayBuffer = new ArrayBuffer(byteString.length);
-      const uint8Array = new Uint8Array(arrayBuffer);
-      for (let i = 0; i < byteString.length; i++) {
-        uint8Array[i] = byteString.charCodeAt(i);
-      }
-      const blob = new Blob([uint8Array], { type: 'image/png' });
-      const file = new File([blob], img.filename, { type: 'image/png' });
-
-      const uploadResponse = await imageApi.uploadImage(file);
-
-      if (uploadResponse.success) {
-        setUploadStatus(prev => ({ ...prev, [imageIndex]: 'success' }));
-        setSnackbar({
-          open: true,
-          message: t('imageGeneration:nai.generate.uploadSuccess'),
-          severity: 'success'
-        });
-      } else {
-        setUploadStatus(prev => ({ ...prev, [imageIndex]: 'error' }));
-        setSnackbar({
-          open: true,
-          message: uploadResponse.error || t('imageGeneration:nai.generate.uploadError'),
-          severity: 'error'
-        });
-      }
-    } catch (err: any) {
-      setUploadStatus(prev => ({ ...prev, [imageIndex]: 'error' }));
-      setSnackbar({
-        open: true,
-        message: t('imageGeneration:nai.generate.uploadError'),
-        severity: 'error'
-      });
-    } finally {
-      setUploading(false);
-    }
-  };
-
   return (
     <Box>
       {/* Header */}
@@ -313,49 +359,12 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
         </Alert>
       )}
 
-      {/* 프롬프트 도우미 탭 (전체 영역 사용) */}
-      {currentTab === 1 && (
-        <Box>
-          <Paper sx={{ mb: 3 }}>
-            <Tabs value={currentTab} onChange={(_, v) => setCurrentTab(v)}>
-              <Tab label="이미지 생성" />
-              <Tab icon={<HelpIcon />} iconPosition="start" label="프롬프트 도우미" />
-            </Tabs>
-          </Paper>
-          <Grid container spacing={3}>
-            <Grid size={{ xs: 12 }}>
-              <NAIPromptHelper
-                onPromptAdd={handlePromptAdd}
-                onPromptReplace={handlePromptReplace}
-              />
-            </Grid>
-            <Grid size={{ xs: 12 }}>
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={() => setCurrentTab(0)}
-              >
-                생성 화면으로 돌아가기
-              </Button>
-            </Grid>
-          </Grid>
-        </Box>
-      )}
-
-      {/* 3열 레이아웃: 이미지 생성 화면 */}
-      {currentTab === 0 && (
-        <form onSubmit={handleGenerate}>
-          <Paper sx={{ mb: 3 }}>
-            <Tabs value={currentTab} onChange={(_, v) => setCurrentTab(v)}>
-              <Tab label="이미지 생성" />
-              <Tab icon={<HelpIcon />} iconPosition="start" label="프롬프트 도우미" />
-            </Tabs>
-          </Paper>
-
-          <Grid container spacing={3}>
-            {/* 왼쪽: 프롬프트 및 설정 영역 */}
-            <Grid size={{ xs: 12, md: 12, lg: 4 }}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      {/* 이미지 생성 화면 - 2열 레이아웃 */}
+      <Grid container spacing={3}>
+        {/* 왼쪽: 설정 폼 */}
+        <Grid size={{ xs: 12, md: 12, lg: 4 }}>
+          <form onSubmit={handleGenerate}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 {/* 모델 & 프롬프트 */}
                 <Paper sx={{ p: 3 }}>
                   <Typography variant="subtitle1" gutterBottom fontWeight="bold">기본 설정</Typography>
@@ -574,78 +583,38 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
                   </Paper>
                 )}
 
-                {/* 생성 버튼 */}
-                <Button
-                  fullWidth
-                  type="submit"
-                  variant="contained"
-                  size="large"
-                  disabled={generating || !params.prompt}
-                  startIcon={generating ? <CircularProgress size={20} /> : <GenerateIcon />}
-                >
-                  {generating ? '생성 중...' : '이미지 생성'}
-                </Button>
-                {generating && <LinearProgress sx={{ mt: 1 }} />}
-              </Box>
-            </Grid>
-
-            {/* 오른쪽: 이미지 영역 (더 넓게) */}
-            <Grid size={{ xs: 12, md: 6, lg: 7 }}>
-              {results.length > 0 ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  {results.map((result, resultIndex) => (
-                    <Box key={result.id}>
-                      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Chip
-                          label={`생성 ${results.length - resultIndex}`}
-                          color="primary"
-                          size="small"
-                        />
-                        <Typography variant="caption" color="text.secondary">
-                          {new Date(result.timestamp).toLocaleString()}
-                        </Typography>
-                      </Box>
-                      <NAIImageGallery
-                        images={result.images}
-                        metadata={result.metadata}
-                        onUpload={handleUploadImage}
-                        uploading={uploading}
-                        uploadStatus={uploadStatus}
-                      />
-                    </Box>
-                  ))}
-                </Box>
-              ) : (
-                <Paper
-                  sx={{
-                    p: 4,
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    bgcolor: 'background.default',
-                    minHeight: '400px'
-                  }}
-                >
-                  <GenerateIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-                  <Typography variant="h6" color="text.secondary">
-                    생성된 이미지가 여기에 표시됩니다
-                  </Typography>
+                {/* 반복 실행 설정 */}
+                <Paper sx={{ p: 3 }}>
+                  <RepeatControls
+                    config={repeatConfig}
+                    state={repeatState}
+                    onConfigChange={setRepeatConfig}
+                    onStop={handleStopRepeat}
+                    namespace="imageGeneration"
+                  />
                 </Paper>
-              )}
-            </Grid>
-          </Grid>
-        </form>
-      )}
 
-      {/* Snackbar for upload notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        message={snackbar.message}
-      />
+              {/* 생성 버튼 */}
+              <Button
+                fullWidth
+                type="submit"
+                variant="contained"
+                size="large"
+                disabled={generating || !params.prompt}
+                startIcon={generating ? <CircularProgress size={20} /> : <GenerateIcon />}
+              >
+                {generating ? '생성 중...' : '이미지 생성'}
+              </Button>
+              {generating && <LinearProgress sx={{ mt: 1 }} />}
+            </Box>
+          </form>
+        </Grid>
+
+        {/* 오른쪽: 히스토리 목록 */}
+        <Grid size={{ xs: 12, md: 12, lg: 8 }}>
+          <GenerationHistoryList key={historyRefreshKey} serviceType="novelai" />
+        </Grid>
+      </Grid>
     </Box>
   );
 }

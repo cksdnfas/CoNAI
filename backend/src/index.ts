@@ -28,9 +28,12 @@ import { settingsRoutes } from './routes/settings';
 import { workflowRoutes } from './routes/workflows';
 import { comfyuiServerRoutes } from './routes/comfyuiServers';
 import naiRoutes from './routes/nai';
+import generationHistoryRoutes from './routes/generation-history.routes';
 import { initializeDatabase } from './database/init';
+import { initializeApiGenerationDb } from './database/apiGenerationDb';
 import { errorHandler } from './middleware/errorHandler';
 import { imageTaggerService } from './services/imageTaggerService';
+import { APIImageProcessor } from './services/apiImageProcessor';
 import { PORTS, IMAGE_PROCESSING } from '@comfyui-image-manager/shared';
 import { settingsService } from './services/settingsService';
 
@@ -131,6 +134,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/workflows', workflowRoutes);
 app.use('/api/comfyui-servers', comfyuiServerRoutes);
 app.use('/api/nai', naiRoutes);
+app.use('/api/generation-history', generationHistoryRoutes);
 
 // Frontend static file serving
 const frontendDistPath = process.env.FRONTEND_DIST_PATH
@@ -196,7 +200,16 @@ async function startServer() {
     await initializeDatabase();
     console.log('✅ Database initialized successfully');
 
-    // 4. Tagger daemon 자동 시작 (설정이 활성화된 경우)
+    // 4. API Generation History DB 초기화
+    console.log('🗄️  API Generation History DB 초기화 중...');
+    initializeApiGenerationDb(); // Synchronous call (better-sqlite3)
+    console.log('✅ API Generation History DB initialized successfully');
+
+    // 5. API 이미지 저장 디렉토리 생성
+    console.log('📁 API 이미지 디렉토리 생성 중...');
+    await APIImageProcessor.ensureDirectories();
+
+    // 6. Tagger daemon 자동 시작 (설정이 활성화된 경우)
     const settings = settingsService.loadSettings();
     if (settings.tagger.enabled) {
       console.log('🤖 Starting tagger daemon...');
