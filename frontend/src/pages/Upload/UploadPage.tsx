@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Typography, Paper } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import UploadZone from '../../components/UploadZone/UploadZone';
+import PromptPreview from '../../components/PromptPreview/PromptPreview';
 
 const UploadPage: React.FC = () => {
   const { t } = useTranslation(['upload', 'common']);
@@ -112,6 +113,9 @@ const UploadPage: React.FC = () => {
           </Typography>
         </Box>
       </Paper>
+
+      {/* Prompt Preview Section */}
+      <PromptPreview />
     </Box>
   );
 };

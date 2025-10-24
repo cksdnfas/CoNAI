@@ -31,6 +31,14 @@ export default function RepeatControls({
 }: RepeatControlsProps) {
   const { t } = useTranslation([namespace]);
 
+  // namespace에 따라 번역 키 경로 결정
+  const getKey = (key: string) => {
+    if (namespace === 'imageGeneration') {
+      return `nai.repeat.${key}`;
+    }
+    return `repeat.${key}`;
+  };
+
   const handleEnabledChange = (checked: boolean) => {
     onConfigChange({ ...config, enabled: checked });
   };
@@ -54,7 +62,7 @@ export default function RepeatControls({
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
         <RepeatIcon fontSize="small" />
         <Typography variant="subtitle1" fontWeight="bold">
-          {t(`${namespace}:repeat.title`)}
+          {t(getKey('title'))}
         </Typography>
       </Box>
       <Divider sx={{ mb: 2 }} />
@@ -69,7 +77,7 @@ export default function RepeatControls({
               disabled={state.isRunning}
             />
           }
-          label={t(`${namespace}:repeat.enable`)}
+          label={t(getKey('enable'))}
         />
 
         {config.enabled && (
@@ -78,15 +86,15 @@ export default function RepeatControls({
             <TextField
               fullWidth
               type="number"
-              label={t(`${namespace}:repeat.count`)}
+              label={t(getKey('count'))}
               value={config.count}
               onChange={(e) => handleCountChange(e.target.value)}
               disabled={state.isRunning}
               inputProps={{ min: -1, max: 999 }}
               helperText={
                 config.count === -1
-                  ? t(`${namespace}:repeat.infinite`)
-                  : t(`${namespace}:repeat.countHelp`)
+                  ? t(getKey('infinite'))
+                  : t(getKey('countHelp'))
               }
             />
 
@@ -94,12 +102,12 @@ export default function RepeatControls({
             <TextField
               fullWidth
               type="number"
-              label={t(`${namespace}:repeat.delay`)}
+              label={t(getKey('delay'))}
               value={config.delaySeconds}
               onChange={(e) => handleDelayChange(e.target.value)}
               disabled={state.isRunning}
               inputProps={{ min: 1, max: 300 }}
-              helperText={t(`${namespace}:repeat.delayHelp`)}
+              helperText={t(getKey('delayHelp'))}
             />
 
             {/* 진행 상태 */}
@@ -109,10 +117,10 @@ export default function RepeatControls({
                   <Chip
                     label={
                       config.count === -1
-                        ? t(`${namespace}:repeat.progress`, {
+                        ? t(getKey('progress'), {
                             current: state.currentIteration
                           })
-                        : t(`${namespace}:repeat.progressWithTotal`, {
+                        : t(getKey('progressWithTotal'), {
                             current: state.currentIteration,
                             total: state.totalIterations
                           })
@@ -128,7 +136,7 @@ export default function RepeatControls({
                   startIcon={<StopIcon />}
                   onClick={onStop}
                 >
-                  {t(`${namespace}:repeat.stop`)}
+                  {t(getKey('stop'))}
                 </Button>
               </Box>
             )}

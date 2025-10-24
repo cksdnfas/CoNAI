@@ -14,7 +14,7 @@ const NODE_MODULES = path.join(APP_DIR, 'node_modules');
 const PACKAGE_JSON = path.join(APP_DIR, 'package.json');
 
 // Required native modules
-const REQUIRED_MODULES = ['sharp', 'better-sqlite3'];
+const REQUIRED_MODULES = ['sharp', 'better-sqlite3', 'ffmpeg-static', 'ffprobe-static'];
 
 console.log('');
 console.log('========================================================================');
@@ -69,7 +69,9 @@ function installDependencies() {
         private: true,
         dependencies: {
           "sharp": "^0.33.0",
-          "better-sqlite3": "^9.4.0"
+          "better-sqlite3": "^9.4.0",
+          "ffmpeg-static": "^5.2.0",
+          "ffprobe-static": "^3.1.0"
         }
       };
       fs.writeFileSync(PACKAGE_JSON, JSON.stringify(packageJson, null, 2));

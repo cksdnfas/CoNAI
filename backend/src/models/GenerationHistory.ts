@@ -41,6 +41,9 @@ export interface GenerationHistoryRecord {
   // Link to main images DB
   linked_image_id?: number;
 
+  // Group Assignment
+  assigned_group_id?: number;       // User-selected group for automatic assignment
+
   // Error and Metadata
   error_message?: string;
   metadata?: string;                // JSON string
@@ -74,8 +77,8 @@ export class GenerationHistoryModel {
         nai_model, nai_sampler, nai_seed, nai_steps, nai_scale, nai_parameters,
         positive_prompt, negative_prompt, width, height,
         original_path, thumbnail_path, optimized_path, file_size,
-        linked_image_id, error_message, metadata
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        linked_image_id, assigned_group_id, error_message, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const info = stmt.run(
@@ -100,6 +103,7 @@ export class GenerationHistoryModel {
       data.optimized_path,
       data.file_size,
       data.linked_image_id,
+      data.assigned_group_id,
       data.error_message,
       data.metadata
     );

@@ -137,8 +137,7 @@
     },
     "noPrompt": "沒有提示詞資訊。",
     "loading": "載入中...",
-    "loadFailed": "無法載入群組資訊。",
-    "unclassified": "未分類"
+    "loadFailed": "無法載入群組資訊。"
   },
 
   "autoTagDisplay": {

@@ -203,6 +203,63 @@ if (fs.existsSync(imgScopeSource)) {
 
 console.log('✅ Native modules and dependencies copied\n');
 
+// Step 5.5: Copy FFmpeg binaries
+console.log('Step 5.5: Copying FFmpeg binaries...');
+const ffmpegModules = ['ffmpeg-static', 'ffprobe-static'];
+let ffmpegCopied = 0;
+
+for (const mod of ffmpegModules) {
+  const modSource = path.join(sourceNodeModules, mod);
+  const modTarget = path.join(appNodeModules, mod);
+
+  if (fs.existsSync(modSource)) {
+    fs.copySync(modSource, modTarget, { dereference: true });
+
+    // Set executable permissions on Unix-like systems
+    if (!isWindows) {
+      // Check for bin directory
+      const binPath = path.join(modTarget, 'bin');
+      if (fs.existsSync(binPath)) {
+        const files = fs.readdirSync(binPath);
+        files.forEach(file => {
+          const filePath = path.join(binPath, file);
+          if (fs.statSync(filePath).isFile()) {
+            fs.chmodSync(filePath, 0o755);
+          }
+        });
+      }
+
+      // Also check for direct binary files (ffmpeg-static has ffmpeg.exe at root on Windows, but binary on Unix)
+      const possibleBinaries = fs.readdirSync(modTarget).filter(f =>
+        !f.includes('.') || f.endsWith('.so') || f.endsWith('.dylib')
+      );
+      possibleBinaries.forEach(binary => {
+        const binaryPath = path.join(modTarget, binary);
+        try {
+          const stats = fs.statSync(binaryPath);
+          if (stats.isFile()) {
+            fs.chmodSync(binaryPath, 0o755);
+          }
+        } catch (e) {
+          // Ignore errors for non-binary files
+        }
+      });
+    }
+
+    ffmpegCopied++;
+    console.log(`   ✅ Copied ${mod}`);
+  } else {
+    console.warn(`   ⚠️  ${mod} not found in node_modules`);
+  }
+}
+
+if (ffmpegCopied === 0) {
+  console.warn('   ⚠️  WARNING: No FFmpeg binaries found. Video processing will not work!');
+  console.warn('   ⚠️  Install with: npm install ffmpeg-static ffprobe-static');
+} else {
+  console.log(`✅ Copied ${ffmpegCopied} FFmpeg modules\n`);
+}
+
 // Step 6: Copy Python scripts and dependencies
 console.log('Step 6: Copying Python scripts...');
 const pythonSource = path.join(ROOT_DIR, 'backend', 'python');
@@ -264,7 +321,9 @@ const portablePackageJson = {
   description: "Portable distribution of ComfyUI Image Manager",
   dependencies: {
     "sharp": "^0.33.0",
-    "better-sqlite3": "^9.4.0"
+    "better-sqlite3": "^9.4.0",
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0"
   }
 };
 fs.writeFileSync(
@@ -282,6 +341,9 @@ const batchScript = `@echo off
 chcp 65001 > nul
 title ComfyUI Image Manager
 cd /d "%~dp0"
+
+REM Set portable executable directory for runtime path resolution
+set PORTABLE_EXECUTABLE_DIR=%~dp0
 
 echo.
 echo ========================================================================
@@ -328,6 +390,9 @@ pause
 // Linux/Mac shell script
 const shellScript = `#!/bin/bash
 cd "$(dirname "$0")"
+
+# Set portable executable directory for runtime path resolution
+export PORTABLE_EXECUTABLE_DIR="$(pwd)"
 
 echo ""
 echo "╔════════════════════════════════════════════════════════════════════════╗"
@@ -449,7 +514,7 @@ console.log('✅ Environment template created\n');
 
 // Step 10: Create data directories
 console.log('Step 10: Creating data directories...');
-const dataDirectories = ['database', 'uploads', 'logs', 'temp', 'models'];
+const dataDirectories = ['database', 'uploads', 'logs', 'temp', 'models', 'config'];
 for (const dir of dataDirectories) {
   const dirPath = path.join(PORTABLE_OUTPUT_DIR, dir);
   fs.ensureDirSync(dirPath);
@@ -546,10 +611,12 @@ For external internet access:
 ## 📁 Data Storage
 
 All data is stored in these folders (created automatically):
-- \`uploads/\` - Your images
-- \`database/\` - Database files
+- \`uploads/\` - Your images and videos
+- \`database/\` - Database files (images.db, api-generation-history.db)
+- \`config/\` - Application settings (settings.json)
 - \`logs/\` - Application logs
 - \`models/\` - AI model cache (if using tagger)
+- \`temp/\` - Temporary files
 
 ## 🔧 Troubleshooting
 
@@ -593,10 +660,32 @@ Visit: https://github.com/yourusername/comfyui-image-manager
 - \`app/\` - Application files
   - \`app/bundle.js\` - Main application
   - \`app/python/\` - Python scripts for AI tagging (optional)
-  - \`app/node_modules/\` - Native dependencies (sharp, sqlite3)
+  - \`app/node_modules/\` - Native dependencies
+    - \`sharp/\` - Image processing library
+    - \`better-sqlite3/\` - Database engine
+    - \`ffmpeg-static/\` - Video processing (FFmpeg binary)
+    - \`ffprobe-static/\` - Video metadata extraction (FFprobe binary)
+    - + All required dependencies
 - \`start.bat\` / \`start.sh\` - Startup scripts
 - \`.env.example\` - Configuration template
+- \`config/\` - Settings storage directory
+- \`database/\` - Database files
+- \`uploads/\` - Image and video storage
 - \`models/\` - AI model cache (created on first use)
+
+## 🎥 Video Processing
+
+The application includes built-in video processing capabilities:
+
+**Supported Formats**: MP4, WebM, AVI, MOV, MKV, and more
+
+**Features**:
+- Automatic thumbnail generation (animated WebP)
+- Video metadata extraction (duration, resolution, codec, bitrate)
+- Frame-by-frame preview
+- FFmpeg and FFprobe binaries are included
+
+**Note**: Video processing works out of the box - no additional setup required!
 
 ## 💡 Tips
 
@@ -607,6 +696,7 @@ Visit: https://github.com/yourusername/comfyui-image-manager
 - Portable - can be moved to any location after first run
 - Python is optional - only needed for AI tagging feature
 - Models are downloaded once and cached in \`models/\` folder
+- Video processing is automatic with included FFmpeg binaries
 
 ## 🔄 How Auto-Download Works
 

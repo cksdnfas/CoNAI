@@ -5,10 +5,11 @@ import {
   Paper,
   Tabs,
   Tab,
+  CircularProgress,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { groupPromptTerms, type GroupedPromptResult } from '../../utils/promptGrouping';
-import type { AutoTagsData } from '../../types/image';
+import type { AutoTagsData, ImageRecord } from '../../types/image';
 import AutoTagDisplay from './AutoTagDisplay';
 
 interface PromptDisplayProps {
@@ -23,6 +24,10 @@ interface PromptDisplayProps {
   autoTags?: AutoTagsData | null;
   isTaggerEnabled?: boolean;
   onAutoTagGenerated?: () => void;
+  // 히스토리 컨텍스트 관련 props
+  isHistoryContext?: boolean;
+  linkedImage?: ImageRecord | null;
+  loadingLinkedImage?: boolean;
 }
 
 interface TabPanelProps {
@@ -68,6 +73,9 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
   autoTags,
   isTaggerEnabled = false,
   onAutoTagGenerated,
+  isHistoryContext = false,
+  linkedImage = null,
+  loadingLinkedImage = false,
 }) => {
   const { t } = useTranslation('promptManagement');
   const [tabValue, setTabValue] = useState(0);
@@ -77,7 +85,11 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
 
   const hasPrompt = prompt && prompt.trim();
   const hasNegativePrompt = negativePrompt && negativePrompt.trim();
-  const showAutoTab = isTaggerEnabled && imageId !== undefined;
+
+  // AUTO 탭 표시 조건: 일반 모드는 isTaggerEnabled, 히스토리 모드는 linkedImage 존재 여부
+  const showAutoTab = isHistoryContext
+    ? (linkedImage !== null || loadingLinkedImage)
+    : (isTaggerEnabled && imageId !== undefined);
 
   // showGrouped가 true일 때 프롬프트 그룹화 처리
   useEffect(() => {
@@ -142,20 +154,9 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
           </Box>
         ))}
 
-        {/* 미분류 프롬프트들 */}
+        {/* 미분류 프롬프트들 - 헤더 없이 표시 */}
         {data.unclassified_terms.length > 0 && (
           <Box sx={{ mb: 1.5 }}>
-            <Typography
-              variant="subtitle2"
-              sx={{
-                mb: 0.5,
-                fontWeight: 600,
-                color: 'text.secondary',
-                fontSize: '0.9rem',
-              }}
-            >
-              {t('promptDisplay.unclassified')}
-            </Typography>
             <Typography
               variant="body2"
               sx={{
@@ -542,11 +543,37 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
 
           {showAutoTab && (
             <TabPanel value={tabValue} index={(hasPrompt ? 1 : 0) + (hasNegativePrompt ? 1 : 0)}>
-              <AutoTagDisplay
-                imageId={imageId!}
-                autoTags={autoTags ?? null}
-                onTagGenerated={onAutoTagGenerated}
-              />
+              {isHistoryContext ? (
+                // 히스토리 컨텍스트: linked image의 AUTO 태그 표시
+                loadingLinkedImage ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                    <CircularProgress size={40} />
+                    <Typography variant="body2" color="text.secondary" sx={{ ml: 2 }}>
+                      업로드된 이미지 정보 불러오는 중...
+                    </Typography>
+                  </Box>
+                ) : linkedImage ? (
+                  <AutoTagDisplay
+                    imageId={linkedImage.id}
+                    autoTags={linkedImage.auto_tags ?? null}
+                    onTagGenerated={() => {}}
+                    readOnly={true}
+                  />
+                ) : (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                    <Typography variant="body2" color="text.secondary">
+                      서버에 업로드된 이미지가 없습니다
+                    </Typography>
+                  </Box>
+                )
+              ) : (
+                // 일반 컨텍스트: 기존 동작
+                <AutoTagDisplay
+                  imageId={imageId!}
+                  autoTags={autoTags ?? null}
+                  onTagGenerated={onAutoTagGenerated}
+                />
+              )}
             </TabPanel>
           )}
         </Box>

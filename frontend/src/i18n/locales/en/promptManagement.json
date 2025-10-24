@@ -137,8 +137,7 @@
     },
     "noPrompt": "No prompt information available.",
     "loading": "Loading...",
-    "loadFailed": "Failed to load group information.",
-    "unclassified": "Unclassified"
+    "loadFailed": "Failed to load group information."
   },
 
   "autoTagDisplay": {

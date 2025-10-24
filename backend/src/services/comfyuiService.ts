@@ -13,7 +13,7 @@ export class ComfyUIService {
   constructor(private apiEndpoint: string) {
     this.axiosInstance = axios.create({
       baseURL: apiEndpoint,
-      timeout: 30000, // 30초 타임아웃
+      timeout: 1800000, // 30분 타임아웃 (30 * 60 * 1000)
       headers: {
         'Content-Type': 'application/json'
       }
@@ -113,13 +113,13 @@ export class ComfyUIService {
   /**
    * 프롬프트 완료 대기 (폴링)
    * @param promptId ComfyUI 프롬프트 ID
-   * @param maxAttempts 최대 시도 횟수 (기본 60회)
+   * @param maxAttempts 최대 시도 횟수 (기본 1800회 = 1시간)
    * @param intervalMs 폴링 간격 (기본 2초)
    * @returns 완료된 히스토리 데이터
    */
   async waitForCompletion(
     promptId: string,
-    maxAttempts: number = 60,
+    maxAttempts: number = 1800,
     intervalMs: number = 2000
   ): Promise<ComfyUIHistoryResponse> {
     for (let i = 0; i < maxAttempts; i++) {

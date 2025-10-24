@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
 import type { ImageRecord } from '../../../types/image';
 import PromptDisplay from '../../PromptDisplay';
 import { FileInfoSection } from './FileInfoSection';
 import { GroupInfoSection } from './GroupInfoSection';
 import { AIInfoSection } from './AIInfoSection';
+import { imageApi } from '../../../services/api';
 
 type ImageGroupInfo = NonNullable<ImageRecord['groups']>[number];
 
@@ -13,6 +14,8 @@ interface ImageDetailSidebarProps {
   onGroupClick: (group: ImageGroupInfo) => void;
   isTaggerEnabled?: boolean;
   onAutoTagGenerated?: () => void;
+  isHistoryContext?: boolean;
+  linkedImageId?: number | null;
 }
 
 /**
@@ -23,11 +26,43 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
   onGroupClick,
   isTaggerEnabled = false,
   onAutoTagGenerated,
+  isHistoryContext = false,
+  linkedImageId,
 }) => {
+  const [linkedImage, setLinkedImage] = useState<ImageRecord | null>(null);
+  const [loadingLinkedImage, setLoadingLinkedImage] = useState(false);
+
+  // 히스토리 컨텍스트에서 linked_image_id가 있으면 이미지 정보 로드
+  useEffect(() => {
+    if (isHistoryContext && linkedImageId) {
+      const loadLinkedImage = async () => {
+        try {
+          setLoadingLinkedImage(true);
+          const response = await imageApi.getImage(linkedImageId);
+          if (response.success && response.data) {
+            setLinkedImage(response.data);
+          }
+        } catch (error) {
+          console.error('Failed to load linked image:', error);
+          setLinkedImage(null);
+        } finally {
+          setLoadingLinkedImage(false);
+        }
+      };
+      loadLinkedImage();
+    } else {
+      setLinkedImage(null);
+    }
+  }, [isHistoryContext, linkedImageId]);
+
+  // 프롬프트 표시 여부 결정
   const hasPrompts = image.ai_metadata &&
                      (image.ai_metadata.prompts.prompt || image.ai_metadata.prompts.negative_prompt);
 
-  const shouldShowPromptSection = hasPrompts || isTaggerEnabled;
+  // 히스토리 컨텍스트에서는 linked image의 AUTO 프롬프트 사용
+  const showAutoPrompts = isHistoryContext && linkedImage && linkedImage.ai_metadata;
+
+  const shouldShowPromptSection = hasPrompts || isTaggerEnabled || showAutoPrompts;
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -54,6 +89,9 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
             autoTags={image.auto_tags}
             isTaggerEnabled={isTaggerEnabled}
             onAutoTagGenerated={onAutoTagGenerated}
+            isHistoryContext={isHistoryContext}
+            linkedImage={linkedImage}
+            loadingLinkedImage={loadingLinkedImage}
           />
         </Box>
       )}

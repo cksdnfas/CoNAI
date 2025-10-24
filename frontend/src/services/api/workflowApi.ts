@@ -88,10 +88,11 @@ export const workflowApi = {
   },
 
   // 특정 서버로 이미지 생성
-  generateImageOnServer: async (id: number, serverId: number, promptData: Record<string, any>) => {
+  generateImageOnServer: async (id: number, serverId: number, promptData: Record<string, any>, groupId?: number) => {
     const response = await axios.post(`${API_BASE_URL}/workflows/${id}/generate`, {
       prompt_data: promptData,
-      server_id: serverId
+      server_id: serverId,
+      groupId: groupId
     });
     return response.data;
   },

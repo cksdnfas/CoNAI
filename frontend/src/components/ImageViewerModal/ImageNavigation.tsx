@@ -19,7 +19,7 @@ interface ImageNavigationProps {
   totalCount: number;
   onPrevious: () => void;
   onNext: () => void;
-  onRandom: () => void;
+  onRandom?: () => void; // Optional: 히스토리 모드에서는 undefined
   disabled?: boolean;
   isRandomMode?: boolean;
   currentImage?: ImageRecord | null;
@@ -83,18 +83,20 @@ const ImageNavigation: React.FC<ImageNavigationProps> = ({
         </span>
       </Tooltip>
 
-      <Tooltip title={t('imageDetail:viewer.navigation.random')}>
-        <span>
-          <IconButton
-            onClick={onRandom}
-            disabled={disabled || totalCount <= 1}
-            size="small"
-            color="primary"
-          >
-            <RandomIcon />
-          </IconButton>
-        </span>
-      </Tooltip>
+      {onRandom && (
+        <Tooltip title={t('imageDetail:viewer.navigation.random')}>
+          <span>
+            <IconButton
+              onClick={onRandom}
+              disabled={disabled || totalCount <= 1}
+              size="small"
+              color="primary"
+            >
+              <RandomIcon />
+            </IconButton>
+          </span>
+        </Tooltip>
+      )}
     </Box>
   );
 };

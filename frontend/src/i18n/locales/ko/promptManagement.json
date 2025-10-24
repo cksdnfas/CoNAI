@@ -172,8 +172,7 @@
     },
     "noPrompt": "프롬프트 정보가 없습니다.",
     "loading": "로딩 중...",
-    "loadFailed": "그룹 정보를 로드할 수 없습니다.",
-    "unclassified": "Unclassified"
+    "loadFailed": "그룹 정보를 로드할 수 없습니다."
   },
 
   "autoTagDisplay": {

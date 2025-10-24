@@ -1,0 +1,68 @@
+import { useState, useEffect } from 'react';
+import { DEFAULT_PARAMS, PARAMS_STORAGE_KEY } from '../constants/nai.constants';
+import type { NAIParams } from '../types/nai.types';
+
+interface UseNAIParamsOptions {
+  externalPrompt?: string;
+  onPromptChange?: (prompt: string) => void;
+}
+
+export function useNAIParams({ externalPrompt, onPromptChange }: UseNAIParamsOptions = {}) {
+  const [params, setParams] = useState<NAIParams>(getInitialParams);
+
+  // LocalStorage에서 저장된 파라미터 불러오기
+  function getInitialParams(): NAIParams {
+    try {
+      const saved = localStorage.getItem(PARAMS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // 프롬프트는 저장하지 않으므로 제외
+        const { prompt: _, negative_prompt: __, ...savedParams } = parsed;
+        // 기본값과 병합 (새로운 파라미터가 추가될 경우를 대비)
+        return {
+          ...DEFAULT_PARAMS,
+          ...savedParams,
+          prompt: '',
+          negative_prompt: ''
+        };
+      }
+    } catch (e) {
+      console.error('Failed to load saved params:', e);
+    }
+    // 기본값
+    return { ...DEFAULT_PARAMS };
+  }
+
+  // 외부 프롬프트와 동기화
+  useEffect(() => {
+    if (externalPrompt !== undefined && externalPrompt !== params.prompt) {
+      setParams((prev) => ({ ...prev, prompt: externalPrompt }));
+    }
+  }, [externalPrompt]);
+
+  // 프롬프트 변경 시 외부로 전달
+  useEffect(() => {
+    if (onPromptChange && params.prompt !== externalPrompt) {
+      onPromptChange(params.prompt);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.prompt, onPromptChange]);
+
+  // 파라미터 변경 시 LocalStorage에 저장 (프롬프트 제외)
+  useEffect(() => {
+    try {
+      const { prompt, negative_prompt, ...paramsToSave } = params;
+      localStorage.setItem(PARAMS_STORAGE_KEY, JSON.stringify(paramsToSave));
+    } catch (e) {
+      console.error('Failed to save params:', e);
+    }
+  }, [params]);
+
+  return {
+    params,
+    setParams,
+    updateParam: <K extends keyof NAIParams>(key: K, value: NAIParams[K]) => {
+      setParams((prev) => ({ ...prev, [key]: value }));
+    }
+  };
+}

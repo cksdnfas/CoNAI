@@ -1,11 +1,16 @@
 import { PromptCollectionModel } from '../models/PromptCollection';
+import { PromptGroupModel } from '../models/PromptGroup';
 import { SynonymService } from './synonymService';
 import { PromptGroupService } from './promptGroupService';
 import {
   parsePromptTerms,
   normalizeSearchTerm,
   PromptSearchResult,
-  PromptStatistics
+  PromptStatistics,
+  isLoRAModel,
+  cleanPromptTerm,
+  parsePromptWithLoRAs,
+  removeLoRAWeight
 } from '@comfyui-image-manager/shared';
 
 export class PromptCollectionService {
@@ -45,28 +50,120 @@ export class PromptCollectionService {
   }
 
   /**
+   * Ensure LoRA groups exist for both positive and negative prompts
+   * Creates them if they don't exist
+   * @returns Object with positiveGroupId and negativeGroupId
+   */
+  private static async ensureLoRAGroup(): Promise<{
+    positiveGroupId: number;
+    negativeGroupId: number;
+  }> {
+    let positiveGroupId: number;
+    let negativeGroupId: number;
+
+    // Check/create positive LoRA group
+    let positiveGroup = await PromptGroupModel.findByName('LoRA', 'positive');
+    if (!positiveGroup) {
+      console.log('📁 Creating LoRA group for positive prompts...');
+      positiveGroupId = await PromptGroupModel.create(
+        { group_name: 'LoRA', display_order: 999, is_visible: true },
+        'positive'
+      );
+    } else {
+      positiveGroupId = positiveGroup.id;
+    }
+
+    // Check/create negative LoRA group
+    let negativeGroup = await PromptGroupModel.findByName('LoRA', 'negative');
+    if (!negativeGroup) {
+      console.log('📁 Creating LoRA group for negative prompts...');
+      negativeGroupId = await PromptGroupModel.create(
+        { group_name: 'LoRA', display_order: 999, is_visible: true },
+        'negative'
+      );
+    } else {
+      negativeGroupId = negativeGroup.id;
+    }
+
+    return { positiveGroupId, negativeGroupId };
+  }
+
+  /**
    * 이미지에서 프롬프트를 수집하여 데이터베이스에 저장
+   * LoRA 모델은 자동으로 "LoRA" 그룹에 할당 (가중치 제거 후 저장)
+   * 일반 단어는 괄호, 가중치, 언더스코어 제거 후 저장
    */
   static async collectFromImage(prompt: string | null, negativePrompt: string | null): Promise<void> {
     try {
+      // LoRA 그룹 ID 확보
+      const loraGroups = await this.ensureLoRAGroup();
+
       // 포지티브 프롬프트 수집 (유효성 검사 추가)
       if (this.isValidPrompt(prompt)) {
-        const terms = parsePromptTerms(prompt!);
+        // LoRA와 일반 단어 분리
+        const { loras, terms } = parsePromptWithLoRAs(prompt!);
+
+        // LoRA 처리 (가중치 제거 후 저장)
+        for (const lora of loras) {
+          try {
+            const cleanedLoRA = removeLoRAWeight(lora);  // 가중치 제거
+            console.log(`🎨 LoRA model detected: ${lora} → ${cleanedLoRA}`);
+            await PromptCollectionModel.addOrIncrement(cleanedLoRA, loraGroups.positiveGroupId);
+          } catch (loraError) {
+            console.error(`❌ Failed to collect LoRA "${lora}":`, loraError);
+            // 개별 LoRA 실패는 전체 실패로 이어지지 않음
+          }
+        }
+
+        // 일반 단어 처리
         for (const term of terms) {
-          if (term.trim()) {
-            await PromptCollectionModel.addOrIncrement(term.trim());
+          const trimmed = term.trim();
+          if (!trimmed || trimmed.length < 2) continue;
+
+          try {
+            const cleaned = cleanPromptTerm(trimmed);
+            if (cleaned && cleaned.length >= 2) {
+              await PromptCollectionModel.addOrIncrement(cleaned);
+            }
+          } catch (termError) {
+            console.error(`❌ Failed to collect term "${trimmed}":`, termError);
+            // 개별 항목 실패는 전체 실패로 이어지지 않음
           }
         }
       } else if (prompt) {
         console.log(`⚠️ Skipping invalid prompt: "${prompt}"`);
       }
 
-      // 네거티브 프롬프트 수집 (유효성 검사 추가)
+      // 네거티브 프롬프트 수집 (동일 로직)
       if (this.isValidPrompt(negativePrompt)) {
-        const terms = parsePromptTerms(negativePrompt!);
+        // LoRA와 일반 단어 분리
+        const { loras, terms } = parsePromptWithLoRAs(negativePrompt!);
+
+        // LoRA 처리 (가중치 제거 후 저장)
+        for (const lora of loras) {
+          try {
+            const cleanedLoRA = removeLoRAWeight(lora);  // 가중치 제거
+            console.log(`🎨 LoRA model detected (negative): ${lora} → ${cleanedLoRA}`);
+            await PromptCollectionModel.addOrIncrementNegative(cleanedLoRA, loraGroups.negativeGroupId);
+          } catch (loraError) {
+            console.error(`❌ Failed to collect negative LoRA "${lora}":`, loraError);
+            // 개별 LoRA 실패는 전체 실패로 이어지지 않음
+          }
+        }
+
+        // 일반 단어 처리
         for (const term of terms) {
-          if (term.trim()) {
-            await PromptCollectionModel.addOrIncrementNegative(term.trim());
+          const trimmed = term.trim();
+          if (!trimmed || trimmed.length < 2) continue;
+
+          try {
+            const cleaned = cleanPromptTerm(trimmed);
+            if (cleaned && cleaned.length >= 2) {
+              await PromptCollectionModel.addOrIncrementNegative(cleaned);
+            }
+          } catch (termError) {
+            console.error(`❌ Failed to collect negative term "${trimmed}":`, termError);
+            // 개별 항목 실패는 전체 실패로 이어지지 않음
           }
         }
       } else if (negativePrompt) {
@@ -74,6 +171,7 @@ export class PromptCollectionService {
       }
     } catch (error) {
       console.error('Error collecting prompts from image:', error);
+      // STEP 3 요구사항: 오류 발생 시 throw하여 prompt_collection 등록 방지
       throw error;
     }
   }

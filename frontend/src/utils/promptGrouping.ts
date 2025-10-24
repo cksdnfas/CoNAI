@@ -3,7 +3,12 @@
  * 현재 프롬프트를 그룹별로 분류하는 로직
  */
 
-import { parsePromptTerms } from '@comfyui-image-manager/shared';
+import {
+  parsePromptWithLoRAs,
+  cleanPromptTerm,
+  refinePrimaryPrompt,
+  removeLoRAWeight
+} from '@comfyui-image-manager/shared';
 import { API_BASE_URL } from '../services/api';
 
 export interface PromptGroup {
@@ -78,26 +83,32 @@ export const groupPromptTerms = async (
     return { groups: [], unclassified_terms: [] };
   }
 
-  // 1. 프롬프트를 개별 항목으로 파싱
-  const terms = parsePromptTerms(promptText);
+  // 1. NAI 문법 변환 (1.5::rain:: → (rain:1.5))
+  const refinedPrompt = refinePrimaryPrompt(promptText);
 
-  // 2. 그룹 목록 가져오기
+  // 2. LoRA와 일반 프롬프트 분리
+  const { loras, terms } = parsePromptWithLoRAs(refinedPrompt);
+
+  // 3. 그룹 목록 가져오기
   const groups = await fetchPromptGroups(type);
 
-  // 3. 각 그룹의 프롬프트 목록 가져오기
+  // 4. 각 그룹의 프롬프트 목록 가져오기
   const groupPromptMap = new Map<number, string[]>();
 
   for (const group of groups) {
     const groupPrompts = await fetchGroupPrompts(group.id, type);
+    // 콜렉션 프롬프트는 이미 cleanPromptTerm 또는 removeLoRAWeight 처리된 상태
     groupPromptMap.set(group.id, groupPrompts.map(p => p.toLowerCase()));
   }
 
-  // 4. 각 항목을 그룹에 매칭
+  // 5. 각 항목을 그룹에 매칭
   const groupedTerms = new Map<number, string[]>();
   const unclassifiedTerms: string[] = [];
 
+  // 일반 프롬프트 처리
   for (const term of terms) {
-    const normalizedTerm = term.toLowerCase();
+    // 이미지 프롬프트를 콜렉션 형식으로 정규화
+    const normalizedTerm = cleanPromptTerm(term).toLowerCase();
     let matched = false;
 
     for (const [groupId, groupPrompts] of groupPromptMap) {
@@ -105,6 +116,7 @@ export const groupPromptTerms = async (
         if (!groupedTerms.has(groupId)) {
           groupedTerms.set(groupId, []);
         }
+        // 원본 term 저장 (괄호, 가중치, 언더스코어 포함)
         groupedTerms.get(groupId)!.push(term);
         matched = true;
         break;
@@ -116,7 +128,29 @@ export const groupPromptTerms = async (
     }
   }
 
-  // 5. 결과 구성
+  // LoRA 처리 (가중치 제거 후 매칭)
+  for (const lora of loras) {
+    const normalizedLoRA = removeLoRAWeight(lora).toLowerCase();
+    let matched = false;
+
+    for (const [groupId, groupPrompts] of groupPromptMap) {
+      if (groupPrompts.includes(normalizedLoRA)) {
+        if (!groupedTerms.has(groupId)) {
+          groupedTerms.set(groupId, []);
+        }
+        // 원본 lora 저장 (가중치 포함)
+        groupedTerms.get(groupId)!.push(lora);
+        matched = true;
+        break;
+      }
+    }
+
+    if (!matched) {
+      unclassifiedTerms.push(lora);
+    }
+  }
+
+  // 6. 결과 구성
   const result: GroupedPromptTerms[] = [];
 
   for (const group of groups) {

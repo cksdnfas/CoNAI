@@ -34,6 +34,18 @@ export const convertHistoryToImageRecord = (
   // Fallback to direct API/images/ paths only if linked_image_id is not set
   const useImageId = history.linked_image_id;
 
+  // 디버깅: 이미지 경로가 없는 경우 경고
+  if (!useImageId && !history.thumbnail_path && !history.original_path) {
+    console.warn(`[History Adapter] History ${history.id} has no valid image paths:`, {
+      id: history.id,
+      service_type: history.service_type,
+      generation_status: history.generation_status,
+      linked_image_id: history.linked_image_id,
+      thumbnail_path: history.thumbnail_path,
+      original_path: history.original_path
+    });
+  }
+
   return {
     // 기본 이미지 정보
     id: history.id!,

@@ -8,15 +8,13 @@ interface CostCalculationRequest {
   height: number;
   steps: number;
   n_samples: number;
-  sm: boolean;
-  sm_dyn: boolean;
   subscriptionTier: number;
   anlasBalance?: number;
 }
 
 /**
  * POST /api/nai/cost/calculate
- * NovelAI 이미지 생성 비용 계산
+ * NovelAI 이미지 생성 비용 계산 (SMEA 비활성화 버전)
  */
 router.post('/calculate', async (req: Request, res: Response) => {
   try {
@@ -25,8 +23,6 @@ router.post('/calculate', async (req: Request, res: Response) => {
       height,
       steps,
       n_samples,
-      sm,
-      sm_dyn,
       subscriptionTier,
       anlasBalance = 0,
     } = req.body as CostCalculationRequest;
@@ -46,19 +42,17 @@ router.post('/calculate', async (req: Request, res: Response) => {
       return;
     }
 
-    // 비용 계산
+    // 비용 계산 (SMEA 비활성화)
     const estimatedCost = calculateAnlasCost({
       width,
       height,
       steps,
       n_samples,
-      sm,
-      sm_dyn,
     });
 
     // 최대 샘플 수 계산
     const maxSamples = getMaxSamples(
-      { width, height, steps, sm, sm_dyn },
+      { width, height, steps },
       anlasBalance,
       subscriptionTier
     );
@@ -76,8 +70,7 @@ router.post('/calculate', async (req: Request, res: Response) => {
       isOpusFree,
       breakdown: {
         baseCost: Math.ceil((width * height * steps) / (1024 * 1024 * 28)),
-        smMultiplier: sm ? 1.2 : 1.0,
-        smDynMultiplier: sm_dyn ? 1.4 : 1.0,
+        smeaMultiplier: 1.0, // SMEA 비활성화 (고정값)
         samplesMultiplier: n_samples,
       },
     });

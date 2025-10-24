@@ -24,11 +24,12 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { ImageRecord, ImageSearchParams } from '../../types/image';
+import type { GenerationHistoryRecord } from '@comfyui-image-manager/shared';
 import ImageNavigation from './ImageNavigation';
 import { ImageGridModal } from '../ImageGrid';
 import { getBackendOrigin } from '../../utils/backend';
 import { settingsApi } from '../../services/settingsApi';
-import { imageApi } from '../../services/api';
+import { imageApi, generationHistoryApi } from '../../services/api';
 import { useImageTransform } from './hooks/useImageTransform';
 import { useImageNavigation } from './hooks/useImageNavigation';
 import { useGroupImages } from './hooks/useGroupImages';
@@ -47,6 +48,9 @@ interface ImageViewerModalProps {
   searchContext?: 'all' | 'search' | 'group';
   searchParams?: ImageSearchParams;
   groupId?: number;
+  // 히스토리 컨텍스트
+  isHistoryContext?: boolean;
+  historyRecord?: GenerationHistoryRecord;
 }
 
 const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
@@ -60,6 +64,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   searchContext = 'all',
   searchParams,
   groupId,
+  isHistoryContext = false,
+  historyRecord,
 }) => {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -135,7 +141,14 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const handleDownload = () => {
     if (!image) return;
     const link = document.createElement('a');
-    link.href = `${backendOrigin}/api/images/${image.id}/download/original`;
+
+    // 히스토리 컨텍스트일 때는 업로드 경로 직접 사용
+    if (isHistoryContext && image.image_url) {
+      link.href = `${backendOrigin}${image.image_url}`;
+    } else {
+      link.href = `${backendOrigin}/api/images/${image.id}/download/original`;
+    }
+
     link.download = image.original_name;
     document.body.appendChild(link);
     link.click();
@@ -157,7 +170,15 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     if (!currentImage) return;
 
     try {
-      const response = await imageApi.deleteImage(currentImage.id);
+      let response: { success: boolean; error?: string };
+
+      // 히스토리 컨텍스트일 때는 히스토리 삭제 API 사용
+      if (isHistoryContext) {
+        response = await generationHistoryApi.delete(currentImage.id);
+      } else {
+        response = await imageApi.deleteImage(currentImage.id);
+      }
+
       if (response.success) {
         setSnackbar({
           open: true,
@@ -194,7 +215,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         });
       }
     } catch (error) {
-      console.error('Failed to delete image:', error);
+      console.error('Failed to delete:', error);
       setSnackbar({
         open: true,
         message: t('imageDetail:actions.deleteError'),
@@ -293,6 +314,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               onGroupClick={groupImages.handleGroupClick}
               isTaggerEnabled={isTaggerEnabled}
               onAutoTagGenerated={handleAutoTagGenerated}
+              isHistoryContext={isHistoryContext}
+              linkedImageId={historyRecord?.linked_image_id}
             />
           </Paper>
         )}
@@ -320,6 +343,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               onGroupClick={groupImages.handleGroupClick}
               isTaggerEnabled={isTaggerEnabled}
               onAutoTagGenerated={handleAutoTagGenerated}
+              isHistoryContext={isHistoryContext}
+              linkedImageId={historyRecord?.linked_image_id}
             />
           </Drawer>
         )}
@@ -341,17 +366,19 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           totalCount={images.length}
           onPrevious={navigation.handlePrevious}
           onNext={navigation.handleNext}
-          onRandom={navigation.handleRandom}
+          {...(!isHistoryContext && { onRandom: navigation.handleRandom })}
           isRandomMode={isRandomMode}
           currentImage={currentImage}
         />
 
         <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title={t('imageDetail:actions.goToDetail')}>
-            <IconButton size="small" onClick={handleGoToDetail}>
-              <InfoIcon />
-            </IconButton>
-          </Tooltip>
+          {!isHistoryContext && (
+            <Tooltip title={t('imageDetail:actions.goToDetail')}>
+              <IconButton size="small" onClick={handleGoToDetail}>
+                <InfoIcon />
+              </IconButton>
+            </Tooltip>
+          )}
           <Tooltip title={t('imageDetail:actions.download')}>
             <IconButton size="small" onClick={handleDownload}>
               <DownloadIcon />

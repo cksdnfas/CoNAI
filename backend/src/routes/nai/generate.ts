@@ -39,14 +39,16 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
       n_samples: metadata.n_samples,
       seed: metadata.seed,
       noise_schedule: metadata.noise_schedule,
-      legacy: false,
-      qualityToggle: metadata.qualityToggle ?? true
+      legacy: false
     };
 
     // V4/V4.5 전용 파라미터 - v4_prompt 구조 사용
     if (isV4_5 || metadata.model?.includes('nai-diffusion-4')) {
-      // SMEA 설정
-      baseParams.autoSmea = metadata.sm ?? true;
+      // SMEA 비활성화 (고정값)
+      baseParams.autoSmea = false;
+
+      // Variety+ 설정
+      baseParams.variety_plus = metadata.variety_plus ?? false;
 
       // 기타 V4 파라미터
       baseParams.uncond_scale = metadata.uncond_scale ?? 1.0;
@@ -167,6 +169,9 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
     const historyIds: number[] = [];
 
     try {
+      // Extract groupId from request body (optional)
+      const groupId = metadata.groupId;
+
       // 배치 생성 시 모든 이미지에 대해 히스토리 생성
       for (let i = 0; i < images.length; i++) {
         const historyId = await GenerationHistoryService.createNAIHistory({
@@ -180,6 +185,7 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
           negativePrompt: metadata.negative_prompt,
           width: metadata.width || 1024,
           height: metadata.height || 1024,
+          groupId: groupId, // User-selected group for automatic assignment
           metadata: {
             action: metadata.action,
             n_samples: metadata.n_samples,

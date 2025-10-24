@@ -36,9 +36,12 @@ build({
   external: [
     // Native modules that cannot be bundled
     'sharp',
-    'sqlite3',
     'better-sqlite3',
-    'canvas'
+    'canvas',
+    'ffmpeg-static',
+    'ffprobe-static',
+    'blake2',
+    'argon2'
   ],
   minify: false,  // Disabled for better error messages
   sourcemap: true,
@@ -83,7 +86,7 @@ build({
 
     // Check for native modules
     const bundleContent = fs.readFileSync(BUNDLE_OUTPUT, 'utf8');
-    const nativeModules = ['sharp', 'sqlite3', 'better-sqlite3'];
+    const nativeModules = ['sharp', 'better-sqlite3', 'ffmpeg-static', 'ffprobe-static'];
     const foundNative = nativeModules.filter((mod) =>
       bundleContent.includes(`require("${mod}")`) ||
       bundleContent.includes(`require('${mod}')`)

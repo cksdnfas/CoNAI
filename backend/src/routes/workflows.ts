@@ -17,6 +17,7 @@ import fs from 'fs';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { ComfyUIWorkflowParser } from '../utils/comfyuiWorkflowParser';
 import { GenerationHistoryModel as APIGenerationHistoryModel } from '../models/GenerationHistory';
+import { refinePrimaryPrompt } from '@comfyui-image-manager/shared';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
@@ -279,7 +280,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
  */
 router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
-  const { prompt_data, server_id } = req.body;
+  const { prompt_data, server_id, groupId } = req.body;
 
   if (isNaN(id) || !prompt_data) {
     return res.status(400).json({
@@ -359,6 +360,7 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
         negativePrompt: extractedParams.negativePrompt,
         width: extractedParams.width,
         height: extractedParams.height,
+        groupId: groupId ? parseInt(groupId) : undefined, // User-selected group for automatic assignment
         metadata: {
           server_endpoint: apiEndpoint,
           server_name: serverName,
@@ -448,8 +450,21 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
             console.log('✅ Image processed successfully');
 
             // DB 저장
-            console.log('💾 Saving to database...');
             const aiInfo = processed.metadata.ai_info || {};
+
+            // STEP 1: 프롬프트 정제 (DB 저장 전)
+            let refinedPrompt = aiInfo.prompt || null;
+            let refinedNegativePrompt = aiInfo.negative_prompt || null;
+
+            if (refinedPrompt) {
+              refinedPrompt = refinePrimaryPrompt(refinedPrompt);
+            }
+
+            if (refinedNegativePrompt) {
+              refinedNegativePrompt = refinePrimaryPrompt(refinedNegativePrompt);
+            }
+
+            console.log('💾 Saving to database...');
             const imageId = await ImageModel.create({
               filename: processed.filename,
               original_name: path.basename(tempPath),
@@ -462,7 +477,7 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
               height: processed.height,
               metadata: JSON.stringify(processed.metadata),
 
-              // AI 메타데이터 필드들
+              // AI 메타데이터 필드들 (정제된 프롬프트 사용)
               ai_tool: 'ComfyUI',
               model_name: aiInfo.model || null,
               lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
@@ -471,8 +486,8 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
               sampler: aiInfo.sampler || null,
               seed: aiInfo.seed || null,
               scheduler: aiInfo.scheduler || null,
-              prompt: aiInfo.prompt || null,
-              negative_prompt: aiInfo.negative_prompt || null,
+              prompt: refinedPrompt,
+              negative_prompt: refinedNegativePrompt,
               denoise_strength: aiInfo.denoise_strength || null,
               generation_time: aiInfo.generation_time || null,
               batch_size: aiInfo.batch_size || null,
@@ -494,12 +509,13 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
 
             imageIds.push(imageId);
 
-            // 프롬프트 수집 (비동기로 처리, 오류가 있어도 업로드는 계속 진행)
+            // STEP 3: 프롬프트 수집 (정제된 프롬프트 사용)
+            // 비동기로 처리, 오류가 있어도 업로드는 계속 진행
             try {
               console.log('🔍 Collecting prompts...');
               await PromptCollectionService.collectFromImage(
-                aiInfo.prompt || null,
-                aiInfo.negative_prompt || null
+                refinedPrompt,
+                refinedNegativePrompt
               );
               console.log('✅ Prompts collected successfully');
             } catch (promptError) {
@@ -997,7 +1013,19 @@ router.post('/:id/generate-parallel', asyncHandler(async (req: Request, res: Res
                   const processed = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
                   const aiInfo = processed.metadata.ai_info || {};
 
-                  // DB 저장
+                  // STEP 1: 프롬프트 정제 (DB 저장 전)
+                  let refinedPrompt = aiInfo.prompt || null;
+                  let refinedNegativePrompt = aiInfo.negative_prompt || null;
+
+                  if (refinedPrompt) {
+                    refinedPrompt = refinePrimaryPrompt(refinedPrompt);
+                  }
+
+                  if (refinedNegativePrompt) {
+                    refinedNegativePrompt = refinePrimaryPrompt(refinedNegativePrompt);
+                  }
+
+                  // DB 저장 (정제된 프롬프트 사용)
                   const imageId = await ImageModel.create({
                     filename: processed.filename,
                     original_name: path.basename(tempPath),
@@ -1017,8 +1045,8 @@ router.post('/:id/generate-parallel', asyncHandler(async (req: Request, res: Res
                     sampler: aiInfo.sampler || null,
                     seed: aiInfo.seed || null,
                     scheduler: aiInfo.scheduler || null,
-                    prompt: aiInfo.prompt || null,
-                    negative_prompt: aiInfo.negative_prompt || null,
+                    prompt: refinedPrompt,
+                    negative_prompt: refinedNegativePrompt,
                     denoise_strength: aiInfo.denoise_strength || null,
                     generation_time: aiInfo.generation_time || null,
                     batch_size: aiInfo.batch_size || null,
@@ -1035,11 +1063,11 @@ router.post('/:id/generate-parallel', asyncHandler(async (req: Request, res: Res
 
                   imageIds.push(imageId);
 
-                  // 프롬프트 수집
+                  // STEP 3: 프롬프트 수집 (정제된 프롬프트 사용)
                   try {
                     await PromptCollectionService.collectFromImage(
-                      aiInfo.prompt || null,
-                      aiInfo.negative_prompt || null
+                      refinedPrompt,
+                      refinedNegativePrompt
                     );
                   } catch (promptError) {
                     console.warn('⚠️ Failed to collect prompts:', promptError);

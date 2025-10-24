@@ -7,6 +7,7 @@ import { AutoCollectionService } from './autoCollectionService';
 import { imageTaggerService, ImageTaggerService } from './imageTaggerService';
 import { settingsService } from './settingsService';
 import { runtimePaths, resolveUploadsPath } from '../config/runtimePaths';
+import { refinePrimaryPrompt } from '@comfyui-image-manager/shared';
 
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
 
@@ -73,9 +74,25 @@ export class UploadService {
 
     const aiInfo = metadata.ai_info || {};
 
+    // STEP 1: 프롬프트 정제 (DB 저장 전)
+    let refinedPrompt = aiInfo.prompt || null;
+    let refinedNegativePrompt = aiInfo.negative_prompt || null;
+
+    if (refinedPrompt) {
+      console.log('🔄 Refining positive prompt...');
+      refinedPrompt = refinePrimaryPrompt(refinedPrompt);
+      console.log('✅ Positive prompt refined');
+    }
+
+    if (refinedNegativePrompt) {
+      console.log('🔄 Refining negative prompt...');
+      refinedNegativePrompt = refinePrimaryPrompt(refinedNegativePrompt);
+      console.log('✅ Negative prompt refined');
+    }
+
     console.log('💾 Saving to database...');
 
-    // 데이터베이스에 저장
+    // 데이터베이스에 저장 (정제된 프롬프트 사용)
     const imageId = await ImageModel.create({
       filename: path.basename(localFilePath),
       original_name: path.basename(localFilePath),
@@ -88,7 +105,7 @@ export class UploadService {
       height: imageInfo.height,
       metadata: JSON.stringify(metadata),
 
-      // AI 메타데이터 필드들
+      // AI 메타데이터 필드들 (정제된 프롬프트 사용)
       ai_tool: aiInfo.ai_tool || null,
       model_name: aiInfo.model || null,
       lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
@@ -97,8 +114,8 @@ export class UploadService {
       sampler: aiInfo.sampler || null,
       seed: aiInfo.seed || null,
       scheduler: aiInfo.scheduler || null,
-      prompt: aiInfo.prompt || null,
-      negative_prompt: aiInfo.negative_prompt || null,
+      prompt: refinedPrompt,
+      negative_prompt: refinedNegativePrompt,
       denoise_strength: aiInfo.denoise_strength || null,
       generation_time: aiInfo.generation_time || null,
       batch_size: aiInfo.batch_size || null,
@@ -119,12 +136,13 @@ export class UploadService {
 
     console.log('✅ Database save successful, ID:', imageId);
 
-    // 프롬프트 수집 (비동기로 처리, 오류가 있어도 업로드는 계속 진행)
+    // STEP 3: 프롬프트 수집 (정제된 프롬프트 사용)
+    // 비동기로 처리, 오류가 있어도 업로드는 계속 진행
     try {
       console.log('🔍 Collecting prompts...');
       await PromptCollectionService.collectFromImage(
-        aiInfo.prompt || null,
-        aiInfo.negative_prompt || null
+        refinedPrompt,
+        refinedNegativePrompt
       );
       console.log('✅ Prompts collected successfully');
     } catch (promptError) {

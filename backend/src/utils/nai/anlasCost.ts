@@ -1,6 +1,5 @@
 /**
- * Anlas 비용 계산 유틸리티
- * Python 참조 구현과 동일한 알고리즘
+ * Anlas 비용 계산 유틸리티 (SMEA 비활성화 버전)
  */
 
 interface CostCalculationParams {
@@ -9,14 +8,12 @@ interface CostCalculationParams {
   steps?: number;
   n_samples?: number;
   uncond_scale?: number;
-  sm?: boolean;
-  sm_dyn?: boolean;
   strength?: number;
   is_opus?: boolean;
 }
 
 /**
- * Anlas 비용 계산 함수
+ * Anlas 비용 계산 함수 (SMEA 배율 제거)
  */
 export function calculateAnlasCost(params: CostCalculationParams): number {
   const {
@@ -25,8 +22,6 @@ export function calculateAnlasCost(params: CostCalculationParams): number {
     steps = 28,
     n_samples = 1,
     uncond_scale = 1.0,
-    sm = true,
-    sm_dyn = false,
     strength = 1.0,
     is_opus = false
   } = params;
@@ -42,10 +37,8 @@ export function calculateAnlasCost(params: CostCalculationParams): number {
     resolution = NORMAL_PORTRAIT;
   }
 
-  // SMEA 배율
-  let smeaFactor = 1.0;
-  if (sm_dyn) smeaFactor = 1.4;
-  else if (sm) smeaFactor = 1.2;
+  // SMEA 비활성화 (배율 1.0 고정)
+  const smeaFactor = 1.0;
 
   // 기본 비용 계산
   let perSample = Math.ceil(
@@ -74,7 +67,7 @@ export function calculateAnlasCost(params: CostCalculationParams): number {
  * 잔액으로 생성 가능한 최대 샘플 수 계산
  */
 export function getMaxSamples(
-  params: { width: number; height: number; steps: number; sm: boolean; sm_dyn: boolean },
+  params: { width: number; height: number; steps: number },
   anlasBalance: number,
   subscriptionTier: number
 ): number {

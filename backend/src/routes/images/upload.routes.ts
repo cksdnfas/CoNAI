@@ -10,6 +10,7 @@ import { AutoCollectionService } from '../../services/autoCollectionService';
 import { imageTaggerService, ImageTaggerService } from '../../services/imageTaggerService';
 import { UploadResponse, UploadProgressEvent } from '../../types/image';
 import { runtimePaths, toUploadsUrl } from '../../config/runtimePaths';
+import { refinePrimaryPrompt } from '@comfyui-image-manager/shared';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
@@ -133,11 +134,23 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
       const processedImage = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
       console.log('✅ Image processed successfully');
 
-      console.log('💾 Saving to database...');
       // 메타데이터에서 구조화된 필드 추출
       const aiInfo = processedImage.metadata.ai_info || {};
 
-      // 데이터베이스에 저장
+      // STEP 1: 프롬프트 정제 (DB 저장 전)
+      let refinedPrompt = aiInfo.prompt || null;
+      let refinedNegativePrompt = aiInfo.negative_prompt || null;
+
+      if (refinedPrompt) {
+        refinedPrompt = refinePrimaryPrompt(refinedPrompt);
+      }
+
+      if (refinedNegativePrompt) {
+        refinedNegativePrompt = refinePrimaryPrompt(refinedNegativePrompt);
+      }
+
+      console.log('💾 Saving to database...');
+      // 데이터베이스에 저장 (정제된 프롬프트 사용)
       imageId = await ImageModel.create({
         filename: processedImage.filename,
         original_name: file.originalname,
@@ -150,7 +163,7 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
         height: processedImage.height,
         metadata: JSON.stringify(processedImage.metadata),
 
-        // AI 메타데이터 필드들
+        // AI 메타데이터 필드들 (정제된 프롬프트 사용)
         ai_tool: aiInfo.ai_tool || null,
         model_name: aiInfo.model || null,
         lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
@@ -159,8 +172,8 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
         sampler: aiInfo.sampler || null,
         seed: aiInfo.seed || null,
         scheduler: aiInfo.scheduler || null,
-        prompt: aiInfo.prompt || null,
-        negative_prompt: aiInfo.negative_prompt || null,
+        prompt: refinedPrompt,
+        negative_prompt: refinedNegativePrompt,
         denoise_strength: aiInfo.denoise_strength || null,
         generation_time: aiInfo.generation_time || null,
         batch_size: aiInfo.batch_size || null,
@@ -197,13 +210,13 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
         });
       }
 
-      // 이미지인 경우에만 프롬프트 수집 및 자동 태깅 실행
-      // 프롬프트 수집 (비동기로 처리, 오류가 있어도 업로드는 계속 진행)
+      // STEP 3: 프롬프트 수집 (정제된 프롬프트 사용)
+      // 비동기로 처리, 오류가 있어도 업로드는 계속 진행
       try {
         console.log('🔍 Collecting prompts...');
         await PromptCollectionService.collectFromImage(
-          aiInfo.prompt || null,
-          aiInfo.negative_prompt || null
+          refinedPrompt,
+          refinedNegativePrompt
         );
         console.log('✅ Prompts collected successfully');
       } catch (promptError) {
@@ -379,7 +392,19 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
           // 메타데이터에서 구조화된 필드 추출
           const aiInfo = processedImage.metadata.ai_info || {};
 
-          // 데이터베이스에 저장
+          // STEP 1: 프롬프트 정제 (DB 저장 전)
+          let refinedPrompt = aiInfo.prompt || null;
+          let refinedNegativePrompt = aiInfo.negative_prompt || null;
+
+          if (refinedPrompt) {
+            refinedPrompt = refinePrimaryPrompt(refinedPrompt);
+          }
+
+          if (refinedNegativePrompt) {
+            refinedNegativePrompt = refinePrimaryPrompt(refinedNegativePrompt);
+          }
+
+          // 데이터베이스에 저장 (정제된 프롬프트 사용)
           imageId = await ImageModel.create({
             filename: processedImage.filename,
             original_name: file.originalname,
@@ -392,7 +417,7 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
             height: processedImage.height,
             metadata: JSON.stringify(processedImage.metadata),
 
-            // AI 메타데이터 필드들
+            // AI 메타데이터 필드들 (정제된 프롬프트 사용)
             ai_tool: aiInfo.ai_tool || null,
             model_name: aiInfo.model || null,
             lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
@@ -401,8 +426,8 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
             sampler: aiInfo.sampler || null,
             seed: aiInfo.seed || null,
             scheduler: aiInfo.scheduler || null,
-            prompt: aiInfo.prompt || null,
-            negative_prompt: aiInfo.negative_prompt || null,
+            prompt: refinedPrompt,
+            negative_prompt: refinedNegativePrompt,
             denoise_strength: aiInfo.denoise_strength || null,
             generation_time: aiInfo.generation_time || null,
             batch_size: aiInfo.batch_size || null,
@@ -426,11 +451,11 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
             has_color_histogram: !!processedImage.colorHistogram
           });
 
-          // 이미지인 경우에만 프롬프트 수집 실행
+          // STEP 3: 프롬프트 수집 (정제된 프롬프트 사용)
           try {
             await PromptCollectionService.collectFromImage(
-              aiInfo.prompt || null,
-              aiInfo.negative_prompt || null
+              refinedPrompt,
+              refinedNegativePrompt
             );
           } catch (promptError) {
             console.warn('⚠️ Failed to collect prompts for', file.originalname, '(non-critical):', promptError);
@@ -669,7 +694,19 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
         // 메타데이터에서 구조화된 필드 추출
         const aiInfo = processedImage.metadata.ai_info || {};
 
-        // 데이터베이스에 저장
+        // STEP 1: 프롬프트 정제 (DB 저장 전)
+        let refinedPrompt = aiInfo.prompt || null;
+        let refinedNegativePrompt = aiInfo.negative_prompt || null;
+
+        if (refinedPrompt) {
+          refinedPrompt = refinePrimaryPrompt(refinedPrompt);
+        }
+
+        if (refinedNegativePrompt) {
+          refinedNegativePrompt = refinePrimaryPrompt(refinedNegativePrompt);
+        }
+
+        // 데이터베이스에 저장 (정제된 프롬프트 사용)
         imageId = await ImageModel.create({
           filename: processedImage.filename,
           original_name: file.originalname,
@@ -689,8 +726,8 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
           sampler: aiInfo.sampler || null,
           seed: aiInfo.seed || null,
           scheduler: aiInfo.scheduler || null,
-          prompt: aiInfo.prompt || null,
-          negative_prompt: aiInfo.negative_prompt || null,
+          prompt: refinedPrompt,
+          negative_prompt: refinedNegativePrompt,
           denoise_strength: aiInfo.denoise_strength || null,
           generation_time: aiInfo.generation_time || null,
           batch_size: aiInfo.batch_size || null,
@@ -714,11 +751,11 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
           has_color_histogram: !!processedImage.colorHistogram
         });
 
-        // 이미지인 경우에만 프롬프트 수집 실행
+        // STEP 3: 프롬프트 수집 (정제된 프롬프트 사용)
         try {
           await PromptCollectionService.collectFromImage(
-            aiInfo.prompt || null,
-            aiInfo.negative_prompt || null
+            refinedPrompt,
+            refinedNegativePrompt
           );
         } catch (promptError) {
           console.warn('⚠️ Failed to collect prompts for', file.originalname, promptError);

@@ -1,5 +1,6 @@
 import { GenerationHistoryModel, GenerationHistoryRecord, ServiceType } from '../models/GenerationHistory';
 import { APIImageProcessor } from './apiImageProcessor';
+import { ImageGroupModel } from '../models/Group';
 import axios from 'axios';
 import FormData from 'form-data';
 
@@ -24,6 +25,7 @@ export class GenerationHistoryService {
     width: number;
     height: number;
     metadata?: object;
+    groupId?: number;
   }): Promise<number> {
     const historyRecord: Omit<GenerationHistoryRecord, 'id'> = {
       service_type: 'comfyui',
@@ -36,6 +38,7 @@ export class GenerationHistoryService {
       negative_prompt: data.negativePrompt,
       width: data.width,
       height: data.height,
+      assigned_group_id: data.groupId,
       metadata: data.metadata ? JSON.stringify(data.metadata) : undefined
     };
 
@@ -59,6 +62,7 @@ export class GenerationHistoryService {
     width: number;
     height: number;
     metadata?: object;
+    groupId?: number;
   }): Promise<number> {
     const historyRecord: Omit<GenerationHistoryRecord, 'id'> = {
       service_type: 'novelai',
@@ -73,6 +77,7 @@ export class GenerationHistoryService {
       negative_prompt: data.negativePrompt,
       width: data.width,
       height: data.height,
+      assigned_group_id: data.groupId,
       metadata: data.metadata ? JSON.stringify(data.metadata) : undefined
     };
 
@@ -124,6 +129,23 @@ export class GenerationHistoryService {
 
       // Link to already processed image (from workflow loop)
       GenerationHistoryModel.linkToImage(historyId, linkedImageId);
+
+      // Assign to group if groupId was specified (manual collection)
+      const history = GenerationHistoryModel.findById(historyId);
+      if (history?.assigned_group_id && linkedImageId) {
+        try {
+          console.log(`📁 Assigning image ${linkedImageId} to group ${history.assigned_group_id}...`);
+          await ImageGroupModel.addImageToGroup(
+            history.assigned_group_id,
+            linkedImageId,
+            'manual', // User-selected group = manual collection
+            0
+          );
+          console.log(`✓ Image assigned to group ${history.assigned_group_id}`);
+        } catch (groupError) {
+          console.warn(`⚠️ Failed to assign image to group (non-critical):`, groupError);
+        }
+      }
 
       // Update status to completed
       GenerationHistoryModel.updateStatus(historyId, 'completed');
@@ -188,6 +210,23 @@ export class GenerationHistoryService {
 
       // Step 4: Link to main images record (sync)
       GenerationHistoryModel.linkToImage(historyId, linkedImageId);
+
+      // Step 5: Assign to group if groupId was specified (manual collection)
+      const history = GenerationHistoryModel.findById(historyId);
+      if (history?.assigned_group_id && linkedImageId) {
+        try {
+          console.log(`📁 Assigning image ${linkedImageId} to group ${history.assigned_group_id}...`);
+          await ImageGroupModel.addImageToGroup(
+            history.assigned_group_id,
+            linkedImageId,
+            'manual', // User-selected group = manual collection
+            0
+          );
+          console.log(`✓ Image assigned to group ${history.assigned_group_id}`);
+        } catch (groupError) {
+          console.warn(`⚠️ Failed to assign image to group (non-critical):`, groupError);
+        }
+      }
 
       // Update status to completed (sync)
       GenerationHistoryModel.updateStatus(historyId, 'completed');

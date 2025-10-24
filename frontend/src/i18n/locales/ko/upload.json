@@ -50,5 +50,21 @@
     "dataAnalysis": "프롬프트, 모델명, 생성 파라미터 등이 자동으로 분석되어 검색과 분류에 활용됩니다.",
     "imageVersions": "업로드된 이미지는 원본, 최적화본, 썸네일 3가지 버전으로 저장됩니다.",
     "autoGrouping": "자동 그룹 수집 규칙이 설정되어 있으면 업로드와 동시에 관련 그룹에 자동 분류됩니다."
+  },
+  "promptPreview": {
+    "title": "프롬프트 미리보기",
+    "description": "이미지를 선택하면 AI 메타데이터를 즉시 확인할 수 있습니다. (서버 업로드 없음)",
+    "dragOrClick": "이미지를 드래그하거나 클릭하여 선택",
+    "dropHere": "파일을 여기에 놓으세요",
+    "noUpload": "이미지는 서버에 업로드되지 않으며 브라우저에서만 분석됩니다",
+    "aiTool": "AI 도구",
+    "positivePrompt": "프롬프트",
+    "negativePrompt": "네거티브 프롬프트",
+    "terms": "추출된 용어",
+    "loraModels": "LoRA 모델",
+    "parameters": "생성 파라미터",
+    "rawMetadata": "원본 메타데이터 (EXIF/PNG 청크)",
+    "invalidFileType": "이미지 파일만 선택할 수 있습니다",
+    "extractionFailed": "메타데이터 추출에 실패했습니다"
   }
 }

@@ -137,8 +137,7 @@
     },
     "noPrompt": "没有提示词信息。",
     "loading": "加载中...",
-    "loadFailed": "无法加载组信息。",
-    "unclassified": "未分类"
+    "loadFailed": "无法加载组信息。"
   },
 
   "autoTagDisplay": {
