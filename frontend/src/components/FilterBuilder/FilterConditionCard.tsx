@@ -12,10 +12,8 @@ import {
   Slider,
   Typography,
   Stack,
-  Chip,
   Switch,
   FormControlLabel,
-  Button,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -23,7 +21,7 @@ import {
   Check as CheckIcon,
   Close as CloseIcon,
 } from '@mui/icons-material';
-import { FilterCondition, FilterCategory } from '@comfyui-image-manager/shared';
+import type { FilterCondition, FilterCategory } from '@comfyui-image-manager/shared';
 
 interface FilterConditionCardProps {
   condition: FilterCondition;

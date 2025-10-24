@@ -7,7 +7,6 @@ import {
   Button,
   Chip,
   Stack,
-  IconButton,
   Divider,
 } from '@mui/material';
 import {
@@ -16,7 +15,7 @@ import {
   CallSplit as OrIcon,
   MergeType as AndIcon,
 } from '@mui/icons-material';
-import { FilterCondition, FilterGroupType } from '@comfyui-image-manager/shared';
+import type { FilterCondition, FilterGroupType } from '@comfyui-image-manager/shared';
 import FilterConditionCard from './FilterConditionCard';
 
 interface FilterGroupCardProps {

@@ -7,7 +7,9 @@ import type {
   GroupWithStats,
   GroupCreateData,
   GroupUpdateData,
-  AutoCollectResult
+  AutoCollectResult,
+  ComplexSearchRequest,
+  ComplexSearchResponse
 } from '@comfyui-image-manager/shared';
 import type {
   PromptCollectionResponse,
@@ -48,6 +50,12 @@ export const imageApi = {
   // 오토태그 기반 이미지 검색
   searchByAutoTags: async (params: AutoTagSearchParams): Promise<ImageListResponse> => {
     const response = await api.post('/api/images/search-by-autotags', params);
+    return response.data;
+  },
+
+  // 복합 필터 검색 (Complex Filter System)
+  searchComplex: async (request: ComplexSearchRequest): Promise<ComplexSearchResponse> => {
+    const response = await api.post('/api/images/search/complex', request);
     return response.data;
   },
 

@@ -11,12 +11,12 @@ import {
   Clear as ClearIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import type { ComplexSearchRequest } from '@comfyui-image-manager/shared';
 import SearchBar from '../../components/SearchBar/SearchBar';
 import ImageGrid from '../../components/ImageGrid/ImageGrid';
 import BulkActionBar from '../../components/BulkActionBar/BulkActionBar';
 import { useSearch } from '../../hooks/useSearch';
 import { useSelection } from '../../hooks/useSelection';
-import type { ImageSearchParams, AutoTagSearchParams } from '../../types/image';
 
 const SearchPage: React.FC = () => {
   const { t } = useTranslation(['search', 'common']);
@@ -30,7 +30,7 @@ const SearchPage: React.FC = () => {
     totalPages,
     total,
     lastSearchParams,
-    searchImages,
+    searchComplex,
     changePage,
     changePageSize,
     deleteImages,
@@ -46,9 +46,9 @@ const SearchPage: React.FC = () => {
     selectedCount,
   } = useSelection();
 
-  const handleSearch = (params: ImageSearchParams, autoTagParams?: AutoTagSearchParams) => {
+  const handleSearch = (request: ComplexSearchRequest) => {
     deselectAll(); // 새 검색 시 선택 해제
-    searchImages(params, autoTagParams);
+    searchComplex(request);
   };
 
   const handleSelectionChange = (newSelectedIds: number[]) => {

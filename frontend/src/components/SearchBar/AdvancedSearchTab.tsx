@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Typography, Alert } from '@mui/material';
-import { FilterCondition } from '@comfyui-image-manager/shared';
+import type { FilterCondition } from '@comfyui-image-manager/shared';
 import FilterGroupCard from '../FilterBuilder/FilterGroupCard';
 
 interface AdvancedSearchTabProps {
@@ -98,16 +98,16 @@ const AdvancedSearchTab: React.FC<AdvancedSearchTabProps> = ({
           <strong>시나리오</strong>: "nsfw 제외, 1girl OR 2girls, 캐릭터 있음"
         </Typography>
         <Typography variant="caption" component="div">
-          1. 제외 그룹에 "오토태그 > General 태그: nsfw" 추가
+          1. 제외 그룹에 "오토태그 {'->'} General 태그: nsfw" 추가
         </Typography>
         <Typography variant="caption" component="div">
-          2. OR 그룹에 "오토태그 > General 태그: 1girl" 추가
+          2. OR 그룹에 "오토태그 {'->'} General 태그: 1girl" 추가
         </Typography>
         <Typography variant="caption" component="div">
-          3. OR 그룹에 "오토태그 > General 태그: 2girls" 추가
+          3. OR 그룹에 "오토태그 {'->'} General 태그: 2girls" 추가
         </Typography>
         <Typography variant="caption" component="div">
-          4. AND 그룹에 "오토태그 > 캐릭터 존재: 있음" 추가
+          4. AND 그룹에 "오토태그 {'->'} 캐릭터 존재: 있음" 추가
         </Typography>
       </Alert>
     </Box>

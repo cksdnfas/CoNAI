@@ -11,7 +11,7 @@ import {
   Search as SearchIcon,
   Clear as ClearIcon,
 } from '@mui/icons-material';
-import { FilterCondition, ComplexSearchRequest } from '@comfyui-image-manager/shared';
+import type { FilterCondition, ComplexSearchRequest } from '@comfyui-image-manager/shared';
 import SimpleSearchTab from './SimpleSearchTab';
 import AdvancedSearchTab from './AdvancedSearchTab';
 

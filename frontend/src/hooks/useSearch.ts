@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import type { ImageRecord, ImageSearchParams, AutoTagSearchParams, PageSize } from '../types/image';
+import type { ComplexSearchRequest } from '@comfyui-image-manager/shared';
 import { imageApi } from '../services/api';
 
 export const useSearch = () => {
@@ -12,6 +13,7 @@ export const useSearch = () => {
   const [total, setTotal] = useState(0);
   const [lastSearchParams, setLastSearchParams] = useState<ImageSearchParams | null>(null);
   const [lastAutoTagParams, setLastAutoTagParams] = useState<AutoTagSearchParams | null>(null);
+  const [lastComplexRequest, setLastComplexRequest] = useState<ComplexSearchRequest | null>(null);
 
   const searchImages = useCallback(async (params: ImageSearchParams, autoTagParams?: AutoTagSearchParams) => {
     setLoading(true);
@@ -64,30 +66,76 @@ export const useSearch = () => {
     }
   }, [pageSize]);
 
+  const searchComplex = useCallback(async (request: ComplexSearchRequest) => {
+    setLoading(true);
+    setError(null);
+
+    const searchRequest = {
+      ...request,
+      page: request.page || 1,
+      limit: request.limit || pageSize,
+    };
+
+    try {
+      const response = await imageApi.searchComplex(searchRequest);
+
+      if (response.success && response.data) {
+        setImages(response.data.images);
+        setTotalPages(response.data.totalPages);
+        setTotal(response.data.total);
+        setCurrentPage(response.data.page);
+        setLastComplexRequest(searchRequest);
+        setLastSearchParams(null);
+        setLastAutoTagParams(null);
+      } else {
+        setError(response.error || '검색에 실패했습니다.');
+        setImages([]);
+        setTotal(0);
+        setTotalPages(0);
+      }
+    } catch (err) {
+      setError('검색 중 오류가 발생했습니다.');
+      setImages([]);
+      setTotal(0);
+      setTotalPages(0);
+      console.error('Complex search error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [pageSize]);
+
   const changePage = useCallback((page: number) => {
-    if (lastSearchParams) {
+    if (lastComplexRequest) {
+      const newRequest = { ...lastComplexRequest, page };
+      searchComplex(newRequest);
+    } else if (lastSearchParams) {
       const newParams = { ...lastSearchParams, page };
       searchImages(newParams, lastAutoTagParams || undefined);
     }
-  }, [lastSearchParams, lastAutoTagParams, searchImages]);
+  }, [lastComplexRequest, lastSearchParams, lastAutoTagParams, searchComplex, searchImages]);
 
   const changePageSize = useCallback((newPageSize: PageSize) => {
     setPageSize(newPageSize);
-    if (lastSearchParams) {
+    if (lastComplexRequest) {
+      const newRequest = { ...lastComplexRequest, page: 1, limit: newPageSize };
+      searchComplex(newRequest);
+    } else if (lastSearchParams) {
       const newParams = { ...lastSearchParams, page: 1, limit: newPageSize };
       searchImages(newParams, lastAutoTagParams || undefined);
     }
 
     // 로컬 스토리지에 저장
     localStorage.setItem('searchPageSize', newPageSize.toString());
-  }, [lastSearchParams, lastAutoTagParams, searchImages]);
+  }, [lastComplexRequest, lastSearchParams, lastAutoTagParams, searchComplex, searchImages]);
 
   const deleteImages = useCallback(async (ids: number[]) => {
     setLoading(true);
     try {
       await imageApi.deleteImages(ids);
       // 삭제 후 검색 재실행
-      if (lastSearchParams) {
+      if (lastComplexRequest) {
+        await searchComplex(lastComplexRequest);
+      } else if (lastSearchParams) {
         await searchImages(lastSearchParams, lastAutoTagParams || undefined);
       }
     } catch (err) {
@@ -96,13 +144,15 @@ export const useSearch = () => {
     } finally {
       setLoading(false);
     }
-  }, [lastSearchParams, lastAutoTagParams, searchImages]);
+  }, [lastComplexRequest, lastSearchParams, lastAutoTagParams, searchComplex, searchImages]);
 
   const refreshSearch = useCallback(() => {
-    if (lastSearchParams) {
+    if (lastComplexRequest) {
+      searchComplex(lastComplexRequest);
+    } else if (lastSearchParams) {
       searchImages(lastSearchParams, lastAutoTagParams || undefined);
     }
-  }, [lastSearchParams, lastAutoTagParams, searchImages]);
+  }, [lastComplexRequest, lastSearchParams, lastAutoTagParams, searchComplex, searchImages]);
 
   const clearSearch = useCallback(() => {
     setImages([]);
@@ -111,6 +161,7 @@ export const useSearch = () => {
     setCurrentPage(1);
     setLastSearchParams(null);
     setLastAutoTagParams(null);
+    setLastComplexRequest(null);
     setError(null);
   }, []);
 
@@ -135,6 +186,7 @@ export const useSearch = () => {
     total,
     lastSearchParams,
     searchImages,
+    searchComplex,
     changePage,
     changePageSize,
     deleteImages,
