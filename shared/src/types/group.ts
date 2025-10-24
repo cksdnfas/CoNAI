@@ -3,6 +3,8 @@
  * Shared between backend and frontend
  */
 
+import type { ComplexFilter } from './filter';
+
 export interface GroupRecord {
   id: number;
   name: string;
@@ -14,7 +16,7 @@ export interface GroupRecord {
 
   // Auto-collection fields
   auto_collect_enabled: boolean;
-  auto_collect_conditions?: string;
+  auto_collect_conditions?: string;  // JSON string (legacy format or ComplexFilter)
   auto_collect_last_run?: string;
 }
 
@@ -63,7 +65,7 @@ export interface GroupCreateData {
   color?: string;
   parent_id?: number;
   auto_collect_enabled?: boolean;
-  auto_collect_conditions?: AutoCollectCondition[];
+  auto_collect_conditions?: AutoCollectCondition[] | ComplexFilter;  // Support both formats
 }
 
 export interface GroupUpdateData {
@@ -72,7 +74,7 @@ export interface GroupUpdateData {
   color?: string;
   parent_id?: number;
   auto_collect_enabled?: boolean;
-  auto_collect_conditions?: AutoCollectCondition[];
+  auto_collect_conditions?: AutoCollectCondition[] | ComplexFilter;  // Support both formats
 }
 
 export interface GroupWithStats extends GroupRecord {

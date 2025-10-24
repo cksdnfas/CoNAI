@@ -1,9 +1,10 @@
 import { GroupModel, ImageGroupModel } from '../models/Group';
 import { ImageModel } from '../models/Image';
-import { GroupRecord, AutoCollectCondition, AutoCollectResult } from '@comfyui-image-manager/shared';
+import { GroupRecord, AutoCollectCondition, AutoCollectResult, ComplexFilter, FilterCondition } from '@comfyui-image-manager/shared';
 import { ImageRecord } from '@comfyui-image-manager/shared';
 import { AutoTagSearchService } from './autoTagSearchService';
 import { AutoTagSearchParams } from '../types/autoTag';
+import { ComplexFilterService } from './complexFilterService';
 
 export class AutoCollectionService {
   /**
@@ -374,9 +375,21 @@ export class AutoCollectionService {
   }
 
   /**
+   * Check if conditions are in ComplexFilter format
+   */
+  private static isComplexFilter(data: any): data is ComplexFilter {
+    return data && (
+      data.exclude_group !== undefined ||
+      data.or_group !== undefined ||
+      data.and_group !== undefined
+    );
+  }
+
+  /**
    * 특정 그룹의 자동수집 실행
    * - 수동으로 추가된 이미지는 삭제하지 않음
    * - 자동수집 조건 변경 시에도 수동 추가 이미지 유지
+   * - ComplexFilter 또는 legacy AutoCollectCondition[] 지원
    */
   static async runAutoCollectionForGroup(groupId: number): Promise<AutoCollectResult> {
     const startTime = Date.now();
@@ -387,7 +400,15 @@ export class AutoCollectionService {
         throw new Error('Group not found or auto collection not enabled');
       }
 
-      const conditions: AutoCollectCondition[] = JSON.parse(group.auto_collect_conditions);
+      const parsedConditions = JSON.parse(group.auto_collect_conditions);
+
+      // ComplexFilter 형식인지 확인
+      if (this.isComplexFilter(parsedConditions)) {
+        return await this.runAutoCollectionWithComplexFilter(groupId, group, parsedConditions, startTime);
+      }
+
+      // Legacy 형식 (AutoCollectCondition[])
+      const conditions: AutoCollectCondition[] = parsedConditions;
       if (!conditions || conditions.length === 0) {
         throw new Error('No valid conditions found');
       }
@@ -485,6 +506,7 @@ export class AutoCollectionService {
 
   /**
    * 새로 업로드된 이미지에 대한 자동수집 실행
+   * - ComplexFilter 및 legacy 형식 지원
    */
   static async runAutoCollectionForNewImage(imageId: number): Promise<AutoCollectResult[]> {
     try {
@@ -502,8 +524,26 @@ export class AutoCollectionService {
             continue;
           }
 
-          const conditions: AutoCollectCondition[] = JSON.parse(group.auto_collect_conditions);
-          const matches = await this.checkImageMatchesConditions(image, conditions);
+          const parsedConditions = JSON.parse(group.auto_collect_conditions);
+
+          let matches = false;
+
+          // ComplexFilter 형식인 경우
+          if (this.isComplexFilter(parsedConditions)) {
+            // ComplexFilterService를 사용하여 단일 이미지 검증
+            const searchResult = await ComplexFilterService.executeComplexSearch(
+              parsedConditions,
+              undefined,
+              { page: 1, limit: 1 }
+            );
+
+            // 검색 결과에 현재 이미지가 포함되어 있는지 확인
+            matches = searchResult.images.some((img: any) => img.id === imageId);
+          } else {
+            // Legacy 형식 (AutoCollectCondition[])
+            const conditions: AutoCollectCondition[] = parsedConditions;
+            matches = await this.checkImageMatchesConditions(image, conditions);
+          }
 
           if (matches) {
             // 이미 그룹에 속해있는지 확인
@@ -666,5 +706,62 @@ export class AutoCollectionService {
     }
 
     return { valid: errors.length === 0, errors };
+  }
+
+  /**
+   * ComplexFilter를 사용한 자동수집 실행
+   * - ComplexFilterService를 활용하여 효율적인 쿼리 실행
+   */
+  private static async runAutoCollectionWithComplexFilter(
+    groupId: number,
+    group: GroupRecord,
+    complexFilter: ComplexFilter,
+    startTime: number
+  ): Promise<AutoCollectResult> {
+    try {
+      // 기존 자동수집 이미지들만 제거
+      const removedCount = await ImageGroupModel.removeAutoCollectedImages(groupId);
+
+      // ComplexFilterService를 사용하여 조건에 맞는 이미지 검색
+      const searchResult = await ComplexFilterService.executeComplexSearch(
+        complexFilter,
+        undefined,
+        { page: 1, limit: 10000 }  // 모든 결과 가져오기 (자동수집용)
+      );
+
+      const matchingImages = searchResult.images;
+      let addedCount = 0;
+
+      // 검색 결과를 그룹에 추가
+      for (const image of matchingImages) {
+        try {
+          // 이미 그룹에 속해있는지 확인
+          const alreadyInGroup = await ImageGroupModel.isImageInGroup(groupId, image.id);
+
+          if (!alreadyInGroup) {
+            await ImageGroupModel.addImageToGroup(groupId, image.id, 'auto');
+            addedCount++;
+          }
+        } catch (err) {
+          console.warn('Error adding image to group:', err);
+        }
+      }
+
+      // 마지막 실행 시간 업데이트
+      await GroupModel.updateAutoCollectLastRun(groupId);
+
+      const executionTime = Date.now() - startTime;
+
+      return {
+        group_id: groupId,
+        group_name: group.name,
+        images_added: addedCount,
+        images_removed: removedCount,
+        execution_time: executionTime
+      };
+    } catch (error) {
+      console.error(`Complex filter auto collection failed for group ${groupId}:`, error);
+      throw error;
+    }
   }
 }
