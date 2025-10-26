@@ -202,4 +202,101 @@ export class ImageSearchModel {
 
     return { images: enrichedImages, total };
   }
+
+  /**
+   * 검색 조건에 맞는 이미지 ID만 조회 (랜덤 선택용)
+   */
+  static async searchImageIds(
+    searchParams: {
+      search_text?: string;
+      negative_text?: string;
+      ai_tool?: string;
+      model_name?: string;
+      min_width?: number;
+      max_width?: number;
+      min_height?: number;
+      max_height?: number;
+      min_file_size?: number;
+      max_file_size?: number;
+      start_date?: string;
+      end_date?: string;
+      group_id?: number;
+    }
+  ): Promise<number[]> {
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    if (searchParams.search_text) {
+      conditions.push('i.prompt LIKE ?');
+      params.push(`%${searchParams.search_text}%`);
+    }
+    if (searchParams.negative_text) {
+      conditions.push('i.negative_prompt LIKE ?');
+      params.push(`%${searchParams.negative_text}%`);
+    }
+    if (searchParams.ai_tool) {
+      conditions.push('i.ai_tool = ?');
+      params.push(searchParams.ai_tool);
+    }
+    if (searchParams.model_name) {
+      conditions.push('i.model_name LIKE ?');
+      params.push(`%${searchParams.model_name}%`);
+    }
+    if (searchParams.min_width) {
+      conditions.push('i.width >= ?');
+      params.push(searchParams.min_width);
+    }
+    if (searchParams.max_width) {
+      conditions.push('i.width <= ?');
+      params.push(searchParams.max_width);
+    }
+    if (searchParams.min_height) {
+      conditions.push('i.height >= ?');
+      params.push(searchParams.min_height);
+    }
+    if (searchParams.max_height) {
+      conditions.push('i.height <= ?');
+      params.push(searchParams.max_height);
+    }
+    if (searchParams.min_file_size) {
+      conditions.push('i.file_size >= ?');
+      params.push(searchParams.min_file_size);
+    }
+    if (searchParams.max_file_size) {
+      conditions.push('i.file_size <= ?');
+      params.push(searchParams.max_file_size);
+    }
+    if (searchParams.start_date) {
+      conditions.push('DATE(i.upload_date) >= DATE(?)');
+      params.push(searchParams.start_date);
+    }
+    if (searchParams.end_date) {
+      conditions.push('DATE(i.upload_date) <= DATE(?)');
+      params.push(searchParams.end_date);
+    }
+
+    let groupJoinClause = '';
+    if (searchParams.group_id !== undefined) {
+      if (searchParams.group_id === 0) {
+        groupJoinClause = 'LEFT JOIN image_groups ig_filter ON i.id = ig_filter.image_id';
+        conditions.push('ig_filter.image_id IS NULL');
+      } else {
+        groupJoinClause = 'INNER JOIN image_groups ig_filter ON i.id = ig_filter.image_id';
+        conditions.push('ig_filter.group_id = ?');
+        params.push(searchParams.group_id);
+      }
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const query = `
+      SELECT DISTINCT i.id
+      FROM images i ${groupJoinClause}
+      ${whereClause}
+      ORDER BY i.upload_date DESC
+    `;
+
+    const rows = db.prepare(query).all(...params) as { id: number }[];
+    return rows.map(row => row.id);
+  }
 }

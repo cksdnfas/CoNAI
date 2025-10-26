@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Box, Skeleton } from '@mui/material';
 import type { ImageRecord } from '../../../types/image';
 import { getBackendOrigin } from '../../../utils/backend';
@@ -32,12 +32,6 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const backendOrigin = getBackendOrigin();
-
-  // Reset loading states when image changes
-  useEffect(() => {
-    setImageError(false);
-    setImageLoading(true);
-  }, [image.id]);
 
   // 이미지 URL 우선순위:
   // GIF: optimized_url(원본 복사) → image_url(원본) → thumbnail_url (애니메이션 보존)
@@ -113,6 +107,7 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
       {image.mime_type?.startsWith('video/') ? (
         <Box
           component="video"
+          key={`video-${image.id}`}
           src={imageError ? fallbackUrl : imageUrl}
           controls
           autoPlay
@@ -136,6 +131,7 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
       ) : (
         <Box
           component="img"
+          key={`img-${image.id}`}
           src={imageError ? fallbackUrl : imageUrl}
           alt={image.original_name}
           draggable={false}

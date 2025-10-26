@@ -4,9 +4,8 @@
     "subtitle": "Manage ComfyUI workflows and generate images"
   },
   "tabs": {
-    "workflows": "Workflow Management",
-    "servers": "Server Management",
     "novelai": "NovelAI",
+    "comfyui": "ComfyUI",
     "ariaLabel": "Image generation tabs"
   },
   "nai": {

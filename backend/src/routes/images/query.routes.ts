@@ -202,6 +202,64 @@ router.post('/search', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
+ * 검색 조건에 맞는 이미지 ID만 조회 (랜덤 선택용)
+ * POST /api/images/search/ids
+ */
+router.post('/search/ids', asyncHandler(async (req: Request, res: Response) => {
+  const {
+    search_text,
+    negative_text,
+    ai_tool,
+    model_name,
+    min_width,
+    max_width,
+    min_height,
+    max_height,
+    min_file_size,
+    max_file_size,
+    start_date,
+    end_date,
+    group_id
+  } = req.body;
+
+  try {
+    const searchParams = {
+      search_text,
+      negative_text,
+      ai_tool,
+      model_name,
+      min_width: min_width ? parseInt(min_width) : undefined,
+      max_width: max_width ? parseInt(max_width) : undefined,
+      min_height: min_height ? parseInt(min_height) : undefined,
+      max_height: max_height ? parseInt(max_height) : undefined,
+      min_file_size: min_file_size ? parseInt(min_file_size) : undefined,
+      max_file_size: max_file_size ? parseInt(max_file_size) : undefined,
+      start_date,
+      end_date,
+      group_id: group_id !== undefined ? parseInt(group_id) : undefined
+    };
+
+    const ids = await ImageModel.searchImageIds(searchParams);
+
+    res.json({
+      success: true,
+      data: {
+        ids,
+        total: ids.length
+      }
+    });
+    return;
+  } catch (error) {
+    console.error('Search IDs error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get search image IDs'
+    });
+    return;
+  }
+}));
+
+/**
  * 특정 이미지 조회
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {

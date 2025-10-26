@@ -15,6 +15,7 @@ import type { ImageRecord, PageSize, ImageSearchParams } from '../../types/image
 import ImageCard from '../ImageCard/ImageCard';
 import PageSizeSelector from '../PageSizeSelector/PageSizeSelector';
 import ImageViewerModal from '../ImageViewerModal';
+import { imageApi, groupApi } from '../../services/api';
 import './ImageGrid.css';
 
 export interface ImageGridProps {
@@ -33,6 +34,7 @@ export interface ImageGridProps {
   showCollectionType?: boolean;
   currentGroupId?: number;
   searchParams?: ImageSearchParams;
+  allImageIds?: number[]; // 외부에서 전달된 전체 이미지 ID 목록 (우선순위)
 }
 
 const ImageGrid: React.FC<ImageGridProps> = ({
@@ -51,14 +53,53 @@ const ImageGrid: React.FC<ImageGridProps> = ({
   showCollectionType = false,
   currentGroupId,
   searchParams,
+  allImageIds: externalAllImageIds,
 }) => {
   const { t } = useTranslation(['common', 'gallery']);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [lastClickedIndex, setLastClickedIndex] = useState<number>(-1);
+  const [internalAllImageIds, setInternalAllImageIds] = useState<number[]>([]);
 
   // images가 undefined일 경우 방어
   const safeImages = images || [];
+
+  // 외부에서 전달된 ID 목록이 있으면 우선 사용, 없으면 내부적으로 조회
+  const allImageIds = externalAllImageIds || internalAllImageIds;
+
+  // 그룹/검색 컨텍스트에서 전체 이미지 ID 목록 조회 (외부에서 전달되지 않은 경우만)
+  useEffect(() => {
+    // 외부에서 이미 전달된 경우 조회하지 않음
+    if (externalAllImageIds && externalAllImageIds.length > 0) {
+      return;
+    }
+
+    const fetchAllImageIds = async () => {
+      try {
+        if (currentGroupId) {
+          // 그룹 모드: 그룹 전체 이미지 ID 조회
+          const result = await groupApi.getImageIdsForGroup(currentGroupId);
+          if (result.success && result.data) {
+            setInternalAllImageIds(result.data.ids);
+          }
+        } else if (searchParams) {
+          // 검색 모드: 검색 결과 전체 이미지 ID 조회
+          const result = await imageApi.searchImageIds(searchParams);
+          if (result.success && result.data) {
+            setInternalAllImageIds(result.data.ids);
+          }
+        } else {
+          // 전체 모드: ID 목록 없음 (기존 방식 사용)
+          setInternalAllImageIds([]);
+        }
+      } catch (error) {
+        console.error('Failed to fetch all image IDs:', error);
+        setInternalAllImageIds([]);
+      }
+    };
+
+    fetchAllImageIds();
+  }, [currentGroupId, searchParams, externalAllImageIds]);
 
   const handleSelectionChange = (id: number, event?: React.MouseEvent) => {
     if (!onSelectionChange) return;
@@ -283,6 +324,7 @@ const ImageGrid: React.FC<ImageGridProps> = ({
         searchContext={searchParams ? 'search' : currentGroupId ? 'group' : 'all'}
         searchParams={searchParams}
         groupId={currentGroupId}
+        allImageIds={allImageIds}
       />
     </Box>
   );

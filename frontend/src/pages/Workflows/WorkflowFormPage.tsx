@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Button,
@@ -43,9 +43,20 @@ export default function WorkflowFormPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [workflowJson, setWorkflowJson] = useState('');
-  const [apiEndpoint, setApiEndpoint] = useState('http://127.0.0.1:8188');
   const [isActive, setIsActive] = useState(true);
+  const [color, setColor] = useState('#2196f3');
   const [markedFields, setMarkedFields] = useState<MarkedField[]>([]);
+
+  // Color picker debounce
+  const colorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const handleColorChange = useCallback((newColor: string) => {
+    if (colorTimeoutRef.current) {
+      clearTimeout(colorTimeoutRef.current);
+    }
+    colorTimeoutRef.current = setTimeout(() => {
+      setColor(newColor);
+    }, 100); // 100ms debounce
+  }, []);
 
   // JSON 유효성 검사
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -65,8 +76,8 @@ export default function WorkflowFormPage() {
       setName(workflow.name);
       setDescription(workflow.description || '');
       setWorkflowJson(workflow.workflow_json);
-      setApiEndpoint(workflow.api_endpoint || 'http://127.0.0.1:8188');
       setIsActive(workflow.is_active);
+      setColor(workflow.color || '#2196f3');
       setMarkedFields(workflow.marked_fields || []);
     } catch (err: any) {
       setError(err.response?.data?.error || err.message);
@@ -150,8 +161,8 @@ export default function WorkflowFormPage() {
         description: description.trim() || undefined,
         workflow_json: workflowJson,
         marked_fields: markedFields.length > 0 ? markedFields : undefined,
-        api_endpoint: apiEndpoint,
-        is_active: isActive
+        is_active: isActive,
+        color: color
       };
 
       if (isEditMode) {
@@ -231,14 +242,57 @@ export default function WorkflowFormPage() {
           sx={{ mb: 2 }}
         />
 
-        <TextField
-          fullWidth
-          label={t('workflows:form.apiEndpoint')}
-          value={apiEndpoint}
-          onChange={(e) => setApiEndpoint(e.target.value)}
-          placeholder="http://127.0.0.1:8188"
-          sx={{ mb: 2 }}
-        />
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            워크플로우 색상
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {[
+              { color: '#2196f3', label: '파란색 (기본)' },
+              { color: '#f44336', label: '빨간색' },
+              { color: '#4caf50', label: '초록색' },
+              { color: '#ff9800', label: '주황색' },
+              { color: '#9c27b0', label: '보라색' },
+              { color: '#00bcd4', label: '청록색' },
+              { color: '#ffeb3b', label: '노란색' },
+              { color: '#795548', label: '갈색' },
+              { color: '#607d8b', label: '회색' },
+              { color: '#e91e63', label: '핑크색' },
+            ].map((item) => (
+              <Box
+                key={item.color}
+                onClick={() => setColor(item.color)}
+                sx={{
+                  width: 40,
+                  height: 40,
+                  bgcolor: item.color,
+                  borderRadius: 1,
+                  cursor: 'pointer',
+                  border: color === item.color ? '3px solid #000' : '2px solid #ddd',
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    transform: 'scale(1.1)',
+                    boxShadow: 2,
+                  },
+                }}
+                title={item.label}
+              />
+            ))}
+            <input
+              type="color"
+              defaultValue={color}
+              onInput={(e) => handleColorChange((e.target as HTMLInputElement).value)}
+              style={{
+                width: '40px',
+                height: '40px',
+                border: '2px solid #ddd',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+              title="직접 색상 선택"
+            />
+          </Box>
+        </Box>
 
         <FormControlLabel
           control={

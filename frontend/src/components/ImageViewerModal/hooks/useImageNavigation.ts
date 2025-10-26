@@ -11,6 +11,7 @@ interface UseImageNavigationProps {
   searchContext?: 'all' | 'search' | 'group';
   searchParams?: ImageSearchParams;
   groupId?: number;
+  allImageIds?: number[]; // 전체 이미지 ID 목록 (랜덤 선택용)
   onRandomImageLoaded?: (image: ImageRecord) => void;
   onRandomModeChange?: (isRandom: boolean) => void;
 }
@@ -33,6 +34,7 @@ export const useImageNavigation = ({
   searchContext = 'all',
   searchParams,
   groupId,
+  allImageIds = [],
   onRandomImageLoaded,
   onRandomModeChange,
 }: UseImageNavigationProps): UseImageNavigationResult => {
@@ -58,6 +60,40 @@ export const useImageNavigation = ({
   }, [currentIndex, images, onImageChange, onRandomModeChange]);
 
   const handleRandom = useCallback(async () => {
+    // allImageIds가 있으면 메모리에서 랜덤 선택 (새로운 방식)
+    if (allImageIds && allImageIds.length > 0) {
+      try {
+        // 메모리의 ID 목록에서 랜덤 선택
+        const randomId = allImageIds[Math.floor(Math.random() * allImageIds.length)];
+
+        // 현재 배열에 있는지 확인
+        const foundIndex = images?.findIndex(img => img.id === randomId) ?? -1;
+
+        if (foundIndex >= 0 && onImageChange) {
+          // 현재 페이지에 있음 - 바로 이동
+          onImageChange(foundIndex);
+          if (onRandomModeChange) {
+            onRandomModeChange(false);
+          }
+        } else {
+          // 현재 페이지에 없음 - API로 조회
+          const result = await imageApi.getImage(randomId);
+          if (result.success && result.data) {
+            if (onRandomImageLoaded) {
+              onRandomImageLoaded(result.data);
+            }
+            if (onRandomModeChange) {
+              onRandomModeChange(true);
+            }
+          }
+        }
+        return;
+      } catch (error) {
+        console.error('Failed to load random image:', error);
+      }
+    }
+
+    // fallback: 기존 방식 (API 호출 또는 현재 페이지 내에서만 랜덤)
     try {
       let result: { success: boolean; data?: ImageRecord; error?: string } | null = null;
 
@@ -73,7 +109,7 @@ export const useImageNavigation = ({
       // If API call succeeded and returned an image, use it
       if (result?.success && result.data) {
         // Check if this image exists in current array
-        const foundIndex = images.findIndex(img => img.id === result.data!.id);
+        const foundIndex = images?.findIndex(img => img.id === result.data!.id) ?? -1;
 
         if (foundIndex >= 0 && onImageChange) {
           // Image found in array - navigate to it (normal mode)
@@ -110,7 +146,7 @@ export const useImageNavigation = ({
     if (onRandomModeChange) {
       onRandomModeChange(false);
     }
-  }, [searchContext, searchParams, groupId, images, currentIndex, onImageChange, onRandomImageLoaded, onRandomModeChange]);
+  }, [allImageIds, images, currentIndex, onImageChange, onRandomImageLoaded, onRandomModeChange, searchContext, searchParams, groupId]);
 
   // Keyboard event handler
   useEffect(() => {

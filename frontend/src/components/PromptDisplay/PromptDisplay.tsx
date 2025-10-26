@@ -83,6 +83,9 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
   const [negativeGrouped, setNegativeGrouped] = useState<GroupedPromptResult | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // 사용자가 선택한 탭 종류 추적 (이미지 변경 시 동일한 종류 탭으로 이동)
+  const previousTabTypeRef = React.useRef<'positive' | 'negative' | 'auto'>('positive');
+
   const hasPrompt = prompt && prompt.trim();
   const hasNegativePrompt = negativePrompt && negativePrompt.trim();
 
@@ -119,8 +122,66 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
     }
   }, [showGrouped, prompt, negativePrompt, hasPrompt, hasNegativePrompt]);
 
+  // 이미지 변경 시 이전에 선택했던 탭 종류를 찾아서 이동 (없으면 첫 번째로)
+  useEffect(() => {
+    const targetType = previousTabTypeRef.current;
+    let index = 0;
+
+    // 이전에 선택했던 탭 종류 찾기
+    if (hasPrompt) {
+      if (targetType === 'positive') {
+        setTabValue(index);
+        return;
+      }
+      index++;
+    }
+
+    if (hasNegativePrompt) {
+      if (targetType === 'negative') {
+        setTabValue(index);
+        return;
+      }
+      index++;
+    }
+
+    if (showAutoTab) {
+      if (targetType === 'auto') {
+        setTabValue(index);
+        return;
+      }
+    }
+
+    // 이전 탭 종류를 찾지 못하면 첫 번째 탭으로
+    setTabValue(0);
+  }, [prompt, negativePrompt, linkedImage, hasPrompt, hasNegativePrompt, showAutoTab]);
+
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+
+    // 현재 선택한 탭 종류를 ref에 저장
+    let index = 0;
+
+    if (hasPrompt) {
+      if (newValue === index) {
+        previousTabTypeRef.current = 'positive';
+        return;
+      }
+      index++;
+    }
+
+    if (hasNegativePrompt) {
+      if (newValue === index) {
+        previousTabTypeRef.current = 'negative';
+        return;
+      }
+      index++;
+    }
+
+    if (showAutoTab) {
+      if (newValue === index) {
+        previousTabTypeRef.current = 'auto';
+      }
+    }
   };
 
   // 그룹화된 프롬프트 렌더링 함수

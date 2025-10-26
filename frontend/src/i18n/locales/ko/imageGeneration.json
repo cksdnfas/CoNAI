@@ -4,9 +4,8 @@
     "subtitle": "ComfyUI 워크플로우를 관리하고 이미지를 생성합니다"
   },
   "tabs": {
-    "workflows": "워크플로우 관리",
-    "servers": "서버 관리",
     "novelai": "NovelAI",
+    "comfyui": "ComfyUI",
     "ariaLabel": "이미지 생성 탭"
   },
   "nai": {

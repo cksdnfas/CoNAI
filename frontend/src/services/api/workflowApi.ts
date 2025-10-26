@@ -10,6 +10,7 @@ export interface Workflow {
   marked_fields?: MarkedField[];
   api_endpoint: string;
   is_active: boolean;
+  color: string;
   created_date: string;
   updated_date: string;
 }

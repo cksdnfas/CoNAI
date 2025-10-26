@@ -59,6 +59,12 @@ export const imageApi = {
     return response.data;
   },
 
+  // 복잡한 검색 조건에 맞는 이미지 ID 목록 조회 (랜덤 선택용)
+  searchComplexIds: async (request: ComplexSearchRequest): Promise<{ success: boolean; data?: { ids: number[]; total: number }; error?: string }> => {
+    const response = await api.post('/api/images/search/complex/ids', request);
+    return response.data;
+  },
+
   // 이미지 업로드 (단일)
   uploadImage: async (file: File): Promise<UploadResponse> => {
     try {
@@ -237,6 +243,12 @@ export const imageApi = {
     const response = await api.post('/api/images/random-from-search', params);
     return response.data;
   },
+
+  // 검색 조건에 맞는 이미지 ID 목록 조회 (랜덤 선택용)
+  searchImageIds: async (params: ImageSearchParams): Promise<{ success: boolean; data?: { ids: number[]; total: number }; error?: string }> => {
+    const response = await api.post('/api/images/search/ids', params);
+    return response.data;
+  },
 };
 
 // 그룹 관련 API
@@ -354,6 +366,12 @@ export const groupApi = {
   // 그룹의 랜덤 이미지 조회
   getRandomImageFromGroup: async (id: number): Promise<{ success: boolean; data?: ImageRecord; error?: string }> => {
     const response = await api.get(`/api/groups/${id}/random-image`);
+    return response.data;
+  },
+
+  // 그룹에 속한 이미지 ID 목록 조회 (랜덤 선택용)
+  getImageIdsForGroup: async (id: number): Promise<{ success: boolean; data?: { ids: number[]; total: number }; error?: string }> => {
+    const response = await api.get(`/api/groups/${id}/image-ids`);
     return response.data;
   },
 };

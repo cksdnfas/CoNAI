@@ -146,6 +146,106 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
+ * Complex search returning only image IDs (for random selection)
+ * POST /api/images/search/complex/ids
+ *
+ * Request body: ComplexSearchRequest (without pagination)
+ */
+router.post('/ids', asyncHandler(async (req: Request, res: Response) => {
+  const requestBody = req.body as ComplexSearchRequest;
+
+  try {
+    let ids: number[];
+
+    // Simple search mode
+    if (requestBody.simple_search?.text) {
+      const searchText = requestBody.simple_search.text;
+
+      const simpleFilter: ComplexFilter = {
+        or_group: [
+          {
+            category: 'positive_prompt',
+            type: 'prompt_contains',
+            value: searchText
+          },
+          {
+            category: 'negative_prompt',
+            type: 'negative_prompt_contains',
+            value: searchText
+          },
+          {
+            category: 'auto_tag',
+            type: 'auto_tag_general',
+            value: searchText,
+            min_score: 0,
+            max_score: 1
+          },
+          {
+            category: 'auto_tag',
+            type: 'auto_tag_character',
+            value: searchText,
+            min_score: 0,
+            max_score: 1
+          }
+        ]
+      };
+
+      ids = await ComplexFilterService.executeComplexSearchIds(
+        simpleFilter,
+        {
+          ai_tool: requestBody.ai_tool,
+          model_name: requestBody.model_name,
+          start_date: requestBody.start_date,
+          end_date: requestBody.end_date
+        }
+      );
+    }
+    // Complex filter mode
+    else if (requestBody.complex_filter) {
+      // Validate filter
+      const validation = ComplexFilterService.validateFilter(requestBody.complex_filter);
+      if (!validation.valid) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid filter: ${validation.errors.join(', ')}`
+        });
+      }
+
+      ids = await ComplexFilterService.executeComplexSearchIds(
+        requestBody.complex_filter,
+        {
+          ai_tool: requestBody.ai_tool,
+          model_name: requestBody.model_name,
+          start_date: requestBody.start_date,
+          end_date: requestBody.end_date
+        }
+      );
+    }
+    // No filter specified
+    else {
+      return res.status(400).json({
+        success: false,
+        error: 'Either simple_search or complex_filter must be provided'
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        ids,
+        total: ids.length
+      }
+    });
+  } catch (error) {
+    console.error('Complex search IDs error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get search IDs'
+    });
+  }
+}));
+
+/**
  * Validate complex filter
  * POST /api/images/search/complex/validate
  *

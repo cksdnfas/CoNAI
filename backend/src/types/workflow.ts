@@ -9,6 +9,7 @@ export interface WorkflowRecord {
   marked_fields?: string; // JSON string: MarkedField[]
   api_endpoint: string;
   is_active: boolean;
+  color: string;
   created_date: string;
   updated_date: string;
 }
@@ -39,6 +40,7 @@ export interface WorkflowCreateData {
   marked_fields?: MarkedField[];
   api_endpoint?: string;
   is_active?: boolean;
+  color?: string;
 }
 
 /**
@@ -51,6 +53,7 @@ export interface WorkflowUpdateData {
   marked_fields?: MarkedField[];
   api_endpoint?: string;
   is_active?: boolean;
+  color?: string;
 }
 
 /**

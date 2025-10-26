@@ -516,4 +516,27 @@ export class ComplexFilterService {
 
     return errors;
   }
+
+  /**
+   * Execute complex search and return only image IDs (for random selection)
+   */
+  static async executeComplexSearchIds(
+    filter: ComplexFilter,
+    basicParams?: {
+      ai_tool?: string;
+      model_name?: string;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<number[]> {
+    // Build query
+    const { query: baseQuery, params } = this.buildComplexQuery(filter, basicParams);
+
+    // Modify query to select only IDs
+    const idsQuery = baseQuery.replace(/SELECT i\.\*/g, 'SELECT DISTINCT i.id');
+
+    // Execute query
+    const rows = db.prepare(idsQuery).all(...params) as { id: number }[];
+    return rows.map(row => row.id);
+  }
 }

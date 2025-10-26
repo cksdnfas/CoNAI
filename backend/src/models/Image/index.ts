@@ -107,6 +107,26 @@ export class ImageModel {
     return ImageSearchModel.searchByAutoTags(searchParams, basicSearchParams);
   }
 
+  static searchImageIds(
+    searchParams: {
+      search_text?: string;
+      negative_text?: string;
+      ai_tool?: string;
+      model_name?: string;
+      min_width?: number;
+      max_width?: number;
+      min_height?: number;
+      max_height?: number;
+      min_file_size?: number;
+      max_file_size?: number;
+      start_date?: string;
+      end_date?: string;
+      group_id?: number;
+    }
+  ): Promise<number[]> {
+    return ImageSearchModel.searchImageIds(searchParams);
+  }
+
   // ==================== 태깅 (ImageTaggingModel) ====================
 
   static findUntagged(limit?: number): Promise<ImageRecord[]> {

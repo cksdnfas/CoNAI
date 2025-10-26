@@ -18,15 +18,16 @@ export class WorkflowModel {
 
     const info = db.prepare(`
       INSERT INTO workflows (
-        name, description, workflow_json, marked_fields, api_endpoint, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        name, description, workflow_json, marked_fields, api_endpoint, is_active, color
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       workflowData.name,
       workflowData.description || null,
       workflowData.workflow_json,
       markedFieldsJson,
       workflowData.api_endpoint || 'http://127.0.0.1:8188',
-      workflowData.is_active !== undefined ? (workflowData.is_active ? 1 : 0) : 1
+      workflowData.is_active !== undefined ? (workflowData.is_active ? 1 : 0) : 1,
+      workflowData.color || '#2196f3'
     );
 
     return info.lastInsertRowid as number;
@@ -84,6 +85,10 @@ export class WorkflowModel {
     if (workflowData.is_active !== undefined) {
       fields.push('is_active = ?');
       values.push(workflowData.is_active ? 1 : 0);
+    }
+    if (workflowData.color !== undefined) {
+      fields.push('color = ?');
+      values.push(workflowData.color);
     }
 
     if (fields.length === 0) {

@@ -31,9 +31,15 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const activeOnly = req.query.active === 'true';
     const workflows = await WorkflowModel.findAll(activeOnly);
 
+    // marked_fields를 JSON 객체로 파싱
+    const parsedWorkflows = workflows.map(workflow => ({
+      ...workflow,
+      marked_fields: workflow.marked_fields ? JSON.parse(workflow.marked_fields) : []
+    }));
+
     const response: WorkflowResponse = {
       success: true,
-      data: workflows
+      data: parsedWorkflows
     };
 
     return res.json(response);
@@ -98,7 +104,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  * POST /api/workflows
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { name, description, workflow_json, marked_fields, api_endpoint, is_active } = req.body;
+  const { name, description, workflow_json, marked_fields, api_endpoint, is_active, color } = req.body;
 
   if (!name || !workflow_json) {
     return res.status(400).json({
@@ -133,7 +139,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       workflow_json,
       marked_fields,
       api_endpoint,
-      is_active
+      is_active,
+      color
     };
 
     const workflowId = await WorkflowModel.create(workflowData);
@@ -163,7 +170,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
-  const { name, description, workflow_json, marked_fields, api_endpoint, is_active } = req.body;
+  const { name, description, workflow_json, marked_fields, api_endpoint, is_active, color } = req.body;
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -202,7 +209,8 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
       workflow_json,
       marked_fields,
       api_endpoint,
-      is_active
+      is_active,
+      color
     };
 
     const updated = await WorkflowModel.update(id, workflowData);

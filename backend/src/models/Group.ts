@@ -304,4 +304,20 @@ export class ImageGroupModel {
     const row = db.prepare(query).get(groupId) as any;
     return row || null;
   }
+
+  /**
+   * 그룹에 속한 모든 이미지 ID 조회 (랜덤 선택용)
+   */
+  static async getImageIdsForGroup(groupId: number): Promise<number[]> {
+    const query = `
+      SELECT i.id
+      FROM image_groups ig
+      INNER JOIN images i ON ig.image_id = i.id
+      WHERE ig.group_id = ?
+      ORDER BY ig.order_index ASC, ig.added_date DESC
+    `;
+
+    const rows = db.prepare(query).all(groupId) as { id: number }[];
+    return rows.map(row => row.id);
+  }
 }

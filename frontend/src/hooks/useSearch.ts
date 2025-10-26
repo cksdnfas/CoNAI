@@ -14,6 +14,7 @@ export const useSearch = () => {
   const [lastSearchParams, setLastSearchParams] = useState<ImageSearchParams | null>(null);
   const [lastAutoTagParams, setLastAutoTagParams] = useState<AutoTagSearchParams | null>(null);
   const [lastComplexRequest, setLastComplexRequest] = useState<ComplexSearchRequest | null>(null);
+  const [allResultIds, setAllResultIds] = useState<number[]>([]); // 전체 검색 결과 ID 목록
 
   const searchImages = useCallback(async (params: ImageSearchParams, autoTagParams?: AutoTagSearchParams) => {
     setLoading(true);
@@ -77,21 +78,31 @@ export const useSearch = () => {
     };
 
     try {
-      const response = await imageApi.searchComplex(searchRequest);
+      // 페이지 검색과 전체 ID 목록 조회를 병렬로 수행
+      const [searchResponse, idsResponse] = await Promise.all([
+        imageApi.searchComplex(searchRequest),
+        imageApi.searchComplexIds(searchRequest)
+      ]);
 
-      if (response.success && response.data) {
-        setImages(response.data.images);
-        setTotalPages(response.data.totalPages);
-        setTotal(response.data.total);
-        setCurrentPage(response.data.page);
+      if (searchResponse.success && searchResponse.data) {
+        setImages(searchResponse.data.images);
+        setTotalPages(searchResponse.data.totalPages);
+        setTotal(searchResponse.data.total);
+        setCurrentPage(searchResponse.data.page);
         setLastComplexRequest(searchRequest);
         setLastSearchParams(null);
         setLastAutoTagParams(null);
+
+        // 전체 ID 목록 저장
+        if (idsResponse.success && idsResponse.data) {
+          setAllResultIds(idsResponse.data.ids);
+        }
       } else {
-        setError(response.error || '검색에 실패했습니다.');
+        setError(searchResponse.error || '검색에 실패했습니다.');
         setImages([]);
         setTotal(0);
         setTotalPages(0);
+        setAllResultIds([]);
       }
     } catch (err: any) {
       // Extract detailed error message from backend response
@@ -102,6 +113,7 @@ export const useSearch = () => {
       setImages([]);
       setTotal(0);
       setTotalPages(0);
+      setAllResultIds([]);
       console.error('Complex search error:', {
         message: err.message,
         response: err.response?.data,
@@ -194,6 +206,7 @@ export const useSearch = () => {
     total,
     lastSearchParams,
     lastComplexRequest,
+    allResultIds,
     searchImages,
     searchComplex,
     changePage,

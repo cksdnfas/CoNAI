@@ -473,6 +473,28 @@ router.post('/auto-collect-all', asyncHandler(async (req: Request, res: Response
 }));
 
 /**
+ * 그룹에 속한 모든 이미지 ID 조회 (랜덤 선택용)
+ * GET /api/groups/:id/image-ids
+ */
+router.get('/:id/image-ids', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const id = validateId(req.params.id, 'Group ID');
+
+    const ids = await ImageGroupModel.getImageIdsForGroup(id);
+
+    return res.json(successResponse({
+      ids,
+      total: ids.length
+    }));
+  } catch (error) {
+    console.error('Error getting image IDs from group:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get image IDs from group';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
+  }
+}));
+
+/**
  * 그룹의 랜덤 이미지 조회 (전체 이미지 정보 포함)
  * GET /api/groups/:id/random-image
  */

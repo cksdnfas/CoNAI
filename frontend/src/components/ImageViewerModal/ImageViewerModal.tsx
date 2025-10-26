@@ -48,6 +48,7 @@ interface ImageViewerModalProps {
   searchContext?: 'all' | 'search' | 'group';
   searchParams?: ImageSearchParams;
   groupId?: number;
+  allImageIds?: number[]; // 전체 이미지 ID 목록 (랜덤 선택용)
   // 히스토리 컨텍스트
   isHistoryContext?: boolean;
   historyRecord?: GenerationHistoryRecord;
@@ -64,6 +65,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   searchContext = 'all',
   searchParams,
   groupId,
+  allImageIds = [],
   isHistoryContext = false,
   historyRecord,
 }) => {
@@ -95,6 +97,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     searchContext,
     searchParams,
     groupId,
+    allImageIds,
     onRandomImageLoaded: (newImage: ImageRecord) => {
       setCurrentImage(newImage);
     },
@@ -119,10 +122,13 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     loadSettings();
   }, []);
 
-  // Update current image when prop changes
+  // Update current image when prop changes (but only when not in random mode)
   useEffect(() => {
-    setCurrentImage(image);
-  }, [image]);
+    // 랜덤 모드가 아닐 때만 prop 변경사항 반영
+    if (!isRandomMode) {
+      setCurrentImage(image);
+    }
+  }, [image, isRandomMode]);
 
   // Reload image after auto-tag generation
   const handleAutoTagGenerated = async () => {

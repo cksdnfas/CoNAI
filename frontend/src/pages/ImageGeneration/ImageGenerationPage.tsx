@@ -6,15 +6,13 @@ import {
   Typography
 } from '@mui/material';
 import {
-  Workspaces as WorkflowIcon,
-  Settings as SettingsIcon,
-  AutoAwesome as NAIIcon
+  AutoAwesome as NAIIcon,
+  AccountTree as ComfyUIIcon
 } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import WorkflowsTab from './WorkflowsTab';
-import ServersTab from './ServersTab';
 import NAITab from './NAI/NAITab';
+import ComfyUITab from './ComfyUITab';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -45,10 +43,8 @@ export default function ImageGenerationPage() {
   const [currentTab, setCurrentTab] = useState(0);
 
   useEffect(() => {
-    if (tabParam === 'workflows') {
+    if (tabParam === 'comfyui' || tabParam === 'workflows' || tabParam === 'servers') {
       setCurrentTab(1);
-    } else if (tabParam === 'servers') {
-      setCurrentTab(2);
     } else {
       setCurrentTab(0);
     }
@@ -58,10 +54,8 @@ export default function ImageGenerationPage() {
     setCurrentTab(newValue);
     if (newValue === 0) {
       setSearchParams({ tab: 'nai' });
-    } else if (newValue === 1) {
-      setSearchParams({ tab: 'workflows' });
     } else {
-      setSearchParams({ tab: 'servers' });
+      setSearchParams({ tab: 'comfyui' });
     }
   };
 
@@ -86,18 +80,11 @@ export default function ImageGenerationPage() {
             aria-controls="image-generation-tabpanel-0"
           />
           <Tab
-            icon={<WorkflowIcon />}
+            icon={<ComfyUIIcon />}
             iconPosition="start"
-            label={t('imageGeneration:tabs.workflows')}
+            label={t('imageGeneration:tabs.comfyui')}
             id="image-generation-tab-1"
             aria-controls="image-generation-tabpanel-1"
-          />
-          <Tab
-            icon={<SettingsIcon />}
-            iconPosition="start"
-            label={t('imageGeneration:tabs.servers')}
-            id="image-generation-tab-2"
-            aria-controls="image-generation-tabpanel-2"
           />
         </Tabs>
       </Box>
@@ -106,10 +93,7 @@ export default function ImageGenerationPage() {
         <NAITab />
       </TabPanel>
       <TabPanel value={currentTab} index={1}>
-        <WorkflowsTab />
-      </TabPanel>
-      <TabPanel value={currentTab} index={2}>
-        <ServersTab />
+        <ComfyUITab />
       </TabPanel>
     </Box>
   );
