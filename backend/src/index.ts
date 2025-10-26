@@ -30,6 +30,7 @@ import { comfyuiServerRoutes } from './routes/comfyuiServers';
 import naiRoutes from './routes/nai';
 import generationHistoryRoutes from './routes/generation-history.routes';
 import { initializeDatabase } from './database/init';
+import { initializeUserSettingsDb } from './database/userSettingsDb';
 import { initializeApiGenerationDb } from './database/apiGenerationDb';
 import { errorHandler } from './middleware/errorHandler';
 import { imageTaggerService } from './services/imageTaggerService';
@@ -202,16 +203,21 @@ async function startServer() {
     await initializeDatabase();
     console.log('✅ Database initialized successfully');
 
-    // 4. API Generation History DB 초기화
+    // 4. User Settings DB 초기화
+    console.log('🗄️  User Settings DB 초기화 중...');
+    initializeUserSettingsDb(); // Synchronous call (better-sqlite3)
+    console.log('✅ User Settings DB initialized successfully');
+
+    // 5. API Generation History DB 초기화
     console.log('🗄️  API Generation History DB 초기화 중...');
     initializeApiGenerationDb(); // Synchronous call (better-sqlite3)
     console.log('✅ API Generation History DB initialized successfully');
 
-    // 5. API 이미지 저장 디렉토리 생성
+    // 6. API 이미지 저장 디렉토리 생성
     console.log('📁 API 이미지 디렉토리 생성 중...');
     await APIImageProcessor.ensureDirectories();
 
-    // 6. Tagger daemon 자동 시작 (설정이 활성화된 경우)
+    // 7. Tagger daemon 자동 시작 (설정이 활성화된 경우)
     const settings = settingsService.loadSettings();
     if (settings.tagger.enabled) {
       console.log('🤖 Starting tagger daemon...');

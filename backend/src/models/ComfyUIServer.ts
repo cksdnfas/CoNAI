@@ -1,4 +1,5 @@
-import { db } from '../database/init';
+import { userSettingsDb } from '../database/userSettingsDb';
+import { apiGenDb } from '../database/apiGenerationDb';
 import {
   ComfyUIServerRecord,
   ComfyUIServerCreateData,
@@ -11,7 +12,7 @@ export class ComfyUIServerModel {
    * 새 서버 생성
    */
   static async create(serverData: ComfyUIServerCreateData): Promise<number> {
-    const info = db.prepare(`
+    const info = userSettingsDb.prepare(`
       INSERT INTO comfyui_servers (
         name, endpoint, description, is_active
       ) VALUES (?, ?, ?, ?)
@@ -29,7 +30,7 @@ export class ComfyUIServerModel {
    * 서버 조회 (ID)
    */
   static async findById(id: number): Promise<ComfyUIServerRecord | null> {
-    const row = db.prepare('SELECT * FROM comfyui_servers WHERE id = ?').get(id) as ComfyUIServerRecord | undefined;
+    const row = userSettingsDb.prepare('SELECT * FROM comfyui_servers WHERE id = ?').get(id) as ComfyUIServerRecord | undefined;
     return row || null;
   }
 
@@ -43,7 +44,7 @@ export class ComfyUIServerModel {
     }
     query += ' ORDER BY created_date DESC';
 
-    const rows = db.prepare(query).all() as ComfyUIServerRecord[];
+    const rows = userSettingsDb.prepare(query).all() as ComfyUIServerRecord[];
     return rows || [];
   }
 
@@ -51,7 +52,7 @@ export class ComfyUIServerModel {
    * 활성화된 서버만 조회
    */
   static async findActiveServers(): Promise<ComfyUIServerRecord[]> {
-    const rows = db.prepare(
+    const rows = userSettingsDb.prepare(
       'SELECT * FROM comfyui_servers WHERE is_active = 1 ORDER BY id ASC'
     ).all() as ComfyUIServerRecord[];
     return rows || [];
@@ -89,7 +90,7 @@ export class ComfyUIServerModel {
     values.push(id);
 
     const query = `UPDATE comfyui_servers SET ${fields.join(', ')} WHERE id = ?`;
-    const info = db.prepare(query).run(...values);
+    const info = userSettingsDb.prepare(query).run(...values);
     return info.changes > 0;
   }
 
@@ -97,8 +98,8 @@ export class ComfyUIServerModel {
    * 서버 삭제
    */
   static async delete(id: number): Promise<boolean> {
-    // workflow_servers와 generation_history는 CASCADE/SET NULL로 자동 처리됨
-    const info = db.prepare('DELETE FROM comfyui_servers WHERE id = ?').run(id);
+    // workflow_servers는 CASCADE로 자동 처리됨
+    const info = userSettingsDb.prepare('DELETE FROM comfyui_servers WHERE id = ?').run(id);
     return info.changes > 0;
   }
 
@@ -114,12 +115,13 @@ export class ComfyUIServerModel {
       params.push(excludeId);
     }
 
-    const row = db.prepare(query).get(...params);
+    const row = userSettingsDb.prepare(query).get(...params);
     return !!row;
   }
 
   /**
    * 서버별 생성 통계 조회
+   * Note: generation_history 제거되어 항상 0 반환
    */
   static async getStatsByServer(serverId: number): Promise<{
     total: number;
@@ -128,24 +130,14 @@ export class ComfyUIServerModel {
     pending: number;
     processing: number;
   }> {
-    const query = `
-      SELECT
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
-        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as processing
-      FROM generation_history
-      WHERE server_id = ?
-    `;
-
-    const row = db.prepare(query).get(serverId) as any;
+    // generation_history 테이블이 제거되어 통계 불가능
+    // api_generation_history에는 server_id가 없음
     return {
-      total: row.total || 0,
-      completed: row.completed || 0,
-      failed: row.failed || 0,
-      pending: row.pending || 0,
-      processing: row.processing || 0
+      total: 0,
+      completed: 0,
+      failed: 0,
+      pending: 0,
+      processing: 0
     };
   }
 }
@@ -155,7 +147,7 @@ export class WorkflowServerModel {
    * 워크플로우에 서버 연결
    */
   static async linkServer(workflowId: number, serverId: number, isEnabled: boolean = true): Promise<number> {
-    const info = db.prepare(`
+    const info = userSettingsDb.prepare(`
       INSERT OR REPLACE INTO workflow_servers (workflow_id, server_id, is_enabled)
       VALUES (?, ?, ?)
     `).run(workflowId, serverId, isEnabled ? 1 : 0);
@@ -167,7 +159,7 @@ export class WorkflowServerModel {
    * 워크플로우에서 서버 연결 해제
    */
   static async unlinkServer(workflowId: number, serverId: number): Promise<boolean> {
-    const info = db.prepare(
+    const info = userSettingsDb.prepare(
       'DELETE FROM workflow_servers WHERE workflow_id = ? AND server_id = ?'
     ).run(workflowId, serverId);
     return info.changes > 0;
@@ -190,7 +182,7 @@ export class WorkflowServerModel {
 
     query += ' ORDER BY s.id ASC';
 
-    const rows = db.prepare(query).all(workflowId) as any[];
+    const rows = userSettingsDb.prepare(query).all(workflowId) as any[];
     return rows || [];
   }
 
@@ -206,7 +198,7 @@ export class WorkflowServerModel {
       ORDER BY w.name ASC
     `;
 
-    const rows = db.prepare(query).all(serverId) as any[];
+    const rows = userSettingsDb.prepare(query).all(serverId) as any[];
     return rows || [];
   }
 
@@ -214,7 +206,7 @@ export class WorkflowServerModel {
    * 워크플로우의 모든 서버 연결 해제
    */
   static async unlinkAllServers(workflowId: number): Promise<number> {
-    const info = db.prepare('DELETE FROM workflow_servers WHERE workflow_id = ?').run(workflowId);
+    const info = userSettingsDb.prepare('DELETE FROM workflow_servers WHERE workflow_id = ?').run(workflowId);
     return info.changes;
   }
 
@@ -222,7 +214,7 @@ export class WorkflowServerModel {
    * 워크플로우-서버 연결 활성화/비활성화
    */
   static async toggleEnabled(workflowId: number, serverId: number, isEnabled: boolean): Promise<boolean> {
-    const info = db.prepare(
+    const info = userSettingsDb.prepare(
       'UPDATE workflow_servers SET is_enabled = ? WHERE workflow_id = ? AND server_id = ?'
     ).run(isEnabled ? 1 : 0, workflowId, serverId);
     return info.changes > 0;

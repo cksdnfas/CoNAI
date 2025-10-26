@@ -65,34 +65,6 @@ export interface GenerationRequest {
 }
 
 /**
- * 생성 히스토리 레코드
- */
-export interface GenerationHistoryRecord {
-  id: number;
-  workflow_id: number;
-  prompt_data: string; // JSON string
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  comfyui_prompt_id?: string;
-  generated_image_id?: number;
-  error_message?: string;
-  execution_time?: number; // 초 단위
-  created_date: string;
-}
-
-/**
- * 생성 히스토리 생성 데이터
- */
-export interface GenerationHistoryCreateData {
-  workflow_id: number;
-  prompt_data: Record<string, any>;
-  status?: 'pending' | 'processing' | 'completed' | 'failed';
-  comfyui_prompt_id?: string;
-  generated_image_id?: number;
-  error_message?: string;
-  execution_time?: number;
-}
-
-/**
  * ComfyUI API 응답 타입
  */
 export interface ComfyUIPromptResponse {
@@ -137,6 +109,6 @@ export interface GenerationStatusResponse {
   generated_image_id?: number;
   generated_image?: any; // enriched image record
   error_message?: string;
-  execution_time?: number;
+  execution_time?: number; // Deprecated, not used in api_generation_history
   created_date: string;
 }

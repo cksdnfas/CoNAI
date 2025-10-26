@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { WorkflowModel, GenerationHistoryModel } from '../models/Workflow';
+import { WorkflowModel } from '../models/Workflow';
 import { createComfyUIService, ParallelGenerationService } from '../services/comfyuiService';
 import { WorkflowResponse, WorkflowCreateData, WorkflowUpdateData, GenerationRequest, GenerationStatusResponse } from '../types/workflow';
 import { asyncHandler } from '../middleware/errorHandler';
@@ -16,7 +16,7 @@ import path from 'path';
 import fs from 'fs';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { ComfyUIWorkflowParser } from '../utils/comfyuiWorkflowParser';
-import { GenerationHistoryModel as APIGenerationHistoryModel } from '../models/GenerationHistory';
+import { GenerationHistoryModel } from '../models/GenerationHistory';
 import { refinePrimaryPrompt } from '@comfyui-image-manager/shared';
 
 const router = Router();
@@ -349,17 +349,10 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
       sampler: extractedParams.sampler
     });
 
-    // 생성 히스토리 레코드 생성 (pending 상태) - 기존 시스템 유지
-    const historyId = await GenerationHistoryModel.create({
-      workflow_id: id,
-      prompt_data,
-      status: 'pending'
-    });
-
-    // ✅ API Generation History 생성 (신규 시스템)
-    let apiHistoryId: number | undefined;
+    // API Generation History 생성
+    let historyId: number | undefined;
     try {
-      apiHistoryId = await GenerationHistoryService.createComfyUIHistory({
+      historyId = await GenerationHistoryService.createComfyUIHistory({
         workflow: workflowJson,
         workflowId: id,
         workflowName: workflow.name,
@@ -378,18 +371,15 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
           model: extractedParams.model
         }
       });
-      console.log(`✅ API History created: ${apiHistoryId}`);
-    } catch (apiHistoryError) {
-      console.error('⚠️ Failed to create API history (non-critical):', apiHistoryError);
+      console.log(`✅ Generation history created: ${historyId}`);
+    } catch (historyError) {
+      console.error('⚠️ Failed to create generation history (non-critical):', historyError);
     }
 
     // 백그라운드에서 이미지 생성 프로세스 실행
     (async () => {
       const startTime = Date.now();
       try {
-        // 상태를 processing으로 업데이트
-        await GenerationHistoryModel.updateStatus(historyId, 'processing');
-
         // ComfyUI 서비스 생성 (선택된 endpoint 사용)
         const comfyService = createComfyUIService(apiEndpoint);
         console.log(`📤 Sending to ComfyUI: ${apiEndpoint}`);
@@ -397,26 +387,21 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
         // 이미지 생성 (temp 폴더에 다운로드)
         const { promptId, imagePaths: tempFilePaths } = await comfyService.generateImages(workflow, prompt_data);
 
-        // ComfyUI prompt ID 업데이트
-        await GenerationHistoryModel.updateStatus(historyId, 'processing', {
-          comfyui_prompt_id: promptId
-        });
-
-        // ✅ API History에도 promptId 업데이트
-        if (apiHistoryId) {
+        // promptId 업데이트
+        if (historyId) {
           try {
-            const apiHistory = await GenerationHistoryService.getHistory(apiHistoryId);
-            if (apiHistory) {
+            const history = await GenerationHistoryService.getHistory(historyId);
+            if (history) {
               const updatedRecord = {
-                ...apiHistory,
+                ...history,
                 comfyui_prompt_id: promptId,
                 generation_status: 'processing' as const
               };
-              APIGenerationHistoryModel.update(apiHistoryId, updatedRecord);
-              console.log(`✅ API History ${apiHistoryId} updated with promptId: ${promptId}`);
+              GenerationHistoryModel.update(historyId, updatedRecord);
+              console.log(`✅ History ${historyId} updated with promptId: ${promptId}`);
             }
           } catch (e) {
-            console.error('⚠️ Failed to update API history with promptId:', e);
+            console.error('⚠️ Failed to update history with promptId:', e);
           }
         }
 
@@ -424,13 +409,13 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
         // 완전한 업로드 파이프라인 실행: 썸네일, 최적화, 메타데이터, 프롬프트 수집, 자동 태깅, 자동 그룹 분류
         const imageIds: number[] = [];
 
-        // ✅ API History 메타데이터 추출을 위해 첫 번째 이미지 Buffer 미리 읽기
+        // 메타데이터 추출을 위해 첫 번째 이미지 Buffer 미리 읽기
         let firstImageBuffer: Buffer | null = null;
-        if (apiHistoryId && tempFilePaths.length > 0) {
+        if (historyId && tempFilePaths.length > 0) {
           try {
             firstImageBuffer = await fs.promises.readFile(tempFilePaths[0]);
           } catch (bufferError) {
-            console.warn('⚠️ Failed to read first image buffer for API history:', bufferError);
+            console.warn('⚠️ Failed to read first image buffer for history:', bufferError);
           }
         }
 
@@ -569,42 +554,30 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
         // 첫 번째 이미지를 히스토리에 연결
         const generatedImageId = imageIds.length > 0 ? imageIds[0] : undefined;
 
-        // 완료 상태로 업데이트 (기존 시스템)
-        const executionTime = Math.floor((Date.now() - startTime) / 1000);
-        await GenerationHistoryModel.updateStatus(historyId, 'completed', {
-          generated_image_id: generatedImageId,
-          execution_time: executionTime
-        });
-
-        // ✅ API History 완료 처리 (메타데이터 추출 + 이미지 연결)
-        if (apiHistoryId && generatedImageId && firstImageBuffer) {
+        // 완료 처리 (메타데이터 추출 + 이미지 연결)
+        if (historyId && generatedImageId && firstImageBuffer) {
           try {
-            await GenerationHistoryService.processComfyUIHistoryMetadata(apiHistoryId, firstImageBuffer, generatedImageId);
-            console.log(`✅ API History ${apiHistoryId} completed with metadata and linked to image ${generatedImageId}`);
-          } catch (apiError) {
-            console.error(`⚠️ Failed to complete API history ${apiHistoryId}:`, apiError);
+            await GenerationHistoryService.processComfyUIHistoryMetadata(historyId, firstImageBuffer, generatedImageId);
+            console.log(`✅ History ${historyId} completed with metadata and linked to image ${generatedImageId}`);
+          } catch (error) {
+            console.error(`⚠️ Failed to complete history ${historyId}:`, error);
           }
         }
 
         console.log(`✅ Image generation completed for history ID ${historyId}`);
       } catch (error) {
         console.error(`❌ Image generation failed for history ID ${historyId}:`, error);
-        const executionTime = Math.floor((Date.now() - startTime) / 1000);
-        await GenerationHistoryModel.updateStatus(historyId, 'failed', {
-          error_message: (error as Error).message,
-          execution_time: executionTime
-        });
 
-        // ✅ API History 실패 처리
-        if (apiHistoryId) {
+        // 실패 처리
+        if (historyId) {
           try {
-            const apiHistory = await GenerationHistoryService.getHistory(apiHistoryId);
-            if (apiHistory) {
-              APIGenerationHistoryModel.recordError(apiHistoryId, (error as Error).message);
-              console.log(`✅ API History ${apiHistoryId} marked as failed`);
+            const history = await GenerationHistoryService.getHistory(historyId);
+            if (history) {
+              GenerationHistoryModel.recordError(historyId, (error as Error).message);
+              console.log(`✅ History ${historyId} marked as failed`);
             }
-          } catch (apiError) {
-            console.error(`⚠️ Failed to update API history error:`, apiError);
+          } catch (recordError) {
+            console.error(`⚠️ Failed to update history error:`, recordError);
           }
         }
       }
@@ -615,7 +588,6 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
       success: true,
       data: {
         history_id: historyId,
-        api_history_id: apiHistoryId,
         status: 'pending',
         message: 'Image generation started. Check status using /api/generation-history/:id'
       }
@@ -649,18 +621,21 @@ router.get('/:id/history', asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    const result = await GenerationHistoryModel.findByWorkflow(id, page, limit);
-    const stats = await GenerationHistoryModel.getStatsByWorkflow(id);
+    // API Generation History에서 조회
+    const offset = (page - 1) * limit;
+    const histories = GenerationHistoryModel.findByWorkflow(id, { limit, offset });
+    const total = GenerationHistoryModel.count({ workflow_id: id });
+    const stats = GenerationHistoryModel.getWorkflowStatistics(id);
 
     const response: WorkflowResponse = {
       success: true,
       data: {
-        histories: result.histories,
+        histories,
         pagination: {
           page,
           limit,
-          total: result.total,
-          totalPages: Math.ceil(result.total / limit)
+          total,
+          totalPages: Math.ceil(total / limit)
         },
         stats
       }
@@ -692,7 +667,7 @@ router.get('/history/:historyId', asyncHandler(async (req: Request, res: Respons
   }
 
   try {
-    const history = await GenerationHistoryModel.findById(historyId);
+    const history = GenerationHistoryModel.findById(historyId);
 
     if (!history) {
       return res.status(404).json({
@@ -703,22 +678,22 @@ router.get('/history/:historyId', asyncHandler(async (req: Request, res: Respons
 
     // 생성된 이미지 정보 조회
     let generatedImage = null;
-    if (history.generated_image_id) {
-      const image = await ImageModel.findById(history.generated_image_id);
+    if (history.linked_image_id) {
+      const image = await ImageModel.findById(history.linked_image_id);
       if (image) {
         generatedImage = enrichImageRecord(image);
       }
     }
 
     const statusResponse: GenerationStatusResponse = {
-      id: history.id,
-      status: history.status,
+      id: history.id!,
+      status: history.generation_status,
       comfyui_prompt_id: history.comfyui_prompt_id,
-      generated_image_id: history.generated_image_id,
+      generated_image_id: history.linked_image_id,
       generated_image: generatedImage,
       error_message: history.error_message,
-      execution_time: history.execution_time,
-      created_date: history.created_date
+      execution_time: undefined, // Not stored in api_generation_history
+      created_date: history.created_at || ''
     };
 
     const response: WorkflowResponse = {
@@ -898,7 +873,9 @@ router.delete('/:id/servers/:serverId', asyncHandler(async (req: Request, res: R
 /**
  * 멀티 서버로 이미지 생성 (병렬)
  * POST /api/workflows/:id/generate-parallel
+ * TODO: Refactor to use api_generation_history
  */
+/* TEMPORARILY DISABLED - Needs refactoring for api_generation_history
 router.post('/:id/generate-parallel', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
   const { prompt_data } = req.body;
@@ -1157,5 +1134,6 @@ router.post('/:id/generate-parallel', asyncHandler(async (req: Request, res: Res
     return res.status(500).json(response);
   }
 }));
+*/
 
 export { router as workflowRoutes };

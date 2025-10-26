@@ -71,10 +71,10 @@ export function useImageGeneration({
         selectedGroupId || undefined
       );
 
-      // api_history_id 저장하고 폴링 시작
-      const apiHistoryId = response.data.api_history_id;
+      // history_id 저장하고 폴링 시작
+      const apiHistoryId = response.data.history_id;
       if (!apiHistoryId) {
-        console.error('No api_history_id in response');
+        console.error('No history_id in response');
         setError('Failed to start image generation');
         return;
       }
