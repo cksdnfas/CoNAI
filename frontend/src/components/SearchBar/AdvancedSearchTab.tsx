@@ -1,115 +1,116 @@
-import React from 'react';
-import { Box, Typography, Alert } from '@mui/material';
-import type { FilterCondition } from '@comfyui-image-manager/shared';
-import FilterGroupCard from '../FilterBuilder/FilterGroupCard';
+import React, { useState } from 'react';
+import { Box, Typography, IconButton, Tooltip } from '@mui/material';
+import { HelpOutline as HelpOutlineIcon } from '@mui/icons-material';
+import type { FilterCondition, FilterGroupType } from '@comfyui-image-manager/shared';
+import FilterBlockList, { type FilterBlockData } from '../FilterBuilder/FilterBlockList';
+import FilterBlockModal from '../FilterBuilder/FilterBlockModal';
 
 interface AdvancedSearchTabProps {
-  excludeConditions: FilterCondition[];
-  orConditions: FilterCondition[];
-  andConditions: FilterCondition[];
-  onAddExcludeCondition: () => void;
-  onUpdateExcludeCondition: (index: number, condition: FilterCondition) => void;
-  onRemoveExcludeCondition: (index: number) => void;
-  onAddOrCondition: () => void;
-  onUpdateOrCondition: (index: number, condition: FilterCondition) => void;
-  onRemoveOrCondition: (index: number) => void;
-  onAddAndCondition: () => void;
-  onUpdateAndCondition: (index: number, condition: FilterCondition) => void;
-  onRemoveAndCondition: (index: number) => void;
+  filterBlocks: FilterBlockData[];
+  onAddBlock: (groupType: FilterGroupType, condition: FilterCondition) => void;
+  onRemoveBlock: (id: string) => void;
+  onEditBlock: (id: string, groupType: FilterGroupType, condition: FilterCondition) => void;
+  showHeader?: boolean; // 헤더 표시 여부 (기본값: false, SearchPage에서만 true)
 }
 
 const AdvancedSearchTab: React.FC<AdvancedSearchTabProps> = ({
-  excludeConditions,
-  orConditions,
-  andConditions,
-  onAddExcludeCondition,
-  onUpdateExcludeCondition,
-  onRemoveExcludeCondition,
-  onAddOrCondition,
-  onUpdateOrCondition,
-  onRemoveOrCondition,
-  onAddAndCondition,
-  onUpdateAndCondition,
-  onRemoveAndCondition,
+  filterBlocks,
+  onAddBlock,
+  onRemoveBlock,
+  onEditBlock,
+  showHeader = false,
 }) => {
-  const totalConditions =
-    excludeConditions.length + orConditions.length + andConditions.length;
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+  const [editingBlock, setEditingBlock] = useState<FilterBlockData | null>(null);
+
+  const handleOpenModal = () => {
+    setEditingBlockId(null);
+    setEditingBlock(null);
+    setModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setModalOpen(false);
+    setEditingBlockId(null);
+    setEditingBlock(null);
+  };
+
+  const handleEditBlock = (id: string) => {
+    const block = filterBlocks.find((b) => b.id === id);
+    if (block) {
+      setEditingBlockId(id);
+      setEditingBlock(block);
+      setModalOpen(true);
+    }
+  };
+
+  const handleAddFilter = (groupType: FilterGroupType, condition: FilterCondition) => {
+    if (editingBlockId) {
+      // 편집 모드
+      onEditBlock(editingBlockId, groupType, condition);
+    } else {
+      // 추가 모드
+      onAddBlock(groupType, condition);
+    }
+  };
+
+  const handleHelpClick = () => {
+    window.open('/help?page=filters', '_blank');
+  };
 
   return (
     <Box sx={{ py: 2 }}>
-      {/* 설명 */}
-      <Alert severity="info" sx={{ mb: 3 }}>
-        <Typography variant="body2" fontWeight={500} gutterBottom>
-          고급 검색: PoE 스타일 복합 필터 시스템
-        </Typography>
-        <Typography variant="caption" component="div" sx={{ mt: 1 }}>
-          • <strong>제외 (NOT)</strong>: 이 조건에 맞는 이미지를 결과에서 제외합니다 (최우선 실행)
-        </Typography>
-        <Typography variant="caption" component="div">
-          • <strong>OR 그룹</strong>: 조건 중 하나라도 만족하면 포함됩니다
-        </Typography>
-        <Typography variant="caption" component="div">
-          • <strong>AND 그룹</strong>: 모든 조건을 만족해야 포함됩니다
-        </Typography>
-        <Typography variant="caption" component="div" sx={{ mt: 1, fontStyle: 'italic' }}>
-          실행 순서: 제외 → OR → AND 순으로 필터링됩니다
-        </Typography>
-      </Alert>
-
-      {totalConditions === 0 && (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          조건이 하나도 없습니다. 아래에서 조건을 추가하세요.
-        </Alert>
+      {/* 헤더와 도움말 링크 (showHeader가 true일 때만 표시) */}
+      {showHeader && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 2,
+            p: 1.5,
+            backgroundColor: (theme) =>
+              theme.palette.mode === 'dark' ? 'rgb(7, 19, 24)' : 'rgb(229, 246, 253)',
+            borderRadius: 1,
+            border: '1px solid',
+            borderColor: (theme) =>
+              theme.palette.mode === 'dark' ? 'rgb(1, 67, 97)' : 'rgb(1, 67, 97)',
+          }}
+        >
+          <Box>
+            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+              복합 필터 검색
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {filterBlocks.length > 0
+                ? `${filterBlocks.length}개의 필터 적용 중 · 실행 순서: 제외 → OR → AND`
+                : '필터를 추가하여 정교한 검색을 시작하세요'}
+            </Typography>
+          </Box>
+          <Tooltip title="필터 사용법 도움말" arrow>
+            <IconButton onClick={handleHelpClick} size="small" color="primary">
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
       )}
 
-      {/* 제외 (NOT) 그룹 */}
-      <FilterGroupCard
-        type="exclude"
-        conditions={excludeConditions}
-        onAddCondition={onAddExcludeCondition}
-        onUpdateCondition={onUpdateExcludeCondition}
-        onRemoveCondition={onRemoveExcludeCondition}
+      {/* 필터 블록 리스트 (+ 버튼 포함) */}
+      <FilterBlockList
+        blocks={filterBlocks}
+        onRemove={onRemoveBlock}
+        onEdit={handleEditBlock}
+        onAdd={handleOpenModal}
       />
 
-      {/* OR 그룹 */}
-      <FilterGroupCard
-        type="or"
-        conditions={orConditions}
-        onAddCondition={onAddOrCondition}
-        onUpdateCondition={onUpdateOrCondition}
-        onRemoveCondition={onRemoveOrCondition}
+      {/* 필터 추가/편집 모달 */}
+      <FilterBlockModal
+        open={modalOpen}
+        onClose={handleCloseModal}
+        onAdd={handleAddFilter}
+        initialData={editingBlock ? { groupType: editingBlock.groupType, condition: editingBlock.condition } : undefined}
       />
-
-      {/* AND 그룹 */}
-      <FilterGroupCard
-        type="and"
-        conditions={andConditions}
-        onAddCondition={onAddAndCondition}
-        onUpdateCondition={onUpdateAndCondition}
-        onRemoveCondition={onRemoveAndCondition}
-      />
-
-      {/* 사용 예시 */}
-      <Alert severity="success" sx={{ mt: 2 }}>
-        <Typography variant="body2" fontWeight={500} gutterBottom>
-          💡 사용 예시
-        </Typography>
-        <Typography variant="caption" component="div" sx={{ mt: 1 }}>
-          <strong>시나리오</strong>: "nsfw 제외, 1girl OR 2girls, 캐릭터 있음"
-        </Typography>
-        <Typography variant="caption" component="div">
-          1. 제외 그룹에 "오토태그 {'->'} General 태그: nsfw" 추가
-        </Typography>
-        <Typography variant="caption" component="div">
-          2. OR 그룹에 "오토태그 {'->'} General 태그: 1girl" 추가
-        </Typography>
-        <Typography variant="caption" component="div">
-          3. OR 그룹에 "오토태그 {'->'} General 태그: 2girls" 추가
-        </Typography>
-        <Typography variant="caption" component="div">
-          4. AND 그룹에 "오토태그 {'->'} 캐릭터 존재: 있음" 추가
-        </Typography>
-      </Alert>
     </Box>
   );
 };

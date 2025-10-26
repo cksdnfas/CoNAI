@@ -40,9 +40,24 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
   }, [image.id]);
 
   // 이미지 URL 우선순위:
-  // 1. optimized_url → 2. image_url → 3. thumbnail_url
+  // GIF: optimized_url(원본 복사) → image_url(원본) → thumbnail_url (애니메이션 보존)
+  // 일반 이미지: optimized_url(webp) → image_url(원본) → thumbnail_url(webp)
   // 히스토리 이미지는 업로드 전까지 URL만 존재하므로 직접 경로 사용
   const getImageUrl = () => {
+    // GIF는 애니메이션 보존을 위해 원본 또는 optimized(원본 복사본) 사용
+    const isGif = image.mime_type === 'image/gif';
+
+    if (isGif) {
+      // GIF는 optimized(원본 복사본) → image_url(원본) 순서로 우선
+      if (image.optimized_url) {
+        return image.optimized_url.startsWith('http') ? image.optimized_url : `${backendOrigin}${image.optimized_url}`;
+      }
+      if (image.image_url) {
+        return image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
+      }
+    }
+
+    // 일반 이미지는 기존 로직
     if (image.optimized_url) {
       return image.optimized_url.startsWith('http') ? image.optimized_url : `${backendOrigin}${image.optimized_url}`;
     }

@@ -44,6 +44,74 @@ export class PromptCollectionModel {
   }
 
   /**
+   * 배치 프롬프트 추가 또는 사용 횟수 증가 (성능 최적화)
+   * @param prompts - 프롬프트와 그룹 ID 배열
+   * @returns 처리된 프롬프트 수
+   */
+  static async batchAddOrIncrement(prompts: Array<{ prompt: string; group_id?: number }>): Promise<number> {
+    if (!prompts || prompts.length === 0) {
+      return 0;
+    }
+
+    let processedCount = 0;
+
+    // 트랜잭션으로 배치 처리
+    const transaction = db.transaction(() => {
+      const selectStmt = db.prepare('SELECT id, usage_count FROM prompt_collection WHERE prompt = ?');
+      const updateStmt = db.prepare('UPDATE prompt_collection SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+      const insertStmt = db.prepare('INSERT INTO prompt_collection (prompt, usage_count, group_id) VALUES (?, 1, ?)');
+
+      for (const item of prompts) {
+        const row = selectStmt.get(item.prompt) as PromptCollectionRecord | undefined;
+
+        if (row) {
+          updateStmt.run(row.id);
+        } else {
+          insertStmt.run(item.prompt, item.group_id || null);
+        }
+        processedCount++;
+      }
+    });
+
+    transaction();
+    return processedCount;
+  }
+
+  /**
+   * 배치 네거티브 프롬프트 추가 또는 사용 횟수 증가 (성능 최적화)
+   * @param prompts - 프롬프트와 그룹 ID 배열
+   * @returns 처리된 프롬프트 수
+   */
+  static async batchAddOrIncrementNegative(prompts: Array<{ prompt: string; group_id?: number }>): Promise<number> {
+    if (!prompts || prompts.length === 0) {
+      return 0;
+    }
+
+    let processedCount = 0;
+
+    // 트랜잭션으로 배치 처리
+    const transaction = db.transaction(() => {
+      const selectStmt = db.prepare('SELECT id, usage_count FROM negative_prompt_collection WHERE prompt = ?');
+      const updateStmt = db.prepare('UPDATE negative_prompt_collection SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+      const insertStmt = db.prepare('INSERT INTO negative_prompt_collection (prompt, usage_count, group_id) VALUES (?, 1, ?)');
+
+      for (const item of prompts) {
+        const row = selectStmt.get(item.prompt) as NegativePromptCollectionRecord | undefined;
+
+        if (row) {
+          updateStmt.run(row.id);
+        } else {
+          insertStmt.run(item.prompt, item.group_id || null);
+        }
+        processedCount++;
+      }
+    });
+
+    transaction();
+    return processedCount;
+  }
+
+  /**
    * 프롬프트 검색 (포지티브)
    */
   static async searchPrompts(

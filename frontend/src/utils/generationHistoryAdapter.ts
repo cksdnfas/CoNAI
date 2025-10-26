@@ -30,17 +30,15 @@ export const convertHistoryToImageRecord = (
   const scheduler = isComfyUI ? parsedMetadata.scheduler : null;
   const model_name = isComfyUI ? parsedMetadata.model : history.nai_model;
 
-  // Both ComfyUI and NovelAI use linked_image_id when available (after upload to main images API)
-  // Fallback to direct API/images/ paths only if linked_image_id is not set
-  const useImageId = history.linked_image_id;
+  // 히스토리 이미지는 항상 히스토리 폴더(uploads/API/images/)의 이미지를 사용
+  // linked_image_id는 메타데이터로만 보관 (향후 참조용)
 
   // 디버깅: 이미지 경로가 없는 경우 경고
-  if (!useImageId && !history.thumbnail_path && !history.original_path) {
+  if (!history.thumbnail_path && !history.original_path) {
     console.warn(`[History Adapter] History ${history.id} has no valid image paths:`, {
       id: history.id,
       service_type: history.service_type,
       generation_status: history.generation_status,
-      linked_image_id: history.linked_image_id,
       thumbnail_path: history.thumbnail_path,
       original_path: history.original_path
     });
@@ -90,17 +88,10 @@ export const convertHistoryToImageRecord = (
     bitrate: null,
 
     // URL 필드
-    // ComfyUI: linked_image_id를 통해 메인 images API 사용 (/api/images/{id}/thumbnail)
-    // NovelAI: API/images/에 직접 저장된 경로 사용 (/uploads/API/images/...)
-    thumbnail_url: useImageId
-      ? `/api/images/${history.linked_image_id}/thumbnail`
-      : (history.thumbnail_path ? `/uploads/${history.thumbnail_path}` : undefined),
-    image_url: useImageId
-      ? `/api/images/${history.linked_image_id}/image`
-      : (history.original_path ? `/uploads/${history.original_path}` : undefined),
-    optimized_url: useImageId
-      ? `/api/images/${history.linked_image_id}/optimized`
-      : (history.optimized_path ? `/uploads/${history.optimized_path}` : undefined),
+    // 히스토리 이미지는 항상 히스토리 폴더(uploads/API/images/)의 이미지를 직접 참조
+    thumbnail_url: history.thumbnail_path ? `/uploads/${history.thumbnail_path}` : undefined,
+    image_url: history.original_path ? `/uploads/${history.original_path}` : undefined,
+    optimized_url: history.optimized_path ? `/uploads/${history.optimized_path}` : undefined,
 
     // 그룹 정보 없음
     groups: [],

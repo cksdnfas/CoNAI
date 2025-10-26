@@ -11,14 +11,14 @@ const router = Router();
 // Upload routes
 router.use('/', uploadRoutes);
 
+// Tagging routes (must come before queryRoutes to avoid /:id catching /untagged-count)
+router.use('/', taggingRoutes);
+
 // Query and download routes
 router.use('/', queryRoutes);
 
 // Complex search routes (PoE-style AND/OR/NOT filtering)
 router.use('/search/complex', complexSearchRoutes);
-
-// Tagging routes
-router.use('/', taggingRoutes);
 
 // Management routes (delete, update, etc.)
 router.use('/', managementRoutes);

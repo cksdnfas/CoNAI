@@ -3,7 +3,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { settingsService } from '../services/settingsService';
 import { imageTaggerService } from '../services/imageTaggerService';
 import { RatingScoreService } from '../services/ratingScoreService';
-import { GeneralSettings, TaggerSettings, SimilaritySettings, SupportedLanguage } from '../types/settings';
+import { GeneralSettings, TaggerSettings, SimilaritySettings, MetadataExtractionSettings, SupportedLanguage } from '../types/settings';
 import { RatingWeightsUpdate, RatingTierInput, RatingData } from '../types/rating';
 
 const router = Router();
@@ -275,6 +275,63 @@ router.put(
       success: true,
       data: updatedSettings,
       message: 'Similarity settings updated successfully',
+    });
+    return;
+  })
+);
+
+// ==================== Metadata Extraction Settings Routes ====================
+
+/**
+ * PUT /api/settings/metadata
+ * Update metadata extraction settings
+ */
+router.put(
+  '/metadata',
+  asyncHandler(async (req: Request, res: Response) => {
+    const metadataSettings: Partial<MetadataExtractionSettings> = req.body;
+
+    // Validate scan mode if provided
+    if (metadataSettings.stealthScanMode !== undefined) {
+      const validModes = ['fast', 'full', 'skip'];
+      if (!validModes.includes(metadataSettings.stealthScanMode)) {
+        res.status(400).json({
+          success: false,
+          error: `Invalid scan mode. Must be one of: ${validModes.join(', ')}`,
+        });
+        return;
+      }
+    }
+
+    // Validate file size limit if provided
+    if (metadataSettings.stealthMaxFileSizeMB !== undefined) {
+      if (metadataSettings.stealthMaxFileSizeMB <= 0) {
+        res.status(400).json({
+          success: false,
+          error: 'File size limit must be greater than 0',
+        });
+        return;
+      }
+    }
+
+    // Validate resolution limit if provided
+    if (metadataSettings.stealthMaxResolutionMP !== undefined) {
+      if (metadataSettings.stealthMaxResolutionMP <= 0) {
+        res.status(400).json({
+          success: false,
+          error: 'Resolution limit must be greater than 0',
+        });
+        return;
+      }
+    }
+
+    // Update settings
+    const updatedSettings = settingsService.updateMetadataSettings(metadataSettings);
+
+    res.json({
+      success: true,
+      data: updatedSettings,
+      message: 'Metadata extraction settings updated successfully',
     });
     return;
   })

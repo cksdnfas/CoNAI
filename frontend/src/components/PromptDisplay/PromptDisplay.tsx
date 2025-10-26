@@ -557,7 +557,6 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
                     imageId={linkedImage.id}
                     autoTags={linkedImage.auto_tags ?? null}
                     onTagGenerated={() => {}}
-                    readOnly={true}
                   />
                 ) : (
                   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>

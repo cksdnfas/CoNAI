@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { GroupModel, ImageGroupModel } from '../models/Group';
 import { AutoCollectionService } from '../services/autoCollectionService';
+import { ComplexFilterService } from '../services/complexFilterService';
 import {
   GroupResponse,
   GroupCreateData,
@@ -8,7 +9,9 @@ import {
   validateId,
   successResponse,
   errorResponse,
-  PAGINATION
+  PAGINATION,
+  ComplexFilter,
+  AutoCollectCondition
 } from '@comfyui-image-manager/shared';
 import { asyncHandler } from '../middleware/errorHandler';
 import { enrichImageRecord } from './images/utils';
@@ -17,6 +20,22 @@ import fs from 'fs';
 import { resolveUploadsPath } from '../config/runtimePaths';
 
 const router = Router();
+
+/**
+ * Validate auto-collect conditions (supports both legacy and ComplexFilter formats)
+ */
+function validateAutoCollectConditions(conditions: AutoCollectCondition[] | ComplexFilter): { valid: boolean; errors: string[] } {
+  // Check if it's ComplexFilter format
+  const isComplexFilter = conditions && typeof conditions === 'object' && !Array.isArray(conditions);
+
+  if (isComplexFilter) {
+    // Use ComplexFilterService for ComplexFilter validation
+    return ComplexFilterService.validateFilter(conditions as ComplexFilter);
+  } else {
+    // Use AutoCollectionService for legacy format validation
+    return AutoCollectionService.validateConditions(conditions as AutoCollectCondition[]);
+  }
+}
 
 /**
  * 모든 그룹 조회 (통계 포함)
@@ -122,9 +141,9 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     return res.status(400).json(errorResponse('Group name is required'));
   }
 
-  // 자동수집 조건 유효성 검사
+  // 자동수집 조건 유효성 검사 (ComplexFilter 지원)
   if (auto_collect_enabled && auto_collect_conditions) {
-    const validation = AutoCollectionService.validateConditions(auto_collect_conditions);
+    const validation = validateAutoCollectConditions(auto_collect_conditions);
     if (!validation.valid) {
       return res.status(400).json(
         errorResponse(`Invalid auto collection conditions: ${validation.errors.join(', ')}`)
@@ -177,9 +196,9 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     const id = validateId(req.params.id, 'Group ID');
     const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions } = req.body;
 
-    // 자동수집 조건 유효성 검사
+    // 자동수집 조건 유효성 검사 (ComplexFilter 지원)
     if (auto_collect_enabled && auto_collect_conditions) {
-      const validation = AutoCollectionService.validateConditions(auto_collect_conditions);
+      const validation = validateAutoCollectConditions(auto_collect_conditions);
       if (!validation.valid) {
         return res.status(400).json(
           errorResponse(`Invalid auto collection conditions: ${validation.errors.join(', ')}`)

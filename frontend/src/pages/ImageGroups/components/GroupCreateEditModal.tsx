@@ -58,7 +58,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
     color: '#2196f3',
     auto_collect_enabled: false,
   });
-  const [conditions, setConditions] = useState<AutoCollectCondition[] | ComplexFilter>([]);
+  const [conditions, setConditions] = useState<ComplexFilter>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,12 +78,21 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
       if (group.auto_collect_conditions) {
         try {
           const parsedConditions = JSON.parse(group.auto_collect_conditions);
-          setConditions(parsedConditions);
+          // ComplexFilter 형식인지 확인
+          if (parsedConditions && typeof parsedConditions === 'object' &&
+              ('exclude_group' in parsedConditions || 'or_group' in parsedConditions || 'and_group' in parsedConditions)) {
+            setConditions(parsedConditions);
+          } else if (Array.isArray(parsedConditions)) {
+            // 레거시 배열 형식을 ComplexFilter로 변환
+            setConditions({});
+          } else {
+            setConditions({});
+          }
         } catch (e) {
-          setConditions([]);
+          setConditions({});
         }
       } else {
-        setConditions([]);
+        setConditions({});
       }
     } else {
       setFormData({
@@ -92,7 +101,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
         color: '#2196f3',
         auto_collect_enabled: false,
       });
-      setConditions([]);
+      setConditions({});
     }
     setError(null);
     setActiveTab(0);
@@ -107,7 +116,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   };
 
   // 조건 변경 핸들러 (ComplexFilter 지원)
-  const handleConditionsChange = (newConditions: AutoCollectCondition[] | ComplexFilter) => {
+  const handleConditionsChange = (newConditions: ComplexFilter) => {
     setConditions(newConditions);
   };
 

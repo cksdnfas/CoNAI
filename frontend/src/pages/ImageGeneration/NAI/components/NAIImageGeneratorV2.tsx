@@ -49,7 +49,6 @@ export default function NAIImageGeneratorV2({
     error,
     userData,
     historyRefreshKey,
-    setError,
     executeSingleGeneration,
     calculateCost
   } = useNAIGeneration({ token, onLogout });

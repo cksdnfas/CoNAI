@@ -264,11 +264,12 @@ export class AutoTagSearchService {
     // has_character 플래그가 있는 경우
     if (character.has_character !== undefined) {
       if (character.has_character === true) {
-        // 캐릭터 필드가 존재하고 비어있지 않음
+        // 캐릭터가 있음: 필드 존재 + object 타입 + 비어있지 않음
         conditions.push(`json_extract(i.auto_tags, '$.character') IS NOT NULL`);
         conditions.push(`json_type(i.auto_tags, '$.character') = 'object'`);
+        conditions.push(`json_extract(i.auto_tags, '$.character') != '{}'`);
       } else {
-        // 캐릭터 필드가 없거나 비어있음
+        // 캐릭터가 없음: 필드 없음 OR object 아님 OR 빈 객체
         const noCharConditions = [
           `json_extract(i.auto_tags, '$.character') IS NULL`,
           `json_type(i.auto_tags, '$.character') != 'object'`,

@@ -3,13 +3,13 @@
     "language": "ko"
   },
   "tagger": {
-    "enabled": true,
-    "model": "swinv2",
-    "device": "cuda",
+    "enabled": false,
+    "model": "vit",
+    "device": "auto",
     "generalThreshold": 0.35,
-    "characterThreshold": 0.35,
+    "characterThreshold": 0.75,
     "pythonPath": "python",
-    "autoTagOnUpload": true,
+    "autoTagOnUpload": false,
     "keepModelLoaded": false,
     "autoUnloadMinutes": 5
   },
@@ -20,7 +20,7 @@
     "enableSecondaryExtraction": true,
     "stealthScanMode": "fast",
     "stealthMaxFileSizeMB": 10,
-    "stealthMaxResolutionMP": 10,
+    "stealthMaxResolutionMP": 5,
     "skipStealthForComfyUI": true,
     "skipStealthForWebUI": false
   }

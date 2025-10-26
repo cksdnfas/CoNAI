@@ -43,9 +43,7 @@ export default function ServersTab() {
     name: '',
     endpoint: '',
     description: '',
-    is_active: true,
-    priority: 0,
-    max_concurrent_jobs: 1
+    is_active: true
   });
 
   useEffect(() => {
@@ -71,9 +69,7 @@ export default function ServersTab() {
         name: server.name,
         endpoint: server.endpoint,
         description: server.description || '',
-        is_active: server.is_active,
-        priority: server.priority,
-        max_concurrent_jobs: server.max_concurrent_jobs
+        is_active: server.is_active
       });
     } else {
       setEditingServer(null);
@@ -81,9 +77,7 @@ export default function ServersTab() {
         name: '',
         endpoint: 'http://127.0.0.1:8188',
         description: '',
-        is_active: true,
-        priority: 0,
-        max_concurrent_jobs: 1
+        is_active: true
       });
     }
     setOpenDialog(true);
@@ -192,11 +186,6 @@ export default function ServersTab() {
                   </Typography>
                 )}
 
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
-                  <Chip label={t('servers:card.priority', { priority: server.priority })} size="small" variant="outlined" />
-                  <Chip label={t('servers:card.concurrent', { count: server.max_concurrent_jobs })} size="small" variant="outlined" />
-                </Box>
-
                 {connectionStatus[server.id] !== undefined && (
                   <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
                     {connectionStatus[server.id] ? (
@@ -285,21 +274,6 @@ export default function ServersTab() {
               rows={2}
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            />
-            <TextField
-              label={t('servers:dialog.priority')}
-              type="number"
-              fullWidth
-              value={formData.priority}
-              onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) })}
-              helperText={t('servers:dialog.priorityHelper')}
-            />
-            <TextField
-              label={t('servers:dialog.maxConcurrent')}
-              type="number"
-              fullWidth
-              value={formData.max_concurrent_jobs}
-              onChange={(e) => setFormData({ ...formData, max_concurrent_jobs: parseInt(e.target.value) })}
             />
             <FormControlLabel
               control={

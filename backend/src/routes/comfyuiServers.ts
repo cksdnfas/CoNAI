@@ -199,7 +199,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  * POST /api/comfyui-servers
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { name, endpoint, description, is_active, priority, max_concurrent_jobs } = req.body;
+  const { name, endpoint, description, is_active } = req.body;
 
   if (!name || !endpoint) {
     return res.status(400).json({
@@ -222,9 +222,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       name,
       endpoint,
       description,
-      is_active,
-      priority,
-      max_concurrent_jobs
+      is_active
     };
 
     const serverId = await ComfyUIServerModel.create(serverData);
@@ -254,7 +252,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
-  const { name, endpoint, description, is_active, priority, max_concurrent_jobs } = req.body;
+  const { name, endpoint, description, is_active } = req.body;
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -279,9 +277,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
       name,
       endpoint,
       description,
-      is_active,
-      priority,
-      max_concurrent_jobs
+      is_active
     };
 
     const updated = await ComfyUIServerModel.update(id, serverData);

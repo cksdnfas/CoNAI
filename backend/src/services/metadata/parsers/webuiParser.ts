@@ -20,7 +20,19 @@ export class WebUIParser {
     }
 
     if (typeof data === 'object' && data !== null) {
-      return data.parameters !== undefined;
+      // Direct parameters property
+      if (data.parameters !== undefined) {
+        return true;
+      }
+
+      // Nested in textChunks (common in PNG metadata)
+      if (data.textChunks && typeof data.textChunks === 'object') {
+        if (data.textChunks.parameters !== undefined) {
+          return true;
+        }
+      }
+
+      return false;
     }
 
     return false;
@@ -38,6 +50,9 @@ export class WebUIParser {
         parametersText = data;
       } else if (data.parameters) {
         parametersText = data.parameters;
+      } else if (data.textChunks?.parameters) {
+        // Handle nested textChunks structure
+        parametersText = data.textChunks.parameters;
       } else {
         return {};
       }

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
-import { AppSettings, GeneralSettings, TaggerSettings, SimilaritySettings, TaggerModel, TaggerModelInfo, TaggerDevice, SupportedLanguage } from '../types/settings';
+import { AppSettings, GeneralSettings, TaggerSettings, SimilaritySettings, MetadataExtractionSettings, TaggerModel, TaggerModelInfo, TaggerDevice, SupportedLanguage } from '../types/settings';
 
 const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
 
@@ -51,6 +51,14 @@ export class SettingsService {
       similarity: {
         autoGenerateHashOnUpload: true,  // 기본값: 자동 해시 생성
       },
+      metadataExtraction: {
+        enableSecondaryExtraction: true,      // 기본값: Secondary Extraction 활성화
+        stealthScanMode: 'fast',              // 기본값: 빠른 스캔 (권장)
+        stealthMaxFileSizeMB: 10,             // 기본값: 10MB 이상 스킵
+        stealthMaxResolutionMP: 5,            // 기본값: 5MP 이상 스킵
+        skipStealthForComfyUI: true,          // 기본값: ComfyUI 스킵
+        skipStealthForWebUI: false,           // 기본값: WebUI 검사
+      },
     };
   }
 
@@ -92,6 +100,10 @@ export class SettingsService {
           similarity: {
             ...defaults.similarity,
             ...loadedSettings.similarity,
+          },
+          metadataExtraction: {
+            ...defaults.metadataExtraction,
+            ...loadedSettings.metadataExtraction,
           },
         };
 
@@ -147,6 +159,14 @@ export class SettingsService {
     for (const key of Object.keys(defaults.similarity)) {
       if (!(key in (loaded.similarity || {}))) {
         console.log(`[SettingsService] Missing field: similarity.${key}`);
+        return true;
+      }
+    }
+
+    // Check metadata extraction fields
+    for (const key of Object.keys(defaults.metadataExtraction)) {
+      if (!(key in (loaded.metadataExtraction || {}))) {
+        console.log(`[SettingsService] Missing field: metadataExtraction.${key}`);
         return true;
       }
     }
@@ -215,6 +235,22 @@ export class SettingsService {
       similarity: {
         ...currentSettings.similarity,
         ...similaritySettings,
+      },
+    };
+    this.saveSettings(updatedSettings);
+    return updatedSettings;
+  }
+
+  /**
+   * Update metadata extraction settings
+   */
+  updateMetadataSettings(metadataSettings: Partial<MetadataExtractionSettings>): AppSettings {
+    const currentSettings = this.loadSettings();
+    const updatedSettings: AppSettings = {
+      ...currentSettings,
+      metadataExtraction: {
+        ...currentSettings.metadataExtraction,
+        ...metadataSettings,
       },
     };
     this.saveSettings(updatedSettings);

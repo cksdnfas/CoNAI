@@ -13,15 +13,13 @@ export class ComfyUIServerModel {
   static async create(serverData: ComfyUIServerCreateData): Promise<number> {
     const info = db.prepare(`
       INSERT INTO comfyui_servers (
-        name, endpoint, description, is_active, priority, max_concurrent_jobs
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        name, endpoint, description, is_active
+      ) VALUES (?, ?, ?, ?)
     `).run(
       serverData.name,
       serverData.endpoint,
       serverData.description || null,
-      serverData.is_active !== undefined ? (serverData.is_active ? 1 : 0) : 1,
-      serverData.priority || 0,
-      serverData.max_concurrent_jobs || 1
+      serverData.is_active !== undefined ? (serverData.is_active ? 1 : 0) : 1
     );
 
     return info.lastInsertRowid as number;
@@ -43,18 +41,18 @@ export class ComfyUIServerModel {
     if (activeOnly) {
       query += ' WHERE is_active = 1';
     }
-    query += ' ORDER BY priority DESC, created_date DESC';
+    query += ' ORDER BY created_date DESC';
 
     const rows = db.prepare(query).all() as ComfyUIServerRecord[];
     return rows || [];
   }
 
   /**
-   * 활성화된 서버만 조회 (우선순위 순)
+   * 활성화된 서버만 조회
    */
   static async findActiveServers(): Promise<ComfyUIServerRecord[]> {
     const rows = db.prepare(
-      'SELECT * FROM comfyui_servers WHERE is_active = 1 ORDER BY priority DESC, id ASC'
+      'SELECT * FROM comfyui_servers WHERE is_active = 1 ORDER BY id ASC'
     ).all() as ComfyUIServerRecord[];
     return rows || [];
   }
@@ -81,14 +79,6 @@ export class ComfyUIServerModel {
     if (serverData.is_active !== undefined) {
       fields.push('is_active = ?');
       values.push(serverData.is_active ? 1 : 0);
-    }
-    if (serverData.priority !== undefined) {
-      fields.push('priority = ?');
-      values.push(serverData.priority);
-    }
-    if (serverData.max_concurrent_jobs !== undefined) {
-      fields.push('max_concurrent_jobs = ?');
-      values.push(serverData.max_concurrent_jobs);
     }
 
     if (fields.length === 0) {
@@ -198,7 +188,7 @@ export class WorkflowServerModel {
       query += ' AND ws.is_enabled = 1 AND s.is_active = 1';
     }
 
-    query += ' ORDER BY s.priority DESC, s.id ASC';
+    query += ' ORDER BY s.id ASC';
 
     const rows = db.prepare(query).all(workflowId) as any[];
     return rows || [];

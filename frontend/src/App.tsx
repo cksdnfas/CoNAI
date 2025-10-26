@@ -15,6 +15,7 @@ import SettingsPage from './pages/Settings/SettingsPage';
 import ImageGenerationPage from './pages/ImageGeneration/ImageGenerationPage';
 import WorkflowFormPage from './pages/Workflows/WorkflowFormPage';
 import WorkflowGeneratePage from './pages/Workflows/WorkflowGeneratePage';
+import HelpPage from './pages/Help/HelpPage';
 
 // 레이아웃 컴포넌트들
 import { Layout } from './components/Layout';
@@ -35,6 +36,7 @@ function App() {
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/help" element={<HelpPage />} />
             <Route path="/image/:id" element={<ImageDetailPage />} />
             <Route path="/image-generation" element={<ImageGenerationPage />} />
             <Route path="/image-generation/new" element={<WorkflowFormPage />} />

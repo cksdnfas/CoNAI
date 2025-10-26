@@ -8,8 +8,6 @@ export interface ComfyUIServer {
   endpoint: string;
   description?: string;
   is_active: boolean;
-  priority: number;
-  max_concurrent_jobs: number;
   created_date: string;
   updated_date: string;
 }
@@ -44,8 +42,6 @@ export const comfyuiServerApi = {
     endpoint: string;
     description?: string;
     is_active?: boolean;
-    priority?: number;
-    max_concurrent_jobs?: number;
   }) => {
     const response = await axios.post(`${API_BASE_URL}/comfyui-servers`, data);
     return response.data;

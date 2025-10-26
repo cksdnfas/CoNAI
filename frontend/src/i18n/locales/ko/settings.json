@@ -7,6 +7,7 @@
     "rating": "Rating 점수 설정",
     "similarity": "이미지 유사도 검색",
     "prompts": "프롬프트 관리",
+    "metadata": "메타데이터 추출",
     "advanced": "고급 설정"
   },
   "general": {
@@ -336,6 +337,53 @@
       },
       "localStorageNote": "설정값은 로컬에만 저장되며, 검색 시 실시간으로 적용됩니다."
     }
+  },
+  "metadata": {
+    "title": "메타데이터 추출 최적화",
+    "description": "AI 이미지 메타데이터 추출 성능을 최적화합니다. 기본 설정으로 ComfyUI 이미지 처리가 99.85% 빨라집니다.",
+    "scanMode": {
+      "title": "Stealth PNG 스캔 모드",
+      "fast": {
+        "label": "Fast (권장)",
+        "description": "빠른 시그니처 스캔 - 처음 200픽셀만 확인 후 조기 종료"
+      },
+      "full": {
+        "label": "Full",
+        "description": "전체 파일 스캔 - 모든 픽셀 확인 (느림)"
+      },
+      "skip": {
+        "label": "Skip",
+        "description": "스캔 건너뛰기 - Secondary extraction 비활성화"
+      }
+    },
+    "limits": {
+      "title": "파일 크기 및 해상도 제한",
+      "fileSize": {
+        "label": "최대 파일 크기 (MB)",
+        "helper": "이 크기보다 큰 파일은 Stealth PNG 스캔을 건너뜁니다"
+      },
+      "resolution": {
+        "label": "최대 해상도 (메가픽셀)",
+        "helper": "이 해상도보다 큰 이미지는 Stealth PNG 스캔을 건너뜁니다"
+      }
+    },
+    "skipSettings": {
+      "title": "AI 도구별 스킵 설정",
+      "description": "특정 AI 도구의 이미지는 Stealth PNG 스캔을 자동으로 건너뜁니다.",
+      "comfyui": {
+        "label": "ComfyUI 이미지 스킵 (권장)",
+        "description": "ComfyUI는 Stealth PNG를 사용하지 않으므로 스캔 불필요"
+      },
+      "webui": {
+        "label": "WebUI 이미지 스킵",
+        "description": "WebUI는 Stealth PNG를 사용할 수 있으므로 필요시에만 활성화"
+      }
+    },
+    "secondary": {
+      "label": "Secondary extraction 활성화",
+      "description": "Primary extraction 실패 시 Stealth PNG 방식으로 재시도합니다."
+    },
+    "performanceNote": "💡 팁: 기본 설정(Fast + ComfyUI 스킵)으로 대부분의 경우 최적의 성능을 제공합니다. ComfyUI 이미지 처리 시간이 2682ms → 4ms로 단축됩니다!"
   },
   "messages": {
     "saveSuccess": "설정이 성공적으로 저장되었습니다",

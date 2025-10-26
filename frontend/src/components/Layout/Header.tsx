@@ -41,6 +41,7 @@ const Header: React.FC = () => {
     { label: t('header.menu.upload'), path: '/upload' },
     { label: t('header.menu.imageGeneration'), path: '/image-generation' },
     { label: t('header.menu.settings'), path: '/settings' },
+    { label: t('header.menu.help'), path: '/help' },
   ];
 
   const handleMobileMenuToggle = () => {

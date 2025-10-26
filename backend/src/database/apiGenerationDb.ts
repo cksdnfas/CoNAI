@@ -5,13 +5,36 @@ import { runtimePaths } from '../config/runtimePaths';
 
 const API_DB_PATH = path.join(runtimePaths.databaseDir, 'api-generation-history.db');
 
-// Migration path resolution:
-// - Development: Reference source files directly (no copy needed)
-// - Production: Use migrations copied to dist during build
-const isDevelopment = process.env.NODE_ENV === 'development';
-const MIGRATIONS_PATH = isDevelopment
-  ? path.join(__dirname, '../../src/database/migrations/api-generation')
-  : path.join(__dirname, 'migrations/api-generation');
+// Migration path resolution with multiple fallback strategies
+// - Development: Reference source files directly
+// - Production/Bundle: Use migrations in dist
+// - Portable: Use migrations in app folder
+// - SEA: Use migrations alongside executable
+const getMigrationsPath = (): string => {
+  const possiblePaths = [
+    // Development: source files
+    path.join(__dirname, '../../src/database/migrations/api-generation'),
+    // Production: compiled in dist
+    path.join(__dirname, 'migrations/api-generation'),
+    // Portable: app/migrations/api-generation
+    path.join(process.cwd(), 'app', 'migrations', 'api-generation'),
+    // Bundle: relative to bundle location
+    path.join(path.dirname(process.argv[1] || ''), 'migrations', 'api-generation'),
+    // Alternative relative path
+    path.join(__dirname, '../migrations/api-generation')
+  ];
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+
+  // Return first path as fallback (will cause warning later)
+  return possiblePaths[0];
+};
+
+const MIGRATIONS_PATH = getMigrationsPath();
 
 /**
  * API Generation History Database Instance
@@ -87,9 +110,13 @@ function recordMigration(version: string): void {
  */
 function runMigrations(): void {
   if (!fs.existsSync(MIGRATIONS_PATH)) {
-    console.warn('No migrations directory found for API generation DB');
+    console.warn(`⚠️  No migrations directory found for API generation DB`);
+    console.warn(`   Searched path: ${MIGRATIONS_PATH}`);
+    console.warn(`   API generation history features may not work correctly`);
     return;
   }
+
+  console.log(`📂 Using API generation migrations from: ${MIGRATIONS_PATH}`);
 
   // Create migrations tracking table
   createMigrationsTable();

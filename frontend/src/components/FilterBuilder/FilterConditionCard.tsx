@@ -63,6 +63,37 @@ const CATEGORY_LABELS: Record<FilterCategory, string> = {
   basic: '기본',
 };
 
+// Get default value for condition type
+const getDefaultValueForType = (type: string): Omit<FilterCondition, 'category' | 'type'> => {
+  switch (type) {
+    case 'auto_tag_exists':
+    case 'auto_tag_has_character':
+      return { value: true };
+
+    case 'auto_tag_general':
+    case 'auto_tag_character':
+      return { value: '', min_score: 0, max_score: 1 };
+
+    case 'auto_tag_rating':
+      return { value: true, rating_type: 'general' as const, min_score: 0, max_score: 1 };
+
+    case 'auto_tag_rating_score':
+      return { value: true, min_score: 0, max_score: 1 };
+
+    case 'prompt_contains':
+    case 'prompt_regex':
+    case 'negative_prompt_contains':
+    case 'negative_prompt_regex':
+    case 'ai_tool':
+    case 'model_name':
+    case 'auto_tag_model':
+      return { value: '' };
+
+    default:
+      return { value: '' };
+  }
+};
+
 const FilterConditionCard: React.FC<FilterConditionCardProps> = ({
   condition,
   index,
@@ -74,21 +105,24 @@ const FilterConditionCard: React.FC<FilterConditionCardProps> = ({
   const [editingCondition, setEditingCondition] = useState<FilterCondition>(condition);
 
   const handleCategoryChange = (newCategory: FilterCategory) => {
-    // 카테고리 변경 시 타입 초기화
+    // 카테고리 변경 시 타입 초기화 및 적절한 기본값 설정
     const firstType = CONDITION_TYPES[newCategory][0].value;
-    setEditingCondition({
-      ...editingCondition,
+    const newCondition: FilterCondition = {
       category: newCategory,
       type: firstType as any,
-      value: '',
-    });
+      ...getDefaultValueForType(firstType),
+    };
+    setEditingCondition(newCondition);
   };
 
   const handleTypeChange = (newType: string) => {
-    setEditingCondition({
-      ...editingCondition,
+    // 타입 변경 시 적절한 기본값 설정
+    const newCondition: FilterCondition = {
+      category: editingCondition.category,
       type: newType as any,
-    });
+      ...getDefaultValueForType(newType),
+    };
+    setEditingCondition(newCondition);
   };
 
   const handleSave = () => {

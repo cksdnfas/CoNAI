@@ -4,6 +4,17 @@ export interface GeneralSettings {
   language: SupportedLanguage;
 }
 
+export type StealthScanMode = 'full' | 'fast' | 'skip';
+
+export interface MetadataExtractionSettings {
+  enableSecondaryExtraction: boolean;
+  stealthScanMode: StealthScanMode;
+  stealthMaxFileSizeMB: number;
+  stealthMaxResolutionMP: number;
+  skipStealthForComfyUI: boolean;
+  skipStealthForWebUI: boolean;
+}
+
 export type TaggerModel = 'vit' | 'swinv2' | 'convnext';
 export type TaggerDevice = 'auto' | 'cpu' | 'cuda';
 
@@ -27,6 +38,7 @@ export interface AppSettings {
   general: GeneralSettings;
   tagger: TaggerSettings;
   similarity: SimilaritySettings;
+  metadataExtraction: MetadataExtractionSettings;
 }
 
 export interface TaggerModelInfo {

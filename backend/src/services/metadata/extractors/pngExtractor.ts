@@ -25,9 +25,68 @@ export class PngExtractor {
         }
       }
 
-      // Check for WebUI/SD format in raw strings
+      // PRIORITY 1: Check for WebUI/SD format in textChunks (actual prompt data)
+      if (textChunks['parameters']) {
+        console.log('✅ WebUI parameters found in textChunks (priority extraction)');
+
+        // Also check for ComfyUI workflow as supplementary data
+        let result: any = { parameters: textChunks['parameters'] };
+
+        if (textChunks['prompt']) {
+          const promptValue = textChunks['prompt'];
+          if (promptValue.trim().startsWith('{')) {
+            try {
+              const sanitizedJSON = promptValue.replace(/NaN/g, 'null');
+              const parsed = JSON.parse(sanitizedJSON);
+
+              // Check for ComfyUI node structure
+              for (const key in parsed) {
+                const node = parsed[key];
+                if (node && typeof node === 'object' && node.class_type) {
+                  console.log('ℹ️ ComfyUI workflow also found (stored as supplementary data)');
+                  result.comfyui_workflow = promptValue;
+                  break;
+                }
+              }
+            } catch (error) {
+              // Ignore JSON parsing errors
+            }
+          }
+        }
+
+        return result;
+      }
+
+      // PRIORITY 2: Check for ComfyUI workflow in 'prompt' key (fallback when no parameters)
+      if (textChunks['prompt']) {
+        const promptValue = textChunks['prompt'];
+
+        // Check if it's a workflow JSON
+        if (promptValue.trim().startsWith('{')) {
+          try {
+            // Replace NaN with null for JSON parsing (ComfyUI sometimes uses NaN in arrays)
+            const sanitizedJSON = promptValue.replace(/NaN/g, 'null');
+            const parsed = JSON.parse(sanitizedJSON);
+
+            // Check for ComfyUI node structure
+            for (const key in parsed) {
+              const node = parsed[key];
+              if (node && typeof node === 'object' && node.class_type) {
+                console.log('✅ ComfyUI workflow found in textChunks[prompt] (no parameters field)');
+                return { comfyui_workflow: promptValue };
+              }
+            }
+          } catch (error) {
+            // Not valid JSON, continue
+            console.log('⚠️ Failed to parse textChunks[prompt] as JSON:', (error as Error).message);
+          }
+        }
+      }
+
+      // Check for WebUI/SD format in raw strings (fallback)
       for (const data of rawStrings) {
         if (data.includes('parameters') && data.includes('Steps:')) {
+          console.log('✅ WebUI parameters found in rawStrings');
           // Will be parsed by WebUIParser
           return { parameters: data };
         }

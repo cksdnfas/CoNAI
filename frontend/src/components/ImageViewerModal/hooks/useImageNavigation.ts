@@ -47,14 +47,15 @@ export const useImageNavigation = ({
   }, [currentIndex, onImageChange, onRandomModeChange]);
 
   const handleNext = useCallback(() => {
-    if (currentIndex < images.length - 1 && onImageChange) {
+    const imagesLength = images?.length ?? 0;
+    if (currentIndex < imagesLength - 1 && onImageChange) {
       onImageChange(currentIndex + 1);
       // 일반 네비게이션 시 랜덤 모드 해제
       if (onRandomModeChange) {
         onRandomModeChange(false);
       }
     }
-  }, [currentIndex, images.length, onImageChange, onRandomModeChange]);
+  }, [currentIndex, images, onImageChange, onRandomModeChange]);
 
   const handleRandom = useCallback(async () => {
     try {
@@ -96,11 +97,12 @@ export const useImageNavigation = ({
     }
 
     // Fallback to in-memory random if API fails or no context
-    if (images.length <= 1 || !onImageChange) return;
+    const imagesLength = images?.length ?? 0;
+    if (imagesLength <= 1 || !onImageChange) return;
 
     let randomIndex;
     do {
-      randomIndex = Math.floor(Math.random() * images.length);
+      randomIndex = Math.floor(Math.random() * imagesLength);
     } while (randomIndex === currentIndex);
 
     onImageChange(randomIndex);

@@ -574,6 +574,7 @@ export const naiApi = {
       uncond_scale?: number;
       qualityToggle?: boolean;
       seed?: number;
+      groupId?: number;
       // img2img/inpaint 관련
       image?: string;
       strength?: number;

@@ -363,7 +363,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       >
         <ImageNavigation
           currentIndex={currentIndex}
-          totalCount={images.length}
+          totalCount={images?.length ?? 0}
           onPrevious={navigation.handlePrevious}
           onNext={navigation.handleNext}
           {...(!isHistoryContext && { onRandom: navigation.handleRandom })}

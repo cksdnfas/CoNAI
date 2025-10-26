@@ -49,6 +49,7 @@ export interface AIMetadata {
   Comment?: string;
   Source?: string;
   parameters?: string;
+  comfyui_workflow?: string;
   textChunks?: any;
   rawStrings?: any;
   stealthData?: string;

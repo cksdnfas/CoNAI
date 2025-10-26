@@ -122,6 +122,14 @@ export class ImageProcessor {
     inputPath: string,
     outputPath: string
   ): Promise<void> {
+    // GIF 파일은 원본 그대로 복사 (애니메이션 보존)
+    const ext = path.extname(inputPath).toLowerCase();
+    if (ext === '.gif') {
+      const gifOutputPath = outputPath.replace(/\.webp$/, '.gif');
+      await fs.promises.copyFile(inputPath, gifOutputPath);
+      return;
+    }
+
     const image = sharp(inputPath);
     const metadata = await image.metadata();
 
@@ -159,11 +167,16 @@ export class ImageProcessor {
     file: Express.Multer.File,
     baseUploadPath: string
   ): Promise<ProcessedImage> {
+    const startTime = Date.now();
+    console.log(`⏱️ [ImageProcessor] Starting image processing: ${file.originalname}`);
+
     let tempFilePath: string | undefined;
 
     try {
       // 폴더 구조 생성
+      const folderStart = Date.now();
       const folders = await this.createUploadFolders(baseUploadPath);
+      console.log(`⏱️ [ImageProcessor] Folder creation: ${Date.now() - folderStart}ms`);
 
       // 고유한 파일명 생성
       const filename = this.generateUniqueFilename(file.originalname);
@@ -173,12 +186,15 @@ export class ImageProcessor {
       const thumbnailFilename = `${path.parse(filename).name}.webp`;
       const thumbnailPath = path.join(folders.thumbnailFolder, thumbnailFilename);
 
-      // 저용량 최적화 파일명 (.webp 확장자)
-      const optimizedFilename = `${path.parse(filename).name}_opt.webp`;
+      // 저용량 최적화 파일명 (GIF는 .gif, 나머지는 .webp)
+      const ext = path.extname(filename).toLowerCase();
+      const optimizedExt = ext === '.gif' ? '.gif' : '.webp';
+      const optimizedFilename = `${path.parse(filename).name}_opt${optimizedExt}`;
       const optimizedPath = path.join(folders.optimizedFolder, optimizedFilename);
 
       // diskStorage 사용: file.path에서 임시 파일 읽기
       // memoryStorage 사용: file.buffer 사용 (하위 호환성)
+      const copyStart = Date.now();
       if (file.path) {
         // diskStorage: 임시 파일 복사
         tempFilePath = file.path;
@@ -189,18 +205,25 @@ export class ImageProcessor {
       } else {
         throw new Error('No file data available (neither path nor buffer)');
       }
+      console.log(`⏱️ [ImageProcessor] File copy: ${Date.now() - copyStart}ms`);
 
       // 이미지 정보 추출
+      const infoStart = Date.now();
       const imageInfo = await this.getImageInfo(originalPath);
+      console.log(`⏱️ [ImageProcessor] Image info extraction: ${Date.now() - infoStart}ms`);
 
       // 메타데이터 추출
+      const metadataStart = Date.now();
       const metadata = await this.extractMetadata(originalPath);
+      console.log(`⏱️ [ImageProcessor] Metadata extraction: ${Date.now() - metadataStart}ms`);
 
       // 병렬로 썸네일과 저용량 이미지 생성
+      const generateStart = Date.now();
       await Promise.all([
         this.generateThumbnail(originalPath, thumbnailPath),
         this.generateOptimized(originalPath, optimizedPath)
       ]);
+      console.log(`⏱️ [ImageProcessor] Thumbnail/Optimized generation: ${Date.now() - generateStart}ms`);
 
       const relativeOriginal = this.normalizeRelativePath(originalPath, baseUploadPath);
       const relativeThumbnail = this.normalizeRelativePath(thumbnailPath, baseUploadPath);
@@ -214,10 +237,12 @@ export class ImageProcessor {
       const settings = settingsService.loadSettings();
 
       if (settings.similarity.autoGenerateHashOnUpload) {
-        console.log('✅ [ImageProcessor] Auto hash generation ENABLED, starting...');
+        const hashStart = Date.now();
+        console.log('⏱️ [ImageProcessor] Starting similarity hash generation...');
         try {
-          console.log('🔍 [ImageProcessor] Generating perceptual hash for:', filename);
+          const phashStart = Date.now();
           perceptualHash = await ImageSimilarityService.generatePerceptualHash(originalPath);
+          console.log(`⏱️ [ImageProcessor] Perceptual hash: ${Date.now() - phashStart}ms`);
 
           if (!perceptualHash) {
             console.error('❌ [ImageProcessor] Perceptual hash is undefined/null!');
@@ -225,9 +250,10 @@ export class ImageProcessor {
             console.log('✅ [ImageProcessor] Perceptual hash generated:', perceptualHash.substring(0, 16) + '...', `(${perceptualHash.length} chars)`);
           }
 
-          console.log('🔍 [ImageProcessor] Generating color histogram...');
+          const histStart = Date.now();
           const histogram = await ImageSimilarityService.generateColorHistogram(originalPath);
           colorHistogram = ImageSimilarityService.serializeHistogram(histogram);
+          console.log(`⏱️ [ImageProcessor] Color histogram: ${Date.now() - histStart}ms`);
 
           if (!colorHistogram) {
             console.error('❌ [ImageProcessor] Color histogram is undefined/null!');
@@ -237,7 +263,7 @@ export class ImageProcessor {
 
           // 최종 검증
           if (perceptualHash && colorHistogram) {
-            console.log('✅ [ImageProcessor] Hash generation SUCCESS - both hashes valid');
+            console.log(`⏱️ [ImageProcessor] ✅ Hash generation complete: ${Date.now() - hashStart}ms`);
           } else {
             console.error('❌ [ImageProcessor] Hash generation FAILED - one or both hashes invalid:', {
               hasPerceptualHash: !!perceptualHash,
@@ -259,6 +285,9 @@ export class ImageProcessor {
         console.log('   Settings value:', { autoGenerateHashOnUpload: settings.similarity.autoGenerateHashOnUpload });
       }
 
+      const totalTime = Date.now() - startTime;
+      console.log(`⏱️ [ImageProcessor] ✅ Total processing time: ${totalTime}ms`);
+
       return {
         filename,
         originalPath: relativeOriginal,
@@ -272,7 +301,7 @@ export class ImageProcessor {
         colorHistogram
       };
     } catch (error) {
-      console.error('Image processing failed:', error);
+      console.error(`⏱️ [ImageProcessor] ❌ Failed after ${Date.now() - startTime}ms:`, error);
       const message = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Image processing failed: ${message}`);
     } finally {

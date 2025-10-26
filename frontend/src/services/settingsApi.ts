@@ -40,10 +40,22 @@ export interface SimilaritySettings {
   autoGenerateHashOnUpload: boolean;  // 업로드 시 자동 해시 생성 여부
 }
 
+export type StealthScanMode = 'fast' | 'full' | 'skip';
+
+export interface MetadataExtractionSettings {
+  enableSecondaryExtraction: boolean;
+  stealthScanMode: StealthScanMode;
+  stealthMaxFileSizeMB: number;
+  stealthMaxResolutionMP: number;
+  skipStealthForComfyUI: boolean;
+  skipStealthForWebUI: boolean;
+}
+
 export interface AppSettings {
   general: GeneralSettings;
   tagger: TaggerSettings;
   similarity: SimilaritySettings;
+  metadataExtraction: MetadataExtractionSettings;
 }
 
 export interface DependencyCheckResult {
@@ -158,6 +170,17 @@ export const settingsApi = {
   updateSimilaritySettings: async (settings: Partial<SimilaritySettings>): Promise<AppSettings> => {
     const response = await api.put<{ success: boolean; data: AppSettings; message: string }>(
       '/similarity',
+      settings
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Update metadata extraction settings
+   */
+  updateMetadataSettings: async (settings: Partial<MetadataExtractionSettings>): Promise<AppSettings> => {
+    const response = await api.put<{ success: boolean; data: AppSettings; message: string }>(
+      '/metadata',
       settings
     );
     return response.data.data;

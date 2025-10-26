@@ -11,6 +11,7 @@ import { JpegExtractor } from './extractors/jpegExtractor';
 import { StealthPngExtractor } from './extractors/stealthPngExtractor';
 import { NovelAIParser } from './parsers/novelaiParser';
 import { WebUIParser } from './parsers/webuiParser';
+import { ComfyUIParser } from './parsers/comfyuiParser';
 import { WorkflowDetector } from './parsers/workflowDetector';
 
 export class MetadataExtractor {
@@ -20,18 +21,25 @@ export class MetadataExtractor {
    * @returns ImageMetadata
    */
   static async extractMetadata(filePath: string): Promise<ImageMetadata> {
+    const startTime = Date.now();
+    const fileName = path.basename(filePath);
+    console.log(`⏱️ [MetadataExtractor] Starting extraction: ${fileName}`);
+
     try {
       if (!fs.existsSync(filePath)) {
         throw new Error(`File does not exist: ${filePath}`);
       }
 
       const fileExt = path.extname(filePath).toLowerCase();
-      const buffer = await fs.promises.readFile(filePath);
 
-      console.log(`🔍 [MetadataExtractor] Extracting metadata from: ${path.basename(filePath)}`);
+      const readStart = Date.now();
+      const buffer = await fs.promises.readFile(filePath);
+      console.log(`⏱️ [MetadataExtractor] File read (${(buffer.length / 1024).toFixed(1)}KB): ${Date.now() - readStart}ms`);
 
       // 1차 추출 (Primary extraction)
+      const primaryStart = Date.now();
       let aiInfo = await this.primaryExtraction(buffer, filePath, fileExt);
+      console.log(`⏱️ [MetadataExtractor] Primary extraction: ${Date.now() - primaryStart}ms`);
 
       // 프롬프트 추출 실패 여부 확인 (빈 문자열과 공백만 있는 경우도 실패로 처리)
       const hasPrompt = Boolean(
@@ -47,10 +55,53 @@ export class MetadataExtractor {
       });
 
       if (!hasPrompt && fileExt === '.png') {
-        console.log('⚠️ [MetadataExtractor] Primary extraction failed - attempting Stealth PNG Info');
+        // 설정 로드
+        const { settingsService } = await import('../../services/settingsService');
+        const settings = settingsService.loadSettings();
+        const metadataSettings = settings.metadataExtraction;
 
-        // 2차 추출 (Secondary extraction - Stealth PNG Info)
-        aiInfo = await this.secondaryExtraction(buffer, aiInfo);
+        // Secondary extraction 비활성화 체크
+        if (!metadataSettings.enableSecondaryExtraction) {
+          console.log('⚡ [MetadataExtractor] Secondary extraction disabled in settings');
+          // Skip secondary extraction - proceed with primary result
+        } else if (aiInfo.ai_tool === 'ComfyUI' && metadataSettings.skipStealthForComfyUI) {
+          // AI 도구 기반 스킵
+          console.log('⚡ [MetadataExtractor] Skipping Stealth PNG for ComfyUI (setting enabled)');
+        } else if ((aiInfo.ai_tool === 'Automatic1111' || aiInfo.ai_tool === 'Stable Diffusion') && metadataSettings.skipStealthForWebUI) {
+          console.log('⚡ [MetadataExtractor] Skipping Stealth PNG for WebUI (setting enabled)');
+        } else {
+          // 파일 크기 체크
+          const fileSizeMB = buffer.length / (1024 * 1024);
+          if (fileSizeMB > metadataSettings.stealthMaxFileSizeMB) {
+            console.log(`⚡ [MetadataExtractor] File too large for Stealth PNG scan (${fileSizeMB.toFixed(1)}MB > ${metadataSettings.stealthMaxFileSizeMB}MB)`);
+          } else {
+            // 해상도 체크를 위해 Sharp 메타데이터 가져오기
+            const sharp = (await import('sharp')).default;
+            const imageMetadata = await sharp(buffer).metadata();
+
+            if (imageMetadata.width && imageMetadata.height) {
+              const megaPixels = (imageMetadata.width * imageMetadata.height) / 1_000_000;
+              if (megaPixels > metadataSettings.stealthMaxResolutionMP) {
+                console.log(`⚡ [MetadataExtractor] Resolution too high for Stealth PNG scan (${megaPixels.toFixed(1)}MP > ${metadataSettings.stealthMaxResolutionMP}MP)`);
+              } else {
+                // 모든 조건 통과 - Secondary extraction 실행
+                console.log(`⚠️ [MetadataExtractor] Primary extraction failed - attempting Stealth PNG Info (mode: ${metadataSettings.stealthScanMode})`);
+
+                // 2차 추출 (Secondary extraction - Stealth PNG Info)
+                const secondaryStart = Date.now();
+                aiInfo = await this.secondaryExtraction(buffer, aiInfo, metadataSettings.stealthScanMode);
+                console.log(`⏱️ [MetadataExtractor] Secondary extraction: ${Date.now() - secondaryStart}ms`);
+              }
+            } else {
+              // width/height가 없으면 Secondary extraction 실행
+              console.log(`⚠️ [MetadataExtractor] Primary extraction failed - attempting Stealth PNG Info (mode: ${metadataSettings.stealthScanMode})`);
+
+              const secondaryStart = Date.now();
+              aiInfo = await this.secondaryExtraction(buffer, aiInfo, metadataSettings.stealthScanMode);
+              console.log(`⏱️ [MetadataExtractor] Secondary extraction: ${Date.now() - secondaryStart}ms`);
+            }
+          }
+        }
       }
 
       // 워크플로 JSON 검증 및 필터링
@@ -74,10 +125,14 @@ export class MetadataExtractor {
       }
 
       // AI 도구 자동 감지
+      const detectStart = Date.now();
       this.detectAITool(aiInfo);
+      console.log(`⏱️ [MetadataExtractor] AI tool detection: ${Date.now() - detectStart}ms`);
 
       // LoRA 모델 정보 처리
+      const loraStart = Date.now();
       this.processLoRAModels(aiInfo);
+      console.log(`⏱️ [MetadataExtractor] LoRA processing: ${Date.now() - loraStart}ms`);
 
       // AI 정보가 없어도 기본값 설정하지 않음
       // 프롬프트가 없으면 prompt 필드를 undefined로 유지
@@ -88,12 +143,15 @@ export class MetadataExtractor {
         };
       }
 
+      const totalTime = Date.now() - startTime;
+      console.log(`⏱️ [MetadataExtractor] ✅ Total extraction time: ${totalTime}ms`);
+
       return {
         extractedAt: new Date().toISOString(),
         ai_info: aiInfo
       };
     } catch (error) {
-      console.warn('Failed to extract AI metadata:', error);
+      console.error(`⏱️ [MetadataExtractor] ❌ Failed after ${Date.now() - startTime}ms:`, error);
       return {
         extractedAt: new Date().toISOString(),
         ai_info: {
@@ -131,13 +189,14 @@ export class MetadataExtractor {
    */
   private static async secondaryExtraction(
     buffer: Buffer,
-    existingAiInfo: AIMetadata
+    existingAiInfo: AIMetadata,
+    scanMode: import('../../types/settings').StealthScanMode = 'fast'
   ): Promise<AIMetadata> {
     try {
-      console.log('🔍 [secondaryExtraction] Starting Stealth PNG Info extraction...');
+      console.log(`🔍 [secondaryExtraction] Starting Stealth PNG Info extraction (mode: ${scanMode})...`);
       console.log('📊 [secondaryExtraction] Buffer size:', buffer.length, 'bytes');
 
-      const stealthData = await StealthPngExtractor.extractStealthPngInfo(buffer);
+      const stealthData = await StealthPngExtractor.extractStealthPngInfo(buffer, scanMode);
 
       if (!stealthData) {
         console.log('❌ [secondaryExtraction] Stealth PNG Info not found - keeping original');
@@ -210,19 +269,35 @@ export class MetadataExtractor {
     console.log('🔍 [parseRawData] Input type:', typeof rawData, {
       hasStealthData: !!rawData.stealthData,
       stealthDataLength: rawData.stealthData?.length || 0,
-      stealthDataPreview: rawData.stealthData?.substring(0, 100)
+      stealthDataPreview: rawData.stealthData?.substring(0, 100),
+      hasComfyUIWorkflow: !!rawData.comfyui_workflow,
+      hasParameters: !!rawData.parameters
     });
 
-    // Try NovelAI parser
+    // PRIORITY 1: Try NovelAI parser (most specific format)
     if (NovelAIParser.isNovelAIFormat(rawData)) {
       console.log('📦 [MetadataExtractor] Parsing as NovelAI format');
       return NovelAIParser.parse(rawData);
     }
 
-    // Try WebUI parser
+    // PRIORITY 2: Try WebUI parser (reliable prompt extraction)
     if (WebUIParser.isWebUIFormat(rawData)) {
       console.log('📦 [MetadataExtractor] Parsing as WebUI format');
-      return WebUIParser.parse(rawData);
+      const result = WebUIParser.parse(rawData);
+
+      // If ComfyUI workflow exists, use it for AI tool detection
+      if (rawData.comfyui_workflow && !result.ai_tool) {
+        console.log('ℹ️ [MetadataExtractor] ComfyUI workflow detected - marking as ComfyUI');
+        result.ai_tool = 'ComfyUI';
+      }
+
+      return result;
+    }
+
+    // PRIORITY 3: Try ComfyUI workflow parser (fallback, less reliable for prompts)
+    if (rawData.comfyui_workflow) {
+      console.log('📦 [MetadataExtractor] Parsing as ComfyUI workflow format (fallback)');
+      return ComfyUIParser.parse(rawData);
     }
 
     // Try parsing stealth data if present
@@ -341,6 +416,7 @@ export class MetadataExtractor {
 export * from './types';
 export { NovelAIParser } from './parsers/novelaiParser';
 export { WebUIParser } from './parsers/webuiParser';
+export { ComfyUIParser } from './parsers/comfyuiParser';
 export { WorkflowDetector } from './parsers/workflowDetector';
 export { PngExtractor } from './extractors/pngExtractor';
 export { JpegExtractor } from './extractors/jpegExtractor';

@@ -79,12 +79,30 @@ const migrationsTarget = path.join(appDir, 'migrations');
 if (fs.existsSync(migrationsSource)) {
   fs.copySync(migrationsSource, migrationsTarget, {
     filter: (src) => {
-      // .js 파일만 복사 (컴파일된 JavaScript)
+      // .js 파일과 디렉토리만 복사 (컴파일된 JavaScript + 서브폴더)
       return src.endsWith('.js') || fs.statSync(src).isDirectory();
     }
   });
   const migrationFiles = fs.readdirSync(migrationsTarget).filter(f => f.endsWith('.js'));
-  console.log(`   ✅ Copied ${migrationFiles.length} migration files`);
+  console.log(`   ✅ Copied ${migrationFiles.length} main migration files`);
+
+  // Copy API generation migrations (SQL files from source, not dist)
+  const apiGenMigrationsSource = path.join(ROOT_DIR, 'backend', 'src', 'database', 'migrations', 'api-generation');
+  const apiGenMigrationsTarget = path.join(migrationsTarget, 'api-generation');
+
+  if (fs.existsSync(apiGenMigrationsSource)) {
+    fs.ensureDirSync(apiGenMigrationsTarget);
+    fs.copySync(apiGenMigrationsSource, apiGenMigrationsTarget, {
+      filter: (src) => {
+        // .sql 파일만 복사
+        return src.endsWith('.sql') || fs.statSync(src).isDirectory();
+      }
+    });
+    const apiGenFiles = fs.readdirSync(apiGenMigrationsTarget).filter(f => f.endsWith('.sql'));
+    console.log(`   ✅ Copied ${apiGenFiles.length} API generation migration files`);
+  } else {
+    console.warn('   ⚠️  API generation migrations not found');
+  }
 } else {
   console.warn('   ⚠️  Migration source not found, skipping');
 }
@@ -170,6 +188,46 @@ if (fs.existsSync(betterSqlite3Source)) {
     });
   }
   console.log(`   Found additional better-sqlite3 dependencies`);
+}
+
+// Copy argon2 and collect its dependencies
+console.log(`   📦 Copying argon2...`);
+const argon2Source = path.join(sourceNodeModules, 'argon2');
+const argon2Target = path.join(appNodeModules, 'argon2');
+if (fs.existsSync(argon2Source)) {
+  fs.copySync(argon2Source, argon2Target, { dereference: true });
+  console.log(`   ✅ Copied argon2`);
+
+  // Collect argon2 dependencies
+  const argon2PackageJson = JSON.parse(fs.readFileSync(path.join(argon2Source, 'package.json'), 'utf8'));
+  if (argon2PackageJson.dependencies) {
+    Object.keys(argon2PackageJson.dependencies).forEach(dep => {
+      collectAllDependencies(dep, allDependencies);
+    });
+  }
+  console.log(`   Found additional argon2 dependencies`);
+} else {
+  console.warn(`   ⚠️  argon2 not found - NovelAI authentication will not work`);
+}
+
+// Copy blake2 and collect its dependencies
+console.log(`   📦 Copying blake2...`);
+const blake2Source = path.join(sourceNodeModules, 'blake2');
+const blake2Target = path.join(appNodeModules, 'blake2');
+if (fs.existsSync(blake2Source)) {
+  fs.copySync(blake2Source, blake2Target, { dereference: true });
+  console.log(`   ✅ Copied blake2`);
+
+  // Collect blake2 dependencies
+  const blake2PackageJson = JSON.parse(fs.readFileSync(path.join(blake2Source, 'package.json'), 'utf8'));
+  if (blake2PackageJson.dependencies) {
+    Object.keys(blake2PackageJson.dependencies).forEach(dep => {
+      collectAllDependencies(dep, allDependencies);
+    });
+  }
+  console.log(`   Found additional blake2 dependencies`);
+} else {
+  console.warn(`   ⚠️  blake2 not found - NovelAI authentication will not work`);
 }
 
 // Copy all dependencies
@@ -323,7 +381,9 @@ const portablePackageJson = {
     "sharp": "^0.33.0",
     "better-sqlite3": "^9.4.0",
     "ffmpeg-static": "^5.2.0",
-    "ffprobe-static": "^3.1.0"
+    "ffprobe-static": "^3.1.0",
+    "argon2": "^0.44.0",
+    "blake2": "^5.0.0"
   }
 };
 fs.writeFileSync(
@@ -665,6 +725,8 @@ Visit: https://github.com/yourusername/comfyui-image-manager
     - \`better-sqlite3/\` - Database engine
     - \`ffmpeg-static/\` - Video processing (FFmpeg binary)
     - \`ffprobe-static/\` - Video metadata extraction (FFprobe binary)
+    - \`argon2/\` - Password hashing for NovelAI authentication
+    - \`blake2/\` - Cryptographic hashing for NovelAI authentication
     - + All required dependencies
 - \`start.bat\` / \`start.sh\` - Startup scripts
 - \`.env.example\` - Configuration template

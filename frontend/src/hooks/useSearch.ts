@@ -93,12 +93,20 @@ export const useSearch = () => {
         setTotal(0);
         setTotalPages(0);
       }
-    } catch (err) {
-      setError('검색 중 오류가 발생했습니다.');
+    } catch (err: any) {
+      // Extract detailed error message from backend response
+      const errorMessage = err.response?.data?.error ||
+                          err.message ||
+                          '검색 중 오류가 발생했습니다.';
+      setError(errorMessage);
       setImages([]);
       setTotal(0);
       setTotalPages(0);
-      console.error('Complex search error:', err);
+      console.error('Complex search error:', {
+        message: err.message,
+        response: err.response?.data,
+        request: searchRequest
+      });
     } finally {
       setLoading(false);
     }
@@ -185,6 +193,7 @@ export const useSearch = () => {
     totalPages,
     total,
     lastSearchParams,
+    lastComplexRequest,
     searchImages,
     searchComplex,
     changePage,

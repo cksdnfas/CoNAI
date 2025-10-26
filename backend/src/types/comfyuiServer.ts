@@ -7,8 +7,6 @@ export interface ComfyUIServerRecord {
   endpoint: string;
   description?: string;
   is_active: boolean;
-  priority: number; // 우선순위 (높을수록 먼저 사용)
-  max_concurrent_jobs: number; // 동시 작업 수 제한
   created_date: string;
   updated_date: string;
 }
@@ -21,8 +19,6 @@ export interface ComfyUIServerCreateData {
   endpoint: string;
   description?: string;
   is_active?: boolean;
-  priority?: number;
-  max_concurrent_jobs?: number;
 }
 
 /**
@@ -33,8 +29,6 @@ export interface ComfyUIServerUpdateData {
   endpoint?: string;
   description?: string;
   is_active?: boolean;
-  priority?: number;
-  max_concurrent_jobs?: number;
 }
 
 /**

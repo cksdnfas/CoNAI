@@ -66,12 +66,16 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
           {
             category: 'auto_tag',
             type: 'auto_tag_general',
-            value: searchText
+            value: searchText,
+            min_score: 0,
+            max_score: 1
           },
           {
             category: 'auto_tag',
             type: 'auto_tag_character',
-            value: searchText
+            value: searchText,
+            min_score: 0,
+            max_score: 1
           }
         ]
       };

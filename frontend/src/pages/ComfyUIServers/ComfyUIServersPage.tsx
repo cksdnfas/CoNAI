@@ -43,9 +43,7 @@ export default function ComfyUIServersPage() {
     name: '',
     endpoint: '',
     description: '',
-    is_active: true,
-    priority: 0,
-    max_concurrent_jobs: 1
+    is_active: true
   });
 
   useEffect(() => {
@@ -71,9 +69,7 @@ export default function ComfyUIServersPage() {
         name: server.name,
         endpoint: server.endpoint,
         description: server.description || '',
-        is_active: server.is_active,
-        priority: server.priority,
-        max_concurrent_jobs: server.max_concurrent_jobs
+        is_active: server.is_active
       });
     } else {
       setEditingServer(null);
@@ -81,9 +77,7 @@ export default function ComfyUIServersPage() {
         name: '',
         endpoint: 'http://127.0.0.1:8188',
         description: '',
-        is_active: true,
-        priority: 0,
-        max_concurrent_jobs: 1
+        is_active: true
       });
     }
     setOpenDialog(true);
@@ -193,11 +187,6 @@ export default function ComfyUIServersPage() {
                   </Typography>
                 )}
 
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
-                  <Chip label={`우선순위: ${server.priority}`} size="small" variant="outlined" />
-                  <Chip label={`동시작업: ${server.max_concurrent_jobs}`} size="small" variant="outlined" />
-                </Box>
-
                 {connectionStatus[server.id] !== undefined && (
                   <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
                     {connectionStatus[server.id] ? (
@@ -287,21 +276,6 @@ export default function ComfyUIServersPage() {
               rows={2}
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            />
-            <TextField
-              label="우선순위"
-              type="number"
-              fullWidth
-              value={formData.priority}
-              onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) })}
-              helperText="높을수록 먼저 사용됩니다"
-            />
-            <TextField
-              label="최대 동시 작업 수"
-              type="number"
-              fullWidth
-              value={formData.max_concurrent_jobs}
-              onChange={(e) => setFormData({ ...formData, max_concurrent_jobs: parseInt(e.target.value) })}
             />
             <FormControlLabel
               control={

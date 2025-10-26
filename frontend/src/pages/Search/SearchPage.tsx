@@ -30,6 +30,7 @@ const SearchPage: React.FC = () => {
     totalPages,
     total,
     lastSearchParams,
+    lastComplexRequest,
     searchComplex,
     changePage,
     changePageSize,
@@ -82,7 +83,7 @@ const SearchPage: React.FC = () => {
     refreshSearch();
   };
 
-  const hasSearched = lastSearchParams !== null;
+  const hasSearched = lastSearchParams !== null || lastComplexRequest !== null;
   const hasResults = images.length > 0;
 
   return (

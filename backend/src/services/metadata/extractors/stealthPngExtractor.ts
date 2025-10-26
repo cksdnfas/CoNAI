@@ -9,6 +9,7 @@
 import sharp from 'sharp';
 import zlib from 'zlib';
 import { StealthPngSignature } from '../types';
+import type { StealthScanMode } from '../../../types/settings';
 
 export class StealthPngExtractor {
   private static readonly SIGNATURES = {
@@ -18,11 +19,24 @@ export class StealthPngExtractor {
     RGB_COMPRESSED: 'stealth_rgbcomp'
   } as const;
 
+  // Fast scan mode: 처음 몇 픽셀만 시그니처 스캔
+  private static readonly FAST_SCAN_PIXEL_LIMIT = 200;
+
   /**
    * Extract stealth PNG info from image buffer
    * Follows NAI-Tag-Viewer logic exactly
+   * @param buffer - Image buffer
+   * @param scanMode - Scan mode: 'full' | 'fast' | 'skip'
    */
-  static async extractStealthPngInfo(buffer: Buffer): Promise<string | null> {
+  static async extractStealthPngInfo(
+    buffer: Buffer,
+    scanMode: StealthScanMode = 'fast'
+  ): Promise<string | null> {
+    // Skip 모드: 즉시 null 반환
+    if (scanMode === 'skip') {
+      console.log('⚡ [StealthPNG] Skip mode - not scanning');
+      return null;
+    }
     try {
       const image = sharp(buffer);
       const metadata = await image.metadata();
@@ -64,6 +78,15 @@ export class StealthPngExtractor {
       for (let x = 0; x < width; x++) {
         for (let y = 0; y < height; y++) {
           const pixelIndex = (y * width + x) * channels;
+
+          // Fast scan mode: 시그니처 확인 단계에서 제한된 픽셀만 스캔
+          if (scanMode === 'fast' && confirmingSignature) {
+            const scannedPixels = x * height + y;
+            if (scannedPixels > this.FAST_SCAN_PIXEL_LIMIT && !sigConfirmed) {
+              console.log(`⚡ [StealthPNG] Fast scan: No signature in first ${this.FAST_SCAN_PIXEL_LIMIT} pixels`);
+              return null;
+            }
+          }
 
           let r: number, g: number, b: number, a: number = 0;
 

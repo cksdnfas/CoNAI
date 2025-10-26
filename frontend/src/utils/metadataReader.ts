@@ -5,6 +5,7 @@
  */
 
 import exifr from 'exifr';
+import { extractStealthPngInfo } from './stealthPngExtractor';
 
 export interface RawMetadata {
   [key: string]: any;
@@ -47,8 +48,6 @@ interface RawPngMetadata {
  */
 class PngExtractor {
   static extract(buffer: ArrayBuffer): AIMetadata {
-    const aiInfo: AIMetadata = {};
-
     try {
       const { textChunks, rawStrings } = this.extractRawPngMetadata(buffer);
 
@@ -143,22 +142,50 @@ class PngExtractor {
  */
 class NovelAIParser {
   static isNovelAIFormat(data: any): boolean {
+    console.log('🔍 [NovelAIParser.isNovelAIFormat] Checking data type:', typeof data);
+
     if (typeof data === 'string') {
       try {
         const parsed = JSON.parse(data);
-        return this.hasNovelAIFields(parsed) || this.hasCommentField(parsed);
-      } catch {
+        console.log('📦 [NovelAIParser] Parsed JSON keys:', Object.keys(parsed));
+
+        // Check Comment field first (Stealth PNG structure)
+        if (parsed.Comment) {
+          console.log('📄 [NovelAIParser] Found Comment field');
+          try {
+            const commentData = JSON.parse(parsed.Comment);
+            const hasNAI = this.hasNovelAIFields(commentData);
+            console.log('✅ [NovelAIParser] Comment contains NAI fields:', hasNAI);
+            if (hasNAI) return true;
+          } catch (e) {
+            console.warn('⚠️ [NovelAIParser] Comment field is not valid JSON');
+          }
+        }
+
+        // Direct NAI fields check
+        const hasDirectNAI = this.hasNovelAIFields(parsed);
+        console.log('📦 [NovelAIParser] Direct NAI fields:', hasDirectNAI);
+        return hasDirectNAI;
+      } catch (e) {
+        console.warn('⚠️ [NovelAIParser] JSON parse failed:', e);
         return false;
       }
     }
 
     if (typeof data === 'object' && data !== null) {
+      console.log('📦 [NovelAIParser] Checking object data, keys:', Object.keys(data));
+
       if (this.hasCommentField(data)) {
+        console.log('✅ [NovelAIParser] Object has valid Comment field');
         return true;
       }
-      return this.hasNovelAIFields(data);
+
+      const hasNAI = this.hasNovelAIFields(data);
+      console.log('📦 [NovelAIParser] Object has NAI fields:', hasNAI);
+      return hasNAI;
     }
 
+    console.log('❌ [NovelAIParser] Not a NovelAI format');
     return false;
   }
 
@@ -187,33 +214,45 @@ class NovelAIParser {
   }
 
   static parse(data: any): AIMetadata {
+    console.log('🔍 [NovelAIParser.parse] Input type:', typeof data);
+
     try {
       let naiData: any;
       let topLevelData: any = data;
 
-      // Handle string input
+      // Handle string input (from Stealth PNG)
       if (typeof data === 'string') {
+        console.log('📄 [NovelAIParser] Parsing string input');
         topLevelData = JSON.parse(data);
+        console.log('📦 [NovelAIParser] Top-level keys:', Object.keys(topLevelData));
+
         if (topLevelData.Comment) {
+          console.log('📄 [NovelAIParser] Parsing Comment field');
           try {
             naiData = JSON.parse(topLevelData.Comment);
-            console.log('📦 [NovelAIParser] Parsed Comment field from Stealth PNG');
+            console.log('✅ [NovelAIParser] Successfully parsed Comment from Stealth PNG');
+            console.log('📦 [NovelAIParser] NAI data keys:', Object.keys(naiData));
           } catch (e) {
-            console.warn('[NovelAIParser] Failed to parse Comment field:', e);
+            console.warn('⚠️ [NovelAIParser] Failed to parse Comment field:', e);
             naiData = topLevelData;
           }
         } else {
+          console.log('📄 [NovelAIParser] No Comment field, using top-level data');
           naiData = topLevelData;
         }
       } else if (data.Comment) {
+        // Object with Comment field
+        console.log('📄 [NovelAIParser] Object has Comment field');
         topLevelData = data;
         try {
           naiData = JSON.parse(data.Comment);
+          console.log('✅ [NovelAIParser] Successfully parsed Comment field');
         } catch (e) {
-          console.warn('[NovelAIParser] Failed to parse Comment field:', e);
+          console.warn('⚠️ [NovelAIParser] Failed to parse Comment field:', e);
           naiData = data;
         }
       } else {
+        console.log('📄 [NovelAIParser] Using data directly');
         naiData = data;
       }
 
@@ -258,6 +297,8 @@ class NovelAIParser {
       console.log('✅ [NovelAIParser] Successfully parsed:', {
         hasPrompt: !!aiInfo.prompt,
         hasNegativePrompt: !!aiInfo.negative_prompt,
+        promptLength: aiInfo.prompt?.length || 0,
+        negativePromptLength: aiInfo.negative_prompt?.length || 0,
         steps: aiInfo.steps,
         scale: aiInfo.cfg_scale,
         sampler: aiInfo.sampler,
@@ -266,7 +307,7 @@ class NovelAIParser {
 
       return aiInfo;
     } catch (error) {
-      console.warn('NovelAI parsing error:', error);
+      console.error('❌ [NovelAIParser] Parse error:', error);
       return {};
     }
   }
@@ -426,61 +467,6 @@ class WebUIParser {
 }
 
 /**
- * Stealth PNG Extractor
- */
-async function extractStealthPngInfo(file: File): Promise<string | null> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
-      try {
-        const buffer = e.target?.result as ArrayBuffer;
-        const data = new Uint8Array(buffer);
-
-        // Search for stealth marker: "stealth_pnginfo"
-        const marker = new TextEncoder().encode('stealth_pnginfo');
-
-        for (let i = 0; i < data.length - marker.length - 4; i++) {
-          let found = true;
-          for (let j = 0; j < marker.length; j++) {
-            if (data[i + j] !== marker[j]) {
-              found = false;
-              break;
-            }
-          }
-
-          if (found) {
-            // Read length (4 bytes little-endian after marker)
-            const lengthStart = i + marker.length;
-            const length =
-              data[lengthStart] |
-              (data[lengthStart + 1] << 8) |
-              (data[lengthStart + 2] << 16) |
-              (data[lengthStart + 3] << 24);
-
-            // Read data
-            const dataStart = lengthStart + 4;
-            const stealthData = data.slice(dataStart, dataStart + length);
-            const text = new TextDecoder().decode(stealthData);
-
-            resolve(text);
-            return;
-          }
-        }
-
-        resolve(null);
-      } catch (error) {
-        console.error('Error extracting stealth PNG info:', error);
-        resolve(null);
-      }
-    };
-
-    reader.onerror = () => resolve(null);
-    reader.readAsArrayBuffer(file);
-  });
-}
-
-/**
  * Metadata Extractor - Main extraction function
  */
 async function extractFromFile(file: File): Promise<AIMetadata> {
@@ -514,19 +500,48 @@ async function extractFromFile(file: File): Promise<AIMetadata> {
     // Step 3: Parse raw data
     let parsedData = parseRawData(aiInfo);
 
-    // Step 4: If no prompt, try Stealth PNG Info
-    if (!parsedData.prompt && !parsedData.positive_prompt) {
-      console.log('⚠️ [MetadataExtractor] Primary extraction failed - attempting Stealth PNG Info');
+    // Step 4: Check if prompt was extracted (including trim check)
+    const hasPrompt = Boolean(
+      (parsedData.prompt && parsedData.prompt.trim()) ||
+      (parsedData.positive_prompt && parsedData.positive_prompt.trim())
+    );
+
+    console.log('🔍 [extractFromFile] Primary extraction result:', {
+      hasPrompt,
+      promptLength: parsedData.prompt?.length || 0,
+      positivePromptLength: parsedData.positive_prompt?.length || 0,
+      promptPreview: (parsedData.prompt || parsedData.positive_prompt)?.substring(0, 50)
+    });
+
+    // Step 5: If no prompt, try Stealth PNG Info
+    if (!hasPrompt) {
+      console.log('⚠️ [extractFromFile] Primary extraction failed - attempting Stealth PNG Info');
       const stealthData = await extractStealthPngInfo(file);
 
       if (stealthData) {
-        console.log('✅ [secondaryExtraction] Stealth PNG Info extracted successfully!');
+        console.log('✅ [extractFromFile] Stealth PNG Info extracted successfully!');
+        console.log('📊 [extractFromFile] Stealth data length:', stealthData.length);
+        console.log('📄 [extractFromFile] First 200 chars:', stealthData.substring(0, 200));
+
         rawMetadata['Stealth PNG Info'] = stealthData;
 
+        // Parse Stealth data
         const stealthParsed = parseRawData({ stealthData });
+
+        console.log('📦 [extractFromFile] Stealth parse result:', {
+          hasPrompt: !!stealthParsed.prompt,
+          hasPositivePrompt: !!stealthParsed.positive_prompt,
+          promptLength: stealthParsed.prompt?.length || 0
+        });
+
         if (stealthParsed.prompt || stealthParsed.positive_prompt) {
+          console.log('✅ [extractFromFile] Using Stealth PNG data');
           parsedData = stealthParsed;
+        } else {
+          console.log('⚠️ [extractFromFile] Stealth data parsing failed - no valid prompts');
         }
+      } else {
+        console.log('❌ [extractFromFile] Stealth PNG Info not found');
       }
     }
 
@@ -540,17 +555,21 @@ async function extractFromFile(file: File): Promise<AIMetadata> {
  * Parse raw data using appropriate parser
  */
 function parseRawData(rawData: any): AIMetadata {
-  console.log('🔍 [parseRawData] Input type:', typeof rawData);
+  console.log('🔍 [parseRawData] Input type:', typeof rawData, {
+    hasStealthData: !!rawData.stealthData,
+    stealthDataLength: rawData.stealthData?.length || 0,
+    stealthDataPreview: rawData.stealthData?.substring(0, 100)
+  });
 
   // Try NovelAI parser
   if (NovelAIParser.isNovelAIFormat(rawData)) {
-    console.log('📦 [MetadataExtractor] Parsing as NovelAI format');
+    console.log('📦 [parseRawData] Parsing as NovelAI format');
     return NovelAIParser.parse(rawData);
   }
 
   // Try WebUI parser
   if (WebUIParser.isWebUIFormat(rawData)) {
-    console.log('📦 [MetadataExtractor] Parsing as WebUI format');
+    console.log('📦 [parseRawData] Parsing as WebUI format');
     return WebUIParser.parse(rawData);
   }
 
@@ -558,18 +577,41 @@ function parseRawData(rawData: any): AIMetadata {
   if (rawData.stealthData) {
     console.log('🔍 [parseRawData] Attempting to parse stealth data...');
 
-    if (NovelAIParser.isNovelAIFormat(rawData.stealthData)) {
-      console.log('📦 [MetadataExtractor] Parsing stealth data as NovelAI format');
-      return NovelAIParser.parse(rawData.stealthData);
+    // Try NovelAI
+    const isNovelAI = NovelAIParser.isNovelAIFormat(rawData.stealthData);
+    console.log('🔍 [parseRawData] Is NovelAI format?', isNovelAI);
+
+    if (isNovelAI) {
+      console.log('📦 [parseRawData] Parsing stealth data as NovelAI format');
+      const result = NovelAIParser.parse(rawData.stealthData);
+      console.log('✅ [parseRawData] NovelAI parse result:', {
+        hasPrompt: !!result.prompt,
+        hasPositivePrompt: !!result.positive_prompt,
+        hasNegativePrompt: !!result.negative_prompt
+      });
+      return result;
     }
 
-    if (WebUIParser.isWebUIFormat(rawData.stealthData)) {
-      console.log('📦 [MetadataExtractor] Parsing stealth data as WebUI format');
-      return WebUIParser.parse(rawData.stealthData);
+    // Try WebUI
+    const isWebUI = WebUIParser.isWebUIFormat(rawData.stealthData);
+    console.log('🔍 [parseRawData] Is WebUI format?', isWebUI);
+
+    if (isWebUI) {
+      console.log('📦 [parseRawData] Parsing stealth data as WebUI format');
+      const result = WebUIParser.parse(rawData.stealthData);
+      console.log('✅ [parseRawData] WebUI parse result:', {
+        hasPrompt: !!result.prompt,
+        hasPositivePrompt: !!result.positive_prompt,
+        hasNegativePrompt: !!result.negative_prompt
+      });
+      return result;
     }
+
+    console.log('❌ [parseRawData] Stealth data found but format not recognized');
+    console.log('📄 [parseRawData] Raw stealth data sample:', rawData.stealthData.substring(0, 200));
   }
 
-  console.log('⚠️ [MetadataExtractor] No recognized format found');
+  console.log('⚠️ [parseRawData] No recognized format found');
   return {};
 }
 

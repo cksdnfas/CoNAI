@@ -12,11 +12,12 @@ import {
 import { Settings as SettingsIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import GeneralSettings from './components/GeneralSettings';
+import MetadataSettings from './components/MetadataSettings';
 import TaggerSettings from './features/Tagger/TaggerSettings';
 import RatingScoreSettings from './features/Rating/RatingScoreSettings';
 import SimilaritySettings from './features/Similarity/SimilaritySettings';
 import PromptList from '../PromptManagement/components/PromptList';
-import { settingsApi, type AppSettings, type GeneralSettings as GeneralSettingsType, type TaggerSettings as TaggerSettingsType } from '../../services/settingsApi';
+import { settingsApi, type AppSettings, type GeneralSettings as GeneralSettingsType, type TaggerSettings as TaggerSettingsType, type MetadataExtractionSettings } from '../../services/settingsApi';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -97,6 +98,25 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleUpdateMetadataSettings = async (metadataSettings: Partial<MetadataExtractionSettings>) => {
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const updatedSettings = await settingsApi.updateMetadataSettings(metadataSettings);
+      setSettings(updatedSettings);
+      setSuccessMessage(t('messages.saveSuccess'));
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 3000);
+    } catch (err) {
+      setError(t('messages.saveFailed'));
+      console.error('Failed to update settings:', err);
+      throw err;
+    }
+  };
+
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
@@ -152,6 +172,7 @@ const SettingsPage: React.FC = () => {
             <Tab label={t('tabs.rating')} />
             <Tab label={t('tabs.similarity')} />
             <Tab label={t('tabs.prompts')} />
+            <Tab label={t('tabs.metadata')} />
             <Tab label={t('tabs.advanced')} disabled />
           </Tabs>
         </Box>
@@ -200,6 +221,13 @@ const SettingsPage: React.FC = () => {
         </TabPanel>
 
         <TabPanel value={tabValue} index={5}>
+          <MetadataSettings
+            settings={settings.metadataExtraction}
+            onUpdate={handleUpdateMetadataSettings}
+          />
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={6}>
           <Alert severity="info">
             고급 설정 기능은 향후 추가될 예정입니다.
           </Alert>

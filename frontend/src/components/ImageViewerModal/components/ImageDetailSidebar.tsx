@@ -32,9 +32,18 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
   const [linkedImage, setLinkedImage] = useState<ImageRecord | null>(null);
   const [loadingLinkedImage, setLoadingLinkedImage] = useState(false);
 
-  // 히스토리 컨텍스트에서 linked_image_id가 있으면 이미지 정보 로드
+  // 히스토리 컨텍스트에서는 linked_image_id 조회를 비활성화
+  // 히스토리 이미지는 항상 히스토리 폴더의 원본 프롬프트만 사용
+  // (업로드된 이미지가 삭제될 수 있어서 404 에러 방지)
   useEffect(() => {
-    if (isHistoryContext && linkedImageId) {
+    // 히스토리 컨텍스트에서는 linked image 조회 안 함
+    if (isHistoryContext) {
+      setLinkedImage(null);
+      return;
+    }
+
+    // 일반 컨텍스트에서만 linked_image_id 조회 (미래 확장성)
+    if (linkedImageId) {
       const loadLinkedImage = async () => {
         try {
           setLoadingLinkedImage(true);
@@ -43,7 +52,6 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
             setLinkedImage(response.data);
           }
         } catch (error) {
-          console.error('Failed to load linked image:', error);
           setLinkedImage(null);
         } finally {
           setLoadingLinkedImage(false);

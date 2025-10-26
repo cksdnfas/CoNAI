@@ -228,9 +228,19 @@ export class ComplexFilterService {
     // Has character
     if (condition.type === 'auto_tag_has_character') {
       if (condition.value === true) {
-        return `json_extract(i.auto_tags, '$.character') IS NOT NULL AND json_type(i.auto_tags, '$.character') = 'object'`;
+        // 캐릭터 필드가 존재하고, object이며, 빈 객체가 아님
+        return `(
+          json_extract(i.auto_tags, '$.character') IS NOT NULL
+          AND json_type(i.auto_tags, '$.character') = 'object'
+          AND json_extract(i.auto_tags, '$.character') != '{}'
+        )`;
       } else {
-        return `(json_extract(i.auto_tags, '$.character') IS NULL OR json_type(i.auto_tags, '$.character') != 'object')`;
+        // 캐릭터 필드가 없거나, object가 아니거나, 빈 객체임
+        return `(
+          json_extract(i.auto_tags, '$.character') IS NULL
+          OR json_type(i.auto_tags, '$.character') != 'object'
+          OR json_extract(i.auto_tags, '$.character') = '{}'
+        )`;
       }
     }
 
@@ -453,8 +463,32 @@ export class ComplexFilterService {
       if (!condition.type) {
         errors.push(`${groupName} group, condition ${index + 1}: type is required`);
       }
-      if (condition.value === undefined || condition.value === null || condition.value === '') {
-        errors.push(`${groupName} group, condition ${index + 1}: value is required`);
+
+      // Type-specific value validation
+      if (condition.type === 'auto_tag_exists' || condition.type === 'auto_tag_has_character') {
+        // Boolean types: value must be boolean
+        if (typeof condition.value !== 'boolean') {
+          errors.push(`${groupName} group, condition ${index + 1}: value must be boolean for ${condition.type}`);
+        }
+      } else if (condition.type === 'auto_tag_general' || condition.type === 'auto_tag_character' ||
+                 condition.type === 'prompt_contains' || condition.type === 'prompt_regex' ||
+                 condition.type === 'negative_prompt_contains' || condition.type === 'negative_prompt_regex' ||
+                 condition.type === 'ai_tool' || condition.type === 'model_name' ||
+                 condition.type === 'auto_tag_model') {
+        // String types: value must be non-empty string
+        if (typeof condition.value !== 'string' || condition.value.trim() === '') {
+          errors.push(`${groupName} group, condition ${index + 1}: value must be a non-empty string for ${condition.type}`);
+        }
+      } else if (condition.type === 'auto_tag_rating' || condition.type === 'auto_tag_rating_score') {
+        // Rating types: at least one of min_score or max_score must be set
+        if (condition.min_score === undefined && condition.max_score === undefined) {
+          errors.push(`${groupName} group, condition ${index + 1}: at least one of min_score or max_score is required for ${condition.type}`);
+        }
+      } else {
+        // Default validation: value is required
+        if (condition.value === undefined || condition.value === null) {
+          errors.push(`${groupName} group, condition ${index + 1}: value is required`);
+        }
       }
 
       // Validate score ranges

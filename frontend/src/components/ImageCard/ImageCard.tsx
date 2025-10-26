@@ -86,7 +86,11 @@ const ImageCard: React.FC<ImageCardProps> = ({
   };
 
   // API 엔드포인트를 통해 썸네일 및 원본 이미지 제공 (외부 네트워크 접근 보장)
-  const thumbnailUrl = `${backendOrigin}/api/images/${image.id}/thumbnail`;
+  // GIF는 애니메이션 보존을 위해 원본 사용
+  const isGif = image.mime_type === 'image/gif';
+  const thumbnailUrl = isGif
+    ? `${backendOrigin}/api/images/${image.id}/optimized` // GIF optimized는 원본 복사본
+    : `${backendOrigin}/api/images/${image.id}/thumbnail`;
   const fallbackUrl = `${backendOrigin}/api/images/${image.id}/download/original`;
 
   return (

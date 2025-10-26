@@ -8,7 +8,8 @@
       "search": "검색",
       "upload": "업로드",
       "imageGeneration": "이미지 생성",
-      "settings": "설정"
+      "settings": "설정",
+      "help": "도움말"
     },
     "theme": {
       "light": "라이트 모드",
@@ -23,5 +24,12 @@
   "footer": {
     "copyright": "© 2024 ComfyUI Image Manager. All rights reserved.",
     "version": "버전"
+  },
+  "help": {
+    "title": "도움말",
+    "sections": {
+      "setup": "설정 가이드",
+      "filters": "필터 가이드"
+    }
   }
 }

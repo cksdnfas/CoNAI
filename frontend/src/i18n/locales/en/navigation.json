@@ -8,7 +8,8 @@
       "search": "Search",
       "upload": "Upload",
       "imageGeneration": "Image Generation",
-      "settings": "Settings"
+      "settings": "Settings",
+      "help": "Help"
     },
     "theme": {
       "light": "Light Mode",
@@ -23,5 +24,16 @@
   "footer": {
     "copyright": "© 2024 ComfyUI Image Manager. All rights reserved.",
     "version": "Version"
+  },
+  "help": {
+    "title": "Help",
+    "sections": {
+      "gettingStarted": "Getting Started",
+      "imageManagement": "Image Management",
+      "autoCollection": "Auto Collection",
+      "promptSystem": "Prompt System",
+      "settings": "Settings",
+      "shortcuts": "Shortcuts"
+    }
   }
 }

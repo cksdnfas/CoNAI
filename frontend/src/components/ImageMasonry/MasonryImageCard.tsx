@@ -25,7 +25,11 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
   const cardRef = useRef<HTMLDivElement>(null);
   const backendOrigin = getBackendOrigin();
   // API 엔드포인트를 통해 썸네일 제공 (외부 네트워크 접근 보장)
-  const imageUrl = `${backendOrigin}/api/images/${image.id}/thumbnail`;
+  // GIF는 애니메이션 보존을 위해 원본 사용
+  const isGif = image.mime_type === 'image/gif';
+  const imageUrl = isGif
+    ? `${backendOrigin}/api/images/${image.id}/optimized` // GIF optimized는 원본 복사본
+    : `${backendOrigin}/api/images/${image.id}/thumbnail`;
 
   const handleSelectionChange = (e: React.MouseEvent) => {
     e.stopPropagation();
