@@ -13,8 +13,8 @@ interface ImageMasonryProps {
   hasMore: boolean;
   onLoadMore: () => void;
   selectable?: boolean;
-  selectedIds?: number[];
-  onSelectionChange?: (selectedIds: number[]) => void;
+  selectedIds?: string[];
+  onSelectionChange?: (selectedIds: string[]) => void;
 }
 
 const ImageMasonry: React.FC<ImageMasonryProps> = ({
@@ -48,16 +48,16 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
     setCurrentImageIndex(newIndex);
   };
 
-  const handleSelectionChange = (id: number, event?: React.MouseEvent) => {
+  const handleSelectionChange = (compositeHash: string, event?: React.MouseEvent) => {
     if (!onSelectionChange) return;
 
-    const imageIndex = images.findIndex(img => img.id === id);
+    const imageIndex = images.findIndex(img => img.composite_hash === compositeHash);
 
     // Ctrl/Cmd + Click: 토글 선택
     if (event && (event.ctrlKey || event.metaKey)) {
-      const newSelectedIds = selectedIds.includes(id)
-        ? selectedIds.filter(selectedId => selectedId !== id)
-        : [...selectedIds, id];
+      const newSelectedIds = selectedIds.includes(compositeHash)
+        ? selectedIds.filter(selectedId => selectedId !== compositeHash)
+        : [...selectedIds, compositeHash];
       onSelectionChange(newSelectedIds);
       setLastClickedIndex(imageIndex);
       return;
@@ -67,16 +67,16 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
     if (event && event.shiftKey && lastClickedIndex >= 0) {
       const start = Math.min(lastClickedIndex, imageIndex);
       const end = Math.max(lastClickedIndex, imageIndex);
-      const rangeIds = images.slice(start, end + 1).map(img => img.id);
+      const rangeIds = images.slice(start, end + 1).map(img => img.composite_hash);
       const newSelectedIds = Array.from(new Set([...selectedIds, ...rangeIds]));
       onSelectionChange(newSelectedIds);
       return;
     }
 
     // 일반 클릭: 토글 선택 (체크박스 방식)
-    const newSelectedIds = selectedIds.includes(id)
-      ? selectedIds.filter(selectedId => selectedId !== id)
-      : [...selectedIds, id];
+    const newSelectedIds = selectedIds.includes(compositeHash)
+      ? selectedIds.filter(selectedId => selectedId !== compositeHash)
+      : [...selectedIds, compositeHash];
     onSelectionChange(newSelectedIds);
     setLastClickedIndex(imageIndex);
   };
@@ -104,7 +104,7 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
       // Ctrl/Cmd + A: 전체 선택
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         e.preventDefault();
-        const allIds = images.map(img => img.id);
+        const allIds = images.map(img => img.composite_hash);
         onSelectionChange(allIds);
       }
 
@@ -194,12 +194,12 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
         >
           {images.map((image, index) => (
             <MasonryImageCard
-              key={image.id}
+              key={image.composite_hash}
               image={image}
               onClick={() => handleImageClick(index)}
-              selected={selectedIds.includes(image.id)}
+              selected={selectedIds.includes(image.composite_hash)}
               selectable={selectable}
-              onSelectionChange={(id, event) => handleSelectionChange(id, event)}
+              onSelectionChange={(compositeHash, event) => handleSelectionChange(compositeHash, event)}
             />
           ))}
         </Masonry>

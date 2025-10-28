@@ -368,26 +368,14 @@ export class AutoCollectionService {
       // ImageSimilarityModel을 동적 임포트하여 순환 참조 방지
       const { ImageSimilarityModel } = await import('../models/Image/ImageSimilarityModel');
 
-      // 새 구조: composite_hash 기반 (권장)
-      if ('composite_hash' in image) {
-        // ImageMetadataRecord의 경우 composite_hash 사용
-        const duplicates = await ImageSimilarityModel.findDuplicates(image.composite_hash, {
-          threshold,
-          includeMetadata: true
-        });
+      // composite_hash 기반으로 중복 이미지 검색
+      const duplicates = await ImageSimilarityModel.findDuplicates(image.composite_hash, {
+        threshold,
+        includeMetadata: true
+      });
 
-        // 중복 이미지가 하나라도 있으면 true
-        return duplicates.length > 0;
-      } else {
-        // 레거시: ImageRecord의 경우 id 사용 (하위 호환성)
-        const duplicates = await ImageSimilarityModel.findDuplicatesByImageId(image.id, {
-          threshold,
-          includeMetadata: true
-        });
-
-        // 중복 이미지가 하나라도 있으면 true
-        return duplicates.length > 0;
-      }
+      // 중복 이미지가 하나라도 있으면 true
+      return duplicates.length > 0;
     } catch (error) {
       console.warn('Failed to evaluate duplicate condition:', error);
       return false;

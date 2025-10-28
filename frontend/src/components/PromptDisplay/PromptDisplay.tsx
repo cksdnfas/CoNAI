@@ -20,7 +20,7 @@ interface PromptDisplayProps {
   variant?: 'outlined' | 'elevation' | 'none';
   showGrouped?: boolean; // 그룹별 배지 표시 모드
   // AUTO 탭 관련 props
-  imageId?: number;
+  imageId?: string;  // ✅ composite_hash
   autoTags?: AutoTagsData | null;
   isTaggerEnabled?: boolean;
   onAutoTagGenerated?: () => void;
@@ -615,7 +615,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
                   </Box>
                 ) : linkedImage ? (
                   <AutoTagDisplay
-                    imageId={linkedImage.id}
+                    imageId={linkedImage.composite_hash}
                     autoTags={linkedImage.auto_tags ?? null}
                     onTagGenerated={() => {}}
                   />

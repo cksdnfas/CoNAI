@@ -17,8 +17,8 @@ export const useSimilarityTest = () => {
   const [searchLimit, setSearchLimit] = useState(20);
 
   const handleTestSearch = async (t: any) => {
-    const imageId = parseInt(testImageId);
-    if (isNaN(imageId) || imageId <= 0) {
+    const compositeHash = testImageId.trim();
+    if (!compositeHash) {
       alert(t('tagger.test.invalidId'));
       return;
     }
@@ -27,7 +27,7 @@ export const useSimilarityTest = () => {
     setTestResults([]);
     setQueryImage(null);
     try {
-      const imageResponse = await imageApi.getImage(imageId);
+      const imageResponse = await imageApi.getImage(compositeHash);
       if (imageResponse.success && imageResponse.data) {
         setQueryImage(imageResponse.data);
       }
@@ -35,15 +35,15 @@ export const useSimilarityTest = () => {
       let results: SimilarImage[] = [];
 
       if (testType === 'duplicates') {
-        results = await similarityApi.findDuplicates(imageId, duplicateThreshold);
+        results = await similarityApi.findDuplicates(compositeHash, duplicateThreshold);
       } else if (testType === 'similar') {
-        results = await similarityApi.findSimilar(imageId, {
+        results = await similarityApi.findSimilar(compositeHash, {
           threshold: similarThreshold,
           limit: searchLimit,
           includeColorSimilarity: true,
         });
       } else if (testType === 'color') {
-        results = await similarityApi.findSimilarByColor(imageId, colorThreshold, searchLimit);
+        results = await similarityApi.findSimilarByColor(compositeHash, colorThreshold, searchLimit);
       }
 
       setTestResults(results);

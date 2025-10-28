@@ -250,7 +250,7 @@ router.post('/search/ids', asyncHandler(async (req: Request, res: Response) => {
     res.json({
       success: true,
       data: {
-        ids: compositeHashes,
+        composite_hashes: compositeHashes,
         total: compositeHashes.length
       }
     });

@@ -361,7 +361,7 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
             const historyRecord = records[index];
             return (
               <HistoryMasonryCard
-                key={imageRecord.id}
+                key={imageRecord.composite_hash}
                 image={imageRecord}
                 onClick={() => handleImageClick(index)}
                 generationStatus={historyRecord.generation_status}
@@ -369,7 +369,7 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
                 onDelete={() => handleDelete(historyRecord.id)}
                 selectable={true}
                 selected={selectedIds.has(historyRecord.id)}
-                onSelectionChange={handleSelectionChange}
+                onSelectionChange={(_, event) => handleSelectionChange(historyRecord.id, event)}
               />
             );
           })}

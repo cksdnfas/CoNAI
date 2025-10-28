@@ -155,32 +155,6 @@ export class ImageGroupModel {
     }
   }
 
-  /**
-   * 레거시: imageId로 그룹에 추가 (호환성 유지)
-   * @deprecated composite_hash 사용 권장
-   */
-  static async addImageToGroupByImageId(
-    groupId: number,
-    imageId: number,
-    collectionType: 'manual' | 'auto' = 'manual',
-    orderIndex: number = 0
-  ): Promise<number> {
-    // image_files를 통해 composite_hash 조회
-    const file = db.prepare(`
-      SELECT if.composite_hash
-      FROM image_files if
-      JOIN images i ON if.original_file_path LIKE '%' || i.file_path
-      WHERE i.id = ?
-      LIMIT 1
-    `).get(imageId) as { composite_hash: string } | undefined;
-
-    if (!file) {
-      throw new Error(`이미지 ID ${imageId}에 대한 composite_hash를 찾을 수 없습니다`);
-    }
-
-    await this.addImageToGroup(groupId, file.composite_hash, collectionType, orderIndex);
-    return 1; // 레거시 호환용
-  }
 
   /**
    * 그룹에서 이미지 제거 (composite_hash 기반)
@@ -192,26 +166,6 @@ export class ImageGroupModel {
     return info.changes > 0;
   }
 
-  /**
-   * 레거시: imageId로 그룹에서 제거 (호환성 유지)
-   * @deprecated composite_hash 사용 권장
-   */
-  static async removeImageFromGroupByImageId(groupId: number, imageId: number): Promise<boolean> {
-    // image_files를 통해 composite_hash 조회
-    const file = db.prepare(`
-      SELECT if.composite_hash
-      FROM image_files if
-      JOIN images i ON if.original_file_path LIKE '%' || i.file_path
-      WHERE i.id = ?
-      LIMIT 1
-    `).get(imageId) as { composite_hash: string } | undefined;
-
-    if (!file) {
-      return false;
-    }
-
-    return await this.removeImageFromGroup(groupId, file.composite_hash);
-  }
 
   /**
    * 특정 그룹의 모든 자동수집 이미지 제거

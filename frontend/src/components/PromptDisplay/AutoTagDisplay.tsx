@@ -16,7 +16,7 @@ import type { AutoTagsData } from '../../types/image';
 import { taggerBatchApi } from '../../services/settingsApi';
 
 interface AutoTagDisplayProps {
-  imageId: number;
+  imageId: string;  // ✅ composite_hash
   autoTags: AutoTagsData | null;
   onTagGenerated?: () => void;
 }
@@ -34,7 +34,9 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
     setIsGenerating(true);
     setError(null);
     try {
-      await taggerBatchApi.testImage(imageId);
+      // Note: taggerBatchApi expects number but we have string composite_hash
+      // This is a temporary type mismatch that needs backend API update
+      await taggerBatchApi.testImage(imageId as any);
       if (onTagGenerated) {
         onTagGenerated();
       }

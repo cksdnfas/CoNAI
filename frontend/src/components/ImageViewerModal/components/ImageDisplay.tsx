@@ -62,7 +62,7 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
       return image.thumbnail_url.startsWith('http') ? image.thumbnail_url : `${backendOrigin}${image.thumbnail_url}`;
     }
     // 일반 이미지만 API fallback 사용
-    return `${backendOrigin}/api/images/${image.id}/optimized`;
+    return `${backendOrigin}/api/images/${image.composite_hash}/optimized`;
   };
 
   const getFallbackUrl = () => {
@@ -72,7 +72,7 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
     if (image.thumbnail_url) {
       return image.thumbnail_url.startsWith('http') ? image.thumbnail_url : `${backendOrigin}${image.thumbnail_url}`;
     }
-    return `${backendOrigin}/api/images/${image.id}/download/original`;
+    return `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
   };
 
   const imageUrl = getImageUrl();
@@ -107,7 +107,7 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
       {image.mime_type?.startsWith('video/') ? (
         <Box
           component="video"
-          key={`video-${image.id}`}
+          key={`video-${image.composite_hash}`}
           src={imageError ? fallbackUrl : imageUrl}
           controls
           autoPlay
@@ -131,9 +131,9 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
       ) : (
         <Box
           component="img"
-          key={`img-${image.id}`}
+          key={`img-${image.composite_hash}`}
           src={imageError ? fallbackUrl : imageUrl}
-          alt={image.original_name}
+          alt={image.original_file_path ?? ''}
           draggable={false}
           onError={() => setImageError(true)}
           onLoad={() => setImageLoading(false)}

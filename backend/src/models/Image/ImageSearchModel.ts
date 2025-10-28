@@ -363,7 +363,7 @@ export class ImageSearchModel {
 
   /**
    * 검색 조건에 맞는 이미지 composite_hash 목록 조회 (랜덤 선택용)
-   * @deprecated composite_hash를 사용하도록 업데이트되었지만, 반환값은 여전히 number[]로 유지 (호환성)
+   * ✅ 완전히 composite_hash 기반으로 전환됨 (string[] 반환)
    */
   static async searchImageIds(
     searchParams: {
@@ -381,97 +381,9 @@ export class ImageSearchModel {
       end_date?: string;
       group_id?: number;
     }
-  ): Promise<number[]> {
-    const conditions: string[] = [];
-    const params: any[] = [];
-
-    if (searchParams.search_text) {
-      conditions.push('im.prompt LIKE ?');
-      params.push(`%${searchParams.search_text}%`);
-    }
-    if (searchParams.negative_text) {
-      conditions.push('im.negative_prompt LIKE ?');
-      params.push(`%${searchParams.negative_text}%`);
-    }
-    if (searchParams.ai_tool) {
-      conditions.push('im.ai_tool = ?');
-      params.push(searchParams.ai_tool);
-    }
-    if (searchParams.model_name) {
-      conditions.push('im.model_name LIKE ?');
-      params.push(`%${searchParams.model_name}%`);
-    }
-    if (searchParams.min_width) {
-      conditions.push('im.width >= ?');
-      params.push(searchParams.min_width);
-    }
-    if (searchParams.max_width) {
-      conditions.push('im.width <= ?');
-      params.push(searchParams.max_width);
-    }
-    if (searchParams.min_height) {
-      conditions.push('im.height >= ?');
-      params.push(searchParams.min_height);
-    }
-    if (searchParams.max_height) {
-      conditions.push('im.height <= ?');
-      params.push(searchParams.max_height);
-    }
-    if (searchParams.min_file_size) {
-      conditions.push('if.file_size >= ?');
-      params.push(searchParams.min_file_size);
-    }
-    if (searchParams.max_file_size) {
-      conditions.push('if.file_size <= ?');
-      params.push(searchParams.max_file_size);
-    }
-    if (searchParams.start_date) {
-      conditions.push('DATE(im.first_seen_date) >= DATE(?)');
-      params.push(searchParams.start_date);
-    }
-    if (searchParams.end_date) {
-      conditions.push('DATE(im.first_seen_date) <= DATE(?)');
-      params.push(searchParams.end_date);
-    }
-
-    // 그룹 필터
-    let groupJoinClause = '';
-    if (searchParams.group_id !== undefined) {
-      if (searchParams.group_id === 0) {
-        groupJoinClause = 'LEFT JOIN image_groups ig_filter ON im.composite_hash = ig_filter.composite_hash';
-        conditions.push('ig_filter.composite_hash IS NULL');
-      } else {
-        groupJoinClause = 'INNER JOIN image_groups ig_filter ON im.composite_hash = ig_filter.composite_hash';
-        conditions.push('ig_filter.group_id = ?');
-        params.push(searchParams.group_id);
-      }
-    }
-
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    const query = `
-      SELECT DISTINCT im.composite_hash
-      FROM image_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
-      ${groupJoinClause}
-      ${whereClause}
-      ORDER BY im.first_seen_date DESC
-    `;
-
-    const rows = db.prepare(query).all(...params) as { composite_hash: string }[];
-
-    // composite_hash를 숫자로 변환 (호환성을 위해 해시 코드 사용)
-    // 실제로는 composite_hash 문자열을 사용해야 하지만, 레거시 코드 호환을 위해 해시코드 반환
-    return rows.map(row => {
-      // 간단한 문자열 해시 함수 (Java hashCode 방식)
-      let hash = 0;
-      for (let i = 0; i < row.composite_hash.length; i++) {
-        const char = row.composite_hash.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash; // 32비트 정수로 변환
-      }
-      return Math.abs(hash);
-    });
+  ): Promise<string[]> {
+    // searchCompositeHashes() 메서드로 위임
+    return this.searchCompositeHashes(searchParams);
   }
 
   /**

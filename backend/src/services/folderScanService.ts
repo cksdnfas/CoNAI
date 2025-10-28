@@ -4,7 +4,7 @@ import path from 'path';
 import sharp from 'sharp';
 import { ImageSimilarityService } from './imageSimilarity';
 import { WatchedFolderService } from './watchedFolderService';
-import { MetadataExtractor } from './metadata';
+import { BackgroundQueueService } from './backgroundQueue';
 
 export interface ScanResult {
   folderId: number;
@@ -15,11 +15,16 @@ export interface ScanResult {
   missingImages: number;
   errors: Array<{ file: string; error: string }>;
   duration: number;
+  thumbnailsGenerated: number;
+  backgroundTasks: number;
 }
 
 export class FolderScanService {
+  private static readonly BATCH_SIZE = 10; // 병렬 처리 배치 크기
+  private static readonly THUMBNAIL_SIZE = 1080;
+
   /**
-   * 폴더 스캔 실행
+   * 폴더 스캔 실행 (병렬 처리 최적화)
    */
   static async scanFolder(folderId: number, fullRescan: boolean = false): Promise<ScanResult> {
     const startTime = Date.now();
@@ -31,7 +36,9 @@ export class FolderScanService {
       updatedPaths: 0,
       missingImages: 0,
       errors: [],
-      duration: 0
+      duration: 0,
+      thumbnailsGenerated: 0,
+      backgroundTasks: 0
     };
 
     try {
@@ -73,22 +80,30 @@ export class FolderScanService {
         console.log(`  🔄 전체 재스캔: ${result.missingImages}개 파일 상태 변경`);
       }
 
-      // 6. 각 파일 처리
-      for (const filePath of files) {
-        result.totalScanned++;
+      // 6. 각 파일 배치 병렬 처리 (10개씩)
+      for (let i = 0; i < files.length; i += this.BATCH_SIZE) {
+        const batch = files.slice(i, i + this.BATCH_SIZE);
 
-        try {
-          await this.processFile(filePath, folderId, result);
-        } catch (error) {
-          result.errors.push({
-            file: filePath,
-            error: error instanceof Error ? error.message : 'Unknown error'
-          });
-        }
+        // 배치 병렬 처리
+        const batchResults = await Promise.allSettled(
+          batch.map(filePath => this.processFile(filePath, folderId, result))
+        );
+
+        // 결과 집계
+        batchResults.forEach((batchResult, index) => {
+          result.totalScanned++;
+
+          if (batchResult.status === 'rejected') {
+            result.errors.push({
+              file: batch[index],
+              error: batchResult.reason instanceof Error ? batchResult.reason.message : 'Unknown error'
+            });
+          }
+        });
 
         // 진행 상황 로그 (100개마다)
         if (result.totalScanned % 100 === 0) {
-          console.log(`  📊 진행: ${result.totalScanned}/${files.length}`);
+          console.log(`  📊 진행: ${result.totalScanned}/${files.length} (배치 ${i / this.BATCH_SIZE + 1})`);
         }
       }
 
@@ -117,7 +132,7 @@ export class FolderScanService {
   }
 
   /**
-   * 파일 처리
+   * 파일 처리 (병렬 최적화 + 백그라운드 작업)
    */
   private static async processFile(
     filePath: string,
@@ -153,8 +168,11 @@ export class FolderScanService {
       return;
     }
 
-    // 3. 신규 파일 → 해시 생성
-    const hashes = await ImageSimilarityService.generateCompositeHash(filePath);
+    // 3. 신규 파일 → 해시 생성 병렬화
+    const [hashes, colorHistogram] = await Promise.all([
+      ImageSimilarityService.generateCompositeHash(filePath),
+      ImageSimilarityService.generateColorHistogram(filePath)
+    ]);
 
     // 4. 메타데이터 확인 (같은 이미지가 다른 경로에 있을 수 있음)
     const existingMetadata = db.prepare(
@@ -183,27 +201,21 @@ export class FolderScanService {
       return;
     }
 
-    // 5. 완전히 새로운 이미지 → 메타데이터 추출 및 썸네일 생성
+    // 5. 완전히 새로운 이미지 → 메타데이터 기본 등록 및 썸네일 생성
     try {
       // 이미지 정보 추출
       const imageInfo = await sharp(filePath).metadata();
 
-      // AI 메타데이터 추출
-      const aiMetadata = await MetadataExtractor.extractMetadata(filePath);
+      // 색상 히스토그램 직렬화
+      const colorHistogramJson = ImageSimilarityService.serializeHistogram(colorHistogram);
 
-      // 색상 히스토그램 생성
-      const histogram = await ImageSimilarityService.generateColorHistogram(filePath);
-      const colorHistogramJson = ImageSimilarityService.serializeHistogram(histogram);
-
-      // 썸네일 경로 생성 (temp 폴더에 저장)
+      // 썸네일 경로 생성 (temp 폴더에 저장, 해시 기반)
       const dateStr = new Date().toISOString().split('T')[0];
-      const thumbnailPath = `uploads/temp/${dateStr}/${hashes.compositeHash}-thumb.jpg`;
-      const optimizedPath = `uploads/temp/${dateStr}/${hashes.compositeHash}-optimized.webp`;
+      const tempDir = path.join('uploads', 'temp', 'images', dateStr, 'thumbnails');
+      await fs.promises.mkdir(tempDir, { recursive: true });
+      const thumbnailPath = path.join(tempDir, `${hashes.compositeHash}.webp`);
 
-      // 6. image_metadata 삽입
-      const aiInfo = aiMetadata.ai_info || {};
-      const loraModels = aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null;
-
+      // 6. image_metadata 기본 정보만 우선 삽입 (AI 메타데이터는 백그라운드에서)
       db.prepare(`
         INSERT INTO image_metadata (
           composite_hash, perceptual_hash, dhash, ahash, color_histogram,
@@ -221,22 +233,8 @@ export class FolderScanService {
         imageInfo.width,
         imageInfo.height,
         thumbnailPath,
-        optimizedPath,
-        aiInfo.ai_tool || null,
-        aiInfo.model || null,
-        loraModels,
-        aiInfo.steps || null,
-        aiInfo.cfg_scale || null,
-        aiInfo.sampler || null,
-        aiInfo.seed || null,
-        aiInfo.scheduler || null,
-        aiInfo.prompt || null,
-        aiInfo.negative_prompt || null,
-        aiInfo.denoise_strength || null,
-        aiInfo.generation_time || null,
-        aiInfo.batch_size || null,
-        aiInfo.batch_index || null,
-        null // auto_tags
+        null, // optimized_path는 더 이상 사용 안 함
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
       );
 
       // 7. image_files 삽입
@@ -255,12 +253,40 @@ export class FolderScanService {
         stats.mtime.toISOString()
       );
 
+      // 8. 썸네일 생성 (해시별 1개만)
+      if (!fs.existsSync(thumbnailPath)) {
+        await this.generateThumbnail(filePath, thumbnailPath);
+        result.thumbnailsGenerated++;
+      }
+
+      // 9. 백그라운드 작업 추가 (실패해도 스캔 성공)
+      BackgroundQueueService.addMetadataExtractionTask(filePath, hashes.compositeHash);
+      BackgroundQueueService.addAutoTaggingTask(filePath, hashes.compositeHash);
+      BackgroundQueueService.addPromptCollectionTask(filePath, hashes.compositeHash);
+      result.backgroundTasks += 3;
+
       result.newImages++;
       console.log(`  ✨ 신규 이미지: ${path.basename(filePath)}`);
     } catch (error) {
-      console.error(`  ❌ 메타데이터 추출 실패: ${path.basename(filePath)}`, error);
+      console.error(`  ❌ 이미지 처리 실패: ${path.basename(filePath)}`, error);
       throw error;
     }
+  }
+
+  /**
+   * 썸네일 생성
+   */
+  private static async generateThumbnail(
+    inputPath: string,
+    outputPath: string
+  ): Promise<void> {
+    await sharp(inputPath)
+      .resize(this.THUMBNAIL_SIZE, this.THUMBNAIL_SIZE, {
+        fit: 'inside',
+        withoutEnlargement: true
+      })
+      .webp({ quality: 90 })
+      .toFile(outputPath);
   }
 
   /**
@@ -364,7 +390,9 @@ export class FolderScanService {
             file: folder.folder_path,
             error: error instanceof Error ? error.message : 'Unknown'
           }],
-          duration: 0
+          duration: 0,
+          thumbnailsGenerated: 0,
+          backgroundTasks: 0
         });
       }
     }
@@ -407,7 +435,9 @@ export class FolderScanService {
             file: folder.folder_path,
             error: error instanceof Error ? error.message : 'Unknown'
           }],
-          duration: 0
+          duration: 0,
+          thumbnailsGenerated: 0,
+          backgroundTasks: 0
         });
       }
     }

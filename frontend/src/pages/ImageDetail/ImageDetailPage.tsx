@@ -168,8 +168,8 @@ const ImageDetailPage: React.FC = () => {
   }
 
   // API 엔드포인트를 통해 이미지 제공 (외부 네트워크 접근 보장)
-  const imageUrl = image ? `${backendOrigin}/api/images/${image.id}/optimized` : '';
-  const fallbackUrl = image ? `${backendOrigin}/api/images/${image.id}/download/original` : '';
+  const imageUrl = image ? `${backendOrigin}/api/images/${image.composite_hash}/optimized` : '';
+  const fallbackUrl = image ? `${backendOrigin}/api/images/${image.composite_hash}/download/original` : '';
 
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
@@ -220,7 +220,7 @@ const ImageDetailPage: React.FC = () => {
                 <Box
                   component="img"
                   src={imageError ? fallbackUrl : imageUrl}
-                  alt={image.original_name}
+                  alt={image.original_file_path ?? ''}
                   onError={() => setImageError(true)}
                   sx={{
                     width: '100%',
@@ -241,13 +241,10 @@ const ImageDetailPage: React.FC = () => {
               <Typography
                 variant="body2"
                 color="text.secondary"
-                title={image.original_name}
+                title={image.original_file_path ?? ''}
                 sx={{ mb: 1 }}
               >
-                {t('imageDetail:fileInfo.originalFilename')}: {truncateFilename(image.original_name)}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {t('imageDetail:fileInfo.filename')}: {image.filename}
+                {t('imageDetail:fileInfo.originalFilename')}: {truncateFilename(image.original_file_path ?? '')}
               </Typography>
             </Paper>
 
@@ -261,7 +258,7 @@ const ImageDetailPage: React.FC = () => {
                   <strong>{t('imageDetail:fileInfo.size')}:</strong> {image.width} × {image.height}
                 </Typography>
                 <Typography variant="body2">
-                  <strong>{t('imageDetail:fileInfo.fileSize')}:</strong> {formatFileSize(image.file_size)}
+                  <strong>{t('imageDetail:fileInfo.fileSize')}:</strong> {formatFileSize(image.file_size ?? 0)}
                 </Typography>
                 <Typography variant="body2">
                   <strong>{t('imageDetail:fileInfo.mimeType')}:</strong> {image.mime_type}
@@ -302,7 +299,7 @@ const ImageDetailPage: React.FC = () => {
                 )}
 
                 <Typography variant="body2">
-                  <strong>{t('imageDetail:fileInfo.uploadDate')}:</strong> {formatDate(image.upload_date)}
+                  <strong>{t('imageDetail:fileInfo.uploadDate')}:</strong> {formatDate(image.first_seen_date)}
                 </Typography>
               </Box>
             </Paper>
@@ -420,7 +417,7 @@ const ImageDetailPage: React.FC = () => {
                   negativePrompt={image.ai_metadata?.prompts.negative_prompt}
                   maxHeight={800}
                   variant="none"
-                  imageId={image.id}
+                  imageId={image.composite_hash}
                   autoTags={image.auto_tags}
                   isTaggerEnabled={isTaggerEnabled}
                   onAutoTagGenerated={handleAutoTagGenerated}

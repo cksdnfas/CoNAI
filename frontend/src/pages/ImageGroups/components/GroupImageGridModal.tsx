@@ -37,8 +37,8 @@ interface GroupImageGridModalProps {
   totalPages?: number;
   total?: number;
   onPageChange?: (page: number) => void;
-  onImagesRemoved?: (selectedImageIds: number[]) => void;
-  onImagesAssigned?: (targetGroupId: number, selectedImageIds: number[]) => void;
+  onImagesRemoved?: (selectedImageIds: string[]) => void;
+  onImagesAssigned?: (targetGroupId: number, selectedImageIds: string[]) => void;
 }
 
 const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
@@ -58,7 +58,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   onImagesAssigned,
 }) => {
   const { t } = useTranslation(['imageGroups', 'common']);
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
 
@@ -80,7 +80,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   }, [currentGroup?.id]);
 
   // 선택된 이미지 정보
-  const selectedImages = images.filter(img => selectedIds.includes(img.id));
+  const selectedImages = images.filter(img => selectedIds.includes(img.composite_hash));
   const hasManualSelected = selectedImages.some(img => {
     const groupInfo = img.groups?.find(g => g.id === currentGroup?.id);
     return groupInfo?.collection_type === 'manual';
@@ -101,13 +101,13 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   const handleRemoveConfirm = () => {
     setRemoveDialogOpen(false);
     if (onImagesRemoved) {
-      // 수동 수집 이미지 ID만 전달
+      // 수동 수집 이미지 composite_hash만 전달
       const manualImageIds = selectedImages
         .filter(img => {
           const groupInfo = img.groups?.find(g => g.id === currentGroup?.id);
           return groupInfo?.collection_type === 'manual';
         })
-        .map(img => img.id);
+        .map(img => img.composite_hash);
       onImagesRemoved(manualImageIds);
     }
     setSelectedIds([]);

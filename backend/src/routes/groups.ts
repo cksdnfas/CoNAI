@@ -310,20 +310,20 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
 router.post('/:id/images', asyncHandler(async (req: Request, res: Response) => {
   try {
     const groupId = validateId(req.params.id, 'Group ID');
-    const { image_id, order_index = 0 } = req.body;
+    const { composite_hash, order_index = 0 } = req.body;
 
-    if (!image_id) {
-      return res.status(400).json(errorResponse('Image ID is required'));
+    if (!composite_hash) {
+      return res.status(400).json(errorResponse('Composite hash is required'));
     }
 
     // 이미 그룹에 속해있는지 확인
-    const collectionType = await ImageGroupModel.getCollectionType(groupId, image_id);
+    const collectionType = await ImageGroupModel.getCollectionType(groupId, composite_hash);
 
     if (collectionType === 'manual') {
       return res.status(409).json(errorResponse('Image is already manually added to the group'));
     } else if (collectionType === 'auto') {
       // 자동수집된 이미지를 수동으로 전환
-      const converted = await ImageGroupModel.convertToManual(groupId, image_id);
+      const converted = await ImageGroupModel.convertToManual(groupId, composite_hash);
       if (converted) {
         return res.status(200).json(
           successResponse({
@@ -335,7 +335,7 @@ router.post('/:id/images', asyncHandler(async (req: Request, res: Response) => {
     }
 
     // 그룹에 없는 이미지를 새로 추가
-    await ImageGroupModel.addImageToGroup(groupId, image_id, 'manual', order_index);
+    await ImageGroupModel.addImageToGroup(groupId, composite_hash, 'manual', order_index);
 
     return res.status(201).json(
       successResponse({
@@ -358,10 +358,10 @@ router.post('/:id/images', asyncHandler(async (req: Request, res: Response) => {
 router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response) => {
   try {
     const groupId = validateId(req.params.id, 'Group ID');
-    const { image_ids } = req.body;
+    const { composite_hashes } = req.body;
 
-    if (!image_ids || !Array.isArray(image_ids) || image_ids.length === 0) {
-      return res.status(400).json(errorResponse('Image IDs array is required'));
+    if (!composite_hashes || !Array.isArray(composite_hashes) || composite_hashes.length === 0) {
+      return res.status(400).json(errorResponse('Composite hashes array is required'));
     }
 
     let addedCount = 0;
@@ -369,16 +369,16 @@ router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response)
     let skippedCount = 0;
     const errors: string[] = [];
 
-    for (const imageId of image_ids) {
+    for (const compositeHash of composite_hashes) {
       try {
         // 이미 그룹에 속해있는지 확인
-        const collectionType = await ImageGroupModel.getCollectionType(groupId, imageId);
+        const collectionType = await ImageGroupModel.getCollectionType(groupId, compositeHash);
 
         if (collectionType === 'manual') {
           skippedCount++;
           continue;
         } else if (collectionType === 'auto') {
-          const converted = await ImageGroupModel.convertToManual(groupId, imageId);
+          const converted = await ImageGroupModel.convertToManual(groupId, compositeHash);
           if (converted) {
             convertedCount++;
           }
@@ -386,10 +386,10 @@ router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response)
         }
 
         // 그룹에 없는 이미지를 새로 추가
-        await ImageGroupModel.addImageToGroup(groupId, imageId, 'manual', 0);
+        await ImageGroupModel.addImageToGroup(groupId, compositeHash, 'manual', 0);
         addedCount++;
       } catch (error) {
-        errors.push(`Image ${imageId}: ${(error as Error).message}`);
+        errors.push(`Image ${compositeHash}: ${(error as Error).message}`);
       }
     }
 

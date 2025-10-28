@@ -17,8 +17,8 @@ interface HistoryMasonryCardProps {
   onClick: () => void;
   selected?: boolean;
   selectable?: boolean;
-  onSelectionChange?: (id: number, event?: React.MouseEvent) => void;
-  onDelete?: (id: number) => void;
+  onSelectionChange?: (compositeHash: string, event?: React.MouseEvent) => void;
+  onDelete?: (compositeHash: string) => void;
   // 히스토리 전용 추가 정보
   generationStatus?: GenerationStatus;
   serviceType?: ServiceType;
@@ -45,15 +45,15 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
   const imageUrl = isGif
     ? (image.optimized_url
         ? `${backendOrigin}${image.optimized_url}`
-        : `${backendOrigin}/api/images/${image.id}/optimized`)
+        : `${backendOrigin}/api/images/${image.composite_hash}/optimized`)
     : (image.thumbnail_url
         ? `${backendOrigin}${image.thumbnail_url}`
-        : `${backendOrigin}/api/images/${image.id}/thumbnail`);
+        : `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`);
 
   const handleSelectionChange = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onSelectionChange) {
-      onSelectionChange(image.id, e);
+      onSelectionChange(image.composite_hash, e);
     }
   };
 
@@ -68,7 +68,7 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onDelete) {
-      onDelete(image.id);
+      onDelete(image.composite_hash);
     }
   };
 
@@ -239,7 +239,7 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
           <CardMedia
             component="img"
             image={imageUrl}
-            alt={image.original_name}
+            alt={image.original_file_path ?? ''}
             loading="lazy"
             decoding="async"
             draggable={false}

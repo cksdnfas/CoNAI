@@ -317,7 +317,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
             component="img"
             height="250"
             image={imageError ? fallbackUrl : thumbnailUrl}
-            alt={image.original_name}
+            alt={image.original_file_path ?? ''}
             draggable={false}
             onError={() => setImageError(true)}
             sx={{

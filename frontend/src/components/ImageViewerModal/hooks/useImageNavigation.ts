@@ -11,7 +11,7 @@ interface UseImageNavigationProps {
   searchContext?: 'all' | 'search' | 'group';
   searchParams?: ImageSearchParams;
   groupId?: number;
-  allImageIds?: number[]; // 전체 이미지 ID 목록 (랜덤 선택용)
+  allImageIds?: string[]; // 전체 이미지 composite_hash 목록 (랜덤 선택용)
   onRandomImageLoaded?: (image: ImageRecord) => void;
   onRandomModeChange?: (isRandom: boolean) => void;
 }
@@ -67,7 +67,7 @@ export const useImageNavigation = ({
         const randomId = allImageIds[Math.floor(Math.random() * allImageIds.length)];
 
         // 현재 배열에 있는지 확인
-        const foundIndex = images?.findIndex(img => img.id === randomId) ?? -1;
+        const foundIndex = images?.findIndex(img => img.composite_hash === randomId) ?? -1;
 
         if (foundIndex >= 0 && onImageChange) {
           // 현재 페이지에 있음 - 바로 이동
@@ -109,7 +109,7 @@ export const useImageNavigation = ({
       // If API call succeeded and returned an image, use it
       if (result?.success && result.data) {
         // Check if this image exists in current array
-        const foundIndex = images?.findIndex(img => img.id === result.data!.id) ?? -1;
+        const foundIndex = images?.findIndex(img => img.composite_hash === result.data!.composite_hash) ?? -1;
 
         if (foundIndex >= 0 && onImageChange) {
           // Image found in array - navigate to it (normal mode)

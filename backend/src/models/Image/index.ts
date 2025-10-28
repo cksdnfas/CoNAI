@@ -155,6 +155,10 @@ export class ImageModel {
     return ImageSearchModel.searchByAutoTags(searchParams, basicSearchParams);
   }
 
+  /**
+   * 검색 조건에 맞는 이미지 composite_hash 목록 조회
+   * ✅ 완전히 composite_hash 기반으로 전환됨 (string[] 반환)
+   */
   static searchImageIds(
     searchParams: {
       search_text?: string;
@@ -171,7 +175,7 @@ export class ImageModel {
       end_date?: string;
       group_id?: number;
     }
-  ): Promise<number[]> {
+  ): Promise<string[]> {
     return ImageSearchModel.searchImageIds(searchParams);
   }
 

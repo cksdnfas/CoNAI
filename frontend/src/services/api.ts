@@ -311,7 +311,7 @@ export const groupApi = {
   // ✅ 이미지를 그룹에 수동 추가 (composite_hash 기반)
   addImageToGroup: async (groupId: number, compositeHash: string, orderIndex: number = 0): Promise<GroupResponse> => {
     const response = await api.post(`/api/groups/${groupId}/images`, {
-      image_id: compositeHash,  // 백엔드는 image_id 파라미터명 사용하지만 composite_hash 값을 받음
+      composite_hash: compositeHash,
       order_index: orderIndex
     });
     return response.data;
@@ -320,7 +320,7 @@ export const groupApi = {
   // ✅ 여러 이미지를 그룹에 수동 추가 (composite_hash 기반)
   addImagesToGroup: async (groupId: number, compositeHashes: string[]): Promise<GroupResponse> => {
     const response = await api.post(`/api/groups/${groupId}/images/bulk`, {
-      image_ids: compositeHashes  // 백엔드는 image_ids 파라미터명 사용하지만 composite_hash 값들을 받음
+      composite_hashes: compositeHashes
     });
     return response.data;
   },

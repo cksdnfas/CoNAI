@@ -165,8 +165,8 @@ const SimilaritySettings: React.FC = () => {
   };
 
   const handleTestSearch = async () => {
-    const imageId = parseInt(testImageId);
-    if (isNaN(imageId) || imageId <= 0) {
+    const compositeHash = testImageId.trim();
+    if (!compositeHash) {
       alert(t('tagger.test.invalidId'));
       return;
     }
@@ -176,9 +176,16 @@ const SimilaritySettings: React.FC = () => {
     setQueryImage(null);
     try {
       // 원본 이미지 정보 가져오기
-      const imageResponse = await imageApi.getImage(imageId);
+      const imageResponse = await imageApi.getImage(compositeHash);
       if (imageResponse.success && imageResponse.data) {
         setQueryImage(imageResponse.data);
+      }
+
+      // composite_hash를 number로 변환 (similarity API는 imageId가 number 타입)
+      const imageId = parseInt(compositeHash, 10);
+      if (isNaN(imageId)) {
+        alert(t('tagger.test.invalidId'));
+        return;
       }
 
       let results: SimilarImage[] = [];
@@ -222,7 +229,7 @@ const SimilaritySettings: React.FC = () => {
   };
 
   const getThumbnailUrl = (image: ImageRecord): string => {
-    return buildUploadsUrl(image.thumbnail_url || image.file_path);
+    return buildUploadsUrl(image.thumbnail_url ?? image.original_file_path ?? '');
   };
 
   const getMatchTypeColor = (matchType: string): 'error' | 'warning' | 'info' | 'success' => {
@@ -352,7 +359,6 @@ const SimilaritySettings: React.FC = () => {
                 label={t('similarity.test.imageId')}
                 value={testImageId}
                 onChange={(e) => setTestImageId(e.target.value)}
-                type="number"
                 placeholder={t('similarity.test.placeholder')}
                 fullWidth
               />
@@ -392,7 +398,7 @@ const SimilaritySettings: React.FC = () => {
                   <Box
                     component="img"
                     src={getThumbnailUrl(queryImage)}
-                    alt={queryImage.filename}
+                    alt={queryImage.original_file_path ?? ''}
                     sx={{
                       width: '100%',
                       maxHeight: 300,
@@ -402,10 +408,10 @@ const SimilaritySettings: React.FC = () => {
                   />
                   <CardContent>
                     <Typography variant="body2">
-                      <strong>{t('similarity.test.imageDetails.id')}</strong> {queryImage.id}
+                      <strong>{t('similarity.test.imageDetails.id')}</strong> {queryImage.composite_hash}
                     </Typography>
                     <Typography variant="body2" noWrap>
-                      <strong>{t('similarity.test.imageDetails.filename')}</strong> {queryImage.filename}
+                      <strong>{t('similarity.test.imageDetails.filename')}</strong> {queryImage.original_file_path ?? ''}
                     </Typography>
                     <Typography variant="body2">
                       <strong>{t('similarity.test.imageDetails.size')}</strong> {queryImage.width} × {queryImage.height}
@@ -428,12 +434,12 @@ const SimilaritySettings: React.FC = () => {
                 </Typography>
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' }, gap: 2 }}>
                   {testResults.slice(0, 12).map((result) => (
-                    <Box key={result.image.id}>
+                    <Box key={result.image.composite_hash}>
                       <Card variant="outlined">
                         <Box
                           component="img"
                           src={getThumbnailUrl(result.image)}
-                          alt={result.image.filename}
+                          alt={result.image.original_file_path ?? ''}
                           sx={{
                             width: '100%',
                             height: 150,
@@ -442,7 +448,7 @@ const SimilaritySettings: React.FC = () => {
                         />
                         <CardContent sx={{ p: 1 }}>
                           <Typography variant="caption" display="block" noWrap>
-                            ID: {result.image.id}
+                            ID: {result.image.composite_hash}
                           </Typography>
                           <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
                             <Chip
@@ -524,11 +530,11 @@ const SimilaritySettings: React.FC = () => {
                     <AccordionDetails>
                       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(5, 1fr)' }, gap: 1 }}>
                         {group.images.slice(0, 5).map((image) => (
-                          <Box key={image.id}>
+                          <Box key={image.composite_hash}>
                             <Box
                               component="img"
                               src={getThumbnailUrl(image)}
-                              alt={image.filename}
+                              alt={image.original_file_path ?? ''}
                               sx={{
                                 width: '100%',
                                 height: 100,
@@ -537,7 +543,7 @@ const SimilaritySettings: React.FC = () => {
                               }}
                             />
                             <Typography variant="caption" display="block" align="center">
-                              {t('similarity.duplicateScan.id', { id: image.id })}
+                              {t('similarity.duplicateScan.id', { id: image.composite_hash })}
                             </Typography>
                           </Box>
                         ))}

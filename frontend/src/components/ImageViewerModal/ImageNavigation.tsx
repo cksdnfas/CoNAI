@@ -64,7 +64,7 @@ const ImageNavigation: React.FC<ImageNavigationProps> = ({
         }}
       >
         {isRandomMode && currentImage
-          ? `image/${currentImage.id}`
+          ? `image/${currentImage.composite_hash}`
           : totalCount > 0
             ? `${currentIndex + 1} / ${totalCount}`
             : '0 / 0'

@@ -84,7 +84,7 @@ export const similarityApi = {
    * 특정 이미지의 중복 이미지 검색
    */
   findDuplicates: async (
-    imageId: number,
+    imageId: string | number,
     threshold: number = 5,
     includeMetadata: boolean = true
   ): Promise<SimilarImage[]> => {
@@ -101,7 +101,7 @@ export const similarityApi = {
    * 유사 이미지 검색
    */
   findSimilar: async (
-    imageId: number,
+    imageId: string | number,
     options: SimilaritySearchOptions = {}
   ): Promise<SimilarImage[]> => {
     const {
@@ -125,7 +125,7 @@ export const similarityApi = {
    * 색감이 유사한 이미지 검색
    */
   findSimilarByColor: async (
-    imageId: number,
+    imageId: string | number,
     threshold: number = 85,
     limit: number = 20
   ): Promise<SimilarImage[]> => {

@@ -39,7 +39,7 @@ interface FileProgress {
   status: 'waiting' | 'processing' | 'complete' | 'error';
   currentStage?: UploadStage;
   message?: string;
-  imageId?: number;
+  imageId?: string;  // ✅ composite_hash
   error?: string;
 }
 

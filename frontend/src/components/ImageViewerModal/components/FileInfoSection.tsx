@@ -41,17 +41,17 @@ export const FileInfoSection: React.FC<FileInfoSectionProps> = ({ image }) => {
       </Box>
       <Collapse in={expanded}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, pl: 1 }}>
-          <Typography variant="body2" title={image.original_name}>
-            {t('imageDetail:fileInfo.filename')}: {truncateFilename(image.original_name)}
+          <Typography variant="body2" title={image.original_file_path ?? ''}>
+            {t('imageDetail:fileInfo.filename')}: {truncateFilename(image.original_file_path || '')}
           </Typography>
           <Typography variant="body2">
             {t('imageDetail:imageInfo.dimensions')}: {image.width} × {image.height}
           </Typography>
           <Typography variant="body2">
-            {t('imageDetail:fileInfo.fileSize')}: {formatFileSize(image.file_size)}
+            {t('imageDetail:fileInfo.fileSize')}: {formatFileSize(image.file_size ?? 0)}
           </Typography>
           <Typography variant="body2">
-            {t('imageDetail:fileInfo.uploadDate')}: {formatDate(image.upload_date)}
+            {t('imageDetail:fileInfo.uploadDate')}: {formatDate(image.first_seen_date)}
           </Typography>
         </Box>
       </Collapse>

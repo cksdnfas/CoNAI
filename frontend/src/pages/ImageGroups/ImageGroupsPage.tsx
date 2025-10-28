@@ -235,7 +235,7 @@ const ImageGroupsPage: React.FC = () => {
   };
 
   // 이미지 제거 핸들러
-  const handleImagesRemoved = async (manualImageIds: number[]) => {
+  const handleImagesRemoved = async (manualImageIds: string[]) => {
     if (!selectedGroupForImages) return;
 
     try {
@@ -292,7 +292,7 @@ const ImageGroupsPage: React.FC = () => {
   };
 
   // 이미지 할당 핸들러
-  const handleImagesAssigned = async (targetGroupId: number, selectedImageIds: number[]) => {
+  const handleImagesAssigned = async (targetGroupId: number, selectedImageIds: string[]) => {
     try {
       const response = await groupApi.addImagesToGroup(targetGroupId, selectedImageIds);
 

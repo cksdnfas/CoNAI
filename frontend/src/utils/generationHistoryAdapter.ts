@@ -45,19 +45,22 @@ export const convertHistoryToImageRecord = (
   }
 
   return {
-    // 기본 이미지 정보
-    id: history.id!,
-    filename: history.original_path || `history_${history.id}`,
-    original_name: history.original_path || 'Generated Image',
-    file_path: history.original_path || '',
+    // ✅ New structure - Primary identification
+    composite_hash: `history_${history.id}`,  // Temporary hash for history records
+    first_seen_date: history.created_at,      // Replaces upload_date
+
+    // File information (from image_files table JOIN)
+    file_id: null,                             // History records don't have file_id yet
+    original_file_path: history.original_path || null,  // Replaces file_path
+    file_size: history.file_size || null,
+    mime_type: 'image/png',
+    file_status: 'active' as const,
+
+    // Image metadata
+    width: history.width || 0,
+    height: history.height || 0,
     thumbnail_path: history.thumbnail_path || '',
     optimized_path: null,
-    file_size: history.file_size || 0,
-    mime_type: 'image/png',
-    width: history.width || null,
-    height: history.height || null,
-    upload_date: history.created_at,
-    metadata: history.metadata || null,
 
     // AI 메타데이터 - 서비스별 매핑
     ai_tool: isComfyUI ? 'ComfyUI' : 'NovelAI',
@@ -78,6 +81,8 @@ export const convertHistoryToImageRecord = (
 
     // 이미지 유사도 검색 필드
     perceptual_hash: null,
+    dhash: null,
+    ahash: null,
     color_histogram: null,
 
     // 동영상 전용 메타데이터
@@ -89,9 +94,9 @@ export const convertHistoryToImageRecord = (
 
     // URL 필드
     // 히스토리 이미지는 항상 히스토리 폴더(uploads/API/images/)의 이미지를 직접 참조
-    thumbnail_url: history.thumbnail_path ? `/uploads/${history.thumbnail_path}` : undefined,
-    image_url: history.original_path ? `/uploads/${history.original_path}` : undefined,
-    optimized_url: history.optimized_path ? `/uploads/${history.optimized_path}` : undefined,
+    thumbnail_url: history.thumbnail_path ? `/uploads/${history.thumbnail_path}` : '',
+    image_url: history.original_path ? `/uploads/${history.original_path}` : null,
+    optimized_url: history.optimized_path ? `/uploads/${history.optimized_path}` : null,
 
     // 그룹 정보 없음
     groups: [],

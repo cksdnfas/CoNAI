@@ -47,7 +47,7 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
       const loadLinkedImage = async () => {
         try {
           setLoadingLinkedImage(true);
-          const response = await imageApi.getImage(linkedImageId);
+          const response = await imageApi.getImage(String(linkedImageId));
           if (response.success && response.data) {
             setLinkedImage(response.data);
           }
@@ -93,7 +93,7 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
             negativePrompt={image.ai_metadata?.prompts.negative_prompt}
             variant="outlined"
             showGrouped={true}
-            imageId={image.id}
+            imageId={image.composite_hash}
             autoTags={image.auto_tags}
             isTaggerEnabled={isTaggerEnabled}
             onAutoTagGenerated={onAutoTagGenerated}

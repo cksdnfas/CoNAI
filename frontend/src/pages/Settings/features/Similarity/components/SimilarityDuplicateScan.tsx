@@ -49,18 +49,18 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
   const { t } = useTranslation('settings');
 
   // 선택된 이미지 관리
-  const [selectedImages, setSelectedImages] = useState<Set<number>>(new Set());
+  const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   // 이미지 선택 토글
-  const handleToggleImage = (imageId: number) => {
+  const handleToggleImage = (compositeHash: string) => {
     setSelectedImages(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(imageId)) {
-        newSet.delete(imageId);
+      if (newSet.has(compositeHash)) {
+        newSet.delete(compositeHash);
       } else {
-        newSet.add(imageId);
+        newSet.add(compositeHash);
       }
       return newSet;
     });
@@ -72,9 +72,9 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
       const newSet = new Set(prev);
       group.images.forEach(image => {
         if (selectAll) {
-          newSet.add(image.id);
+          newSet.add(image.composite_hash);
         } else {
-          newSet.delete(image.id);
+          newSet.delete(image.composite_hash);
         }
       });
       return newSet;
@@ -87,7 +87,7 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
       const newSet = new Set(prev);
       // 첫 번째 이미지를 제외한 나머지 모두 선택
       group.images.slice(1).forEach(image => {
-        newSet.add(image.id);
+        newSet.add(image.composite_hash);
       });
       return newSet;
     });
@@ -99,8 +99,8 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
 
     setDeleting(true);
     try {
-      const imageIds = Array.from(selectedImages);
-      const results = await imageApi.deleteImages(imageIds);
+      const compositeHashes = Array.from(selectedImages);
+      const results = await imageApi.deleteImages(compositeHashes);
 
       const successCount = results.filter(r => r.success).length;
       const failCount = results.filter(r => !r.success).length;
@@ -129,12 +129,12 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
 
   // 그룹이 모두 선택되었는지 확인
   const isGroupFullySelected = (group: DuplicateGroup) => {
-    return group.images.every(image => selectedImages.has(image.id));
+    return group.images.every(image => selectedImages.has(image.composite_hash));
   };
 
   // 그룹이 부분적으로 선택되었는지 확인
   const isGroupPartiallySelected = (group: DuplicateGroup) => {
-    return group.images.some(image => selectedImages.has(image.id)) && !isGroupFullySelected(group);
+    return group.images.some(image => selectedImages.has(image.composite_hash)) && !isGroupFullySelected(group);
   };
 
   return (
@@ -240,10 +240,10 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
                     {/* 이미지 그리드 */}
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(5, 1fr)' }, gap: 2 }}>
                       {group.images.map((image) => {
-                        const isSelected = selectedImages.has(image.id);
+                        const isSelected = selectedImages.has(image.composite_hash);
                         return (
                           <Box
-                            key={image.id}
+                            key={image.composite_hash}
                             sx={{
                               position: 'relative',
                               cursor: 'pointer',
@@ -257,12 +257,12 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
                                 transform: 'scale(1.02)',
                               },
                             }}
-                            onClick={() => handleToggleImage(image.id)}
+                            onClick={() => handleToggleImage(image.composite_hash)}
                           >
                             {/* 체크박스 */}
                             <Checkbox
                               checked={isSelected}
-                              onChange={() => handleToggleImage(image.id)}
+                              onChange={() => handleToggleImage(image.composite_hash)}
                               sx={{
                                 position: 'absolute',
                                 top: 4,
@@ -280,7 +280,7 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
                             <Box
                               component="img"
                               src={getThumbnailUrl(image)}
-                              alt={image.filename}
+                              alt={image.original_file_path ?? ''}
                               sx={{
                                 width: '100%',
                                 height: 150,
@@ -292,7 +292,7 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
                             {/* 이미지 정보 */}
                             <Box sx={{ p: 1, bgcolor: isSelected ? 'error.light' : 'background.paper' }}>
                               <Typography variant="caption" display="block" noWrap sx={{ color: isSelected ? 'error.contrastText' : 'text.primary' }}>
-                                ID: {image.id}
+                                ID: {image.composite_hash}
                               </Typography>
                               <Typography variant="caption" display="block" noWrap sx={{ color: isSelected ? 'error.contrastText' : 'text.secondary' }}>
                                 {image.width} × {image.height}

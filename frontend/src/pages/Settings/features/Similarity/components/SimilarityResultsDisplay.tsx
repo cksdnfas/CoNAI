@@ -33,7 +33,7 @@ export const SimilarityResultsDisplay: React.FC<SimilarityResultsDisplayProps> =
         <Box
           component="img"
           src={getThumbnailUrl(queryImage)}
-          alt={queryImage.filename}
+          alt={queryImage.original_file_path ?? ''}
           sx={{
             width: '100%',
             maxHeight: 300,
@@ -43,10 +43,10 @@ export const SimilarityResultsDisplay: React.FC<SimilarityResultsDisplayProps> =
         />
         <CardContent>
           <Typography variant="body2">
-            <strong>{t('similarity.test.imageDetails.id')}</strong> {queryImage.id}
+            <strong>{t('similarity.test.imageDetails.id')}</strong> {queryImage.composite_hash}
           </Typography>
           <Typography variant="body2" noWrap>
-            <strong>{t('similarity.test.imageDetails.filename')}</strong> {queryImage.filename}
+            <strong>{t('similarity.test.imageDetails.filename')}</strong> {queryImage.original_file_path ?? ''}
           </Typography>
           <Typography variant="body2">
             <strong>{t('similarity.test.imageDetails.size')}</strong> {queryImage.width} × {queryImage.height}
@@ -67,12 +67,12 @@ export const SimilarityResultsDisplay: React.FC<SimilarityResultsDisplayProps> =
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' }, gap: 2 }}>
             {testResults.slice(0, 12).map((result) => (
-              <Box key={result.image.id}>
+              <Box key={result.image.composite_hash}>
                 <Card variant="outlined">
                   <Box
                     component="img"
                     src={getThumbnailUrl(result.image)}
-                    alt={result.image.filename}
+                    alt={result.image.original_file_path ?? ''}
                     sx={{
                       width: '100%',
                       height: 150,
@@ -81,7 +81,7 @@ export const SimilarityResultsDisplay: React.FC<SimilarityResultsDisplayProps> =
                   />
                   <CardContent sx={{ p: 1 }}>
                     <Typography variant="caption" display="block" noWrap>
-                      ID: {result.image.id}
+                      ID: {result.image.composite_hash}
                     </Typography>
                     <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
                       <Chip
