@@ -29,6 +29,7 @@ import { workflowRoutes } from './routes/workflows';
 import { comfyuiServerRoutes } from './routes/comfyuiServers';
 import naiRoutes from './routes/nai';
 import generationHistoryRoutes from './routes/generation-history.routes';
+import wildcardRoutes from './routes/wildcards';
 import { initializeDatabase } from './database/init';
 import { initializeUserSettingsDb } from './database/userSettingsDb';
 import { initializeApiGenerationDb } from './database/apiGenerationDb';
@@ -138,6 +139,7 @@ app.use('/api/workflows', workflowRoutes);
 app.use('/api/comfyui-servers', comfyuiServerRoutes);
 app.use('/api/nai', naiRoutes);
 app.use('/api/generation-history', generationHistoryRoutes);
+app.use('/api/wildcards', wildcardRoutes);
 
 // Frontend static file serving
 const frontendDistPath = process.env.FRONTEND_DIST_PATH

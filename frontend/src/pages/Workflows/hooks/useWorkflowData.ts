@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { workflowApi, type Workflow } from '../../../services/api/workflowApi';
-import { buildPromptData, initializeFormData } from '../utils/promptBuilder';
+import { buildPromptDataWithWildcards, initializeFormData } from '../utils/promptBuilder';
 
 /**
  * 워크플로우 데이터 관리 Hook
@@ -48,10 +48,10 @@ export function useWorkflowData(workflowId: string | undefined) {
   };
 
   /**
-   * Prompt 데이터 빌드
+   * Prompt 데이터 빌드 (와일드카드 파싱 포함)
    */
-  const getPromptData = () => {
-    return buildPromptData(workflow, formData);
+  const getPromptData = async () => {
+    return await buildPromptDataWithWildcards(workflow, formData);
   };
 
   return {

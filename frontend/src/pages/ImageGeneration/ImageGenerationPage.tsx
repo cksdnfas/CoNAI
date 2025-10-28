@@ -7,12 +7,14 @@ import {
 } from '@mui/material';
 import {
   AutoAwesome as NAIIcon,
-  AccountTree as ComfyUIIcon
+  AccountTree as ComfyUIIcon,
+  Category as WildcardIcon
 } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import NAITab from './NAI/NAITab';
 import ComfyUITab from './ComfyUITab';
+import WildcardTab from './WildcardTab';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -45,6 +47,8 @@ export default function ImageGenerationPage() {
   useEffect(() => {
     if (tabParam === 'comfyui' || tabParam === 'workflows' || tabParam === 'servers') {
       setCurrentTab(1);
+    } else if (tabParam === 'wildcards') {
+      setCurrentTab(2);
     } else {
       setCurrentTab(0);
     }
@@ -54,8 +58,10 @@ export default function ImageGenerationPage() {
     setCurrentTab(newValue);
     if (newValue === 0) {
       setSearchParams({ tab: 'nai' });
-    } else {
+    } else if (newValue === 1) {
       setSearchParams({ tab: 'comfyui' });
+    } else if (newValue === 2) {
+      setSearchParams({ tab: 'wildcards' });
     }
   };
 
@@ -86,6 +92,13 @@ export default function ImageGenerationPage() {
             id="image-generation-tab-1"
             aria-controls="image-generation-tabpanel-1"
           />
+          <Tab
+            icon={<WildcardIcon />}
+            iconPosition="start"
+            label={t('imageGeneration:tabs.wildcards')}
+            id="image-generation-tab-2"
+            aria-controls="image-generation-tabpanel-2"
+          />
         </Tabs>
       </Box>
 
@@ -94,6 +107,9 @@ export default function ImageGenerationPage() {
       </TabPanel>
       <TabPanel value={currentTab} index={1}>
         <ComfyUITab />
+      </TabPanel>
+      <TabPanel value={currentTab} index={2}>
+        <WildcardTab />
       </TabPanel>
     </Box>
   );

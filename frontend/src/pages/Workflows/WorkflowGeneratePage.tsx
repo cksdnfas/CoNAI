@@ -46,6 +46,9 @@ export default function WorkflowGeneratePage() {
     getPromptData
   } = useWorkflowData(id);
 
+  // promptData state 추가 (전송 데이터 미리보기용)
+  const [promptData, setPromptData] = useState<Record<string, any>>({});
+
   // 2. 서버 관리
   const {
     servers,
@@ -119,6 +122,18 @@ export default function WorkflowGeneratePage() {
     loadSavedGroup();
   }, [id]);
 
+  // formData 변경 시 promptData 업데이트
+  useEffect(() => {
+    if (workflow && formData) {
+      getPromptData().then(data => {
+        setPromptData(data);
+      }).catch(err => {
+        console.error('[WorkflowGeneratePage] Failed to build prompt data:', err);
+        setPromptData({});
+      });
+    }
+  }, [workflow, formData]);
+
   // 로딩 상태
   if (loading) {
     return (
@@ -137,7 +152,6 @@ export default function WorkflowGeneratePage() {
     );
   }
 
-  const promptData = getPromptData();
   const connectedServers = getConnectedServers();
 
   return (

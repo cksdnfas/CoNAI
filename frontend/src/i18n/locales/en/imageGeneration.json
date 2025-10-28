@@ -6,6 +6,7 @@
   "tabs": {
     "novelai": "NovelAI",
     "comfyui": "ComfyUI",
+    "wildcards": "Wildcards",
     "ariaLabel": "Image generation tabs"
   },
   "nai": {

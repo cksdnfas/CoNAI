@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wildcard Weight Syntax Test</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      border-bottom: 3px solid #4CAF50;
+      padding-bottom: 10px;
+    }
+    .test-case {
+      margin: 20px 0;
+      padding: 15px;
+      background: #f9f9f9;
+      border-left: 4px solid #2196F3;
+      border-radius: 4px;
+    }
+    .input {
+      color: #666;
+      font-family: 'Courier New', monospace;
+      margin: 5px 0;
+    }
+    .output {
+      color: #2e7d32;
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+      margin: 5px 0;
+    }
+    .label {
+      font-weight: bold;
+      color: #555;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    .warning {
+      color: #ff9800;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎲 Wildcard Dynamic Weight Test</h1>
+
+    <div class="test-case">
+      <div class="label">Test 1: List-based Random Weight</div>
+      <div class="input">Input: masterpiece, (best quality, 1.0, 1.1, 1.2), detailed</div>
+      <div class="output" id="output1">Output: -</div>
+    </div>
+
+    <div class="test-case">
+      <div class="label">Test 2: Range-based Random Weight</div>
+      <div class="input">Input: artwork, (lighting, -1.0~1.0, 0.1), beautiful</div>
+      <div class="output" id="output2">Output: -</div>
+    </div>
+
+    <div class="test-case">
+      <div class="label">Test 3: Wildcard Weight Cleanup</div>
+      <div class="input">Input: (++flower++:1.2), nature</div>
+      <div class="output" id="output3">Output: -</div>
+      <div class="warning">⚠️ Wildcard weights should be removed</div>
+    </div>
+
+    <div class="test-case">
+      <div class="label">Test 4: Invalid Wildcard Removal</div>
+      <div class="input">Input: masterpiece, ++invalid_wildcard++, quality</div>
+      <div class="output" id="output4">Output: -</div>
+      <div class="warning">⚠️ Non-existent wildcards should be removed</div>
+    </div>
+
+    <div class="test-case">
+      <div class="label">Test 5: Combined Test</div>
+      <div class="input">Input: (++flower++:1.2), (quality, 1.0, 1.1, 1.2), (lighting, -0.5~0.5, 0.1), ++invalid++</div>
+      <div class="output" id="output5">Output: -</div>
+    </div>
+
+    <div class="test-case">
+      <div class="label">Test 6: Multiple List Weights</div>
+      <div class="input">Input: (tag1, 0.8, 0.9, 1.0), (tag2, 1.1, 1.2, 1.3), (tag3, 1.0, 1.5, 2.0)</div>
+      <div class="output" id="output6">Output: -</div>
+    </div>
+
+    <div class="test-case">
+      <div class="label">Test 7: Negative to Positive Range</div>
+      <div class="input">Input: (emphasis, -1.5~1.5, 0.5), standard prompt</div>
+      <div class="output" id="output7">Output: -</div>
+    </div>
+
+    <button onclick="runTests()">🚀 Run Tests (Multiple Times)</button>
+
+    <script type="module">
+      // Simulated parser functions (복사한 로직)
+      function parseWeightListSyntax(text) {
+        const pattern = /\(([^,)]+),\s*([\d.,\s-]+)\)/g;
+
+        return text.replace(pattern, (match, tag, weights) => {
+          const weightValues = weights.split(',')
+            .map(w => w.trim())
+            .filter(w => w.length > 0 && !isNaN(parseFloat(w)));
+
+          if (weightValues.length === 0) {
+            return match;
+          }
+
+          const randomWeight = weightValues[Math.floor(Math.random() * weightValues.length)];
+          return `(${tag.trim()}:${randomWeight})`;
+        });
+      }
+
+      function parseWeightRangeSyntax(text) {
+        const pattern = /\(([^,)]+),\s*([-\d.]+)~([-\d.]+),\s*([\d.]+)\)/g;
+
+        return text.replace(pattern, (match, tag, minStr, maxStr, stepStr) => {
+          const min = parseFloat(minStr);
+          const max = parseFloat(maxStr);
+          const step = parseFloat(stepStr);
+
+          if (isNaN(min) || isNaN(max) || isNaN(step) || step <= 0 || min >= max) {
+            console.warn(`Invalid range syntax: ${match}`);
+            return match;
+          }
+
+          const values = [];
+          for (let v = min; v <= max; v = parseFloat((v + step).toFixed(10))) {
+            values.push(parseFloat(v.toFixed(2)));
+          }
+
+          if (values.length === 0) {
+            return match;
+          }
+
+          const randomValue = values[Math.floor(Math.random() * values.length)];
+          return `(${tag.trim()}:${randomValue})`;
+        });
+      }
+
+      function cleanupWildcardWeights(text) {
+        const pattern = /\((\+\+[^+]+\+\+):[\d.]+\)/g;
+        return text.replace(pattern, '$1');
+      }
+
+      function removeInvalidWildcards(text) {
+        const pattern = /\+\+([^+]+)\+\+/g;
+        // Simulate: only 'flower' exists
+        const validWildcards = new Set(['flower']);
+
+        return text.replace(pattern, (match, name) => {
+          if (!validWildcards.has(name)) {
+            console.warn(`Removing invalid wildcard: ${name}`);
+            return '';
+          }
+          return 'rose'; // Simulate replacement
+        });
+      }
+
+      function parseAll(text) {
+        let result = cleanupWildcardWeights(text);
+        result = removeInvalidWildcards(result);
+        result = parseWeightRangeSyntax(result);
+        result = parseWeightListSyntax(result);
+        result = result.replace(/\s+/g, ' ').trim();
+        return result;
+      }
+
+      window.runTests = function() {
+        // Run each test 3 times to show randomness
+        for (let i = 1; i <= 7; i++) {
+          const outputEl = document.getElementById(`output${i}`);
+          const input = outputEl.previousElementSibling.textContent.replace('Input: ', '');
+
+          const results = [];
+          for (let j = 0; j < 3; j++) {
+            results.push(parseAll(input));
+          }
+
+          outputEl.innerHTML = `
+            Run 1: ${results[0]}<br>
+            Run 2: ${results[1]}<br>
+            Run 3: ${results[2]}
+          `;
+        }
+      };
+    </script>
+  </div>
+</body>
+</html>

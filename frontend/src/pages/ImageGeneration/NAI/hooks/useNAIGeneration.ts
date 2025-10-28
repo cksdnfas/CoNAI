@@ -4,6 +4,7 @@ import { naiApi } from '../../../../services/api';
 import api from '../../../../services/api';
 import { RESOLUTIONS } from '../constants/nai.constants';
 import type { NAIParams, NAIUserData, NAIGenerationResponse } from '../types/nai.types';
+import { parseWildcards } from '../../../../utils/wildcardParser';
 
 /**
  * Anlas 비용 계산 함수 (SMEA 비활성화 버전)
@@ -148,8 +149,17 @@ export function useNAIGeneration({ token, onLogout, onGenerationComplete }: UseN
 
     try {
       const resolution = RESOLUTIONS[params.resolution as keyof typeof RESOLUTIONS];
+
+      // 와일드카드 파싱
+      const parsedPrompt = await parseWildcards(params.prompt, 'nai');
+      const parsedNegativePrompt = params.negative_prompt
+        ? await parseWildcards(params.negative_prompt, 'nai')
+        : params.negative_prompt;
+
       const response = await naiApi.generateImage(token, {
         ...params,
+        prompt: parsedPrompt,
+        negative_prompt: parsedNegativePrompt,
         width: resolution.width,
         height: resolution.height,
         model: params.model,

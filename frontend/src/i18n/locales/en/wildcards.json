@@ -1,0 +1,48 @@
+{
+  "page": {
+    "title": "Wildcard Management",
+    "noWildcards": "No wildcards registered",
+    "noWildcardsDesc": "Add new wildcards to automate prompt generation"
+  },
+  "filters": {
+    "all": "All",
+    "both": "Both"
+  },
+  "actions": {
+    "add": "Add Wildcard",
+    "addItem": "Add Item",
+    "preview": "Preview",
+    "confirmDelete": "Are you sure you want to delete the '{{name}}' wildcard?"
+  },
+  "card": {
+    "items": "{{count}} items",
+    "itemsCount": " items",
+    "moreItems": "and {{count}} more"
+  },
+  "dialog": {
+    "createTitle": "Create Wildcard",
+    "editTitle": "Edit Wildcard"
+  },
+  "form": {
+    "name": "Name",
+    "nameHelper": "Enter name without ++ (e.g. flower, color)",
+    "description": "Description (optional)",
+    "comfyuiItems": "ComfyUI Prompt Items",
+    "naiItems": "NovelAI Prompt Items",
+    "itemsHelper": "Each item can contain comma-separated words. You can nest other wildcards using ++name++ format.",
+    "itemPlaceholder": "e.g. rose, red, thorns or wilted, ++flower++"
+  },
+  "preview": {
+    "title": "Wildcard Preview",
+    "inputLabel": "Test Prompt",
+    "inputPlaceholder": "e.g. A garden with blooming ++flower++, ++color++ sky",
+    "generate": "Generate Results",
+    "results": "Parsing Results (5 random samples)",
+    "result": "Result {{number}}"
+  },
+  "errors": {
+    "nameRequired": "Wildcard name is required",
+    "itemsRequired": "At least one item is required",
+    "previewTextRequired": "Please enter a prompt to test"
+  }
+}

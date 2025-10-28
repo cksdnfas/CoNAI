@@ -63,7 +63,7 @@ export function useImageGeneration({
       }));
       setError(null);
 
-      const promptData = getPromptData();
+      const promptData = await getPromptData();
       const response = await workflowApi.generateImageOnServer(
         parseInt(workflowId!),
         serverId,

@@ -6,6 +6,7 @@
   "tabs": {
     "novelai": "NovelAI",
     "comfyui": "ComfyUI",
+    "wildcards": "와일드카드",
     "ariaLabel": "이미지 생성 탭"
   },
   "nai": {

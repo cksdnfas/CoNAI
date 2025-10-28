@@ -1,4 +1,5 @@
 import type { Workflow, MarkedField } from '../../../services/api/workflowApi';
+import { parseObjectWildcards } from '../../../utils/wildcardParser';
 
 /**
  * 워크플로우 JSON과 폼 데이터를 결합하여 최종 prompt 데이터 생성
@@ -46,6 +47,22 @@ export function buildPromptData(
     console.error('Failed to build prompt data:', err);
     return {};
   }
+}
+
+/**
+ * 와일드카드 파싱이 포함된 워크플로우 prompt 데이터 생성 (비동기)
+ * @param workflow 워크플로우 객체
+ * @param formData 폼 입력 데이터
+ * @returns 와일드카드가 파싱된 prompt 데이터
+ */
+export async function buildPromptDataWithWildcards(
+  workflow: Workflow | null,
+  formData: Record<string, any>
+): Promise<Record<string, any>> {
+  const promptData = buildPromptData(workflow, formData);
+
+  // 와일드카드 파싱 (객체 전체를 재귀적으로 파싱)
+  return await parseObjectWildcards(promptData, 'comfyui');
 }
 
 /**
