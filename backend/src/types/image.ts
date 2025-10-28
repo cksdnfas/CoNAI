@@ -1,3 +1,105 @@
+/**
+ * 영구 메타데이터 레코드 (실제 데이터 운용의 중심)
+ * 원본 파일 접근이 필요 없는 모든 작업은 이 타입만 사용
+ *
+ * 사용 케이스:
+ * - 이미지 브라우징 (썸네일은 캐시에 있음)
+ * - 검색/필터 (prompt, model, tags 기반)
+ * - 통계/분석 (모델 사용량, 프롬프트 분석)
+ * - 그룹 관리 (composite_hash 기반)
+ */
+export interface ImageMetadataRecord {
+  // 고유 식별자 (복합 해시: pHash + dHash + aHash)
+  composite_hash: string;
+  perceptual_hash: string;
+  dhash: string;
+  ahash: string;
+  color_histogram: string | null;
+
+  // 이미지 기본 정보
+  width: number | null;
+  height: number | null;
+
+  // 캐시된 경로 (원본 파일 불필요)
+  thumbnail_path: string | null;
+  optimized_path: string | null;
+
+  // AI 생성 메타데이터 (검색/필터/통계의 핵심)
+  ai_tool: string | null;
+  model_name: string | null;
+  lora_models: string | null;
+  steps: number | null;
+  cfg_scale: number | null;
+  sampler: string | null;
+  seed: number | null;
+  scheduler: string | null;
+  prompt: string | null;
+  negative_prompt: string | null;
+  denoise_strength: number | null;
+  generation_time: number | null;
+  batch_size: number | null;
+  batch_index: number | null;
+
+  // 자동 태그
+  auto_tags: string | null;
+
+  // 비디오 메타데이터
+  duration: number | null;
+  fps: number | null;
+  video_codec: string | null;
+  audio_codec: string | null;
+  bitrate: number | null;
+
+  // 평가 시스템
+  rating_score: number;
+
+  // 타임스탬프
+  first_seen_date: string;
+  metadata_updated_date: string;
+}
+
+/**
+ * 파일 위치 레코드 (원본 파일 접근 전용)
+ * 다운로드, 삭제, 폴더 스캔에만 사용
+ *
+ * 사용 케이스:
+ * - 원본 이미지 다운로드
+ * - 파일 삭제
+ * - 폴더 스캔 관리
+ */
+export interface ImageFileRecord {
+  id: number;
+  composite_hash: string;
+  original_file_path: string;
+  folder_id: number;
+  file_status: 'active' | 'missing' | 'deleted';
+  file_size: number;
+  mime_type: string;
+  file_modified_date: string | null;
+  scan_date: string;
+  last_verified_date: string;
+}
+
+/**
+ * 통합 뷰 (원본 파일 경로가 필요한 경우)
+ * 다운로드 API, 파일 관리 등에서 사용
+ */
+export interface ImageWithFileView extends ImageMetadataRecord {
+  // 파일 정보 추가 (LEFT JOIN으로 null 가능)
+  file_id: number | null;
+  original_file_path: string | null;
+  file_status: string | null;
+  folder_id: number | null;
+  folder_name: string | null;
+}
+
+/**
+ * 레거시 타입 (호환성 유지용)
+ * @deprecated 새 코드에서는 ImageMetadataRecord 사용 권장
+ *
+ * 기존 images 테이블 기반 구조
+ * 점진적으로 ImageMetadataRecord로 전환 예정
+ */
 export interface ImageRecord {
   id: number;
   filename: string;

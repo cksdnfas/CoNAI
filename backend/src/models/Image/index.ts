@@ -1,61 +1,109 @@
-import { ImageModel as BaseImageModel } from './ImageModel';
+import { ImageMetadataModel } from './ImageMetadataModel';
+import { ImageFileModel } from './ImageFileModel';
 import { ImageSearchModel } from './ImageSearchModel';
 import { ImageTaggingModel } from './ImageTaggingModel';
 import { ImageStatsModel } from './ImageStatsModel';
-import { ImageRecord, ImageMetadata } from '../../types/image';
+import { ImageMetadataRecord } from '../../types/image';
 import { AutoTagSearchParams, AutoTagStats } from '../../types/autoTag';
 
 /**
- * 통합 이미지 모델 클래스
- * 기존 API 호환성을 유지하면서 책임별로 분리된 모델들을 통합
+ * 통합 이미지 모델 클래스 (Backward Compatibility Layer)
+ *
+ * ⚠️ DEPRECATED: 이 레이어는 레거시 호환성을 위해 유지됩니다.
+ * 신규 코드는 ImageMetadataModel, ImageFileModel, ImageSearchModel을 직접 사용하세요.
+ *
+ * 새 구조로 완전히 전환되었으며, images 테이블을 사용하지 않습니다.
  */
 export class ImageModel {
-  // ==================== 기본 CRUD (ImageModel) ====================
+  // ==================== 기본 CRUD (ImageMetadataModel 기반) ====================
 
-  static create(imageData: Omit<ImageRecord, 'id' | 'upload_date'>): Promise<number> {
-    return BaseImageModel.create(imageData);
+  /**
+   * 이미지 생성 - 새 구조 사용 불가
+   * @deprecated ImageUploadService.saveUploadedImage() 사용 권장
+   */
+  static async create(imageData: any): Promise<number> {
+    throw new Error('ImageModel.create() is deprecated. Use ImageUploadService.saveUploadedImage()');
   }
 
-  static findById(id: number): Promise<ImageRecord | null> {
-    return BaseImageModel.findById(id);
+  /**
+   * ID로 이미지 조회 - composite_hash 사용으로 변경 필요
+   * @deprecated ImageMetadataModel.findByHash() 사용 권장
+   */
+  static async findById(id: number): Promise<any | null> {
+    throw new Error('ImageModel.findById(id) is deprecated. Use ImageMetadataModel.findByHash(compositeHash)');
   }
 
-  static findAll(
-    page?: number,
-    limit?: number,
-    sortBy?: 'upload_date' | 'filename' | 'file_size',
-    sortOrder?: 'ASC' | 'DESC'
-  ): Promise<{ images: ImageRecord[], total: number }> {
-    return BaseImageModel.findAll(page, limit, sortBy, sortOrder);
+  /**
+   * 전체 이미지 목록 조회
+   */
+  static async findAll(
+    page: number = 1,
+    limit: number = 20,
+    sortBy: 'upload_date' | 'filename' | 'file_size' = 'upload_date',
+    sortOrder: 'ASC' | 'DESC' = 'DESC'
+  ): Promise<{ images: any[], total: number }> {
+    // upload_date → first_seen_date 매핑
+    const mappedSortBy = sortBy === 'upload_date' ? 'first_seen_date' : 'first_seen_date';
+
+    const result = await ImageMetadataModel.findAllWithFiles({
+      page,
+      limit,
+      sortBy: mappedSortBy as 'first_seen_date',
+      sortOrder
+    });
+
+    return { images: result.items, total: result.total };
   }
 
-  static findByDateRange(
+  /**
+   * 날짜 범위로 이미지 조회
+   */
+  static async findByDateRange(
     startDate: string,
     endDate: string,
     page?: number,
     limit?: number
-  ): Promise<{ images: ImageRecord[], total: number }> {
-    return BaseImageModel.findByDateRange(startDate, endDate, page, limit);
+  ): Promise<{ images: any[], total: number }> {
+    const result = ImageMetadataModel.findByDateRange(startDate, endDate, page, limit);
+    return { images: result.items, total: result.total };
   }
 
-  static delete(id: number): Promise<boolean> {
-    return BaseImageModel.delete(id);
+  /**
+   * 이미지 삭제 - composite_hash 사용으로 변경 필요
+   * @deprecated ImageMetadataModel.delete(compositeHash) 사용 권장
+   */
+  static async delete(id: number): Promise<boolean> {
+    throw new Error('ImageModel.delete(id) is deprecated. Use ImageMetadataModel.delete(compositeHash)');
   }
 
-  static updateMetadata(id: number, metadata: ImageMetadata): Promise<boolean> {
-    return BaseImageModel.updateMetadata(id, metadata);
+  /**
+   * 메타데이터 업데이트
+   * @deprecated ImageMetadataModel.update() 사용 권장
+   */
+  static async updateMetadata(id: number, metadata: any): Promise<boolean> {
+    throw new Error('ImageModel.updateMetadata(id) is deprecated. Use ImageMetadataModel.update(compositeHash)');
   }
 
-  static updateAutoTags(id: number, autoTags: string | null): Promise<boolean> {
-    return BaseImageModel.updateAutoTags(id, autoTags);
+  /**
+   * 자동 태그 업데이트
+   * @deprecated ImageMetadataModel.update() 사용 권장
+   */
+  static async updateAutoTags(id: number, autoTags: string | null): Promise<boolean> {
+    throw new Error('ImageModel.updateAutoTags(id) is deprecated. Use ImageMetadataModel.update(compositeHash)');
   }
 
-  static getRandomImage(): Promise<ImageRecord | null> {
-    return BaseImageModel.getRandomImage();
+  /**
+   * 랜덤 이미지 조회
+   */
+  static async getRandomImage(): Promise<any | null> {
+    return ImageMetadataModel.getRandomImage();
   }
 
-  static getRandomFromSearch(searchParams: any): Promise<ImageRecord | null> {
-    return BaseImageModel.getRandomFromSearch(searchParams);
+  /**
+   * 검색 조건에 맞는 랜덤 이미지 조회
+   */
+  static async getRandomFromSearch(searchParams: any): Promise<any | null> {
+    return ImageSearchModel.getRandomFromSearch(searchParams);
   }
 
   // ==================== 검색 (ImageSearchModel) ====================
@@ -129,12 +177,13 @@ export class ImageModel {
 
   // ==================== 태깅 (ImageTaggingModel) ====================
 
-  static findUntagged(limit?: number): Promise<ImageRecord[]> {
+  static findUntagged(limit?: number): Promise<any[]> {
     return ImageTaggingModel.findUntagged(limit);
   }
 
   static findAllIds(limit?: number): Promise<number[]> {
-    return ImageTaggingModel.findAllIds(limit);
+    // 레거시 호환성: composite_hash를 반환하지만 타입은 number[]로 유지
+    throw new Error('ImageModel.findAllIds() is deprecated. Use ImageMetadataModel for composite_hash based queries');
   }
 
   static countUntagged(): Promise<number> {

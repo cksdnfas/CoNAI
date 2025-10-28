@@ -10,6 +10,8 @@ import {
  * Complex Filter Service
  * PoE-style advanced filtering with AND/OR/NOT logic
  *
+ * 새 구조: image_metadata + image_files 기반 쿼리
+ *
  * Execution order (priority):
  * 1. Exclude (NOT) group - highest priority
  * 2. OR group - medium priority
@@ -21,6 +23,8 @@ export class ComplexFilterService {
   /**
    * Build complex search query with CTE (Common Table Expression)
    * Uses multi-stage filtering for optimal performance
+   *
+   * 새 구조: image_metadata 테이블 기반, composite_hash로 식별
    */
   static buildComplexQuery(
     filter: ComplexFilter,
@@ -37,19 +41,19 @@ export class ComplexFilterService {
     // Build basic filter conditions (applies to all groups)
     const basicConditions: string[] = [];
     if (basicParams?.ai_tool) {
-      basicConditions.push('i.ai_tool = ?');
+      basicConditions.push('im.ai_tool = ?');
       params.push(basicParams.ai_tool);
     }
     if (basicParams?.model_name) {
-      basicConditions.push('i.model_name LIKE ?');
+      basicConditions.push('im.model_name LIKE ?');
       params.push(`%${basicParams.model_name}%`);
     }
     if (basicParams?.start_date) {
-      basicConditions.push('DATE(i.upload_date) >= DATE(?)');
+      basicConditions.push('DATE(im.first_seen_date) >= DATE(?)');
       params.push(basicParams.start_date);
     }
     if (basicParams?.end_date) {
-      basicConditions.push('DATE(i.upload_date) <= DATE(?)');
+      basicConditions.push('DATE(im.first_seen_date) <= DATE(?)');
       params.push(basicParams.end_date);
     }
 
@@ -62,8 +66,8 @@ export class ComplexFilterService {
       const excludeResult = this.buildGroupQuery(filter.exclude_group, 'OR', params);
       ctes.push(`
         excluded AS (
-          SELECT DISTINCT i.id
-          FROM images i
+          SELECT DISTINCT im.composite_hash
+          FROM image_metadata im
           ${basicWhere}
           ${excludeResult.conditions.length > 0 ? (basicWhere ? 'AND' : 'WHERE') + ' (' + excludeResult.conditions.join(' OR ') + ')' : ''}
         )
@@ -78,8 +82,8 @@ export class ComplexFilterService {
         hasOrGroup = true;
         ctes.push(`
           or_results AS (
-            SELECT DISTINCT i.id
-            FROM images i
+            SELECT DISTINCT im.composite_hash
+            FROM image_metadata im
             ${basicWhere}
             ${(basicWhere ? 'AND' : 'WHERE') + ' (' + orResult.conditions.join(' OR ') + ')'}
           )
@@ -95,8 +99,8 @@ export class ComplexFilterService {
         hasAndGroup = true;
         ctes.push(`
           and_results AS (
-            SELECT DISTINCT i.id
-            FROM images i
+            SELECT DISTINCT im.composite_hash
+            FROM image_metadata im
             ${basicWhere}
             ${(basicWhere ? 'AND' : 'WHERE') + ' (' + andResult.conditions.join(' AND ') + ')'}
           )
@@ -108,13 +112,13 @@ export class ComplexFilterService {
     const finalConditions: string[] = [];
 
     if (hasOrGroup) {
-      finalConditions.push('i.id IN (SELECT id FROM or_results)');
+      finalConditions.push('im.composite_hash IN (SELECT composite_hash FROM or_results)');
     }
     if (hasAndGroup) {
-      finalConditions.push('i.id IN (SELECT id FROM and_results)');
+      finalConditions.push('im.composite_hash IN (SELECT composite_hash FROM and_results)');
     }
     if (filter.exclude_group && filter.exclude_group.length > 0) {
-      finalConditions.push('i.id NOT IN (SELECT id FROM excluded)');
+      finalConditions.push('im.composite_hash NOT IN (SELECT composite_hash FROM excluded)');
     }
 
     // If no groups specified, return all images (with basic filters)
@@ -123,8 +127,8 @@ export class ComplexFilterService {
       : basicWhere;
 
     const query = ctes.length > 0
-      ? `WITH ${ctes.join(', ')} SELECT i.* FROM images i ${finalWhere}`
-      : `SELECT i.* FROM images i ${finalWhere}`;
+      ? `WITH ${ctes.join(', ')} SELECT im.* FROM image_metadata im ${finalWhere}`
+      : `SELECT im.* FROM image_metadata im ${finalWhere}`;
 
     return { query, params };
   }
@@ -169,28 +173,30 @@ export class ComplexFilterService {
 
   /**
    * Build SQL for basic conditions (ai_tool, model_name)
+   * 새 구조: image_metadata 테이블 사용 (im 별칭)
    */
   private static buildBasicConditionSQL(condition: FilterCondition, params: any[]): string | null {
     if (condition.type === 'ai_tool') {
       params.push(condition.value);
-      return 'i.ai_tool = ?';
+      return 'im.ai_tool = ?';
     }
     if (condition.type === 'model_name') {
       params.push(`%${condition.value}%`);
-      return 'i.model_name LIKE ?';
+      return 'im.model_name LIKE ?';
     }
     return null;
   }
 
   /**
    * Build SQL for prompt conditions
+   * 새 구조: image_metadata 테이블 사용 (im 별칭)
    */
   private static buildPromptConditionSQL(
     condition: FilterCondition,
     params: any[],
     isNegative: boolean
   ): string | null {
-    const column = isNegative ? 'i.negative_prompt' : 'i.prompt';
+    const column = isNegative ? 'im.negative_prompt' : 'im.prompt';
 
     if (condition.type === 'prompt_contains' || condition.type === 'negative_prompt_contains') {
       const value = String(condition.value);
@@ -216,13 +222,14 @@ export class ComplexFilterService {
 
   /**
    * Build SQL for auto-tag conditions
+   * 새 구조: image_metadata 테이블 사용 (im 별칭)
    */
   private static buildAutoTagConditionSQL(condition: FilterCondition, params: any[]): string | null {
     // Auto-tag exists
     if (condition.type === 'auto_tag_exists') {
       return condition.value === true
-        ? 'i.auto_tags IS NOT NULL'
-        : 'i.auto_tags IS NULL';
+        ? 'im.auto_tags IS NOT NULL'
+        : 'im.auto_tags IS NULL';
     }
 
     // Has character
@@ -230,16 +237,16 @@ export class ComplexFilterService {
       if (condition.value === true) {
         // 캐릭터 필드가 존재하고, object이며, 빈 객체가 아님
         return `(
-          json_extract(i.auto_tags, '$.character') IS NOT NULL
-          AND json_type(i.auto_tags, '$.character') = 'object'
-          AND json_extract(i.auto_tags, '$.character') != '{}'
+          json_extract(im.auto_tags, '$.character') IS NOT NULL
+          AND json_type(im.auto_tags, '$.character') = 'object'
+          AND json_extract(im.auto_tags, '$.character') != '{}'
         )`;
       } else {
         // 캐릭터 필드가 없거나, object가 아니거나, 빈 객체임
         return `(
-          json_extract(i.auto_tags, '$.character') IS NULL
-          OR json_type(i.auto_tags, '$.character') != 'object'
-          OR json_extract(i.auto_tags, '$.character') = '{}'
+          json_extract(im.auto_tags, '$.character') IS NULL
+          OR json_type(im.auto_tags, '$.character') != 'object'
+          OR json_extract(im.auto_tags, '$.character') = '{}'
         )`;
       }
     }
@@ -251,11 +258,11 @@ export class ComplexFilterService {
 
       if (condition.min_score !== undefined) {
         params.push(condition.min_score);
-        conditions.push(`json_extract(i.auto_tags, '${jsonPath}') >= ?`);
+        conditions.push(`json_extract(im.auto_tags, '${jsonPath}') >= ?`);
       }
       if (condition.max_score !== undefined) {
         params.push(condition.max_score);
-        conditions.push(`json_extract(i.auto_tags, '${jsonPath}') <= ?`);
+        conditions.push(`json_extract(im.auto_tags, '${jsonPath}') <= ?`);
       }
 
       return conditions.length > 0 ? conditions.join(' AND ') : null;
@@ -270,11 +277,11 @@ export class ComplexFilterService {
       if (condition.min_score !== undefined) {
         params.push(condition.min_score);
         // Simplified: use general rating as proxy
-        conditions.push(`json_extract(i.auto_tags, '$.rating.general') * 100 >= ?`);
+        conditions.push(`json_extract(im.auto_tags, '$.rating.general') * 100 >= ?`);
       }
       if (condition.max_score !== undefined) {
         params.push(condition.max_score);
-        conditions.push(`json_extract(i.auto_tags, '$.rating.general') * 100 <= ?`);
+        conditions.push(`json_extract(im.auto_tags, '$.rating.general') * 100 <= ?`);
       }
 
       return conditions.length > 0 ? conditions.join(' AND ') : null;
@@ -288,7 +295,7 @@ export class ComplexFilterService {
       const tagConditions: string[] = [];
       for (const variant of variants) {
         const existsCondition = `EXISTS (
-          SELECT 1 FROM json_each(i.auto_tags, '$.general')
+          SELECT 1 FROM json_each(im.auto_tags, '$.general')
           WHERE LOWER(key) LIKE ?
           ${condition.min_score !== undefined ? ' AND value >= ?' : ''}
           ${condition.max_score !== undefined ? ' AND value <= ?' : ''}
@@ -311,7 +318,7 @@ export class ComplexFilterService {
       const charConditions: string[] = [];
       for (const variant of variants) {
         const existsCondition = `EXISTS (
-          SELECT 1 FROM json_each(i.auto_tags, '$.character')
+          SELECT 1 FROM json_each(im.auto_tags, '$.character')
           WHERE LOWER(key) LIKE ?
           ${condition.min_score !== undefined ? ' AND value >= ?' : ''}
           ${condition.max_score !== undefined ? ' AND value <= ?' : ''}
@@ -329,7 +336,7 @@ export class ComplexFilterService {
     // Model
     if (condition.type === 'auto_tag_model') {
       params.push(condition.value);
-      return `json_extract(i.auto_tags, '$.model') = ?`;
+      return `json_extract(im.auto_tags, '$.model') = ?`;
     }
 
     return null;
@@ -369,6 +376,7 @@ export class ComplexFilterService {
 
   /**
    * Execute complex search query
+   * 새 구조: image_metadata 기반 검색, composite_hash 사용
    */
   static async executeComplexSearch(
     filter: ComplexFilter,
@@ -381,7 +389,7 @@ export class ComplexFilterService {
     pagination?: {
       page: number;
       limit: number;
-      sortBy?: 'upload_date' | 'filename' | 'file_size' | 'width' | 'height';
+      sortBy?: 'upload_date' | 'first_seen_date' | 'filename' | 'file_size' | 'width' | 'height';
       sortOrder?: 'ASC' | 'DESC';
     }
   ): Promise<{ images: any[]; total: number; stats?: FilterExecutionStats }> {
@@ -390,21 +398,26 @@ export class ComplexFilterService {
     // Build query
     const { query: baseQuery, params } = this.buildComplexQuery(filter, basicParams);
 
-    // Count total results
-    const countQuery = baseQuery.replace(/SELECT i\.\*/g, 'SELECT COUNT(DISTINCT i.id) as total');
+    // Count total results (composite_hash 기반)
+    const countQuery = baseQuery.replace(/SELECT im\.\*/g, 'SELECT COUNT(DISTINCT im.composite_hash) as total');
     const countRow = db.prepare(countQuery).get(...params) as any;
     const total = countRow?.total || 0;
 
     // Apply pagination
     const page = pagination?.page || 1;
     const limit = pagination?.limit || 25;
-    const sortBy = pagination?.sortBy || 'upload_date';
+    let sortBy = pagination?.sortBy || 'first_seen_date';
     const sortOrder = pagination?.sortOrder || 'DESC';
     const offset = (page - 1) * limit;
 
+    // 날짜 필드 매핑 (레거시 호환성)
+    if (sortBy === 'upload_date') {
+      sortBy = 'first_seen_date';
+    }
+
     const dataQuery = `
       ${baseQuery}
-      ORDER BY i.${sortBy} ${sortOrder}
+      ORDER BY im.${sortBy} ${sortOrder}
       LIMIT ? OFFSET ?
     `;
 
@@ -518,7 +531,8 @@ export class ComplexFilterService {
   }
 
   /**
-   * Execute complex search and return only image IDs (for random selection)
+   * Execute complex search and return only composite_hash (for random selection)
+   * 새 구조: composite_hash 기반
    */
   static async executeComplexSearchIds(
     filter: ComplexFilter,
@@ -528,15 +542,16 @@ export class ComplexFilterService {
       start_date?: string;
       end_date?: string;
     }
-  ): Promise<number[]> {
+  ): Promise<string[]> {
     // Build query
     const { query: baseQuery, params } = this.buildComplexQuery(filter, basicParams);
 
-    // Modify query to select only IDs
-    const idsQuery = baseQuery.replace(/SELECT i\.\*/g, 'SELECT DISTINCT i.id');
+    // Modify query to select only composite_hash
+    const hashesQuery = baseQuery.replace(/SELECT im\.\*/g, 'SELECT DISTINCT im.composite_hash');
 
     // Execute query
-    const rows = db.prepare(idsQuery).all(...params) as { id: number }[];
-    return rows.map(row => row.id);
+    const rows = db.prepare(hashesQuery).all(...params) as { composite_hash: string }[];
+    return rows.map(row => row.composite_hash);
   }
+
 }

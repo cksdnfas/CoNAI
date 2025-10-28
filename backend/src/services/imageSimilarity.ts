@@ -201,4 +201,175 @@ export class ImageSimilarityService {
       throw new Error('Invalid histogram JSON');
     }
   }
+
+  /**
+   * Difference Hash (dHash) 생성
+   * 9x8 그리드에서 수평 그래디언트 계산
+   * 회전 및 밝기 변화에 강함
+   */
+  static async generateDHash(imagePath: string): Promise<string> {
+    try {
+      // 9x8 크기로 리사이즈 (수평 차이를 위해 가로 1픽셀 더 필요)
+      const { data } = await sharp(imagePath)
+        .resize(9, 8, { fit: 'fill' })
+        .greyscale()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      if (data.length !== 72) {
+        throw new Error(`Unexpected pixel data length: ${data.length}`);
+      }
+
+      // 각 행에서 좌->우 비교하여 비트 생성
+      let hash = '';
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const leftPixel = data[row * 9 + col];
+          const rightPixel = data[row * 9 + col + 1];
+          hash += leftPixel < rightPixel ? '1' : '0';
+        }
+      }
+
+      // 64비트 이진 문자열을 16진수로 변환
+      return this.binaryToHex(hash);
+    } catch (error) {
+      console.error('Failed to generate dHash:', error);
+      throw new Error(`dHash generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Average Hash (aHash) 생성
+   * 8x8 그레이스케일의 평균값 기반
+   * 가장 빠르고 단순한 해시
+   */
+  static async generateAHash(imagePath: string): Promise<string> {
+    try {
+      const { data } = await sharp(imagePath)
+        .resize(8, 8, { fit: 'fill' })
+        .greyscale()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      if (data.length !== 64) {
+        throw new Error(`Unexpected pixel data length: ${data.length}`);
+      }
+
+      // 평균값 계산
+      const average = data.reduce((sum, val) => sum + val, 0) / data.length;
+
+      // 비트 생성
+      let hash = '';
+      for (let i = 0; i < data.length; i++) {
+        hash += data[i] > average ? '1' : '0';
+      }
+
+      // 64비트 이진 문자열을 16진수로 변환
+      return this.binaryToHex(hash);
+    } catch (error) {
+      console.error('Failed to generate aHash:', error);
+      throw new Error(`aHash generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * 복합 해시 생성 (pHash + dHash + aHash)
+   * 이미지의 고유 식별자로 사용
+   */
+  static async generateCompositeHash(imagePath: string): Promise<{
+    compositeHash: string;
+    perceptualHash: string;
+    dHash: string;
+    aHash: string;
+  }> {
+    try {
+      // 병렬로 모든 해시 생성
+      const [perceptualHash, dHash, aHash] = await Promise.all([
+        this.generatePerceptualHash(imagePath),
+        this.generateDHash(imagePath),
+        this.generateAHash(imagePath)
+      ]);
+
+      // 복합 해시: 단순 연결 (48자)
+      const compositeHash = `${perceptualHash}${dHash}${aHash}`;
+
+      return {
+        compositeHash,
+        perceptualHash,
+        dHash,
+        aHash
+      };
+    } catch (error) {
+      console.error('Failed to generate composite hash:', error);
+      throw new Error(`Composite hash generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * 복합 해시 기반 유사도 판별
+   * 3개 해시의 합의로 "같은 이미지" 여부 판정
+   */
+  static isSameImage(
+    hashA: { perceptualHash: string; dHash: string; aHash: string },
+    hashB: { perceptualHash: string; dHash: string; aHash: string },
+    threshold: number = 5
+  ): {
+    isSame: boolean;
+    confidence: number;
+    matchType: 'exact' | 'near-same' | 'similar' | 'different';
+    details: {
+      pHashDistance: number;
+      dHashDistance: number;
+      aHashDistance: number;
+      avgDistance: number;
+      consensus: number;
+    };
+  } {
+    const pDist = this.calculateHammingDistance(hashA.perceptualHash, hashB.perceptualHash);
+    const dDist = this.calculateHammingDistance(hashA.dHash, hashB.dHash);
+    const aDist = this.calculateHammingDistance(hashA.aHash, hashB.aHash);
+
+    // 가중 평균 (pHash 50%, dHash 30%, aHash 20%)
+    const avgDistance = pDist * 0.5 + dDist * 0.3 + aDist * 0.2;
+
+    // 합의 기반 판정 (2개 이상 threshold 이하면 "같은 이미지")
+    const consensus = [
+      pDist <= threshold,
+      dDist <= threshold,
+      aDist <= threshold
+    ].filter(v => v).length;
+
+    // 최종 판정
+    let isSame = false;
+    let matchType: 'exact' | 'near-same' | 'similar' | 'different' = 'different';
+
+    if (pDist === 0 && dDist === 0 && aDist === 0) {
+      // 완전히 동일
+      isSame = true;
+      matchType = 'exact';
+    } else if (consensus >= 2 && avgDistance <= threshold) {
+      // 거의 같은 이미지 (리사이징/재압축)
+      isSame = true;
+      matchType = 'near-same';
+    } else if (avgDistance <= 15) {
+      // 유사한 이미지
+      isSame = false;
+      matchType = 'similar';
+    }
+
+    const confidence = isSame ? Math.max(0, 100 - (avgDistance / 64) * 100) : 0;
+
+    return {
+      isSame,
+      confidence: Math.round(confidence * 100) / 100,
+      matchType,
+      details: {
+        pHashDistance: pDist,
+        dHashDistance: dDist,
+        aHashDistance: aDist,
+        avgDistance: Math.round(avgDistance * 100) / 100,
+        consensus
+      }
+    };
+  }
 }

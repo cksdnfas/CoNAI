@@ -2,6 +2,8 @@ import { GroupModel, ImageGroupModel } from '../models/Group';
 import { ImageModel } from '../models/Image';
 import { GroupRecord, AutoCollectCondition, AutoCollectResult, ComplexFilter, FilterCondition } from '@comfyui-image-manager/shared';
 import { ImageRecord } from '@comfyui-image-manager/shared';
+import { ImageMetadataRecord } from '../types/image';
+import { ImageMetadataModel } from '../models/Image/ImageMetadataModel';
 import { AutoTagSearchService } from './autoTagSearchService';
 import { AutoTagSearchParams } from '../types/autoTag';
 import { ComplexFilterService } from './complexFilterService';
@@ -16,9 +18,12 @@ export class AutoCollectionService {
 
   /**
    * 단일 이미지가 그룹 조건에 맞는지 확인
+   *
+   * @param image - ImageMetadataRecord (새 구조) 또는 ImageRecord (레거시)
+   * @param conditions - 자동 수집 조건 배열
    */
   static async checkImageMatchesConditions(
-    image: ImageRecord,
+    image: ImageMetadataRecord | ImageRecord,
     conditions: AutoCollectCondition[]
   ): Promise<boolean> {
     if (!conditions || conditions.length === 0) {
@@ -37,9 +42,12 @@ export class AutoCollectionService {
   /**
    * 개별 조건 평가
    * Note: async로 변경되어 rating_score 조건도 지원
+   *
+   * @param image - ImageMetadataRecord (새 구조) 또는 ImageRecord (레거시)
+   * @param condition - 평가할 조건
    */
   private static async evaluateCondition(
-    image: ImageRecord,
+    image: ImageMetadataRecord | ImageRecord,
     condition: AutoCollectCondition
   ): Promise<boolean> {
     const { type, value, case_sensitive = false } = condition;
@@ -157,7 +165,7 @@ export class AutoCollectionService {
    * Rating 조건 평가
    */
   private static evaluateRatingCondition(
-    image: ImageRecord,
+    image: ImageMetadataRecord | ImageRecord,
     condition: AutoCollectCondition
   ): boolean {
     if (!image.auto_tags || !condition.rating_type) return false;
@@ -190,7 +198,7 @@ export class AutoCollectionService {
    * General 태그 조건 평가
    */
   private static evaluateGeneralTagCondition(
-    image: ImageRecord,
+    image: ImageMetadataRecord | ImageRecord,
     condition: AutoCollectCondition
   ): boolean {
     if (!image.auto_tags || typeof condition.value !== 'string') return false;
@@ -225,7 +233,7 @@ export class AutoCollectionService {
    * Character 조건 평가
    */
   private static evaluateCharacterCondition(
-    image: ImageRecord,
+    image: ImageMetadataRecord | ImageRecord,
     condition: AutoCollectCondition
   ): boolean {
     if (!image.auto_tags || typeof condition.value !== 'string') return false;
@@ -260,7 +268,7 @@ export class AutoCollectionService {
    * 오토태그의 model 조건 평가
    */
   private static evaluateAutoTagModelCondition(
-    image: ImageRecord,
+    image: ImageMetadataRecord | ImageRecord,
     condition: AutoCollectCondition
   ): boolean {
     if (!image.auto_tags || typeof condition.value !== 'string') return false;
@@ -288,7 +296,7 @@ export class AutoCollectionService {
    * 캐릭터 존재 여부 조건 평가
    */
   private static evaluateHasCharacterCondition(
-    image: ImageRecord,
+    image: ImageMetadataRecord | ImageRecord,
     condition: AutoCollectCondition
   ): boolean {
     if (!image.auto_tags) return false;
@@ -311,7 +319,7 @@ export class AutoCollectionService {
    * Rating Score 조건 평가 (가중치 기반)
    */
   private static async evaluateRatingScoreCondition(
-    image: ImageRecord,
+    image: ImageMetadataRecord | ImageRecord,
     condition: AutoCollectCondition
   ): Promise<boolean> {
     if (!image.auto_tags) return false;
@@ -347,7 +355,7 @@ export class AutoCollectionService {
    * perceptual_hash를 사용하여 Hamming distance 기반 중복 검색
    */
   private static async evaluateDuplicateCondition(
-    image: ImageRecord,
+    image: ImageMetadataRecord | ImageRecord,
     condition: AutoCollectCondition,
     threshold: number
   ): Promise<boolean> {
@@ -360,14 +368,26 @@ export class AutoCollectionService {
       // ImageSimilarityModel을 동적 임포트하여 순환 참조 방지
       const { ImageSimilarityModel } = await import('../models/Image/ImageSimilarityModel');
 
-      // 중복 이미지 검색
-      const duplicates = await ImageSimilarityModel.findDuplicates(image.id, {
-        threshold,
-        includeMetadata: true
-      });
+      // 새 구조: composite_hash 기반 (권장)
+      if ('composite_hash' in image) {
+        // ImageMetadataRecord의 경우 composite_hash 사용
+        const duplicates = await ImageSimilarityModel.findDuplicates(image.composite_hash, {
+          threshold,
+          includeMetadata: true
+        });
 
-      // 중복 이미지가 하나라도 있으면 true
-      return duplicates.length > 0;
+        // 중복 이미지가 하나라도 있으면 true
+        return duplicates.length > 0;
+      } else {
+        // 레거시: ImageRecord의 경우 id 사용 (하위 호환성)
+        const duplicates = await ImageSimilarityModel.findDuplicatesByImageId(image.id, {
+          threshold,
+          includeMetadata: true
+        });
+
+        // 중복 이미지가 하나라도 있으면 true
+        return duplicates.length > 0;
+      }
     } catch (error) {
       console.warn('Failed to evaluate duplicate condition:', error);
       return false;
@@ -416,15 +436,17 @@ export class AutoCollectionService {
       // 기존 자동수집 이미지들만 제거 (수동 추가 이미지는 유지)
       const removedCount = await ImageGroupModel.removeAutoCollectedImages(groupId);
 
-      // 모든 이미지 검사
+      // 모든 이미지 검사 (최적화: ImageMetadataModel 직접 사용)
+      const { ImageMetadataModel } = await import('../models/Image/ImageMetadataModel');
+
       let addedCount = 0;
       let page = 1;
       const limit = 100;
       let hasMore = true;
 
       while (hasMore) {
-        const result = await ImageModel.findAll(page, limit);
-        const images = result.images;
+        const result = await ImageMetadataModel.findAll({ page, limit });
+        const images = result.items; // ImageMetadataRecord[]
 
         if (images.length === 0) {
           hasMore = false;
@@ -434,13 +456,13 @@ export class AutoCollectionService {
         for (const image of images) {
           const matches = await this.checkImageMatchesConditions(image, conditions);
           if (matches) {
-            // 이미 그룹에 속해있는지 확인 (manual/auto 모두 포함)
-            const alreadyInGroup = await ImageGroupModel.isImageInGroup(groupId, image.id);
+            // composite_hash 직접 사용 (변환 레이어 불필요)
+            const alreadyInGroup = await ImageGroupModel.isImageInGroup(groupId, image.composite_hash);
 
             // 이미 그룹에 있으면 스킵 (수동 추가된 이미지 보호)
             if (!alreadyInGroup) {
               try {
-                await ImageGroupModel.addImageToGroup(groupId, image.id, 'auto');
+                await ImageGroupModel.addImageToGroup(groupId, image.composite_hash, 'auto');
                 addedCount++;
               } catch (err) {
                 console.warn('Error adding image to group:', err);
@@ -507,12 +529,17 @@ export class AutoCollectionService {
   /**
    * 새로 업로드된 이미지에 대한 자동수집 실행
    * - ComplexFilter 및 legacy 형식 지원
+   * - 새 구조: composite_hash 기반
+   *
+   * @param compositeHash - 이미지의 composite_hash (새 구조)
+   * @returns 자동 수집 결과 배열
    */
-  static async runAutoCollectionForNewImage(imageId: number): Promise<AutoCollectResult[]> {
+  static async runAutoCollectionForNewImage(compositeHash: string): Promise<AutoCollectResult[]> {
     try {
-      const image = await ImageModel.findById(imageId);
+      // image_metadata에서 메타데이터 조회
+      const image = ImageMetadataModel.findByHash(compositeHash);
       if (!image) {
-        throw new Error('Image not found');
+        throw new Error(`Image metadata not found for hash: ${compositeHash.substring(0, 16)}...`);
       }
 
       const groups = await GroupModel.findAutoCollectEnabled();
@@ -537,8 +564,12 @@ export class AutoCollectionService {
               { page: 1, limit: 1 }
             );
 
-            // 검색 결과에 현재 이미지가 포함되어 있는지 확인
-            matches = searchResult.images.some((img: any) => img.id === imageId);
+            // 검색 결과에 현재 이미지가 포함되어 있는지 확인 (composite_hash로)
+            matches = searchResult.images.some((img: any) =>
+              img.composite_hash === compositeHash ||
+              // 레거시 호환: image_files.id로도 체크
+              (img.id && searchResult.images.some((i: any) => i.composite_hash === compositeHash))
+            );
           } else {
             // Legacy 형식 (AutoCollectCondition[])
             const conditions: AutoCollectCondition[] = parsedConditions;
@@ -546,10 +577,10 @@ export class AutoCollectionService {
           }
 
           if (matches) {
-            // 이미 그룹에 속해있는지 확인
-            const alreadyInGroup = await ImageGroupModel.isImageInGroup(group.id, imageId);
+            // 이미 그룹에 속해있는지 확인 (composite_hash 기반)
+            const alreadyInGroup = await ImageGroupModel.isImageInGroup(group.id, compositeHash);
             if (!alreadyInGroup) {
-              await ImageGroupModel.addImageToGroup(group.id, imageId, 'auto');
+              await ImageGroupModel.addImageToGroup(group.id, compositeHash, 'auto');
               results.push({
                 group_id: group.id,
                 group_name: group.name,
@@ -567,6 +598,38 @@ export class AutoCollectionService {
       return results;
     } catch (error) {
       console.error('Auto collection for new image failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 레거시 호환: imageId로 자동수집 실행
+   * @deprecated 새 코드에서는 composite_hash 버전 사용 권장
+   */
+  static async runAutoCollectionForNewImageById(imageId: number): Promise<AutoCollectResult[]> {
+    try {
+      const image = await ImageModel.findById(imageId);
+      if (!image) {
+        throw new Error('Image not found');
+      }
+
+      // image_files를 통해 composite_hash 조회
+      const { db } = await import('../database/init');
+      const file = db.prepare(`
+        SELECT if.composite_hash
+        FROM image_files if
+        JOIN images i ON if.original_file_path LIKE '%' || i.file_path
+        WHERE i.id = ?
+        LIMIT 1
+      `).get(imageId) as { composite_hash: string } | undefined;
+
+      if (!file) {
+        throw new Error(`Could not find composite_hash for image ID ${imageId}`);
+      }
+
+      return await this.runAutoCollectionForNewImage(file.composite_hash);
+    } catch (error) {
+      console.error('Auto collection for new image (by ID) failed:', error);
       throw error;
     }
   }

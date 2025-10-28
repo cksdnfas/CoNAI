@@ -2,7 +2,13 @@ import { db } from '../../database/init';
 import { AutoTagStats } from '../../types/autoTag';
 
 /**
- * 통계 관련 작업을 담당하는 이미지 모델
+ * 통계 관련 작업을 담당하는 이미지 모델 (새 구조 기반)
+ *
+ * ✅ 새 구조 전환 완료: image_metadata 기반
+ *
+ * 변경사항:
+ * - images 테이블 → image_metadata 테이블
+ * - 모든 기존 통계 기능 유지
  */
 export class ImageStatsModel {
   /**
@@ -15,7 +21,7 @@ export class ImageStatsModel {
         COUNT(*) as total_images,
         SUM(CASE WHEN auto_tags IS NOT NULL THEN 1 ELSE 0 END) as tagged_images,
         SUM(CASE WHEN auto_tags IS NULL THEN 1 ELSE 0 END) as untagged_images
-      FROM images
+      FROM image_metadata
     `;
     const statsRow = db.prepare(statsQuery).get() as any;
 
@@ -42,7 +48,7 @@ export class ImageStatsModel {
             AND json_extract(auto_tags, '$.rating.explicit') > json_extract(auto_tags, '$.rating.sensitive')
             AND json_extract(auto_tags, '$.rating.explicit') > json_extract(auto_tags, '$.rating.questionable')
           THEN 1 ELSE 0 END) as explicit
-      FROM images
+      FROM image_metadata
       WHERE auto_tags IS NOT NULL
     `;
     const ratingRow = db.prepare(ratingQuery).get() as any;
@@ -50,7 +56,7 @@ export class ImageStatsModel {
     // 3. Character 개수 조회
     const characterQuery = `
       SELECT COUNT(*) as character_count
-      FROM images
+      FROM image_metadata
       WHERE auto_tags IS NOT NULL
         AND json_extract(auto_tags, '$.character') IS NOT NULL
         AND json_type(auto_tags, '$.character') = 'object'
@@ -62,7 +68,7 @@ export class ImageStatsModel {
       SELECT
         json_extract(auto_tags, '$.model') as model,
         COUNT(*) as count
-      FROM images
+      FROM image_metadata
       WHERE auto_tags IS NOT NULL
         AND json_extract(auto_tags, '$.model') IS NOT NULL
       GROUP BY model

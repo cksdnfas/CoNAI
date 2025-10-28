@@ -4,7 +4,9 @@ import { uploadSingle, uploadMultiple } from '../../middleware/upload';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { ImageProcessor } from '../../services/imageProcessor';
 import { VideoProcessor } from '../../services/videoProcessor';
-import { ImageModel } from '../../models/Image';
+import { ImageUploadService } from '../../services/imageUploadService';
+import { ImageFileModel } from '../../models/Image/ImageFileModel';
+import { ImageMetadataModel } from '../../models/Image/ImageMetadataModel';
 import { PromptCollectionService } from '../../services/promptCollectionService';
 import { AutoCollectionService } from '../../services/autoCollectionService';
 import { imageTaggerService, ImageTaggerService } from '../../services/imageTaggerService';
@@ -14,6 +16,9 @@ import { refinePrimaryPrompt } from '@comfyui-image-manager/shared';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
+
+// 기본 업로드 폴더 ID (watched_folders 테이블에서 조회)
+const DEFAULT_UPLOAD_FOLDER_ID = 1;
 
 /**
  * 파일이 동영상인지 확인
@@ -33,9 +38,7 @@ function isImageFile(mimeType: string): boolean {
  * 단일 이미지 업로드
  */
 router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
-  // fields() 사용 시 req.files 객체로 전달됨
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-
   const file = files?.['image']?.[0] || files?.['file']?.[0];
 
   console.log('📤 Upload request received:', {
@@ -46,7 +49,6 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
     } : 'No file'
   });
 
-  // 응답 타임아웃 설정 (30초)
   req.setTimeout(30000, () => {
     console.error('❌ Upload request timeout');
     if (!res.headersSent) {
@@ -66,7 +68,7 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
   }
 
   try {
-    let imageId: number;
+    let compositeHash: string;
     let processedData: {
       filename: string;
       originalPath: string;
@@ -84,60 +86,57 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
       const processedVideo = await VideoProcessor.processVideo(file, UPLOAD_BASE_PATH);
       console.log('✅ Video processed successfully');
 
-      console.log('💾 Saving to database...');
-      // 동영상 메타데이터 저장
-      imageId = await ImageModel.create({
-        filename: processedVideo.filename,
-        original_name: file.originalname,
-        file_path: processedVideo.originalPath,
-        thumbnail_path: processedVideo.thumbnailPath,
-        optimized_path: processedVideo.optimizedPath,
-        file_size: processedVideo.fileSize,
-        mime_type: file.mimetype,
-        width: processedVideo.width,
-        height: processedVideo.height,
-        metadata: JSON.stringify(processedVideo.metadata),
+      console.log('💾 Saving to database (new structure)...');
+      const fullVideoPath = path.join(UPLOAD_BASE_PATH, processedVideo.originalPath);
 
-        // 동영상 메타데이터 필드들
-        duration: processedVideo.metadata.duration,
-        fps: processedVideo.metadata.fps,
-        video_codec: processedVideo.metadata.video_codec,
-        audio_codec: processedVideo.metadata.audio_codec,
-        bitrate: processedVideo.metadata.bitrate,
+      // 새 구조로 저장
+      compositeHash = await ImageUploadService.saveUploadedImage(
+        fullVideoPath,
+        {
+          width: processedVideo.width,
+          height: processedVideo.height,
+          thumbnailPath: processedVideo.thumbnailPath,
+          optimizedPath: processedVideo.optimizedPath,
+          fileSize: processedVideo.fileSize,
+          mimeType: file.mimetype,
 
-        // AI 메타데이터 필드들 (동영상은 null)
-        ai_tool: null,
-        model_name: null,
-        lora_models: null,
-        steps: null,
-        cfg_scale: null,
-        sampler: null,
-        seed: null,
-        scheduler: null,
-        prompt: null,
-        negative_prompt: null,
-        denoise_strength: null,
-        generation_time: null,
-        batch_size: null,
-        batch_index: null,
-        auto_tags: null,
+          // 동영상 메타데이터
+          duration: processedVideo.metadata.duration,
+          fps: processedVideo.metadata.fps,
+          videoCodec: processedVideo.metadata.video_codec,
+          audioCodec: processedVideo.metadata.audio_codec,
+          bitrate: processedVideo.metadata.bitrate,
 
-        // 유사도 검색 필드들 (동영상은 null)
-        perceptual_hash: null,
-        color_histogram: null
-      });
+          // AI 메타데이터 (동영상은 null)
+          aiTool: null,
+          modelName: null,
+          loraModels: null,
+          steps: null,
+          cfgScale: null,
+          sampler: null,
+          seed: null,
+          scheduler: null,
+          prompt: null,
+          negativePrompt: null,
+          denoiseStrength: null,
+          generationTime: null,
+          batchSize: null,
+          batchIndex: null,
+          autoTags: null
+        },
+        DEFAULT_UPLOAD_FOLDER_ID
+      );
 
       processedData = processedVideo;
-      console.log('✅ Video database save successful, ID:', imageId);
+      console.log('✅ Video database save successful, composite_hash:', compositeHash.substring(0, 16) + '...');
     } else if (isImageFile(file.mimetype)) {
       console.log('🔄 Processing image...');
       const processedImage = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
       console.log('✅ Image processed successfully');
 
-      // 메타데이터에서 구조화된 필드 추출
       const aiInfo = processedImage.metadata.ai_info || {};
 
-      // STEP 1: 프롬프트 정제 (DB 저장 전)
+      // 프롬프트 정제
       let refinedPrompt = aiInfo.prompt || null;
       let refinedNegativePrompt = aiInfo.negative_prompt || null;
 
@@ -149,69 +148,51 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
         refinedNegativePrompt = refinePrimaryPrompt(refinedNegativePrompt);
       }
 
-      console.log('💾 Saving to database...');
-      // 데이터베이스에 저장 (정제된 프롬프트 사용)
-      imageId = await ImageModel.create({
-        filename: processedImage.filename,
-        original_name: file.originalname,
-        file_path: processedImage.originalPath,
-        thumbnail_path: processedImage.thumbnailPath,
-        optimized_path: processedImage.optimizedPath,
-        file_size: processedImage.fileSize,
-        mime_type: file.mimetype,
-        width: processedImage.width,
-        height: processedImage.height,
-        metadata: JSON.stringify(processedImage.metadata),
+      console.log('💾 Saving to database (new structure)...');
+      const fullImagePath = path.join(UPLOAD_BASE_PATH, processedImage.originalPath);
 
-        // AI 메타데이터 필드들 (정제된 프롬프트 사용)
-        ai_tool: aiInfo.ai_tool || null,
-        model_name: aiInfo.model || null,
-        lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
-        steps: aiInfo.steps || null,
-        cfg_scale: aiInfo.cfg_scale || null,
-        sampler: aiInfo.sampler || null,
-        seed: aiInfo.seed || null,
-        scheduler: aiInfo.scheduler || null,
-        prompt: refinedPrompt,
-        negative_prompt: refinedNegativePrompt,
-        denoise_strength: aiInfo.denoise_strength || null,
-        generation_time: aiInfo.generation_time || null,
-        batch_size: aiInfo.batch_size || null,
-        batch_index: aiInfo.batch_index || null,
-        auto_tags: null,  // 업로드 시에는 null, 별도 태깅 요청으로 추가
+      // 새 구조로 저장
+      compositeHash = await ImageUploadService.saveUploadedImage(
+        fullImagePath,
+        {
+          width: processedImage.width,
+          height: processedImage.height,
+          thumbnailPath: processedImage.thumbnailPath,
+          optimizedPath: processedImage.optimizedPath,
+          fileSize: processedImage.fileSize,
+          mimeType: file.mimetype,
 
-        // 동영상 메타데이터 필드들 (이미지는 null)
-        duration: null,
-        fps: null,
-        video_codec: null,
-        audio_codec: null,
-        bitrate: null,
+          // AI 메타데이터
+          aiTool: aiInfo.ai_tool || null,
+          modelName: aiInfo.model || null,
+          loraModels: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
+          steps: aiInfo.steps || null,
+          cfgScale: aiInfo.cfg_scale || null,
+          sampler: aiInfo.sampler || null,
+          seed: aiInfo.seed || null,
+          scheduler: aiInfo.scheduler || null,
+          prompt: refinedPrompt,
+          negativePrompt: refinedNegativePrompt,
+          denoiseStrength: aiInfo.denoise_strength || null,
+          generationTime: aiInfo.generation_time || null,
+          batchSize: aiInfo.batch_size || null,
+          batchIndex: aiInfo.batch_index || null,
+          autoTags: null,
 
-        // 유사도 검색 필드들
-        perceptual_hash: processedImage.perceptualHash || null,
-        color_histogram: processedImage.colorHistogram || null
-      });
+          // 동영상 메타데이터 (이미지는 null)
+          duration: null,
+          fps: null,
+          videoCodec: null,
+          audioCodec: null,
+          bitrate: null
+        },
+        DEFAULT_UPLOAD_FOLDER_ID
+      );
 
       processedData = processedImage;
-      console.log('✅ Image database save successful, ID:', imageId);
-      console.log('💾 [Upload] Database save with hash data:', {
-        imageId: imageId,
-        has_perceptual_hash: !!processedImage.perceptualHash,
-        has_color_histogram: !!processedImage.colorHistogram,
-        perceptual_hash: processedImage.perceptualHash ? `${processedImage.perceptualHash.substring(0, 16)}... (${processedImage.perceptualHash.length} chars)` : 'NULL',
-        color_histogram: processedImage.colorHistogram ? `${processedImage.colorHistogram.length} bytes` : 'NULL'
-      });
+      console.log('✅ Image database save successful, composite_hash:', compositeHash.substring(0, 16) + '...');
 
-      // 검증: 데이터베이스에 실제로 저장되었는지 확인
-      if (!processedImage.perceptualHash || !processedImage.colorHistogram) {
-        console.error('⚠️ [Upload] WARNING: Hash data is NULL - will be saved as NULL in database!', {
-          perceptualHash: processedImage.perceptualHash || 'NULL',
-          colorHistogram: processedImage.colorHistogram ? `${processedImage.colorHistogram.length} bytes` : 'NULL'
-        });
-      }
-
-      // STEP 3: 프롬프트 수집 (정제된 프롬프트 사용)
-      // 비동기로 처리, 오류가 있어도 업로드는 계속 진행
+      // 프롬프트 수집
       try {
         console.log('🔍 Collecting prompts...');
         await PromptCollectionService.collectFromImage(
@@ -222,15 +203,11 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
       } catch (promptError) {
         console.warn('⚠️ Failed to collect prompts (non-critical):', promptError);
       }
-
-      // 이미지인 경우에만 프롬프트 수집 실행
-      // (프롬프트 수집은 이미지 전용)
-      processedData = processedImage;
     } else {
       throw new Error(`Unsupported file type: ${file.mimetype}`);
     }
 
-    // 자동 태깅 (설정에서 활성화된 경우) - 이미지/동영상 모두 적용, 자동수집보다 먼저 실행
+    // 자동 태깅 (설정에서 활성화된 경우)
     try {
       const { settingsService } = await import('../../services/settingsService');
       const settings = settingsService.loadSettings();
@@ -250,7 +227,7 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
 
         if (taggerResult.success) {
           const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-          await ImageModel.updateAutoTags(imageId, autoTagsJson);
+          ImageMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
           console.log('✅ Auto-tagging completed successfully');
         } else {
           console.warn('⚠️ Auto-tagging failed (non-critical):', taggerResult.error);
@@ -260,10 +237,10 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
       console.warn('⚠️ Failed to auto-tag file (non-critical):', autoTagError);
     }
 
-    // 자동수집 그룹 처리 (이미지/동영상 모두 적용, 자동 태깅 이후 실행하여 auto_tags 조건도 체크 가능)
+    // 자동수집 그룹 처리
     try {
       console.log('🔍 Running auto collection for new file...');
-      const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(imageId);
+      const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(compositeHash);
       if (autoCollectResults.length > 0) {
         console.log(`✅ File automatically added to ${autoCollectResults.length} groups`);
       }
@@ -271,10 +248,14 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
       console.warn('⚠️ Failed to run auto collection (non-critical):', autoCollectError);
     }
 
+    // image_files에서 ID 조회 (응답용 - 레거시 호환성)
+    const fileRecords = ImageFileModel.findActiveByHash(compositeHash);
+    const fileId = fileRecords.length > 0 ? fileRecords[0].id : 0;
+
     const response: UploadResponse = {
       success: true,
       data: {
-        id: imageId,
+        id: fileId, // file_id 반환 (레거시 호환)
         filename: processedData.filename,
         original_name: file.originalname,
         thumbnail_url: toUploadsUrl(processedData.thumbnailPath)!,
@@ -308,7 +289,6 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
  * 다중 이미지 업로드
  */
 router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request, res: Response) => {
-  // fields() 사용 시 req.files 객체로 전달됨
   const filesObj = req.files as { [fieldname: string]: Express.Multer.File[] };
   const files = filesObj?.['images'] || filesObj?.['files'] || [];
 
@@ -325,7 +305,7 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
 
     for (const file of files) {
       try {
-        let imageId: number;
+        let compositeHash: string;
         let processedData: {
           filename: string;
           originalPath: string;
@@ -339,60 +319,47 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
 
         // 파일 타입에 따라 분기 처리
         if (isVideoFile(file.mimetype)) {
-          // 동영상 처리
           const processedVideo = await VideoProcessor.processVideo(file, UPLOAD_BASE_PATH);
+          const fullVideoPath = path.join(UPLOAD_BASE_PATH, processedVideo.originalPath);
 
-          // 동영상 메타데이터 저장
-          imageId = await ImageModel.create({
-            filename: processedVideo.filename,
-            original_name: file.originalname,
-            file_path: processedVideo.originalPath,
-            thumbnail_path: processedVideo.thumbnailPath,
-            optimized_path: processedVideo.optimizedPath,
-            file_size: processedVideo.fileSize,
-            mime_type: file.mimetype,
-            width: processedVideo.width,
-            height: processedVideo.height,
-            metadata: JSON.stringify(processedVideo.metadata),
-
-            // 동영상 메타데이터 필드들
-            duration: processedVideo.metadata.duration,
-            fps: processedVideo.metadata.fps,
-            video_codec: processedVideo.metadata.video_codec,
-            audio_codec: processedVideo.metadata.audio_codec,
-            bitrate: processedVideo.metadata.bitrate,
-
-            // AI 메타데이터 필드들 (동영상은 null)
-            ai_tool: null,
-            model_name: null,
-            lora_models: null,
-            steps: null,
-            cfg_scale: null,
-            sampler: null,
-            seed: null,
-            scheduler: null,
-            prompt: null,
-            negative_prompt: null,
-            denoise_strength: null,
-            generation_time: null,
-            batch_size: null,
-            batch_index: null,
-            auto_tags: null,
-
-            // 유사도 검색 필드들 (동영상은 null)
-            perceptual_hash: null,
-            color_histogram: null
-          });
+          compositeHash = await ImageUploadService.saveUploadedImage(
+            fullVideoPath,
+            {
+              width: processedVideo.width,
+              height: processedVideo.height,
+              thumbnailPath: processedVideo.thumbnailPath,
+              optimizedPath: processedVideo.optimizedPath,
+              fileSize: processedVideo.fileSize,
+              mimeType: file.mimetype,
+              duration: processedVideo.metadata.duration,
+              fps: processedVideo.metadata.fps,
+              videoCodec: processedVideo.metadata.video_codec,
+              audioCodec: processedVideo.metadata.audio_codec,
+              bitrate: processedVideo.metadata.bitrate,
+              aiTool: null,
+              modelName: null,
+              loraModels: null,
+              steps: null,
+              cfgScale: null,
+              sampler: null,
+              seed: null,
+              scheduler: null,
+              prompt: null,
+              negativePrompt: null,
+              denoiseStrength: null,
+              generationTime: null,
+              batchSize: null,
+              batchIndex: null,
+              autoTags: null
+            },
+            DEFAULT_UPLOAD_FOLDER_ID
+          );
 
           processedData = processedVideo;
         } else if (isImageFile(file.mimetype)) {
-          // 이미지 처리
           const processedImage = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
-
-          // 메타데이터에서 구조화된 필드 추출
           const aiInfo = processedImage.metadata.ai_info || {};
 
-          // STEP 1: 프롬프트 정제 (DB 저장 전)
           let refinedPrompt = aiInfo.prompt || null;
           let refinedNegativePrompt = aiInfo.negative_prompt || null;
 
@@ -404,54 +371,44 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
             refinedNegativePrompt = refinePrimaryPrompt(refinedNegativePrompt);
           }
 
-          // 데이터베이스에 저장 (정제된 프롬프트 사용)
-          imageId = await ImageModel.create({
-            filename: processedImage.filename,
-            original_name: file.originalname,
-            file_path: processedImage.originalPath,
-            thumbnail_path: processedImage.thumbnailPath,
-            optimized_path: processedImage.optimizedPath,
-            file_size: processedImage.fileSize,
-            mime_type: file.mimetype,
-            width: processedImage.width,
-            height: processedImage.height,
-            metadata: JSON.stringify(processedImage.metadata),
+          const fullImagePath = path.join(UPLOAD_BASE_PATH, processedImage.originalPath);
 
-            // AI 메타데이터 필드들 (정제된 프롬프트 사용)
-            ai_tool: aiInfo.ai_tool || null,
-            model_name: aiInfo.model || null,
-            lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
-            steps: aiInfo.steps || null,
-            cfg_scale: aiInfo.cfg_scale || null,
-            sampler: aiInfo.sampler || null,
-            seed: aiInfo.seed || null,
-            scheduler: aiInfo.scheduler || null,
-            prompt: refinedPrompt,
-            negative_prompt: refinedNegativePrompt,
-            denoise_strength: aiInfo.denoise_strength || null,
-            generation_time: aiInfo.generation_time || null,
-            batch_size: aiInfo.batch_size || null,
-            batch_index: aiInfo.batch_index || null,
-            auto_tags: null,  // 업로드 시에는 null, 별도 태깅 요청으로 추가
+          compositeHash = await ImageUploadService.saveUploadedImage(
+            fullImagePath,
+            {
+              width: processedImage.width,
+              height: processedImage.height,
+              thumbnailPath: processedImage.thumbnailPath,
+              optimizedPath: processedImage.optimizedPath,
+              fileSize: processedImage.fileSize,
+              mimeType: file.mimetype,
+              aiTool: aiInfo.ai_tool || null,
+              modelName: aiInfo.model || null,
+              loraModels: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
+              steps: aiInfo.steps || null,
+              cfgScale: aiInfo.cfg_scale || null,
+              sampler: aiInfo.sampler || null,
+              seed: aiInfo.seed || null,
+              scheduler: aiInfo.scheduler || null,
+              prompt: refinedPrompt,
+              negativePrompt: refinedNegativePrompt,
+              denoiseStrength: aiInfo.denoise_strength || null,
+              generationTime: aiInfo.generation_time || null,
+              batchSize: aiInfo.batch_size || null,
+              batchIndex: aiInfo.batch_index || null,
+              autoTags: null,
+              duration: null,
+              fps: null,
+              videoCodec: null,
+              audioCodec: null,
+              bitrate: null
+            },
+            DEFAULT_UPLOAD_FOLDER_ID
+          );
 
-            // 동영상 메타데이터 필드들 (이미지는 null)
-            duration: null,
-            fps: null,
-            video_codec: null,
-            audio_codec: null,
-            bitrate: null,
+          console.log('🔍 [Upload Multiple] Saved with composite_hash:', compositeHash.substring(0, 16) + '...');
 
-            // 유사도 검색 필드들
-            perceptual_hash: processedImage.perceptualHash || null,
-            color_histogram: processedImage.colorHistogram || null
-          });
-
-          console.log('🔍 [Upload Multiple] Hash data for', file.originalname, ':', {
-            has_perceptual_hash: !!processedImage.perceptualHash,
-            has_color_histogram: !!processedImage.colorHistogram
-          });
-
-          // STEP 3: 프롬프트 수집 (정제된 프롬프트 사용)
+          // 프롬프트 수집
           try {
             await PromptCollectionService.collectFromImage(
               refinedPrompt,
@@ -461,13 +418,12 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
             console.warn('⚠️ Failed to collect prompts for', file.originalname, '(non-critical):', promptError);
           }
 
-          // 이미지인 경우에만 프롬프트 수집 실행
           processedData = processedImage;
         } else {
           throw new Error(`Unsupported file type: ${file.mimetype}`);
         }
 
-        // 자동 태깅 (설정에서 활성화된 경우) - 이미지/동영상 모두 적용, 자동수집보다 먼저 실행
+        // 자동 태깅
         try {
           const { settingsService } = await import('../../services/settingsService');
           const settings = settingsService.loadSettings();
@@ -484,16 +440,16 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
 
             if (taggerResult.success) {
               const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-              await ImageModel.updateAutoTags(imageId, autoTagsJson);
+              ImageMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
             }
           }
         } catch (autoTagError) {
           console.warn('⚠️ Failed to auto-tag', file.originalname, '(non-critical):', autoTagError);
         }
 
-        // 자동수집 그룹 처리 (이미지/동영상 모두 적용, 자동 태깅 이후 실행)
+        // 자동수집 그룹 처리
         try {
-          const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(imageId);
+          const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(compositeHash);
           if (autoCollectResults.length > 0) {
             console.log(`✅ ${file.originalname} automatically added to ${autoCollectResults.length} groups`);
           }
@@ -501,8 +457,12 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
           console.warn('⚠️ Failed to run auto collection for', file.originalname, '(non-critical):', autoCollectError);
         }
 
+        // image_files에서 ID 조회
+        const fileRecords = ImageFileModel.findActiveByHash(compositeHash);
+        const fileId = fileRecords.length > 0 ? fileRecords[0].id : 0;
+
         results.push({
-          id: imageId,
+          id: fileId,
           filename: processedData.filename,
           original_name: file.originalname,
           thumbnail_url: toUploadsUrl(processedData.thumbnailPath)!,
@@ -544,7 +504,6 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
 
 /**
  * 다중 이미지 업로드 (Server-Sent Events 스트리밍)
- * 실시간 진행도를 클라이언트에 전송
  */
 router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res: Response) => {
   const filesObj = req.files as { [fieldname: string]: Express.Multer.File[] };
@@ -561,14 +520,13 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // Nginx 버퍼링 비활성화
+  res.setHeader('X-Accel-Buffering', 'no');
 
-  // 진행도 이벤트 전송 헬퍼 함수
   const sendProgress = (event: UploadProgressEvent) => {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
 
-  // 설정 미리 로드 (자동 태깅 여부 확인)
+  // 설정 미리 로드
   let autoTagEnabled = false;
   try {
     const { settingsService } = await import('../../services/settingsService');
@@ -584,7 +542,6 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
     const currentFile = i + 1;
 
     try {
-      // 1. 시작 이벤트
       sendProgress({
         type: 'start',
         currentFile,
@@ -594,15 +551,13 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
         timestamp: new Date().toISOString()
       });
 
-      let imageId: number;
+      let compositeHash: string;
       let processedData: {
         originalPath: string;
         [key: string]: any;
       } | undefined;
 
-      // 파일 타입에 따라 분기 처리
       if (isVideoFile(file.mimetype)) {
-        // 동영상 처리
         sendProgress({
           type: 'stage',
           currentFile,
@@ -614,6 +569,41 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
         });
 
         const processedVideo = await VideoProcessor.processVideo(file, UPLOAD_BASE_PATH);
+        const fullVideoPath = path.join(UPLOAD_BASE_PATH, processedVideo.originalPath);
+
+        compositeHash = await ImageUploadService.saveUploadedImage(
+          fullVideoPath,
+          {
+            width: processedVideo.width,
+            height: processedVideo.height,
+            thumbnailPath: processedVideo.thumbnailPath,
+            optimizedPath: processedVideo.optimizedPath,
+            fileSize: processedVideo.fileSize,
+            mimeType: file.mimetype,
+            duration: processedVideo.metadata.duration,
+            fps: processedVideo.metadata.fps,
+            videoCodec: processedVideo.metadata.video_codec,
+            audioCodec: processedVideo.metadata.audio_codec,
+            bitrate: processedVideo.metadata.bitrate,
+            aiTool: null,
+            modelName: null,
+            loraModels: null,
+            steps: null,
+            cfgScale: null,
+            sampler: null,
+            seed: null,
+            scheduler: null,
+            prompt: null,
+            negativePrompt: null,
+            denoiseStrength: null,
+            generationTime: null,
+            batchSize: null,
+            batchIndex: null,
+            autoTags: null
+          },
+          DEFAULT_UPLOAD_FOLDER_ID
+        );
+
         processedData = processedVideo;
 
         sendProgress({
@@ -625,50 +615,7 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
           message: '애니메이션 썸네일 생성 완료',
           timestamp: new Date().toISOString()
         });
-
-        // 동영상 메타데이터 저장
-        imageId = await ImageModel.create({
-          filename: processedVideo.filename,
-          original_name: file.originalname,
-          file_path: processedVideo.originalPath,
-          thumbnail_path: processedVideo.thumbnailPath,
-          optimized_path: processedVideo.optimizedPath,
-          file_size: processedVideo.fileSize,
-          mime_type: file.mimetype,
-          width: processedVideo.width,
-          height: processedVideo.height,
-          metadata: JSON.stringify(processedVideo.metadata),
-
-          // 동영상 메타데이터 필드들
-          duration: processedVideo.metadata.duration,
-          fps: processedVideo.metadata.fps,
-          video_codec: processedVideo.metadata.video_codec,
-          audio_codec: processedVideo.metadata.audio_codec,
-          bitrate: processedVideo.metadata.bitrate,
-
-          // AI 메타데이터 필드들 (동영상은 null)
-          ai_tool: null,
-          model_name: null,
-          lora_models: null,
-          steps: null,
-          cfg_scale: null,
-          sampler: null,
-          seed: null,
-          scheduler: null,
-          prompt: null,
-          negative_prompt: null,
-          denoise_strength: null,
-          generation_time: null,
-          batch_size: null,
-          batch_index: null,
-          auto_tags: null,
-
-          // 유사도 검색 필드들 (동영상은 null)
-          perceptual_hash: null,
-          color_histogram: null
-        });
       } else if (isImageFile(file.mimetype)) {
-        // 이미지 처리
         sendProgress({
           type: 'stage',
           currentFile,
@@ -680,21 +627,8 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
         });
 
         const processedImage = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
-
-        sendProgress({
-          type: 'stage',
-          currentFile,
-          totalFiles: files.length,
-          filename: file.originalname,
-          stage: 'thumbnail',
-          message: '썸네일 및 최적화 이미지 생성 완료',
-          timestamp: new Date().toISOString()
-        });
-
-        // 메타데이터에서 구조화된 필드 추출
         const aiInfo = processedImage.metadata.ai_info || {};
 
-        // STEP 1: 프롬프트 정제 (DB 저장 전)
         let refinedPrompt = aiInfo.prompt || null;
         let refinedNegativePrompt = aiInfo.negative_prompt || null;
 
@@ -706,52 +640,52 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
           refinedNegativePrompt = refinePrimaryPrompt(refinedNegativePrompt);
         }
 
-        // 데이터베이스에 저장 (정제된 프롬프트 사용)
-        imageId = await ImageModel.create({
-          filename: processedImage.filename,
-          original_name: file.originalname,
-          file_path: processedImage.originalPath,
-          thumbnail_path: processedImage.thumbnailPath,
-          optimized_path: processedImage.optimizedPath,
-          file_size: processedImage.fileSize,
-          mime_type: file.mimetype,
-          width: processedImage.width,
-          height: processedImage.height,
-          metadata: JSON.stringify(processedImage.metadata),
-          ai_tool: aiInfo.ai_tool || null,
-          model_name: aiInfo.model || null,
-          lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
-          steps: aiInfo.steps || null,
-          cfg_scale: aiInfo.cfg_scale || null,
-          sampler: aiInfo.sampler || null,
-          seed: aiInfo.seed || null,
-          scheduler: aiInfo.scheduler || null,
-          prompt: refinedPrompt,
-          negative_prompt: refinedNegativePrompt,
-          denoise_strength: aiInfo.denoise_strength || null,
-          generation_time: aiInfo.generation_time || null,
-          batch_size: aiInfo.batch_size || null,
-          batch_index: aiInfo.batch_index || null,
-          auto_tags: null,
+        const fullImagePath = path.join(UPLOAD_BASE_PATH, processedImage.originalPath);
 
-          // 동영상 메타데이터 필드들 (이미지는 null)
-          duration: null,
-          fps: null,
-          video_codec: null,
-          audio_codec: null,
-          bitrate: null,
+        compositeHash = await ImageUploadService.saveUploadedImage(
+          fullImagePath,
+          {
+            width: processedImage.width,
+            height: processedImage.height,
+            thumbnailPath: processedImage.thumbnailPath,
+            optimizedPath: processedImage.optimizedPath,
+            fileSize: processedImage.fileSize,
+            mimeType: file.mimetype,
+            aiTool: aiInfo.ai_tool || null,
+            modelName: aiInfo.model || null,
+            loraModels: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
+            steps: aiInfo.steps || null,
+            cfgScale: aiInfo.cfg_scale || null,
+            sampler: aiInfo.sampler || null,
+            seed: aiInfo.seed || null,
+            scheduler: aiInfo.scheduler || null,
+            prompt: refinedPrompt,
+            negativePrompt: refinedNegativePrompt,
+            denoiseStrength: aiInfo.denoise_strength || null,
+            generationTime: aiInfo.generation_time || null,
+            batchSize: aiInfo.batch_size || null,
+            batchIndex: aiInfo.batch_index || null,
+            autoTags: null,
+            duration: null,
+            fps: null,
+            videoCodec: null,
+            audioCodec: null,
+            bitrate: null
+          },
+          DEFAULT_UPLOAD_FOLDER_ID
+        );
 
-          // 유사도 검색 필드들
-          perceptual_hash: processedImage.perceptualHash || null,
-          color_histogram: processedImage.colorHistogram || null
+        sendProgress({
+          type: 'stage',
+          currentFile,
+          totalFiles: files.length,
+          filename: file.originalname,
+          stage: 'thumbnail',
+          message: '썸네일 및 최적화 이미지 생성 완료',
+          timestamp: new Date().toISOString()
         });
 
-        console.log('🔍 [Upload Stream] Hash data for', file.originalname, ':', {
-          has_perceptual_hash: !!processedImage.perceptualHash,
-          has_color_histogram: !!processedImage.colorHistogram
-        });
-
-        // STEP 3: 프롬프트 수집 (정제된 프롬프트 사용)
+        // 프롬프트 수집
         try {
           await PromptCollectionService.collectFromImage(
             refinedPrompt,
@@ -766,7 +700,7 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
         throw new Error(`Unsupported file type: ${file.mimetype}`);
       }
 
-      // 자동 태깅 (설정에서 활성화된 경우) - 이미지/동영상 모두 적용, 자동수집보다 먼저 실행
+      // 자동 태깅
       if (autoTagEnabled) {
         sendProgress({
           type: 'stage',
@@ -794,7 +728,7 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
 
           if (taggerResult.success) {
             const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-            await ImageModel.updateAutoTags(imageId, autoTagsJson);
+            ImageMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
             sendProgress({
               type: 'stage',
               currentFile,
@@ -820,7 +754,7 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
         }
       }
 
-      // 6. 자동수집 그룹 처리 (자동 태깅 이후 실행하여 auto_tags 조건도 체크 가능)
+      // 자동수집 그룹 처리
       sendProgress({
         type: 'stage',
         currentFile,
@@ -832,7 +766,7 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
       });
 
       try {
-        const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(imageId);
+        const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(compositeHash);
         if (autoCollectResults.length > 0) {
           sendProgress({
             type: 'stage',
@@ -848,19 +782,22 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
         console.warn('⚠️ Failed to run auto collection for', file.originalname, autoCollectError);
       }
 
-      // 7. 완료 이벤트
+      // image_files에서 ID 조회
+      const fileRecords = ImageFileModel.findActiveByHash(compositeHash);
+      const fileId = fileRecords.length > 0 ? fileRecords[0].id : 0;
+
+      // 완료 이벤트
       sendProgress({
         type: 'complete',
         currentFile,
         totalFiles: files.length,
         filename: file.originalname,
         message: '업로드 완료',
-        imageId,
+        imageId: fileId,
         timestamp: new Date().toISOString()
       });
 
     } catch (error) {
-      // 에러 이벤트
       sendProgress({
         type: 'error',
         currentFile,
@@ -872,7 +809,6 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
     }
   }
 
-  // 스트림 종료
   res.end();
   return;
 });

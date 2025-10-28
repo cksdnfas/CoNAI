@@ -135,13 +135,28 @@ export class GenerationHistoryService {
       if (history?.assigned_group_id && linkedImageId) {
         try {
           console.log(`📁 Assigning image ${linkedImageId} to group ${history.assigned_group_id}...`);
-          await ImageGroupModel.addImageToGroup(
-            history.assigned_group_id,
-            linkedImageId,
-            'manual', // User-selected group = manual collection
-            0
-          );
-          console.log(`✓ Image assigned to group ${history.assigned_group_id}`);
+
+          // linkedImageId를 composite_hash로 변환
+          const { db } = await import('../database/init');
+          const file = db.prepare(`
+            SELECT if.composite_hash
+            FROM image_files if
+            JOIN images i ON if.original_file_path LIKE '%' || i.file_path
+            WHERE i.id = ?
+            LIMIT 1
+          `).get(linkedImageId) as { composite_hash: string } | undefined;
+
+          if (file) {
+            await ImageGroupModel.addImageToGroup(
+              history.assigned_group_id,
+              file.composite_hash,
+              'manual', // User-selected group = manual collection
+              0
+            );
+            console.log(`✓ Image assigned to group ${history.assigned_group_id}`);
+          } else {
+            console.warn(`⚠️ Could not find composite_hash for image ID ${linkedImageId}`);
+          }
         } catch (groupError) {
           console.warn(`⚠️ Failed to assign image to group (non-critical):`, groupError);
         }
@@ -216,13 +231,28 @@ export class GenerationHistoryService {
       if (history?.assigned_group_id && linkedImageId) {
         try {
           console.log(`📁 Assigning image ${linkedImageId} to group ${history.assigned_group_id}...`);
-          await ImageGroupModel.addImageToGroup(
-            history.assigned_group_id,
-            linkedImageId,
-            'manual', // User-selected group = manual collection
-            0
-          );
-          console.log(`✓ Image assigned to group ${history.assigned_group_id}`);
+
+          // linkedImageId를 composite_hash로 변환
+          const { db } = await import('../database/init');
+          const file = db.prepare(`
+            SELECT if.composite_hash
+            FROM image_files if
+            JOIN images i ON if.original_file_path LIKE '%' || i.file_path
+            WHERE i.id = ?
+            LIMIT 1
+          `).get(linkedImageId) as { composite_hash: string } | undefined;
+
+          if (file) {
+            await ImageGroupModel.addImageToGroup(
+              history.assigned_group_id,
+              file.composite_hash,
+              'manual', // User-selected group = manual collection
+              0
+            );
+            console.log(`✓ Image assigned to group ${history.assigned_group_id}`);
+          } else {
+            console.warn(`⚠️ Could not find composite_hash for image ID ${linkedImageId}`);
+          }
         } catch (groupError) {
           console.warn(`⚠️ Failed to assign image to group (non-critical):`, groupError);
         }

@@ -65,9 +65,12 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
       return res.status(404).json(errorResponse('No images found in group'));
     }
 
-    // 썸네일 파일 경로 결정 (thumbnail_path가 있으면 사용, 없으면 원본 사용)
-    const imagePath = randomImage.thumbnail_path || randomImage.file_path;
-    const fullPath = resolveUploadsPath(imagePath);
+    // 썸네일 파일 경로 사용 (image_metadata에 저장됨)
+    if (!randomImage.thumbnail_path) {
+      return res.status(404).json(errorResponse('Thumbnail not found for image'));
+    }
+
+    const fullPath = resolveUploadsPath(randomImage.thumbnail_path);
 
     // 파일 존재 여부 확인
     if (!fs.existsSync(fullPath)) {
@@ -409,14 +412,16 @@ router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response)
 
 /**
  * 그룹에서 이미지 제거
- * DELETE /api/groups/:id/images/:imageId
+ * DELETE /api/groups/:id/images/:compositeHash
+ *
+ * Note: 파라미터 이름은 imageId지만 실제로는 composite_hash를 받습니다
  */
 router.delete('/:id/images/:imageId', asyncHandler(async (req: Request, res: Response) => {
   try {
     const groupId = validateId(req.params.id, 'Group ID');
-    const imageId = validateId(req.params.imageId, 'Image ID');
+    const compositeHash = req.params.imageId; // composite_hash로 사용
 
-    const removed = await ImageGroupModel.removeImageFromGroup(groupId, imageId);
+    const removed = await ImageGroupModel.removeImageFromGroup(groupId, compositeHash);
 
     if (!removed) {
       return res.status(404).json(errorResponse('Image not found in group'));
@@ -473,18 +478,20 @@ router.post('/auto-collect-all', asyncHandler(async (req: Request, res: Response
 }));
 
 /**
- * 그룹에 속한 모든 이미지 ID 조회 (랜덤 선택용)
+ * 그룹에 속한 모든 이미지 composite_hash 조회 (랜덤 선택용)
  * GET /api/groups/:id/image-ids
+ *
+ * Note: 엔드포인트 이름은 image-ids지만 실제로는 composite_hash 배열을 반환합니다
  */
 router.get('/:id/image-ids', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(req.params.id, 'Group ID');
 
-    const ids = await ImageGroupModel.getImageIdsForGroup(id);
+    const hashes = await ImageGroupModel.getCompositeHashesForGroup(id);
 
     return res.json(successResponse({
-      ids,
-      total: ids.length
+      ids: hashes, // 클라이언트 호환성을 위해 'ids' 키 유지
+      total: hashes.length
     }));
   } catch (error) {
     console.error('Error getting image IDs from group:', error);

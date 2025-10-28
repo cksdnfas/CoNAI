@@ -172,7 +172,7 @@ export class UploadService {
     // 자동수집 그룹 처리 (자동 태깅 이후 실행하여 auto_tags 조건도 체크 가능)
     try {
       console.log('🔍 Running auto collection...');
-      const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(imageId);
+      const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImageById(imageId);
       if (autoCollectResults.length > 0) {
         console.log(`✅ Image automatically added to ${autoCollectResults.length} groups`);
       }

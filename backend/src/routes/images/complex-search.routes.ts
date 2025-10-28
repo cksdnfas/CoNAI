@@ -155,7 +155,7 @@ router.post('/ids', asyncHandler(async (req: Request, res: Response) => {
   const requestBody = req.body as ComplexSearchRequest;
 
   try {
-    let ids: number[];
+    let ids: string[]; // composite_hash[]
 
     // Simple search mode
     if (requestBody.simple_search?.text) {

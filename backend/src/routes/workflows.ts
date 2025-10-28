@@ -535,10 +535,10 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
               console.warn('⚠️ Failed to auto-tag image (non-critical):', autoTagError);
             }
 
-            // 자동수집 그룹 처리
+            // 자동수집 그룹 처리 (레거시 호환)
             try {
               console.log('🔍 Running auto collection...');
-              const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(imageId);
+              const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImageById(imageId);
               if (autoCollectResults.length > 0) {
                 console.log(`✅ Image automatically added to ${autoCollectResults.length} groups`);
               }
