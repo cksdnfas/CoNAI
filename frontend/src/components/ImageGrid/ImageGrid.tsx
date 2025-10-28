@@ -18,23 +18,24 @@ import ImageViewerModal from '../ImageViewerModal';
 import { imageApi, groupApi } from '../../services/api';
 import './ImageGrid.css';
 
+// ✅ composite_hash 기반으로 변경
 export interface ImageGridProps {
   images: ImageRecord[];
   loading?: boolean;
   selectable?: boolean;
-  selectedIds?: number[];
-  onSelectionChange?: (selectedIds: number[]) => void;
+  selectedIds?: string[];  // composite_hash[]
+  onSelectionChange?: (selectedIds: string[]) => void;
   pageSize?: PageSize;
   onPageSizeChange?: (size: PageSize) => void;
   currentPage?: number;
   totalPages?: number;
   total?: number;
   onPageChange?: (page: number) => void;
-  onImageDelete?: (id: number) => void;
+  onImageDelete?: (compositeHash: string) => void;  // composite_hash
   showCollectionType?: boolean;
   currentGroupId?: number;
   searchParams?: ImageSearchParams;
-  allImageIds?: number[]; // 외부에서 전달된 전체 이미지 ID 목록 (우선순위)
+  allImageIds?: string[]; // ✅ 외부에서 전달된 전체 이미지 composite_hash 목록 (우선순위)
 }
 
 const ImageGrid: React.FC<ImageGridProps> = ({
@@ -59,7 +60,7 @@ const ImageGrid: React.FC<ImageGridProps> = ({
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [lastClickedIndex, setLastClickedIndex] = useState<number>(-1);
-  const [internalAllImageIds, setInternalAllImageIds] = useState<number[]>([]);
+  const [internalAllImageIds, setInternalAllImageIds] = useState<string[]>([]);  // ✅ composite_hash[]
 
   // images가 undefined일 경우 방어
   const safeImages = images || [];
@@ -67,7 +68,7 @@ const ImageGrid: React.FC<ImageGridProps> = ({
   // 외부에서 전달된 ID 목록이 있으면 우선 사용, 없으면 내부적으로 조회
   const allImageIds = externalAllImageIds || internalAllImageIds;
 
-  // 그룹/검색 컨텍스트에서 전체 이미지 ID 목록 조회 (외부에서 전달되지 않은 경우만)
+  // ✅ 그룹/검색 컨텍스트에서 전체 이미지 composite_hash 목록 조회
   useEffect(() => {
     // 외부에서 이미 전달된 경우 조회하지 않음
     if (externalAllImageIds && externalAllImageIds.length > 0) {
@@ -77,16 +78,16 @@ const ImageGrid: React.FC<ImageGridProps> = ({
     const fetchAllImageIds = async () => {
       try {
         if (currentGroupId) {
-          // 그룹 모드: 그룹 전체 이미지 ID 조회
+          // 그룹 모드: 그룹 전체 이미지 composite_hash 조회
           const result = await groupApi.getImageIdsForGroup(currentGroupId);
           if (result.success && result.data) {
-            setInternalAllImageIds(result.data.ids);
+            setInternalAllImageIds(result.data.composite_hashes);
           }
         } else if (searchParams) {
-          // 검색 모드: 검색 결과 전체 이미지 ID 조회
+          // 검색 모드: 검색 결과 전체 이미지 composite_hash 조회
           const result = await imageApi.searchImageIds(searchParams);
           if (result.success && result.data) {
-            setInternalAllImageIds(result.data.ids);
+            setInternalAllImageIds(result.data.composite_hashes);
           }
         } else {
           // 전체 모드: ID 목록 없음 (기존 방식 사용)
@@ -101,16 +102,17 @@ const ImageGrid: React.FC<ImageGridProps> = ({
     fetchAllImageIds();
   }, [currentGroupId, searchParams, externalAllImageIds]);
 
-  const handleSelectionChange = (id: number, event?: React.MouseEvent) => {
+  // ✅ composite_hash 기반으로 변경
+  const handleSelectionChange = (compositeHash: string, event?: React.MouseEvent) => {
     if (!onSelectionChange) return;
 
-    const imageIndex = safeImages.findIndex(img => img.id === id);
+    const imageIndex = safeImages.findIndex(img => img.composite_hash === compositeHash);
 
     // Ctrl/Cmd + Click: 토글 선택
     if (event && (event.ctrlKey || event.metaKey)) {
-      const newSelectedIds = selectedIds.includes(id)
-        ? selectedIds.filter(selectedId => selectedId !== id)
-        : [...selectedIds, id];
+      const newSelectedIds = selectedIds.includes(compositeHash)
+        ? selectedIds.filter(selectedId => selectedId !== compositeHash)
+        : [...selectedIds, compositeHash];
       onSelectionChange(newSelectedIds);
       setLastClickedIndex(imageIndex);
       return;
@@ -120,16 +122,16 @@ const ImageGrid: React.FC<ImageGridProps> = ({
     if (event && event.shiftKey && lastClickedIndex >= 0) {
       const start = Math.min(lastClickedIndex, imageIndex);
       const end = Math.max(lastClickedIndex, imageIndex);
-      const rangeIds = safeImages.slice(start, end + 1).map(img => img.id);
+      const rangeIds = safeImages.slice(start, end + 1).map(img => img.composite_hash);
       const newSelectedIds = Array.from(new Set([...selectedIds, ...rangeIds]));
       onSelectionChange(newSelectedIds);
       return;
     }
 
     // 일반 클릭: 토글 선택
-    const newSelectedIds = selectedIds.includes(id)
-      ? selectedIds.filter(selectedId => selectedId !== id)
-      : [...selectedIds, id];
+    const newSelectedIds = selectedIds.includes(compositeHash)
+      ? selectedIds.filter(selectedId => selectedId !== compositeHash)
+      : [...selectedIds, compositeHash];
     onSelectionChange(newSelectedIds);
     setLastClickedIndex(imageIndex);
   };
@@ -138,7 +140,7 @@ const ImageGrid: React.FC<ImageGridProps> = ({
     if (!onSelectionChange) return;
 
     if (checked) {
-      const allIds = safeImages.map(image => image.id);
+      const allIds = safeImages.map(image => image.composite_hash);
       onSelectionChange(allIds);
     } else {
       onSelectionChange([]);
@@ -180,7 +182,7 @@ const ImageGrid: React.FC<ImageGridProps> = ({
       // Ctrl/Cmd + A: 전체 선택
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         e.preventDefault();
-        const allIds = safeImages.map(img => img.id);
+        const allIds = safeImages.map(img => img.composite_hash);
         onSelectionChange(allIds);
       }
 
@@ -282,12 +284,12 @@ const ImageGrid: React.FC<ImageGridProps> = ({
       {/* 이미지 그리드 */}
       <Grid container spacing={2}>
         {safeImages.map((image, index) => (
-          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3, xl: 2 }} key={image.id}>
+          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3, xl: 2 }} key={image.composite_hash}>
             <ImageCard
               image={image}
-              selected={selectedIds.includes(image.id)}
+              selected={selectedIds.includes(image.composite_hash)}
               selectable={selectable}
-              onSelectionChange={(id, event) => handleSelectionChange(id, event)}
+              onSelectionChange={(hash, event) => handleSelectionChange(hash, event)}
               onDelete={onImageDelete}
               onImageClick={() => handleImageClick(index)}
               showCollectionType={showCollectionType}

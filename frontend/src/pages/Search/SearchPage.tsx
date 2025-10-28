@@ -53,7 +53,8 @@ const SearchPage: React.FC = () => {
     searchComplex(request);
   };
 
-  const handleSelectionChange = (newSelectedIds: number[]) => {
+  // ✅ composite_hash 기반으로 변경
+  const handleSelectionChange = (newSelectedIds: string[]) => {
     if (newSelectedIds.length === 0) {
       deselectAll();
     } else {
@@ -72,10 +73,10 @@ const SearchPage: React.FC = () => {
     }
   };
 
-  const handleImageDelete = async (id: number) => {
-    await deleteImages([id]);
-    if (selectedIds.includes(id)) {
-      toggleSelection(id);
+  const handleImageDelete = async (compositeHash: string) => {
+    await deleteImages([compositeHash]);
+    if (selectedIds.includes(compositeHash)) {
+      toggleSelection(compositeHash);
     }
   };
 
@@ -217,7 +218,7 @@ const SearchPage: React.FC = () => {
         <BulkActionBar
           selectedCount={selectedCount}
           selectedIds={selectedIds}
-          selectedImages={images.filter(img => selectedIds.includes(img.id))}
+          selectedImages={images.filter(img => selectedIds.includes(img.composite_hash))}
           onSelectionClear={deselectAll}
           onActionComplete={handleBulkActionComplete}
         />

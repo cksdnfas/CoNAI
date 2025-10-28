@@ -4,12 +4,13 @@ import { CheckCircle as CheckCircleIcon, VideoLibrary as VideoLibraryIcon } from
 import type { ImageRecord } from '../../types/image';
 import { getBackendOrigin } from '../../utils/backend';
 
+// ✅ composite_hash 기반으로 변경
 interface MasonryImageCardProps {
   image: ImageRecord;
   onClick: () => void;
   selected?: boolean;
   selectable?: boolean;
-  onSelectionChange?: (id: number, event?: React.MouseEvent) => void;
+  onSelectionChange?: (compositeHash: string, event?: React.MouseEvent) => void;
 }
 
 const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
@@ -24,17 +25,17 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
   const [isHovered, setIsHovered] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const backendOrigin = getBackendOrigin();
-  // API 엔드포인트를 통해 썸네일 제공 (외부 네트워크 접근 보장)
+  // ✅ composite_hash 사용 - API 엔드포인트를 통해 썸네일 제공 (외부 네트워크 접근 보장)
   // GIF는 애니메이션 보존을 위해 원본 사용
   const isGif = image.mime_type === 'image/gif';
   const imageUrl = isGif
-    ? `${backendOrigin}/api/images/${image.id}/optimized` // GIF optimized는 원본 복사본
-    : `${backendOrigin}/api/images/${image.id}/thumbnail`;
+    ? `${backendOrigin}/api/images/${image.composite_hash}/optimized` // GIF optimized는 원본 복사본
+    : `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
 
   const handleSelectionChange = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onSelectionChange) {
-      onSelectionChange(image.id, e);
+      onSelectionChange(image.composite_hash, e);
     }
   };
 
@@ -211,7 +212,7 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
             <CardMedia
               component="img"
               image={imageUrl}
-              alt={image.original_name}
+              alt={image.original_file_path || 'Image'}
               loading="lazy"
               decoding="async"
               draggable={false}

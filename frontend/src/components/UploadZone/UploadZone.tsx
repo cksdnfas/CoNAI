@@ -81,7 +81,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
             filename: acceptedFiles[0].name,
             status: 'complete',
             message: t('messages.uploadComplete'),
-            imageId: response.data?.id
+            imageId: response.data?.composite_hash
           }]);
           setMessage({ type: 'success', text: t('messages.uploadSuccess') });
         } else {
@@ -115,7 +115,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
             } else if (event.type === 'complete') {
               item.status = 'complete';
               item.message = event.message;
-              item.imageId = event.imageId;
+              item.imageId = event.compositeHash;
               completed++;
             } else if (event.type === 'error') {
               item.status = 'error';

@@ -26,9 +26,10 @@ import { getBackendOrigin } from '../../utils/backend';
 import PromptDisplay from '../../components/PromptDisplay';
 import { settingsApi } from '../../services/settingsApi';
 
+// ✅ composite_hash 기반 라우팅으로 변경
 const ImageDetailPage: React.FC = () => {
   const { t } = useTranslation(['imageDetail', 'common']);
-  const { id } = useParams<{ id: string }>();
+  const { compositeHash } = useParams<{ compositeHash: string }>();
   const navigate = useNavigate();
   const [image, setImage] = useState<ImageRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,7 +55,7 @@ const ImageDetailPage: React.FC = () => {
 
   useEffect(() => {
     const loadImage = async () => {
-      if (!id) {
+      if (!compositeHash) {
         setError(t('imageDetail:page.noIdProvided'));
         setLoading(false);
         return;
@@ -62,7 +63,7 @@ const ImageDetailPage: React.FC = () => {
 
       try {
         setLoading(true);
-        const response = await imageApi.getImage(parseInt(id));
+        const response = await imageApi.getImage(compositeHash);
 
         if (response.success && response.data) {
           setImage(response.data);
@@ -77,13 +78,13 @@ const ImageDetailPage: React.FC = () => {
     };
 
     loadImage();
-  }, [id, t]);
+  }, [compositeHash, t]);
 
   // Reload image after auto-tag generation
   const handleAutoTagGenerated = async () => {
-    if (!id) return;
+    if (!compositeHash) return;
     try {
-      const response = await imageApi.getImage(parseInt(id));
+      const response = await imageApi.getImage(compositeHash);
       if (response.success && response.data) {
         setImage(response.data);
       }
@@ -107,8 +108,8 @@ const ImageDetailPage: React.FC = () => {
   const handleDownload = () => {
     if (!image) return;
     const link = document.createElement('a');
-    link.href = `${backendOrigin}/api/images/${image.id}/download/original`;
-    link.download = image.original_name;
+    link.href = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
+    link.download = image.original_file_path || `image_${image.composite_hash.substring(0, 8)}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

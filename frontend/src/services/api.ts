@@ -33,7 +33,7 @@ const api = axios.create({
   },
 });
 
-// 이미지 관련 API
+// 이미지 관련 API (✅ composite_hash 기반으로 완전 전환)
 export const imageApi = {
   // 이미지 목록 조회
   getImages: async (page: number = 1, limit: number = 25): Promise<ImageListResponse> => {
@@ -59,8 +59,8 @@ export const imageApi = {
     return response.data;
   },
 
-  // 복잡한 검색 조건에 맞는 이미지 ID 목록 조회 (랜덤 선택용)
-  searchComplexIds: async (request: ComplexSearchRequest): Promise<{ success: boolean; data?: { ids: number[]; total: number }; error?: string }> => {
+  // 복잡한 검색 조건에 맞는 이미지 composite_hash 목록 조회 (랜덤 선택용)
+  searchComplexIds: async (request: ComplexSearchRequest): Promise<{ success: boolean; data?: { composite_hashes: string[]; total: number }; error?: string }> => {
     const response = await api.post('/api/images/search/complex/ids', request);
     return response.data;
   },
@@ -209,27 +209,37 @@ export const imageApi = {
     }
   },
 
-  // 이미지 상세 조회
-  getImage: async (id: number): Promise<{ success: boolean; data?: ImageRecord; error?: string }> => {
-    const response = await api.get(`/api/images/${id}`);
+  // ✅ 이미지 상세 조회 (composite_hash 기반)
+  getImage: async (compositeHash: string): Promise<{ success: boolean; data?: ImageRecord; error?: string }> => {
+    const response = await api.get(`/api/images/${compositeHash}`);
     return response.data;
   },
 
-  // 이미지 삭제
-  deleteImage: async (id: number): Promise<{ success: boolean; error?: string }> => {
-    const response = await api.delete(`/api/images/${id}`);
+  // ✅ 이미지 삭제 (composite_hash 기반)
+  deleteImage: async (compositeHash: string): Promise<{ success: boolean; error?: string }> => {
+    const response = await api.delete(`/api/images/${compositeHash}`);
     return response.data;
   },
 
-  // 다중 이미지 삭제
-  deleteImages: async (ids: number[]): Promise<{ success: boolean; error?: string }[]> => {
-    const promises = ids.map(id => imageApi.deleteImage(id));
+  // ✅ 다중 이미지 삭제 (composite_hash 기반)
+  deleteImages: async (compositeHashes: string[]): Promise<{ success: boolean; error?: string }[]> => {
+    const promises = compositeHashes.map(hash => imageApi.deleteImage(hash));
     return Promise.all(promises);
   },
 
-  // 이미지 다운로드 URL 생성
-  getDownloadUrl: (id: number, type: 'original' | 'optimized' = 'original'): string => {
-    return `${API_BASE_URL}/api/images/${id}/download/${type}`;
+  // ✅ 이미지 다운로드 URL 생성 (composite_hash 기반)
+  getDownloadUrl: (compositeHash: string, type: 'original' | 'optimized' = 'original'): string => {
+    return `${API_BASE_URL}/api/images/${compositeHash}/download/${type}`;
+  },
+
+  // ✅ 썸네일 URL 생성 (composite_hash 기반)
+  getThumbnailUrl: (compositeHash: string): string => {
+    return `${API_BASE_URL}/api/images/${compositeHash}/thumbnail`;
+  },
+
+  // ✅ 최적화 이미지 URL 생성 (composite_hash 기반)
+  getOptimizedUrl: (compositeHash: string): string => {
+    return `${API_BASE_URL}/api/images/${compositeHash}/optimized`;
   },
 
   // 랜덤 이미지 조회
@@ -244,8 +254,8 @@ export const imageApi = {
     return response.data;
   },
 
-  // 검색 조건에 맞는 이미지 ID 목록 조회 (랜덤 선택용)
-  searchImageIds: async (params: ImageSearchParams): Promise<{ success: boolean; data?: { ids: number[]; total: number }; error?: string }> => {
+  // ✅ 검색 조건에 맞는 이미지 composite_hash 목록 조회 (랜덤 선택용)
+  searchImageIds: async (params: ImageSearchParams): Promise<{ success: boolean; data?: { composite_hashes: string[]; total: number }; error?: string }> => {
     const response = await api.post('/api/images/search/ids', params);
     return response.data;
   },
@@ -298,44 +308,44 @@ export const groupApi = {
     return response.data;
   },
 
-  // 이미지를 그룹에 수동 추가
-  addImageToGroup: async (groupId: number, imageId: number, orderIndex: number = 0): Promise<GroupResponse> => {
+  // ✅ 이미지를 그룹에 수동 추가 (composite_hash 기반)
+  addImageToGroup: async (groupId: number, compositeHash: string, orderIndex: number = 0): Promise<GroupResponse> => {
     const response = await api.post(`/api/groups/${groupId}/images`, {
-      image_id: imageId,
+      image_id: compositeHash,  // 백엔드는 image_id 파라미터명 사용하지만 composite_hash 값을 받음
       order_index: orderIndex
     });
     return response.data;
   },
 
-  // 여러 이미지를 그룹에 수동 추가
-  addImagesToGroup: async (groupId: number, imageIds: number[]): Promise<GroupResponse> => {
+  // ✅ 여러 이미지를 그룹에 수동 추가 (composite_hash 기반)
+  addImagesToGroup: async (groupId: number, compositeHashes: string[]): Promise<GroupResponse> => {
     const response = await api.post(`/api/groups/${groupId}/images/bulk`, {
-      image_ids: imageIds
+      image_ids: compositeHashes  // 백엔드는 image_ids 파라미터명 사용하지만 composite_hash 값들을 받음
     });
     return response.data;
   },
 
-  // 그룹에서 이미지 제거
-  removeImageFromGroup: async (groupId: number, imageId: number): Promise<GroupResponse> => {
-    const response = await api.delete(`/api/groups/${groupId}/images/${imageId}`);
+  // ✅ 그룹에서 이미지 제거 (composite_hash 기반)
+  removeImageFromGroup: async (groupId: number, compositeHash: string): Promise<GroupResponse> => {
+    const response = await api.delete(`/api/groups/${groupId}/images/${compositeHash}`);
     return response.data;
   },
 
-  // 그룹에서 여러 이미지 제거
-  removeImagesFromGroup: async (groupId: number, imageIds: number[]): Promise<{ success: boolean; removed: number; errors: string[] }> => {
+  // ✅ 그룹에서 여러 이미지 제거 (composite_hash 기반)
+  removeImagesFromGroup: async (groupId: number, compositeHashes: string[]): Promise<{ success: boolean; removed: number; errors: string[] }> => {
     let removedCount = 0;
     const errors: string[] = [];
 
-    for (const imageId of imageIds) {
+    for (const compositeHash of compositeHashes) {
       try {
-        const response = await api.delete(`/api/groups/${groupId}/images/${imageId}`);
+        const response = await api.delete(`/api/groups/${groupId}/images/${compositeHash}`);
         if (response.data.success) {
           removedCount++;
         } else {
-          errors.push(`Image ${imageId}: ${response.data.error || 'Failed to remove'}`);
+          errors.push(`Image ${compositeHash}: ${response.data.error || 'Failed to remove'}`);
         }
       } catch (error: any) {
-        errors.push(`Image ${imageId}: ${error.response?.data?.error || error.message || 'Failed to remove'}`);
+        errors.push(`Image ${compositeHash}: ${error.response?.data?.error || error.message || 'Failed to remove'}`);
       }
     }
 
@@ -369,8 +379,8 @@ export const groupApi = {
     return response.data;
   },
 
-  // 그룹에 속한 이미지 ID 목록 조회 (랜덤 선택용)
-  getImageIdsForGroup: async (id: number): Promise<{ success: boolean; data?: { ids: number[]; total: number }; error?: string }> => {
+  // ✅ 그룹에 속한 이미지 composite_hash 목록 조회 (랜덤 선택용)
+  getImageIdsForGroup: async (id: number): Promise<{ success: boolean; data?: { composite_hashes: string[]; total: number }; error?: string }> => {
     const response = await api.get(`/api/groups/${id}/image-ids`);
     return response.data;
   },

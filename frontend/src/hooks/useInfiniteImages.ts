@@ -58,11 +58,12 @@ export const useInfiniteImages = () => {
     loadImages(1);
   }, [loadImages]);
 
-  const deleteImage = useCallback(async (id: number) => {
+  // ✅ composite_hash 기반으로 변경
+  const deleteImage = useCallback(async (compositeHash: string) => {
     try {
-      await imageApi.deleteImage(id);
+      await imageApi.deleteImage(compositeHash);
       // 삭제된 이미지를 목록에서 제거
-      setImages(prev => prev.filter(img => img.id !== id));
+      setImages(prev => prev.filter(img => img.composite_hash !== compositeHash));
     } catch (err) {
       setError('이미지 삭제에 실패했습니다.');
       console.error('Error deleting image:', err);

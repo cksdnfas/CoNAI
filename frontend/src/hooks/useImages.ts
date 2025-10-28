@@ -47,10 +47,11 @@ export const useImages = () => {
     localStorage.setItem('imagePageSize', newPageSize.toString());
   }, [fetchImages]);
 
-  const deleteImages = useCallback(async (ids: number[]) => {
+  // ✅ composite_hash 기반으로 변경
+  const deleteImages = useCallback(async (compositeHashes: string[]) => {
     setLoading(true);
     try {
-      await imageApi.deleteImages(ids);
+      await imageApi.deleteImages(compositeHashes);
       // 삭제 후 현재 페이지 새로고침
       await fetchImages(currentPage, pageSize);
     } catch (err) {

@@ -23,7 +23,8 @@ import BulkActionBar from '../../components/BulkActionBar/BulkActionBar';
 import { useImages } from '../../hooks/useImages';
 import { useSelection } from '../../hooks/useSelection';
 
-type SortBy = 'upload_date' | 'filename' | 'file_size' | 'width' | 'height';
+// ✅ first_seen_date로 변경
+type SortBy = 'first_seen_date' | 'file_size' | 'width' | 'height';
 type SortOrder = 'asc' | 'desc';
 
 const GalleryPage: React.FC = () => {
@@ -51,20 +52,21 @@ const GalleryPage: React.FC = () => {
     selectedCount,
   } = useSelection();
 
-  const [sortBy, setSortBy] = useState<SortBy>('upload_date');
+  const [sortBy, setSortBy] = useState<SortBy>('first_seen_date');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [filterAiTool, setFilterAiTool] = useState<string>('');
 
-  const handleSelectionChange = (newSelectedIds: number[]) => {
+  // ✅ composite_hash 기반으로 변경
+  const handleSelectionChange = (newSelectedIds: string[]) => {
     // 선택 상태를 직접 업데이트
     selectAll(newSelectedIds);
   };
 
-  const handleImageDelete = async (id: number) => {
-    await deleteImages([id]);
+  const handleImageDelete = async (compositeHash: string) => {
+    await deleteImages([compositeHash]);
     // 선택 목록에서도 제거
-    if (selectedIds.includes(id)) {
-      toggleSelection(id);
+    if (selectedIds.includes(compositeHash)) {
+      toggleSelection(compositeHash);
     }
   };
 
@@ -79,7 +81,7 @@ const GalleryPage: React.FC = () => {
     let bValue: any = b[sortBy];
 
     // 날짜 정렬의 경우
-    if (sortBy === 'upload_date') {
+    if (sortBy === 'first_seen_date') {
       aValue = new Date(aValue).getTime();
       bValue = new Date(bValue).getTime();
     }
@@ -107,7 +109,7 @@ const GalleryPage: React.FC = () => {
 
   const clearFilters = () => {
     setFilterAiTool('');
-    setSortBy('upload_date');
+    setSortBy('first_seen_date');
     setSortOrder('desc');
   };
 
@@ -179,8 +181,7 @@ const GalleryPage: React.FC = () => {
                 label={t('gallery:filters.sortBy')}
                 onChange={(e) => setSortBy(e.target.value as SortBy)}
               >
-                <MenuItem value="upload_date">{t('gallery:sorting.uploadDate')}</MenuItem>
-                <MenuItem value="filename">{t('gallery:sorting.filename')}</MenuItem>
+                <MenuItem value="first_seen_date">{t('gallery:sorting.uploadDate')}</MenuItem>
                 <MenuItem value="file_size">{t('gallery:sorting.fileSize')}</MenuItem>
                 <MenuItem value="width">{t('gallery:sorting.width')}</MenuItem>
                 <MenuItem value="height">{t('gallery:sorting.height')}</MenuItem>
@@ -273,7 +274,7 @@ const GalleryPage: React.FC = () => {
       <BulkActionBar
         selectedCount={selectedCount}
         selectedIds={selectedIds}
-        selectedImages={filteredImages.filter(img => selectedIds.includes(img.id))}
+        selectedImages={filteredImages.filter(img => selectedIds.includes(img.composite_hash))}
         onSelectionClear={deselectAll}
         onActionComplete={handleBulkActionComplete}
       />

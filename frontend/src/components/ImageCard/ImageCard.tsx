@@ -20,12 +20,13 @@ import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../types/image';
 import { getBackendOrigin } from '../../utils/backend';
 
+// ✅ composite_hash 기반으로 변경
 interface ImageCardProps {
   image: ImageRecord;
   selected?: boolean;
   selectable?: boolean;
-  onSelectionChange?: (id: number, event?: React.MouseEvent) => void;
-  onDelete?: (id: number) => void;
+  onSelectionChange?: (compositeHash: string, event?: React.MouseEvent) => void;  // composite_hash
+  onDelete?: (compositeHash: string) => void;  // composite_hash
   onImageClick?: () => void;
   showCollectionType?: boolean; // 그룹 모달에서만 collection_type 표시
   currentGroupId?: number; // 현재 그룹 ID (collection_type 표시용)
@@ -52,18 +53,19 @@ const ImageCard: React.FC<ImageCardProps> = ({
     : null;
   const isAutoCollected = currentGroupInfo?.collection_type === 'auto';
 
+  // ✅ composite_hash 사용
   const handleSelectionClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // 이벤트 전파 방지
     if (onSelectionChange) {
-      onSelectionChange(image.id, e);
+      onSelectionChange(image.composite_hash, e);
     }
   };
 
   const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation(); // 이벤트 전파 방지
     const link = document.createElement('a');
-    link.href = `${backendOrigin}/api/images/${image.id}/download/original`;
-    link.download = image.original_name;
+    link.href = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
+    link.download = image.original_file_path || `image_${image.composite_hash.substring(0, 8)}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -76,28 +78,28 @@ const ImageCard: React.FC<ImageCardProps> = ({
       ? t('common:imageCard.confirmDelete.video')
       : t('common:imageCard.confirmDelete.image');
     if (onDelete && window.confirm(confirmMessage)) {
-      onDelete(image.id);
+      onDelete(image.composite_hash);
     }
   };
 
   const handleInfoClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // 이벤트 전파 방지
-    window.open(`/#/image/${image.id}`, '_blank');
+    window.open(`/#/image/${image.composite_hash}`, '_blank');
   };
 
-  // API 엔드포인트를 통해 썸네일 및 원본 이미지 제공 (외부 네트워크 접근 보장)
+  // ✅ composite_hash 사용 - API 엔드포인트를 통해 썸네일 및 원본 이미지 제공
   // GIF는 애니메이션 보존을 위해 원본 사용
   const isGif = image.mime_type === 'image/gif';
   const thumbnailUrl = isGif
-    ? `${backendOrigin}/api/images/${image.id}/optimized` // GIF optimized는 원본 복사본
-    : `${backendOrigin}/api/images/${image.id}/thumbnail`;
-  const fallbackUrl = `${backendOrigin}/api/images/${image.id}/download/original`;
+    ? `${backendOrigin}/api/images/${image.composite_hash}/optimized` // GIF optimized는 원본 복사본
+    : `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
+  const fallbackUrl = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
 
   return (
     <>
       <Card
         className={selectable ? 'selectable-image' : ''}
-        data-image-id={image.id}
+        data-image-id={image.composite_hash}
         data-selectable={selectable}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}

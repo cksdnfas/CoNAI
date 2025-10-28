@@ -1,21 +1,31 @@
 /**
  * Image-related type definitions
  * Shared between backend and frontend
+ *
+ * BREAKING CHANGES - Complete migration to composite_hash system:
+ * - Primary key: id (number) → composite_hash (string, 48 chars)
+ * - Date field: upload_date → first_seen_date
+ * - File path: file_path → original_file_path (from image_files table JOIN)
+ * - File info: Now comes from image_files table (file_id, file_status, etc.)
  */
 
 export interface ImageRecord {
-  id: number;
-  filename: string;
-  original_name: string;
-  file_path: string;
-  thumbnail_path: string;
-  optimized_path: string | null;
-  file_size: number;
-  mime_type: string;
-  width: number | null;
-  height: number | null;
-  upload_date: string;
-  metadata: string | null;
+  // ✅ New structure - Primary identification
+  composite_hash: string;              // 48-character hash (PRIMARY KEY)
+  first_seen_date: string;             // ISO 8601 date (replaces upload_date)
+
+  // File information (from image_files table JOIN)
+  file_id: number | null;              // Reference to image_files table
+  original_file_path: string | null;   // Original file path (replaces file_path)
+  file_size: number | null;            // File size in bytes
+  mime_type: string;                   // MIME type (image/png, video/mp4, etc.)
+  file_status?: 'active' | 'deleted';  // File status
+
+  // Image metadata (from image_metadata table)
+  width: number | null;                // Image width in pixels
+  height: number | null;               // Image height in pixels
+  thumbnail_path: string;              // Thumbnail file path
+  optimized_path: string | null;       // Optimized image path (WebP)
 
   // AI metadata fields (image generation info)
   ai_tool: string | null;              // ComfyUI, NovelAI, Stable Diffusion, etc.
@@ -36,6 +46,8 @@ export interface ImageRecord {
 
   // Image similarity search fields
   perceptual_hash: string | null;      // pHash algorithm based image hash
+  dhash: string | null;                // dHash for difference hash
+  ahash: string | null;                // aHash for average hash
   color_histogram: string | null;      // RGB color distribution (JSON)
 
   // Video-specific metadata fields
@@ -44,6 +56,14 @@ export interface ImageRecord {
   video_codec: string | null;          // Video codec (h264, vp9, etc.)
   audio_codec: string | null;          // Audio codec (aac, opus, etc.)
   bitrate: number | null;              // Bitrate (kbps)
+
+  // ❌ REMOVED LEGACY FIELDS:
+  // - id: number
+  // - filename: string
+  // - original_name: string
+  // - file_path: string (now original_file_path from JOIN)
+  // - upload_date: string (now first_seen_date)
+  // - metadata: string | null (deprecated)
 }
 
 export interface ImageMetadata {
@@ -86,16 +106,15 @@ export interface LoRAModel {
 export interface UploadResponse {
   success: boolean;
   data?: {
-    id: number;
-    filename: string;
-    original_name: string;
+    composite_hash: string;            // ✅ Changed from id
+    original_file_path: string;        // ✅ Changed from filename
     thumbnail_url: string;
     optimized_url: string;
     file_size: number;
     mime_type: string;
     width: number | null;
     height: number | null;
-    upload_date: string;
+    first_seen_date: string;           // ✅ Changed from upload_date
   };
   error?: string;
 }
@@ -118,12 +137,12 @@ export type UploadStage = 'upload' | 'metadata' | 'thumbnail' | 'auto-collect' |
 
 export interface UploadProgressEvent {
   type: UploadProgressEventType;
-  currentFile: number;        // Current file number (1-based)
-  totalFiles: number;          // Total file count
-  filename: string;            // Current filename
-  stage?: UploadStage;         // Processing stage
-  message?: string;            // Detailed message
-  imageId?: number;            // Image ID on completion
-  error?: string;              // Error message
-  timestamp: string;           // Timestamp
+  currentFile: number;             // Current file number (1-based)
+  totalFiles: number;              // Total file count
+  filename: string;                // Current filename
+  stage?: UploadStage;             // Processing stage
+  message?: string;                // Detailed message
+  compositeHash?: string;          // ✅ Changed from imageId
+  error?: string;                  // Error message
+  timestamp: string;               // Timestamp
 }

@@ -13,60 +13,79 @@ export interface AutoTagsData {
   tagged_at: string;
 }
 
+/**
+ * ImageRecord interface - Complete migration to composite_hash system
+ *
+ * Breaking Changes:
+ * - Primary key: id (number) → composite_hash (string, 48 chars)
+ * - Date field: upload_date → first_seen_date
+ * - File path: file_path → original_file_path (from image_files table JOIN)
+ * - File info: Now comes from image_files table (file_id, file_status, etc.)
+ */
 export interface ImageRecord {
-  id: number;
-  filename: string;
-  original_name: string;
-  file_path: string;
-  thumbnail_path: string;
-  optimized_path: string | null;
-  file_size: number;
-  mime_type: string;
-  width: number | null;
-  height: number | null;
-  upload_date: string;
-  metadata: string | null;
+  // ✅ New structure - Primary identification
+  composite_hash: string;              // 48-character hash (PRIMARY KEY)
+  first_seen_date: string;             // ISO 8601 date (replaces upload_date)
 
-  // AI 메타데이터 필드들
-  ai_tool: string | null;
-  model_name: string | null;
-  lora_models: string | null;
-  steps: number | null;
-  cfg_scale: number | null;
-  sampler: string | null;
-  seed: number | null;
-  scheduler: string | null;
-  prompt: string | null;
-  negative_prompt: string | null;
-  denoise_strength: number | null;
-  generation_time: number | null;
-  batch_size: number | null;
-  batch_index: number | null;
-  auto_tags: AutoTagsData | null;     // WD v3 자동 태그 (백엔드에서 이미 파싱됨)
+  // File information (from image_files table JOIN)
+  file_id: number | null;              // Reference to image_files table
+  original_file_path: string | null;   // Original file path (replaces file_path)
+  file_size: number | null;            // File size in bytes
+  mime_type: string;                   // MIME type (image/png, video/mp4, etc.)
+  file_status?: 'active' | 'deleted';  // File status
 
-  // 이미지 유사도 검색 필드들
-  perceptual_hash: string | null;      // pHash 알고리즘 기반 이미지 해시
-  color_histogram: string | null;      // RGB 색상 분포 (JSON)
+  // Image metadata (from image_metadata table)
+  width: number;                       // Image width in pixels
+  height: number;                      // Image height in pixels
+  thumbnail_path: string;              // Thumbnail file path
+  optimized_path: string | null;       // Optimized image path (WebP)
 
-  // 동영상 전용 메타데이터 필드들
-  duration: number | null;             // 동영상 재생 시간(초)
-  fps: number | null;                  // 프레임 레이트
-  video_codec: string | null;          // 비디오 코덱 (h264, vp9 등)
-  audio_codec: string | null;          // 오디오 코덱 (aac, opus 등)
-  bitrate: number | null;              // 비트레이트 (kbps)
+  // AI generation metadata
+  ai_tool: string | null;              // ComfyUI, NovelAI, Stable Diffusion, etc.
+  model_name: string | null;           // AI model name
+  lora_models: string | null;          // LoRA models used (JSON string)
+  steps: number | null;                // Generation steps
+  cfg_scale: number | null;            // CFG scale
+  sampler: string | null;              // Sampler name
+  seed: number | null;                 // Generation seed
+  scheduler: string | null;            // Scheduler name
+  prompt: string | null;               // Positive prompt
+  negative_prompt: string | null;      // Negative prompt
+  denoise_strength: number | null;     // Denoise strength
+  generation_time: number | null;      // Generation time in seconds
+  batch_size: number | null;           // Batch size
+  batch_index: number | null;          // Batch index
 
-  // 추가된 URL 필드들 (백엔드에서 enrichImageRecord로 추가)
-  thumbnail_url?: string;
-  image_url?: string;
-  optimized_url?: string;
+  // Auto-tagging (WD v3 Tagger)
+  auto_tags: AutoTagsData | null;      // Auto-generated tags (parsed JSON)
 
-  // 그룹 정보 (백엔드에서 조인으로 추가)
+  // Image similarity search
+  perceptual_hash: string | null;      // pHash for perceptual similarity
+  dhash: string | null;                // dHash for difference hash
+  ahash: string | null;                // aHash for average hash
+  color_histogram: string | null;      // RGB color histogram (JSON)
+
+  // Video-specific metadata
+  duration: number | null;             // Video duration in seconds
+  fps: number | null;                  // Frame rate
+  video_codec: string | null;          // Video codec (h264, vp9, etc.)
+  audio_codec: string | null;          // Audio codec (aac, opus, etc.)
+  bitrate: number | null;              // Bitrate in kbps
+
+  // URLs (automatically added by backend enrichImageWithFileView)
+  thumbnail_url: string;               // Thumbnail URL
+  image_url: string | null;            // Original image URL
+  optimized_url: string | null;        // Optimized image URL
+
+  // Group information (when joined)
   groups?: Array<{
     id: number;
     name: string;
     color?: string;
     collection_type: 'manual' | 'auto';
   }>;
+
+  // Structured AI metadata (backend convenience field)
   ai_metadata?: {
     ai_tool: string | null;
     model_name: string | null;
@@ -87,21 +106,28 @@ export interface ImageRecord {
       negative_prompt: string | null;
     };
   };
+
+  // ❌ REMOVED LEGACY FIELDS:
+  // - id: number
+  // - filename: string
+  // - original_name: string
+  // - file_path: string (now original_file_path from JOIN)
+  // - upload_date: string (now first_seen_date)
+  // - metadata: string | null (deprecated)
 }
 
 export interface UploadResponse {
   success: boolean;
   data?: {
-    id: number;
-    filename: string;
-    original_name: string;
+    composite_hash: string;            // ✅ Changed from id
+    original_file_path: string;        // ✅ Changed from filename
     thumbnail_url: string;
     optimized_url: string;
     file_size: number;
     mime_type: string;
     width: number | null;
     height: number | null;
-    upload_date: string;
+    first_seen_date: string;           // ✅ Changed from upload_date
   };
   error?: string;
 }
@@ -119,8 +145,8 @@ export interface ImageListResponse {
 }
 
 export interface ImageSearchParams {
-  search_text?: string;           // 긍정 프롬프트 검색 키워드
-  negative_text?: string;         // 네거티브 프롬프트 검색 키워드 (필터)
+  search_text?: string;           // Positive prompt search keyword
+  negative_text?: string;         // Negative prompt search keyword
   ai_tool?: string;
   model_name?: string;
   start_date?: string;
@@ -134,13 +160,13 @@ export interface ImageSearchParams {
   group_id?: number;
   page?: number;
   limit?: number;
-  sortBy?: 'upload_date' | 'filename' | 'file_size' | 'width' | 'height';
+  sortBy?: 'first_seen_date' | 'file_size' | 'width' | 'height';  // ✅ Changed from upload_date
   sortOrder?: 'ASC' | 'DESC';
 }
 
 export type PageSize = 25 | 50 | 100;
 
-// AutoTag 검색 관련 타입
+// AutoTag search related types
 export interface RatingFilter {
   general?: { min?: number; max?: number };
   sensitive?: { min?: number; max?: number };
@@ -163,36 +189,36 @@ export interface CharacterFilter {
 
 export interface AutoTagSearchParams {
   rating?: RatingFilter;
-  rating_score?: { min_score?: number; max_score?: number };  // 가중치 기반 점수 필터
+  rating_score?: { min_score?: number; max_score?: number };
   general_tags?: TagFilter[];
   character?: CharacterFilter;
   model?: string;
   has_auto_tags?: boolean;
   page?: number;
   limit?: number;
-  sortBy?: 'upload_date' | 'filename' | 'file_size' | 'width' | 'height';
+  sortBy?: 'first_seen_date' | 'file_size' | 'width' | 'height';  // ✅ Changed from upload_date
   sortOrder?: 'ASC' | 'DESC';
 }
 
-// 업로드 진행도 이벤트 타입 (SSE용)
+// Upload progress event types (SSE)
 export type UploadProgressEventType = 'start' | 'processing' | 'stage' | 'complete' | 'error';
 export type UploadStage = 'upload' | 'metadata' | 'thumbnail' | 'auto-collect' | 'auto-tag';
 
 export interface UploadProgressEvent {
   type: UploadProgressEventType;
-  currentFile: number;        // 현재 처리 중인 파일 번호 (1-based)
-  totalFiles: number;          // 전체 파일 개수
-  filename: string;            // 현재 파일명
-  stage?: UploadStage;         // 처리 단계
-  message?: string;            // 상세 메시지
-  imageId?: number;            // 완료 시 이미지 ID
-  error?: string;              // 에러 메시지
-  timestamp: string;           // 타임스탬프
+  currentFile: number;             // Current file number (1-based)
+  totalFiles: number;              // Total files count
+  filename: string;                // Current filename
+  stage?: UploadStage;             // Processing stage
+  message?: string;                // Detail message
+  compositeHash?: string;          // ✅ Changed from imageId
+  error?: string;                  // Error message
+  timestamp: string;               // Timestamp
 }
 
-// 이미지 선택 관련 타입
+// Image selection related types
 export interface ImageSelectionProps {
   selectable?: boolean;
-  selectedIds?: number[];
-  onSelectionChange?: (selectedIds: number[]) => void;
+  selectedIds?: string[];                            // ✅ Changed to string[]
+  onSelectionChange?: (selectedIds: string[]) => void;  // ✅ Changed to string[]
 }

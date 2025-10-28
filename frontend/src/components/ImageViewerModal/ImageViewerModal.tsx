@@ -37,6 +37,7 @@ import { ImageControls } from './components/ImageControls';
 import { ImageDisplay } from './components/ImageDisplay';
 import { ImageDetailSidebar } from './components/ImageDetailSidebar';
 
+// ✅ composite_hash 기반으로 변경
 interface ImageViewerModalProps {
   open: boolean;
   onClose: () => void;
@@ -44,11 +45,11 @@ interface ImageViewerModalProps {
   images?: ImageRecord[];
   currentIndex?: number;
   onImageChange?: (index: number) => void;
-  onImageDeleted?: (imageId: number) => void;
+  onImageDeleted?: (compositeHash: string) => void;  // composite_hash
   searchContext?: 'all' | 'search' | 'group';
   searchParams?: ImageSearchParams;
   groupId?: number;
-  allImageIds?: number[]; // 전체 이미지 ID 목록 (랜덤 선택용)
+  allImageIds?: string[]; // ✅ 전체 이미지 composite_hash 목록 (랜덤 선택용)
   // 히스토리 컨텍스트
   isHistoryContext?: boolean;
   historyRecord?: GenerationHistoryRecord;
@@ -86,8 +87,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     severity: 'success',
   });
 
-  // Custom hooks
-  const transform = useImageTransform(image?.id, open);
+  // Custom hooks - ✅ composite_hash 사용
+  const transform = useImageTransform(image?.composite_hash, open);
   const navigation = useImageNavigation({
     images,
     currentIndex,
@@ -130,11 +131,11 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     }
   }, [image, isRandomMode]);
 
-  // Reload image after auto-tag generation
+  // ✅ Reload image after auto-tag generation (composite_hash)
   const handleAutoTagGenerated = async () => {
-    if (!image?.id) return;
+    if (!image?.composite_hash) return;
     try {
-      const response = await imageApi.getImage(image.id);
+      const response = await imageApi.getImage(image.composite_hash);
       if (response.success && response.data) {
         setCurrentImage(response.data);
       }
@@ -143,7 +144,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     }
   };
 
-  // Event handlers
+  // ✅ Event handlers (composite_hash)
   const handleDownload = () => {
     if (!image) return;
     const link = document.createElement('a');
@@ -152,10 +153,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     if (isHistoryContext && image.image_url) {
       link.href = `${backendOrigin}${image.image_url}`;
     } else {
-      link.href = `${backendOrigin}/api/images/${image.id}/download/original`;
+      link.href = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
     }
 
-    link.download = image.original_name;
+    link.download = image.original_file_path || `image_${image.composite_hash.substring(0, 8)}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -163,7 +164,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   const handleGoToDetail = () => {
     if (image) {
-      navigate(`/image/${image.id}`);
+      navigate(`/image/${image.composite_hash}`);
       onClose();
     }
   };
@@ -172,6 +173,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     setDeleteDialogOpen(true);
   };
 
+  // ✅ Delete handler (composite_hash)
   const handleDeleteConfirm = async () => {
     if (!currentImage) return;
 
@@ -179,10 +181,12 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       let response: { success: boolean; error?: string };
 
       // 히스토리 컨텍스트일 때는 히스토리 삭제 API 사용
+      // Note: History context still uses id (number) for history records
       if (isHistoryContext) {
-        response = await generationHistoryApi.delete(currentImage.id);
+        // @ts-ignore - history records may have id field
+        response = await generationHistoryApi.delete(currentImage.id || currentImage.composite_hash);
       } else {
-        response = await imageApi.deleteImage(currentImage.id);
+        response = await imageApi.deleteImage(currentImage.composite_hash);
       }
 
       if (response.success) {
@@ -194,7 +198,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
         // Notify parent component
         if (onImageDeleted) {
-          onImageDeleted(currentImage.id);
+          onImageDeleted(currentImage.composite_hash);
         }
 
         // Navigate to next/previous image or close modal

@@ -14,7 +14,7 @@ export const useSearch = () => {
   const [lastSearchParams, setLastSearchParams] = useState<ImageSearchParams | null>(null);
   const [lastAutoTagParams, setLastAutoTagParams] = useState<AutoTagSearchParams | null>(null);
   const [lastComplexRequest, setLastComplexRequest] = useState<ComplexSearchRequest | null>(null);
-  const [allResultIds, setAllResultIds] = useState<number[]>([]); // 전체 검색 결과 ID 목록
+  const [allResultIds, setAllResultIds] = useState<string[]>([]); // ✅ 전체 검색 결과 composite_hash 목록
 
   const searchImages = useCallback(async (params: ImageSearchParams, autoTagParams?: AutoTagSearchParams) => {
     setLoading(true);
@@ -93,9 +93,9 @@ export const useSearch = () => {
         setLastSearchParams(null);
         setLastAutoTagParams(null);
 
-        // 전체 ID 목록 저장
+        // ✅ 전체 composite_hash 목록 저장
         if (idsResponse.success && idsResponse.data) {
-          setAllResultIds(idsResponse.data.ids);
+          setAllResultIds(idsResponse.data.composite_hashes);
         }
       } else {
         setError(searchResponse.error || '검색에 실패했습니다.');
@@ -148,10 +148,11 @@ export const useSearch = () => {
     localStorage.setItem('searchPageSize', newPageSize.toString());
   }, [lastComplexRequest, lastSearchParams, lastAutoTagParams, searchComplex, searchImages]);
 
-  const deleteImages = useCallback(async (ids: number[]) => {
+  // ✅ composite_hash 기반으로 변경
+  const deleteImages = useCallback(async (compositeHashes: string[]) => {
     setLoading(true);
     try {
-      await imageApi.deleteImages(ids);
+      await imageApi.deleteImages(compositeHashes);
       // 삭제 후 검색 재실행
       if (lastComplexRequest) {
         await searchComplex(lastComplexRequest);

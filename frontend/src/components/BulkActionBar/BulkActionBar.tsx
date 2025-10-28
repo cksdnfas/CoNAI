@@ -19,12 +19,13 @@ import { useBulkActions } from '../../hooks/useBulkActions';
 import GroupAssignModal from '../GroupAssignModal';
 import type { ImageRecord } from '../../types/image';
 
+// ✅ composite_hash 기반으로 변경
 interface BulkActionBarProps {
   selectedCount: number;
-  selectedIds: number[];
+  selectedIds: string[];  // composite_hash[]
   selectedImages?: ImageRecord[];
   onSelectionClear: () => void;
-  onActionComplete?: (deletedIds?: number[]) => void;
+  onActionComplete?: (deletedIds?: string[]) => void;  // composite_hash[]
   onModalStateChange?: (isOpen: boolean) => void;
 }
 

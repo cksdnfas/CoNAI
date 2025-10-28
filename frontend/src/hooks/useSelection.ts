@@ -1,29 +1,30 @@
 import { useState, useCallback } from 'react';
 
+// ✅ composite_hash 기반으로 완전 전환
 export const useSelection = () => {
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const toggleSelection = useCallback((id: number) => {
+  const toggleSelection = useCallback((compositeHash: string) => {
     setSelectedIds(prev =>
-      prev.includes(id)
-        ? prev.filter(selectedId => selectedId !== id)
-        : [...prev, id]
+      prev.includes(compositeHash)
+        ? prev.filter(selectedId => selectedId !== compositeHash)
+        : [...prev, compositeHash]
     );
   }, []);
 
-  const selectAll = useCallback((ids: number[]) => {
-    setSelectedIds(ids);
+  const selectAll = useCallback((compositeHashes: string[]) => {
+    setSelectedIds(compositeHashes);
   }, []);
 
   const deselectAll = useCallback(() => {
     setSelectedIds([]);
   }, []);
 
-  const isSelected = useCallback((id: number) => {
-    return selectedIds.includes(id);
+  const isSelected = useCallback((compositeHash: string) => {
+    return selectedIds.includes(compositeHash);
   }, [selectedIds]);
 
-  const toggleSelectAll = useCallback((allIds: number[]) => {
+  const toggleSelectAll = useCallback((allIds: string[]) => {
     if (selectedIds.length === allIds.length) {
       deselectAll();
     } else {

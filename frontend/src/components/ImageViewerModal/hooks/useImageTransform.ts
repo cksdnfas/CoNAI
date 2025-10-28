@@ -25,8 +25,9 @@ interface UseImageTransformResult {
 
 /**
  * Custom hook for managing image transformations (zoom, rotation, flip, drag)
+ * ✅ composite_hash 기반으로 변경
  */
-export const useImageTransform = (imageId?: number, isOpen: boolean = false): UseImageTransformResult => {
+export const useImageTransform = (compositeHash?: string, isOpen: boolean = false): UseImageTransformResult => {
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [flipX, setFlipX] = useState(false);
@@ -48,7 +49,7 @@ export const useImageTransform = (imageId?: number, isOpen: boolean = false): Us
     setFlipY(false);
     setImagePosition({ x: 0, y: 0 });
     setIsDragging(false);
-  }, [imageId]);
+  }, [compositeHash]);
 
   // Zoom handlers
   const handleZoomIn = useCallback(() => {

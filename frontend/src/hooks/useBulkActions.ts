@@ -5,14 +5,15 @@ export const useBulkActions = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const deleteImages = useCallback(async (imageIds: number[]): Promise<boolean> => {
-    if (imageIds.length === 0) return false;
+  // ✅ composite_hash 기반으로 변경
+  const deleteImages = useCallback(async (compositeHashes: string[]): Promise<boolean> => {
+    if (compositeHashes.length === 0) return false;
 
     setLoading(true);
     setError(null);
 
     try {
-      const results = await imageApi.deleteImages(imageIds);
+      const results = await imageApi.deleteImages(compositeHashes);
       const failedCount = results.filter(result => !result.success).length;
 
       if (failedCount > 0) {
@@ -29,8 +30,9 @@ export const useBulkActions = () => {
     }
   }, []);
 
-  const downloadImages = useCallback(async (imageIds: number[]) => {
-    if (imageIds.length === 0) return;
+  // ✅ composite_hash 기반으로 변경
+  const downloadImages = useCallback(async (compositeHashes: string[]) => {
+    if (compositeHashes.length === 0) return;
 
     setLoading(true);
     setError(null);
@@ -38,10 +40,10 @@ export const useBulkActions = () => {
     try {
       // 각 이미지를 순차적으로 다운로드
       // 브라우저에서 동시 다운로드 제한을 고려하여 순차 처리
-      for (const imageId of imageIds) {
+      for (const compositeHash of compositeHashes) {
         const link = document.createElement('a');
-        link.href = imageApi.getDownloadUrl(imageId, 'original');
-        link.download = `image_${imageId}`;
+        link.href = imageApi.getDownloadUrl(compositeHash, 'original');
+        link.download = `image_${compositeHash.substring(0, 8)}`;  // 해시의 처음 8자만 사용
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -57,14 +59,15 @@ export const useBulkActions = () => {
     }
   }, []);
 
-  const assignToGroup = useCallback(async (imageIds: number[], groupId: number): Promise<boolean> => {
-    if (imageIds.length === 0) return false;
+  // ✅ composite_hash 기반으로 변경
+  const assignToGroup = useCallback(async (compositeHashes: string[], groupId: number): Promise<boolean> => {
+    if (compositeHashes.length === 0) return false;
 
     setLoading(true);
     setError(null);
 
     try {
-      const result = await groupApi.addImagesToGroup(groupId, imageIds);
+      const result = await groupApi.addImagesToGroup(groupId, compositeHashes);
 
       if (!result.success) {
         setError(result.error || '그룹 할당에 실패했습니다.');

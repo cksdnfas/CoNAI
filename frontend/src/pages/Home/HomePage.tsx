@@ -15,10 +15,10 @@ const HomePage: React.FC = () => {
     refreshImages,
   } = useInfiniteImages();
 
-  // 선택 상태 관리 (상시 선택모드)
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  // ✅ 선택 상태 관리 (상시 선택모드) - composite_hash 기반
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const handleSelectionChange = (newSelectedIds: number[]) => {
+  const handleSelectionChange = (newSelectedIds: string[]) => {
     setSelectedIds(newSelectedIds);
   };
 
@@ -26,7 +26,7 @@ const HomePage: React.FC = () => {
     setSelectedIds([]);
   };
 
-  const handleActionComplete = async (deletedIds?: number[]) => {
+  const handleActionComplete = async (deletedIds?: string[]) => {
     // 삭제된 이미지가 있으면 선택에서 제거
     if (deletedIds && deletedIds.length > 0) {
       setSelectedIds(prev => prev.filter(id => !deletedIds.includes(id)));
@@ -108,7 +108,7 @@ const HomePage: React.FC = () => {
       <BulkActionBar
         selectedCount={selectedIds.length}
         selectedIds={selectedIds}
-        selectedImages={images.filter(img => selectedIds.includes(img.id))}
+        selectedImages={images.filter(img => selectedIds.includes(img.composite_hash))}
         onSelectionClear={handleSelectionClear}
         onActionComplete={handleActionComplete}
       />
