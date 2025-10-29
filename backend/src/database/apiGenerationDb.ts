@@ -106,20 +106,75 @@ function recordMigration(version: string): void {
 }
 
 /**
+ * Create all tables directly (no migration files needed)
+ */
+function createTables(): void {
+  console.log('📊 Creating API generation history tables...');
+
+  // 1. API Generation history table
+  apiGenDb.exec(`
+    CREATE TABLE IF NOT EXISTS api_generation_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      service_type TEXT NOT NULL CHECK(service_type IN ('comfyui', 'novelai')),
+      generation_status TEXT NOT NULL DEFAULT 'pending' CHECK(generation_status IN ('pending', 'processing', 'completed', 'failed')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      completed_at DATETIME,
+      comfyui_workflow TEXT,
+      comfyui_prompt_id TEXT,
+      workflow_id INTEGER,
+      group_id INTEGER,
+      nai_model TEXT,
+      nai_sampler TEXT,
+      nai_seed INTEGER,
+      nai_steps INTEGER,
+      nai_scale REAL,
+      nai_parameters TEXT,
+      positive_prompt TEXT,
+      negative_prompt TEXT,
+      width INTEGER,
+      height INTEGER,
+      original_path TEXT,
+      thumbnail_path TEXT,
+      optimized_path TEXT,
+      file_size INTEGER,
+      linked_image_id INTEGER,
+      composite_hash TEXT,
+      error_message TEXT,
+      metadata TEXT
+    )
+  `);
+
+  // Create indexes
+  const indexes = [
+    'CREATE INDEX IF NOT EXISTS idx_api_gen_service_type ON api_generation_history(service_type)',
+    'CREATE INDEX IF NOT EXISTS idx_api_gen_status ON api_generation_history(generation_status)',
+    'CREATE INDEX IF NOT EXISTS idx_api_gen_created_at ON api_generation_history(created_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_api_gen_linked_image ON api_generation_history(linked_image_id)',
+    'CREATE INDEX IF NOT EXISTS idx_api_gen_composite_hash ON api_generation_history(composite_hash)',
+    'CREATE INDEX IF NOT EXISTS idx_api_gen_workflow_id ON api_generation_history(workflow_id)',
+    'CREATE INDEX IF NOT EXISTS idx_api_gen_group_id ON api_generation_history(group_id)'
+  ];
+
+  indexes.forEach(sql => apiGenDb.exec(sql));
+
+  console.log('  ✅ API generation history tables created (1 table + indexes)');
+}
+
+/**
  * Run all migration files in order
  */
 function runMigrations(): void {
+  // Create migrations tracking table
+  createMigrationsTable();
+
+  // Check if migrations folder exists
   if (!fs.existsSync(MIGRATIONS_PATH)) {
-    console.warn(`⚠️  No migrations directory found for API generation DB`);
-    console.warn(`   Searched path: ${MIGRATIONS_PATH}`);
-    console.warn(`   API generation history features may not work correctly`);
+    console.log('📊 No migrations folder found, creating tables directly...');
+    createTables();
     return;
   }
 
   console.log(`📂 Using API generation migrations from: ${MIGRATIONS_PATH}`);
-
-  // Create migrations tracking table
-  createMigrationsTable();
 
   // Get already applied migrations
   const appliedMigrations = getAppliedMigrations();
