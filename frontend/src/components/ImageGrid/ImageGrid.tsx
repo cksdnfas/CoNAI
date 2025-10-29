@@ -284,7 +284,7 @@ const ImageGrid: React.FC<ImageGridProps> = ({
       {/* 이미지 그리드 */}
       <Grid container spacing={2}>
         {safeImages.map((image, index) => (
-          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3, xl: 2 }} key={image.composite_hash}>
+          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3, xl: 2 }} key={image.file_id ? `file-${image.file_id}` : `hash-${image.composite_hash}-${index}`}>
             <ImageCard
               image={image}
               selected={selectedIds.includes(image.composite_hash)}

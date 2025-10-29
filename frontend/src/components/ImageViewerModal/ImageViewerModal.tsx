@@ -81,6 +81,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [currentImage, setCurrentImage] = useState<ImageRecord | null>(image);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isRandomMode, setIsRandomMode] = useState(false);
+  const [showOriginal, setShowOriginal] = useState(false); // 원본 이미지 표시 여부 (기본: 썸네일)
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',
@@ -282,6 +283,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           <ImageControls
             scale={transform.scale}
             isMobile={isMobile}
+            showOriginal={showOriginal}
+            isGif={currentImage?.mime_type === 'image/gif'}
             onZoomIn={transform.handleZoomIn}
             onZoomOut={transform.handleZoomOut}
             onRotateLeft={transform.handleRotateLeft}
@@ -289,6 +292,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             onFlipHorizontal={transform.handleFlipHorizontal}
             onFlipVertical={transform.handleFlipVertical}
             onReset={transform.handleReset}
+            onToggleOriginal={() => setShowOriginal(prev => !prev)}
             onOpenDrawer={isMobile ? () => setDrawerOpen(true) : undefined}
             onClose={onClose}
           />
@@ -304,6 +308,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             isDragging={transform.isDragging}
             containerRef={transform.imageContainerRef}
             onMouseDown={transform.handleMouseDown}
+            showOriginal={showOriginal}
           />
         </Box>
 

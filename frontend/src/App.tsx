@@ -37,7 +37,7 @@ function App() {
             <Route path="/search" element={<SearchPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/help" element={<HelpPage />} />
-            <Route path="/image/:id" element={<ImageDetailPage />} />
+            <Route path="/image/:compositeHash" element={<ImageDetailPage />} />
             <Route path="/image-generation" element={<ImageGenerationPage />} />
             <Route path="/image-generation/new" element={<WorkflowFormPage />} />
             <Route path="/image-generation/:id/edit" element={<WorkflowFormPage />} />

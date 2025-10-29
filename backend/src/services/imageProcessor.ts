@@ -25,7 +25,7 @@ export class ImageProcessor {
   }
 
   private static readonly THUMBNAIL_SIZE = 1080;
-  private static readonly THUMBNAIL_QUALITY = 80;
+  private static readonly THUMBNAIL_QUALITY = 90;
   private static readonly OPTIMIZED_QUALITY = 95;
 
   /**
@@ -203,7 +203,7 @@ export class ImageProcessor {
         filename,
         originalPath: relativeOriginal,
         thumbnailPath: '', // 스캔 시 생성
-        optimizedPath: '', // 스캔 시 생성
+        optimizedPath: '', // 더 이상 사용 안 함 (썸네일로 대체)
         width: imageInfo.width,
         height: imageInfo.height,
         fileSize: file.size,

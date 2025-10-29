@@ -8,7 +8,6 @@ import path from 'path';
  */
 export enum TaskType {
   METADATA_EXTRACTION = 'metadata_extraction',
-  AUTO_TAGGING = 'auto_tagging',
   PROMPT_COLLECTION = 'prompt_collection'
 }
 
@@ -28,9 +27,11 @@ export interface BackgroundTask {
 
 /**
  * 백그라운드 작업 큐 서비스
- * - 메타데이터 추출, 자동 태깅 등의 비동기 작업 처리
+ * - 메타데이터 추출, 프롬프트 수집 등의 비동기 작업 처리
  * - 실패 시 재시도 메커니즘
  * - 스캔 성공에 영향을 주지 않음
+ *
+ * 참고: 자동 태깅은 AutoTagScheduler로 분리되어 처리됨
  */
 export class BackgroundQueueService {
   private static queue: BackgroundTask[] = [];
@@ -62,29 +63,6 @@ export class BackgroundQueueService {
     }
   }
 
-  /**
-   * 자동 태깅 작업 추가
-   */
-  static addAutoTaggingTask(filePath: string, compositeHash: string): void {
-    const task: BackgroundTask = {
-      id: `${compositeHash}_tagging_${Date.now()}`,
-      type: TaskType.AUTO_TAGGING,
-      filePath,
-      compositeHash,
-      priority: 2,
-      retries: 0,
-      maxRetries: this.MAX_RETRIES,
-      createdAt: new Date()
-    };
-
-    this.queue.push(task);
-    console.log(`  📋 백그라운드 작업 추가: 자동 태깅 - ${path.basename(filePath)}`);
-
-    // 큐 처리 시작
-    if (!this.processing) {
-      this.processQueue();
-    }
-  }
 
   /**
    * 프롬프트 수집 작업 추가
@@ -166,10 +144,6 @@ export class BackgroundQueueService {
           await this.processMetadataExtraction(task);
           break;
 
-        case TaskType.AUTO_TAGGING:
-          await this.processAutoTagging(task);
-          break;
-
         case TaskType.PROMPT_COLLECTION:
           await this.processPromptCollection(task);
           break;
@@ -228,22 +202,6 @@ export class BackgroundQueueService {
     console.log(`  ✅ 메타데이터 추출 완료: ${path.basename(task.filePath)}`);
   }
 
-  /**
-   * 자동 태깅 처리
-   */
-  private static async processAutoTagging(task: BackgroundTask): Promise<void> {
-    // 자동 태깅 설정 확인
-    const settings = settingsService.loadSettings();
-    if (!settings.tagger.autoTagOnUpload) {
-      console.log(`  ⏭️  자동 태깅 비활성화: ${path.basename(task.filePath)}`);
-      return;
-    }
-
-    // TODO: 자동 태깅 로직 구현
-    // - WD Tagger 호출
-    // - auto_tags 필드 업데이트
-    console.log(`  🏷️  자동 태깅 대기: ${path.basename(task.filePath)}`);
-  }
 
   /**
    * 프롬프트 수집 처리
@@ -275,7 +233,6 @@ export class BackgroundQueueService {
   } {
     const tasksByType: Record<TaskType, number> = {
       [TaskType.METADATA_EXTRACTION]: 0,
-      [TaskType.AUTO_TAGGING]: 0,
       [TaskType.PROMPT_COLLECTION]: 0
     };
 

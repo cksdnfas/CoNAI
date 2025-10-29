@@ -70,12 +70,19 @@ export function enrichImageRecord(image: any) {
  * composite_hash 기반 이미지 데이터 처리
  */
 export function enrichImageWithFileView(image: any) {
+  // 외부 폴더 이미지인지 확인 (original_file_path가 절대 경로)
+  const isExternalImage = image.original_file_path && require('path').isAbsolute(image.original_file_path);
+
   const enriched = {
     ...image,
-    thumbnail_url: toUploadsUrl(image.thumbnail_path as string)!,
-    // original_file_path가 있으면 사용, 없으면 null
-    image_url: image.original_file_path ? toUploadsUrl(image.original_file_path) : null,
-    optimized_url: image.optimized_path ? toUploadsUrl(image.optimized_path) : null,
+    // 썸네일: temp 폴더에 있으므로 항상 정상 작동 (외부 이미지도 포함)
+    thumbnail_url: toUploadsUrl(image.thumbnail_path as string) || `/api/images/${image.composite_hash}/thumbnail`,
+    // 원본 이미지: 외부 폴더면 API 엔드포인트 사용
+    image_url: isExternalImage
+      ? `/api/images/${image.composite_hash}/download/original`
+      : (image.original_file_path ? toUploadsUrl(image.original_file_path) : null),
+    // optimized는 더 이상 생성하지 않음 - 하위 호환성을 위해 thumbnail_url과 동일하게 설정
+    optimized_url: toUploadsUrl(image.thumbnail_path as string) || `/api/images/${image.composite_hash}/thumbnail`,
 
     // 그룹 정보 (이미 있는 경우 그대로 유지)
     groups: image.groups || [],

@@ -80,6 +80,13 @@ export function ensureRuntimeDirectories(): void {
 }
 
 export function resolveUploadsPath(...segments: string[]): string {
+  // If single segment and it's an absolute path that exists, return as-is
+  // This handles external folder paths (watched folders)
+  if (segments.length === 1 && path.isAbsolute(segments[0])) {
+    return segments[0];
+  }
+
+  // Otherwise join with uploadsDir for relative paths
   return path.join(uploadsDir, ...segments);
 }
 
@@ -94,6 +101,14 @@ export function toUploadsUrl(relativePath: string | null | undefined): string | 
   if (!relativePath) {
     return null;
   }
+
+  // 절대 경로인 경우 (외부 폴더) - API 엔드포인트 사용을 위해 null 반환
+  // Windows: C:\, D:\, E:\ 등
+  // Linux/Mac: /로 시작
+  if (path.isAbsolute(relativePath)) {
+    return null;
+  }
+
   const normalized = normalizeUploadSegment(relativePath);
   return `${uploadsPublicBase}/${normalized}`;
 }

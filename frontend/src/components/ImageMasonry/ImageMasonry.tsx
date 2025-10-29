@@ -194,7 +194,7 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
         >
           {images.map((image, index) => (
             <MasonryImageCard
-              key={image.composite_hash}
+              key={image.file_id ? `file-${image.file_id}` : `hash-${image.composite_hash}-${index}`}
               image={image}
               onClick={() => handleImageClick(index)}
               selected={selectedIds.includes(image.composite_hash)}

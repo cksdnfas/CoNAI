@@ -3,55 +3,91 @@ import path from 'path';
 import fs from 'fs';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { ImageModel } from '../../models/Image';
+import { ImageMetadataModel } from '../../models/Image/ImageMetadataModel';
+import { db } from '../../database/init';
 import { imageTaggerService, ImageTaggerService } from '../../services/imageTaggerService';
 import { ImageListResponse } from '../../types/image';
-import { runtimePaths } from '../../config/runtimePaths';
+import { runtimePaths, resolveUploadsPath } from '../../config/runtimePaths';
 import { AutoTagSearchService } from '../../services/autoTagSearchService';
 import { AutoTagSearchParams } from '../../types/autoTag';
 import { enrichImageRecord } from './utils';
 
 const router = Router();
-const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
 
 /**
  * 단일 이미지 태깅 (WD v3 Tagger)
  */
 router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const compositeHash = req.params.id;
 
-  if (isNaN(id)) {
+  console.log('[TagRoute] POST /:id/tag hit!');
+  console.log('[TagRoute] req.params.id:', compositeHash);
+  console.log('[TagRoute] req.url:', req.url);
+  console.log('[TagRoute] req.path:', req.path);
+
+  if (!compositeHash || typeof compositeHash !== 'string') {
+    console.log('[TagRoute] Invalid composite hash:', compositeHash);
     return res.status(400).json({
       success: false,
-      error: 'Invalid image ID'
+      error: 'Invalid composite hash'
     });
   }
 
   try {
-    // 이미지 정보 조회
-    const image = await ImageModel.findById(id);
+    console.log('[TagRoute] Querying database for composite_hash:', compositeHash);
 
-    if (!image) {
+    // 이미지 메타데이터 및 파일 정보 조회
+    const imageData = db.prepare(`
+      SELECT
+        im.*,
+        if.original_file_path,
+        if.mime_type as file_mime_type
+      FROM image_metadata im
+      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
+      WHERE im.composite_hash = ?
+      LIMIT 1
+    `).get(compositeHash) as any;
+
+    console.log('[TagRoute] Database query result:', imageData ? 'Found' : 'Not found');
+
+    if (!imageData) {
+      console.log('[TagRoute] Image not found in database');
       return res.status(404).json({
         success: false,
         error: 'Image not found'
       });
     }
 
-    // 원본 이미지 경로
-    const imagePath = path.join(UPLOAD_BASE_PATH, image.file_path);
+    console.log('[TagRoute] Image data retrieved, file_path:', imageData.original_file_path);
 
-    if (!fs.existsSync(imagePath)) {
+    if (!imageData.original_file_path) {
       return res.status(404).json({
         success: false,
-        error: 'Image file not found'
+        error: 'No active file found for this image'
       });
     }
 
-    console.log(`[ImageTag] Tagging file ${id}: ${imagePath}`);
+    // 원본 이미지 경로
+    const imagePath = resolveUploadsPath(imageData.original_file_path);
+
+    console.log('[TagRoute] original_file_path from DB:', imageData.original_file_path);
+    console.log('[TagRoute] Calculated imagePath:', imagePath);
+    console.log('[TagRoute] File exists?', fs.existsSync(imagePath));
+
+    if (!fs.existsSync(imagePath)) {
+      console.log('[TagRoute] Image file not found on disk');
+      return res.status(404).json({
+        success: false,
+        error: 'Image file not found on disk'
+      });
+    }
+
+    console.log(`[ImageTag] Tagging file ${compositeHash}: ${imagePath}`);
 
     // 동영상 또는 이미지 태깅 실행
+    const mimeType = imageData.file_mime_type || imageData.mime_type;
     let taggerResult;
-    if (ImageTaggerService.isVideoFile(imagePath, image.mime_type)) {
+    if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
       console.log('[ImageTag] Detected video file, extracting frames...');
       taggerResult = await imageTaggerService.tagVideo(imagePath);
     } else {
@@ -80,14 +116,14 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
     console.log('[ImageTag] Formatted JSON length:', autoTagsJson?.length || 0);
     console.log('[ImageTag] Formatted JSON preview:', autoTagsJson?.substring(0, 100));
 
-    await ImageModel.updateAutoTags(id, autoTagsJson);
+    ImageMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
 
-    console.log(`[ImageTag] Successfully tagged image ${id}`);
+    console.log(`[ImageTag] Successfully tagged image ${compositeHash}`);
 
     res.json({
       success: true,
       data: {
-        image_id: id,
+        composite_hash: compositeHash,
         auto_tags: autoTagsJson ? JSON.parse(autoTagsJson) : null
       }
     });
@@ -122,14 +158,23 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
 
     console.log(`[BatchTag] Starting batch tagging for ${image_ids.length} images`);
 
-    for (const id of image_ids) {
+    for (const compositeHash of image_ids) {
       try {
-        // 이미지 정보 조회
-        const image = await ImageModel.findById(id);
+        // 이미지 메타데이터 및 파일 정보 조회
+        const imageData = db.prepare(`
+          SELECT
+            im.*,
+            if.original_file_path,
+            if.mime_type as file_mime_type
+          FROM image_metadata im
+          LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
+          WHERE im.composite_hash = ?
+          LIMIT 1
+        `).get(compositeHash) as any;
 
-        if (!image) {
+        if (!imageData) {
           results.push({
-            image_id: id,
+            composite_hash: compositeHash,
             success: false,
             error: 'Image not found'
           });
@@ -137,12 +182,22 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
           continue;
         }
 
+        if (!imageData.original_file_path) {
+          results.push({
+            composite_hash: compositeHash,
+            success: false,
+            error: 'No active file found'
+          });
+          failCount++;
+          continue;
+        }
+
         // 원본 이미지 경로
-        const imagePath = path.join(UPLOAD_BASE_PATH, image.file_path);
+        const imagePath = resolveUploadsPath(imageData.original_file_path);
 
         if (!fs.existsSync(imagePath)) {
           results.push({
-            image_id: id,
+            composite_hash: compositeHash,
             success: false,
             error: 'Image file not found'
           });
@@ -151,8 +206,9 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
         }
 
         // 동영상 또는 이미지 태깅 실행
+        const mimeType = imageData.file_mime_type || imageData.mime_type;
         let taggerResult;
-        if (ImageTaggerService.isVideoFile(imagePath, image.mime_type)) {
+        if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
           taggerResult = await imageTaggerService.tagVideo(imagePath);
         } else {
           taggerResult = await imageTaggerService.tagImage(imagePath);
@@ -160,7 +216,7 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
 
         if (!taggerResult.success) {
           results.push({
-            image_id: id,
+            composite_hash: compositeHash,
             success: false,
             error: taggerResult.error || 'Tagging failed'
           });
@@ -170,20 +226,20 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
 
         // 데이터베이스에 저장
         const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-        await ImageModel.updateAutoTags(id, autoTagsJson);
+        ImageMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
 
         results.push({
-          image_id: id,
+          composite_hash: compositeHash,
           success: true,
           auto_tags: autoTagsJson ? JSON.parse(autoTagsJson) : null
         });
         successCount++;
 
-        console.log(`[BatchTag] Tagged image ${id} (${successCount}/${image_ids.length})`);
+        console.log(`[BatchTag] Tagged image ${compositeHash} (${successCount}/${image_ids.length})`);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         results.push({
-          image_id: id,
+          composite_hash: compositeHash,
           success: false,
           error: message
         });
@@ -221,7 +277,7 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
   const maxLimit = limit ? parseInt(limit) : 100;
 
   try {
-    // 미처리 이미지 조회
+    // 미처리 이미지 조회 (composite_hash, file_path 포함)
     const untaggedImages = await ImageModel.findUntagged(maxLimit);
 
     if (untaggedImages.length === 0) {
@@ -246,11 +302,24 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
 
     for (const image of untaggedImages) {
       try {
-        const imagePath = path.join(UPLOAD_BASE_PATH, image.file_path);
+        const compositeHash = image.composite_hash || image.id;
+        const filePath = image.original_file_path || image.file_path;
+
+        if (!filePath) {
+          results.push({
+            composite_hash: compositeHash,
+            success: false,
+            error: 'No file path available'
+          });
+          failCount++;
+          continue;
+        }
+
+        const imagePath = resolveUploadsPath(filePath);
 
         if (!fs.existsSync(imagePath)) {
           results.push({
-            image_id: image.id,
+            composite_hash: compositeHash,
             success: false,
             error: 'Image file not found'
           });
@@ -259,8 +328,9 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
         }
 
         // 동영상 또는 이미지 태깅 실행
+        const mimeType = image.file_mime_type || image.mime_type;
         let taggerResult;
-        if (ImageTaggerService.isVideoFile(imagePath, image.mime_type)) {
+        if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
           taggerResult = await imageTaggerService.tagVideo(imagePath);
         } else {
           taggerResult = await imageTaggerService.tagImage(imagePath);
@@ -268,7 +338,7 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
 
         if (!taggerResult.success) {
           results.push({
-            image_id: image.id,
+            composite_hash: compositeHash,
             success: false,
             error: taggerResult.error || 'Tagging failed'
           });
@@ -277,20 +347,21 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
         }
 
         const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-        await ImageModel.updateAutoTags(image.id, autoTagsJson);
+        ImageMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
 
         results.push({
-          image_id: image.id,
+          composite_hash: compositeHash,
           success: true,
           auto_tags: autoTagsJson ? JSON.parse(autoTagsJson) : null
         });
         successCount++;
 
-        console.log(`[BatchTagUnprocessed] Tagged file ${image.id} (${successCount}/${untaggedImages.length})`);
+        console.log(`[BatchTagUnprocessed] Tagged file ${compositeHash} (${successCount}/${untaggedImages.length})`);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
+        const compositeHash = image.composite_hash || image.id;
         results.push({
-          image_id: image.id,
+          composite_hash: compositeHash,
           success: false,
           error: message
         });
@@ -329,10 +400,18 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
   const forceRetag = force !== undefined ? force : true;
 
   try {
-    // 전체 이미지 ID 조회
-    const imageIds = await ImageModel.findAllIds(maxLimit);
+    // 전체 이미지 composite_hash 조회
+    const query = maxLimit
+      ? `SELECT composite_hash FROM image_metadata ORDER BY first_seen_date DESC LIMIT ?`
+      : `SELECT composite_hash FROM image_metadata ORDER BY first_seen_date DESC`;
 
-    if (imageIds.length === 0) {
+    const hashRows = maxLimit
+      ? db.prepare(query).all(maxLimit) as any[]
+      : db.prepare(query).all() as any[];
+
+    const compositeHashes = hashRows.map(row => row.composite_hash);
+
+    if (compositeHashes.length === 0) {
       res.json({
         success: true,
         data: {
@@ -346,19 +425,29 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
       return;
     }
 
-    console.log(`[BatchTagAll] Processing ${imageIds.length} images (force=${forceRetag})`);
+    console.log(`[BatchTagAll] Processing ${compositeHashes.length} images (force=${forceRetag})`);
 
     const results = [];
     let successCount = 0;
     let failCount = 0;
 
-    for (const id of imageIds) {
+    for (const compositeHash of compositeHashes) {
       try {
-        const image = await ImageModel.findById(id);
+        // 이미지 메타데이터 및 파일 정보 조회
+        const imageData = db.prepare(`
+          SELECT
+            im.*,
+            if.original_file_path,
+            if.mime_type as file_mime_type
+          FROM image_metadata im
+          LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
+          WHERE im.composite_hash = ?
+          LIMIT 1
+        `).get(compositeHash) as any;
 
-        if (!image) {
+        if (!imageData) {
           results.push({
-            image_id: id,
+            composite_hash: compositeHash,
             success: false,
             error: 'Image not found'
           });
@@ -366,11 +455,21 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
           continue;
         }
 
-        const imagePath = path.join(UPLOAD_BASE_PATH, image.file_path);
+        if (!imageData.original_file_path) {
+          results.push({
+            composite_hash: compositeHash,
+            success: false,
+            error: 'No active file found'
+          });
+          failCount++;
+          continue;
+        }
+
+        const imagePath = resolveUploadsPath(imageData.original_file_path);
 
         if (!fs.existsSync(imagePath)) {
           results.push({
-            image_id: id,
+            composite_hash: compositeHash,
             success: false,
             error: 'Image file not found'
           });
@@ -379,8 +478,9 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
         }
 
         // 동영상 또는 이미지 태깅 실행
+        const mimeType = imageData.file_mime_type || imageData.mime_type;
         let taggerResult;
-        if (ImageTaggerService.isVideoFile(imagePath, image.mime_type)) {
+        if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
           taggerResult = await imageTaggerService.tagVideo(imagePath);
         } else {
           taggerResult = await imageTaggerService.tagImage(imagePath);
@@ -388,7 +488,7 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
 
         if (!taggerResult.success) {
           results.push({
-            image_id: id,
+            composite_hash: compositeHash,
             success: false,
             error: taggerResult.error || 'Tagging failed'
           });
@@ -397,20 +497,20 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
         }
 
         const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-        await ImageModel.updateAutoTags(id, autoTagsJson);
+        ImageMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
 
         results.push({
-          image_id: id,
+          composite_hash: compositeHash,
           success: true,
           auto_tags: autoTagsJson ? JSON.parse(autoTagsJson) : null
         });
         successCount++;
 
-        console.log(`[BatchTagAll] Tagged file ${id} (${successCount}/${imageIds.length})`);
+        console.log(`[BatchTagAll] Tagged file ${compositeHash} (${successCount}/${compositeHashes.length})`);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         results.push({
-          image_id: id,
+          composite_hash: compositeHash,
           success: false,
           error: message
         });
@@ -423,7 +523,7 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
     res.json({
       success: true,
       data: {
-        total: imageIds.length,
+        total: compositeHashes.length,
         success_count: successCount,
         fail_count: failCount,
         results

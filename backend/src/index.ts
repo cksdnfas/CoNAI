@@ -31,6 +31,7 @@ import naiRoutes from './routes/nai';
 import generationHistoryRoutes from './routes/generation-history.routes';
 import wildcardRoutes from './routes/wildcards';
 import { watchedFoldersRoutes } from './routes/watchedFolders';
+import { backgroundQueueRoutes } from './routes/backgroundQueue';
 import { initializeDatabase } from './database/init';
 import { initializeUserSettingsDb } from './database/userSettingsDb';
 import { initializeApiGenerationDb } from './database/apiGenerationDb';
@@ -39,6 +40,8 @@ import { imageTaggerService } from './services/imageTaggerService';
 import { APIImageProcessor } from './services/apiImageProcessor';
 import { PORTS, IMAGE_PROCESSING } from '@comfyui-image-manager/shared';
 import { settingsService } from './services/settingsService';
+import { AutoScanScheduler } from './services/autoScanScheduler';
+import { autoTagScheduler } from './services/autoTagScheduler';
 
 const app = express();
 const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;
@@ -142,6 +145,7 @@ app.use('/api/nai', naiRoutes);
 app.use('/api/generation-history', generationHistoryRoutes);
 app.use('/api/wildcards', wildcardRoutes);
 app.use('/api/folders', watchedFoldersRoutes);
+app.use('/api/background-queue', backgroundQueueRoutes);
 
 // Frontend static file serving
 const frontendDistPath = process.env.FRONTEND_DIST_PATH
@@ -235,6 +239,16 @@ async function startServer() {
     } else {
       console.log('⏭️  Tagger is disabled - skipping daemon startup');
     }
+
+    // 8. 자동 스캔 스케줄러 시작
+    console.log('🤖 Starting auto-scan scheduler...');
+    AutoScanScheduler.start();
+    console.log('✅ Auto-scan scheduler started successfully');
+
+    // 9. 자동 태깅 스케줄러 시작
+    console.log('🤖 Starting auto-tag scheduler...');
+    autoTagScheduler.start();
+    console.log('✅ Auto-tag scheduler started successfully');
 
     const extractHost = (value?: string | null): string | undefined => {
       if (!value || value.trim().length === 0) {
@@ -346,6 +360,22 @@ ${divider}`);
     // Graceful shutdown
     const shutdown = async () => {
       console.log('\n🛑 Shutting down gracefully...');
+
+      // Stop auto-scan scheduler
+      try {
+        AutoScanScheduler.stop();
+        console.log('✅ Auto-scan scheduler stopped');
+      } catch (error) {
+        console.warn('⚠️  Error stopping auto-scan scheduler:', error);
+      }
+
+      // Stop auto-tag scheduler
+      try {
+        autoTagScheduler.stop();
+        console.log('✅ Auto-tag scheduler stopped');
+      } catch (error) {
+        console.warn('⚠️  Error stopping auto-tag scheduler:', error);
+      }
 
       // Stop tagger daemon
       try {

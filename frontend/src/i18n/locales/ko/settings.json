@@ -8,6 +8,7 @@
     "similarity": "이미지 유사도 검색",
     "prompts": "프롬프트 관리",
     "metadata": "메타데이터 추출",
+    "folders": "폴더 관리",
     "advanced": "고급 설정"
   },
   "general": {

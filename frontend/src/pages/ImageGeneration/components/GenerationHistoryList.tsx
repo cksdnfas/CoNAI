@@ -361,7 +361,7 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
             const historyRecord = records[index];
             return (
               <HistoryMasonryCard
-                key={imageRecord.composite_hash}
+                key={imageRecord.file_id ? `file-${imageRecord.file_id}` : `hash-${imageRecord.composite_hash}-${index}`}
                 image={imageRecord}
                 onClick={() => handleImageClick(index)}
                 generationStatus={historyRecord.generation_status}

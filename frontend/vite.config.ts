@@ -20,6 +20,14 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:1566',
         changeOrigin: true,
+        configure: (proxy, _options) => {
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            console.log('[Vite Proxy] Proxying:', req.method, req.url, '→', proxyReq.path);
+          });
+          proxy.on('error', (err, _req, _res) => {
+            console.error('[Vite Proxy] Error:', err);
+          });
+        }
       },
       '/uploads': {
         target: 'http://localhost:1566',

@@ -8,33 +8,55 @@ import { ColorHistogram } from '../types/similarity';
 export class ImageSimilarityService {
   /**
    * Perceptual Hash (pHash) 생성
-   * 8x8 그레이스케일 이미지를 기반으로 64비트 해시 생성
+   * DCT (Discrete Cosine Transform) 기반으로 64비트 해시 생성
+   * 밝기/색상 변화에 강한 해시 알고리즘
    */
   static async generatePerceptualHash(imagePath: string): Promise<string> {
     try {
-      // 1. 8x8 크기로 리사이즈 (비율 무시)
+      // 1. 32x32 크기로 리사이즈 (DCT를 위한 충분한 데이터)
       // 2. 그레이스케일 변환
       // 3. Raw 픽셀 데이터 추출
-      const { data, info } = await sharp(imagePath)
-        .resize(8, 8, { fit: 'fill' })
+      const { data } = await sharp(imagePath)
+        .resize(32, 32, { fit: 'fill' })
         .greyscale()
         .raw()
         .toBuffer({ resolveWithObject: true });
 
-      if (data.length !== 64) {
+      if (data.length !== 1024) {
         throw new Error(`Unexpected pixel data length: ${data.length}`);
       }
 
-      // 평균 픽셀 값 계산
-      const average = data.reduce((sum, val) => sum + val, 0) / data.length;
-
-      // 각 픽셀이 평균보다 큰지 판단하여 비트 생성
-      let hash = '';
-      for (let i = 0; i < data.length; i++) {
-        hash += data[i] > average ? '1' : '0';
+      // 픽셀 데이터를 32x32 행렬로 변환
+      const matrix: number[][] = [];
+      for (let i = 0; i < 32; i++) {
+        matrix[i] = [];
+        for (let j = 0; j < 32; j++) {
+          matrix[i][j] = data[i * 32 + j];
+        }
       }
 
-      // 64비트 이진 문자열을 16진수로 변환 (저장 공간 절약)
+      // DCT 변환 적용
+      const dctMatrix = this.applyDCT(matrix);
+
+      // 좌상단 8x8 저주파 영역 추출 (DC 성분 제외)
+      const lowFreq: number[] = [];
+      for (let i = 0; i < 8; i++) {
+        for (let j = 0; j < 8; j++) {
+          lowFreq.push(dctMatrix[i][j]);
+        }
+      }
+
+      // 중간값(median) 계산
+      const sorted = [...lowFreq].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+
+      // 각 값이 중간값보다 큰지 비교하여 비트 생성
+      let hash = '';
+      for (let i = 0; i < lowFreq.length; i++) {
+        hash += lowFreq[i] > median ? '1' : '0';
+      }
+
+      // 64비트 이진 문자열을 16진수로 변환
       return this.binaryToHex(hash);
     } catch (error) {
       console.error('Failed to generate perceptual hash:', error);
@@ -158,6 +180,46 @@ export class ImageSimilarityService {
     if (hammingDistance === 0) return 'exact';
     if (hammingDistance <= 5) return 'near-duplicate';
     return 'similar';
+  }
+
+  /**
+   * 2D DCT (Discrete Cosine Transform) Type-II 변환
+   * 이미지를 주파수 도메인으로 변환하여 본질적인 구조 추출
+   * @param matrix 입력 행렬 (NxN)
+   * @returns DCT 변환된 행렬
+   */
+  private static applyDCT(matrix: number[][]): number[][] {
+    const N = matrix.length;
+    const dct: number[][] = [];
+
+    // 결과 행렬 초기화
+    for (let i = 0; i < N; i++) {
+      dct[i] = new Array(N).fill(0);
+    }
+
+    // 2D DCT-II 공식 적용
+    for (let u = 0; u < N; u++) {
+      for (let v = 0; v < N; v++) {
+        let sum = 0;
+
+        for (let i = 0; i < N; i++) {
+          for (let j = 0; j < N; j++) {
+            const cu = u === 0 ? 1 / Math.sqrt(2) : 1;
+            const cv = v === 0 ? 1 / Math.sqrt(2) : 1;
+
+            sum +=
+              cu * cv *
+              matrix[i][j] *
+              Math.cos(((2 * i + 1) * u * Math.PI) / (2 * N)) *
+              Math.cos(((2 * j + 1) * v * Math.PI) / (2 * N));
+          }
+        }
+
+        dct[u][v] = (2 / N) * sum;
+      }
+    }
+
+    return dct;
   }
 
   /**

@@ -10,12 +10,16 @@ import {
   Flip as FlipIcon,
   FlipCameraAndroid as FlipVerticalIcon,
   Refresh as ResetIcon,
+  HighQuality as HighQualityIcon,
+  Image as ThumbnailIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 
 interface ImageControlsProps {
   scale: number;
   isMobile: boolean;
+  showOriginal: boolean; // 원본 이미지 표시 여부
+  isGif: boolean; // GIF 파일 여부 (GIF는 원본 전환 버튼 숨김)
   onZoomIn: () => void;
   onZoomOut: () => void;
   onRotateLeft: () => void;
@@ -23,6 +27,7 @@ interface ImageControlsProps {
   onFlipHorizontal: () => void;
   onFlipVertical: () => void;
   onReset: () => void;
+  onToggleOriginal: () => void; // 원본/썸네일 전환
   onOpenDrawer?: () => void;
   onClose: () => void;
 }
@@ -33,6 +38,8 @@ interface ImageControlsProps {
 export const ImageControls: React.FC<ImageControlsProps> = ({
   scale,
   isMobile,
+  showOriginal,
+  isGif,
   onZoomIn,
   onZoomOut,
   onRotateLeft,
@@ -40,6 +47,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
   onFlipHorizontal,
   onFlipVertical,
   onReset,
+  onToggleOriginal,
   onOpenDrawer,
   onClose,
 }) => {
@@ -121,6 +129,24 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
         >
           <ResetIcon />
         </IconButton>
+
+        {/* 원본/썸네일 전환 버튼 (GIF는 제외) */}
+        {!isGif && (
+          <IconButton
+            onClick={onToggleOriginal}
+            sx={{
+              color: 'white',
+              bgcolor: showOriginal ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
+              '&:hover': {
+                bgcolor: showOriginal ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+              }
+            }}
+            size="small"
+            title={showOriginal ? '썸네일 보기 (빠른 로딩)' : '원본 이미지 보기 (고화질)'}
+          >
+            {showOriginal ? <ThumbnailIcon /> : <HighQualityIcon />}
+          </IconButton>
+        )}
       </Box>
 
       {/* Right side - Action buttons */}

@@ -188,7 +188,7 @@ export const settingsApi = {
 };
 
 const imageApi = axios.create({
-  baseURL: `${API_BASE_URL}/api/images`,
+  baseURL: '/api/images',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -232,7 +232,7 @@ export const taggerBatchApi = {
   /**
    * Test tagging on a single image
    */
-  testImage: async (imageId: number): Promise<any> => {
+  testImage: async (imageId: string): Promise<any> => {
     const response = await imageApi.post<{ success: boolean; data: any }>(
       `/${imageId}/tag`
     );

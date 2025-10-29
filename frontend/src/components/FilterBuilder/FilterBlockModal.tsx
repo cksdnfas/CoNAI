@@ -377,7 +377,7 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth disableRestoreFocus>
       <DialogTitle>
         <Typography variant="h6" fontWeight={600}>
           {initialData ? '필터 편집' : '필터 추가'}

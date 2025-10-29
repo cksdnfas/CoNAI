@@ -13,6 +13,7 @@ interface ImageDisplayProps {
   isDragging: boolean;
   containerRef: React.RefObject<HTMLDivElement | null>;
   onMouseDown: (e: React.MouseEvent) => void;
+  showOriginal?: boolean; // 원본 이미지 표시 여부 (기본값: false, 썸네일 사용)
 }
 
 /**
@@ -28,41 +29,43 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
   isDragging,
   containerRef,
   onMouseDown,
+  showOriginal = false, // 기본값: 썸네일 사용
 }) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const backendOrigin = getBackendOrigin();
 
   // 이미지 URL 우선순위:
-  // GIF: optimized_url(원본 복사) → image_url(원본) → thumbnail_url (애니메이션 보존)
-  // 일반 이미지: optimized_url(webp) → image_url(원본) → thumbnail_url(webp)
-  // 히스토리 이미지는 업로드 전까지 URL만 존재하므로 직접 경로 사용
+  // 새 정책: 기본적으로 썸네일 사용 (90% 품질, 1080px, 빠른 로딩)
+  // 원본 보기 버튼 클릭 시에만 원본 이미지 로드
+  // GIF는 항상 원본 사용 (애니메이션 보존)
   const getImageUrl = () => {
-    // GIF는 애니메이션 보존을 위해 원본 또는 optimized(원본 복사본) 사용
     const isGif = image.mime_type === 'image/gif';
 
+    // GIF는 항상 원본 사용 (애니메이션 보존)
     if (isGif) {
-      // GIF는 optimized(원본 복사본) → image_url(원본) 순서로 우선
-      if (image.optimized_url) {
-        return image.optimized_url.startsWith('http') ? image.optimized_url : `${backendOrigin}${image.optimized_url}`;
-      }
       if (image.image_url) {
         return image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
       }
+      // Fallback: API 엔드포인트
+      return `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
     }
 
-    // 일반 이미지는 기존 로직
-    if (image.optimized_url) {
-      return image.optimized_url.startsWith('http') ? image.optimized_url : `${backendOrigin}${image.optimized_url}`;
+    // 원본 보기 모드 (사용자가 버튼 클릭)
+    if (showOriginal) {
+      if (image.image_url) {
+        return image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
+      }
+      // Fallback: API 엔드포인트
+      return `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
     }
-    if (image.image_url) {
-      return image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
-    }
+
+    // 기본: 썸네일 우선 (90% 품질, 1080px)
     if (image.thumbnail_url) {
       return image.thumbnail_url.startsWith('http') ? image.thumbnail_url : `${backendOrigin}${image.thumbnail_url}`;
     }
-    // 일반 이미지만 API fallback 사용
-    return `${backendOrigin}/api/images/${image.composite_hash}/optimized`;
+    // Fallback: API 엔드포인트
+    return `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
   };
 
   const getFallbackUrl = () => {

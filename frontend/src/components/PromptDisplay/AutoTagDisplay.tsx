@@ -34,9 +34,7 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
     setIsGenerating(true);
     setError(null);
     try {
-      // Note: taggerBatchApi expects number but we have string composite_hash
-      // This is a temporary type mismatch that needs backend API update
-      await taggerBatchApi.testImage(imageId as any);
+      await taggerBatchApi.testImage(imageId);
       if (onTagGenerated) {
         onTagGenerated();
       }

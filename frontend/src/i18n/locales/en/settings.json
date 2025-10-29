@@ -8,6 +8,7 @@
     "similarity": "Image Similarity Search",
     "prompts": "Prompt Management",
     "metadata": "Metadata Extraction",
+    "folders": "Folder Management",
     "advanced": "Advanced Settings"
   },
   "general": {

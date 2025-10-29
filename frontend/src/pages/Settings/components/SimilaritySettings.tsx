@@ -433,8 +433,8 @@ const SimilaritySettings: React.FC = () => {
                   {t('similarity.test.results', { count: testResults.length })}
                 </Typography>
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' }, gap: 2 }}>
-                  {testResults.slice(0, 12).map((result) => (
-                    <Box key={result.image.composite_hash}>
+                  {testResults.slice(0, 12).map((result, index) => (
+                    <Box key={result.image.file_id ? `file-${result.image.file_id}` : `hash-${result.image.composite_hash}-${index}`}>
                       <Card variant="outlined">
                         <Box
                           component="img"
@@ -529,8 +529,8 @@ const SimilaritySettings: React.FC = () => {
                     </AccordionSummary>
                     <AccordionDetails>
                       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(5, 1fr)' }, gap: 1 }}>
-                        {group.images.slice(0, 5).map((image) => (
-                          <Box key={image.composite_hash}>
+                        {group.images.slice(0, 5).map((image, index) => (
+                          <Box key={image.file_id ? `file-${image.file_id}` : `hash-${image.composite_hash}-${index}`}>
                             <Box
                               component="img"
                               src={getThumbnailUrl(image)}

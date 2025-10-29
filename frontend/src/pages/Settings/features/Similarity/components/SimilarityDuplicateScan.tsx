@@ -239,11 +239,11 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
 
                     {/* 이미지 그리드 */}
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(5, 1fr)' }, gap: 2 }}>
-                      {group.images.map((image) => {
+                      {group.images.map((image, index) => {
                         const isSelected = selectedImages.has(image.composite_hash);
                         return (
                           <Box
-                            key={image.composite_hash}
+                            key={image.file_id ? `file-${image.file_id}` : `hash-${image.composite_hash}-${index}`}
                             sx={{
                               position: 'relative',
                               cursor: 'pointer',
