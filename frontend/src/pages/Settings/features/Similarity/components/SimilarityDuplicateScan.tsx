@@ -71,10 +71,12 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
     setSelectedImages(prev => {
       const newSet = new Set(prev);
       group.images.forEach(image => {
-        if (selectAll) {
-          newSet.add(image.composite_hash);
-        } else {
-          newSet.delete(image.composite_hash);
+        if (image.composite_hash) {
+          if (selectAll) {
+            newSet.add(image.composite_hash);
+          } else {
+            newSet.delete(image.composite_hash);
+          }
         }
       });
       return newSet;
@@ -87,7 +89,9 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
       const newSet = new Set(prev);
       // 첫 번째 이미지를 제외한 나머지 모두 선택
       group.images.slice(1).forEach(image => {
-        newSet.add(image.composite_hash);
+        if (image.composite_hash) {
+          newSet.add(image.composite_hash);
+        }
       });
       return newSet;
     });
@@ -129,12 +133,12 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
 
   // 그룹이 모두 선택되었는지 확인
   const isGroupFullySelected = (group: DuplicateGroup) => {
-    return group.images.every(image => selectedImages.has(image.composite_hash));
+    return group.images.every(image => image.composite_hash && selectedImages.has(image.composite_hash));
   };
 
   // 그룹이 부분적으로 선택되었는지 확인
   const isGroupPartiallySelected = (group: DuplicateGroup) => {
-    return group.images.some(image => selectedImages.has(image.composite_hash)) && !isGroupFullySelected(group);
+    return group.images.some(image => image.composite_hash && selectedImages.has(image.composite_hash)) && !isGroupFullySelected(group);
   };
 
   return (
@@ -240,6 +244,7 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
                     {/* 이미지 그리드 */}
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(5, 1fr)' }, gap: 2 }}>
                       {group.images.map((image, index) => {
+                        if (!image.composite_hash) return null;
                         const isSelected = selectedImages.has(image.composite_hash);
                         return (
                           <Box
@@ -257,12 +262,12 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
                                 transform: 'scale(1.02)',
                               },
                             }}
-                            onClick={() => handleToggleImage(image.composite_hash)}
+                            onClick={() => handleToggleImage(image.composite_hash!)}
                           >
                             {/* 체크박스 */}
                             <Checkbox
                               checked={isSelected}
-                              onChange={() => handleToggleImage(image.composite_hash)}
+                              onChange={() => handleToggleImage(image.composite_hash!)}
                               sx={{
                                 position: 'absolute',
                                 top: 4,

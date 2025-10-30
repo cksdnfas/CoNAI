@@ -80,7 +80,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   }, [currentGroup?.id]);
 
   // 선택된 이미지 정보
-  const selectedImages = images.filter(img => selectedIds.includes(img.composite_hash));
+  const selectedImages = images.filter(img => img.composite_hash && selectedIds.includes(img.composite_hash));
   const hasManualSelected = selectedImages.some(img => {
     const groupInfo = img.groups?.find(g => g.id === currentGroup?.id);
     return groupInfo?.collection_type === 'manual';
@@ -107,7 +107,8 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
           const groupInfo = img.groups?.find(g => g.id === currentGroup?.id);
           return groupInfo?.collection_type === 'manual';
         })
-        .map(img => img.composite_hash);
+        .map(img => img.composite_hash)
+        .filter((hash): hash is string => hash !== null);
       onImagesRemoved(manualImageIds);
     }
     setSelectedIds([]);

@@ -24,8 +24,11 @@ export interface AutoTagsData {
  */
 export interface ImageRecord {
   // ✅ New structure - Primary identification
-  composite_hash: string;              // 48-character hash (PRIMARY KEY)
+  composite_hash: string | null;       // 48-character hash (PRIMARY KEY) - NULL during Phase 1
   first_seen_date: string;             // ISO 8601 date (replaces upload_date)
+
+  // Phase 1/2 processing status
+  is_processing?: boolean;             // True if composite_hash is NULL (Phase 1 only)
 
   // File information (from image_files table JOIN)
   file_id: number | null;              // Reference to image_files table

@@ -108,7 +108,7 @@ const HomePage: React.FC = () => {
       <BulkActionBar
         selectedCount={selectedIds.length}
         selectedIds={selectedIds}
-        selectedImages={images.filter(img => selectedIds.includes(img.composite_hash))}
+        selectedImages={images.filter(img => img.composite_hash && selectedIds.includes(img.composite_hash))}
         onSelectionClear={handleSelectionClear}
         onActionComplete={handleActionComplete}
       />

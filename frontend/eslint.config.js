@@ -6,6 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
+  reactHooks.configs.flat.recommended,
   globalIgnores(['dist']),
   {
     files: ['**/*.{ts,tsx}'],

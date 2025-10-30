@@ -122,7 +122,9 @@ const ImageGrid: React.FC<ImageGridProps> = ({
     if (event && event.shiftKey && lastClickedIndex >= 0) {
       const start = Math.min(lastClickedIndex, imageIndex);
       const end = Math.max(lastClickedIndex, imageIndex);
-      const rangeIds = safeImages.slice(start, end + 1).map(img => img.composite_hash);
+      const rangeIds = safeImages.slice(start, end + 1)
+        .map(img => img.composite_hash)
+        .filter((hash): hash is string => hash !== null);
       const newSelectedIds = Array.from(new Set([...selectedIds, ...rangeIds]));
       onSelectionChange(newSelectedIds);
       return;
@@ -140,7 +142,9 @@ const ImageGrid: React.FC<ImageGridProps> = ({
     if (!onSelectionChange) return;
 
     if (checked) {
-      const allIds = safeImages.map(image => image.composite_hash);
+      const allIds = safeImages
+        .map(image => image.composite_hash)
+        .filter((hash): hash is string => hash !== null);
       onSelectionChange(allIds);
     } else {
       onSelectionChange([]);
@@ -182,7 +186,9 @@ const ImageGrid: React.FC<ImageGridProps> = ({
       // Ctrl/Cmd + A: 전체 선택
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         e.preventDefault();
-        const allIds = safeImages.map(img => img.composite_hash);
+        const allIds = safeImages
+          .map(img => img.composite_hash)
+          .filter((hash): hash is string => hash !== null);
         onSelectionChange(allIds);
       }
 
@@ -284,10 +290,10 @@ const ImageGrid: React.FC<ImageGridProps> = ({
       {/* 이미지 그리드 */}
       <Grid container spacing={2}>
         {safeImages.map((image, index) => (
-          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3, xl: 2 }} key={image.file_id ? `file-${image.file_id}` : `hash-${image.composite_hash}-${index}`}>
+          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3, xl: 2 }} key={image.file_id ? `file-${image.file_id}` : `hash-${image.composite_hash || 'processing'}-${index}`}>
             <ImageCard
               image={image}
-              selected={selectedIds.includes(image.composite_hash)}
+              selected={image.composite_hash ? selectedIds.includes(image.composite_hash) : false}
               selectable={selectable}
               onSelectionChange={(hash, event) => handleSelectionChange(hash, event)}
               onDelete={onImageDelete}

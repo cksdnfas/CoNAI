@@ -67,7 +67,9 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
     if (event && event.shiftKey && lastClickedIndex >= 0) {
       const start = Math.min(lastClickedIndex, imageIndex);
       const end = Math.max(lastClickedIndex, imageIndex);
-      const rangeIds = images.slice(start, end + 1).map(img => img.composite_hash);
+      const rangeIds = images.slice(start, end + 1)
+        .map(img => img.composite_hash)
+        .filter((hash): hash is string => hash !== null);
       const newSelectedIds = Array.from(new Set([...selectedIds, ...rangeIds]));
       onSelectionChange(newSelectedIds);
       return;
@@ -104,7 +106,9 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
       // Ctrl/Cmd + A: 전체 선택
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         e.preventDefault();
-        const allIds = images.map(img => img.composite_hash);
+        const allIds = images
+          .map(img => img.composite_hash)
+          .filter((hash): hash is string => hash !== null);
         onSelectionChange(allIds);
       }
 
@@ -194,10 +198,10 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
         >
           {images.map((image, index) => (
             <MasonryImageCard
-              key={image.file_id ? `file-${image.file_id}` : `hash-${image.composite_hash}-${index}`}
+              key={image.file_id ? `file-${image.file_id}` : `hash-${image.composite_hash || 'processing'}-${index}`}
               image={image}
               onClick={() => handleImageClick(index)}
-              selected={selectedIds.includes(image.composite_hash)}
+              selected={image.composite_hash ? selectedIds.includes(image.composite_hash) : false}
               selectable={selectable}
               onSelectionChange={(compositeHash, event) => handleSelectionChange(compositeHash, event)}
             />

@@ -107,6 +107,7 @@ const ImageDetailPage: React.FC = () => {
 
   const handleDownload = () => {
     if (!image) return;
+    if (!image.composite_hash) return;
     const link = document.createElement('a');
     link.href = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
     link.download = image.original_file_path || `image_${image.composite_hash.substring(0, 8)}.png`;
@@ -417,7 +418,7 @@ const ImageDetailPage: React.FC = () => {
                   negativePrompt={image.ai_metadata?.prompts.negative_prompt}
                   maxHeight={800}
                   variant="none"
-                  imageId={image.composite_hash}
+                  imageId={image.composite_hash!}
                   autoTags={image.auto_tags}
                   isTaggerEnabled={isTaggerEnabled}
                   onAutoTagGenerated={handleAutoTagGenerated}

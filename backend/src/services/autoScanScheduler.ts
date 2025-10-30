@@ -2,15 +2,18 @@ import * as cron from 'node-cron';
 import { FolderScanService } from './folderScanService';
 import { WatchedFolderService } from './watchedFolderService';
 import { FileWatcherService } from './fileWatcherService';
+import { BackgroundProcessorService } from './backgroundProcessorService';
 
 /**
  * 자동 스캔 스케줄러
  * - 폴더별 scan_interval 설정에 따라 주기적으로 스캔 실행
  * - auto_scan이 활성화된 폴더만 대상
  * - 실시간 워처가 활성화된 경우 전체 스캔 건너뛰기 (백업 검증 스캔 유지)
+ * - Phase 2 백그라운드 처리 트리거
  */
 export class AutoScanScheduler {
   private static cronTask: cron.ScheduledTask | null = null;
+  private static phase2CronTask: cron.ScheduledTask | null = null;
   private static isRunning = false;
 
   /**
@@ -43,21 +46,42 @@ export class AutoScanScheduler {
       }
     });
 
-    console.log('✅ 자동 스캔 스케줄러 시작됨 (1분마다 실행)');
+    // Phase 2 백그라운드 처리 스케줄러 (매 5분마다)
+    this.phase2CronTask = cron.schedule('*/5 * * * *', async () => {
+      const unprocessedCount = BackgroundProcessorService.getUnprocessedCount();
+      if (unprocessedCount > 0) {
+        console.log(`🔨 Phase 2 처리 시작: ${unprocessedCount}개 대기 중`);
+        try {
+          await BackgroundProcessorService.processUnhashedImages();
+        } catch (error) {
+          console.error('❌ Phase 2 처리 중 오류 발생:', error);
+        }
+      }
+    });
+
+    console.log('✅ 자동 스캔 스케줄러 시작됨 (Phase 1: 1분마다, Phase 2: 5분마다)');
   }
 
   /**
    * 스케줄러 중지
    */
   static stop(): void {
-    if (!this.cronTask) {
+    if (!this.cronTask && !this.phase2CronTask) {
       console.log('⚠️  자동 스캔 스케줄러가 실행 중이 아닙니다');
       return;
     }
 
-    this.cronTask.stop();
-    this.cronTask = null;
-    console.log('🛑 자동 스캔 스케줄러 중지됨');
+    if (this.cronTask) {
+      this.cronTask.stop();
+      this.cronTask = null;
+    }
+
+    if (this.phase2CronTask) {
+      this.phase2CronTask.stop();
+      this.phase2CronTask = null;
+    }
+
+    console.log('🛑 자동 스캔 스케줄러 중지됨 (Phase 1 + Phase 2)');
   }
 
   /**

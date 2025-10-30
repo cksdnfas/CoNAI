@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo, memo } from 'react';
 import {
   Card,
   CardMedia,
@@ -15,6 +15,7 @@ import {
   AutoAwesome as AutoAwesomeIcon,
   CheckCircle as CheckCircleIcon,
   VideoLibrary as VideoLibraryIcon,
+  HourglassEmpty as HourglassIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../types/image';
@@ -53,47 +54,70 @@ const ImageCard: React.FC<ImageCardProps> = ({
     : null;
   const isAutoCollected = currentGroupInfo?.collection_type === 'auto';
 
-  // ✅ composite_hash 사용
-  const handleSelectionClick = (e: React.MouseEvent) => {
+  // ✅ composite_hash 사용 (NULL 처리 포함)
+  const handleSelectionClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation(); // 이벤트 전파 방지
-    if (onSelectionChange) {
+    if (onSelectionChange && image.composite_hash) {
       onSelectionChange(image.composite_hash, e);
     }
-  };
+  }, [onSelectionChange, image.composite_hash]);
 
-  const handleDownload = (e: React.MouseEvent) => {
+  const handleDownload = useCallback((e: React.MouseEvent) => {
     e.stopPropagation(); // 이벤트 전파 방지
     const link = document.createElement('a');
-    link.href = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
-    link.download = image.original_file_path || `image_${image.composite_hash.substring(0, 8)}.png`;
+
+    // Phase 1: composite_hash가 없으면 경로 기반 다운로드
+    if (image.is_processing || !image.composite_hash) {
+      link.href = `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path || '')}`;
+    } else {
+      link.href = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
+    }
+
+    link.download = image.original_file_path || `image_${image.composite_hash?.substring(0, 8) || 'unknown'}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
+  }, [backendOrigin, image.is_processing, image.composite_hash, image.original_file_path]);
 
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleDelete = useCallback((e: React.MouseEvent) => {
     e.stopPropagation(); // 이벤트 전파 방지
     const isVideo = image.mime_type?.startsWith('video/');
     const confirmMessage = isVideo
       ? t('common:imageCard.confirmDelete.video')
       : t('common:imageCard.confirmDelete.image');
-    if (onDelete && window.confirm(confirmMessage)) {
+    if (onDelete && image.composite_hash && window.confirm(confirmMessage)) {
       onDelete(image.composite_hash);
     }
-  };
+  }, [onDelete, image.composite_hash, image.mime_type, t]);
 
-  const handleInfoClick = (e: React.MouseEvent) => {
+  const handleInfoClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation(); // 이벤트 전파 방지
-    window.open(`/#/image/${image.composite_hash}`, '_blank');
-  };
+    if (image.composite_hash) {
+      window.open(`/#/image/${image.composite_hash}`, '_blank');
+    }
+  }, [image.composite_hash]);
 
   // ✅ composite_hash 사용 - API 엔드포인트를 통해 썸네일 및 원본 이미지 제공
+  // Phase 1: composite_hash가 NULL이면 경로 기반 URL 사용
   // GIF는 애니메이션 보존을 위해 원본 사용
   const isGif = image.mime_type === 'image/gif';
-  const thumbnailUrl = isGif
-    ? `${backendOrigin}/api/images/${image.composite_hash}/optimized` // GIF optimized는 원본 복사본
-    : `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
-  const fallbackUrl = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
+  const isProcessing = image.is_processing || !image.composite_hash;
+
+  const thumbnailUrl = useMemo(() => {
+    if (isProcessing) {
+      return `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path || '')}`;
+    }
+    return isGif
+      ? `${backendOrigin}/api/images/${image.composite_hash}/optimized`
+      : `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
+  }, [isProcessing, isGif, backendOrigin, image.composite_hash, image.original_file_path]);
+
+  const fallbackUrl = useMemo(() => {
+    if (isProcessing) {
+      return `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path || '')}`;
+    }
+    return `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
+  }, [isProcessing, backendOrigin, image.composite_hash, image.original_file_path]);
 
   return (
     <>
@@ -200,6 +224,28 @@ const ImageCard: React.FC<ImageCardProps> = ({
                   ? 'rgba(33, 150, 243, 0.8)'
                   : 'rgba(33, 150, 243, 0.9)',
                 color: 'white',
+                '& .MuiChip-icon': {
+                  color: 'white',
+                },
+              }}
+            />
+          </Box>
+        )}
+
+        {/* Phase 1 처리 중 배지 */}
+        {image.is_processing && (
+          <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
+            <Chip
+              icon={<HourglassIcon sx={{ fontSize: '0.8rem' }} />}
+              label="Processing"
+              size="small"
+              sx={{
+                fontSize: '0.7rem',
+                height: '22px',
+                fontWeight: 600,
+                bgcolor: 'rgba(255, 152, 0, 0.9)',
+                color: 'white',
+                backdropFilter: 'blur(4px)',
                 '& .MuiChip-icon': {
                   color: 'white',
                 },
@@ -428,4 +474,4 @@ const ImageCard: React.FC<ImageCardProps> = ({
   );
 };
 
-export default ImageCard;
+export default memo(ImageCard);

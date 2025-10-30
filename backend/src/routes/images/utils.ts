@@ -68,21 +68,36 @@ export function enrichImageRecord(image: any) {
 /**
  * ImageWithFileView에 URL과 구조화된 메타데이터 추가 (새 구조)
  * composite_hash 기반 이미지 데이터 처리
+ * Phase 1 지원: composite_hash가 NULL인 경우 원본 파일 사용
  */
 export function enrichImageWithFileView(image: any) {
   // 외부 폴더 이미지인지 확인 (original_file_path가 절대 경로)
   const isExternalImage = image.original_file_path && require('path').isAbsolute(image.original_file_path);
 
+  // Phase 1: composite_hash가 없는 경우 (빠른 등록만 완료)
+  const isProcessing = !image.composite_hash;
+
   const enriched = {
     ...image,
-    // 썸네일: temp 폴더에 있으므로 항상 정상 작동 (외부 이미지도 포함)
-    thumbnail_url: toUploadsUrl(image.thumbnail_path as string) || `/api/images/${image.composite_hash}/thumbnail`,
-    // 원본 이미지: 외부 폴더면 API 엔드포인트 사용
-    image_url: isExternalImage
-      ? `/api/images/${image.composite_hash}/download/original`
-      : (image.original_file_path ? toUploadsUrl(image.original_file_path) : null),
-    // optimized는 더 이상 생성하지 않음 - 하위 호환성을 위해 thumbnail_url과 동일하게 설정
-    optimized_url: toUploadsUrl(image.thumbnail_path as string) || `/api/images/${image.composite_hash}/thumbnail`,
+    // Phase 1 상태 플래그
+    is_processing: isProcessing,
+
+    // 썸네일: composite_hash가 있으면 썸네일 사용, 없으면 원본 사용
+    thumbnail_url: isProcessing
+      ? `/api/images/by-path/${encodeURIComponent(image.original_file_path)}`
+      : (toUploadsUrl(image.thumbnail_path as string) || `/api/images/${image.composite_hash}/thumbnail`),
+
+    // 원본 이미지
+    image_url: isProcessing
+      ? `/api/images/by-path/${encodeURIComponent(image.original_file_path)}`
+      : (isExternalImage
+        ? `/api/images/${image.composite_hash}/download/original`
+        : (image.original_file_path ? toUploadsUrl(image.original_file_path) : null)),
+
+    // optimized: Phase 1이면 null, 아니면 thumbnail과 동일
+    optimized_url: isProcessing
+      ? null
+      : (toUploadsUrl(image.thumbnail_path as string) || `/api/images/${image.composite_hash}/thumbnail`),
 
     // 그룹 정보 (이미 있는 경우 그대로 유지)
     groups: image.groups || [],

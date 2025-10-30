@@ -88,8 +88,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     severity: 'success',
   });
 
-  // Custom hooks - ✅ composite_hash 사용
-  const transform = useImageTransform(image?.composite_hash, open);
+  // Custom hooks - ✅ composite_hash 사용 (null 체크 포함)
+  const transform = useImageTransform(image?.composite_hash || undefined, open);
   const navigation = useImageNavigation({
     images,
     currentIndex,
@@ -157,15 +157,15 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       link.href = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
     }
 
-    link.download = image.original_file_path || `image_${image.composite_hash.substring(0, 8)}.png`;
+    link.download = image.original_file_path || `image_${image.composite_hash?.substring(0, 8) || 'unknown'}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   const handleGoToDetail = () => {
-    if (image) {
-      navigate(`/image/${image.composite_hash}`);
+    if (image && image.composite_hash) {
+      navigate(`/image/${image.composite_hash!}`);
       onClose();
     }
   };
@@ -187,6 +187,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         // @ts-ignore - history records may have id field
         response = await generationHistoryApi.delete(currentImage.id || currentImage.composite_hash);
       } else {
+        if (!currentImage.composite_hash) {
+          throw new Error('Image is still processing');
+        }
         response = await imageApi.deleteImage(currentImage.composite_hash);
       }
 
@@ -198,7 +201,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         });
 
         // Notify parent component
-        if (onImageDeleted) {
+        if (onImageDeleted && currentImage.composite_hash) {
           onImageDeleted(currentImage.composite_hash);
         }
 

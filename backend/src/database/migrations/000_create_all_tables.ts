@@ -340,7 +340,15 @@ export const up = async (db: Database.Database): Promise<void> => {
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(defaultUploadPath, '직접 업로드', 'upload', 1, 60, 1, 1);
 
-  console.log('  ✅ 폴더 테이블 3개 + 인덱스 + 기본 폴더 생성 완료\n');
+  // API 생성 이미지 폴더 등록
+  const apiUploadPath = path.join('uploads', 'API', 'images');
+  db.prepare(`
+    INSERT OR IGNORE INTO watched_folders
+    (folder_path, folder_name, folder_type, auto_scan, scan_interval, recursive, is_active)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(apiUploadPath, 'API 생성 이미지', 'api', 1, 60, 1, 1);
+
+  console.log('  ✅ 폴더 테이블 3개 + 인덱스 + 기본 폴더 2개 생성 완료\n');
 
   // ============================================
   // 6. API 생성 히스토리 (apiGenerationDb.ts에서 관리)

@@ -274,7 +274,7 @@ const GalleryPage: React.FC = () => {
       <BulkActionBar
         selectedCount={selectedCount}
         selectedIds={selectedIds}
-        selectedImages={filteredImages.filter(img => selectedIds.includes(img.composite_hash))}
+        selectedImages={filteredImages.filter(img => img.composite_hash && selectedIds.includes(img.composite_hash))}
         onSelectionClear={deselectAll}
         onActionComplete={handleBulkActionComplete}
       />

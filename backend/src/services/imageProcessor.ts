@@ -25,7 +25,7 @@ export class ImageProcessor {
   }
 
   private static readonly THUMBNAIL_SIZE = 1080;
-  private static readonly THUMBNAIL_QUALITY = 90;
+  private static readonly THUMBNAIL_QUALITY = 70; // Reduced from 90 to 70 for better performance
   private static readonly OPTIMIZED_QUALITY = 95;
 
   /**

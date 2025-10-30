@@ -315,11 +315,12 @@ export class ImageMetadataModel {
 
   /**
    * 파일 경로 포함 전체 조회 (image_files JOIN)
+   * Phase 1 지원: composite_hash가 NULL인 이미지도 조회
    */
   static findAllWithFiles(options: {
     page?: number;
     limit?: number;
-    sortBy?: 'first_seen_date' | 'width' | 'height';
+    sortBy?: 'first_seen_date' | 'width' | 'height' | 'scan_date';
     sortOrder?: 'ASC' | 'DESC';
   }): { items: any[], total: number } {
     const page = options.page || 1;
@@ -328,19 +329,56 @@ export class ImageMetadataModel {
     const sortOrder = options.sortOrder || 'DESC';
     const offset = (page - 1) * limit;
 
-    const countRow = db.prepare('SELECT COUNT(DISTINCT im.composite_hash) as total FROM image_metadata im').get() as { total: number };
+    // 카운트: image_files (composite_hash 있는 것) + image_metadata (composite_hash 없는 것)
+    const countRow = db.prepare(`
+      SELECT COUNT(*) as total FROM (
+        SELECT composite_hash FROM image_metadata
+        UNION ALL
+        SELECT id as composite_hash FROM image_files WHERE composite_hash IS NULL AND file_status = 'active'
+      )
+    `).get() as { total: number };
 
+    // Phase 1 + Phase 2 이미지 모두 조회
+    // 1. composite_hash가 있는 이미지 (정상 처리 완료)
+    // 2. composite_hash가 NULL인 이미지 (Phase 1만 완료)
     const items = db.prepare(`
       SELECT
-        im.*,
+        im.composite_hash,
+        im.perceptual_hash,
+        im.dhash,
+        im.ahash,
+        im.color_histogram,
+        im.width,
+        im.height,
+        im.thumbnail_path,
+        im.optimized_path,
+        im.ai_tool,
+        im.model_name,
+        im.lora_models,
+        im.steps,
+        im.cfg_scale,
+        im.sampler,
+        im.seed,
+        im.scheduler,
+        im.prompt,
+        im.negative_prompt,
+        im.denoise_strength,
+        im.generation_time,
+        im.batch_size,
+        im.batch_index,
+        im.auto_tags,
+        im.first_seen_date,
+        im.metadata_updated_date,
         if.id as file_id,
         if.original_file_path,
         if.file_size,
         if.mime_type,
-        if.file_status
-      FROM image_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
-      ORDER BY im.${sortBy} ${sortOrder}
+        if.file_status,
+        if.scan_date
+      FROM image_files if
+      LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
+      WHERE if.file_status = 'active'
+      ORDER BY ${sortBy === 'scan_date' ? 'if.scan_date' : `COALESCE(im.${sortBy}, if.scan_date)`} ${sortOrder}
       LIMIT ? OFFSET ?
     `).all(limit, offset);
 

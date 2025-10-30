@@ -52,7 +52,7 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
 
   const handleSelectionChange = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onSelectionChange) {
+    if (onSelectionChange && image.composite_hash) {
       onSelectionChange(image.composite_hash, e);
     }
   };
@@ -67,7 +67,7 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onDelete) {
+    if (onDelete && image.composite_hash) {
       onDelete(image.composite_hash);
     }
   };

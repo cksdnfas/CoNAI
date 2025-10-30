@@ -450,6 +450,8 @@ export class ImageSimilarityService {
         // 2. 32x32 RGB 버퍼 (히스토그램용)
         sharp(imagePath)
           .resize(32, 32, { fit: 'fill' })
+          .removeAlpha()  // 알파 채널 제거하여 RGB 강제 변환
+          .toColourspace('srgb')  // RGB 색공간 명시
           .raw()
           .toBuffer()
       ]);

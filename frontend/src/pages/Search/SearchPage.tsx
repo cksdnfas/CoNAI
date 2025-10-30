@@ -218,7 +218,7 @@ const SearchPage: React.FC = () => {
         <BulkActionBar
           selectedCount={selectedCount}
           selectedIds={selectedIds}
-          selectedImages={images.filter(img => selectedIds.includes(img.composite_hash))}
+          selectedImages={images.filter(img => img.composite_hash && selectedIds.includes(img.composite_hash))}
           onSelectionClear={deselectAll}
           onActionComplete={handleBulkActionComplete}
         />

@@ -613,7 +613,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
                       업로드된 이미지 정보 불러오는 중...
                     </Typography>
                   </Box>
-                ) : linkedImage ? (
+                ) : linkedImage && linkedImage.composite_hash ? (
                   <AutoTagDisplay
                     imageId={linkedImage.composite_hash}
                     autoTags={linkedImage.auto_tags ?? null}

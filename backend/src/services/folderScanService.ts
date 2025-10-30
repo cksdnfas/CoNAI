@@ -8,6 +8,7 @@ import pLimit from 'p-limit';
 import { ImageSimilarityService } from './imageSimilarity';
 import { WatchedFolderService } from './watchedFolderService';
 import { BackgroundQueueService } from './backgroundQueue';
+import { BackgroundProcessorService } from './backgroundProcessorService';
 import { FileWatcherService } from './fileWatcherService';
 import { resolveFolderPath } from '../utils/pathResolver';
 
@@ -108,8 +109,11 @@ export class FolderScanService {
         console.log(`  🔄 전체 재스캔: ${result.missingImages}개 파일 상태 변경`);
       }
 
-      // 7. 배치별로 파일 처리 (Bulk 쿼리 최적화)
-      await this.processBatchWithBulkQueries(files, folderId, result);
+      // 7. 배치별로 파일 처리 (Phase 1: 빠른 등록)
+      await this.processFastRegistration(files, folderId, result);
+
+      // 7.5. Phase 2 백그라운드 처리 트리거
+      BackgroundProcessorService.triggerHashGeneration();
 
       // 8. 스캔 완료 상태 업데이트
       await WatchedFolderService.updateScanStatus(
@@ -159,7 +163,119 @@ export class FolderScanService {
   }
 
   /**
+   * Phase 1: 빠른 등록 (해시 없이 기본 정보만 등록)
+   * - composite_hash를 NULL로 설정하여 즉시 DB 등록
+   * - 기본 이미지 정보만 수집 (파일 크기, 해상도, MIME 타입)
+   * - 썸네일 및 해시 생성은 Phase 2에서 처리
+   */
+  private static async processFastRegistration(
+    files: string[],
+    folderId: number,
+    result: ScanResult
+  ): Promise<void> {
+    const batchStartTime = Date.now();
+
+    // 동시성 제어: CPU 코어 수 * 4 (I/O 바운드 작업이므로 높게 설정)
+    const concurrency = Math.min(os.cpus().length * 4, 20);
+    const limit = pLimit(concurrency);
+    console.log(`  ⚡ Phase 1: 빠른 등록 모드 (동시성: ${concurrency})`);
+
+    const tasks = files.map((filePath, index) =>
+      limit(async () => {
+        try {
+          const stats = fs.statSync(filePath);
+          const mimeType = this.getMimeType(filePath);
+
+          // 1. 기존 파일 확인 (경로로)
+          const existingFile = db.prepare(
+            'SELECT id, composite_hash FROM image_files WHERE original_file_path = ?'
+          ).get(filePath) as { id: number; composite_hash: string | null } | undefined;
+
+          if (existingFile) {
+            // 기존 파일 발견 → 상태 업데이트
+            db.prepare(`
+              UPDATE image_files
+              SET file_status = 'active',
+                  last_verified_date = ?,
+                  file_modified_date = ?,
+                  file_size = ?
+              WHERE id = ?
+            `).run(
+              new Date().toISOString(),
+              stats.mtime.toISOString(),
+              stats.size,
+              existingFile.id
+            );
+
+            result.existingImages++;
+            result.totalScanned++;
+            return;
+          }
+
+          // 2. 신규 파일 → 기본 정보만 수집 (해시는 Phase 2에서)
+          // Sharp metadata만 가져오기 (빠름: ~5-20ms)
+          let width: number | null = null;
+          let height: number | null = null;
+
+          try {
+            const metadata = await sharp(filePath).metadata();
+            width = metadata.width || null;
+            height = metadata.height || null;
+          } catch (error) {
+            // 이미지 메타데이터 추출 실패해도 계속 진행
+            console.warn(`  ⚠️  메타데이터 추출 실패: ${path.basename(filePath)}`);
+          }
+
+          // 3. composite_hash 없이 image_files에 등록
+          db.prepare(`
+            INSERT INTO image_files (
+              composite_hash, original_file_path, folder_id,
+              file_status, file_size, mime_type, file_modified_date
+            ) VALUES (NULL, ?, ?, 'active', ?, ?, ?)
+          `).run(
+            filePath,
+            folderId,
+            stats.size,
+            mimeType,
+            stats.mtime.toISOString()
+          );
+
+          result.newImages++;
+          result.totalScanned++;
+
+          // 진행 상황 로그
+          if (result.totalScanned % this.PROGRESS_LOG_INTERVAL === 0 || result.totalScanned === files.length) {
+            const elapsed = (Date.now() - batchStartTime) / 1000;
+            const speed = elapsed > 0 ? result.totalScanned / elapsed : 0;
+            const remaining = files.length - result.totalScanned;
+            const eta = speed > 0 ? remaining / speed : 0;
+
+            console.log(
+              `  📊 Phase 1 진행: ${result.totalScanned}/${files.length} ` +
+              `(${speed.toFixed(1)} 이미지/초, 예상 완료: ${this.formatETA(eta)})`
+            );
+          }
+        } catch (error) {
+          result.totalScanned++;
+          result.errors.push({
+            file: filePath,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+          console.error(`  ❌ 등록 실패: ${path.basename(filePath)}`, error);
+        }
+      })
+    );
+
+    await Promise.all(tasks);
+
+    const duration = ((Date.now() - batchStartTime) / 1000).toFixed(1);
+    console.log(`  ✅ Phase 1 완료: ${result.newImages}개 신규, ${result.existingImages}개 기존 (${duration}초)`);
+    console.log(`  🔨 Phase 2 백그라운드 처리 시작 예정...`);
+  }
+
+  /**
    * 배치 단위 파일 처리 (해시 생성 + 기본 정보 수집)
+   * @deprecated Phase 1 빠른 등록 방식으로 대체됨 (processFastRegistration)
    */
   private static async processFileBatch(
     filePath: string,

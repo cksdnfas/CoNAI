@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { Card, CardMedia, Box, Skeleton, Chip } from '@mui/material';
 import { CheckCircle as CheckCircleIcon, VideoLibrary as VideoLibraryIcon } from '@mui/icons-material';
 import type { ImageRecord } from '../../types/image';
@@ -28,29 +28,38 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
   // ✅ composite_hash 사용 - API 엔드포인트를 통해 썸네일 제공 (외부 네트워크 접근 보장)
   // GIF는 애니메이션 보존을 위해 원본 사용
   const isGif = image.mime_type === 'image/gif';
-  const imageUrl = isGif
-    ? `${backendOrigin}/api/images/${image.composite_hash}/optimized` // GIF optimized는 원본 복사본
-    : `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
+  const isProcessing = image.is_processing || !image.composite_hash;
 
-  const handleSelectionChange = (e: React.MouseEvent) => {
+  const imageUrl = useMemo(() => {
+    if (isProcessing) {
+      return `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path || '')}`;
+    }
+    return isGif
+      ? `${backendOrigin}/api/images/${image.composite_hash}/optimized`
+      : `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
+  }, [isProcessing, isGif, backendOrigin, image.composite_hash, image.original_file_path]);
+
+  const handleSelectionChange = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onSelectionChange) {
+    if (onSelectionChange && image.composite_hash) {
       onSelectionChange(image.composite_hash, e);
     }
-  };
+  }, [onSelectionChange, image.composite_hash]);
 
-  const handleCardClick = (e: React.MouseEvent) => {
+  const handleCardClick = useCallback((e: React.MouseEvent) => {
     // 체크박스 클릭이면 무시
     if ((e.target as HTMLElement).closest('.image-card-actions')) {
       return;
     }
     onClick();
-  };
+  }, [onClick]);
 
   // 이미지 aspect ratio 계산 (레이아웃 시프트 방지)
-  const aspectRatio = image.width && image.height
-    ? image.width / image.height
-    : 1;
+  const aspectRatio = useMemo(() => {
+    return image.width && image.height
+      ? image.width / image.height
+      : 1;
+  }, [image.width, image.height]);
 
   // Intersection Observer로 뷰포트 진입 감지
   useEffect(() => {
@@ -77,9 +86,9 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
     };
   }, []);
 
-  const handleImageLoad = () => {
+  const handleImageLoad = useCallback(() => {
     setImageLoaded(true);
-  };
+  }, []);
 
   return (
     <Card
@@ -258,4 +267,4 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
   );
 };
 
-export default MasonryImageCard;
+export default memo(MasonryImageCard);
