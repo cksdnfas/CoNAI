@@ -247,12 +247,27 @@ async function startServer() {
       console.log('⏭️  Tagger is disabled - skipping daemon startup');
     }
 
-    // 8. 자동 스캔 스케줄러 시작
+    // 8. 파일 워처 서비스 시작 (실시간 파일 모니터링)
+    if (process.env.ENABLE_FILE_WATCHING !== 'false') {
+      try {
+        console.log('👀 Starting file watcher service...');
+        const { FileWatcherService } = await import('./services/fileWatcherService');
+        await FileWatcherService.initialize();
+        console.log('✅ File watcher service started successfully');
+      } catch (error) {
+        console.warn('⚠️  Failed to start file watcher service:', error instanceof Error ? error.message : error);
+        console.warn('   Falling back to scheduled scans only');
+      }
+    } else {
+      console.log('⏭️  File watching is disabled - using scheduled scans only');
+    }
+
+    // 9. 자동 스캔 스케줄러 시작
     console.log('🤖 Starting auto-scan scheduler...');
     AutoScanScheduler.start();
     console.log('✅ Auto-scan scheduler started successfully');
 
-    // 9. 자동 태깅 스케줄러 시작
+    // 10. 자동 태깅 스케줄러 시작
     console.log('🤖 Starting auto-tag scheduler...');
     autoTagScheduler.start();
     console.log('✅ Auto-tag scheduler started successfully');

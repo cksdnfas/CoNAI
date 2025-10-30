@@ -3,9 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import sharp from 'sharp';
+import fg from 'fast-glob';
+import pLimit from 'p-limit';
 import { ImageSimilarityService } from './imageSimilarity';
 import { WatchedFolderService } from './watchedFolderService';
 import { BackgroundQueueService } from './backgroundQueue';
+import { FileWatcherService } from './fileWatcherService';
 import { resolveFolderPath } from '../utils/pathResolver';
 
 export interface ScanResult {
@@ -71,9 +74,11 @@ export class FolderScanService {
 
       // 2. 폴더 경로 해석 (상대 경로 → 절대 경로)
       const resolvedPath = resolveFolderPath(folder.folder_path);
+      console.log(`🔍 [Scan Debug] 경로 해석: ${folder.folder_path} → ${resolvedPath}`);
 
       // 3. 폴더 경로 유효성 확인
       const validation = await WatchedFolderService.validateFolderPath(resolvedPath);
+      console.log(`🔍 [Scan Debug] 경로 유효성: exists=${validation.exists}, isDir=${validation.isDirectory}`);
       if (!validation.exists || !validation.isDirectory) {
         throw new Error(validation.error || '유효하지 않은 폴더 경로');
       }
@@ -82,13 +87,16 @@ export class FolderScanService {
       await WatchedFolderService.updateScanStatus(folderId, 'in_progress');
 
       // 5. 파일 목록 수집
-      const files = this.collectFiles(resolvedPath, {
+      const files = await this.collectFiles(resolvedPath, {
         recursive: folder.recursive === 1,
         extensions: folder.file_extensions ? JSON.parse(folder.file_extensions) : null,
         excludePatterns: folder.exclude_patterns ? JSON.parse(folder.exclude_patterns) : null
       });
 
-      console.log(`📂 스캔 시작: ${resolvedPath} (${files.length}개 파일, 배치 크기: ${this.BATCH_SIZE})`);
+      console.log(`📂 스캔 시작: ${resolvedPath} (${files.length}개 파일 발견, 배치 크기: ${this.BATCH_SIZE})`);
+      if (files.length === 0) {
+        console.warn(`⚠️ [Scan Debug] 파일 발견 실패 - 패턴 확인 필요: recursive=${folder.recursive === 1}, extensions=${folder.file_extensions}`);
+      }
 
       // 6. 전체 재스캔인 경우 기존 파일들을 'missing'으로 표시
       if (fullRescan) {
@@ -184,23 +192,20 @@ export class FolderScanService {
       return { filePath, stats, mimeType };
     }
 
-    // 2. 신규 파일 → 해시 생성 (병렬화)
-    const [hashes, colorHistogram] = await Promise.all([
-      ImageSimilarityService.generateCompositeHash(filePath),
-      ImageSimilarityService.generateColorHistogram(filePath)
-    ]);
+    // 2. 신규 파일 → 해시 및 히스토그램 생성 (최적화: 2x Sharp 파이프라인)
+    const result = await ImageSimilarityService.generateHashAndHistogram(filePath);
 
     return {
       filePath,
       stats,
       mimeType,
-      hashes,
-      colorHistogram
+      hashes: result.hashes,
+      colorHistogram: result.colorHistogram
     };
   }
 
   /**
-   * Bulk 쿼리로 배치 처리 (핵심 최적화)
+   * Bulk 쿼리로 배치 처리 (핵심 최적화) - p-limit 동시성 제어 적용
    */
   private static async processBatchWithBulkQueries(
     files: string[],
@@ -209,44 +214,53 @@ export class FolderScanService {
   ): Promise<void> {
     const batchStartTime = Date.now();
 
-    // 1. 배치별로 해시 생성 (병렬 처리)
+    // 1. p-limit으로 동시성 제어 (CPU 코어 수 * 2)
+    const concurrency = Math.min(os.cpus().length * 2, 16);
+    const limit = pLimit(concurrency);
+    console.log(`  ⚡ 동시성 제어: ${concurrency}개 동시 처리`);
+
+    // 2. 모든 파일을 동시성 제어하에 병렬 처리
     const processedFiles: ProcessedFileData[] = [];
 
-    for (let i = 0; i < files.length; i += this.BATCH_SIZE) {
-      const batch = files.slice(i, i + this.BATCH_SIZE);
+    const tasks = files.map((filePath, index) =>
+      limit(async () => {
+        try {
+          const fileData = await this.processFileBatch(filePath, folderId);
+          result.totalScanned++;
 
-      const batchResults = await Promise.allSettled(
-        batch.map(filePath => this.processFileBatch(filePath, folderId))
-      );
+          // 진행 상황 로그
+          if (result.totalScanned % this.PROGRESS_LOG_INTERVAL === 0 || result.totalScanned === files.length) {
+            const elapsed = (Date.now() - batchStartTime) / 1000;
+            const speed = elapsed > 0 ? result.totalScanned / elapsed : 0;
+            const remaining = files.length - result.totalScanned;
+            const eta = speed > 0 ? remaining / speed : 0;
 
-      // 결과 집계
-      for (let j = 0; j < batchResults.length; j++) {
-        const batchResult = batchResults[j];
-        result.totalScanned++;
+            console.log(
+              `  📊 진행: ${result.totalScanned}/${files.length} ` +
+              `(${speed.toFixed(1)} 이미지/초, 예상 완료: ${this.formatETA(eta)})`
+            );
+          }
 
-        if (batchResult.status === 'rejected') {
+          return fileData;
+        } catch (error) {
+          result.totalScanned++;
           result.errors.push({
-            file: batch[j],
-            error: batchResult.reason instanceof Error ? batchResult.reason.message : 'Unknown error'
+            file: filePath,
+            error: error instanceof Error ? error.message : 'Unknown error'
           });
-        } else if (batchResult.value.hashes) {
-          processedFiles.push(batchResult.value);
-        } else {
-          result.existingImages++;
+          return null;
         }
-      }
+      })
+    );
 
-      // 진행 상황 로그 (설정된 간격마다)
-      if (result.totalScanned % this.PROGRESS_LOG_INTERVAL === 0 || i + this.BATCH_SIZE >= files.length) {
-        const elapsed = (Date.now() - batchStartTime) / 1000;
-        const speed = elapsed > 0 ? result.totalScanned / elapsed : 0;
-        const remaining = files.length - result.totalScanned;
-        const eta = speed > 0 ? remaining / speed : 0;
+    const results = await Promise.all(tasks);
 
-        console.log(
-          `  📊 진행: ${result.totalScanned}/${files.length} ` +
-          `(${speed.toFixed(1)} 이미지/초, 예상 완료: ${this.formatETA(eta)})`
-        );
+    // 유효한 결과만 수집
+    for (const fileData of results) {
+      if (fileData && fileData.hashes) {
+        processedFiles.push(fileData);
+      } else if (fileData && !fileData.hashes) {
+        result.existingImages++;
       }
     }
 
@@ -546,61 +560,55 @@ export class FolderScanService {
   }
 
   /**
-   * 파일 수집 (재귀적)
+   * 파일 수집 (재귀적) - fast-glob 사용으로 최적화
    */
-  private static collectFiles(
+  private static async collectFiles(
     dirPath: string,
     options: {
       recursive: boolean;
       extensions: string[] | null;
       excludePatterns: string[] | null;
     }
-  ): string[] {
-    const files: string[] = [];
+  ): Promise<string[]> {
     const imageExtensions = options.extensions || [
       '.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff'
     ];
 
-    const traverse = (currentPath: string) => {
-      try {
-        const items = fs.readdirSync(currentPath);
+    // Windows 경로를 Unix 스타일로 정규화 (fast-glob 호환성)
+    const normalizedPath = dirPath.replace(/\\/g, '/');
 
-        for (const item of items) {
-          const fullPath = path.join(currentPath, item);
+    // fast-glob 패턴 생성 (확장자에서 점 제거)
+    const exts = imageExtensions
+      .map(ext => ext.startsWith('.') ? ext.substring(1) : ext)
+      .join(',');
+    const patterns = options.recursive
+      ? [`${normalizedPath}/**/*.{${exts}}`]
+      : [`${normalizedPath}/*.{${exts}}`];
 
-          try {
-            const stats = fs.statSync(fullPath);
+    console.log(`🔍 [Scan Debug] Fast-glob 패턴:`, patterns);
+    console.log(`🔍 [Scan Debug] 확장자:`, imageExtensions);
+    console.log(`🔍 [Scan Debug] 제외 패턴:`, options.excludePatterns);
 
-            // 제외 패턴 확인
-            if (options.excludePatterns) {
-              const shouldExclude = options.excludePatterns.some(pattern =>
-                fullPath.includes(pattern)
-              );
-              if (shouldExclude) continue;
-            }
+    try {
+      const files = await fg(patterns, {
+        ignore: options.excludePatterns || [],
+        absolute: true,
+        onlyFiles: true,
+        concurrency: 256,
+        caseSensitiveMatch: false,
+        suppressErrors: true  // 권한 문제 등의 에러 무시
+      });
 
-            if (stats.isDirectory()) {
-              if (options.recursive) {
-                traverse(fullPath);
-              }
-            } else if (stats.isFile()) {
-              const ext = path.extname(fullPath).toLowerCase();
-              if (imageExtensions.includes(ext)) {
-                files.push(fullPath);
-              }
-            }
-          } catch (itemError) {
-            // 개별 파일/폴더 접근 오류는 무시 (권한 문제 등)
-            console.warn(`  ⚠️  접근 불가: ${fullPath}`);
-          }
-        }
-      } catch (dirError) {
-        console.error(`  ❌ 디렉토리 읽기 실패: ${currentPath}`, dirError);
+      console.log(`🔍 [Scan Debug] Fast-glob 결과: ${files.length}개 파일 발견`);
+      if (files.length > 0) {
+        console.log(`🔍 [Scan Debug] 처음 3개 파일:`, files.slice(0, 3));
       }
-    };
 
-    traverse(dirPath);
-    return files;
+      return files;
+    } catch (error) {
+      console.error(`  ❌ 파일 스캔 실패: ${dirPath}`, error);
+      return [];
+    }
   }
 
   /**
@@ -658,6 +666,7 @@ export class FolderScanService {
 
   /**
    * 자동 스캔 실행 (스케줄러용)
+   * 실시간 워처가 활성화된 폴더는 전체 스캔 건너뛰기 (백업 검증만 수행)
    */
   static async runAutoScan(): Promise<ScanResult[]> {
     console.log('🤖 자동 스캔 시작...');
@@ -675,6 +684,24 @@ export class FolderScanService {
 
     for (const folder of folders) {
       try {
+        // 워처 상태 확인
+        const watcherStatus = FileWatcherService.getWatcherStatus(folder.id);
+        const isWatcherActive = watcherStatus && watcherStatus.state === 'watching';
+
+        // 워처가 활성화되어 있고 최근 이벤트가 있으면 전체 스캔 건너뛰기
+        if (isWatcherActive && watcherStatus.lastEvent) {
+          const timeSinceLastEvent = Date.now() - watcherStatus.lastEvent.getTime();
+          const oneHourMs = 60 * 60 * 1000;
+
+          // 마지막 이벤트가 1시간 이내면 전체 스캔 스킵
+          if (timeSinceLastEvent < oneHourMs) {
+            console.log(`  ⏭️  워처 활성: ${folder.folder_name} (마지막 이벤트: ${Math.round(timeSinceLastEvent / 1000 / 60)}분 전)`);
+            continue;
+          } else {
+            console.log(`  🔄 백업 검증 스캔: ${folder.folder_name} (마지막 이벤트: ${Math.round(timeSinceLastEvent / 1000 / 60)}분 전)`);
+          }
+        }
+
         console.log(`\n🔍 자동 스캔: ${folder.folder_name}`);
         const result = await this.scanFolder(folder.id, false);
         results.push(result);

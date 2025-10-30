@@ -12,17 +12,22 @@ import {
   Alert,
   CircularProgress,
   Grid,
-  Tooltip
+  Tooltip,
+  Divider
 } from '@mui/material';
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Refresh as RefreshIcon,
   Add as AddIcon,
-  FolderOpen as FolderIcon,
   PlayArrow as PlayIcon,
   History as HistoryIcon,
-  Autorenew as AutorenewIcon
+  Autorenew as AutorenewIcon,
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon,
+  RestartAlt as RestartIcon,
+  Stop as StopIcon,
+  Error as ErrorIcon
 } from '@mui/icons-material';
 import { folderApi } from '../../../../../services/folderApi';
 import FolderFormDialog from './FolderFormDialog';
@@ -39,6 +44,7 @@ const WatchedFoldersList: React.FC = () => {
   const [scanningAll, setScanningAll] = useState(false);
   const [logModalOpen, setLogModalOpen] = useState(false);
   const [logFolderId, setLogFolderId] = useState<number | undefined>(undefined);
+  const [watcherActioningId, setWatcherActioningId] = useState<number | null>(null);
 
   // 폴더 목록 로드
   const loadFolders = async () => {
@@ -57,6 +63,13 @@ const WatchedFoldersList: React.FC = () => {
 
   useEffect(() => {
     loadFolders();
+
+    // 10초마다 폴더 상태 갱신 (watcher 상태 포함)
+    const interval = setInterval(() => {
+      loadFolders();
+    }, 10000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // 폴더 추가/편집 다이얼로그
@@ -125,6 +138,48 @@ const WatchedFoldersList: React.FC = () => {
     }
   };
 
+  // Watcher 시작
+  const handleStartWatcher = async (folderId: number) => {
+    setWatcherActioningId(folderId);
+    try {
+      await folderApi.startWatcher(folderId);
+      loadFolders();
+    } catch (err) {
+      console.error('Failed to start watcher:', err);
+      setError('실시간 감시 시작에 실패했습니다');
+    } finally {
+      setWatcherActioningId(null);
+    }
+  };
+
+  // Watcher 중지
+  const handleStopWatcher = async (folderId: number) => {
+    setWatcherActioningId(folderId);
+    try {
+      await folderApi.stopWatcher(folderId);
+      loadFolders();
+    } catch (err) {
+      console.error('Failed to stop watcher:', err);
+      setError('실시간 감시 중지에 실패했습니다');
+    } finally {
+      setWatcherActioningId(null);
+    }
+  };
+
+  // Watcher 재시작
+  const handleRestartWatcher = async (folderId: number) => {
+    setWatcherActioningId(folderId);
+    try {
+      await folderApi.restartWatcher(folderId);
+      loadFolders();
+    } catch (err) {
+      console.error('Failed to restart watcher:', err);
+      setError('실시간 감시 재시작에 실패했습니다');
+    } finally {
+      setWatcherActioningId(null);
+    }
+  };
+
   // 상태 칩 색상
   const getStatusColor = (status: string | null) => {
     switch (status) {
@@ -150,6 +205,48 @@ const WatchedFoldersList: React.FC = () => {
         return '진행 중';
       default:
         return '대기';
+    }
+  };
+
+  // Watcher 상태 색상
+  const getWatcherStatusColor = (status: string | null) => {
+    switch (status) {
+      case 'watching':
+        return 'success';
+      case 'error':
+        return 'error';
+      case 'stopped':
+        return 'default';
+      default:
+        return 'default';
+    }
+  };
+
+  // Watcher 상태 텍스트
+  const getWatcherStatusText = (status: string | null) => {
+    switch (status) {
+      case 'watching':
+        return '감시 중';
+      case 'error':
+        return '오류';
+      case 'stopped':
+        return '중지';
+      default:
+        return '비활성';
+    }
+  };
+
+  // Watcher 상태 아이콘
+  const getWatcherStatusIcon = (status: string | null) => {
+    switch (status) {
+      case 'watching':
+        return <VisibilityIcon fontSize="small" />;
+      case 'error':
+        return <ErrorIcon fontSize="small" />;
+      case 'stopped':
+        return <StopIcon fontSize="small" />;
+      default:
+        return <VisibilityOffIcon fontSize="small" />;
     }
   };
 
@@ -236,22 +333,56 @@ const WatchedFoldersList: React.FC = () => {
                       {folder.auto_scan === 1 && (
                         <Chip
                           icon={<AutorenewIcon />}
-                          label={`${folder.scan_interval}분`}
+                          label={`자동 ${folder.scan_interval}분`}
                           size="small"
                           variant="outlined"
                         />
                       )}
                       {folder.last_scan_status && (
                         <Chip
-                          label={getStatusText(folder.last_scan_status)}
+                          label={`스캔: ${getStatusText(folder.last_scan_status)}`}
                           size="small"
                           color={getStatusColor(folder.last_scan_status)}
                         />
                       )}
                     </Box>
+
+                    {/* 실시간 감시 상태 */}
+                    {folder.watcher_enabled === 1 && (
+                      <>
+                        <Divider sx={{ my: 1 }} />
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Chip
+                              icon={getWatcherStatusIcon(folder.watcher_status)}
+                              label={getWatcherStatusText(folder.watcher_status)}
+                              size="small"
+                              color={getWatcherStatusColor(folder.watcher_status)}
+                              variant="outlined"
+                            />
+                          </Box>
+                          {folder.watcher_error && (
+                            <Typography variant="caption" color="error" sx={{ fontSize: '0.7rem' }}>
+                              {folder.watcher_error}
+                            </Typography>
+                          )}
+                          {folder.watcher_last_event && (
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                              마지막 이벤트: {new Date(folder.watcher_last_event).toLocaleString('ko-KR', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </Typography>
+                          )}
+                        </Box>
+                      </>
+                    )}
+
                     {folder.last_scan_date && (
-                      <Typography variant="caption" color="text.secondary">
-                        {new Date(folder.last_scan_date).toLocaleString('ko-KR', {
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: folder.watcher_enabled === 1 ? 0 : 0.5 }}>
+                        마지막 스캔: {new Date(folder.last_scan_date).toLocaleString('ko-KR', {
                           month: 'short',
                           day: 'numeric',
                           hour: '2-digit',
@@ -262,7 +393,54 @@ const WatchedFoldersList: React.FC = () => {
                   </Box>
                 </CardContent>
 
-                <CardActions sx={{ pt: 0, px: 2, pb: 1.5, gap: 0.5 }}>
+                <CardActions sx={{ pt: 0, px: 2, pb: 1.5, gap: 0.5, flexWrap: 'wrap' }}>
+                {/* 실시간 감시 컨트롤 */}
+                {folder.watcher_enabled === 1 && (
+                  <>
+                    {folder.watcher_status === 'watching' ? (
+                      <>
+                        <Tooltip title="감시 중지" arrow>
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleStopWatcher(folder.id)}
+                              disabled={watcherActioningId === folder.id}
+                              color="warning"
+                            >
+                              {watcherActioningId === folder.id ? <CircularProgress size={18} /> : <StopIcon fontSize="small" />}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                        <Tooltip title="감시 재시작" arrow>
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleRestartWatcher(folder.id)}
+                              disabled={watcherActioningId === folder.id}
+                              color="info"
+                            >
+                              {watcherActioningId === folder.id ? <CircularProgress size={18} /> : <RestartIcon fontSize="small" />}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      </>
+                    ) : (
+                      <Tooltip title="감시 시작" arrow>
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleStartWatcher(folder.id)}
+                            disabled={watcherActioningId === folder.id}
+                            color="success"
+                          >
+                            {watcherActioningId === folder.id ? <CircularProgress size={18} /> : <VisibilityIcon fontSize="small" />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    )}
+                    <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                  </>
+                )}
                 <Tooltip title="스캔" arrow>
                   <span>
                     <IconButton

@@ -9,6 +9,11 @@ export type FolderType = 'upload' | 'scan' | 'archive';
 export type ScanStatus = 'success' | 'error' | 'in_progress' | null;
 
 /**
+ * 감시자 상태 타입
+ */
+export type WatcherStatus = 'watching' | 'stopped' | 'error' | null;
+
+/**
  * 파일 상태 타입
  */
 export type FileStatus = 'active' | 'missing' | 'deleted';
@@ -31,6 +36,10 @@ export interface WatchedFolder {
   last_scan_status: ScanStatus;
   last_scan_found: number;
   last_scan_error: string | null;
+  watcher_enabled: number;
+  watcher_status: WatcherStatus;
+  watcher_error: string | null;
+  watcher_last_event: string | null;
   created_date: string;
   updated_date: string;
 }
@@ -47,6 +56,7 @@ export interface WatchedFolderCreate {
   recursive?: boolean;
   file_extensions?: string[];
   exclude_patterns?: string[];
+  watcher_enabled?: boolean;
 }
 
 /**
@@ -60,6 +70,7 @@ export interface WatchedFolderUpdate {
   file_extensions?: string[];
   exclude_patterns?: string[];
   is_active?: boolean;
+  watcher_enabled?: boolean;
 }
 
 /**
@@ -123,4 +134,26 @@ export interface BackgroundQueueStatus {
     tasksByType: Record<BackgroundTaskType, number>;
   };
   autoTag: AutoTagStatus;
+}
+
+/**
+ * 감시자 상태 정보
+ */
+export interface WatcherStatusInfo {
+  id: number;
+  folder_path: string;
+  watcher_enabled: number;
+  watcher_status: WatcherStatus;
+  watcher_error: string | null;
+  watcher_last_event: string | null;
+}
+
+/**
+ * 감시자 헬스체크 결과
+ */
+export interface WatcherHealthCheck {
+  totalWatchers: number;
+  activeWatchers: number;
+  errorWatchers: number;
+  watchers: WatcherStatusInfo[];
 }

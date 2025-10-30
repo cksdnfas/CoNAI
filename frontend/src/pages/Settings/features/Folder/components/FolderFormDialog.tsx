@@ -14,10 +14,9 @@ import {
   InputLabel,
   Alert,
   Box,
-  Chip,
-  IconButton
+  Chip
 } from '@mui/material';
-import { Add as AddIcon, Close as CloseIcon } from '@mui/icons-material';
+import { Add as AddIcon } from '@mui/icons-material';
 import { folderApi } from '../../../../../services/folderApi';
 import type { WatchedFolder, WatchedFolderCreate, WatchedFolderUpdate, FolderType } from '../../../../../types/folder';
 
@@ -39,7 +38,8 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
     scan_interval: 60,
     recursive: true,
     file_extensions: ['.jpg', '.jpeg', '.png', '.webp', '.gif'],
-    exclude_patterns: []
+    exclude_patterns: [],
+    watcher_enabled: false
   });
 
   const [newExtension, setNewExtension] = useState('');
@@ -58,7 +58,8 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
         scan_interval: folder.scan_interval,
         recursive: folder.recursive === 1,
         file_extensions: folder.file_extensions ? JSON.parse(folder.file_extensions) : [],
-        exclude_patterns: folder.exclude_patterns ? JSON.parse(folder.exclude_patterns) : []
+        exclude_patterns: folder.exclude_patterns ? JSON.parse(folder.exclude_patterns) : [],
+        watcher_enabled: folder.watcher_enabled === 1
       });
     } else {
       // 초기화
@@ -70,7 +71,8 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
         scan_interval: 60,
         recursive: true,
         file_extensions: ['.jpg', '.jpeg', '.png', '.webp', '.gif'],
-        exclude_patterns: []
+        exclude_patterns: [],
+        watcher_enabled: false
       });
     }
     setError(null);
@@ -230,6 +232,23 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
             }
             label="하위 폴더 포함 (재귀 스캔)"
           />
+
+          {/* 실시간 감시 */}
+          <FormControlLabel
+            control={
+              <Switch
+                checked={formData.watcher_enabled}
+                onChange={(e) => setFormData({ ...formData, watcher_enabled: e.target.checked })}
+              />
+            }
+            label="실시간 파일 감시 활성화"
+          />
+          {formData.watcher_enabled && (
+            <Alert severity="info" sx={{ mt: -1 }}>
+              실시간 감시는 폴더 내 파일 추가/수정/삭제를 즉시 감지하여 자동으로 처리합니다.
+              자동 스캔과 별개로 동작하며, 더 빠른 반응 속도를 제공합니다.
+            </Alert>
+          )}
 
           {/* 파일 확장자 */}
           <Box>

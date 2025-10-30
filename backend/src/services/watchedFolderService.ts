@@ -30,6 +30,7 @@ export interface WatchedFolderCreate {
   recursive?: boolean;
   file_extensions?: string[];
   exclude_patterns?: string[];
+  watcher_enabled?: boolean;
 }
 
 export interface WatchedFolderUpdate {
@@ -40,6 +41,7 @@ export interface WatchedFolderUpdate {
   file_extensions?: string[];
   exclude_patterns?: string[];
   is_active?: boolean;
+  watcher_enabled?: number;  // 0 or 1
 }
 
 export class WatchedFolderService {
@@ -74,8 +76,8 @@ export class WatchedFolderService {
     const info = db.prepare(`
       INSERT INTO watched_folders (
         folder_path, folder_name, folder_type, auto_scan, scan_interval,
-        recursive, file_extensions, exclude_patterns
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        recursive, file_extensions, exclude_patterns, watcher_enabled
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       absolutePath,
       folderData.folder_name || path.basename(absolutePath),
@@ -84,7 +86,8 @@ export class WatchedFolderService {
       folderData.scan_interval || 60,
       folderData.recursive !== false ? 1 : 0,
       folderData.file_extensions ? JSON.stringify(folderData.file_extensions) : null,
-      folderData.exclude_patterns ? JSON.stringify(folderData.exclude_patterns) : null
+      folderData.exclude_patterns ? JSON.stringify(folderData.exclude_patterns) : null,
+      folderData.watcher_enabled ? 1 : 0
     );
 
     return info.lastInsertRowid as number;
@@ -162,6 +165,11 @@ export class WatchedFolderService {
     if (updates.is_active !== undefined) {
       fields.push('is_active = ?');
       values.push(updates.is_active ? 1 : 0);
+    }
+
+    if (updates.watcher_enabled !== undefined) {
+      fields.push('watcher_enabled = ?');
+      values.push(updates.watcher_enabled ? 1 : 0);
     }
 
     if (fields.length === 0) {

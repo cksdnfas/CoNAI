@@ -6,7 +6,9 @@ import type {
   FolderScanResult,
   ScanAllSummary,
   PathValidationResult,
-  FolderType
+  FolderType,
+  WatcherStatusInfo,
+  WatcherHealthCheck
 } from '../types/folder';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1566';
@@ -117,6 +119,46 @@ export const updateDefaultFolder = async (
   return response.data.data;
 };
 
+/**
+ * 실시간 감시 시작
+ */
+export const startWatcher = async (id: number): Promise<{ message: string; status: WatcherStatusInfo }> => {
+  const response = await axios.post(`${API_BASE_URL}/api/folders/${id}/watcher/start`);
+  return response.data.data;
+};
+
+/**
+ * 실시간 감시 중지
+ */
+export const stopWatcher = async (id: number): Promise<{ message: string }> => {
+  const response = await axios.post(`${API_BASE_URL}/api/folders/${id}/watcher/stop`);
+  return response.data.data;
+};
+
+/**
+ * 실시간 감시 재시작
+ */
+export const restartWatcher = async (id: number): Promise<{ message: string; status: WatcherStatusInfo }> => {
+  const response = await axios.post(`${API_BASE_URL}/api/folders/${id}/watcher/restart`);
+  return response.data.data;
+};
+
+/**
+ * 감시자 상태 조회
+ */
+export const getWatcherStatus = async (id: number): Promise<WatcherStatusInfo> => {
+  const response = await axios.get(`${API_BASE_URL}/api/folders/${id}/watcher/status`);
+  return response.data.data;
+};
+
+/**
+ * 모든 감시자 헬스체크
+ */
+export const getWatchersHealth = async (): Promise<WatcherHealthCheck> => {
+  const response = await axios.get(`${API_BASE_URL}/api/folders/watchers/health`);
+  return response.data.data;
+};
+
 export const folderApi = {
   getFolders,
   getFolder,
@@ -127,5 +169,10 @@ export const folderApi = {
   scanAllFolders,
   validateFolderPath,
   getDefaultFolder,
-  updateDefaultFolder
+  updateDefaultFolder,
+  startWatcher,
+  stopWatcher,
+  restartWatcher,
+  getWatcherStatus,
+  getWatchersHealth
 };

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import { WatchedFolderService } from '../services/watchedFolderService';
 import { FolderScanService } from '../services/folderScanService';
+import { FileWatcherService } from '../services/fileWatcherService';
 import { successResponse, errorResponse } from '@comfyui-image-manager/shared';
 
 const router = Router();
@@ -227,10 +228,58 @@ router.patch('/:id', asyncHandler(async (req: Request, res: Response) => {
 
   const updates = req.body;
 
+  // 워처 관련 설정이 변경되었는지 확인
+  const watcherConfigChanged = !!(
+    updates.recursive !== undefined ||
+    updates.file_extensions !== undefined ||
+    updates.exclude_patterns !== undefined ||
+    updates.watcher_enabled !== undefined
+  );
+
   const success = await WatchedFolderService.updateFolder(id, updates);
 
   if (!success) {
     return res.status(404).json(errorResponse('폴더를 찾을 수 없습니다'));
+  }
+
+  // 워처 설정이 변경되었고 워처가 실행 중이면 재시작
+  if (watcherConfigChanged) {
+    const watcherStatus = FileWatcherService.getWatcherStatus(id);
+
+    if (updates.watcher_enabled === 1) {
+      // 워처 활성화 요청
+      try {
+        if (watcherStatus && watcherStatus.state === 'watching') {
+          // 이미 실행 중이면 재시작
+          await FileWatcherService.restartWatcher(id);
+          console.log(`  🔄 워처 재시작: folderId=${id} (설정 변경)`);
+        } else {
+          // 실행 중이 아니면 시작
+          await FileWatcherService.startWatcher(id);
+          console.log(`  ✅ 워처 시작: folderId=${id} (설정 활성화)`);
+        }
+      } catch (error) {
+        console.error(`  ❌ 워처 시작/재시작 실패: folderId=${id}`, error);
+      }
+    } else if (updates.watcher_enabled === 0) {
+      // 워처 비활성화 요청
+      try {
+        if (watcherStatus) {
+          await FileWatcherService.stopWatcher(id);
+          console.log(`  🛑 워처 중지: folderId=${id} (설정 비활성화)`);
+        }
+      } catch (error) {
+        console.error(`  ❌ 워처 중지 실패: folderId=${id}`, error);
+      }
+    } else if (watcherStatus && watcherStatus.state === 'watching') {
+      // 워처 활성화 상태 변경 없이 다른 설정만 변경된 경우 재시작
+      try {
+        await FileWatcherService.restartWatcher(id);
+        console.log(`  🔄 워처 재시작: folderId=${id} (설정 변경)`);
+      } catch (error) {
+        console.error(`  ❌ 워처 재시작 실패: folderId=${id}`, error);
+      }
+    }
   }
 
   const folder = await WatchedFolderService.getFolder(id);
@@ -301,6 +350,171 @@ router.get('/:id/scan-logs', asyncHandler(async (req: Request, res: Response) =>
 
   const logs = FolderScanService.getScanLogs(id, limit);
   return res.json(successResponse(logs));
+}));
+
+// ==================== 파일 워처 제어 API ====================
+
+/**
+ * GET /api/folders/:id/watcher/status
+ * 워처 상태 조회
+ */
+router.get('/:id/watcher/status', asyncHandler(async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+
+  if (isNaN(id)) {
+    return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
+  }
+
+  const status = FileWatcherService.getWatcherStatus(id);
+
+  if (!status) {
+    return res.json(successResponse({
+      folderId: id,
+      running: false,
+      state: 'stopped',
+      message: '워처가 실행되고 있지 않습니다'
+    }));
+  }
+
+  return res.json(successResponse({
+    folderId: id,
+    running: status.state === 'watching',
+    state: status.state,
+    folderName: status.folderName,
+    folderPath: status.folderPath,
+    lastEvent: status.lastEvent,
+    eventCount: status.eventCount,
+    error: status.error,
+    retryAttempts: status.retryAttempts
+  }));
+}));
+
+/**
+ * POST /api/folders/:id/watcher/start
+ * 워처 시작
+ */
+router.post('/:id/watcher/start', asyncHandler(async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+
+  if (isNaN(id)) {
+    return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
+  }
+
+  // 폴더 확인
+  const folder = await WatchedFolderService.getFolder(id);
+  if (!folder) {
+    return res.status(404).json(errorResponse('폴더를 찾을 수 없습니다'));
+  }
+
+  if (!folder.is_active) {
+    return res.status(400).json(errorResponse('비활성화된 폴더입니다'));
+  }
+
+  // 워처 시작
+  try {
+    await FileWatcherService.startWatcher(id);
+
+    // watcher_enabled 플래그 업데이트
+    await WatchedFolderService.updateFolder(id, { watcher_enabled: 1 });
+
+    return res.json(successResponse({
+      message: '워처가 시작되었습니다',
+      folderId: id,
+      folderName: folder.folder_name
+    }));
+  } catch (error) {
+    return res.status(500).json(errorResponse(
+      `워처 시작 실패: ${error instanceof Error ? error.message : 'Unknown error'}`
+    ));
+  }
+}));
+
+/**
+ * POST /api/folders/:id/watcher/stop
+ * 워처 중지
+ */
+router.post('/:id/watcher/stop', asyncHandler(async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+
+  if (isNaN(id)) {
+    return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
+  }
+
+  try {
+    await FileWatcherService.stopWatcher(id);
+
+    // watcher_enabled 플래그 업데이트
+    await WatchedFolderService.updateFolder(id, { watcher_enabled: 0 });
+
+    return res.json(successResponse({
+      message: '워처가 중지되었습니다',
+      folderId: id
+    }));
+  } catch (error) {
+    return res.status(500).json(errorResponse(
+      `워처 중지 실패: ${error instanceof Error ? error.message : 'Unknown error'}`
+    ));
+  }
+}));
+
+/**
+ * POST /api/folders/:id/watcher/restart
+ * 워처 재시작
+ */
+router.post('/:id/watcher/restart', asyncHandler(async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+
+  if (isNaN(id)) {
+    return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
+  }
+
+  const folder = await WatchedFolderService.getFolder(id);
+  if (!folder) {
+    return res.status(404).json(errorResponse('폴더를 찾을 수 없습니다'));
+  }
+
+  try {
+    await FileWatcherService.restartWatcher(id);
+
+    return res.json(successResponse({
+      message: '워처가 재시작되었습니다',
+      folderId: id,
+      folderName: folder.folder_name
+    }));
+  } catch (error) {
+    return res.status(500).json(errorResponse(
+      `워처 재시작 실패: ${error instanceof Error ? error.message : 'Unknown error'}`
+    ));
+  }
+}));
+
+/**
+ * GET /api/folders/watchers/health
+ * 모든 워처 헬스체크
+ */
+router.get('/watchers/health', asyncHandler(async (_req: Request, res: Response) => {
+  const allStatuses = FileWatcherService.getAllWatcherStatuses();
+
+  const summary = {
+    totalWatchers: allStatuses.length,
+    watching: allStatuses.filter(w => w.state === 'watching').length,
+    error: allStatuses.filter(w => w.state === 'error').length,
+    stopped: allStatuses.filter(w => w.state === 'stopped').length,
+    initializing: allStatuses.filter(w => w.state === 'initializing').length,
+    totalEvents24h: allStatuses.reduce((sum, w) => sum + w.eventCount, 0),
+    watchers: allStatuses.map(w => ({
+      folderId: w.folderId,
+      folderName: w.folderName,
+      folderPath: w.folderPath,
+      state: w.state,
+      lastEvent: w.lastEvent,
+      eventCount: w.eventCount,
+      error: w.error,
+      retryAttempts: w.retryAttempts
+    }))
+  };
+
+  return res.json(successResponse(summary));
 }));
 
 export { router as watchedFoldersRoutes };

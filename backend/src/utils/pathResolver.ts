@@ -2,6 +2,18 @@ import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
 
 /**
+ * 경로를 정규화 (Windows/Unix 호환)
+ *
+ * @param pathStr 경로 문자열
+ * @param forceUnix Unix 스타일 슬래시 강제 (fast-glob 등)
+ * @returns 정규화된 경로
+ */
+export function normalizePath(pathStr: string, forceUnix: boolean = false): string {
+  const normalized = path.normalize(pathStr);
+  return forceUnix ? normalized.replace(/\\/g, '/') : normalized;
+}
+
+/**
  * 폴더 경로를 해석하여 절대 경로로 변환
  *
  * - 절대 경로: 그대로 반환
@@ -13,7 +25,7 @@ import { runtimePaths } from '../config/runtimePaths';
 export function resolveFolderPath(folderPath: string): string {
   // 이미 절대 경로면 그대로 반환
   if (path.isAbsolute(folderPath)) {
-    return folderPath;
+    return path.normalize(folderPath);
   }
 
   // 상대 경로는 basePath 기준으로 해석

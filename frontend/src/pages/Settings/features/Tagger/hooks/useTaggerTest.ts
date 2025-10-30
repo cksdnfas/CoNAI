@@ -18,7 +18,7 @@ export const useTaggerTest = () => {
     setTestProcessing(true);
     setTestResult(null);
     try {
-      const result = await taggerBatchApi.testImage(validation.imageId!);
+      const result = await taggerBatchApi.testImage(String(validation.imageId!));
       setTestResult(result);
     } catch (error) {
       alert(t('tagger.test.failed'));

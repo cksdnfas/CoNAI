@@ -244,7 +244,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
     setTestProcessing(true);
     setTestResult(null);
     try {
-      const result = await taggerBatchApi.testImage(imageId);
+      const result = await taggerBatchApi.testImage(String(imageId));
       setTestResult(result);
     } catch (error) {
       alert(t('tagger.test.failed'));

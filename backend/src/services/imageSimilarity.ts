@@ -335,8 +335,8 @@ export class ImageSimilarityService {
   }
 
   /**
-   * 복합 해시 생성 (pHash + dHash + aHash)
-   * 이미지의 고유 식별자로 사용
+   * 복합 해시 생성 (pHash + dHash + aHash) - 최적화 버전
+   * 단일 Sharp 파이프라인으로 모든 해시 생성 (3x I/O 절감)
    */
   static async generateCompositeHash(imagePath: string): Promise<{
     compositeHash: string;
@@ -345,14 +345,72 @@ export class ImageSimilarityService {
     aHash: string;
   }> {
     try {
-      // 병렬로 모든 해시 생성
-      const [perceptualHash, dHash, aHash] = await Promise.all([
-        this.generatePerceptualHash(imagePath),
-        this.generateDHash(imagePath),
-        this.generateAHash(imagePath)
-      ]);
+      // 1. 단일 Sharp 파이프라인으로 32x32 그레이스케일 버퍼 생성
+      const buffer32x32 = await sharp(imagePath)
+        .resize(32, 32, { fit: 'fill' })
+        .greyscale()
+        .raw()
+        .toBuffer();
 
-      // 복합 해시: 단순 연결 (48자)
+      if (buffer32x32.length !== 1024) {
+        throw new Error(`Unexpected pixel data length for pHash: ${buffer32x32.length}`);
+      }
+
+      // 2. Perceptual Hash 계산 (버퍼 기반)
+      const matrix: number[][] = [];
+      for (let i = 0; i < 32; i++) {
+        matrix[i] = [];
+        for (let j = 0; j < 32; j++) {
+          matrix[i][j] = buffer32x32[i * 32 + j];
+        }
+      }
+
+      const dctMatrix = this.applyDCT(matrix);
+      const lowFreq: number[] = [];
+      for (let i = 0; i < 8; i++) {
+        for (let j = 0; j < 8; j++) {
+          lowFreq.push(dctMatrix[i][j]);
+        }
+      }
+
+      const sorted = [...lowFreq].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+
+      let pHashBinary = '';
+      for (let i = 0; i < lowFreq.length; i++) {
+        pHashBinary += lowFreq[i] > median ? '1' : '0';
+      }
+      const perceptualHash = this.binaryToHex(pHashBinary);
+
+      // 3. dHash 계산 (32x32 버퍼 재사용, 9x8 다운샘플링)
+      let dHashBinary = '';
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          // 32x32에서 9x8로 다운샘플링 (4픽셀 간격)
+          const leftPixel = buffer32x32[row * 4 * 32 + col * 4];
+          const rightPixel = buffer32x32[row * 4 * 32 + (col + 1) * 4];
+          dHashBinary += leftPixel < rightPixel ? '1' : '0';
+        }
+      }
+      const dHash = this.binaryToHex(dHashBinary);
+
+      // 4. aHash 계산 (32x32 버퍼 재사용, 8x8 다운샘플링)
+      const samples: number[] = [];
+      for (let i = 0; i < 8; i++) {
+        for (let j = 0; j < 8; j++) {
+          // 32x32에서 8x8로 다운샘플링 (4픽셀 간격)
+          samples.push(buffer32x32[i * 4 * 32 + j * 4]);
+        }
+      }
+
+      const average = samples.reduce((sum, val) => sum + val, 0) / samples.length;
+      let aHashBinary = '';
+      for (let i = 0; i < samples.length; i++) {
+        aHashBinary += samples[i] > average ? '1' : '0';
+      }
+      const aHash = this.binaryToHex(aHashBinary);
+
+      // 5. 복합 해시 생성
       const compositeHash = `${perceptualHash}${dHash}${aHash}`;
 
       return {
@@ -364,6 +422,138 @@ export class ImageSimilarityService {
     } catch (error) {
       console.error('Failed to generate composite hash:', error);
       throw new Error(`Composite hash generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * 복합 해시 및 컬러 히스토그램 동시 생성 - 최적화 버전
+   * 2개의 Sharp 파이프라인으로 모든 데이터 생성 (4x → 2x I/O 절감)
+   */
+  static async generateHashAndHistogram(imagePath: string): Promise<{
+    hashes: {
+      compositeHash: string;
+      perceptualHash: string;
+      dHash: string;
+      aHash: string;
+    };
+    colorHistogram: ColorHistogram;
+  }> {
+    try {
+      // 병렬 처리: 그레이스케일 해시 + RGB 히스토그램
+      const [grayBuffer, rgbBuffer] = await Promise.all([
+        // 1. 32x32 그레이스케일 버퍼 (해시용)
+        sharp(imagePath)
+          .resize(32, 32, { fit: 'fill' })
+          .greyscale()
+          .raw()
+          .toBuffer(),
+        // 2. 32x32 RGB 버퍼 (히스토그램용)
+        sharp(imagePath)
+          .resize(32, 32, { fit: 'fill' })
+          .raw()
+          .toBuffer()
+      ]);
+
+      // === 해시 계산 (그레이스케일 버퍼 기반) ===
+      if (grayBuffer.length !== 1024) {
+        throw new Error(`Unexpected grayscale buffer length: ${grayBuffer.length}`);
+      }
+
+      // Perceptual Hash
+      const matrix: number[][] = [];
+      for (let i = 0; i < 32; i++) {
+        matrix[i] = [];
+        for (let j = 0; j < 32; j++) {
+          matrix[i][j] = grayBuffer[i * 32 + j];
+        }
+      }
+
+      const dctMatrix = this.applyDCT(matrix);
+      const lowFreq: number[] = [];
+      for (let i = 0; i < 8; i++) {
+        for (let j = 0; j < 8; j++) {
+          lowFreq.push(dctMatrix[i][j]);
+        }
+      }
+
+      const sorted = [...lowFreq].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+
+      let pHashBinary = '';
+      for (let i = 0; i < lowFreq.length; i++) {
+        pHashBinary += lowFreq[i] > median ? '1' : '0';
+      }
+      const perceptualHash = this.binaryToHex(pHashBinary);
+
+      // dHash
+      let dHashBinary = '';
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const leftPixel = grayBuffer[row * 4 * 32 + col * 4];
+          const rightPixel = grayBuffer[row * 4 * 32 + (col + 1) * 4];
+          dHashBinary += leftPixel < rightPixel ? '1' : '0';
+        }
+      }
+      const dHash = this.binaryToHex(dHashBinary);
+
+      // aHash
+      const samples: number[] = [];
+      for (let i = 0; i < 8; i++) {
+        for (let j = 0; j < 8; j++) {
+          samples.push(grayBuffer[i * 4 * 32 + j * 4]);
+        }
+      }
+
+      const average = samples.reduce((sum, val) => sum + val, 0) / samples.length;
+      let aHashBinary = '';
+      for (let i = 0; i < samples.length; i++) {
+        aHashBinary += samples[i] > average ? '1' : '0';
+      }
+      const aHash = this.binaryToHex(aHashBinary);
+
+      const compositeHash = `${perceptualHash}${dHash}${aHash}`;
+
+      // === 색상 히스토그램 계산 (RGB 버퍼 기반) ===
+      if (rgbBuffer.length !== 3072) {
+        throw new Error(`Unexpected RGB buffer length: ${rgbBuffer.length}`);
+      }
+
+      const histogram: ColorHistogram = {
+        r: new Array(256).fill(0),
+        g: new Array(256).fill(0),
+        b: new Array(256).fill(0)
+      };
+
+      for (let i = 0; i < rgbBuffer.length; i += 3) {
+        const r = rgbBuffer[i];
+        const g = rgbBuffer[i + 1];
+        const b = rgbBuffer[i + 2];
+
+        histogram.r[r]++;
+        histogram.g[g]++;
+        histogram.b[b]++;
+      }
+
+      // 정규화
+      const totalPixels = 32 * 32;
+      for (let i = 0; i < 256; i++) {
+        histogram.r[i] /= totalPixels;
+        histogram.g[i] /= totalPixels;
+        histogram.b[i] /= totalPixels;
+      }
+
+      return {
+        hashes: {
+          compositeHash,
+          perceptualHash,
+          dHash,
+          aHash
+        },
+        colorHistogram: histogram
+      };
+    } catch (error) {
+      console.error('Failed to generate hash and histogram:', error);
+      throw new Error(`Hash and histogram generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

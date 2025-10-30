@@ -26,7 +26,7 @@ const BackgroundStatusMonitor: React.FC = () => {
   const [status, setStatus] = useState<BackgroundQueueStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [autoRefresh] = useState(true);
 
   // 상태 조회
   const fetchStatus = async () => {

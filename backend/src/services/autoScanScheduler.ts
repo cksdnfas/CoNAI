@@ -1,11 +1,13 @@
 import * as cron from 'node-cron';
 import { FolderScanService } from './folderScanService';
 import { WatchedFolderService } from './watchedFolderService';
+import { FileWatcherService } from './fileWatcherService';
 
 /**
  * 자동 스캔 스케줄러
  * - 폴더별 scan_interval 설정에 따라 주기적으로 스캔 실행
  * - auto_scan이 활성화된 폴더만 대상
+ * - 실시간 워처가 활성화된 경우 전체 스캔 건너뛰기 (백업 검증 스캔 유지)
  */
 export class AutoScanScheduler {
   private static cronTask: cron.ScheduledTask | null = null;
