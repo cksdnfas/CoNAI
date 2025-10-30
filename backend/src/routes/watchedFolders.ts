@@ -21,10 +21,18 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 /**
  * GET /api/folders/default
  * 기본 업로드 폴더 조회
+ *
+ * 중요: 이 라우트는 /:id 보다 먼저 정의되어야 합니다.
+ * Express는 라우트를 순서대로 매칭하므로, 특정 문자열 경로가
+ * 파라미터 경로보다 먼저 와야 합니다.
  */
 router.get('/default', asyncHandler(async (_req: Request, res: Response) => {
   const folders = await WatchedFolderService.listFolders({ type: 'upload' });
-  const defaultFolder = folders.find(f => f.folder_path.includes('uploads/images'));
+  // Windows와 Unix 경로 구분자를 모두 처리하기 위해 정규화
+  const defaultFolder = folders.find(f => {
+    const normalizedPath = f.folder_path.replace(/\\/g, '/');
+    return normalizedPath.includes('uploads/images');
+  });
 
   if (!defaultFolder) {
     return res.status(404).json(errorResponse('기본 업로드 폴더를 찾을 수 없습니다'));
@@ -34,8 +42,22 @@ router.get('/default', asyncHandler(async (_req: Request, res: Response) => {
 }));
 
 /**
+ * GET /api/folders/scan-logs/recent
+ * 최근 스캔 로그 조회 (모든 폴더)
+ *
+ * 중요: 이 라우트는 /:id 보다 먼저 정의되어야 합니다.
+ */
+router.get('/scan-logs/recent', asyncHandler(async (req: Request, res: Response) => {
+  const limit = parseInt(req.query.limit as string) || 100;
+  const logs = FolderScanService.getRecentScanLogs(limit);
+  return res.json(successResponse(logs));
+}));
+
+/**
  * GET /api/folders/:id
  * 특정 폴더 정보 조회
+ *
+ * 중요: 파라미터 라우트는 특정 문자열 경로 뒤에 정의되어야 합니다.
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
@@ -164,7 +186,11 @@ router.patch('/default', asyncHandler(async (req: Request, res: Response) => {
 
   // 기존 기본 폴더 찾기
   const folders = await WatchedFolderService.listFolders({ type: 'upload' });
-  const defaultFolder = folders.find(f => f.folder_path.includes('uploads/images'));
+  // Windows와 Unix 경로 구분자를 모두 처리하기 위해 정규화
+  const defaultFolder = folders.find(f => {
+    const normalizedPath = f.folder_path.replace(/\\/g, '/');
+    return normalizedPath.includes('uploads/images');
+  });
 
   if (!defaultFolder) {
     return res.status(404).json(errorResponse('기본 업로드 폴더를 찾을 수 없습니다'));
@@ -274,16 +300,6 @@ router.get('/:id/scan-logs', asyncHandler(async (req: Request, res: Response) =>
   }
 
   const logs = FolderScanService.getScanLogs(id, limit);
-  return res.json(successResponse(logs));
-}));
-
-/**
- * GET /api/folders/scan-logs/recent
- * 최근 스캔 로그 조회 (모든 폴더)
- */
-router.get('/scan-logs/recent', asyncHandler(async (req: Request, res: Response) => {
-  const limit = parseInt(req.query.limit as string) || 100;
-  const logs = FolderScanService.getRecentScanLogs(limit);
   return res.json(successResponse(logs));
 }));
 

@@ -332,11 +332,13 @@ export const up = async (db: Database.Database): Promise<void> => {
   folderIndexes.forEach(sql => db.exec(sql));
 
   // 기본 업로드 폴더 등록 (상대 경로)
+  // 모든 폴더를 동일하게 취급 - auto_scan 활성화
   const defaultUploadPath = path.join('uploads', 'images');
   db.prepare(`
-    INSERT OR IGNORE INTO watched_folders (folder_path, folder_name, folder_type, is_active)
-    VALUES (?, ?, ?, ?)
-  `).run(defaultUploadPath, '직접 업로드', 'upload', 1);
+    INSERT OR IGNORE INTO watched_folders
+    (folder_path, folder_name, folder_type, auto_scan, scan_interval, recursive, is_active)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(defaultUploadPath, '직접 업로드', 'upload', 1, 60, 1, 1);
 
   console.log('  ✅ 폴더 테이블 3개 + 인덱스 + 기본 폴더 생성 완료\n');
 

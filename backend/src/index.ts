@@ -208,8 +208,15 @@ async function startServer() {
 
     // 3. 데이터베이스 자동 초기화
     console.log('🗄️  데이터베이스를 초기화하는 중...');
+    const isNewDatabase = !fs.existsSync(runtimePaths.databaseFile);
     await initializeDatabase();
     console.log('✅ Database initialized successfully');
+
+    // 3-1. 첫 실행 안내
+    if (isNewDatabase) {
+      console.log('✅ 새 데이터베이스 생성 완료');
+      console.log('💡 자동 스캔 스케줄러가 곧 첫 스캔을 시작합니다');
+    }
 
     // 4. User Settings DB 초기화
     console.log('🗄️  User Settings DB 초기화 중...');

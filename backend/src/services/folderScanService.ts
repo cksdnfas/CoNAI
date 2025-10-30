@@ -374,9 +374,9 @@ export class FolderScanService {
 
       // 백그라운드 작업 추가
       BackgroundQueueService.addMetadataExtractionTask(filePath, hashes.compositeHash);
-      BackgroundQueueService.addAutoTaggingTask(filePath, hashes.compositeHash);
+      // Auto-tagging is handled separately by AutoTagScheduler (see backgroundQueue.ts:34)
       BackgroundQueueService.addPromptCollectionTask(filePath, hashes.compositeHash);
-      result.backgroundTasks += 3;
+      result.backgroundTasks += 2;
 
       result.newImages++;
       console.log(`  ✨ 신규 이미지: ${path.basename(filePath)}`);
