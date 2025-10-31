@@ -462,7 +462,7 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
       }
 
       // 원본 이미지 제공 with ETag
-      const stats = fs.statSync(originalPath);
+      const stats = await fs.promises.stat(originalPath);
       const etag = generateETag(stats);
 
       // Check If-None-Match header
@@ -479,7 +479,7 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
     }
 
     // 썸네일 제공 with ETag
-    const stats = fs.statSync(thumbnailPath);
+    const stats = await fs.promises.stat(thumbnailPath);
     const etag = generateETag(stats);
 
     // Check If-None-Match header
@@ -598,7 +598,7 @@ router.get('/:compositeHash/optimized', asyncHandler(async (req: Request, res: R
       }
 
       // Original fallback with ETag
-      const stats = fs.statSync(originalPath);
+      const stats = await fs.promises.stat(originalPath);
       const etag = generateETag(stats);
 
       if (req.headers['if-none-match'] === etag) {
@@ -626,7 +626,7 @@ router.get('/:compositeHash/optimized', asyncHandler(async (req: Request, res: R
       }
 
       // Original fallback with ETag
-      const stats = fs.statSync(originalPath);
+      const stats = await fs.promises.stat(originalPath);
       const etag = generateETag(stats);
 
       if (req.headers['if-none-match'] === etag) {
@@ -642,7 +642,7 @@ router.get('/:compositeHash/optimized', asyncHandler(async (req: Request, res: R
     }
 
     // 최적화 이미지 제공 with ETag
-    const stats = fs.statSync(optimizedPath);
+    const stats = await fs.promises.stat(optimizedPath);
     const etag = generateETag(stats);
 
     if (req.headers['if-none-match'] === etag) {

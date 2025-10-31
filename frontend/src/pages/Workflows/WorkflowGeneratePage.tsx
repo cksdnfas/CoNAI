@@ -252,9 +252,9 @@ export default function WorkflowGeneratePage() {
         {/* 오른쪽: 히스토리 목록 */}
         <Grid size={{ xs: 12, md: 12, lg: 8 }}>
           <GenerationHistoryList
-            key={historyRefreshKey}
             serviceType="comfyui"
             workflowId={parseInt(id!)}
+            refreshKey={historyRefreshKey}
           />
         </Grid>
       </Grid>

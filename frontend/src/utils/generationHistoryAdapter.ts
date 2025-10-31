@@ -2,12 +2,24 @@ import type { GenerationHistoryRecord } from '@comfyui-image-manager/shared';
 import type { ImageRecord } from '../types/image';
 
 /**
+ * Extended GenerationHistoryRecord with metadata JOIN fields
+ */
+export interface GenerationHistoryRecordWithMetadata extends GenerationHistoryRecord {
+  actual_composite_hash?: string | null;
+  actual_thumbnail_path?: string | null;
+  actual_optimized_path?: string | null;
+}
+
+/**
  * GenerationHistoryRecord를 ImageRecord 형식으로 변환
  * ImageMasonry 컴포넌트에서 사용할 수 있도록 어댑터 패턴 적용
  * ComfyUI와 NovelAI 모두 지원
+ *
+ * actual_* 필드 우선 사용 (image_files/image_metadata JOIN 결과)
+ * 없으면 history 자체 필드로 fallback (아직 처리 안된 이미지)
  */
 export const convertHistoryToImageRecord = (
-  history: GenerationHistoryRecord
+  history: GenerationHistoryRecordWithMetadata
 ): ImageRecord => {
   // ComfyUI와 NovelAI 구분
   const isComfyUI = history.service_type === 'comfyui';
@@ -33,12 +45,19 @@ export const convertHistoryToImageRecord = (
   // 히스토리 이미지는 항상 히스토리 폴더(uploads/API/images/)의 이미지를 사용
   // linked_image_id는 메타데이터로만 보관 (향후 참조용)
 
+  // ✅ actual_* 필드 우선 사용 (image_files/image_metadata JOIN 결과)
+  // 없으면 history 자체 필드로 fallback (아직 처리 안된 이미지)
+  const composite_hash = history.actual_composite_hash || `history_${history.id}`;
+  const thumbnail_path = history.actual_thumbnail_path || history.thumbnail_path || '';
+  const optimized_path = history.actual_optimized_path || history.optimized_path || null;
+
   // 디버깅: 이미지 경로가 없는 경우 경고
-  if (!history.thumbnail_path && !history.original_path) {
+  if (!thumbnail_path && !history.original_path) {
     console.warn(`[History Adapter] History ${history.id} has no valid image paths:`, {
       id: history.id,
       service_type: history.service_type,
       generation_status: history.generation_status,
+      actual_thumbnail_path: history.actual_thumbnail_path,
       thumbnail_path: history.thumbnail_path,
       original_path: history.original_path
     });
@@ -46,7 +65,7 @@ export const convertHistoryToImageRecord = (
 
   return {
     // ✅ New structure - Primary identification
-    composite_hash: `history_${history.id}`,  // Temporary hash for history records
+    composite_hash,  // Use actual composite_hash if available
     first_seen_date: history.created_at,      // Replaces upload_date
 
     // File information (from image_files table JOIN)
@@ -56,11 +75,11 @@ export const convertHistoryToImageRecord = (
     mime_type: 'image/png',
     file_status: 'active' as const,
 
-    // Image metadata
+    // Image metadata - use actual values with fallback
     width: history.width || 0,
     height: history.height || 0,
-    thumbnail_path: history.thumbnail_path || '',
-    optimized_path: null,
+    thumbnail_path,
+    optimized_path,
 
     // AI 메타데이터 - 서비스별 매핑
     ai_tool: isComfyUI ? 'ComfyUI' : 'NovelAI',
@@ -93,10 +112,12 @@ export const convertHistoryToImageRecord = (
     bitrate: null,
 
     // URL 필드
-    // 히스토리 이미지는 항상 히스토리 폴더(uploads/API/images/)의 이미지를 직접 참조
-    thumbnail_url: history.thumbnail_path ? `/uploads/${history.thumbnail_path}` : '',
+    // ✅ actual_* 필드 우선 사용, 없으면 original_path로 fallback
+    thumbnail_url: thumbnail_path
+      ? `/uploads/${thumbnail_path}`
+      : (history.original_path ? `/uploads/${history.original_path}` : ''),
     image_url: history.original_path ? `/uploads/${history.original_path}` : null,
-    optimized_url: history.optimized_path ? `/uploads/${history.optimized_path}` : null,
+    optimized_url: optimized_path ? `/uploads/${optimized_path}` : null,
 
     // 그룹 정보 없음
     groups: [],
@@ -129,7 +150,7 @@ export const convertHistoryToImageRecord = (
  * 여러 GenerationHistoryRecord를 ImageRecord 배열로 변환
  */
 export const convertHistoriesToImageRecords = (
-  histories: GenerationHistoryRecord[]
+  histories: (GenerationHistoryRecord | GenerationHistoryRecordWithMetadata)[]
 ): ImageRecord[] => {
   return histories.map(convertHistoryToImageRecord);
 };

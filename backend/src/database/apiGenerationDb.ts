@@ -69,11 +69,34 @@ export function initializeApiGenerationDb(): void {
       console.log('✅ Connected to existing API generation database');
     }
 
+    // Attach main images database for cross-database queries
+    attachMainDatabase();
+
     // Run migrations
     runMigrations();
   } catch (error) {
     console.error('Failed to initialize API generation database:', error);
     throw error;
+  }
+}
+
+/**
+ * Attach main images database for cross-database queries
+ * Allows JOINs between api_generation_history and image_files/image_metadata tables
+ */
+function attachMainDatabase(): void {
+  try {
+    const MAIN_DB_PATH = path.join(runtimePaths.databaseDir, 'images.db');
+
+    if (fs.existsSync(MAIN_DB_PATH)) {
+      apiGenDb.exec(`ATTACH DATABASE '${MAIN_DB_PATH}' AS main_db`);
+      console.log('✅ Main images database attached for cross-database queries');
+    } else {
+      console.warn('⚠️ Main images database not found, cross-database queries will fail');
+    }
+  } catch (error) {
+    console.error('Failed to attach main database:', error);
+    // Don't throw - allow API gen DB to work standalone
   }
 }
 
@@ -122,6 +145,7 @@ function createTables(): void {
       comfyui_workflow TEXT,
       comfyui_prompt_id TEXT,
       workflow_id INTEGER,
+      workflow_name TEXT,
       group_id INTEGER,
       nai_model TEXT,
       nai_sampler TEXT,
@@ -138,6 +162,7 @@ function createTables(): void {
       optimized_path TEXT,
       file_size INTEGER,
       linked_image_id INTEGER,
+      assigned_group_id INTEGER,
       composite_hash TEXT,
       error_message TEXT,
       metadata TEXT

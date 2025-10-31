@@ -17,11 +17,13 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   PlayArrow as PlayIcon,
-  Workspaces as WorkflowIcon
+  Workspaces as WorkflowIcon,
+  Visibility as ViewIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { workflowApi, type Workflow } from '../../services/api/workflowApi';
+import WorkflowViewer from './components/WorkflowViewer';
 
 export default function WorkflowsPage() {
   const navigate = useNavigate();
@@ -29,6 +31,8 @@ export default function WorkflowsPage() {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
 
   useEffect(() => {
     loadWorkflows();
@@ -55,6 +59,16 @@ export default function WorkflowsPage() {
         setError(err.message);
       }
     }
+  };
+
+  const handleViewWorkflow = (workflow: Workflow) => {
+    setSelectedWorkflow(workflow);
+    setViewerOpen(true);
+  };
+
+  const handleCloseViewer = () => {
+    setViewerOpen(false);
+    setSelectedWorkflow(null);
   };
 
   if (loading) {
@@ -124,14 +138,24 @@ export default function WorkflowsPage() {
                 </Typography>
               </CardContent>
               <CardActions sx={{ justifyContent: 'space-between', px: 2, pb: 2 }}>
-                <Button
-                  size="small"
-                  startIcon={<PlayIcon />}
-                  onClick={() => navigate(`/workflows/${workflow.id}/generate`)}
-                  disabled={!workflow.is_active}
-                >
-                  {t('workflows:card.generateImage')}
-                </Button>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button
+                    size="small"
+                    startIcon={<PlayIcon />}
+                    onClick={() => navigate(`/workflows/${workflow.id}/generate`)}
+                    disabled={!workflow.is_active}
+                  >
+                    {t('workflows:card.generateImage')}
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<ViewIcon />}
+                    onClick={() => handleViewWorkflow(workflow)}
+                  >
+                    View
+                  </Button>
+                </Box>
                 <Box>
                   <IconButton
                     size="small"
@@ -162,6 +186,16 @@ export default function WorkflowsPage() {
             {t('workflows:page.noWorkflowsDesc')}
           </Typography>
         </Box>
+      )}
+
+      {/* Workflow Viewer Dialog */}
+      {selectedWorkflow && (
+        <WorkflowViewer
+          open={viewerOpen}
+          onClose={handleCloseViewer}
+          workflowName={selectedWorkflow.name}
+          workflowJson={selectedWorkflow.workflow_json}
+        />
       )}
     </Box>
   );

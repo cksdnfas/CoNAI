@@ -207,7 +207,7 @@ export default function NAIImageGeneratorV2({
 
         {/* 오른쪽: 히스토리 목록 */}
         <Grid size={{ xs: 12, lg: 8 }}>
-          <GenerationHistoryList key={historyRefreshKey} serviceType="novelai" />
+          <GenerationHistoryList serviceType="novelai" refreshKey={historyRefreshKey} />
         </Grid>
       </Grid>
 

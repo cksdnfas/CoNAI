@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Typography, Skeleton } from '@mui/material';
 import Masonry from 'react-masonry-css';
 import InfiniteScroll from 'react-infinite-scroll-component';
@@ -39,16 +39,16 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
     600: 2,     // sm
   };
 
-  const handleImageClick = (imageIndex: number) => {
+  const handleImageClick = useCallback((imageIndex: number) => {
     setCurrentImageIndex(imageIndex);
     setViewerOpen(true);
-  };
+  }, []);
 
-  const handleImageChange = (newIndex: number) => {
+  const handleImageChange = useCallback((newIndex: number) => {
     setCurrentImageIndex(newIndex);
-  };
+  }, []);
 
-  const handleSelectionChange = (compositeHash: string, event?: React.MouseEvent) => {
+  const handleSelectionChange = useCallback((compositeHash: string, event?: React.MouseEvent) => {
     if (!onSelectionChange) return;
 
     const imageIndex = images.findIndex(img => img.composite_hash === compositeHash);
@@ -81,7 +81,7 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
       : [...selectedIds, compositeHash];
     onSelectionChange(newSelectedIds);
     setLastClickedIndex(imageIndex);
-  };
+  }, [images, selectedIds, onSelectionChange, lastClickedIndex]);
 
   // 컨테이너 클릭 핸들러 (빈 공간 클릭 시 선택 해제)
   const handleContainerClick = (e: React.MouseEvent) => {

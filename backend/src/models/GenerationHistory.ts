@@ -320,6 +320,90 @@ export class GenerationHistoryModel {
   }
 
   /**
+   * Find history record by ID with metadata from image_files and image_metadata tables
+   * Returns history with actual composite_hash, thumbnails, and metadata if available
+   * Uses ATTACH DATABASE for cross-database queries (main_db = images.db)
+   */
+  static findByIdWithMetadata(id: number): (GenerationHistoryRecord & {
+    actual_composite_hash?: string | null;
+    actual_thumbnail_path?: string | null;
+    actual_optimized_path?: string | null;
+  }) | null {
+    const stmt = apiGenDb.prepare(`
+      SELECT
+        gh.*,
+        if.composite_hash as actual_composite_hash,
+        im.thumbnail_path as actual_thumbnail_path,
+        im.optimized_path as actual_optimized_path
+      FROM api_generation_history gh
+      LEFT JOIN main_db.image_files if ON if.original_file_path = gh.original_path
+      LEFT JOIN main_db.image_metadata im ON im.composite_hash = if.composite_hash
+      WHERE gh.id = ?
+      LIMIT 1
+    `);
+    const record = stmt.get(id) as any;
+    return record || null;
+  }
+
+  /**
+   * Find all records with metadata from image_files and image_metadata tables
+   * Returns history records with actual composite_hash, thumbnails, and metadata if available
+   * Uses ATTACH DATABASE for cross-database queries (main_db = images.db)
+   */
+  static findAllWithMetadata(filters: FilterOptions = {}): (GenerationHistoryRecord & {
+    actual_composite_hash?: string | null;
+    actual_thumbnail_path?: string | null;
+    actual_optimized_path?: string | null;
+  })[] {
+    let sql = `
+      SELECT
+        gh.*,
+        if.composite_hash as actual_composite_hash,
+        im.thumbnail_path as actual_thumbnail_path,
+        im.optimized_path as actual_optimized_path
+      FROM api_generation_history gh
+      LEFT JOIN main_db.image_files if ON if.original_file_path = gh.original_path
+      LEFT JOIN main_db.image_metadata im ON im.composite_hash = if.composite_hash
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    if (filters.service_type) {
+      sql += ' AND gh.service_type = ?';
+      params.push(filters.service_type);
+    }
+
+    if (filters.generation_status) {
+      sql += ' AND gh.generation_status = ?';
+      params.push(filters.generation_status);
+    }
+
+    if (filters.workflow_id !== undefined) {
+      sql += ' AND gh.workflow_id = ?';
+      params.push(filters.workflow_id);
+    }
+
+    // Order by
+    const orderBy = filters.order_by || 'created_at';
+    const orderDir = filters.order_direction || 'DESC';
+    sql += ` ORDER BY gh.${orderBy} ${orderDir}`;
+
+    // Pagination
+    if (filters.limit) {
+      sql += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+
+    if (filters.offset) {
+      sql += ' OFFSET ?';
+      params.push(filters.offset);
+    }
+
+    const stmt = apiGenDb.prepare(sql);
+    return stmt.all(...params) as any[];
+  }
+
+  /**
    * Find records by workflow ID
    * @param workflowId - Workflow ID to filter by
    * @param filters - Additional filters

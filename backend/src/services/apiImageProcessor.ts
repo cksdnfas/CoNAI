@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { ImageProcessor } from './imageProcessor';
+import { FileSaver } from '../utils/fileSaver';
 
 /**
  * API Image Processor
@@ -70,75 +71,27 @@ export class APIImageProcessor {
   }
 
   /**
-   * Process generated image from buffer
-   * Creates: original, thumbnail, optimized versions
+   * Process generated image from buffer - SIMPLIFIED VERSION
+   * Saves ONLY original file to uploads/API/images/YYYY-MM-DD/
+   * Thumbnail and optimized versions will be created by background scan
    *
    * @param imageBuffer - Image buffer from API response
    * @param serviceType - 'comfyui' or 'novelai'
-   * @returns Image paths and file size
+   * @returns Original image path and metadata
    */
   static async processGeneratedImage(
     imageBuffer: Buffer,
     serviceType: 'comfyui' | 'novelai'
   ): Promise<{
     originalPath: string;
-    thumbnailPath: string;
-    optimizedPath: string;
     fileSize: number;
     width: number;
     height: number;
   }> {
     try {
-      // Create folder structure
-      const folders = await this.createUploadFolders();
-
-      // Get image metadata
-      const image = sharp(imageBuffer);
-      const metadata = await image.metadata();
-      const width = metadata.width || 0;
-      const height = metadata.height || 0;
-
-      // Generate unique filename
-      const filename = this.generateUniqueFilename('.png');
-
-      // Define paths
-      const originalPath = path.join(folders.originFolder, filename);
-      const thumbnailFilename = filename.replace('.png', '.webp');
-      const thumbnailPath = path.join(folders.thumbnailFolder, thumbnailFilename);
-      const optimizedPath = path.join(folders.optimizedFolder, filename.replace('.png', '.webp'));
-
-      // Save original image
-      await fs.promises.writeFile(originalPath, imageBuffer);
-
-      // Generate thumbnail (max 1080px, maintaining aspect ratio)
-      await sharp(imageBuffer)
-        .resize(this.THUMBNAIL_SIZE, this.THUMBNAIL_SIZE, {
-          fit: 'inside',
-          withoutEnlargement: true
-        })
-        .webp({ quality: this.THUMBNAIL_QUALITY, effort: 4 })
-        .toFile(thumbnailPath);
-
-      // Generate optimized WebP version
-      await sharp(imageBuffer)
-        .webp({ quality: this.OPTIMIZED_QUALITY })
-        .toFile(optimizedPath);
-
-      // Get file size
-      const stats = await fs.promises.stat(originalPath);
-      const fileSize = stats.size;
-
-      // Return normalized paths relative to uploads directory
-      const uploadsBase = path.join(process.cwd(), 'uploads');
-
-      return {
-        originalPath: path.relative(uploadsBase, originalPath).replace(/\\/g, '/'),
-        thumbnailPath: path.relative(uploadsBase, thumbnailPath).replace(/\\/g, '/'),
-        optimizedPath: path.relative(uploadsBase, optimizedPath).replace(/\\/g, '/'),
-        fileSize,
-        width,
-        height
-      };
+      // Use FileSaver to save original file only
+      // Background scan will handle thumbnail/optimization
+      return await FileSaver.saveGeneratedImage(imageBuffer, serviceType);
     } catch (error) {
       console.error('API Image processing failed:', error);
       throw new Error(`Failed to process ${serviceType} generated image: ${error instanceof Error ? error.message : 'Unknown error'}`);

@@ -104,8 +104,8 @@ export class GenerationHistoryService {
       // Update API history with image paths
       GenerationHistoryModel.updateImagePaths(historyId, {
         original: processedPaths.originalPath,
-        thumbnail: processedPaths.thumbnailPath,
-        optimized: processedPaths.optimizedPath,
+        thumbnail: '', // NULL - background scan will create
+        optimized: '', // NULL - background scan will create
         fileSize: processedPaths.fileSize
       });
 
@@ -175,10 +175,9 @@ export class GenerationHistoryService {
   }
 
   /**
-   * Process generated image and upload to both systems
-   * 1. Process image → save to uploads/API/images/
-   * 2. Upload to main images API → save to uploads/images/
-   * 3. Link both records
+   * Process generated image - SIMPLIFIED VERSION
+   * Saves ONLY original file to uploads/API/images/YYYY-MM-DD/
+   * Background scan will handle: thumbnail, optimization, metadata extraction, DB insertion
    */
   static async processAndUploadImage(
     historyId: number,
@@ -186,82 +185,22 @@ export class GenerationHistoryService {
     serviceType: ServiceType
   ): Promise<void> {
     try {
-      // Update status to processing (sync)
-      GenerationHistoryModel.updateStatus(historyId, 'processing');
-
-      // Step 1: Process image for API history storage
+      // Step 1: Save original file only (no thumbnail/optimization)
       const processedPaths = await APIImageProcessor.processGeneratedImage(imageBuffer, serviceType);
 
-      // Step 2: Update API history with image paths (sync)
+      // Step 2: Update API history with original file path only
       GenerationHistoryModel.updateImagePaths(historyId, {
         original: processedPaths.originalPath,
-        thumbnail: processedPaths.thumbnailPath,
-        optimized: processedPaths.optimizedPath,
+        thumbnail: '', // NULL - background scan will create
+        optimized: '', // NULL - background scan will create
         fileSize: processedPaths.fileSize
       });
 
-      // ✅ Step 2.1: Extract and update metadata (ComfyUI only - NovelAI already has metadata)
-      if (serviceType === 'comfyui') {
-        try {
-          console.log(`🔍 Extracting metadata for ComfyUI history ${historyId}...`);
-          const extractedMetadata = await APIImageProcessor.extractMetadataFromBuffer(imageBuffer, serviceType);
+      // Step 3: Update status to processing (background scan will complete)
+      GenerationHistoryModel.updateStatus(historyId, 'processing');
 
-          GenerationHistoryModel.updateMetadata(historyId, {
-            positive_prompt: extractedMetadata.positive_prompt,
-            negative_prompt: extractedMetadata.negative_prompt,
-            width: extractedMetadata.width || processedPaths.width,
-            height: extractedMetadata.height || processedPaths.height,
-            metadata: JSON.stringify(extractedMetadata.metadata)
-          });
-
-          console.log(`✅ Metadata extracted and saved for history ${historyId}`);
-        } catch (metadataError) {
-          console.warn(`⚠️ Failed to extract metadata (non-critical):`, metadataError);
-        }
-      }
-
-      // Step 3: Upload to main images API for search/management
-      const linkedImageId = await this.uploadToMainImageAPI(imageBuffer, serviceType, historyId);
-
-      // Step 4: Link to main images record (sync)
-      GenerationHistoryModel.linkToImage(historyId, linkedImageId);
-
-      // Step 5: Assign to group if groupId was specified (manual collection)
-      const history = GenerationHistoryModel.findById(historyId);
-      if (history?.assigned_group_id && linkedImageId) {
-        try {
-          console.log(`📁 Assigning image ${linkedImageId} to group ${history.assigned_group_id}...`);
-
-          // linkedImageId를 composite_hash로 변환
-          const { db } = await import('../database/init');
-          const file = db.prepare(`
-            SELECT if.composite_hash
-            FROM image_files if
-            JOIN images i ON if.original_file_path LIKE '%' || i.file_path
-            WHERE i.id = ?
-            LIMIT 1
-          `).get(linkedImageId) as { composite_hash: string } | undefined;
-
-          if (file) {
-            await ImageGroupModel.addImageToGroup(
-              history.assigned_group_id,
-              file.composite_hash,
-              'manual', // User-selected group = manual collection
-              0
-            );
-            console.log(`✓ Image assigned to group ${history.assigned_group_id}`);
-          } else {
-            console.warn(`⚠️ Could not find composite_hash for image ID ${linkedImageId}`);
-          }
-        } catch (groupError) {
-          console.warn(`⚠️ Failed to assign image to group (non-critical):`, groupError);
-        }
-      }
-
-      // Update status to completed (sync)
-      GenerationHistoryModel.updateStatus(historyId, 'completed');
-
-      console.log(`✓ Generation history ${historyId} processed successfully (linked to image ${linkedImageId})`);
+      console.log(`✓ Generation history ${historyId} file saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
+      console.log(`  → Background scan will handle thumbnail/optimization/metadata`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       GenerationHistoryModel.recordError(historyId, errorMessage);
@@ -315,14 +254,16 @@ export class GenerationHistoryService {
 
   /**
    * Get generation history by ID
+   * Returns history with actual composite_hash and thumbnails from image_files/image_metadata if available
    */
   static async getHistory(id: number): Promise<GenerationHistoryRecord | null> {
-    // Model call is now synchronous, but keep async for consistency
-    return GenerationHistoryModel.findById(id);
+    // Use JOIN query to get actual thumbnails and metadata
+    return GenerationHistoryModel.findByIdWithMetadata(id);
   }
 
   /**
    * Get all generation history with filters
+   * Returns history with actual composite_hash and thumbnails from image_files/image_metadata if available
    */
   static async getAllHistory(filters?: {
     service_type?: ServiceType;
@@ -330,8 +271,8 @@ export class GenerationHistoryService {
     limit?: number;
     offset?: number;
   }): Promise<{ records: GenerationHistoryRecord[]; total: number }> {
-    // Model calls are now synchronous
-    const records = GenerationHistoryModel.findAll(filters);
+    // Use JOIN query to get actual thumbnails and metadata
+    const records = GenerationHistoryModel.findAllWithMetadata(filters);
     const total = GenerationHistoryModel.count({
       service_type: filters?.service_type,
       generation_status: filters?.generation_status
@@ -398,6 +339,7 @@ export class GenerationHistoryService {
 
   /**
    * Get generation history by workflow ID
+   * Returns history with actual composite_hash and thumbnails from image_files/image_metadata if available
    */
   static async getHistoryByWorkflow(
     workflowId: number,
@@ -407,7 +349,8 @@ export class GenerationHistoryService {
       offset?: number;
     }
   ): Promise<{ records: GenerationHistoryRecord[]; total: number }> {
-    const records = GenerationHistoryModel.findByWorkflow(workflowId, filters);
+    // Use JOIN query to get actual thumbnails and metadata
+    const records = GenerationHistoryModel.findAllWithMetadata({ ...filters, workflow_id: workflowId });
     const total = GenerationHistoryModel.count({
       workflow_id: workflowId,
       generation_status: filters?.generation_status

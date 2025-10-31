@@ -20,13 +20,15 @@ import {
   Save as SaveIcon,
   Delete as DeleteIcon,
   Add as AddIcon,
-  Upload as UploadIcon
+  Upload as UploadIcon,
+  Visibility as ViewIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { workflowApi, type Workflow, type MarkedField } from '../../services/api/workflowApi';
 import { MarkedFieldsGuide } from './MarkedFieldsGuide';
 import { MarkedFieldsPreview } from './MarkedFieldsPreview';
+import WorkflowViewer from './components/WorkflowViewer';
 
 export default function WorkflowFormPage() {
   const navigate = useNavigate();
@@ -46,6 +48,7 @@ export default function WorkflowFormPage() {
   const [isActive, setIsActive] = useState(true);
   const [color, setColor] = useState('#2196f3');
   const [markedFields, setMarkedFields] = useState<MarkedField[]>([]);
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   // Color picker debounce
   const colorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -311,19 +314,31 @@ export default function WorkflowFormPage() {
           <Typography variant="h6">
             {t('workflows:form.workflowJson')}
           </Typography>
-          <Button
-            component="label"
-            startIcon={<UploadIcon />}
-            size="small"
-          >
-            {t('workflows:form.uploadFile')}
-            <input
-              type="file"
-              accept=".json"
-              hidden
-              onChange={handleFileUpload}
-            />
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {workflowJson && !jsonError && (
+              <Button
+                variant="outlined"
+                startIcon={<ViewIcon />}
+                size="small"
+                onClick={() => setViewerOpen(true)}
+              >
+                View Graph
+              </Button>
+            )}
+            <Button
+              component="label"
+              startIcon={<UploadIcon />}
+              size="small"
+            >
+              {t('workflows:form.uploadFile')}
+              <input
+                type="file"
+                accept=".json"
+                hidden
+                onChange={handleFileUpload}
+              />
+            </Button>
+          </Box>
         </Box>
         <Divider sx={{ mb: 2 }} />
 
@@ -533,6 +548,16 @@ export default function WorkflowFormPage() {
           {saving ? t('workflows:actions.saving') : (isEditMode ? t('workflows:actions.update') : t('workflows:actions.create'))}
         </Button>
       </Box>
+
+      {/* Workflow Viewer Dialog */}
+      {workflowJson && !jsonError && (
+        <WorkflowViewer
+          open={viewerOpen}
+          onClose={() => setViewerOpen(false)}
+          workflowName={name || 'Workflow Preview'}
+          workflowJson={workflowJson}
+        />
+      )}
     </Box>
   );
 }

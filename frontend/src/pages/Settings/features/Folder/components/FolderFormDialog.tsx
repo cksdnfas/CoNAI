@@ -138,13 +138,17 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
           scan_interval: formData.scan_interval,
           recursive: formData.recursive,
           file_extensions: formData.file_extensions,
-          exclude_patterns: formData.exclude_patterns
+          exclude_patterns: formData.exclude_patterns,
+          watcher_enabled: formData.watcher_enabled
         };
         await folderApi.updateFolder(folder.id, updates);
       } else {
         // 추가 모드
         await folderApi.addFolder(formData);
       }
+
+      // 백엔드가 watcher 상태 업데이트할 시간 확보
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       onSuccess();
       onClose();

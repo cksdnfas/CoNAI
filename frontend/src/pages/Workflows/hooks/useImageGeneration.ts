@@ -122,10 +122,10 @@ export function useImageGeneration({
               }
             }));
 
-            // 생성 완료 시 업로드 완료 대기 후 히스토리 목록 새로고침
             if (data.generation_status === 'completed') {
-              await waitForUploadCompletion(apiHistoryId);
-              resolve(); // 성공 완료
+              // 생성 완료 - 히스토리 목록 새로고침
+              setHistoryRefreshKey(prev => prev + 1);
+              resolve();
             } else {
               reject(new Error(data.error_message || 'Generation failed'));
             }
@@ -141,43 +141,6 @@ export function useImageGeneration({
 
       checkStatus();
     });
-  };
-
-  /**
-   * 업로드 완료 대기 후 히스토리 새로고침
-   */
-  const waitForUploadCompletion = async (historyId: number) => {
-    const maxAttempts = 30; // 최대 30초 대기
-    const pollInterval = 1000; // 1초마다 체크
-    let attempts = 0;
-
-    const checkCompletion = async (): Promise<boolean> => {
-      try {
-        const response = await generationHistoryApi.getById(historyId);
-        return response.record.generation_status === 'completed';
-      } catch {
-        return false;
-      }
-    };
-
-    const poll = async () => {
-      attempts++;
-      const isCompleted = await checkCompletion();
-
-      if (isCompleted) {
-        // 업로드 완료 - 히스토리 새로고침
-        setHistoryRefreshKey(prev => prev + 1);
-      } else if (attempts < maxAttempts) {
-        // 아직 완료 안됨 - 계속 폴링
-        setTimeout(poll, pollInterval);
-      } else {
-        // 타임아웃 - 그냥 새로고침
-        setHistoryRefreshKey(prev => prev + 1);
-      }
-    };
-
-    // 폴링 시작
-    poll();
   };
 
   return {

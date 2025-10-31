@@ -18,6 +18,7 @@ import { GenerationHistoryService } from '../services/generationHistoryService';
 import { ComfyUIWorkflowParser } from '../utils/comfyuiWorkflowParser';
 import { GenerationHistoryModel } from '../models/GenerationHistory';
 import { refinePrimaryPrompt } from '@comfyui-image-manager/shared';
+import { FileSaver } from '../utils/fileSaver';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
@@ -405,162 +406,36 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
           }
         }
 
-        // 생성된 이미지를 ImageProcessor로 처리하여 데이터베이스에 저장
-        // 완전한 업로드 파이프라인 실행: 썸네일, 최적화, 메타데이터, 프롬프트 수집, 자동 태깅, 자동 그룹 분류
-        const imageIds: number[] = [];
-
-        // 메타데이터 추출을 위해 첫 번째 이미지 Buffer 미리 읽기
-        let firstImageBuffer: Buffer | null = null;
-        if (historyId && tempFilePaths.length > 0) {
-          try {
-            firstImageBuffer = await fs.promises.readFile(tempFilePaths[0]);
-          } catch (bufferError) {
-            console.warn('⚠️ Failed to read first image buffer for history:', bufferError);
-          }
-        }
+        // SIMPLIFIED: 원본 파일만 uploads/API/images/에 저장
+        // 백그라운드 스캔이 썸네일, 최적화, 메타데이터, DB 등록 등을 처리
+        console.log(`📁 Saving ${tempFilePaths.length} generated images to uploads/API/images/...`);
 
         for (const tempPath of tempFilePaths) {
           try {
-            // Multer File 객체 생성 (ImageProcessor가 요구하는 형식)
-            const fileStats = fs.statSync(tempPath);
-            const ext = path.extname(tempPath).substring(1);
-            const file: Express.Multer.File = {
-              path: tempPath,
-              originalname: path.basename(tempPath),
-              mimetype: `image/${ext}`,
-              size: fileStats.size,
-              fieldname: 'image',
-              encoding: '7bit',
-              destination: path.dirname(tempPath),
-              filename: path.basename(tempPath),
-              stream: null as any,
-              buffer: Buffer.alloc(0)
-            };
+            // 임시 파일을 Buffer로 읽기
+            const imageBuffer = await fs.promises.readFile(tempPath);
 
-            // ImageProcessor로 처리 (uploads/images/YYYY-MM-DD/Origin|thumbnails|optimized/)
-            console.log('🔄 Processing ComfyUI image with ImageProcessor...');
-            const processed = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
-            console.log('✅ Image processed successfully');
+            // FileSaver로 원본만 저장
+            const savedFile = await FileSaver.saveGeneratedImage(imageBuffer, 'comfyui');
 
-            // DB 저장
-            const aiInfo = processed.metadata.ai_info || {};
+            // 히스토리 DB 업데이트 (첫 번째 이미지만)
+            if (historyId && tempFilePaths.indexOf(tempPath) === 0) {
+              await GenerationHistoryModel.updateImagePaths(historyId, {
+                original: savedFile.originalPath,
+                thumbnail: '', // NULL - background scan will create
+                optimized: '', // NULL - background scan will create
+                fileSize: savedFile.fileSize
+              });
 
-            // STEP 1: 프롬프트 정제 (DB 저장 전)
-            let refinedPrompt = aiInfo.prompt || null;
-            let refinedNegativePrompt = aiInfo.negative_prompt || null;
-
-            if (refinedPrompt) {
-              refinedPrompt = refinePrimaryPrompt(refinedPrompt);
+              // 상태 업데이트
+              GenerationHistoryModel.updateStatus(historyId, 'processing');
+              console.log(`✓ History ${historyId} file saved: ${savedFile.originalPath}`);
             }
 
-            if (refinedNegativePrompt) {
-              refinedNegativePrompt = refinePrimaryPrompt(refinedNegativePrompt);
-            }
-
-            console.log('💾 Saving to database...');
-            const imageId = await ImageModel.create({
-              filename: processed.filename,
-              original_name: path.basename(tempPath),
-              file_path: processed.originalPath,
-              thumbnail_path: processed.thumbnailPath,
-              optimized_path: processed.optimizedPath,
-              file_size: processed.fileSize,
-              mime_type: `image/${ext}`,
-              width: processed.width,
-              height: processed.height,
-              metadata: JSON.stringify(processed.metadata),
-
-              // AI 메타데이터 필드들 (정제된 프롬프트 사용)
-              ai_tool: 'ComfyUI',
-              model_name: aiInfo.model || null,
-              lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
-              steps: aiInfo.steps || null,
-              cfg_scale: aiInfo.cfg_scale || null,
-              sampler: aiInfo.sampler || null,
-              seed: aiInfo.seed || null,
-              scheduler: aiInfo.scheduler || null,
-              prompt: refinedPrompt,
-              negative_prompt: refinedNegativePrompt,
-              denoise_strength: aiInfo.denoise_strength || null,
-              generation_time: aiInfo.generation_time || null,
-              batch_size: aiInfo.batch_size || null,
-              batch_index: aiInfo.batch_index || null,
-              auto_tags: null,
-
-              // 동영상 메타데이터 필드들 (이미지는 null)
-              duration: null,
-              fps: null,
-              video_codec: null,
-              audio_codec: null,
-              bitrate: null,
-
-              // 유사도 검색 필드들
-              perceptual_hash: processed.perceptualHash || null,
-              color_histogram: processed.colorHistogram || null
-            });
-            console.log('✅ Database save successful, ID:', imageId);
-
-            imageIds.push(imageId);
-
-            // STEP 3: 프롬프트 수집 (정제된 프롬프트 사용)
-            // 비동기로 처리, 오류가 있어도 업로드는 계속 진행
-            try {
-              console.log('🔍 Collecting prompts...');
-              await PromptCollectionService.collectFromImage(
-                refinedPrompt,
-                refinedNegativePrompt
-              );
-              console.log('✅ Prompts collected successfully');
-            } catch (promptError) {
-              console.warn('⚠️ Failed to collect prompts (non-critical):', promptError);
-            }
-
-            // 자동 태깅 (설정에서 활성화된 경우)
-            try {
-              const settings = settingsService.loadSettings();
-              if (settings.tagger.enabled && settings.tagger.autoTagOnUpload) {
-                console.log('🏷️ Auto-tagging image...');
-                const fullPath = path.join(UPLOAD_BASE_PATH, processed.originalPath);
-                const taggerResult = await imageTaggerService.tagImage(fullPath);
-
-                if (taggerResult.success) {
-                  const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-                  await ImageModel.updateAutoTags(imageId, autoTagsJson);
-                  console.log('✅ Auto-tagging completed successfully');
-                } else {
-                  console.warn('⚠️ Auto-tagging failed (non-critical):', taggerResult.error);
-                }
-              }
-            } catch (autoTagError) {
-              console.warn('⚠️ Failed to auto-tag image (non-critical):', autoTagError);
-            }
-
-            // 자동수집 그룹 처리 (레거시 호환)
-            try {
-              console.log('🔍 Running auto collection...');
-              const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImageById(imageId);
-              if (autoCollectResults.length > 0) {
-                console.log(`✅ Image automatically added to ${autoCollectResults.length} groups`);
-              }
-            } catch (autoCollectError) {
-              console.warn('⚠️ Failed to run auto collection (non-critical):', autoCollectError);
-            }
-
+            // 임시 파일 삭제
+            await fs.promises.unlink(tempPath);
           } catch (error) {
-            console.error(`❌ Failed to process ComfyUI image ${tempPath}:`, error);
-          }
-        }
-
-        // 첫 번째 이미지를 히스토리에 연결
-        const generatedImageId = imageIds.length > 0 ? imageIds[0] : undefined;
-
-        // 완료 처리 (메타데이터 추출 + 이미지 연결)
-        if (historyId && generatedImageId && firstImageBuffer) {
-          try {
-            await GenerationHistoryService.processComfyUIHistoryMetadata(historyId, firstImageBuffer, generatedImageId);
-            console.log(`✅ History ${historyId} completed with metadata and linked to image ${generatedImageId}`);
-          } catch (error) {
-            console.error(`⚠️ Failed to complete history ${historyId}:`, error);
+            console.error(`❌ Failed to save ComfyUI image ${tempPath}:`, error);
           }
         }
 

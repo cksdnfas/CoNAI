@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, memo } from 'react';
 import { Card, CardMedia, Box, Skeleton, Chip } from '@mui/material';
 import { CheckCircle as CheckCircleIcon, VideoLibrary as VideoLibraryIcon } from '@mui/icons-material';
 import type { ImageRecord } from '../../types/image';
@@ -21,7 +21,6 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
   onSelectionChange
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const backendOrigin = getBackendOrigin();
@@ -60,31 +59,6 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
       ? image.width / image.height
       : 1;
   }, [image.width, image.height]);
-
-  // Intersection Observer로 뷰포트 진입 감지
-  useEffect(() => {
-    if (!cardRef.current) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setIsVisible(true);
-            observer.disconnect();
-          }
-        });
-      },
-      {
-        rootMargin: '50px', // 50px 전에 미리 로드 시작
-      }
-    );
-
-    observer.observe(cardRef.current);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
 
   const handleImageLoad = useCallback(() => {
     setImageLoaded(true);
@@ -194,51 +168,49 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
           />
         )}
 
-        {/* 이미지/비디오 - 뷰포트에 들어왔을 때만 로드 */}
-        {isVisible && (
-          image.mime_type?.startsWith('video/') ? (
-            <Box
-              component="video"
-              src={imageUrl}
-              muted
-              loop
-              autoPlay
-              playsInline
-              onLoadedData={handleImageLoad}
-              sx={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                objectFit: 'contain',
-                display: 'block',
-                opacity: imageLoaded ? 1 : 0,
-                transition: 'opacity 0.15s ease-in-out',
-              }}
-            />
-          ) : (
-            <CardMedia
-              component="img"
-              image={imageUrl}
-              alt={image.original_file_path || 'Image'}
-              loading="lazy"
-              decoding="async"
-              draggable={false}
-              onLoad={handleImageLoad}
-              sx={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                objectFit: 'contain',
-                display: 'block',
-                opacity: imageLoaded ? 1 : 0,
-                transition: 'opacity 0.15s ease-in-out',
-              }}
-            />
-          )
+        {/* 이미지/비디오 - 브라우저 네이티브 lazy loading 사용 */}
+        {image.mime_type?.startsWith('video/') ? (
+          <Box
+            component="video"
+            src={imageUrl}
+            muted
+            loop
+            autoPlay
+            playsInline
+            onLoadedData={handleImageLoad}
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              display: 'block',
+              opacity: imageLoaded ? 1 : 0,
+              transition: 'opacity 0.15s ease-in-out',
+            }}
+          />
+        ) : (
+          <CardMedia
+            component="img"
+            image={imageUrl}
+            alt={image.original_file_path || 'Image'}
+            loading="lazy"
+            decoding="async"
+            draggable={false}
+            onLoad={handleImageLoad}
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              display: 'block',
+              opacity: imageLoaded ? 1 : 0,
+              transition: 'opacity 0.15s ease-in-out',
+            }}
+          />
         )}
       </Box>
 

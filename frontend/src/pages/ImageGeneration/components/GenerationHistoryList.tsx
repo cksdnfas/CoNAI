@@ -33,11 +33,13 @@ interface GenerationHistoryListProps {
   serviceType?: ServiceType;
   workflowId?: number; // ComfyUI 워크플로우별 필터링
   onRegenerate?: (record: GenerationHistoryRecord) => void;
+  refreshKey?: number; // 히스토리 새로고침 트리거
 }
 
 export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
   serviceType,
   workflowId,
+  refreshKey,
   // onRegenerate, // TODO: 재생성 기능 구현 예정
 }) => {
   const { t } = useTranslation();
@@ -67,7 +69,7 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
 
   useEffect(() => {
     loadHistory(true);
-  }, [serviceType, workflowId]);
+  }, [serviceType, workflowId, refreshKey]);
 
   const loadHistory = async (reset: boolean = false) => {
     try {

@@ -223,8 +223,15 @@ const WatchedFoldersList: React.FC = () => {
   };
 
   // Watcher 상태 텍스트
-  const getWatcherStatusText = (status: string | null) => {
-    switch (status) {
+  const getWatcherStatusText = (folder: WatchedFolder) => {
+    const { watcher_status, watcher_enabled } = folder;
+
+    // watcher_enabled가 1이고 status가 NULL이면 시작 중
+    if (watcher_enabled === 1 && !watcher_status) {
+      return '시작 중...';
+    }
+
+    switch (watcher_status) {
       case 'watching':
         return '감시 중';
       case 'error':
@@ -237,8 +244,15 @@ const WatchedFoldersList: React.FC = () => {
   };
 
   // Watcher 상태 아이콘
-  const getWatcherStatusIcon = (status: string | null) => {
-    switch (status) {
+  const getWatcherStatusIcon = (folder: WatchedFolder) => {
+    const { watcher_status, watcher_enabled } = folder;
+
+    // watcher_enabled가 1이고 status가 NULL이면 시작 중으로 간주
+    if (watcher_enabled === 1 && !watcher_status) {
+      return <CircularProgress size={16} />; // 로딩 아이콘
+    }
+
+    switch (watcher_status) {
       case 'watching':
         return <VisibilityIcon fontSize="small" />;
       case 'error':
@@ -354,8 +368,8 @@ const WatchedFoldersList: React.FC = () => {
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Chip
-                              icon={getWatcherStatusIcon(folder.watcher_status)}
-                              label={getWatcherStatusText(folder.watcher_status)}
+                              icon={getWatcherStatusIcon(folder)}
+                              label={getWatcherStatusText(folder)}
                               size="small"
                               color={getWatcherStatusColor(folder.watcher_status)}
                               variant="outlined"
