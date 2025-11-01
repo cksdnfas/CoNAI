@@ -11,6 +11,7 @@ import path from 'path';
 import sharp from 'sharp';
 import { ImageSimilarityService } from './imageSimilarity';
 import { BackgroundQueueService } from './backgroundQueue';
+import { shouldProcessFileExtension } from '../constants/supportedExtensions';
 
 export interface FileProcessingResult {
   success: boolean;
@@ -285,13 +286,9 @@ export class SingleFileProcessor {
         thumbnailGenerated = await this.generateThumbnailForFile(filePath, hashes.compositeHash);
       }
 
-      // 4. 백그라운드 작업 큐에 추가 (AI 메타데이터 추출 등)
-      // TODO: BackgroundQueueService addTask 메서드 구현 필요
-      // BackgroundQueueService.addTask({
-      //   type: 'metadata-extraction',
-      //   filePath,
-      //   compositeHash: hashes.compositeHash
-      // });
+      // 4. 백그라운드 작업 큐에 추가 (AI 메타데이터 추출, 프롬프트 수집)
+      BackgroundQueueService.addMetadataExtractionTask(filePath, hashes.compositeHash);
+      BackgroundQueueService.addPromptCollectionTask(filePath, hashes.compositeHash);
 
       return {
         success: true,
@@ -424,11 +421,10 @@ export class SingleFileProcessor {
 
   /**
    * 파일 확장자가 유효한 이미지인지 확인
+   * @deprecated Use shouldProcessFileExtension from supportedExtensions.ts instead
    */
-  static isValidImageExtension(filePath: string, allowedExtensions?: string[]): boolean {
+  static isValidImageExtension(filePath: string, excludeExtensions?: string[]): boolean {
     const ext = path.extname(filePath).toLowerCase();
-    const defaultExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff', '.tif'];
-    const extensions = allowedExtensions || defaultExtensions;
-    return extensions.includes(ext);
+    return shouldProcessFileExtension(ext, excludeExtensions || []);
   }
 }

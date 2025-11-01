@@ -1,5 +1,6 @@
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import CssBaseline from '@mui/material/CssBaseline';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // i18n
 import './i18n';
@@ -23,29 +24,43 @@ import { Layout } from './components/Layout';
 // 테마 컨텍스트
 import { ThemeProvider } from './contexts/ThemeContext';
 
+// React Query 클라이언트 설정
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60000, // 1분 - 백엔드 갤러리 캐시와 동기화
+      gcTime: 300000, // 5분 - 가비지 컬렉션 시간
+      refetchOnWindowFocus: false, // 윈도우 포커스 시 자동 재요청 비활성화
+      retry: 1, // 실패 시 1번만 재시도
+    },
+  },
+});
+
 function App() {
   return (
-    <ThemeProvider>
-      <CssBaseline />
-      <Router>
-        <Layout>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/gallery" element={<GalleryPage />} />
-            <Route path="/image-groups" element={<ImageGroupsPage />} />
-            <Route path="/upload" element={<UploadPage />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/help" element={<HelpPage />} />
-            <Route path="/image/:compositeHash" element={<ImageDetailPage />} />
-            <Route path="/image-generation" element={<ImageGenerationPage />} />
-            <Route path="/image-generation/new" element={<WorkflowFormPage />} />
-            <Route path="/image-generation/:id/edit" element={<WorkflowFormPage />} />
-            <Route path="/image-generation/:id/generate" element={<WorkflowGeneratePage />} />
-          </Routes>
-        </Layout>
-      </Router>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <CssBaseline />
+        <Router>
+          <Layout>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/gallery" element={<GalleryPage />} />
+              <Route path="/image-groups" element={<ImageGroupsPage />} />
+              <Route path="/upload" element={<UploadPage />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/help" element={<HelpPage />} />
+              <Route path="/image/:compositeHash" element={<ImageDetailPage />} />
+              <Route path="/image-generation" element={<ImageGenerationPage />} />
+              <Route path="/image-generation/new" element={<WorkflowFormPage />} />
+              <Route path="/image-generation/:id/edit" element={<WorkflowFormPage />} />
+              <Route path="/image-generation/:id/generate" element={<WorkflowGeneratePage />} />
+            </Routes>
+          </Layout>
+        </Router>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
 

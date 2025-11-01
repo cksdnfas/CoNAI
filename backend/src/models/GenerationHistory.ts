@@ -209,6 +209,7 @@ export class GenerationHistoryModel {
       thumbnail: string;
       optimized: string;
       fileSize: number;
+      compositeHash?: string;
     }
   ): void {
     const stmt = apiGenDb.prepare(`
@@ -216,10 +217,11 @@ export class GenerationHistoryModel {
       SET original_path = ?,
           thumbnail_path = ?,
           optimized_path = ?,
-          file_size = ?
+          file_size = ?,
+          composite_hash = ?
       WHERE id = ?
     `);
-    stmt.run(paths.original, paths.thumbnail, paths.optimized, paths.fileSize, id);
+    stmt.run(paths.original, paths.thumbnail, paths.optimized, paths.fileSize, paths.compositeHash || null, id);
   }
 
   /**

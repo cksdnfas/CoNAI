@@ -37,7 +37,7 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
     auto_scan: true,
     scan_interval: 60,
     recursive: true,
-    file_extensions: ['.jpg', '.jpeg', '.png', '.webp', '.gif'],
+    exclude_extensions: [],
     exclude_patterns: [],
     watcher_enabled: false
   });
@@ -57,12 +57,12 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
         auto_scan: folder.auto_scan === 1,
         scan_interval: folder.scan_interval,
         recursive: folder.recursive === 1,
-        file_extensions: folder.file_extensions ? JSON.parse(folder.file_extensions) : [],
+        exclude_extensions: folder.exclude_extensions ? JSON.parse(folder.exclude_extensions) : [],
         exclude_patterns: folder.exclude_patterns ? JSON.parse(folder.exclude_patterns) : [],
         watcher_enabled: folder.watcher_enabled === 1
       });
     } else {
-      // 초기화
+      // 초기화 - 제외 확장자는 빈 배열로 시작 (모든 지원 확장자 스캔)
       setFormData({
         folder_path: '',
         folder_name: '',
@@ -70,7 +70,7 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
         auto_scan: true,
         scan_interval: 60,
         recursive: true,
-        file_extensions: ['.jpg', '.jpeg', '.png', '.webp', '.gif'],
+        exclude_extensions: [],
         exclude_patterns: [],
         watcher_enabled: false
       });
@@ -78,24 +78,24 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
     setError(null);
   }, [folder, open]);
 
-  // 확장자 추가
+  // 제외 확장자 추가
   const handleAddExtension = () => {
     if (!newExtension.trim()) return;
     const ext = newExtension.trim().startsWith('.') ? newExtension.trim() : `.${newExtension.trim()}`;
-    if (!formData.file_extensions?.includes(ext)) {
+    if (!formData.exclude_extensions?.includes(ext)) {
       setFormData({
         ...formData,
-        file_extensions: [...(formData.file_extensions || []), ext]
+        exclude_extensions: [...(formData.exclude_extensions || []), ext]
       });
     }
     setNewExtension('');
   };
 
-  // 확장자 제거
+  // 제외 확장자 제거
   const handleRemoveExtension = (ext: string) => {
     setFormData({
       ...formData,
-      file_extensions: formData.file_extensions?.filter(e => e !== ext)
+      exclude_extensions: formData.exclude_extensions?.filter(e => e !== ext)
     });
   };
 
@@ -254,28 +254,36 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
             </Alert>
           )}
 
-          {/* 파일 확장자 */}
+          {/* 제외 확장자 */}
           <Box>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              기본적으로 모든 이미지 형식 (.jpg, .png, .webp, .gif, .bmp, .tiff)을 스캔합니다.
+              <br />
+              스캔하지 않을 확장자가 있다면 아래에 추가하세요.
+            </Alert>
             <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
               <TextField
                 size="small"
-                label="파일 확장자 추가"
+                label="제외할 확장자 (선택사항)"
                 value={newExtension}
                 onChange={(e) => setNewExtension(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleAddExtension()}
-                placeholder=".jpg"
+                placeholder=".tmp"
+                helperText="스캔에서 제외할 확장자를 입력하세요"
               />
               <Button onClick={handleAddExtension} startIcon={<AddIcon />}>
                 추가
               </Button>
             </Box>
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              {formData.file_extensions?.map((ext) => (
+              {formData.exclude_extensions?.map((ext) => (
                 <Chip
                   key={ext}
                   label={ext}
                   onDelete={() => handleRemoveExtension(ext)}
                   size="small"
+                  color="error"
+                  variant="outlined"
                 />
               ))}
             </Box>

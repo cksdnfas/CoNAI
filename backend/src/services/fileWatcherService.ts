@@ -12,9 +12,10 @@ import chokidar, { FSWatcher } from 'chokidar';
 import { db } from '../database/init';
 import path from 'path';
 import fs from 'fs';
-import { SingleFileProcessor } from './singleFileProcessor';
+import { FolderScanService } from './folderScanService';
 import { WatchedFolderService } from './watchedFolderService';
 import { resolveFolderPath } from '../utils/pathResolver';
+import { shouldProcessFileExtension } from '../constants/supportedExtensions';
 
 /**
  * 워처 상태
@@ -52,18 +53,18 @@ export class FileWatcherService {
   // 워처 레지스트리 (folderId → WatcherEntry)
   private static watcherRegistry = new Map<number, WatcherEntry>();
 
-  // 처리 중인 파일 (중복 방지)
-  private static processingFiles = new Set<string>();
+  // 처리 중인 폴더 (폴더 단위 락킹)
+  private static processingFolders = new Set<number>();
 
-  // 디바운스 타이머 (파일 경로 → 타이머)
-  private static debounceTimers = new Map<string, NodeJS.Timeout>();
+  // 폴더별 스캔 타이머 (디바운스용)
+  private static folderScanTimers = new Map<number, NodeJS.Timeout>();
 
-  // 이벤트 큐 (folderId → 파일 경로 Set)
-  private static eventQueues = new Map<number, Set<string>>();
+  // 폴더별 대기 중인 파일 목록
+  private static pendingFiles = new Map<number, Set<string>>();
 
   // 설정
   private static readonly MAX_WATCHERS = parseInt(process.env.MAX_WATCHERS || '50');
-  private static readonly DEBOUNCE_MS = parseInt(process.env.WATCHER_DEBOUNCE_MS || '300');
+  private static readonly SCAN_DEBOUNCE_MS = parseInt(process.env.SCAN_DEBOUNCE_MS || '2000'); // 폴더 스캔 디바운스 (2초)
   private static readonly STABILITY_THRESHOLD = parseInt(process.env.WATCHER_STABILITY_THRESHOLD || '2000');
   private static readonly MAX_RETRY_ATTEMPTS = parseInt(process.env.WATCHER_RETRY_ATTEMPTS || '3');
   private static readonly RETRY_DELAY_MS = parseInt(process.env.WATCHER_RETRY_DELAY_MS || '5000');
@@ -78,7 +79,7 @@ export class FileWatcherService {
       // 활성화된 auto_scan 폴더 목록 가져오기
       const folders = db.prepare(`
         SELECT id, folder_path, folder_name, recursive,
-               file_extensions, exclude_patterns, watcher_enabled
+               exclude_extensions, exclude_patterns, watcher_enabled
         FROM watched_folders
         WHERE is_active = 1 AND auto_scan = 1
       `).all() as any[];
@@ -134,7 +135,7 @@ export class FileWatcherService {
     // 폴더 정보 조회
     const folder = db.prepare(`
       SELECT id, folder_path, folder_name, recursive,
-             file_extensions, exclude_patterns
+             exclude_extensions, exclude_patterns
       FROM watched_folders
       WHERE id = ? AND is_active = 1
     `).get(folderId) as any;
@@ -160,7 +161,7 @@ export class FileWatcherService {
     }
 
     // 워처 옵션 구성
-    const extensions = folder.file_extensions ? JSON.parse(folder.file_extensions) : null;
+    const excludeExtensions = folder.exclude_extensions ? JSON.parse(folder.exclude_extensions) : [];
     const excludePatterns = folder.exclude_patterns ? JSON.parse(folder.exclude_patterns) : [];
 
     const isNetworkDrive = this.isNetworkDrive(resolvedPath);
@@ -200,7 +201,7 @@ export class FileWatcherService {
     this.watcherRegistry.set(folderId, entry);
 
     // 이벤트 핸들러 등록
-    this.registerEventHandlers(entry, extensions);
+    this.registerEventHandlers(entry, excludeExtensions);
 
     // 초기화 완료 대기
     await new Promise<void>((resolve, reject) => {
@@ -229,12 +230,12 @@ export class FileWatcherService {
   /**
    * 이벤트 핸들러 등록
    */
-  private static registerEventHandlers(entry: WatcherEntry, extensions: string[] | null): void {
+  private static registerEventHandlers(entry: WatcherEntry, excludeExtensions: string[]): void {
     const { watcher, folderId, folderName } = entry;
 
     // 'add' 이벤트: 새 파일 추가
     watcher.on('add', async (filePath: string, stats?: fs.Stats) => {
-      if (!this.shouldProcessFile(filePath, extensions)) return;
+      if (!this.shouldProcessFile(filePath, excludeExtensions)) return;
 
       entry.eventCount++;
       entry.lastEvent = new Date();
@@ -242,14 +243,13 @@ export class FileWatcherService {
 
       console.log(`👀 [워처:${folderName}] 파일 추가: ${path.basename(filePath)}`);
 
-      this.debounceEvent(filePath, async () => {
-        await this.handleAddEvent(filePath, folderId);
-      });
+      // handleAddEvent에 디바운스 로직 내장됨
+      await this.handleAddEvent(filePath, folderId);
     });
 
     // 'change' 이벤트: 파일 수정
     watcher.on('change', async (filePath: string, stats?: fs.Stats) => {
-      if (!this.shouldProcessFile(filePath, extensions)) return;
+      if (!this.shouldProcessFile(filePath, excludeExtensions)) return;
 
       entry.eventCount++;
       entry.lastEvent = new Date();
@@ -257,14 +257,12 @@ export class FileWatcherService {
 
       console.log(`📝 [워처:${folderName}] 파일 변경: ${path.basename(filePath)}`);
 
-      this.debounceEvent(filePath, async () => {
-        await this.handleChangeEvent(filePath, folderId);
-      });
+      await this.handleChangeEvent(filePath, folderId);
     });
 
     // 'unlink' 이벤트: 파일 삭제
     watcher.on('unlink', async (filePath: string) => {
-      if (!this.shouldProcessFile(filePath, extensions)) return;
+      if (!this.shouldProcessFile(filePath, excludeExtensions)) return;
 
       entry.eventCount++;
       entry.lastEvent = new Date();
@@ -290,70 +288,104 @@ export class FileWatcherService {
 
   /**
    * 'add' 이벤트 처리
+   * 이벤트 큐잉 + 디바운스로 배치 처리 (연속 생성 최적화)
    */
   private static async handleAddEvent(filePath: string, folderId: number): Promise<void> {
-    // 중복 처리 방지
-    if (this.processingFiles.has(filePath)) {
-      console.log(`  ⏭️  이미 처리 중: ${path.basename(filePath)}`);
-      return;
-    }
-
-    this.processingFiles.add(filePath);
-
     try {
       // 파일 쓰기 완료 확인
       await this.waitForFileWrite(filePath);
 
-      // 단일 파일 처리
-      const result = await SingleFileProcessor.processFile(filePath, folderId, {
-        skipIfExists: false,
-        updateIfModified: false,
-        generateThumbnail: true
-      });
+      // 대기 큐에 파일 추가
+      if (!this.pendingFiles.has(folderId)) {
+        this.pendingFiles.set(folderId, new Set());
+      }
+      this.pendingFiles.get(folderId)!.add(filePath);
 
-      if (result.success) {
-        console.log(`  ✅ 파일 처리 완료: ${path.basename(filePath)} (${result.action})`);
-      } else {
-        console.error(`  ❌ 파일 처리 실패: ${path.basename(filePath)} - ${result.error}`);
+      console.log(`  📝 파일 큐에 추가: ${path.basename(filePath)} (대기 중: ${this.pendingFiles.get(folderId)!.size}개)`);
+
+      // 기존 타이머 취소 (디바운스)
+      const existingTimer = this.folderScanTimers.get(folderId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
       }
 
+      // 새 타이머 설정 (SCAN_DEBOUNCE_MS 후 스캔 실행)
+      const timer = setTimeout(() => {
+        this.executeBatchScan(folderId);
+      }, this.SCAN_DEBOUNCE_MS);
+
+      this.folderScanTimers.set(folderId, timer);
+
     } catch (error) {
-      console.error(`  ❌ 파일 처리 중 오류: ${path.basename(filePath)}`, error);
+      console.error(`  ❌ 파일 이벤트 처리 실패: ${path.basename(filePath)}`, error);
+    }
+  }
+
+  /**
+   * 배치 스캔 실행 (디바운스 타이머 완료 후)
+   */
+  private static async executeBatchScan(folderId: number): Promise<void> {
+    // 이미 스캔 중이면 스킵 (폴더 단위 락킹)
+    if (this.processingFolders.has(folderId)) {
+      console.log(`  ⏭️  폴더 스캔 이미 진행 중: folderId=${folderId}`);
+      return;
+    }
+
+    const pendingFileSet = this.pendingFiles.get(folderId);
+    if (!pendingFileSet || pendingFileSet.size === 0) {
+      return;
+    }
+
+    const fileCount = pendingFileSet.size;
+    console.log(`  🚀 배치 스캔 시작: folderId=${folderId}, 대기 파일 ${fileCount}개`);
+
+    this.processingFolders.add(folderId);
+
+    try {
+      const result = await FolderScanService.scanFolder(folderId, false);
+
+      console.log(`  ✅ 배치 스캔 완료: 신규 ${result.newImages}개, 기존 ${result.existingImages}개`);
+
+      // 성공적으로 처리된 파일들 큐에서 제거
+      this.pendingFiles.delete(folderId);
+      this.folderScanTimers.delete(folderId);
+
+    } catch (error) {
+      console.error(`  ❌ 배치 스캔 실패: folderId=${folderId}`, error);
+
+      // 실패 시 재시도를 위해 큐 유지 (다음 이벤트에서 재시도)
     } finally {
-      this.processingFiles.delete(filePath);
+      this.processingFolders.delete(folderId);
     }
   }
 
   /**
    * 'change' 이벤트 처리
+   * 파일 변경 시 강제 재스캔 (폴더 단위 락킹)
    */
   private static async handleChangeEvent(filePath: string, folderId: number): Promise<void> {
-    if (this.processingFiles.has(filePath)) {
-      console.log(`  ⏭️  이미 처리 중: ${path.basename(filePath)}`);
+    // 폴더가 이미 스캔 중이면 대기
+    if (this.processingFolders.has(folderId)) {
+      console.log(`  ⏭️  폴더 스캔 진행 중, 변경 이벤트 대기: ${path.basename(filePath)}`);
       return;
     }
 
-    this.processingFiles.add(filePath);
+    this.processingFolders.add(folderId);
 
     try {
       await this.waitForFileWrite(filePath);
 
-      const result = await SingleFileProcessor.processFile(filePath, folderId, {
-        skipIfExists: false,
-        updateIfModified: true,
-        generateThumbnail: true
-      });
+      console.log(`  🔄 파일 변경 감지, 강제 재스캔: ${path.basename(filePath)}`);
 
-      if (result.success) {
-        console.log(`  ✅ 파일 업데이트 완료: ${path.basename(filePath)} (${result.action})`);
-      } else {
-        console.error(`  ❌ 파일 업데이트 실패: ${path.basename(filePath)} - ${result.error}`);
-      }
+      // 강제 재스캔으로 수정된 파일 재처리
+      const result = await FolderScanService.scanFolder(folderId, true);
+
+      console.log(`  ✅ 파일 업데이트 완료: 신규 ${result.newImages}개, 업데이트 ${result.existingImages}개`);
 
     } catch (error) {
       console.error(`  ❌ 파일 업데이트 중 오류: ${path.basename(filePath)}`, error);
     } finally {
-      this.processingFiles.delete(filePath);
+      this.processingFolders.delete(folderId);
     }
   }
 
@@ -362,8 +394,15 @@ export class FileWatcherService {
    */
   private static handleUnlinkEvent(filePath: string, folderId: number): void {
     try {
-      const success = SingleFileProcessor.markFileAsMissing(filePath);
-      if (success) {
+      // 파일 상태를 'missing'으로 변경
+      const result = db.prepare(`
+        UPDATE image_files
+        SET file_status = 'missing',
+            last_verified_date = ?
+        WHERE original_file_path = ?
+      `).run(new Date().toISOString(), filePath);
+
+      if (result.changes > 0) {
         console.log(`  ✅ 파일 상태 변경: ${path.basename(filePath)} → missing`);
       } else {
         console.log(`  ℹ️  파일이 데이터베이스에 없음: ${path.basename(filePath)}`);
@@ -463,7 +502,7 @@ export class FileWatcherService {
   /**
    * 파일 처리 여부 확인
    */
-  private static shouldProcessFile(filePath: string, allowedExtensions: string[] | null): boolean {
+  private static shouldProcessFile(filePath: string, excludeExtensions: string[]): boolean {
     // 심볼릭 링크 스킵
     try {
       if (fs.lstatSync(filePath).isSymbolicLink()) {
@@ -474,8 +513,9 @@ export class FileWatcherService {
       return false;
     }
 
-    // 확장자 검증
-    return SingleFileProcessor.isValidImageExtension(filePath, allowedExtensions || undefined);
+    // 확장자 검증: 지원 확장자인지 + 제외 목록에 없는지
+    const ext = path.extname(filePath).toLowerCase();
+    return shouldProcessFileExtension(ext, excludeExtensions);
   }
 
   /**
@@ -507,22 +547,6 @@ export class FileWatcherService {
     }
   }
 
-  /**
-   * 디바운싱 이벤트 처리
-   */
-  private static debounceEvent(filePath: string, callback: () => void): void {
-    const existing = this.debounceTimers.get(filePath);
-    if (existing) {
-      clearTimeout(existing);
-    }
-
-    const timer = setTimeout(() => {
-      this.debounceTimers.delete(filePath);
-      callback();
-    }, this.DEBOUNCE_MS);
-
-    this.debounceTimers.set(filePath, timer);
-  }
 
   /**
    * 데이터베이스 워처 상태 업데이트

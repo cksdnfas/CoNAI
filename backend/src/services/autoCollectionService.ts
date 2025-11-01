@@ -787,10 +787,10 @@ export class AutoCollectionService {
       for (const image of matchingImages) {
         try {
           // 이미 그룹에 속해있는지 확인
-          const alreadyInGroup = await ImageGroupModel.isImageInGroup(groupId, image.id);
+          const alreadyInGroup = await ImageGroupModel.isImageInGroup(groupId, image.composite_hash);
 
           if (!alreadyInGroup) {
-            await ImageGroupModel.addImageToGroup(groupId, image.id, 'auto');
+            await ImageGroupModel.addImageToGroup(groupId, image.composite_hash, 'auto');
             addedCount++;
           }
         } catch (err) {

@@ -1,85 +1,96 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
 import type { ImageRecord, PageSize } from '../types/image';
 import { imageApi } from '../services/api';
 
+const PAGE_SIZE: PageSize = 50;
+
 export const useInfiniteImages = () => {
-  const [images, setImages] = useState<ImageRecord[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [pageSize] = useState<PageSize>(50); // 무한스크롤이므로 한 번에 많이 로딩
+  const queryClient = useQueryClient();
 
-  const loadImages = useCallback(async (page: number, shouldReplace = false) => {
-    if (loading) return;
+  // React Query의 useInfiniteQuery 사용
+  const {
+    data,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    refetch,
+  } = useInfiniteQuery({
+    queryKey: ['images', 'infinite'],
+    queryFn: async ({ pageParam = 1 }) => {
+      const response = await imageApi.getImages(pageParam, PAGE_SIZE);
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await imageApi.getImages(page, pageSize);
-
-      if (response.success && response.data) {
-        const newImages = response.data.images;
-
-        if (page === 1 || shouldReplace) {
-          // 첫 페이지이거나 명시적으로 교체 요청 시
-          // 부드러운 전환을 위해 약간의 딜레이 후 교체
-          setImages(newImages);
-        } else {
-          // 다음 페이지는 기존 이미지에 추가
-          setImages(prev => [...prev, ...newImages]);
-        }
-
-        // 더 이상 로딩할 이미지가 없으면 hasMore를 false로
-        setHasMore(response.data.page < response.data.totalPages);
-      } else {
-        setError(response.error || '이미지를 불러오는데 실패했습니다.');
+      if (!response.success || !response.data) {
+        throw new Error(response.error || '이미지를 불러오는데 실패했습니다.');
       }
-    } catch (err) {
-      setError('이미지를 불러오는 중 오류가 발생했습니다.');
-      console.error('Load images error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [loading, pageSize]);
 
+      return response.data;
+    },
+    getNextPageParam: (lastPage) => {
+      // 다음 페이지가 있으면 페이지 번호 반환, 없으면 undefined
+      return lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined;
+    },
+    initialPageParam: 1,
+    staleTime: 60000, // 1분 - 백엔드 캐시와 동기화
+    gcTime: 300000, // 5분
+  });
+
+  // 모든 페이지의 이미지를 하나의 배열로 병합
+  const images = useMemo(() => {
+    return data?.pages.flatMap(page => page.images) ?? [];
+  }, [data]);
+
+  // 로딩 상태
+  const loading = isFetching && !isFetchingNextPage;
+
+  // 에러 메시지
+  const errorMessage = error ? (error as Error).message : null;
+
+  // 더 로드하기
   const loadMore = useCallback(() => {
-    if (!loading && hasMore) {
-      const nextPage = currentPage + 1;
-      setCurrentPage(nextPage);
-      loadImages(nextPage);
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
     }
-  }, [currentPage, hasMore, loading, loadImages]);
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  // 새로고침
   const refreshImages = useCallback(() => {
-    setCurrentPage(1);
-    setHasMore(true);
-    loadImages(1);
-  }, [loadImages]);
+    refetch();
+  }, [refetch]);
 
-  // ✅ composite_hash 기반으로 변경
+  // 이미지 삭제
   const deleteImage = useCallback(async (compositeHash: string) => {
     try {
       await imageApi.deleteImage(compositeHash);
-      // 삭제된 이미지를 목록에서 제거
-      setImages(prev => prev.filter(img => img.composite_hash !== compositeHash));
-    } catch (err) {
-      setError('이미지 삭제에 실패했습니다.');
-      console.error('Error deleting image:', err);
-    }
-  }, []);
 
-  // 초기 로딩
-  useEffect(() => {
-    loadImages(1);
-  }, []);
+      // 캐시에서 삭제된 이미지 제거 (낙관적 업데이트)
+      queryClient.setQueryData(['images', 'infinite'], (oldData: any) => {
+        if (!oldData) return oldData;
+
+        return {
+          ...oldData,
+          pages: oldData.pages.map((page: any) => ({
+            ...page,
+            images: page.images.filter((img: ImageRecord) => img.composite_hash !== compositeHash),
+          })),
+        };
+      });
+
+      // 이미지 목록 무효화 (서버와 동기화)
+      queryClient.invalidateQueries({ queryKey: ['images'] });
+    } catch (err) {
+      console.error('Error deleting image:', err);
+      throw new Error('이미지 삭제에 실패했습니다.');
+    }
+  }, [queryClient]);
 
   return {
     images,
     loading,
-    error,
-    hasMore,
+    error: errorMessage,
+    hasMore: hasNextPage ?? false,
     loadMore,
     refreshImages,
     deleteImage,

@@ -106,8 +106,13 @@ export function useImageGeneration({
    * Promise를 반환하여 완료/실패 시점을 알 수 있음
    */
   const pollGenerationStatus = async (serverId: number, apiHistoryId: number): Promise<void> => {
+    const maxAttempts = 150; // 5분 최대 대기 (2초 * 150)
+    let attempts = 0;
+
     return new Promise((resolve, reject) => {
       const checkStatus = async () => {
+        attempts++;
+
         try {
           const response = await generationHistoryApi.getById(apiHistoryId);
           const data = response.record;
@@ -123,19 +128,35 @@ export function useImageGeneration({
             }));
 
             if (data.generation_status === 'completed') {
-              // 생성 완료 - 히스토리 목록 새로고침
+              console.log(`[ComfyUI] Generation ${apiHistoryId} completed`);
               setHistoryRefreshKey(prev => prev + 1);
               resolve();
             } else {
               reject(new Error(data.error_message || 'Generation failed'));
             }
-          } else {
-            // 계속 폴링
-            setTimeout(checkStatus, 2000);
+            return;
           }
+
+          // Timeout check
+          if (attempts >= maxAttempts) {
+            console.error(`[ComfyUI] Generation ${apiHistoryId} timeout after ${attempts} attempts`);
+            reject(new Error('Generation timeout (5 minutes)'));
+            return;
+          }
+
+          // Continue polling
+          setTimeout(checkStatus, 2000);
         } catch (err) {
-          console.error('Failed to check status:', err);
-          setTimeout(checkStatus, 2000); // 에러가 나도 계속 시도
+          console.error(`[ComfyUI] Failed to check status (attempt ${attempts}/${maxAttempts}):`, err);
+
+          // Timeout even on errors
+          if (attempts >= maxAttempts) {
+            reject(new Error('Status check failed after timeout'));
+            return;
+          }
+
+          // Retry
+          setTimeout(checkStatus, 2000);
         }
       };
 

@@ -2,6 +2,9 @@ import path from 'path';
 import fs from 'fs';
 import { ImageProcessor } from './imageProcessor';
 import { ImageModel } from '../models/Image';
+import { ImageMetadataModel } from '../models/Image/ImageMetadataModel';
+import { ImageSimilarityModel } from '../models/Image/ImageSimilarityModel';
+import { ImageSimilarityService } from './imageSimilarity';
 import { PromptCollectionService } from './promptCollectionService';
 import { AutoCollectionService } from './autoCollectionService';
 import { imageTaggerService, ImageTaggerService } from './imageTaggerService';
@@ -167,6 +170,43 @@ export class UploadService {
       }
     } catch (autoTagError) {
       console.warn('⚠️ Failed to auto-tag image (non-critical):', autoTagError);
+    }
+
+    // 유사도 해시 생성 (설정에서 활성화된 경우)
+    try {
+      const settings = settingsService.loadSettings();
+
+      if (settings.similarity?.autoGenerateHashOnUpload) {
+        console.log('🔢 Generating similarity hashes...');
+
+        // imageId로부터 composite_hash 조회
+        const { db } = await import('../database/init');
+        const file = db.prepare(`
+          SELECT if.composite_hash
+          FROM image_files if
+          JOIN images i ON if.original_file_path LIKE '%' || i.file_path
+          WHERE i.id = ?
+          LIMIT 1
+        `).get(imageId) as { composite_hash: string } | undefined;
+
+        if (file && file.composite_hash) {
+          // 해시 생성
+          const result = await ImageSimilarityService.generateHashAndHistogram(fullPath);
+
+          // 메타데이터 업데이트
+          await ImageSimilarityModel.updateHash(
+            file.composite_hash,
+            result.hashes.perceptualHash,
+            ImageSimilarityService.serializeHistogram(result.colorHistogram)
+          );
+
+          console.log('✅ Similarity hashes generated successfully');
+        } else {
+          console.warn('⚠️ Could not find composite_hash for similarity hash generation');
+        }
+      }
+    } catch (hashError) {
+      console.warn('⚠️ Failed to generate similarity hashes (non-critical):', hashError);
     }
 
     // 자동수집 그룹 처리 (자동 태깅 이후 실행하여 auto_tags 조건도 체크 가능)

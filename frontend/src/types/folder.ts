@@ -29,7 +29,7 @@ export interface WatchedFolder {
   auto_scan: number;
   scan_interval: number;
   recursive: number;
-  file_extensions: string | null;
+  exclude_extensions: string | null;
   exclude_patterns: string | null;
   is_active: number;
   last_scan_date: string | null;
@@ -54,7 +54,7 @@ export interface WatchedFolderCreate {
   auto_scan?: boolean;
   scan_interval?: number;
   recursive?: boolean;
-  file_extensions?: string[];
+  exclude_extensions?: string[];
   exclude_patterns?: string[];
   watcher_enabled?: boolean;
 }
@@ -67,7 +67,7 @@ export interface WatchedFolderUpdate {
   auto_scan?: boolean;
   scan_interval?: number;
   recursive?: boolean;
-  file_extensions?: string[];
+  exclude_extensions?: string[];
   exclude_patterns?: string[];
   is_active?: boolean;
   watcher_enabled?: boolean;

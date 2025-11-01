@@ -1,8 +1,6 @@
 import { GenerationHistoryModel, GenerationHistoryRecord, ServiceType } from '../models/GenerationHistory';
-import { APIImageProcessor } from './apiImageProcessor';
+import { APIImageProcessor } from './APIImageProcessor';
 import { ImageGroupModel } from '../models/Group';
-import { SingleFileProcessor } from './singleFileProcessor';
-import { WatchedFolderService } from './watchedFolderService';
 import axios from 'axios';
 import FormData from 'form-data';
 import path from 'path';
@@ -178,10 +176,9 @@ export class GenerationHistoryService {
   }
 
   /**
-   * Process generated image with immediate processing
+   * Process generated image - Simple file save only
    * 1. Saves original file to uploads/API/images/YYYY-MM-DD/
-   * 2. Immediately triggers SingleFileProcessor to create thumbnails and extract metadata
-   * 3. Updates generation_history with processed data
+   * 2. Main system will auto-detect and process (thumbnails, metadata, etc.)
    */
   static async processAndUploadImage(
     historyId: number,
@@ -192,70 +189,24 @@ export class GenerationHistoryService {
       // Step 1: Update status to processing
       GenerationHistoryModel.updateStatus(historyId, 'processing');
 
-      // Step 2: Save original file only (no thumbnail/optimization yet)
+      // Step 2: Save original file only to uploads/API/images/YYYY-MM-DD/
       const processedPaths = await APIImageProcessor.processGeneratedImage(imageBuffer, serviceType);
 
-      // Step 3: Update API history with original file path
+      // Step 3: Update API history with original file path and composite_hash
       GenerationHistoryModel.updateImagePaths(historyId, {
         original: processedPaths.originalPath,
-        thumbnail: '', // Will be populated after processing
-        optimized: '', // Will be populated after processing
-        fileSize: processedPaths.fileSize
+        thumbnail: '', // Main system will auto-generate
+        optimized: '', // Main system will auto-generate
+        fileSize: processedPaths.fileSize,
+        compositeHash: processedPaths.compositeHash
       });
 
-      console.log(`✓ Generation history ${historyId} file saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
+      // Step 4: Update status to completed (file save complete)
+      GenerationHistoryModel.updateStatus(historyId, 'completed');
 
-      // Step 4: Find API images watched folder
-      const apiImagesPath = path.dirname(path.dirname(processedPaths.originalPath)); // Go up two levels (from file to images folder)
-      const folders = await WatchedFolderService.listFolders();
-      const apiFolder = folders.find(f => f.folder_path.includes('API') && f.folder_path.includes('images'));
-
-      if (!apiFolder) {
-        console.warn(`⚠️  API images folder not registered as watched folder - processing will be delayed`);
-        return;
-      }
-
-      // Step 5: Immediately process the file to generate thumbnails and metadata
-      console.log(`🔄 Triggering immediate processing for ${processedPaths.originalPath}...`);
-      const processingResult = await SingleFileProcessor.processFile(
-        processedPaths.originalPath,
-        apiFolder.id,
-        {
-          skipIfExists: false,
-          updateIfModified: true,
-          generateThumbnail: true
-        }
-      );
-
-      if (processingResult.success && processingResult.compositeHash) {
-        console.log(`✅ Image processed successfully - composite_hash: ${processingResult.compositeHash}`);
-
-        // Step 6: Update generation_history with composite_hash for JOIN queries
-        const { db } = await import('../database/init');
-        const updateResult = db.prepare(`
-          UPDATE api_generation_history
-          SET composite_hash = ?
-          WHERE id = ?
-        `).run(processingResult.compositeHash, historyId);
-
-        console.log(`✅ Updated api_generation_history ${historyId} with composite_hash (changes: ${updateResult.changes})`);
-
-        // Verify the update
-        const verifyRecord = db.prepare(`
-          SELECT composite_hash, generation_status FROM api_generation_history WHERE id = ?
-        `).get(historyId) as { composite_hash: string | null; generation_status: string } | undefined;
-
-        if (verifyRecord) {
-          console.log(`📊 Verification - History ${historyId}: composite_hash="${verifyRecord.composite_hash}", status="${verifyRecord.generation_status}"`);
-        }
-
-        // Step 7: Update status to completed
-        GenerationHistoryModel.updateStatus(historyId, 'completed');
-        console.log(`✅ Generation history ${historyId} completed with thumbnail and metadata`);
-      } else {
-        console.warn(`⚠️  Processing failed: ${processingResult.error || 'Unknown error'}`);
-        console.log(`  → File will be processed on next scheduled scan`);
-      }
+      console.log(`✅ ${serviceType.toUpperCase()} image saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
+      console.log(`✅ Composite hash: ${processedPaths.compositeHash}`);
+      console.log(`   → Main system will auto-detect and process (thumbnails, metadata, prompts, tags, groups)`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       GenerationHistoryModel.recordError(historyId, errorMessage);

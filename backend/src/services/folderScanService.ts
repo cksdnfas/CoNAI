@@ -11,6 +11,7 @@ import { BackgroundQueueService } from './backgroundQueue';
 import { BackgroundProcessorService } from './backgroundProcessorService';
 import { FileWatcherService } from './fileWatcherService';
 import { resolveFolderPath } from '../utils/pathResolver';
+import { ALL_SUPPORTED_EXTENSIONS, shouldProcessFileExtension } from '../constants/supportedExtensions';
 
 export interface ScanResult {
   folderId: number;
@@ -90,13 +91,13 @@ export class FolderScanService {
       // 5. 파일 목록 수집
       const files = await this.collectFiles(resolvedPath, {
         recursive: folder.recursive === 1,
-        extensions: folder.file_extensions ? JSON.parse(folder.file_extensions) : null,
+        excludeExtensions: folder.exclude_extensions ? JSON.parse(folder.exclude_extensions) : [],
         excludePatterns: folder.exclude_patterns ? JSON.parse(folder.exclude_patterns) : null
       });
 
       console.log(`📂 스캔 시작: ${resolvedPath} (${files.length}개 파일 발견, 배치 크기: ${this.BATCH_SIZE})`);
       if (files.length === 0) {
-        console.warn(`⚠️ [Scan Debug] 파일 발견 실패 - 패턴 확인 필요: recursive=${folder.recursive === 1}, extensions=${folder.file_extensions}`);
+        console.warn(`⚠️ [Scan Debug] 파일 발견 실패 - 패턴 확인 필요: recursive=${folder.recursive === 1}, exclude_extensions=${folder.exclude_extensions}`);
       }
 
       // 6. 전체 재스캔인 경우 기존 파일들을 'missing'으로 표시
@@ -677,24 +678,24 @@ export class FolderScanService {
 
   /**
    * 파일 수집 (재귀적) - fast-glob 사용으로 최적화
+   *
+   * 새로운 로직:
+   * 1. 모든 지원 확장자 파일을 스캔
+   * 2. 사용자가 제외한 확장자 제거
    */
   private static async collectFiles(
     dirPath: string,
     options: {
       recursive: boolean;
-      extensions: string[] | null;
+      excludeExtensions: string[];
       excludePatterns: string[] | null;
     }
   ): Promise<string[]> {
-    const imageExtensions = options.extensions || [
-      '.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff'
-    ];
-
     // Windows 경로를 Unix 스타일로 정규화 (fast-glob 호환성)
     const normalizedPath = dirPath.replace(/\\/g, '/');
 
-    // fast-glob 패턴 생성 (확장자에서 점 제거)
-    const exts = imageExtensions
+    // 지원하는 확장자로 fast-glob 패턴 생성 (성능 최적화)
+    const exts = ALL_SUPPORTED_EXTENSIONS
       .map(ext => ext.startsWith('.') ? ext.substring(1) : ext)
       .join(',');
     const patterns = options.recursive
@@ -702,11 +703,13 @@ export class FolderScanService {
       : [`${normalizedPath}/*.{${exts}}`];
 
     console.log(`🔍 [Scan Debug] Fast-glob 패턴:`, patterns);
-    console.log(`🔍 [Scan Debug] 확장자:`, imageExtensions);
+    console.log(`🔍 [Scan Debug] 지원 확장자:`, ALL_SUPPORTED_EXTENSIONS);
+    console.log(`🔍 [Scan Debug] 제외 확장자:`, options.excludeExtensions);
     console.log(`🔍 [Scan Debug] 제외 패턴:`, options.excludePatterns);
 
     try {
-      const files = await fg(patterns, {
+      // Step 1: 지원하는 확장자 파일 모두 스캔
+      const allFiles = await fg(patterns, {
         ignore: options.excludePatterns || [],
         absolute: true,
         onlyFiles: true,
@@ -715,12 +718,23 @@ export class FolderScanService {
         suppressErrors: true  // 권한 문제 등의 에러 무시
       });
 
-      console.log(`🔍 [Scan Debug] Fast-glob 결과: ${files.length}개 파일 발견`);
-      if (files.length > 0) {
-        console.log(`🔍 [Scan Debug] 처음 3개 파일:`, files.slice(0, 3));
+      console.log(`🔍 [Scan Debug] Fast-glob 결과: ${allFiles.length}개 파일 발견`);
+
+      // Step 2: 제외 확장자 필터링
+      const filteredFiles = allFiles.filter(file => {
+        const ext = path.extname(file).toLowerCase();
+        return shouldProcessFileExtension(ext, options.excludeExtensions);
+      });
+
+      if (filteredFiles.length < allFiles.length) {
+        console.log(`🔍 [Scan Debug] 제외 필터 적용: ${allFiles.length} → ${filteredFiles.length}개 파일`);
       }
 
-      return files;
+      if (filteredFiles.length > 0) {
+        console.log(`🔍 [Scan Debug] 처음 3개 파일:`, filteredFiles.slice(0, 3));
+      }
+
+      return filteredFiles;
     } catch (error) {
       console.error(`  ❌ 파일 스캔 실패: ${dirPath}`, error);
       return [];

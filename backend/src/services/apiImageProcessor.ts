@@ -87,6 +87,7 @@ export class APIImageProcessor {
     fileSize: number;
     width: number;
     height: number;
+    compositeHash: string;
   }> {
     try {
       // Use FileSaver to save original file only

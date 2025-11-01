@@ -38,7 +38,7 @@ import { initializeUserSettingsDb } from './database/userSettingsDb';
 import { initializeApiGenerationDb } from './database/apiGenerationDb';
 import { errorHandler } from './middleware/errorHandler';
 import { imageTaggerService } from './services/imageTaggerService';
-import { APIImageProcessor } from './services/apiImageProcessor';
+import { APIImageProcessor } from './services/APIImageProcessor';
 import { PORTS, IMAGE_PROCESSING } from '@comfyui-image-manager/shared';
 import { settingsService } from './services/settingsService';
 import { AutoScanScheduler } from './services/autoScanScheduler';
@@ -300,7 +300,7 @@ async function startServer() {
             auto_scan: true,
             scan_interval: 5, // 5분마다 스캔
             recursive: true,
-            file_extensions: ['.png', '.jpg', '.jpeg', '.webp', '.gif'],
+            exclude_extensions: [], // 모든 이미지 형식 스캔
             exclude_patterns: [],
             watcher_enabled: true
           });

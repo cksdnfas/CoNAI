@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Card,
   CardContent,
@@ -12,13 +12,20 @@ import {
   Select,
   MenuItem,
   Alert,
+  Box,
+  LinearProgress,
+  Chip,
 } from '@mui/material';
 import {
   Search as SearchIcon,
+  Refresh as RefreshIcon,
+  CheckCircle as CheckCircleIcon,
+  Warning as WarningIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../../../../types/image';
-import type { SimilarImage } from '../../../../../services/similarityApi';
+import type { SimilarImage, SimilarityStats } from '../../../../../services/similarityApi';
+import { similarityApi } from '../../../../../services/similarityApi';
 import { SimilarityResultsDisplay } from './SimilarityResultsDisplay';
 
 interface SimilarityTestPanelProps {
@@ -43,6 +50,42 @@ export const SimilarityTestPanel: React.FC<SimilarityTestPanelProps> = ({
   onTestSearch,
 }) => {
   const { t } = useTranslation('settings');
+  const [stats, setStats] = useState<SimilarityStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [rebuildLoading, setRebuildLoading] = useState(false);
+  const [rebuildMessage, setRebuildMessage] = useState<string>('');
+
+  // Load stats on mount
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    setStatsLoading(true);
+    try {
+      const data = await similarityApi.getStats();
+      setStats(data);
+    } catch (error) {
+      console.error('Failed to load stats:', error);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  const handleRebuildHashes = async () => {
+    setRebuildLoading(true);
+    setRebuildMessage('');
+    try {
+      const result = await similarityApi.rebuildHashes(100);
+      setRebuildMessage(`✅ Processed: ${result.processed}, Failed: ${result.failed}, Remaining: ${result.remaining}`);
+      // Reload stats after rebuild
+      await loadStats();
+    } catch (error: any) {
+      setRebuildMessage(`❌ Error: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setRebuildLoading(false);
+    }
+  };
 
   return (
     <Card sx={{ mb: 3 }}>
@@ -54,14 +97,60 @@ export const SimilarityTestPanel: React.FC<SimilarityTestPanelProps> = ({
           {t('similarity.test.description')}
         </Typography>
 
+        {/* Hash Generation Stats */}
+        {statsLoading ? (
+          <Box sx={{ mb: 2 }}>
+            <CircularProgress size={20} />
+          </Box>
+        ) : stats ? (
+          <Box sx={{ mb: 2 }}>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                Hash Status:
+              </Typography>
+              <Chip
+                size="small"
+                icon={stats.completionPercentage >= 100 ? <CheckCircleIcon /> : <WarningIcon />}
+                label={`${stats.imagesWithHash} / ${stats.totalImages} (${stats.completionPercentage.toFixed(1)}%)`}
+                color={stats.completionPercentage >= 100 ? 'success' : 'warning'}
+              />
+            </Stack>
+            {stats.completionPercentage < 100 && (
+              <LinearProgress
+                variant="determinate"
+                value={stats.completionPercentage}
+                sx={{ mb: 1 }}
+              />
+            )}
+            {stats.imagesWithoutHash > 0 && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={rebuildLoading ? <CircularProgress size={16} /> : <RefreshIcon />}
+                onClick={handleRebuildHashes}
+                disabled={rebuildLoading}
+                sx={{ mt: 1 }}
+              >
+                {rebuildLoading ? 'Rebuilding...' : `Rebuild ${stats.imagesWithoutHash} Missing Hashes`}
+              </Button>
+            )}
+            {rebuildMessage && (
+              <Alert severity={rebuildMessage.startsWith('✅') ? 'success' : 'error'} sx={{ mt: 1 }}>
+                {rebuildMessage}
+              </Alert>
+            )}
+          </Box>
+        ) : null}
+
         <Stack spacing={2}>
           <Stack direction="row" spacing={2} alignItems="flex-end">
             <TextField
               label={t('similarity.test.imageId')}
               value={testImageId}
               onChange={(e) => onSetTestImageId(e.target.value)}
-              type="number"
-              placeholder={t('similarity.test.placeholder')}
+              type="text"
+              placeholder="e.g., a1b2c3d4e5f6... (48-character composite hash)"
+              helperText="Enter the composite_hash from image metadata"
               fullWidth
             />
             <FormControl sx={{ minWidth: 150 }}>

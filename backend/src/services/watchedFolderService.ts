@@ -10,7 +10,7 @@ export interface WatchedFolder {
   auto_scan: number;
   scan_interval: number;
   recursive: number;
-  file_extensions: string | null;
+  exclude_extensions: string | null;
   exclude_patterns: string | null;
   is_active: number;
   last_scan_date: string | null;
@@ -28,7 +28,7 @@ export interface WatchedFolderCreate {
   auto_scan?: boolean;
   scan_interval?: number;
   recursive?: boolean;
-  file_extensions?: string[];
+  exclude_extensions?: string[];
   exclude_patterns?: string[];
   watcher_enabled?: boolean;
 }
@@ -38,7 +38,7 @@ export interface WatchedFolderUpdate {
   auto_scan?: boolean;
   scan_interval?: number;
   recursive?: boolean;
-  file_extensions?: string[];
+  exclude_extensions?: string[];
   exclude_patterns?: string[];
   is_active?: boolean;
   watcher_enabled?: number;  // 0 or 1
@@ -76,7 +76,7 @@ export class WatchedFolderService {
     const info = db.prepare(`
       INSERT INTO watched_folders (
         folder_path, folder_name, folder_type, auto_scan, scan_interval,
-        recursive, file_extensions, exclude_patterns, watcher_enabled
+        recursive, exclude_extensions, exclude_patterns, watcher_enabled
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       absolutePath,
@@ -85,7 +85,7 @@ export class WatchedFolderService {
       folderData.auto_scan ? 1 : 0,
       folderData.scan_interval || 60,
       folderData.recursive !== false ? 1 : 0,
-      folderData.file_extensions ? JSON.stringify(folderData.file_extensions) : null,
+      folderData.exclude_extensions ? JSON.stringify(folderData.exclude_extensions) : null,
       folderData.exclude_patterns ? JSON.stringify(folderData.exclude_patterns) : null,
       folderData.watcher_enabled ? 1 : 0
     );
@@ -152,9 +152,9 @@ export class WatchedFolderService {
       values.push(updates.recursive ? 1 : 0);
     }
 
-    if (updates.file_extensions !== undefined) {
-      fields.push('file_extensions = ?');
-      values.push(JSON.stringify(updates.file_extensions));
+    if (updates.exclude_extensions !== undefined) {
+      fields.push('exclude_extensions = ?');
+      values.push(JSON.stringify(updates.exclude_extensions));
     }
 
     if (updates.exclude_patterns !== undefined) {

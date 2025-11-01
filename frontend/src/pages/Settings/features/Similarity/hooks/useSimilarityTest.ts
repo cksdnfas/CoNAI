@@ -19,7 +19,14 @@ export const useSimilarityTest = () => {
   const handleTestSearch = async (t: any) => {
     const compositeHash = testImageId.trim();
     if (!compositeHash) {
-      alert(t('tagger.test.invalidId'));
+      alert(t('similarity.test.invalidId') || 'Please enter a composite hash');
+      return;
+    }
+
+    // Validate hash format (48 hexadecimal characters)
+    const hashPattern = /^[0-9a-fA-F]{48}$/;
+    if (!hashPattern.test(compositeHash)) {
+      alert(t('similarity.test.invalidHashFormat') || 'Invalid hash format. Expected 48 hexadecimal characters.');
       return;
     }
 

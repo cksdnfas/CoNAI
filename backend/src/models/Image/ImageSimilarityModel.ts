@@ -73,8 +73,11 @@ export class ImageSimilarityModel {
 
     // 대상 이미지 조회
     const targetImage = db.prepare('SELECT * FROM image_metadata WHERE composite_hash = ?').get(compositeHash) as ImageMetadataRecord | undefined;
-    if (!targetImage || !targetImage.perceptual_hash) {
-      return [];
+    if (!targetImage) {
+      throw new Error('Image not found with the provided composite hash');
+    }
+    if (!targetImage.perceptual_hash) {
+      throw new Error('Perceptual hash not available for this image. Please rebuild similarity hashes.');
     }
 
     // 모든 이미지 조회 (자신 제외)
@@ -164,8 +167,11 @@ export class ImageSimilarityModel {
 
     // 대상 이미지 조회
     const targetImage = db.prepare('SELECT * FROM image_metadata WHERE composite_hash = ?').get(compositeHash) as ImageMetadataRecord | undefined;
-    if (!targetImage || !targetImage.perceptual_hash) {
-      return [];
+    if (!targetImage) {
+      throw new Error('Image not found with the provided composite hash');
+    }
+    if (!targetImage.perceptual_hash) {
+      throw new Error('Perceptual hash not available for this image. Please rebuild similarity hashes.');
     }
 
     // 모든 이미지 조회 (자신 제외)
@@ -353,8 +359,11 @@ export class ImageSimilarityModel {
   ): Promise<SimilarImage[]> {
     // 대상 이미지 조회
     const targetImage = db.prepare('SELECT * FROM image_metadata WHERE composite_hash = ?').get(compositeHash) as ImageMetadataRecord | undefined;
-    if (!targetImage || !targetImage.color_histogram) {
-      return [];
+    if (!targetImage) {
+      throw new Error('Image not found with the provided composite hash');
+    }
+    if (!targetImage.color_histogram) {
+      throw new Error('Color histogram not available for this image. Please rebuild similarity hashes.');
     }
 
     const targetHist = ImageSimilarityService.deserializeHistogram(targetImage.color_histogram);

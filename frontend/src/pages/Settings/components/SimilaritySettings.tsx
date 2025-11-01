@@ -57,7 +57,7 @@ const SimilaritySettings: React.FC = () => {
   const [autoGenerateHash, setAutoGenerateHash] = useState(true);
 
   // 테스트 섹션
-  const [testImageId, setTestImageId] = useState('');
+  const [testCompositeHash, setTestCompositeHash] = useState('');
   const [testLoading, setTestLoading] = useState(false);
   const [testResults, setTestResults] = useState<SimilarImage[]>([]);
   const [testType, setTestType] = useState<'duplicates' | 'similar' | 'color'>('similar');
@@ -165,7 +165,7 @@ const SimilaritySettings: React.FC = () => {
   };
 
   const handleTestSearch = async () => {
-    const compositeHash = testImageId.trim();
+    const compositeHash = testCompositeHash.trim();
     if (!compositeHash) {
       alert(t('tagger.test.invalidId'));
       return;
@@ -181,25 +181,20 @@ const SimilaritySettings: React.FC = () => {
         setQueryImage(imageResponse.data);
       }
 
-      // composite_hash를 number로 변환 (similarity API는 imageId가 number 타입)
-      const imageId = parseInt(compositeHash, 10);
-      if (isNaN(imageId)) {
-        alert(t('tagger.test.invalidId'));
-        return;
-      }
-
+      // similarity API는 이제 composite_hash (string) 또는 imageId (number) 모두 허용
+      // composite_hash를 직접 사용
       let results: SimilarImage[] = [];
 
       if (testType === 'duplicates') {
-        results = await similarityApi.findDuplicates(imageId, duplicateThreshold);
+        results = await similarityApi.findDuplicates(compositeHash, duplicateThreshold);
       } else if (testType === 'similar') {
-        results = await similarityApi.findSimilar(imageId, {
+        results = await similarityApi.findSimilar(compositeHash, {
           threshold: similarThreshold,
           limit: searchLimit,
           includeColorSimilarity: true,
         });
       } else if (testType === 'color') {
-        results = await similarityApi.findSimilarByColor(imageId, colorThreshold, searchLimit);
+        results = await similarityApi.findSimilarByColor(compositeHash, colorThreshold, searchLimit);
       }
 
       setTestResults(results);
@@ -356,11 +351,12 @@ const SimilaritySettings: React.FC = () => {
           <Stack spacing={2}>
             <Stack direction="row" spacing={2} alignItems="flex-end">
               <TextField
-                label={t('similarity.test.imageId')}
-                value={testImageId}
-                onChange={(e) => setTestImageId(e.target.value)}
-                placeholder={t('similarity.test.placeholder')}
+                label={t('similarity.test.compositeHash')}
+                value={testCompositeHash}
+                onChange={(e) => setTestCompositeHash(e.target.value)}
+                placeholder="예: a1b2c3d4e5f6..."
                 fullWidth
+                helperText={t('similarity.test.hashHelperText')}
               />
               <FormControl sx={{ minWidth: 150 }}>
                 <InputLabel>{t('similarity.test.searchType')}</InputLabel>
@@ -381,7 +377,7 @@ const SimilaritySettings: React.FC = () => {
                 variant="contained"
                 startIcon={testLoading ? <CircularProgress size={20} /> : <SearchIcon />}
                 onClick={handleTestSearch}
-                disabled={testLoading || !testImageId}
+                disabled={testLoading || !testCompositeHash}
                 fullWidth
               >
                 {testLoading ? t('similarity.test.searching') : t('similarity.test.searchButton')}
@@ -475,7 +471,7 @@ const SimilaritySettings: React.FC = () => {
               </Box>
             )}
 
-            {testResults.length === 0 && testImageId && !testLoading && (
+            {testResults.length === 0 && testCompositeHash && !testLoading && (
               <Alert severity="info">
                 {t('similarity.test.noResults')}
               </Alert>

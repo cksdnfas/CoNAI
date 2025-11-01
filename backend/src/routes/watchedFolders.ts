@@ -88,7 +88,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     auto_scan,
     scan_interval,
     recursive,
-    file_extensions,
+    exclude_extensions,
     exclude_patterns
   } = req.body;
 
@@ -104,7 +104,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       auto_scan,
       scan_interval,
       recursive,
-      file_extensions,
+      exclude_extensions,
       exclude_patterns
     });
 
@@ -231,7 +231,7 @@ router.patch('/:id', asyncHandler(async (req: Request, res: Response) => {
   // 워처 관련 설정이 변경되었는지 확인
   const watcherConfigChanged = !!(
     updates.recursive !== undefined ||
-    updates.file_extensions !== undefined ||
+    updates.exclude_extensions !== undefined ||
     updates.exclude_patterns !== undefined ||
     updates.watcher_enabled !== undefined
   );

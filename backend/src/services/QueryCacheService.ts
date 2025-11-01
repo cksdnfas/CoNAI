@@ -225,21 +225,41 @@ export class QueryCacheService {
 
   /**
    * 이미지 관련 모든 캐시 무효화 (업로드/삭제 시 호출)
+   *
+   * 최적화된 무효화 전략:
+   * - 단일 이미지 변경: 첫 페이지만 무효화 (새 이미지가 첫 페이지에 나타날 가능성 높음)
+   * - 대량 작업: 전체 갤러리 캐시 무효화
    */
-  static invalidateImageCache(compositeHash?: string): void {
+  static invalidateImageCache(compositeHash?: string, isBulkOperation = false): void {
     try {
-      // 갤러리 캐시 전체 무효화
-      this.invalidateGalleryCache();
-
-      // 특정 이미지인 경우 해당 캐시만 무효화
-      if (compositeHash) {
-        this.invalidateMetadataCache(compositeHash);
-        this.invalidateThumbnailCache(compositeHash);
-      } else {
-        // 전체 메타데이터 및 썸네일 캐시 무효화
+      if (isBulkOperation || !compositeHash) {
+        // 대량 작업이거나 composite_hash가 없는 경우 전체 무효화
+        this.invalidateGalleryCache();
         this.metadataCache.clear();
         this.thumbnailCache.clear();
-        console.log('🗑️ All image caches invalidated');
+        console.log('🗑️ All image caches invalidated (bulk operation)');
+      } else {
+        // 단일 이미지 변경: 첫 페이지만 무효화 (성능 최적화)
+        // 새로 업로드된 이미지는 first_seen_date DESC 정렬로 첫 페이지에 나타남
+        // 주요 페이지 크기와 정렬 조합에 대한 첫 페이지만 무효화
+        const commonPageSizes = [25, 50, 100];
+        const sortOptions = [
+          { sortBy: 'first_seen_date', sortOrder: 'DESC' },
+          { sortBy: 'first_seen_date', sortOrder: 'ASC' },
+        ];
+
+        commonPageSizes.forEach(limit => {
+          sortOptions.forEach(({ sortBy, sortOrder }) => {
+            const key = this.getGalleryCacheKey(1, limit, sortBy, sortOrder);
+            this.galleryCache.delete(key);
+          });
+        });
+
+        // 특정 이미지 캐시만 무효화
+        this.invalidateMetadataCache(compositeHash);
+        this.invalidateThumbnailCache(compositeHash);
+
+        console.log(`🔄 First page cache invalidated for image: ${compositeHash}`);
       }
     } catch (error) {
       console.warn('⚠️ Image cache invalidate error:', error instanceof Error ? error.message : error);

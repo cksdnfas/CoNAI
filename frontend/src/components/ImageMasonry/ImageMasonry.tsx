@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box, Typography, Skeleton } from '@mui/material';
 import Masonry from 'react-masonry-css';
 import InfiniteScroll from 'react-infinite-scroll-component';
@@ -30,6 +30,9 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [lastClickedIndex, setLastClickedIndex] = useState<number>(-1);
 
+  // 선택 상태를 Set으로 변환하여 O(1) 조회 성능 확보
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+
   // react-masonry-css breakpoint 설정
   const breakpointColumns = {
     default: 6, // xl
@@ -55,7 +58,7 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
 
     // Ctrl/Cmd + Click: 토글 선택
     if (event && (event.ctrlKey || event.metaKey)) {
-      const newSelectedIds = selectedIds.includes(compositeHash)
+      const newSelectedIds = selectedSet.has(compositeHash)
         ? selectedIds.filter(selectedId => selectedId !== compositeHash)
         : [...selectedIds, compositeHash];
       onSelectionChange(newSelectedIds);
@@ -76,12 +79,12 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
     }
 
     // 일반 클릭: 토글 선택 (체크박스 방식)
-    const newSelectedIds = selectedIds.includes(compositeHash)
+    const newSelectedIds = selectedSet.has(compositeHash)
       ? selectedIds.filter(selectedId => selectedId !== compositeHash)
       : [...selectedIds, compositeHash];
     onSelectionChange(newSelectedIds);
     setLastClickedIndex(imageIndex);
-  }, [images, selectedIds, onSelectionChange, lastClickedIndex]);
+  }, [images, selectedIds, selectedSet, onSelectionChange, lastClickedIndex]);
 
   // 컨테이너 클릭 핸들러 (빈 공간 클릭 시 선택 해제)
   const handleContainerClick = (e: React.MouseEvent) => {
@@ -201,9 +204,9 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
               key={image.file_id ? `file-${image.file_id}` : `hash-${image.composite_hash || 'processing'}-${index}`}
               image={image}
               onClick={() => handleImageClick(index)}
-              selected={image.composite_hash ? selectedIds.includes(image.composite_hash) : false}
+              selected={image.composite_hash ? selectedSet.has(image.composite_hash) : false}
               selectable={selectable}
-              onSelectionChange={(compositeHash, event) => handleSelectionChange(compositeHash, event)}
+              onSelectionChange={handleSelectionChange}
             />
           ))}
         </Masonry>

@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import sharp from 'sharp';
+import { ImageSimilarityService } from '../services/imageSimilarity';
 
 /**
  * API 생성 이미지 파일 저장 유틸리티
@@ -57,6 +58,7 @@ export class FileSaver {
     fileSize: number;
     width: number;
     height: number;
+    compositeHash: string;  // 48-character composite hash
   }> {
     try {
       // 1. 날짜 기반 폴더 생성
@@ -79,19 +81,25 @@ export class FileSaver {
         .png() // PNG 포맷 유지
         .toFile(fullPath);
 
-      // 5. 파일 크기 확인
+      // 5. Composite hash 생성
+      const { hashes } = await ImageSimilarityService.generateHashAndHistogram(fullPath);
+      const compositeHash = hashes.compositeHash;
+
+      // 6. 파일 크기 확인
       const stats = await fs.promises.stat(fullPath);
 
-      // 6. uploads 디렉토리 기준 상대 경로 반환
+      // 7. uploads 디렉토리 기준 상대 경로 반환
       const relativePath = this.normalizeRelativePath(fullPath);
 
       console.log(`[FileSaver] ${serviceType} 이미지 저장 완료: ${relativePath} (${width}x${height}, ${Math.round(stats.size / 1024)}KB)`);
+      console.log(`[FileSaver] Composite hash: ${compositeHash}`);
 
       return {
         originalPath: relativePath,
         fileSize: stats.size,
         width,
-        height
+        height,
+        compositeHash
       };
     } catch (error) {
       console.error(`[FileSaver] ${serviceType} 이미지 저장 실패:`, error);

@@ -406,37 +406,63 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
           }
         }
 
-        // SIMPLIFIED: 원본 파일만 uploads/API/images/에 저장
-        // 백그라운드 스캔이 썸네일, 최적화, 메타데이터, DB 등록 등을 처리
-        console.log(`📁 Saving ${tempFilePaths.length} generated images to uploads/API/images/...`);
+        // Simple file move: temp → uploads/API/images/YYYY-MM-DD/
+        // Main system will auto-detect and process (thumbnails, metadata, etc.)
+        console.log(`📁 Moving ${tempFilePaths.length} images to uploads/API/images/...`);
 
         for (const tempPath of tempFilePaths) {
           try {
-            // 임시 파일을 Buffer로 읽기
+            // Read temp file
             const imageBuffer = await fs.promises.readFile(tempPath);
 
-            // FileSaver로 원본만 저장
-            const savedFile = await FileSaver.saveGeneratedImage(imageBuffer, 'comfyui');
+            // Create date-based directory (YYYY-MM-DD)
+            const dateDir = new Date().toISOString().split('T')[0];
+            const targetDir = path.join(runtimePaths.uploadsDir, 'API', 'images', dateDir);
 
-            // 히스토리 DB 업데이트 (첫 번째 이미지만)
-            if (historyId && tempFilePaths.indexOf(tempPath) === 0) {
-              await GenerationHistoryModel.updateImagePaths(historyId, {
-                original: savedFile.originalPath,
-                thumbnail: '', // NULL - background scan will create
-                optimized: '', // NULL - background scan will create
-                fileSize: savedFile.fileSize
-              });
-
-              // 상태 업데이트
-              GenerationHistoryModel.updateStatus(historyId, 'processing');
-              console.log(`✓ History ${historyId} file saved: ${savedFile.originalPath}`);
+            // Ensure directory exists
+            if (!fs.existsSync(targetDir)) {
+              fs.mkdirSync(targetDir, { recursive: true });
             }
 
-            // 임시 파일 삭제
-            await fs.promises.unlink(tempPath);
+            // Generate unique filename
+            const ext = path.extname(tempPath);
+            const filename = `comfyui_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`;
+            const targetPath = path.join(targetDir, filename);
+
+            // Write file to target
+            fs.writeFileSync(targetPath, imageBuffer);
+
+            // Delete temp file
+            fs.unlinkSync(tempPath);
+
+            console.log(`✅ ComfyUI image saved: API/images/${dateDir}/${filename}`);
+
+            // Update history (first image only)
+            if (historyId && tempFilePaths.indexOf(tempPath) === 0) {
+              const relativePath = `API/images/${dateDir}/${filename}`;
+
+              // Generate composite hash
+              const { ImageSimilarityService } = await import('../services/imageSimilarity');
+              const { hashes } = await ImageSimilarityService.generateHashAndHistogram(targetPath);
+
+              GenerationHistoryModel.updateImagePaths(historyId, {
+                original: relativePath,
+                thumbnail: '',
+                optimized: '',
+                fileSize: imageBuffer.length,
+                compositeHash: hashes.compositeHash
+              });
+
+              console.log(`✅ ComfyUI history ${historyId} updated with composite_hash: ${hashes.compositeHash.substring(0, 16)}...`);
+            }
           } catch (error) {
             console.error(`❌ Failed to save ComfyUI image ${tempPath}:`, error);
           }
+        }
+
+        // Mark as completed
+        if (historyId) {
+          GenerationHistoryModel.updateStatus(historyId, 'completed');
         }
 
         console.log(`✅ Image generation completed for history ID ${historyId}`);
@@ -950,7 +976,7 @@ router.post('/:id/generate-parallel', asyncHandler(async (req: Request, res: Res
 
                   // 자동수집 그룹 처리
                   try {
-                    await AutoCollectionService.runAutoCollectionForNewImage(imageId);
+                    await AutoCollectionService.runAutoCollectionForNewImageById(imageId);
                   } catch (autoCollectError) {
                     console.warn('⚠️ Failed to run auto collection:', autoCollectError);
                   }
