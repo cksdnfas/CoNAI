@@ -2,6 +2,7 @@ import { db } from '../database/init';
 import { MetadataExtractor } from './metadata';
 import { settingsService } from './settingsService';
 import path from 'path';
+import { QueryCacheService } from './QueryCacheService';
 
 /**
  * 백그라운드 작업 타입
@@ -200,6 +201,9 @@ export class BackgroundQueueService {
     );
 
     console.log(`  ✅ 메타데이터 추출 완료: ${path.basename(task.filePath)}`);
+
+    // 새 이미지가 추가되었으므로 갤러리 캐시 무효화
+    QueryCacheService.invalidateGalleryCache();
   }
 
 

@@ -42,13 +42,21 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
   // 히스토리 이미지는 thumbnail_url 사용, 일반 이미지는 API 사용
   // GIF는 애니메이션 보존을 위해 원본 사용
   const isGif = image.mime_type === 'image/gif';
+
+  // composite_hash가 유효한지 확인 (fallback "history_123" 형식이 아닌지)
+  const hasValidHash = image.composite_hash && !image.composite_hash.startsWith('history_');
+
   const imageUrl = isGif
     ? (image.optimized_url
         ? `${backendOrigin}${image.optimized_url}`
-        : `${backendOrigin}/api/images/${image.composite_hash}/optimized`)
+        : hasValidHash
+          ? `${backendOrigin}/api/images/${image.composite_hash}/optimized`
+          : (image.image_url ? `${backendOrigin}${image.image_url}` : ''))
     : (image.thumbnail_url
         ? `${backendOrigin}${image.thumbnail_url}`
-        : `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`);
+        : hasValidHash
+          ? `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`
+          : (image.image_url ? `${backendOrigin}${image.image_url}` : ''));
 
   const handleSelectionChange = (e: React.MouseEvent) => {
     e.stopPropagation();

@@ -102,9 +102,11 @@ export function useNAIGeneration({ token, onLogout, onGenerationComplete }: UseN
   }, [token]);
 
   const waitForUploadCompletion = async (historyIds: number[]) => {
-    const maxAttempts = 30; // 최대 30초 대기
-    const pollInterval = 1000; // 1초마다 체크
+    const maxAttempts = 60; // 최대 60초 대기 (증가)
+    const pollInterval = 500; // 500ms마다 체크 (더 빠른 감지)
     let attempts = 0;
+
+    console.log(`[NAI] Starting upload completion polling for ${historyIds.length} images...`);
 
     const checkCompletion = async (): Promise<boolean> => {
       try {
@@ -112,32 +114,46 @@ export function useNAIGeneration({ token, onLogout, onGenerationComplete }: UseN
           historyIds.map(async (id) => {
             try {
               const response = await api.get(`/api/generation-history/${id}`);
-              return response.data.record.generation_status === 'completed';
-            } catch {
+              const status = response.data.record.generation_status;
+              console.log(`[NAI] History ${id} status: ${status}`);
+              return status === 'completed';
+            } catch (error) {
+              console.error(`[NAI] Failed to check history ${id}:`, error);
               return false;
             }
           })
         );
+        const completedCount = statuses.filter(s => s).length;
+        console.log(`[NAI] Completion check: ${completedCount}/${statuses.length} completed`);
         return statuses.every(status => status);
-      } catch {
+      } catch (error) {
+        console.error('[NAI] Completion check failed:', error);
         return false;
       }
     };
 
     const poll = async () => {
       attempts++;
+      console.log(`[NAI] Polling attempt ${attempts}/${maxAttempts}...`);
       const allCompleted = await checkCompletion();
 
       if (allCompleted) {
+        console.log('[NAI] All images completed! Refreshing history...');
         setHistoryRefreshKey(prev => prev + 1);
       } else if (attempts < maxAttempts) {
         setTimeout(poll, pollInterval);
       } else {
+        console.warn(`[NAI] Polling timed out after ${attempts} attempts. Forcing refresh...`);
         setHistoryRefreshKey(prev => prev + 1);
       }
     };
 
+    // Start polling
     poll();
+
+    // Also trigger immediate refresh for optimistic UI
+    console.log('[NAI] Triggering immediate optimistic refresh...');
+    setHistoryRefreshKey(prev => prev + 1);
   };
 
   const executeSingleGeneration = async (

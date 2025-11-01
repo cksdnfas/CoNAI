@@ -32,6 +32,7 @@ import generationHistoryRoutes from './routes/generation-history.routes';
 import wildcardRoutes from './routes/wildcards';
 import { watchedFoldersRoutes } from './routes/watchedFolders';
 import { backgroundQueueRoutes } from './routes/backgroundQueue';
+import { systemRoutes } from './routes/system.routes';
 import { initializeDatabase } from './database/init';
 import { initializeUserSettingsDb } from './database/userSettingsDb';
 import { initializeApiGenerationDb } from './database/apiGenerationDb';
@@ -42,6 +43,7 @@ import { PORTS, IMAGE_PROCESSING } from '@comfyui-image-manager/shared';
 import { settingsService } from './services/settingsService';
 import { AutoScanScheduler } from './services/autoScanScheduler';
 import { autoTagScheduler } from './services/autoTagScheduler';
+import { QueryCacheService } from './services/QueryCacheService';
 
 const app = express();
 const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;
@@ -146,6 +148,7 @@ app.use('/api/generation-history', generationHistoryRoutes);
 app.use('/api/wildcards', wildcardRoutes);
 app.use('/api/folders', watchedFoldersRoutes);
 app.use('/api/background-queue', backgroundQueueRoutes);
+app.use('/api/system', systemRoutes);
 
 // Frontend static file serving
 const frontendDistPath = process.env.FRONTEND_DIST_PATH
@@ -228,7 +231,11 @@ async function startServer() {
     initializeApiGenerationDb(); // Synchronous call (better-sqlite3)
     console.log('✅ API Generation History DB initialized successfully');
 
-    // 6. API 이미지 저장 디렉토리 생성
+    // 6. 쿼리 캐시 서비스 초기화
+    console.log('💾 Query cache service 초기화 중...');
+    QueryCacheService.initialize();
+
+    // 7. API 이미지 저장 디렉토리 생성
     console.log('📁 API 이미지 디렉토리 생성 중...');
     await APIImageProcessor.ensureDirectories();
 
@@ -271,6 +278,53 @@ async function startServer() {
     console.log('🤖 Starting auto-tag scheduler...');
     autoTagScheduler.start();
     console.log('✅ Auto-tag scheduler started successfully');
+
+    // 11. API 생성 이미지 폴더를 watched folder로 등록
+    console.log('📂 Registering API images folder for automatic processing...');
+    try {
+      const { WatchedFolderService } = await import('./services/watchedFolderService');
+      const apiImagesPath = path.join(uploadsDir, 'API', 'images');
+
+      // 폴더가 존재하는지 확인
+      if (fs.existsSync(apiImagesPath)) {
+        // 이미 등록되어 있는지 확인
+        const folders = await WatchedFolderService.listFolders();
+        const existing = folders.find(f => f.folder_path === apiImagesPath);
+
+        if (!existing) {
+          // 신규 등록
+          await WatchedFolderService.addFolder({
+            folder_path: apiImagesPath,
+            folder_name: 'API Generated Images',
+            folder_type: 'scan',
+            auto_scan: true,
+            scan_interval: 5, // 5분마다 스캔
+            recursive: true,
+            file_extensions: ['.png', '.jpg', '.jpeg', '.webp', '.gif'],
+            exclude_patterns: [],
+            watcher_enabled: true
+          });
+          console.log('✅ API images folder registered as watched folder');
+        } else {
+          console.log('✅ API images folder already registered');
+        }
+
+        // 파일 워처가 활성화되어 있다면 해당 폴더 감시 시작
+        if (process.env.ENABLE_FILE_WATCHING !== 'false') {
+          const { FileWatcherService } = await import('./services/fileWatcherService');
+          const folderId = folders.find(f => f.folder_path === apiImagesPath)?.id;
+          if (folderId) {
+            await FileWatcherService.startWatcher(folderId);
+            console.log('✅ File watcher started for API images folder');
+          }
+        }
+      } else {
+        console.log('ℹ️  API images folder does not exist yet - will be created on first use');
+      }
+    } catch (error) {
+      console.warn('⚠️  Failed to register API images folder:', error instanceof Error ? error.message : error);
+      console.warn('   API images may not be automatically processed');
+    }
 
     const extractHost = (value?: string | null): string | undefined => {
       if (!value || value.trim().length === 0) {

@@ -9,6 +9,7 @@ import { ImageSearchModel } from '../../models/Image/ImageSearchModel';
 import { ImageListResponse } from '../../types/image';
 import { runtimePaths, resolveUploadsPath } from '../../config/runtimePaths';
 import { enrichImageWithFileView } from './utils';
+import { QueryCacheService } from '../../services/QueryCacheService';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
@@ -33,6 +34,12 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const sortOrder = (req.query.sortOrder as 'ASC' | 'DESC') || 'DESC';
 
   try {
+    // 캐시 확인
+    const cached = QueryCacheService.getGalleryCache(page, limit, sortBy, sortOrder);
+    if (cached) {
+      return res.json(cached);
+    }
+
     // ImageMetadataModel로 조회 (파일 경로 포함)
     const result = await ImageMetadataModel.findAllWithFiles({
       page,
@@ -54,6 +61,9 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
         totalPages: Math.ceil(result.total / limit)
       }
     };
+
+    // 캐시 저장
+    QueryCacheService.setGalleryCache(page, limit, sortBy, sortOrder, response);
 
     return res.json(response);
   } catch (error) {
@@ -356,6 +366,111 @@ router.get('/date/:startDate/:endDate', asyncHandler(async (req: Request, res: R
       error: error instanceof Error ? error.message : 'Failed to fetch images by date'
     });
     return;
+  }
+}));
+
+/**
+ * 배치 썸네일 조회 (여러 이미지의 썸네일을 한 번에 조회)
+ * GET /api/images/batch/thumbnails?hashes=hash1,hash2,hash3
+ */
+router.get('/batch/thumbnails', asyncHandler(async (req: Request, res: Response) => {
+  const hashesParam = req.query.hashes as string;
+
+  if (!hashesParam) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing hashes parameter'
+    });
+  }
+
+  const hashes = hashesParam.split(',').filter(h => h.length === 48);
+
+  if (hashes.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'No valid hashes provided'
+    });
+  }
+
+  if (hashes.length > 100) {
+    return res.status(400).json({
+      success: false,
+      error: 'Maximum 100 hashes allowed per request'
+    });
+  }
+
+  try {
+    const results: Record<string, {
+      success: boolean;
+      thumbnailPath?: string;
+      mimeType?: string;
+      error?: string;
+    }> = {};
+
+    // 병렬 처리로 모든 썸네일 정보 조회
+    await Promise.all(
+      hashes.map(async (hash) => {
+        try {
+          // 캐시 확인
+          const cached = QueryCacheService.getMetadataCache(hash);
+          let metadata = cached;
+
+          if (!metadata) {
+            metadata = await ImageMetadataModel.findByHash(hash);
+            if (metadata) {
+              QueryCacheService.setMetadataCache(hash, metadata);
+            }
+          }
+
+          if (!metadata) {
+            results[hash] = { success: false, error: 'Not found' };
+            return;
+          }
+
+          const files = await ImageFileModel.findActiveByHash(hash);
+          if (files.length === 0) {
+            results[hash] = { success: false, error: 'File not found' };
+            return;
+          }
+
+          const mimeType = files[0].mime_type;
+
+          // 비디오인 경우 원본 경로 반환
+          if (mimeType && mimeType.startsWith('video/')) {
+            results[hash] = {
+              success: true,
+              thumbnailPath: files[0].original_file_path,
+              mimeType
+            };
+            return;
+          }
+
+          // 이미지인 경우 썸네일 경로 반환
+          const thumbnailPath = metadata.thumbnail_path || files[0].original_file_path;
+          results[hash] = {
+            success: true,
+            thumbnailPath,
+            mimeType: 'image/webp'
+          };
+        } catch (error) {
+          results[hash] = {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          };
+        }
+      })
+    );
+
+    return res.json({
+      success: true,
+      data: results
+    });
+  } catch (error) {
+    console.error('Batch thumbnails error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch batch thumbnails'
+    });
   }
 }));
 

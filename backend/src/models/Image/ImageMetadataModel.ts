@@ -341,46 +341,139 @@ export class ImageMetadataModel {
     // Phase 1 + Phase 2 이미지 모두 조회
     // 1. composite_hash가 있는 이미지 (정상 처리 완료)
     // 2. composite_hash가 NULL인 이미지 (Phase 1만 완료)
-    const items = db.prepare(`
-      SELECT
-        im.composite_hash,
-        im.perceptual_hash,
-        im.dhash,
-        im.ahash,
-        im.color_histogram,
-        im.width,
-        im.height,
-        im.thumbnail_path,
-        im.optimized_path,
-        im.ai_tool,
-        im.model_name,
-        im.lora_models,
-        im.steps,
-        im.cfg_scale,
-        im.sampler,
-        im.seed,
-        im.scheduler,
-        im.prompt,
-        im.negative_prompt,
-        im.denoise_strength,
-        im.generation_time,
-        im.batch_size,
-        im.batch_index,
-        im.auto_tags,
-        im.first_seen_date,
-        im.metadata_updated_date,
-        if.id as file_id,
-        if.original_file_path,
-        if.file_size,
-        if.mime_type,
-        if.file_status,
-        if.scan_date
-      FROM image_files if
-      LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
-      WHERE if.file_status = 'active'
-      ORDER BY ${sortBy === 'scan_date' ? 'if.scan_date' : `COALESCE(im.${sortBy}, if.scan_date)`} ${sortOrder}
-      LIMIT ? OFFSET ?
-    `).all(limit, offset);
+    // 인덱스 활용을 위해 COALESCE 제거 - sortBy에 따라 조건부 쿼리 실행
+    let query: string;
+    if (sortBy === 'scan_date') {
+      // scan_date로 정렬 시 idx_files_scan_date_desc 인덱스 활용
+      query = `
+        SELECT
+          im.composite_hash,
+          im.perceptual_hash,
+          im.dhash,
+          im.ahash,
+          im.color_histogram,
+          im.width,
+          im.height,
+          im.thumbnail_path,
+          im.optimized_path,
+          im.ai_tool,
+          im.model_name,
+          im.lora_models,
+          im.steps,
+          im.cfg_scale,
+          im.sampler,
+          im.seed,
+          im.scheduler,
+          im.prompt,
+          im.negative_prompt,
+          im.denoise_strength,
+          im.generation_time,
+          im.batch_size,
+          im.batch_index,
+          im.auto_tags,
+          im.first_seen_date,
+          im.metadata_updated_date,
+          if.id as file_id,
+          if.original_file_path,
+          if.file_size,
+          if.mime_type,
+          if.file_status,
+          if.scan_date
+        FROM image_files if
+        LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
+        WHERE if.file_status = 'active'
+        ORDER BY if.scan_date ${sortOrder}
+        LIMIT ? OFFSET ?
+      `;
+    } else if (sortBy === 'first_seen_date') {
+      // first_seen_date로 정렬 시 idx_metadata_first_seen_desc 인덱스 활용
+      // NULL 값 처리: metadata가 없는 경우 scan_date 폴백
+      query = `
+        SELECT
+          im.composite_hash,
+          im.perceptual_hash,
+          im.dhash,
+          im.ahash,
+          im.color_histogram,
+          im.width,
+          im.height,
+          im.thumbnail_path,
+          im.optimized_path,
+          im.ai_tool,
+          im.model_name,
+          im.lora_models,
+          im.steps,
+          im.cfg_scale,
+          im.sampler,
+          im.seed,
+          im.scheduler,
+          im.prompt,
+          im.negative_prompt,
+          im.denoise_strength,
+          im.generation_time,
+          im.batch_size,
+          im.batch_index,
+          im.auto_tags,
+          im.first_seen_date,
+          im.metadata_updated_date,
+          if.id as file_id,
+          if.original_file_path,
+          if.file_size,
+          if.mime_type,
+          if.file_status,
+          if.scan_date,
+          CASE WHEN im.first_seen_date IS NULL THEN if.scan_date ELSE im.first_seen_date END as sort_date
+        FROM image_files if
+        LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
+        WHERE if.file_status = 'active'
+        ORDER BY sort_date ${sortOrder}
+        LIMIT ? OFFSET ?
+      `;
+    } else {
+      // 기타 metadata 필드로 정렬 - 폴백 로직 유지
+      query = `
+        SELECT
+          im.composite_hash,
+          im.perceptual_hash,
+          im.dhash,
+          im.ahash,
+          im.color_histogram,
+          im.width,
+          im.height,
+          im.thumbnail_path,
+          im.optimized_path,
+          im.ai_tool,
+          im.model_name,
+          im.lora_models,
+          im.steps,
+          im.cfg_scale,
+          im.sampler,
+          im.seed,
+          im.scheduler,
+          im.prompt,
+          im.negative_prompt,
+          im.denoise_strength,
+          im.generation_time,
+          im.batch_size,
+          im.batch_index,
+          im.auto_tags,
+          im.first_seen_date,
+          im.metadata_updated_date,
+          if.id as file_id,
+          if.original_file_path,
+          if.file_size,
+          if.mime_type,
+          if.file_status,
+          if.scan_date
+        FROM image_files if
+        LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
+        WHERE if.file_status = 'active'
+        ORDER BY COALESCE(im.${sortBy}, if.scan_date) ${sortOrder}
+        LIMIT ? OFFSET ?
+      `;
+    }
+
+    const items = db.prepare(query).all(limit, offset);
 
     return { items, total: countRow.total };
   }

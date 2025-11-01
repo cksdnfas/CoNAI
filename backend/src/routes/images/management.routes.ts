@@ -6,6 +6,7 @@ import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { PromptCollectionService } from '../../services/promptCollectionService';
 import { runtimePaths } from '../../config/runtimePaths';
 import { successResponse, errorResponse } from '@comfyui-image-manager/shared';
+import { QueryCacheService } from '../../services/QueryCacheService';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
@@ -85,6 +86,10 @@ router.delete('/:compositeHash', asyncHandler(async (req: Request, res: Response
     const deleted = await ImageMetadataModel.delete(compositeHash);
 
     if (deleted) {
+      // 캐시 무효화 (삭제 성공 시)
+      QueryCacheService.invalidateImageCache(compositeHash);
+      console.log('🗑️ Cache invalidated for deleted image');
+
       return res.json(successResponse({ message: 'Image deleted successfully' }));
     } else {
       return res.status(500).json(errorResponse('Failed to delete image from database'));

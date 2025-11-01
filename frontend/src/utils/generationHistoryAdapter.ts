@@ -112,12 +112,18 @@ export const convertHistoryToImageRecord = (
     bitrate: null,
 
     // URL 필드
-    // ✅ actual_* 필드 우선 사용, 없으면 original_path로 fallback
+    // ✅ actual_* 필드 우선 사용, 없으면 유효한 composite_hash로 API 라우트 사용, 최후엔 original_path
     thumbnail_url: thumbnail_path
       ? `/uploads/${thumbnail_path}`
-      : (history.original_path ? `/uploads/${history.original_path}` : ''),
+      : (composite_hash && !composite_hash.startsWith('history_'))
+        ? `/api/images/${composite_hash}/thumbnail`  // 유효한 해시면 API 라우트 사용
+        : (history.original_path ? `/uploads/${history.original_path}` : ''),
     image_url: history.original_path ? `/uploads/${history.original_path}` : null,
-    optimized_url: optimized_path ? `/uploads/${optimized_path}` : null,
+    optimized_url: optimized_path
+      ? `/uploads/${optimized_path}`
+      : (composite_hash && !composite_hash.startsWith('history_'))
+        ? `/api/images/${composite_hash}/optimized`  // 유효한 해시면 API 라우트 사용
+        : null,
 
     // 그룹 정보 없음
     groups: [],
