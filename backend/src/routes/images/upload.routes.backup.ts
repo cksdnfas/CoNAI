@@ -212,7 +212,7 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
       const { settingsService } = await import('../../services/settingsService');
       const settings = settingsService.loadSettings();
 
-      if (settings.tagger.enabled && settings.tagger.autoTagOnUpload) {
+      if (settings.tagger.enabled) {
         console.log('🏷️ Auto-tagging on upload...');
         const filePath = path.join(UPLOAD_BASE_PATH, processedData.originalPath);
 
@@ -428,7 +428,7 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
           const { settingsService } = await import('../../services/settingsService');
           const settings = settingsService.loadSettings();
 
-          if (settings.tagger.enabled && settings.tagger.autoTagOnUpload) {
+          if (settings.tagger.enabled) {
             const filePath = path.join(UPLOAD_BASE_PATH, processedData.originalPath);
 
             let taggerResult;
@@ -531,7 +531,7 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
   try {
     const { settingsService } = await import('../../services/settingsService');
     const settings = settingsService.loadSettings();
-    autoTagEnabled = settings.tagger.enabled && settings.tagger.autoTagOnUpload;
+    autoTagEnabled = settings.tagger.enabled;
   } catch (error) {
     console.warn('Failed to load settings:', error);
   }

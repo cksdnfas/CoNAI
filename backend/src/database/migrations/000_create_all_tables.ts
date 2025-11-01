@@ -254,6 +254,54 @@ export const up = async (db: Database.Database): Promise<void> => {
   console.log('  ✅ 이미지 메타데이터 테이블 + 인덱스 생성 완료\n');
 
   // ============================================
+  // 4-2. 비디오 메타데이터 시스템
+  // ============================================
+  console.log('🎬 비디오 메타데이터 테이블 생성 중...');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS video_metadata (
+      file_hash TEXT PRIMARY KEY,
+      duration REAL,
+      fps REAL,
+      width INTEGER,
+      height INTEGER,
+      video_codec TEXT,
+      audio_codec TEXT,
+      bitrate INTEGER,
+      ai_tool TEXT,
+      model_name TEXT,
+      lora_models TEXT,
+      steps INTEGER,
+      cfg_scale REAL,
+      sampler TEXT,
+      seed INTEGER,
+      scheduler TEXT,
+      prompt TEXT,
+      negative_prompt TEXT,
+      denoise_strength REAL,
+      generation_time REAL,
+      batch_size INTEGER,
+      batch_index INTEGER,
+      auto_tags TEXT,
+      rating_score INTEGER DEFAULT 0,
+      first_seen_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      metadata_updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // 비디오 메타데이터 인덱스
+  const videoMetadataIndexes = [
+    'CREATE INDEX IF NOT EXISTS idx_video_ai_tool ON video_metadata(ai_tool)',
+    'CREATE INDEX IF NOT EXISTS idx_video_model ON video_metadata(model_name)',
+    'CREATE INDEX IF NOT EXISTS idx_video_first_seen ON video_metadata(first_seen_date)',
+    'CREATE INDEX IF NOT EXISTS idx_video_duration ON video_metadata(duration)',
+    'CREATE INDEX IF NOT EXISTS idx_video_codec ON video_metadata(video_codec)'
+  ];
+
+  videoMetadataIndexes.forEach(sql => db.exec(sql));
+  console.log('  ✅ 비디오 메타데이터 테이블 + 인덱스 생성 완료\n');
+
+  // ============================================
   // 5. 폴더 스캔 시스템
   // ============================================
   console.log('📂 폴더 스캔 테이블 생성 중...');
@@ -269,6 +317,11 @@ export const up = async (db: Database.Database): Promise<void> => {
       recursive INTEGER DEFAULT 1,
       file_extensions TEXT,
       exclude_patterns TEXT,
+      exclude_extensions TEXT,
+      watcher_enabled INTEGER DEFAULT 0,
+      watcher_status TEXT,
+      watcher_error TEXT,
+      watcher_last_event DATETIME,
       is_active INTEGER DEFAULT 1,
       last_scan_date DATETIME,
       last_scan_status TEXT,
@@ -282,7 +335,8 @@ export const up = async (db: Database.Database): Promise<void> => {
   db.exec(`
     CREATE TABLE IF NOT EXISTS image_files (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      composite_hash TEXT NOT NULL,
+      composite_hash TEXT,
+      file_hash TEXT,
       original_file_path TEXT NOT NULL UNIQUE,
       folder_id INTEGER NOT NULL,
       file_status TEXT NOT NULL DEFAULT 'active',
@@ -320,6 +374,7 @@ export const up = async (db: Database.Database): Promise<void> => {
     'CREATE INDEX IF NOT EXISTS idx_folders_active ON watched_folders(is_active)',
     'CREATE INDEX IF NOT EXISTS idx_folders_auto_scan ON watched_folders(auto_scan)',
     'CREATE INDEX IF NOT EXISTS idx_files_composite_hash ON image_files(composite_hash)',
+    'CREATE INDEX IF NOT EXISTS idx_files_file_hash ON image_files(file_hash)',
     'CREATE INDEX IF NOT EXISTS idx_files_folder_id ON image_files(folder_id)',
     'CREATE INDEX IF NOT EXISTS idx_files_status ON image_files(file_status)',
     'CREATE INDEX IF NOT EXISTS idx_files_scan_date ON image_files(scan_date)',
@@ -332,23 +387,31 @@ export const up = async (db: Database.Database): Promise<void> => {
   folderIndexes.forEach(sql => db.exec(sql));
 
   // 기본 업로드 폴더 등록 (상대 경로)
-  // 모든 폴더를 동일하게 취급 - auto_scan 활성화
+  // 모든 폴더를 동일하게 취급 - auto_scan 및 watcher_enabled 활성화
   const defaultUploadPath = path.join('uploads', 'images');
   db.prepare(`
     INSERT OR IGNORE INTO watched_folders
-    (folder_path, folder_name, folder_type, auto_scan, scan_interval, recursive, is_active)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(defaultUploadPath, '직접 업로드', 'upload', 1, 60, 1, 1);
+    (folder_path, folder_name, folder_type, auto_scan, scan_interval, recursive, is_active, watcher_enabled)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(defaultUploadPath, '직접 업로드', 'upload', 1, 60, 1, 1, 1);
 
   // API 생성 이미지 폴더 등록
   const apiUploadPath = path.join('uploads', 'API', 'images');
   db.prepare(`
     INSERT OR IGNORE INTO watched_folders
-    (folder_path, folder_name, folder_type, auto_scan, scan_interval, recursive, is_active)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(apiUploadPath, 'API 생성 이미지', 'api', 1, 60, 1, 1);
+    (folder_path, folder_name, folder_type, auto_scan, scan_interval, recursive, is_active, watcher_enabled)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(apiUploadPath, 'API 생성 이미지', 'api', 1, 60, 1, 1, 1);
 
-  console.log('  ✅ 폴더 테이블 3개 + 인덱스 + 기본 폴더 2개 생성 완료\n');
+  // 비디오 업로드 폴더 등록
+  const videoUploadPath = path.join('uploads', 'videos');
+  db.prepare(`
+    INSERT OR IGNORE INTO watched_folders
+    (folder_path, folder_name, folder_type, auto_scan, scan_interval, recursive, is_active, watcher_enabled)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(videoUploadPath, '비디오 업로드', 'upload', 1, 60, 1, 1, 1);
+
+  console.log('  ✅ 폴더 테이블 3개 + 인덱스 + 기본 폴더 3개 생성 완료\n');
 
   // ============================================
   // 6. API 생성 히스토리 (apiGenerationDb.ts에서 관리)
@@ -361,8 +424,9 @@ export const up = async (db: Database.Database): Promise<void> => {
   console.log('   - 그룹: 2개 테이블');
   console.log('   - 평가: 2개 테이블');
   console.log('   - 이미지 메타데이터: 1개 테이블');
+  console.log('   - 비디오 메타데이터: 1개 테이블');
   console.log('   - 폴더 관리: 3개 테이블');
-  console.log('   총 12개 테이블 + 인덱스 생성');
+  console.log('   총 13개 테이블 + 인덱스 생성');
   console.log('   (워크플로우, 사용자 설정, API 생성 히스토리는 별도 DB)\n');
 };
 
@@ -382,6 +446,7 @@ export const down = async (db: Database.Database): Promise<void> => {
     'prompt_groups',
     'negative_prompt_collection',
     'prompt_collection',
+    'video_metadata',
     'image_metadata'
   ];
 

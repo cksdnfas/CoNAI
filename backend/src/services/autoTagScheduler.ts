@@ -27,7 +27,7 @@ export class AutoTagScheduler {
     }
 
     const settings = settingsService.loadSettings();
-    if (!settings.tagger.autoTagOnUpload) {
+    if (!settings.tagger.enabled) {
       console.log('[AutoTagScheduler] Auto-tagging is disabled in settings');
       return;
     }
@@ -74,7 +74,7 @@ export class AutoTagScheduler {
   private async processUntaggedImages(): Promise<void> {
     // 설정 재확인 (실행 중 설정 변경 가능)
     const settings = settingsService.loadSettings();
-    if (!settings.tagger.autoTagOnUpload) {
+    if (!settings.tagger.enabled) {
       // 설정 꺼짐 (로그 줄임)
       return;
     }

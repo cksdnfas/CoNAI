@@ -41,12 +41,11 @@ export const TaggerTestSection: React.FC<TaggerTestSectionProps> = ({
 
       <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
         <TextField
-          label={t('tagger.test.imageId')}
+          label={t('tagger.test.imageHash')}
           value={testImageId}
           onChange={(e) => onSetTestImageId(e.target.value)}
-          type="number"
           fullWidth
-          placeholder={t('tagger.test.placeholder')}
+          placeholder={t('tagger.test.placeholderHash')}
         />
         <Button
           variant="contained"

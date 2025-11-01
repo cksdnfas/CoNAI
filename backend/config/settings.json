@@ -3,13 +3,13 @@
     "language": "ko"
   },
   "tagger": {
-    "enabled": true,
+    "enabled": false,
+    "autoTagOnUpload": false,
     "model": "swinv2",
     "device": "cuda",
     "generalThreshold": 0.35,
     "characterThreshold": 0.35,
     "pythonPath": "python",
-    "autoTagOnUpload": true,
     "keepModelLoaded": false,
     "autoUnloadMinutes": 5
   },

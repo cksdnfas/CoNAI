@@ -152,21 +152,13 @@ export class UploadService {
       console.warn('⚠️ Failed to collect prompts (non-critical):', promptError);
     }
 
-    // 자동 태깅 (설정에서 활성화된 경우)
+    // 자동 태깅은 AutoTagScheduler에서 백그라운드로 처리됨
+    // Upload 시에는 파일 저장만 수행
     try {
       const settings = settingsService.loadSettings();
 
-      if (settings.tagger.enabled && settings.tagger.autoTagOnUpload) {
-        console.log('🏷️ Auto-tagging image...');
-        const taggerResult = await imageTaggerService.tagImage(fullPath);
-
-        if (taggerResult.success) {
-          const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-          await ImageModel.updateAutoTags(imageId, autoTagsJson);
-          console.log('✅ Auto-tagging completed successfully');
-        } else {
-          console.warn('⚠️ Auto-tagging failed (non-critical):', taggerResult.error);
-        }
+      if (settings.tagger.enabled) {
+        console.log('🏷️ Auto-tagging will be handled by AutoTagScheduler in the background');
       }
     } catch (autoTagError) {
       console.warn('⚠️ Failed to auto-tag image (non-critical):', autoTagError);

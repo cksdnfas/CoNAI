@@ -77,6 +77,12 @@ export function ensureRuntimeDirectories(): void {
       fs.mkdirSync(dir, { recursive: true });
     }
   });
+
+  // Create video subdirectories
+  const videosDir = path.join(uploadsDir, 'videos');
+  if (!fs.existsSync(videosDir)) {
+    fs.mkdirSync(videosDir, { recursive: true });
+  }
 }
 
 export function resolveUploadsPath(...segments: string[]): string {

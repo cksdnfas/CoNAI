@@ -15,7 +15,8 @@ const BACKEND_DIST = path.join(ROOT_DIR, 'backend', 'dist');
 const BUNDLE_FILE = path.join(BACKEND_DIST, 'bundle.js');
 const SEA_CONFIG = path.join(ROOT_DIR, 'sea-config.json');
 const SEA_BLOB = path.join(ROOT_DIR, 'sea-prep.blob');
-const PKG_OUTPUT_DIR = path.join(ROOT_DIR, 'pkg-output');
+const BUILD_OUTPUT_DIR = path.join(ROOT_DIR, 'build-output');
+const PKG_OUTPUT_DIR = path.join(BUILD_OUTPUT_DIR, 'sea');
 
 const platform = os.platform();
 const arch = os.arch();

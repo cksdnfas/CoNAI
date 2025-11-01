@@ -113,6 +113,7 @@ export class ImageUploadService {
 
       ImageFileModel.create({
         composite_hash: compositeHash,
+        file_hash: null,
         original_file_path: imagePath,
         folder_id: folderId,
         file_status: 'active',

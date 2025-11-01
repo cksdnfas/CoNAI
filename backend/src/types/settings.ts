@@ -19,13 +19,13 @@ export type TaggerModel = 'vit' | 'swinv2' | 'convnext';
 export type TaggerDevice = 'auto' | 'cpu' | 'cuda';
 
 export interface TaggerSettings {
-  enabled: boolean;
+  enabled: boolean;                // Tagger 활성화 (활성화 시 자동으로 미처리 이미지 태깅)
+  autoTagOnUpload: boolean;        // 업로드 시 자동 태깅 여부
   model: TaggerModel;
   device: TaggerDevice;            // 디바이스 선택 (auto/cpu/cuda)
   generalThreshold: number;
   characterThreshold: number;
   pythonPath: string;
-  autoTagOnUpload: boolean;
   keepModelLoaded: boolean;        // 메모리 유지 여부
   autoUnloadMinutes: number;       // 자동 언로드 시간 (분)
 }

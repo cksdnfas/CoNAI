@@ -15,7 +15,18 @@ import { SUPPORTED_IMAGE_EXTENSIONS } from '../../constants/supportedExtensions'
  */
 
 export const up = async (db: Database.Database): Promise<void> => {
-  console.log('Running migration 006: Change file_extensions to exclude_extensions');
+  console.log('⏭️  Migration 006: Skipped (already applied in migration 000)');
+
+  // Check if exclude_extensions exists (for legacy databases)
+  const tableInfo = db.prepare(`PRAGMA table_info(watched_folders)`).all() as Array<{ name: string }>;
+  const hasExcludeExtensions = tableInfo.some(col => col.name === 'exclude_extensions');
+
+  if (hasExcludeExtensions) {
+    console.log('  ✅ exclude_extensions column already exists, skipping migration');
+    return;
+  }
+
+  console.log('🔄 Applying migration 006 for legacy database...');
 
   // Step 1: Add the new exclude_extensions column
   db.exec(`

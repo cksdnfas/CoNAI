@@ -150,7 +150,6 @@ export const SimilarityTestPanel: React.FC<SimilarityTestPanelProps> = ({
               onChange={(e) => onSetTestImageId(e.target.value)}
               type="text"
               placeholder="e.g., a1b2c3d4e5f6... (48-character composite hash)"
-              helperText="Enter the composite_hash from image metadata"
               fullWidth
             />
             <FormControl sx={{ minWidth: 150 }}>

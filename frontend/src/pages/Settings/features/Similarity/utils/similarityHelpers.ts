@@ -1,8 +1,9 @@
 import type { ImageRecord } from '../../../../../types/image';
 import { buildUploadsUrl } from '../../../../../utils/backend';
 
-export const getThumbnailUrl = (image: ImageRecord): string => {
-  return buildUploadsUrl(image.thumbnail_url ?? image.original_file_path ?? '');
+export const getThumbnailUrl = (image: ImageRecord): string | null => {
+  const path = image.thumbnail_url ?? image.original_file_path;
+  return path ? buildUploadsUrl(path) : null;
 };
 
 export const getMatchTypeColor = (matchType: string): 'error' | 'warning' | 'info' | 'success' => {

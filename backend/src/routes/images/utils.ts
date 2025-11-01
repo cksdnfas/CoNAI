@@ -75,7 +75,10 @@ export function enrichImageWithFileView(image: any) {
   const isExternalImage = image.original_file_path && require('path').isAbsolute(image.original_file_path);
 
   // Phase 1: composite_hash가 없는 경우 (빠른 등록만 완료)
-  const isProcessing = !image.composite_hash;
+  // 비디오는 file_hash로, 이미지는 composite_hash로 처리 상태 판단
+  const isProcessing = image.mime_type?.startsWith('video/')
+    ? !image.file_hash      // 비디오는 file_hash 기반
+    : !image.composite_hash; // 이미지는 composite_hash 기반
 
   const enriched = {
     ...image,

@@ -13,6 +13,7 @@ import {
 import { runtimePaths } from '../../config/runtimePaths';
 import { validateId, successResponse, errorResponse, PAGINATION } from '@comfyui-image-manager/shared';
 import { db } from '../../database/init';
+import { enrichImageWithFileView } from './utils';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
@@ -80,13 +81,19 @@ router.get('/:id/duplicates', asyncHandler(async (req: Request, res: Response) =
       });
     }
 
+    // Enrich results with URLs
+    const enrichedDuplicates = duplicates.map(item => ({
+      ...item,
+      image: enrichImageWithFileView(item.image)
+    }));
+
     return res.json(successResponse({
-      similar: duplicates,
-      total: duplicates.length,
+      similar: enrichedDuplicates,
+      total: enrichedDuplicates.length,
       query: {
         imageId: value,
         threshold,
-        limit: duplicates.length
+        limit: enrichedDuplicates.length
       }
     }));
   } catch (error) {
@@ -153,9 +160,15 @@ router.get('/:id/similar', asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
+    // Enrich results with URLs
+    const enrichedSimilar = similar.map(item => ({
+      ...item,
+      image: enrichImageWithFileView(item.image)
+    }));
+
     return res.json(successResponse({
-      similar,
-      total: similar.length,
+      similar: enrichedSimilar,
+      total: enrichedSimilar.length,
       query: {
         imageId: value,
         threshold,
@@ -211,9 +224,15 @@ router.get('/:id/similar-color', asyncHandler(async (req: Request, res: Response
       similar = await ImageSimilarityModel.findSimilarByColorByImageId(imageId, threshold, limit);
     }
 
+    // Enrich results with URLs
+    const enrichedSimilar = similar.map(item => ({
+      ...item,
+      image: enrichImageWithFileView(item.image)
+    }));
+
     return res.json(successResponse({
-      similar,
-      total: similar.length,
+      similar: enrichedSimilar,
+      total: enrichedSimilar.length,
       query: {
         imageId: value,
         threshold,
@@ -241,11 +260,17 @@ router.get('/duplicates/all', asyncHandler(async (req: Request, res: Response) =
       minGroupSize
     });
 
-    const totalImages = groups.reduce((sum, group) => sum + group.images.length, 0);
+    // Enrich all images in all groups with URLs
+    const enrichedGroups = groups.map(group => ({
+      ...group,
+      images: group.images.map(image => enrichImageWithFileView(image))
+    }));
+
+    const totalImages = enrichedGroups.reduce((sum, group) => sum + group.images.length, 0);
 
     return res.json(successResponse({
-      groups,
-      totalGroups: groups.length,
+      groups: enrichedGroups,
+      totalGroups: enrichedGroups.length,
       totalImages,
       query: {
         threshold,

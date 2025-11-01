@@ -1,6 +1,10 @@
 import React, { useState, useRef, useCallback, useMemo, memo, useEffect } from 'react';
 import { Card, CardMedia, Box, Skeleton, Chip } from '@mui/material';
-import { CheckCircle as CheckCircleIcon, VideoLibrary as VideoLibraryIcon } from '@mui/icons-material';
+import {
+  CheckCircle as CheckCircleIcon,
+  VideoLibrary as VideoLibraryIcon,
+  HourglassEmpty as HourglassIcon
+} from '@mui/icons-material';
 import type { ImageRecord } from '../../types/image';
 import { getBackendOrigin } from '../../utils/backend';
 
@@ -241,6 +245,28 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
           )
         )}
       </Box>
+
+      {/* Phase 1 처리 중 배지 */}
+      {image.is_processing && (
+        <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
+          <Chip
+            icon={<HourglassIcon sx={{ fontSize: '0.8rem' }} />}
+            label="Processing"
+            size="small"
+            sx={{
+              fontSize: '0.7rem',
+              height: '22px',
+              fontWeight: 600,
+              bgcolor: 'rgba(255, 152, 0, 0.9)',
+              color: 'white',
+              backdropFilter: 'blur(4px)',
+              '& .MuiChip-icon': {
+                color: 'white',
+              },
+            }}
+          />
+        </Box>
+      )}
 
       {/* 비디오 배지 (재생 시간 표시) */}
       {image.mime_type?.startsWith('video/') && image.duration && (

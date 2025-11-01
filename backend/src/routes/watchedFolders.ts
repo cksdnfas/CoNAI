@@ -89,7 +89,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     scan_interval,
     recursive,
     exclude_extensions,
-    exclude_patterns
+    exclude_patterns,
+    watcher_enabled
   } = req.body;
 
   if (!folder_path) {
@@ -105,8 +106,20 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       scan_interval,
       recursive,
       exclude_extensions,
-      exclude_patterns
+      exclude_patterns,
+      watcher_enabled
     });
+
+    // watcher_enabled가 true면 FileWatcherService 시작
+    if (watcher_enabled) {
+      try {
+        await FileWatcherService.startWatcher(id);
+        console.log(`✅ Watcher started for folder ID: ${id}`);
+      } catch (error) {
+        console.warn(`⚠️ Failed to start watcher for folder ID ${id}:`, error);
+        // Watcher 시작 실패해도 폴더 등록은 성공으로 처리
+      }
+    }
 
     const folder = await WatchedFolderService.getFolder(id);
 

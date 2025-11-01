@@ -137,7 +137,7 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
           auto_scan: formData.auto_scan,
           scan_interval: formData.scan_interval,
           recursive: formData.recursive,
-          file_extensions: formData.file_extensions,
+          exclude_extensions: formData.exclude_extensions,
           exclude_patterns: formData.exclude_patterns,
           watcher_enabled: formData.watcher_enabled
         };

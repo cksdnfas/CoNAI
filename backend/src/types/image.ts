@@ -69,7 +69,8 @@ export interface ImageMetadataRecord {
  */
 export interface ImageFileRecord {
   id: number;
-  composite_hash: string;
+  composite_hash: string | null; // 이미지: composite hash, 비디오: null
+  file_hash: string | null; // MD5 파일 해시 (비디오/GIF용)
   original_file_path: string;
   folder_id: number;
   file_status: 'active' | 'missing' | 'deleted';

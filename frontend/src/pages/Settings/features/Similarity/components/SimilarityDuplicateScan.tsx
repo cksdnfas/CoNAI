@@ -284,7 +284,7 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
                             {/* 이미지 */}
                             <Box
                               component="img"
-                              src={getThumbnailUrl(image)}
+                              src={getThumbnailUrl(image) || ''}
                               alt={image.original_file_path ?? ''}
                               sx={{
                                 width: '100%',

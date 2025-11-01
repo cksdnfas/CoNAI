@@ -12,7 +12,6 @@ import {
 import { Settings as SettingsIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import GeneralSettings from './components/GeneralSettings';
-import MetadataSettings from './components/MetadataSettings';
 import TaggerSettings from './features/Tagger/TaggerSettings';
 import RatingScoreSettings from './features/Rating/RatingScoreSettings';
 import SimilaritySettings from './features/Similarity/SimilaritySettings';
@@ -169,12 +168,11 @@ const SettingsPage: React.FC = () => {
         <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
           <Tabs value={tabValue} onChange={handleTabChange}>
             <Tab label={t('tabs.general')} />
+            <Tab label={t('tabs.folders')} />
             <Tab label={t('tabs.tagger')} />
+            <Tab label={t('tabs.prompts')} />
             <Tab label={t('tabs.rating')} />
             <Tab label={t('tabs.similarity')} />
-            <Tab label={t('tabs.prompts')} />
-            <Tab label={t('tabs.metadata')} />
-            <Tab label={t('tabs.folders')} />
             <Tab label={t('tabs.advanced')} disabled />
           </Tabs>
         </Box>
@@ -183,26 +181,24 @@ const SettingsPage: React.FC = () => {
         <TabPanel value={tabValue} index={0}>
           <GeneralSettings
             settings={settings.general}
+            metadataSettings={settings.metadataExtraction}
             onUpdate={handleUpdateGeneralSettings}
+            onMetadataUpdate={handleUpdateMetadataSettings}
           />
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
+          <FolderSettings />
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={2}>
           <TaggerSettings
             settings={settings.tagger}
             onUpdate={handleUpdateTaggerSettings}
           />
         </TabPanel>
 
-        <TabPanel value={tabValue} index={2}>
-          <RatingScoreSettings />
-        </TabPanel>
-
         <TabPanel value={tabValue} index={3}>
-          <SimilaritySettings />
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={4}>
           <Paper sx={{ width: '100%' }}>
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
               <Tabs
@@ -222,18 +218,15 @@ const SettingsPage: React.FC = () => {
           </Paper>
         </TabPanel>
 
+        <TabPanel value={tabValue} index={4}>
+          <RatingScoreSettings />
+        </TabPanel>
+
         <TabPanel value={tabValue} index={5}>
-          <MetadataSettings
-            settings={settings.metadataExtraction}
-            onUpdate={handleUpdateMetadataSettings}
-          />
+          <SimilaritySettings />
         </TabPanel>
 
         <TabPanel value={tabValue} index={6}>
-          <FolderSettings />
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={7}>
           <Alert severity="info">
             고급 설정 기능은 향후 추가될 예정입니다.
           </Alert>

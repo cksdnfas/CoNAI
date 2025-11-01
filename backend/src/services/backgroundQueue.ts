@@ -3,6 +3,7 @@ import { MetadataExtractor } from './metadata';
 import { settingsService } from './settingsService';
 import path from 'path';
 import { QueryCacheService } from './QueryCacheService';
+import { PromptCollectionService } from './promptCollectionService';
 
 /**
  * 백그라운드 작업 타입
@@ -221,10 +222,13 @@ export class BackgroundQueueService {
       return;
     }
 
-    // TODO: 프롬프트 수집 로직 구현
-    // - 프롬프트 파싱
-    // - prompt_collections 업데이트
-    console.log(`  📝 프롬프트 수집 대기: ${path.basename(task.filePath)}`);
+    // PromptCollectionService를 사용하여 프롬프트 수집
+    await PromptCollectionService.collectFromImage(
+      metadata.prompt,
+      metadata.negative_prompt
+    );
+
+    console.log(`  ✅ 프롬프트 수집 완료: ${path.basename(task.filePath)}`);
   }
 
   /**

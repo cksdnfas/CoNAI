@@ -19,14 +19,12 @@ import type { TaggerSettings as TaggerSettingsType } from '../../../../services/
 // Hooks
 import { useTaggerSettings } from './hooks/useTaggerSettings';
 import { useTaggerModels } from './hooks/useTaggerModels';
-import { useTaggerBatch } from './hooks/useTaggerBatch';
 import { useTaggerTest } from './hooks/useTaggerTest';
 
 // Components
 import { TaggerModelStatus } from './components/TaggerModelStatus';
 import { TaggerConfigForm } from './components/TaggerConfigForm';
 import { TaggerMemoryManagement } from './components/TaggerMemoryManagement';
-import { TaggerBatchOperations } from './components/TaggerBatchOperations';
 import { TaggerTestSection } from './components/TaggerTestSection';
 
 interface TaggerSettingsProps {
@@ -60,18 +58,6 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
     handleDownloadModel,
     handleCheckDependencies,
   } = useTaggerModels(localSettings.enabled);
-
-  // Batch operations hook
-  const {
-    batchProcessing,
-    batchProgress,
-    batchTotal,
-    untaggedCount,
-    confirmDialog,
-    setConfirmDialog,
-    handleBatchTagUnprocessed,
-    handleBatchTagAll,
-  } = useTaggerBatch();
 
   // Test hook
   const {
@@ -176,22 +162,6 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
                 </Alert>
               )}
             </Box>
-
-            <Divider sx={{ my: 2 }} />
-
-            {/* Batch Operations Section */}
-            {localSettings.enabled && (
-              <TaggerBatchOperations
-                batchProcessing={batchProcessing}
-                batchProgress={batchProgress}
-                batchTotal={batchTotal}
-                untaggedCount={untaggedCount}
-                confirmDialog={confirmDialog}
-                onBatchTagUnprocessed={() => handleBatchTagUnprocessed(t)}
-                onBatchTagAll={() => handleBatchTagAll(t)}
-                onSetConfirmDialog={setConfirmDialog}
-              />
-            )}
 
             <Divider sx={{ my: 2 }} />
 

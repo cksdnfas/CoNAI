@@ -11,7 +11,8 @@ import { BackgroundQueueService } from './backgroundQueue';
 import { BackgroundProcessorService } from './backgroundProcessorService';
 import { FileWatcherService } from './fileWatcherService';
 import { resolveFolderPath } from '../utils/pathResolver';
-import { ALL_SUPPORTED_EXTENSIONS, shouldProcessFileExtension } from '../constants/supportedExtensions';
+import { ALL_SUPPORTED_EXTENSIONS, shouldProcessFileExtension, isVideoExtension } from '../constants/supportedExtensions';
+import { generateFileHash } from '../utils/fileHash';
 
 export interface ScanResult {
   folderId: number;
@@ -499,7 +500,7 @@ export class FolderScanService {
 
       // 썸네일 생성 (해시별 1개만)
       if (!fs.existsSync(thumbnailPath)) {
-        await this.generateThumbnail(filePath, thumbnailPath);
+        await this.generateThumbnail(filePath, thumbnailPath, mimeType);
         result.thumbnailsGenerated++;
       }
 
@@ -642,7 +643,7 @@ export class FolderScanService {
 
       // 8. 썸네일 생성 (해시별 1개만)
       if (!fs.existsSync(thumbnailPath)) {
-        await this.generateThumbnail(filePath, thumbnailPath);
+        await this.generateThumbnail(filePath, thumbnailPath, mimeType);
         result.thumbnailsGenerated++;
       }
 
@@ -665,8 +666,15 @@ export class FolderScanService {
    */
   private static async generateThumbnail(
     inputPath: string,
-    outputPath: string
+    outputPath: string,
+    mimeType: string
   ): Promise<void> {
+    // 비디오 파일은 썸네일 생성하지 않음 (원본 사용)
+    if (mimeType.startsWith('video/')) {
+      return;
+    }
+
+    // 이미지 파일만 Sharp로 썸네일 생성
     await sharp(inputPath)
       .resize(this.THUMBNAIL_SIZE, this.THUMBNAIL_SIZE, {
         fit: 'inside',
@@ -751,10 +759,14 @@ export class FolderScanService {
       '.jpeg': 'image/jpeg',
       '.png': 'image/png',
       '.webp': 'image/webp',
-      '.gif': 'image/gif',
       '.bmp': 'image/bmp',
       '.tiff': 'image/tiff',
-      '.tif': 'image/tiff'
+      '.tif': 'image/tiff',
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.mov': 'video/quicktime',
+      '.avi': 'video/x-msvideo',
+      '.gif': 'video/gif'  // GIF는 비디오로 분류
     };
     return mimeTypes[ext] || 'application/octet-stream';
   }

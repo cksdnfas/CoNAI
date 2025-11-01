@@ -6,11 +6,14 @@ import sharp from 'sharp';
 import { db } from '../database/init';
 import { ImageSimilarityService } from './imageSimilarity';
 import { BackgroundQueueService } from './backgroundQueue';
+import { generateFileHash } from '../utils/fileHash';
+import { isVideoExtension } from '../constants/supportedExtensions';
 
 interface UnhashedFile {
   id: number;
   original_file_path: string;
   folder_id: number;
+  mime_type: string;
 }
 
 interface ProcessingResult {
@@ -55,13 +58,17 @@ export class BackgroundProcessorService {
     };
 
     try {
-      // Query for images needing processing
+      // Query for files needing processing (images or videos)
+      // Images need composite_hash, videos need file_hash
       const unhashedFiles = db
         .prepare(
           `
-        SELECT id, original_file_path, folder_id
+        SELECT id, original_file_path, folder_id, mime_type
         FROM image_files
-        WHERE composite_hash IS NULL
+        WHERE (
+          (mime_type LIKE 'image/%' AND composite_hash IS NULL) OR
+          (mime_type LIKE 'video/%' AND file_hash IS NULL)
+        )
           AND file_status = 'active'
         ORDER BY scan_date ASC
         LIMIT ?
@@ -127,6 +134,7 @@ export class BackgroundProcessorService {
    */
   private static async processFile(file: UnhashedFile): Promise<void> {
     const fileName = path.basename(file.original_file_path);
+    const ext = path.extname(file.original_file_path);
 
     // Check if file still exists
     if (!fs.existsSync(file.original_file_path)) {
@@ -136,6 +144,22 @@ export class BackgroundProcessorService {
       ).run(file.id);
       return;
     }
+
+    // 비디오 파일 처리
+    if (file.mime_type.startsWith('video/') || isVideoExtension(ext)) {
+      await this.processVideoFile(file);
+      return;
+    }
+
+    // 이미지 파일 처리
+    await this.processImageFile(file);
+  }
+
+  /**
+   * Process image file: generate hash, check duplicates, create thumbnail
+   */
+  private static async processImageFile(file: UnhashedFile): Promise<void> {
+    const fileName = path.basename(file.original_file_path);
 
     // Generate hashes and color histogram
     const { hashes, colorHistogram } =
@@ -209,7 +233,63 @@ export class BackgroundProcessorService {
       );
     }
 
-    console.log(`  ✨ Processed: ${fileName}`);
+    console.log(`  ✨ Processed image: ${fileName}`);
+  }
+
+  /**
+   * Process video file: generate MD5 hash, create video_metadata
+   */
+  private static async processVideoFile(file: UnhashedFile): Promise<void> {
+    const fileName = path.basename(file.original_file_path);
+
+    // Generate MD5 file hash
+    const fileHash = await generateFileHash(file.original_file_path);
+
+    // Check if this hash already exists (duplicate detection - optional for videos)
+    const existing = db
+      .prepare(`SELECT file_hash FROM video_metadata WHERE file_hash = ?`)
+      .get(fileHash) as { file_hash: string } | undefined;
+
+    if (existing) {
+      // Video metadata already exists - just link file
+      db.prepare(`UPDATE image_files SET file_hash = ? WHERE id = ?`).run(
+        fileHash,
+        file.id
+      );
+
+      console.log(`  ♻️  Video already processed: ${fileName}`);
+      return;
+    }
+
+    // Create basic video_metadata record (FFprobe extraction happens in metadata extraction task)
+    db.prepare(
+      `
+      INSERT INTO video_metadata (file_hash)
+      VALUES (?)
+    `
+    ).run(fileHash);
+
+    // Update image_files record with file_hash
+    db.prepare(`UPDATE image_files SET file_hash = ? WHERE id = ?`).run(
+      fileHash,
+      file.id
+    );
+
+    // Queue metadata extraction task (video metadata via FFprobe)
+    try {
+      BackgroundQueueService.addMetadataExtractionTask(
+        file.original_file_path,
+        fileHash
+      );
+    } catch (error) {
+      // Non-critical error - continue processing
+      console.warn(
+        `  ⚠️  Failed to queue metadata extraction for ${fileName}:`,
+        error instanceof Error ? error.message : error
+      );
+    }
+
+    console.log(`  ✨ Processed video: ${fileName}`);
   }
 
   /**

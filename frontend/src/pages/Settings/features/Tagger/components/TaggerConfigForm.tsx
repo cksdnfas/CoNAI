@@ -47,7 +47,7 @@ export const TaggerConfigForm: React.FC<TaggerConfigFormProps> = ({
 
   return (
     <Stack spacing={3}>
-      {/* Enable/Disable Toggle */}
+      {/* Enable Auto-Tagging */}
       <FormControlLabel
         control={
           <Switch
@@ -55,19 +55,7 @@ export const TaggerConfigForm: React.FC<TaggerConfigFormProps> = ({
             onChange={(e) => onUpdateSettings({ enabled: e.target.checked })}
           />
         }
-        label={t('tagger.enabled')}
-      />
-
-      {/* Auto Tag on Upload */}
-      <FormControlLabel
-        control={
-          <Switch
-            checked={localSettings.autoTagOnUpload}
-            onChange={(e) => onUpdateSettings({ autoTagOnUpload: e.target.checked })}
-            disabled={!localSettings.enabled}
-          />
-        }
-        label={t('tagger.autoTagOnUpload')}
+        label={t('tagger.enableAutoTagging')}
       />
 
       {/* Model Selection */}

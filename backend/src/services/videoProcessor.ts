@@ -4,6 +4,7 @@ import { spawn } from 'child_process';
 import sharp from 'sharp';
 import ffmpegPath from 'ffmpeg-static';
 const ffprobeStatic = require('ffprobe-static');
+import { generateFileHash } from '../utils/fileHash';
 
 export interface VideoMetadata {
   duration: number;          // 초 단위
@@ -28,6 +29,7 @@ export interface ProcessedVideo {
   width: number;
   height: number;
   fileSize: number;
+  fileHash: string;  // MD5 파일 해시
   metadata: VideoMetadata;
 }
 
@@ -366,6 +368,11 @@ export class VideoProcessor {
       const metadata = await this.extractMetadata(originalPath);
       console.log(`✅ Video metadata: ${metadata.duration}s, ${metadata.width}x${metadata.height}, ${metadata.video_codec}`);
 
+      // MD5 파일 해시 생성
+      console.log('🔐 Generating file hash...');
+      const fileHash = await generateFileHash(originalPath);
+      console.log(`✅ File hash: ${fileHash}`);
+
       // 메타데이터 업데이트
       metadata.thumbnail_type = 'video-original';
 
@@ -379,6 +386,7 @@ export class VideoProcessor {
         width: metadata.width,
         height: metadata.height,
         fileSize: file.size,
+        fileHash,
         metadata
       };
     } catch (error) {

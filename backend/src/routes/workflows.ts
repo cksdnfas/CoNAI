@@ -959,20 +959,7 @@ router.post('/:id/generate-parallel', asyncHandler(async (req: Request, res: Res
                     console.warn('⚠️ Failed to collect prompts:', promptError);
                   }
 
-                  // 자동 태깅
-                  try {
-                    const settings = settingsService.loadSettings();
-                    if (settings.tagger.enabled && settings.tagger.autoTagOnUpload) {
-                      const fullPath = path.join(UPLOAD_BASE_PATH, processed.originalPath);
-                      const taggerResult = await imageTaggerService.tagImage(fullPath);
-                      if (taggerResult.success) {
-                        const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-                        await ImageModel.updateAutoTags(imageId, autoTagsJson);
-                      }
-                    }
-                  } catch (autoTagError) {
-                    console.warn('⚠️ Failed to auto-tag image:', autoTagError);
-                  }
+                  // 자동 태깅은 AutoTagScheduler에서 백그라운드로 처리됨
 
                   // 자동수집 그룹 처리
                   try {

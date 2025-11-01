@@ -39,12 +39,12 @@ export class SettingsService {
       },
       tagger: {
         enabled: process.env.TAGGER_ENABLED === 'true',
+        autoTagOnUpload: false,    // 기본값: 업로드 시 자동 태깅 안 함
         model: (process.env.TAGGER_MODEL as TaggerModel) || 'vit',
         device: (process.env.TAGGER_DEVICE as TaggerDevice) || 'auto',  // 기본값: 자동 감지
         generalThreshold: parseFloat(process.env.TAGGER_GEN_THRESHOLD || '0.35'),
         characterThreshold: parseFloat(process.env.TAGGER_CHAR_THRESHOLD || '0.75'),
         pythonPath: process.env.PYTHON_PATH || 'python',
-        autoTagOnUpload: false,
         keepModelLoaded: false,    // 기본값: 메모리 유지 안 함
         autoUnloadMinutes: 5,      // 기본값: 5분 후 자동 언로드
       },
@@ -111,7 +111,6 @@ export class SettingsService {
           tagger_enabled: this.settings.tagger.enabled,
           tagger_model: this.settings.tagger.model,
           tagger_device: this.settings.tagger.device,
-          tagger_autoTag: this.settings.tagger.autoTagOnUpload,
           similarity_autoHash: this.settings.similarity.autoGenerateHashOnUpload
         });
 
@@ -184,7 +183,6 @@ export class SettingsService {
       this.settings = settings;
       console.log('[SettingsService] Settings saved successfully:', {
         tagger_enabled: settings.tagger.enabled,
-        tagger_autoTag: settings.tagger.autoTagOnUpload,
         similarity_autoHash: settings.similarity.autoGenerateHashOnUpload
       });
     } catch (error) {

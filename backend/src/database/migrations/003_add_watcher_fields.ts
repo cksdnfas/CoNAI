@@ -11,37 +11,30 @@
 import Database from 'better-sqlite3';
 
 export function up(db: Database.Database): void {
-  console.log('🔄 마이그레이션: 파일 워처 필드 추가...');
+  console.log('⏭️  마이그레이션 003: Skipped (already applied in migration 000)');
 
-  // 1. watcher_enabled 필드 추가 (기본값: 0 비활성화)
-  db.exec(`
-    ALTER TABLE watched_folders
-    ADD COLUMN watcher_enabled INTEGER DEFAULT 0;
-  `);
-  console.log('  ✅ 필드 추가: watcher_enabled');
+  // Check if fields exist (for legacy databases)
+  const tableInfo = db.prepare(`PRAGMA table_info(watched_folders)`).all() as Array<{ name: string }>;
+  const hasWatcherEnabled = tableInfo.some(col => col.name === 'watcher_enabled');
 
-  // 2. watcher_status 필드 추가
-  db.exec(`
-    ALTER TABLE watched_folders
-    ADD COLUMN watcher_status TEXT;
-  `);
-  console.log('  ✅ 필드 추가: watcher_status');
+  if (!hasWatcherEnabled) {
+    console.log('🔄 Applying migration 003 for legacy database...');
 
-  // 3. watcher_error 필드 추가
-  db.exec(`
-    ALTER TABLE watched_folders
-    ADD COLUMN watcher_error TEXT;
-  `);
-  console.log('  ✅ 필드 추가: watcher_error');
+    // Add watcher fields for legacy database
+    db.exec(`ALTER TABLE watched_folders ADD COLUMN watcher_enabled INTEGER DEFAULT 0;`);
+    console.log('  ✅ 필드 추가: watcher_enabled');
 
-  // 4. watcher_last_event 필드 추가
-  db.exec(`
-    ALTER TABLE watched_folders
-    ADD COLUMN watcher_last_event DATETIME;
-  `);
-  console.log('  ✅ 필드 추가: watcher_last_event');
+    db.exec(`ALTER TABLE watched_folders ADD COLUMN watcher_status TEXT;`);
+    console.log('  ✅ 필드 추가: watcher_status');
 
-  console.log('✅ 파일 워처 필드 추가 완료');
+    db.exec(`ALTER TABLE watched_folders ADD COLUMN watcher_error TEXT;`);
+    console.log('  ✅ 필드 추가: watcher_error');
+
+    db.exec(`ALTER TABLE watched_folders ADD COLUMN watcher_last_event DATETIME;`);
+    console.log('  ✅ 필드 추가: watcher_last_event');
+
+    console.log('✅ Migration 003 applied for legacy database');
+  }
 }
 
 export function down(db: Database.Database): void {

@@ -5,6 +5,7 @@ import {
   DuplicateGroup,
   SimilaritySearchOptions,
   DuplicateSearchOptions,
+  SimilarityMatchType,
   SIMILARITY_THRESHOLDS
 } from '../../types/similarity';
 import { ImageSimilarityService } from '../../services/imageSimilarity';
@@ -80,8 +81,19 @@ export class ImageSimilarityModel {
       throw new Error('Perceptual hash not available for this image. Please rebuild similarity hashes.');
     }
 
-    // 모든 이미지 조회 (자신 제외)
-    let query = 'SELECT * FROM image_metadata WHERE composite_hash != ? AND perceptual_hash IS NOT NULL';
+    // 모든 이미지 조회 (자신 제외) - image_files와 JOIN하여 파일 경로 포함
+    let query = `
+      SELECT
+        im.*,
+        if.id as file_id,
+        if.original_file_path,
+        if.file_size,
+        if.mime_type,
+        if.file_status
+      FROM image_metadata im
+      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
+      WHERE im.composite_hash != ? AND im.perceptual_hash IS NOT NULL
+    `;
     const params: any[] = [compositeHash];
 
     // 메타데이터 기반 필터링 (성능 최적화)
@@ -92,11 +104,11 @@ export class ImageSimilarityModel {
       const heightMin = targetImage.height * 0.9;
       const heightMax = targetImage.height * 1.1;
 
-      query += ' AND width BETWEEN ? AND ? AND height BETWEEN ? AND ?';
+      query += ' AND im.width BETWEEN ? AND ? AND im.height BETWEEN ? AND ?';
       params.push(widthMin, widthMax, heightMin, heightMax);
     }
 
-    const candidates = db.prepare(query).all(...params) as ImageMetadataRecord[];
+    const candidates = db.prepare(query).all(...params) as any[];
 
     // Hamming distance 계산 및 필터링
     const results: SimilarImage[] = [];
@@ -174,10 +186,19 @@ export class ImageSimilarityModel {
       throw new Error('Perceptual hash not available for this image. Please rebuild similarity hashes.');
     }
 
-    // 모든 이미지 조회 (자신 제외)
-    const candidates = db.prepare(
-      'SELECT * FROM image_metadata WHERE composite_hash != ? AND perceptual_hash IS NOT NULL'
-    ).all(compositeHash) as ImageMetadataRecord[];
+    // 모든 이미지 조회 (자신 제외) - image_files와 JOIN하여 파일 경로 포함
+    const candidates = db.prepare(`
+      SELECT
+        im.*,
+        if.id as file_id,
+        if.original_file_path,
+        if.file_size,
+        if.mime_type,
+        if.file_status
+      FROM image_metadata im
+      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
+      WHERE im.composite_hash != ? AND im.perceptual_hash IS NOT NULL
+    `).all(compositeHash) as any[];
 
     // Hamming distance 계산 및 필터링
     const results: SimilarImage[] = [];
@@ -267,6 +288,11 @@ export class ImageSimilarityModel {
 
   /**
    * 전체 중복 이미지 그룹 검색 (composite_hash 기반)
+   *
+   * 처리 과정:
+   * 1. image_metadata에서 유사 이미지 그룹 찾기 (Hamming distance 기반)
+   * 2. 각 그룹의 composite_hash로 image_files 테이블에서 실제 중복 파일 조회
+   * 3. 유사 이미지 + 중복 파일을 모두 포함한 그룹 반환
    */
   static async findAllDuplicateGroups(
     options: DuplicateSearchOptions = {}
@@ -276,77 +302,132 @@ export class ImageSimilarityModel {
       minGroupSize = 2
     } = options;
 
-    // 모든 이미지 조회
-    const allImages = db.prepare(
-      'SELECT * FROM image_metadata WHERE perceptual_hash IS NOT NULL ORDER BY composite_hash'
-    ).all() as ImageMetadataRecord[];
+    // STEP 1: image_metadata에서 고유한 이미지 메타데이터만 조회 (중복 제거된 상태)
+    const allMetadata = db.prepare(`
+      SELECT *
+      FROM image_metadata
+      WHERE perceptual_hash IS NOT NULL
+      ORDER BY composite_hash
+    `).all() as ImageMetadataRecord[];
 
-    if (allImages.length === 0) {
+    if (allMetadata.length === 0) {
       return [];
     }
 
-    // 중복 그룹 찾기
+    // STEP 2: 유사 이미지 그룹 찾기 (Hamming distance 기반)
     const processedHashes = new Set<string>();
-    const groups: DuplicateGroup[] = [];
+    const metadataGroups: ImageMetadataRecord[][] = [];
 
-    for (let i = 0; i < allImages.length; i++) {
-      const currentImage = allImages[i];
+    for (let i = 0; i < allMetadata.length; i++) {
+      const currentMetadata = allMetadata[i];
 
-      // 이미 처리된 이미지는 건너뜀
-      if (processedHashes.has(currentImage.composite_hash)) {
+      // 이미 처리된 메타데이터는 건너뜀
+      if (processedHashes.has(currentMetadata.composite_hash)) {
         continue;
       }
 
-      const group: ImageMetadataRecord[] = [currentImage];
-      processedHashes.add(currentImage.composite_hash);
+      const group: ImageMetadataRecord[] = [currentMetadata];
+      processedHashes.add(currentMetadata.composite_hash);
 
-      // 나머지 이미지와 비교
-      for (let j = i + 1; j < allImages.length; j++) {
-        const compareImage = allImages[j];
+      // 나머지 메타데이터와 비교하여 유사 이미지 찾기
+      for (let j = i + 1; j < allMetadata.length; j++) {
+        const compareMetadata = allMetadata[j];
 
-        if (processedHashes.has(compareImage.composite_hash)) {
+        if (processedHashes.has(compareMetadata.composite_hash)) {
           continue;
         }
 
-        if (!currentImage.perceptual_hash || !compareImage.perceptual_hash) {
+        if (!currentMetadata.perceptual_hash || !compareMetadata.perceptual_hash) {
           continue;
         }
 
         const hammingDistance = ImageSimilarityService.calculateHammingDistance(
-          currentImage.perceptual_hash,
-          compareImage.perceptual_hash
+          currentMetadata.perceptual_hash,
+          compareMetadata.perceptual_hash
         );
 
         if (hammingDistance <= threshold) {
-          group.push(compareImage);
-          processedHashes.add(compareImage.composite_hash);
+          group.push(compareMetadata);
+          processedHashes.add(compareMetadata.composite_hash);
         }
       }
 
-      // 최소 그룹 크기 이상인 경우만 추가
-      if (group.length >= minGroupSize) {
-        const avgSimilarity = group.reduce((sum, img, idx) => {
-          if (idx === 0) return sum;
-          if (!currentImage.perceptual_hash || !img.perceptual_hash) return sum;
+      // 그룹에 포함된 메타데이터가 있으면 저장
+      if (group.length > 0) {
+        metadataGroups.push(group);
+      }
+    }
 
-          const distance = ImageSimilarityService.calculateHammingDistance(
-            currentImage.perceptual_hash,
-            img.perceptual_hash
-          );
-          return sum + ImageSimilarityService.hammingDistanceToSimilarity(distance);
-        }, 0) / (group.length - 1 || 1);
+    // STEP 3: 각 메타데이터 그룹의 composite_hash로 image_files에서 실제 파일들 조회
+    const groups: DuplicateGroup[] = [];
+
+    for (const metadataGroup of metadataGroups) {
+      // 그룹의 모든 composite_hash 추출
+      const compositeHashes = metadataGroup.map(m => m.composite_hash);
+
+      // image_files에서 해당 composite_hash를 가진 모든 파일 조회
+      const placeholders = compositeHashes.map(() => '?').join(',');
+      const fileRecords = db.prepare(`
+        SELECT
+          im.*,
+          if.id as file_id,
+          if.original_file_path,
+          if.file_size,
+          if.mime_type,
+          if.file_status
+        FROM image_files if
+        JOIN image_metadata im ON if.composite_hash = im.composite_hash
+        WHERE if.composite_hash IN (${placeholders})
+          AND if.file_status = 'active'
+        ORDER BY if.composite_hash, if.id
+      `).all(...compositeHashes) as any[];
+
+      // 최소 그룹 크기 체크 (유사 이미지 개수 OR 실제 파일 개수)
+      // 예: 유사 이미지는 1개지만 중복 파일이 3개인 경우도 그룹으로 포함
+      const totalFileCount = fileRecords.length;
+      const uniqueMetadataCount = metadataGroup.length;
+
+      if (totalFileCount >= minGroupSize || uniqueMetadataCount >= minGroupSize) {
+        const firstMetadata = metadataGroup[0];
+        let avgSimilarity: number;
+        let matchType: SimilarityMatchType;
+
+        // 중복 파일만 있는 경우 (같은 composite_hash의 파일들)
+        if (uniqueMetadataCount === 1 && totalFileCount >= 2) {
+          // 완전히 동일한 파일들이므로 100% 유사
+          avgSimilarity = 100; // 0-100 범위의 100
+          matchType = 'exact' as SimilarityMatchType;
+        } else {
+          // 유사 이미지가 있는 경우 평균 유사도 계산
+          avgSimilarity = metadataGroup.reduce((sum, metadata, idx) => {
+            if (idx === 0) return sum;
+            if (!firstMetadata.perceptual_hash || !metadata.perceptual_hash) return sum;
+
+            const distance = ImageSimilarityService.calculateHammingDistance(
+              firstMetadata.perceptual_hash,
+              metadata.perceptual_hash
+            );
+            return sum + ImageSimilarityService.hammingDistanceToSimilarity(distance);
+          }, 0) / (metadataGroup.length - 1 || 1);
+
+          matchType = ImageSimilarityService.determineMatchType(threshold);
+        }
 
         groups.push({
-          groupId: `group_${currentImage.composite_hash.substring(0, 16)}`,
-          images: group as any, // ImageMetadataRecord[]를 ImageRecord[]처럼 사용
+          groupId: `group_${firstMetadata.composite_hash.substring(0, 16)}`,
+          images: fileRecords, // 실제 파일 레코드 (중복 포함)
           similarity: Math.round(avgSimilarity * 100) / 100,
-          matchType: ImageSimilarityService.determineMatchType(threshold)
+          matchType
         });
       }
     }
 
-    // 유사도 순으로 정렬
-    return groups.sort((a, b) => b.similarity - a.similarity);
+    // 유사도 순으로 정렬 (유사도가 같으면 파일 개수가 많은 순)
+    return groups.sort((a, b) => {
+      const simDiff = b.similarity - a.similarity;
+      if (simDiff !== 0) return simDiff;
+      return b.images.length - a.images.length;
+    });
   }
 
   /**
@@ -368,10 +449,19 @@ export class ImageSimilarityModel {
 
     const targetHist = ImageSimilarityService.deserializeHistogram(targetImage.color_histogram);
 
-    // 모든 이미지 조회 (자신 제외)
-    const candidates = db.prepare(
-      'SELECT * FROM image_metadata WHERE composite_hash != ? AND color_histogram IS NOT NULL'
-    ).all(compositeHash) as ImageMetadataRecord[];
+    // 모든 이미지 조회 (자신 제외) - image_files와 JOIN하여 파일 경로 포함
+    const candidates = db.prepare(`
+      SELECT
+        im.*,
+        if.id as file_id,
+        if.original_file_path,
+        if.file_size,
+        if.mime_type,
+        if.file_status
+      FROM image_metadata im
+      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
+      WHERE im.composite_hash != ? AND im.color_histogram IS NOT NULL
+    `).all(compositeHash) as any[];
 
     const results: SimilarImage[] = [];
 

@@ -21,19 +21,111 @@
       "ja": "日本語",
       "zh-CN": "简体中文",
       "zh-TW": "繁體中文"
+    },
+    "metadata": {
+      "title": "Metadata Extraction Optimization",
+      "description": "Optimize AI image metadata extraction performance. Default settings improve ComfyUI image processing by 99.85%.",
+      "scanMode": {
+        "title": "Stealth PNG Scan Mode",
+        "fast": {
+          "label": "Fast (Recommended)",
+          "description": "Quick signature scan - checks first 200 pixels then exits early"
+        },
+        "full": {
+          "label": "Full",
+          "description": "Full file scan - checks all pixels (slow)"
+        },
+        "skip": {
+          "label": "Skip",
+          "description": "Skip scanning - disables secondary extraction"
+        }
+      },
+      "limits": {
+        "title": "File Size and Resolution Limits",
+        "fileSize": {
+          "label": "Max File Size (MB)",
+          "helper": "Files larger than this will skip Stealth PNG scanning"
+        },
+        "resolution": {
+          "label": "Max Resolution (Megapixels)",
+          "helper": "Images larger than this will skip Stealth PNG scanning"
+        }
+      },
+      "skipSettings": {
+        "title": "AI Tool Skip Settings",
+        "description": "Automatically skip Stealth PNG scanning for specific AI tool images.",
+        "comfyui": {
+          "label": "Skip ComfyUI images (Recommended)",
+          "description": "ComfyUI doesn't use Stealth PNG, scanning unnecessary"
+        },
+        "webui": {
+          "label": "Skip WebUI images",
+          "description": "WebUI may use Stealth PNG, enable only if needed"
+        }
+      },
+      "secondary": {
+        "label": "Enable secondary extraction",
+        "description": "Retry with Stealth PNG method if primary extraction fails."
+      },
+      "performanceNote": "💡 Tip: Default settings (Fast + ComfyUI skip) provide optimal performance for most cases. ComfyUI image processing time reduced from 2682ms → 4ms!"
     }
   },
   "tagger": {
     "title": "WD Tagger Settings",
-    "enabled": "Enable Tagger",
-    "model": "Model Selection",
-    "device": "Device",
-    "generalThreshold": "General Tag Threshold",
-    "characterThreshold": "Character Tag Threshold",
-    "pythonPath": "Python Path",
-    "autoTagOnUpload": "Auto-tag on Upload",
-    "keepModelLoaded": "Keep Model in Memory",
-    "autoUnloadMinutes": "Auto-unload Time (minutes)"
+    "description": "Configure AI-based automatic image tagging",
+    "enableAutoTagging": "Enable Auto-Tagging",
+    "model": {
+      "label": "Model Selection",
+      "loading": "Loading models...",
+      "downloaded": "Downloaded"
+    },
+    "device": {
+      "label": "Device Selection",
+      "auto": {
+        "title": "Auto",
+        "description": "Use GPU if available, otherwise CPU"
+      },
+      "cpu": {
+        "title": "CPU",
+        "description": "CPU only (slower but stable)"
+      },
+      "cuda": {
+        "title": "GPU (CUDA)",
+        "description": "Use NVIDIA GPU (fast, requires GPU)"
+      }
+    },
+    "threshold": {
+      "general": {
+        "label": "General Tags Threshold: {{value}}",
+        "description": "Lower values extract more tags (may increase noise)"
+      },
+      "character": {
+        "label": "Character Tags Threshold: {{value}}",
+        "description": "Lower values detect more characters (may increase false positives)"
+      }
+    },
+    "pythonPath": {
+      "label": "Python Executable Path",
+      "helper": "Path to Python executable (e.g., python, python3, C:\\Python39\\python.exe)"
+    },
+    "test": {
+      "title": "Test",
+      "description": "Test current settings with a specific image.",
+      "imageHash": "Image Hash",
+      "placeholderHash": "e.g., abc123def456...",
+      "button": "Run Test",
+      "processing": "Processing...",
+      "result": "Tagging Result:",
+      "failed": "Test failed"
+    },
+    "buttons": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "download": "Download Model",
+      "downloading": "Checking download info...",
+      "checkDependencies": "Check Python Dependencies",
+      "checking": "Checking dependencies..."
+    }
   },
   "rating": {
     "title": "Rating Score Settings",
@@ -69,53 +161,6 @@
       "deletePartialSuccess": "{{success}} succeeded, {{failed}} failed",
       "deleteFailed": "Failed to delete images."
     }
-  },
-  "metadata": {
-    "title": "Metadata Extraction Optimization",
-    "description": "Optimize AI image metadata extraction performance. Default settings improve ComfyUI image processing by 99.85%.",
-    "scanMode": {
-      "title": "Stealth PNG Scan Mode",
-      "fast": {
-        "label": "Fast (Recommended)",
-        "description": "Quick signature scan - checks first 200 pixels then exits early"
-      },
-      "full": {
-        "label": "Full",
-        "description": "Full file scan - checks all pixels (slow)"
-      },
-      "skip": {
-        "label": "Skip",
-        "description": "Skip scanning - disables secondary extraction"
-      }
-    },
-    "limits": {
-      "title": "File Size and Resolution Limits",
-      "fileSize": {
-        "label": "Max File Size (MB)",
-        "helper": "Files larger than this will skip Stealth PNG scanning"
-      },
-      "resolution": {
-        "label": "Max Resolution (Megapixels)",
-        "helper": "Images larger than this will skip Stealth PNG scanning"
-      }
-    },
-    "skipSettings": {
-      "title": "AI Tool Skip Settings",
-      "description": "Automatically skip Stealth PNG scanning for specific AI tool images.",
-      "comfyui": {
-        "label": "Skip ComfyUI images (Recommended)",
-        "description": "ComfyUI doesn't use Stealth PNG, scanning unnecessary"
-      },
-      "webui": {
-        "label": "Skip WebUI images",
-        "description": "WebUI may use Stealth PNG, enable only if needed"
-      }
-    },
-    "secondary": {
-      "label": "Enable secondary extraction",
-      "description": "Retry with Stealth PNG method if primary extraction fails."
-    },
-    "performanceNote": "💡 Tip: Default settings (Fast + ComfyUI skip) provide optimal performance for most cases. ComfyUI image processing time reduced from 2682ms → 4ms!"
   },
   "messages": {
     "saveSuccess": "Settings saved successfully",

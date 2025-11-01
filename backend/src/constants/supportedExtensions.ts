@@ -13,7 +13,6 @@ export const SUPPORTED_IMAGE_EXTENSIONS = [
   '.jpeg',
   '.png',
   '.webp',
-  '.gif',
   '.bmp',
   '.tiff',
   '.tif'
@@ -22,22 +21,23 @@ export const SUPPORTED_IMAGE_EXTENSIONS = [
 /**
  * Video extensions for future video processing support
  * Currently not processed, but reserved for future implementation
+ * Note: GIF is classified as video due to animation support
  */
 export const SUPPORTED_VIDEO_EXTENSIONS = [
   '.mp4',
   '.webm',
   '.mov',
-  '.avi'
+  '.avi',
+  '.gif'
 ] as const;
 
 /**
  * All extensions that the system can potentially process
- * Currently only images are processed; video support is planned
+ * Images and videos are both supported
  */
 export const ALL_SUPPORTED_EXTENSIONS = [
   ...SUPPORTED_IMAGE_EXTENSIONS,
-  // Uncomment when video processing is implemented:
-  // ...SUPPORTED_VIDEO_EXTENSIONS
+  ...SUPPORTED_VIDEO_EXTENSIONS
 ] as const;
 
 /**
@@ -72,4 +72,24 @@ export function isExcludedExtension(ext: string, excludeList: string[]): boolean
  */
 export function shouldProcessFileExtension(ext: string, excludeList: string[] = []): boolean {
   return isSupportedExtension(ext) && !isExcludedExtension(ext, excludeList);
+}
+
+/**
+ * Check if file extension is a video format
+ * @param ext - File extension to check
+ * @returns true if the extension is a video format
+ */
+export function isVideoExtension(ext: string): boolean {
+  const normalized = ext.toLowerCase().startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`;
+  return (SUPPORTED_VIDEO_EXTENSIONS as readonly string[]).includes(normalized);
+}
+
+/**
+ * Check if file extension is an image format
+ * @param ext - File extension to check
+ * @returns true if the extension is an image format
+ */
+export function isImageExtension(ext: string): boolean {
+  const normalized = ext.toLowerCase().startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`;
+  return (SUPPORTED_IMAGE_EXTENSIONS as readonly string[]).includes(normalized);
 }

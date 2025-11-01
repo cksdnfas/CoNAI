@@ -14,7 +14,8 @@ const https = require('https');
 const ROOT_DIR = path.resolve(__dirname, '..');
 const BACKEND_DIST = path.join(ROOT_DIR, 'backend', 'dist');
 const BUNDLE_FILE = path.join(BACKEND_DIST, 'bundle.js');
-const PORTABLE_OUTPUT_DIR = path.join(ROOT_DIR, 'portable-output');
+const BUILD_OUTPUT_DIR = path.join(ROOT_DIR, 'build-output');
+const PORTABLE_OUTPUT_DIR = path.join(BUILD_OUTPUT_DIR, 'portable');
 
 const platform = os.platform();
 const arch = os.arch();
