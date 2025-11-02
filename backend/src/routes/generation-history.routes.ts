@@ -282,18 +282,33 @@ router.post(
 
 /**
  * DELETE /api/generation-history/:id
- * Delete generation history and associated images
+ * Delete generation history (통합 삭제 서비스 사용)
+ *
+ * Query Parameter:
+ * - deleteFiles: true | false (기본값: false)
+ *   - false: 히스토리만 삭제 (이미지 유지)
+ *   - true: 히스토리 + 연결된 이미지 파일까지 삭제
  */
 router.delete(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const deleteFiles = req.query.deleteFiles === 'true';
 
-    await GenerationHistoryService.deleteHistory(parseInt(id));
+    // Import DeletionService dynamically
+    const { DeletionService } = await import('../services/deletionService');
+
+    if (deleteFiles) {
+      // 히스토리 + 파일 모두 삭제
+      await DeletionService.deleteGenerationHistoryWithFiles(parseInt(id));
+    } else {
+      // 히스토리만 삭제
+      await DeletionService.deleteGenerationHistoryOnly(parseInt(id));
+    }
 
     res.json({
       success: true,
-      message: 'Generation history deleted successfully'
+      message: `Generation history deleted successfully${deleteFiles ? ' (with files)' : ' (history only)'}`
     });
   })
 );

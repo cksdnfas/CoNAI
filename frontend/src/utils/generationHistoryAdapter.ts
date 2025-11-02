@@ -47,8 +47,19 @@ export const convertHistoryToImageRecord = (
   // linked_image_id는 메타데이터로만 보관 (향후 참조용)
 
   // ✅ actual_composite_hash로 메타데이터 등록 여부 판단
-  const composite_hash = history.actual_composite_hash || `history_${history.id}`;
-  const hasMetadata = !!history.actual_composite_hash; // 메타데이터 DB에 등록되었는지 여부
+  // actual_composite_hash가 null이면 null 유지 (fallback ID 사용 안 함)
+  const composite_hash = history.actual_composite_hash;
+  const hasMetadata = !!composite_hash; // 메타데이터 DB에 등록되었는지 여부
+
+  // 디버깅: composite_hash가 null인 경우 로그 출력
+  if (!composite_hash) {
+    console.log('[History Adapter] composite_hash is null for history:', {
+      id: history.id,
+      service_type: history.service_type,
+      original_path: history.original_path,
+      actual_composite_hash: history.actual_composite_hash
+    });
+  }
 
   // 디버깅: 이미지 경로가 없는 경우 경고
   if (!hasMetadata && !history.original_path) {
@@ -158,10 +169,11 @@ export const convertHistoryToImageRecord = (
 
     // URL 필드
     // ✅ 간단한 로직: 메타데이터 있으면 API 라우트, 없으면 히스토리 원본 경로
-    thumbnail_url: hasMetadata
+    // composite_hash가 null이면 항상 original_path 사용 (잘못된 API 요청 방지)
+    thumbnail_url: (hasMetadata && composite_hash)
       ? `/api/images/${composite_hash}/thumbnail`
       : (history.original_path ? `/uploads/${history.original_path}` : ''),
-    image_url: hasMetadata
+    image_url: (hasMetadata && composite_hash)
       ? `/api/images/${composite_hash}/file`
       : (history.original_path ? `/uploads/${history.original_path}` : null),
 

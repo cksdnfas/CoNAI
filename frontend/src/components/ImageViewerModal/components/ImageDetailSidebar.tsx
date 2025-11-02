@@ -70,7 +70,9 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
   // 히스토리 컨텍스트에서는 linked image의 AUTO 프롬프트 사용
   const showAutoPrompts = isHistoryContext && linkedImage && linkedImage.ai_metadata;
 
-  const shouldShowPromptSection = hasPrompts || isTaggerEnabled || showAutoPrompts;
+  // auto_tags가 있는 경우에도 프롬프트 섹션 표시
+  const hasAutoTags = image.auto_tags && Object.keys(image.auto_tags).length > 0;
+  const shouldShowPromptSection = hasPrompts || isTaggerEnabled || showAutoPrompts || hasAutoTags;
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, height: '100%', display: 'flex', flexDirection: 'column' }}>

@@ -1,7 +1,7 @@
 import { ImageMetadataModel } from '../models/Image/ImageMetadataModel';
 import { ImageFileModel } from '../models/Image/ImageFileModel';
 import { ImageSimilarityService } from './imageSimilarity';
-import { ImageMetadataRecord } from '../types/image';
+import { ImageMetadataRecord, FileType } from '../types/image';
 import path from 'path';
 
 /**
@@ -109,9 +109,12 @@ export class ImageUploadService {
     if (!fileExists) {
       const fileStats = await import('fs').then(fs => fs.promises.stat(imagePath));
 
+      // 파일 타입 결정
+      const fileType = this.determineFileType(imageData.mimeType, imagePath);
+
       ImageFileModel.create({
         composite_hash: compositeHash,
-        file_hash: null,
+        file_type: fileType,
         original_file_path: imagePath,
         folder_id: folderId,
         file_status: 'active',
@@ -158,5 +161,21 @@ export class ImageUploadService {
   static getActiveFilePath(compositeHash: string): string | null {
     const files = ImageFileModel.findActiveByHash(compositeHash);
     return files.length > 0 ? files[0].original_file_path : null;
+  }
+
+  /**
+   * 파일 타입 결정 (image, video, animated)
+   */
+  private static determineFileType(mimeType: string, filePath: string): FileType {
+    if (mimeType.startsWith('video/')) {
+      return 'video';
+    }
+
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.gif' || ext === '.apng') {
+      return 'animated';
+    }
+
+    return 'image';
   }
 }

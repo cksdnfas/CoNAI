@@ -289,7 +289,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
  */
 router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
-  const { prompt_data, server_id, groupId } = req.body;
+  const { prompt_data, server_id, groupId, source_image } = req.body;
 
   if (isNaN(id) || !prompt_data) {
     return res.status(400).json({
@@ -380,7 +380,18 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
     // 백그라운드에서 이미지 생성 프로세스 실행
     (async () => {
       const startTime = Date.now();
+      let tempImageId: string | undefined;
+
       try {
+        // Handle source_image if provided (from image editor)
+        if (source_image?.tempId) {
+          tempImageId = source_image.tempId;
+          console.log(`🖼️  Using edited image from temp: ${tempImageId}`);
+
+          // TODO: Inject temp image into workflow JSON
+          // This will be done when ComfyUI service supports img2img
+        }
+
         // ComfyUI 서비스 생성 (선택된 endpoint 사용)
         const comfyService = createComfyUIService(apiEndpoint);
         console.log(`📤 Sending to ComfyUI: ${apiEndpoint}`);
@@ -482,6 +493,17 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
             }
           } catch (recordError) {
             console.error(`⚠️ Failed to update history error:`, recordError);
+          }
+        }
+      } finally {
+        // Cleanup temp image if used
+        if (tempImageId) {
+          try {
+            const { TempImageService } = await import('../services/tempImageService');
+            await TempImageService.deleteTempFile(tempImageId);
+            console.log(`🧹 Cleaned up temp image: ${tempImageId}`);
+          } catch (cleanupError) {
+            console.error(`⚠️ Failed to cleanup temp image ${tempImageId}:`, cleanupError);
           }
         }
       }

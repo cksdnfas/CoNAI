@@ -202,10 +202,6 @@ export class AutoTagSearchService {
         // Score 조건을 위한 서브쿼리
         const scoreConditions: string[] = [];
 
-        console.log('[AutoTagSearch] Building score condition for tag:', tagFilter.tag);
-        console.log('[AutoTagSearch] Score range:', tagFilter.min_score, '~', tagFilter.max_score);
-        console.log('[AutoTagSearch] Search variants:', searchVariants);
-
         for (const variant of searchVariants) {
           const scoreCheck: string[] = [];
           if (hasMinFilter) {
@@ -225,9 +221,6 @@ export class AutoTagSearchService {
               WHERE LOWER(key) LIKE ?${scoreCheckStr}
             )
           `.trim();
-
-          console.log('[AutoTagSearch] Score condition SQL:', scoreCondition);
-          console.log('[AutoTagSearch] Params for variant:', variant, '- min:', tagFilter.min_score, 'max:', tagFilter.max_score);
 
           scoreConditions.push(scoreCondition);
 

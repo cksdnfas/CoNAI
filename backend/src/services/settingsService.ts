@@ -36,6 +36,10 @@ export class SettingsService {
     return {
       general: {
         language: 'ko',  // 기본 언어: 한국어
+        deleteProtection: {
+          enabled: true,  // 기본값: 활성화
+          recycleBinPath: 'RecycleBin'
+        }
       },
       tagger: {
         enabled: process.env.TAGGER_ENABLED === 'true',

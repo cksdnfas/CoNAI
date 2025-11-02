@@ -36,25 +36,40 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
   try {
     console.log('[TagRoute] Querying database for composite_hash:', compositeHash);
 
-    // 이미지 메타데이터 및 파일 정보 조회
-    const imageData = db.prepare(`
+    // 이미지/비디오 메타데이터 및 파일 정보 조회
+    // 먼저 image_metadata 확인
+    let imageData = db.prepare(`
       SELECT
         im.*,
         if.original_file_path,
-        if.mime_type as file_mime_type
+        if.mime_type as file_mime_type,
+        'image' as media_type
       FROM image_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       WHERE im.composite_hash = ?
       LIMIT 1
     `).get(compositeHash) as any;
 
-    console.log('[TagRoute] Database query result:', imageData ? 'Found' : 'Not found');
+    // image_metadata에 없으면 video_metadata 확인
+    if (!imageData) {
+      imageData = db.prepare(`
+        SELECT
+          vm.*,
+          if.original_file_path,
+          if.mime_type as file_mime_type,
+          'video' as media_type
+        FROM video_metadata vm
+        LEFT JOIN image_files if ON vm.composite_hash = if.composite_hash AND if.file_status = 'active'
+        WHERE vm.composite_hash = ?
+        LIMIT 1
+      `).get(compositeHash) as any;
+    }
 
     if (!imageData) {
-      console.log('[TagRoute] Image not found in database');
+      console.log('[TagRoute] Image/Video not found in database');
       return res.status(404).json({
         success: false,
-        error: 'Image not found'
+        error: 'Image or video not found'
       });
     }
 
@@ -111,14 +126,23 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
-    // 데이터베이스에 저장
+    // 데이터베이스에 저장 (media_type에 따라 적절한 테이블 업데이트)
     const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
     console.log('[ImageTag] Formatted JSON length:', autoTagsJson?.length || 0);
     console.log('[ImageTag] Formatted JSON preview:', autoTagsJson?.substring(0, 100));
 
-    ImageMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
+    if (imageData.media_type === 'image') {
+      ImageMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
+    } else {
+      // video_metadata 업데이트
+      db.prepare(`
+        UPDATE video_metadata
+        SET auto_tags = ?
+        WHERE composite_hash = ?
+      `).run(autoTagsJson, compositeHash);
+    }
 
-    console.log(`[ImageTag] Successfully tagged image ${compositeHash}`);
+    console.log(`[ImageTag] Successfully tagged ${imageData.media_type} ${compositeHash}`);
 
     res.json({
       success: true,

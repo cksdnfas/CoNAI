@@ -29,7 +29,7 @@ import { useTranslation } from 'react-i18next';
 import { workflowApi, type Workflow, type MarkedField } from '../../services/api/workflowApi';
 import { MarkedFieldsGuide } from './MarkedFieldsGuide';
 import { MarkedFieldsPreview } from './MarkedFieldsPreview';
-import WorkflowGraphViewer from './components/WorkflowGraphViewer';
+import EnhancedWorkflowGraphViewer from './components/EnhancedWorkflowGraphViewer';
 import WorkflowJsonViewer from './components/WorkflowJsonViewer';
 
 export default function WorkflowFormPage() {
@@ -138,6 +138,45 @@ export default function WorkflowFormPage() {
 
   const removeMarkedField = (index: number) => {
     setMarkedFields(markedFields.filter((_, i) => i !== index));
+  };
+
+  // Handle parameter right-click from Graph View
+  const handleParameterRightClick = (
+    nodeId: string,
+    paramKey: string,
+    paramValue: any,
+    paramType: string
+  ) => {
+    const jsonPath = `${nodeId}.inputs.${paramKey}`;
+
+    // Check for duplicates
+    const isDuplicate = markedFields.some((field) => field.jsonPath === jsonPath);
+    if (isDuplicate) {
+      setError(`Parameter "${paramKey}" from node ${nodeId} is already in Marked Fields`);
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+
+    // Infer field type from value
+    let fieldType: 'text' | 'number' | 'textarea' = 'text';
+    if (typeof paramValue === 'number') {
+      fieldType = 'number';
+    } else if (typeof paramValue === 'string' && paramValue.length > 100) {
+      fieldType = 'textarea';
+    }
+
+    // Create new marked field
+    const newField: MarkedField = {
+      id: `field_${Date.now()}`,
+      label: `${paramKey} (Node ${nodeId})`,
+      jsonPath,
+      type: fieldType,
+      required: false,
+    };
+
+    setMarkedFields([...markedFields, newField]);
+    setSuccess(`Added "${paramKey}" from Node ${nodeId} to Marked Fields`);
+    setTimeout(() => setSuccess(null), 3000);
   };
 
   const handleSubmit = async () => {
@@ -383,7 +422,10 @@ export default function WorkflowFormPage() {
         <Box role="tabpanel" hidden={jsonTabValue !== 1}>
           {jsonTabValue === 1 && workflowJson && !jsonError && (
             <Box sx={{ height: '600px', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-              <WorkflowGraphViewer workflowJson={workflowJson} />
+              <EnhancedWorkflowGraphViewer
+                workflowJson={workflowJson}
+                onParameterRightClick={handleParameterRightClick}
+              />
             </Box>
           )}
         </Box>

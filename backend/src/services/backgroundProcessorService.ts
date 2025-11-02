@@ -9,6 +9,7 @@ import { BackgroundQueueService } from './backgroundQueue';
 import { generateFileHash } from '../utils/fileHash';
 import { isVideoExtension } from '../constants/supportedExtensions';
 import { runtimePaths } from '../config/runtimePaths';
+import { VideoProcessor } from './videoProcessor';
 
 interface UnhashedFile {
   id: number;
@@ -238,10 +239,11 @@ export class BackgroundProcessorService {
    * Process video/animated file: generate MD5 hash, store as composite_hash, create video_metadata
    */
   private static async processVideoFile(file: UnhashedFile): Promise<void> {
-    const fileName = path.basename(file.original_file_path);
+    const filePath = file.original_file_path;
+    const fileName = path.basename(filePath);
 
     // Generate MD5 file hash (동영상과 애니메이션은 파일 해시 사용)
-    const fileHash = await generateFileHash(file.original_file_path);
+    const fileHash = await generateFileHash(filePath);
 
     // Check if this hash already exists (duplicate detection)
     const existing = db
@@ -255,17 +257,84 @@ export class BackgroundProcessorService {
         file.id
       );
 
-      console.log(`  ♻️  Video/Animated already processed: ${fileName}`);
+      // Check if image_metadata record exists (for legacy videos)
+      const imageMetadata = db
+        .prepare(`SELECT composite_hash FROM image_metadata WHERE composite_hash = ?`)
+        .get(fileHash) as { composite_hash: string } | undefined;
+
+      if (!imageMetadata) {
+        // Legacy video without image_metadata - extract and create record
+        console.log(`  🔄 Migrating legacy video metadata: ${fileName}`);
+        try {
+          const metadata = await VideoProcessor.extractMetadata(filePath);
+
+          db.prepare(
+            `
+            INSERT INTO image_metadata (
+              composite_hash, width, height, file_size, first_seen_date
+            ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `
+          ).run(fileHash, metadata.width, metadata.height, fs.statSync(filePath).size);
+
+          console.log(`  ✅ Migrated: ${fileName} (${metadata.width}x${metadata.height})`);
+        } catch (error) {
+          console.warn(
+            `  ⚠️  Failed to migrate metadata for ${fileName}:`,
+            error instanceof Error ? error.message : error
+          );
+        }
+      } else {
+        console.log(`  ♻️  Video/Animated already processed: ${fileName}`);
+      }
+
       return;
     }
 
-    // Create basic video_metadata record (FFprobe extraction happens in metadata extraction task)
+    // Extract video metadata immediately using FFprobe
+    let width = 0;
+    let height = 0;
+    let duration = 0;
+    let fps = 0;
+    let videoCodec = 'unknown';
+    let audioCodec: string | null = null;
+    let bitrate = 0;
+
+    try {
+      const metadata = await VideoProcessor.extractMetadata(filePath);
+      width = metadata.width;
+      height = metadata.height;
+      duration = metadata.duration;
+      fps = metadata.fps;
+      videoCodec = metadata.video_codec;
+      audioCodec = metadata.audio_codec;
+      bitrate = metadata.bitrate;
+
+      console.log(`  📊 Extracted metadata: ${width}x${height}, ${duration.toFixed(2)}s, ${videoCodec}`);
+    } catch (error) {
+      console.warn(
+        `  ⚠️  Failed to extract video metadata for ${fileName}:`,
+        error instanceof Error ? error.message : error
+      );
+      // Continue processing even if metadata extraction fails
+    }
+
+    // Create video_metadata record with extracted metadata
     db.prepare(
       `
-      INSERT INTO video_metadata (composite_hash)
-      VALUES (?)
+      INSERT INTO video_metadata (
+        composite_hash, duration, fps, width, height, video_codec, audio_codec, bitrate, first_seen_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `
-    ).run(fileHash);
+    ).run(fileHash, duration, fps, width, height, videoCodec, audioCodec, bitrate);
+
+    // Create image_metadata record with dimensions (CRITICAL: needed for dimension display)
+    db.prepare(
+      `
+      INSERT INTO image_metadata (
+        composite_hash, width, height, file_size, first_seen_date
+      ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `
+    ).run(fileHash, width, height, fs.statSync(filePath).size);
 
     // Update image_files record with composite_hash (MD5 해시 값)
     db.prepare(`UPDATE image_files SET composite_hash = ? WHERE id = ?`).run(
@@ -273,21 +342,7 @@ export class BackgroundProcessorService {
       file.id
     );
 
-    // Queue metadata extraction task (video metadata via FFprobe)
-    try {
-      BackgroundQueueService.addMetadataExtractionTask(
-        file.original_file_path,
-        fileHash
-      );
-    } catch (error) {
-      // Non-critical error - continue processing
-      console.warn(
-        `  ⚠️  Failed to queue metadata extraction for ${fileName}:`,
-        error instanceof Error ? error.message : error
-      );
-    }
-
-    console.log(`  ✨ Processed video/animated: ${fileName}`);
+    console.log(`  ✨ Processed video/animated: ${fileName} (${width}x${height})`);
   }
 
   /**

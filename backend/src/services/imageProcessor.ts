@@ -300,6 +300,12 @@ export class ImageProcessor {
 
   /**
    * 파일 삭제
+   *
+   * @deprecated Use DeletionService.deleteImage() instead
+   *             통합 삭제 서비스(DeletionService)를 사용하세요.
+   *             - RecycleBin 지원
+   *             - composite_hash 중복 검사
+   *             - 일관된 에러 핸들링
    */
   static async deleteImageFiles(
     originalPath: string,

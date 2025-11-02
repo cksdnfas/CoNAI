@@ -27,7 +27,7 @@ import type { ImageRecord, ImageSearchParams } from '../../types/image';
 import type { GenerationHistoryRecord } from '@comfyui-image-manager/shared';
 import ImageNavigation from './ImageNavigation';
 import { ImageGridModal } from '../ImageGrid';
-import { getBackendOrigin } from '../../utils/backend';
+import { getBackendOrigin, buildUploadsUrl } from '../../utils/backend';
 import { settingsApi } from '../../services/settingsApi';
 import { imageApi, generationHistoryApi } from '../../services/api';
 import { useImageTransform } from './hooks/useImageTransform';
@@ -36,6 +36,7 @@ import { useGroupImages } from './hooks/useGroupImages';
 import { ImageControls } from './components/ImageControls';
 import { ImageDisplay } from './components/ImageDisplay';
 import { ImageDetailSidebar } from './components/ImageDetailSidebar';
+import { ImageEditorModal } from '../ImageEditorModal';
 
 // ✅ composite_hash 기반으로 변경
 interface ImageViewerModalProps {
@@ -82,6 +83,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isRandomMode, setIsRandomMode] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false); // 원본 이미지 표시 여부 (기본: 썸네일)
+  const [editorOpen, setEditorOpen] = useState(false); // 이미지 편집 모달
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',
@@ -128,6 +130,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   useEffect(() => {
     // 랜덤 모드가 아닐 때만 prop 변경사항 반영
     if (!isRandomMode) {
+      // console.log('[ImageViewerModal] Received image prop, auto_tags:', image?.auto_tags);
+      // console.log('[ImageViewerModal] Full image object:', image);
       setCurrentImage(image);
     }
   }, [image, isRandomMode]);
@@ -137,6 +141,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     if (!image?.composite_hash) return;
     try {
       const response = await imageApi.getImage(image.composite_hash);
+      // console.log('[ImageViewerModal] API Response:', response);
+      // console.log('[ImageViewerModal] response.data.auto_tags:', response.data?.auto_tags);
       if (response.success && response.data) {
         setCurrentImage(response.data);
       }
@@ -306,6 +312,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             onFlipVertical={transform.handleFlipVertical}
             onReset={transform.handleReset}
             onToggleOriginal={() => setShowOriginal(prev => !prev)}
+            onEdit={() => setEditorOpen(true)}
             onOpenDrawer={isMobile ? () => setDrawerOpen(true) : undefined}
             onClose={onClose}
           />
@@ -471,6 +478,32 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Image Editor Modal */}
+      {currentImage && currentImage.file_id && (
+        <ImageEditorModal
+          open={editorOpen}
+          onClose={() => setEditorOpen(false)}
+          imageId={currentImage.file_id}
+          imageUrl={buildUploadsUrl(showOriginal ? (currentImage.original_file_path || currentImage.thumbnail_path) : currentImage.thumbnail_path)}
+          onSendToComfyUI={(tempId) => {
+            console.log('Send to ComfyUI:', tempId);
+            setSnackbar({
+              open: true,
+              message: 'Image prepared for ComfyUI (feature coming soon)',
+              severity: 'success'
+            });
+          }}
+          onSaveAsNew={(newImageId) => {
+            console.log('Saved as new image:', newImageId);
+            setSnackbar({
+              open: true,
+              message: `New image created (ID: ${newImageId})`,
+              severity: 'success'
+            });
+          }}
+        />
+      )}
     </Dialog>
   );
 };

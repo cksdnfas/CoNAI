@@ -1,9 +1,13 @@
 {
   "general": {
-    "language": "ko"
+    "language": "ko",
+    "deleteProtection": {
+      "enabled": true,
+      "recycleBinPath": "RecycleBin"
+    }
   },
   "tagger": {
-    "enabled": false,
+    "enabled": true,
     "autoTagOnUpload": false,
     "model": "swinv2",
     "device": "cuda",

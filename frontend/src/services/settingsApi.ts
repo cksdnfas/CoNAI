@@ -3,8 +3,14 @@ import { API_BASE_URL } from './api';
 
 export type SupportedLanguage = 'ko' | 'en' | 'ja' | 'zh-CN' | 'zh-TW';
 
+export interface DeleteProtectionSettings {
+  enabled: boolean;
+  recycleBinPath: string;
+}
+
 export interface GeneralSettings {
   language: SupportedLanguage;
+  deleteProtection: DeleteProtectionSettings;
 }
 
 export interface TaggerModel {

@@ -1,6 +1,7 @@
 import { db } from '../database/init';
 import { taggerDaemon } from './taggerDaemon';
 import { settingsService } from './settingsService';
+import { imageTaggerService, ImageTaggerService } from './imageTaggerService';
 import path from 'path';
 
 /**
@@ -80,27 +81,50 @@ export class AutoTagScheduler {
     }
 
     try {
-      // 태깅되지 않은 이미지 조회 (image_files에서 active한 파일 경로 가져오기)
+      // 태깅되지 않은 이미지/비디오 조회 (image_files에서 active한 파일 경로 가져오기)
+      // file_type은 태깅 방식 결정, metadata_table은 업데이트할 테이블 결정
       const untaggedImages = db.prepare(`
         SELECT
           im.composite_hash,
-          if_.original_file_path
+          if_.original_file_path,
+          if_.file_type as media_type,
+          'image' as metadata_table
         FROM image_metadata im
         LEFT JOIN image_files if_ ON im.composite_hash = if_.composite_hash
         WHERE im.auto_tags IS NULL
+          AND if_.original_file_path IS NOT NULL
+          AND if_.file_status = 'active'
+        UNION
+        SELECT
+          vm.composite_hash,
+          if_.original_file_path,
+          if_.file_type as media_type,
+          'video' as metadata_table
+        FROM video_metadata vm
+        LEFT JOIN image_files if_ ON vm.composite_hash = if_.composite_hash
+        WHERE vm.auto_tags IS NULL
           AND if_.original_file_path IS NOT NULL
           AND if_.file_status = 'active'
         LIMIT ?
-      `).all(this.BATCH_SIZE) as Array<{ composite_hash: string; original_file_path: string }>;
+      `).all(this.BATCH_SIZE) as Array<{ composite_hash: string; original_file_path: string; media_type: string; metadata_table: 'image' | 'video' }>;
 
       // 총 미태깅 개수도 확인
       const totalUntagged = db.prepare(`
-        SELECT COUNT(*) as count
-        FROM image_metadata im
-        LEFT JOIN image_files if_ ON im.composite_hash = if_.composite_hash
-        WHERE im.auto_tags IS NULL
-          AND if_.original_file_path IS NOT NULL
-          AND if_.file_status = 'active'
+        SELECT COUNT(*) as count FROM (
+          SELECT im.composite_hash
+          FROM image_metadata im
+          LEFT JOIN image_files if_ ON im.composite_hash = if_.composite_hash
+          WHERE im.auto_tags IS NULL
+            AND if_.original_file_path IS NOT NULL
+            AND if_.file_status = 'active'
+          UNION
+          SELECT vm.composite_hash
+          FROM video_metadata vm
+          LEFT JOIN image_files if_ ON vm.composite_hash = if_.composite_hash
+          WHERE vm.auto_tags IS NULL
+            AND if_.original_file_path IS NOT NULL
+            AND if_.file_status = 'active'
+        )
       `).get() as { count: number };
 
       if (untaggedImages.length === 0) {
@@ -115,7 +139,7 @@ export class AutoTagScheduler {
         const image = untaggedImages[i];
 
         try {
-          await this.tagSingleImage(image.composite_hash, image.original_file_path);
+          await this.tagSingleImage(image.composite_hash, image.original_file_path, image.media_type, image.metadata_table);
 
           // 마지막 이미지가 아니면 대기
           if (i < untaggedImages.length - 1) {
@@ -143,13 +167,23 @@ export class AutoTagScheduler {
   }
 
   /**
-   * 단일 이미지 태깅
+   * 단일 이미지/비디오 태깅
    */
-  private async tagSingleImage(compositeHash: string, filePath: string): Promise<void> {
-    console.log(`[AutoTagScheduler] Tagging: ${path.basename(filePath)}`);
+  private async tagSingleImage(
+    compositeHash: string,
+    filePath: string,
+    mediaType: string,
+    metadataTable: 'image' | 'video'
+  ): Promise<void> {
+    console.log(`[AutoTagScheduler] Tagging (${mediaType}): ${path.basename(filePath)}`);
 
-    // TaggerDaemon을 통해 이미지 태깅
-    const result = await taggerDaemon.tagImage(filePath);
+    // file_type='video'만 비디오 태깅 사용, 'image'와 'animated'는 이미지 태깅 사용
+    const isVideo = mediaType === 'video';
+
+    // 이미지 또는 비디오 태깅 실행
+    const result = isVideo
+      ? await imageTaggerService.tagVideo(filePath)
+      : await taggerDaemon.tagImage(filePath);
 
     if (!result.success) {
       throw new Error(result.error || 'Unknown tagging error');
@@ -166,14 +200,23 @@ export class AutoTagScheduler {
       thresholds: result.thresholds
     });
 
-    // image_metadata 업데이트
-    db.prepare(`
-      UPDATE image_metadata
-      SET auto_tags = ?
-      WHERE composite_hash = ?
-    `).run(autoTags, compositeHash);
+    // metadata_table에 따라 적절한 테이블 업데이트
+    // image_metadata 또는 video_metadata (file_type과 무관)
+    if (metadataTable === 'image') {
+      db.prepare(`
+        UPDATE image_metadata
+        SET auto_tags = ?
+        WHERE composite_hash = ?
+      `).run(autoTags, compositeHash);
+    } else {
+      db.prepare(`
+        UPDATE video_metadata
+        SET auto_tags = ?
+        WHERE composite_hash = ?
+      `).run(autoTags, compositeHash);
+    }
 
-    console.log(`[AutoTagScheduler] ✅ Tagged: ${path.basename(filePath)}`);
+    console.log(`[AutoTagScheduler] ✅ Tagged (${mediaType}): ${path.basename(filePath)}`);
   }
 
   /**

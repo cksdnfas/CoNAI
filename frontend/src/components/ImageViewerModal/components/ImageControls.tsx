@@ -12,6 +12,7 @@ import {
   Refresh as ResetIcon,
   HighQuality as HighQualityIcon,
   Image as ThumbnailIcon,
+  Edit as EditIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 
@@ -28,6 +29,7 @@ interface ImageControlsProps {
   onFlipVertical: () => void;
   onReset: () => void;
   onToggleOriginal: () => void; // 원본/썸네일 전환
+  onEdit?: () => void; // 편집 모드 열기
   onOpenDrawer?: () => void;
   onClose: () => void;
 }
@@ -48,6 +50,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
   onFlipVertical,
   onReset,
   onToggleOriginal,
+  onEdit,
   onOpenDrawer,
   onClose,
 }) => {
@@ -145,6 +148,18 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
             title={showOriginal ? '썸네일 보기 (빠른 로딩)' : '원본 이미지 보기 (고화질)'}
           >
             {showOriginal ? <ThumbnailIcon /> : <HighQualityIcon />}
+          </IconButton>
+        )}
+
+        {/* Edit button for img2img */}
+        {onEdit && (
+          <IconButton
+            onClick={onEdit}
+            sx={{ color: 'white' }}
+            size="small"
+            title="Edit for img2img"
+          >
+            <EditIcon />
           </IconButton>
         )}
       </Box>

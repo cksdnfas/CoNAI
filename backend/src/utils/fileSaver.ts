@@ -91,9 +91,6 @@ export class FileSaver {
       // 7. uploads 디렉토리 기준 상대 경로 반환
       const relativePath = this.normalizeRelativePath(fullPath);
 
-      console.log(`[FileSaver] ${serviceType} 이미지 저장 완료: ${relativePath} (${width}x${height}, ${Math.round(stats.size / 1024)}KB)`);
-      console.log(`[FileSaver] Composite hash: ${compositeHash}`);
-
       return {
         originalPath: relativePath,
         fileSize: stats.size,

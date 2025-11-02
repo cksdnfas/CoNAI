@@ -344,7 +344,6 @@ export const up = async (db: Database.Database): Promise<void> => {
       file_modified_date DATETIME,
       scan_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       last_verified_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (composite_hash) REFERENCES image_metadata(composite_hash) ON DELETE CASCADE,
       FOREIGN KEY (folder_id) REFERENCES watched_folders(id) ON DELETE CASCADE
     )
   `);

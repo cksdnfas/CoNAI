@@ -43,6 +43,18 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
     const isGif = image.file_type === 'animated';
     const isVideo = image.file_type === 'video';
 
+    // composite_hash null 체크
+    if (!image.composite_hash) {
+      // composite_hash가 없으면 image_url 또는 thumbnail_url 사용
+      if (image.image_url) {
+        return image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
+      }
+      if (image.thumbnail_url) {
+        return image.thumbnail_url.startsWith('http') ? image.thumbnail_url : `${backendOrigin}${image.thumbnail_url}`;
+      }
+      return ''; // 둘 다 없으면 빈 문자열
+    }
+
     // GIF와 비디오는 항상 원본 사용 (ImageCard와 동일하게 직접 엔드포인트 사용)
     // 모든 파일 타입이 composite_hash를 사용
     if (isGif || isVideo) {
@@ -73,7 +85,11 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
     if (image.thumbnail_url) {
       return image.thumbnail_url.startsWith('http') ? image.thumbnail_url : `${backendOrigin}${image.thumbnail_url}`;
     }
-    return `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
+    // composite_hash가 있을 때만 API 엔드포인트 사용
+    if (image.composite_hash) {
+      return `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
+    }
+    return ''; // 모든 경로가 없으면 빈 문자열
   };
 
   const imageUrl = getImageUrl();

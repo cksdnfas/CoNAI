@@ -89,10 +89,10 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
   const hasPrompt = prompt && prompt.trim();
   const hasNegativePrompt = negativePrompt && negativePrompt.trim();
 
-  // AUTO 탭 표시 조건: 일반 모드는 isTaggerEnabled, 히스토리 모드는 linkedImage 존재 여부
+  // AUTO 탭 표시 조건: 일반 모드는 isTaggerEnabled 또는 autoTags 존재, 히스토리 모드는 linkedImage 존재 여부
   const showAutoTab = isHistoryContext
     ? (linkedImage !== null || loadingLinkedImage)
-    : (isTaggerEnabled && imageId !== undefined);
+    : (isTaggerEnabled && imageId !== undefined) || (autoTags && Object.keys(autoTags).length > 0);
 
   // showGrouped가 true일 때 프롬프트 그룹화 처리
   useEffect(() => {

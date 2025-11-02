@@ -22,6 +22,15 @@
       "zh-CN": "简体中文",
       "zh-TW": "繁體中文"
     },
+    "deleteProtection": {
+      "title": "Delete File Protection",
+      "description": "Store deleted files in RecycleBin folder for recovery",
+      "enabled": {
+        "label": "Store deleted files in RecycleBin",
+        "description": "When enabled, deleted files are backed up to RecycleBin folder instead of being permanently removed."
+      },
+      "info": "RecycleBin folder is created in the project root. Deleted files are stored with timestamps. You can manually copy files from RecycleBin if recovery is needed."
+    },
     "metadata": {
       "title": "Metadata Extraction Optimization",
       "description": "Optimize AI image metadata extraction performance. Default settings improve ComfyUI image processing by 99.85%.",

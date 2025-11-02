@@ -33,6 +33,7 @@ import wildcardRoutes from './routes/wildcards';
 import { watchedFoldersRoutes } from './routes/watchedFolders';
 import { backgroundQueueRoutes } from './routes/backgroundQueue';
 import { systemRoutes } from './routes/system.routes';
+import imageEditorRoutes from './routes/image-editor.routes';
 import { initializeDatabase } from './database/init';
 import { initializeUserSettingsDb } from './database/userSettingsDb';
 import { initializeApiGenerationDb } from './database/apiGenerationDb';
@@ -149,6 +150,7 @@ app.use('/api/wildcards', wildcardRoutes);
 app.use('/api/folders', watchedFoldersRoutes);
 app.use('/api/background-queue', backgroundQueueRoutes);
 app.use('/api/system', systemRoutes);
+app.use('/api/image-editor', imageEditorRoutes);
 
 // Frontend static file serving
 const frontendDistPath = process.env.FRONTEND_DIST_PATH
@@ -201,7 +203,7 @@ async function startServer() {
   try {
     console.log('🚀 ComfyUI Image Manager Backend 시작 중...\n');
 
-    // 1. 필요한 폴더들 자동 생성
+    // 1. 필요한 폴더들 자동 생성 (uploads, database, logs, temp, models, RecycleBin)
     console.log('📁 필요한 폴더들을 확인하고 생성 중...');
     ensureRuntimeDirectories();
 
@@ -234,6 +236,12 @@ async function startServer() {
     // 6. 쿼리 캐시 서비스 초기화
     console.log('💾 Query cache service 초기화 중...');
     QueryCacheService.initialize();
+
+    // 6-1. 임시 이미지 서비스 초기화
+    console.log('🖼️  Temp image service 초기화 중...');
+    const { TempImageService } = await import('./services/tempImageService');
+    await TempImageService.initialize();
+    console.log('✅ Temp image service initialized successfully');
 
     // 7. API 이미지 저장 디렉토리 생성
     console.log('📁 API 이미지 디렉토리 생성 중...');
@@ -278,6 +286,12 @@ async function startServer() {
     console.log('🤖 Starting auto-tag scheduler...');
     autoTagScheduler.start();
     console.log('✅ Auto-tag scheduler started successfully');
+
+    // 11. 임시 이미지 정리 스케줄러 시작
+    console.log('🧹 Starting temp image cleanup scheduler...');
+    const { TempImageCleanupScheduler } = await import('./cron/tempImageCleanup');
+    TempImageCleanupScheduler.start();
+    console.log('✅ Temp image cleanup scheduler started successfully');
 
     const extractHost = (value?: string | null): string | undefined => {
       if (!value || value.trim().length === 0) {
@@ -404,6 +418,24 @@ ${divider}`);
         console.log('✅ Auto-tag scheduler stopped');
       } catch (error) {
         console.warn('⚠️  Error stopping auto-tag scheduler:', error);
+      }
+
+      // Stop temp image cleanup scheduler
+      try {
+        const { TempImageCleanupScheduler } = await import('./cron/tempImageCleanup');
+        TempImageCleanupScheduler.stop();
+        console.log('✅ Temp image cleanup scheduler stopped');
+      } catch (error) {
+        console.warn('⚠️  Error stopping temp image cleanup scheduler:', error);
+      }
+
+      // Cleanup all temp files on shutdown
+      try {
+        const { TempImageService } = await import('./services/tempImageService');
+        await TempImageService.cleanupAll();
+        console.log('✅ All temp files cleaned up');
+      } catch (error) {
+        console.warn('⚠️  Error cleaning up temp files:', error);
       }
 
       // Stop tagger daemon

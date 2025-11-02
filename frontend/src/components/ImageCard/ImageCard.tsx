@@ -359,7 +359,6 @@ const ImageCard: React.FC<ImageCardProps> = ({
         {isVideo ? (
           <Box
             component="video"
-            height="250"
             src={thumbnailUrl}
             muted
             loop
@@ -371,7 +370,26 @@ const ImageCard: React.FC<ImageCardProps> = ({
             }}
             sx={{
               width: '100%',
-              objectFit: 'cover',
+              height: 'auto', // 자연 높이 사용 (원본 비율 유지)
+              objectFit: 'contain',
+              cursor: 'pointer',
+            }}
+            onClick={onImageClick}
+          />
+        ) : isGif ? (
+          <CardMedia
+            component="img"
+            image={imageError ? fallbackUrl : thumbnailUrl}
+            alt={image.original_file_path ?? ''}
+            draggable={false}
+            onError={(e) => {
+              console.error('[ImageCard] Image load error:', imageError ? fallbackUrl : thumbnailUrl, 'isGif:', isGif, 'mime_type:', image.mime_type, e);
+              setImageError(true);
+            }}
+            sx={{
+              width: '100%',
+              height: 'auto', // 자연 높이 사용 (원본 비율 유지)
+              objectFit: 'contain',
               cursor: 'pointer',
             }}
             onClick={onImageClick}

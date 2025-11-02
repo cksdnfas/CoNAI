@@ -132,6 +132,54 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
 
         <Divider sx={{ my: 4 }} />
 
+        {/* Delete Protection Settings */}
+        <Typography variant="h6" gutterBottom>
+          {t('general.deleteProtection.title')}
+        </Typography>
+
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          {t('general.deleteProtection.description')}
+        </Typography>
+
+        <FormControlLabel
+          control={
+            <Switch
+              checked={settings.deleteProtection?.enabled ?? true}
+              onChange={async (e) => {
+                try {
+                  await onUpdate({
+                    deleteProtection: {
+                      ...settings.deleteProtection,
+                      enabled: e.target.checked,
+                      recycleBinPath: 'RecycleBin'
+                    }
+                  });
+                } catch (err) {
+                  console.error('Failed to update delete protection:', err);
+                  setError(t('messages.saveFailed'));
+                }
+              }}
+              disabled={updating}
+            />
+          }
+          label={
+            <Box>
+              <Typography variant="body1">{t('general.deleteProtection.enabled.label')}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {t('general.deleteProtection.enabled.description')}
+              </Typography>
+            </Box>
+          }
+        />
+
+        <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
+          <Typography variant="body2">
+            {t('general.deleteProtection.info')}
+          </Typography>
+        </Alert>
+
+        <Divider sx={{ my: 4 }} />
+
         {/* Metadata Extraction Optimization */}
         <Typography variant="h6" gutterBottom>
           {t('general.metadata.title')}

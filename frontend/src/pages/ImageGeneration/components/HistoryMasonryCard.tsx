@@ -44,12 +44,16 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
   const isGif = image.file_type === 'animated';
   const isVideo = image.file_type === 'video';
 
-  // composite_hash가 유효한지 확인 (fallback "history_123" 형식이 아닌지)
+  // composite_hash가 유효한지 확인 (null이 아니고, fallback "history_123" 형식이 아닌지)
   const hasValidHash = image.composite_hash && !image.composite_hash.startsWith('history_');
 
   // URL이 이미 절대 경로(http:// 또는 https://)인지 확인
   const isAbsoluteUrl = (url: string) => url.startsWith('http://') || url.startsWith('https://');
 
+  // 이미지 URL 결정 로직 (null 체크 강화)
+  // 1. image_url 또는 thumbnail_url이 있으면 우선 사용
+  // 2. composite_hash가 유효하면 API 엔드포인트 사용
+  // 3. 둘 다 없으면 빈 문자열
   const imageUrl = (isGif || isVideo)
     ? (image.image_url
         ? (isAbsoluteUrl(image.image_url) ? image.image_url : `${backendOrigin}${image.image_url}`)
@@ -227,7 +231,8 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
         sx={{
           position: 'relative',
           width: '100%',
-          paddingTop: `${(1 / aspectRatio) * 100}%`,
+          // 동영상/GIF는 자연 높이 사용, 이미지는 padding-top으로 aspect ratio 유지
+          ...(isVideo || isGif ? {} : { paddingTop: `${(1 / aspectRatio) * 100}%` }),
           overflow: 'hidden',
           bgcolor: 'grey.200',
         }}
@@ -246,28 +251,67 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
           />
         )}
 
-        {/* 이미지 - 뷰포트에 들어왔을 때만 로드 */}
-        {isVisible && (
-          <CardMedia
-            component="img"
-            image={imageUrl}
-            alt={image.original_file_path ?? ''}
-            loading="lazy"
-            decoding="async"
-            draggable={false}
-            onLoad={handleImageLoad}
-            sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain',
-              display: 'block',
-              opacity: imageLoaded ? 1 : 0,
-              transition: 'opacity 0.15s ease-in-out',
-            }}
-          />
+        {/* 이미지/비디오 - 뷰포트에 들어왔을 때만 로드 (imageUrl이 유효한 경우만) */}
+        {isVisible && imageUrl && (
+          isVideo ? (
+            <Box
+              component="video"
+              src={imageUrl}
+              muted
+              loop
+              autoPlay
+              playsInline
+              onLoadedData={handleImageLoad}
+              sx={{
+                // 동영상은 자연 높이 사용 (원본 비율 유지)
+                width: '100%',
+                height: 'auto',
+                display: 'block',
+                opacity: imageLoaded ? 1 : 0,
+                transition: 'opacity 0.15s ease-in-out',
+              }}
+            />
+          ) : isGif ? (
+            <CardMedia
+              component="img"
+              image={imageUrl}
+              alt={image.original_file_path ?? ''}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+              onLoad={handleImageLoad}
+              sx={{
+                // GIF는 자연 높이 사용 (원본 비율 유지)
+                width: '100%',
+                height: 'auto',
+                display: 'block',
+                opacity: imageLoaded ? 1 : 0,
+                transition: 'opacity 0.15s ease-in-out',
+              }}
+            />
+          ) : (
+            <CardMedia
+              component="img"
+              image={imageUrl}
+              alt={image.original_file_path ?? ''}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+              onLoad={handleImageLoad}
+              sx={{
+                // 일반 이미지는 absolute positioning으로 aspect ratio 컨테이너 채우기
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                display: 'block',
+                opacity: imageLoaded ? 1 : 0,
+                transition: 'opacity 0.15s ease-in-out',
+              }}
+            />
+          )
         )}
       </Box>
 

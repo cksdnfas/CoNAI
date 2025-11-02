@@ -138,8 +138,6 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
       tokenPrefix: token.substring(0, 10) + '...'
     });
 
-    console.log('[NAI Generate] Full request body:', JSON.stringify(requestBody, null, 2));
-
     // NovelAI API 호출
     const response = await axios.post(
       'https://image.novelai.net/ai/generate-image',

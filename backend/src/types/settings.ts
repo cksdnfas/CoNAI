@@ -1,7 +1,13 @@
 export type SupportedLanguage = 'ko' | 'en' | 'ja' | 'zh-CN' | 'zh-TW';
 
+export interface DeleteProtectionSettings {
+  enabled: boolean;
+  recycleBinPath: string;
+}
+
 export interface GeneralSettings {
   language: SupportedLanguage;
+  deleteProtection: DeleteProtectionSettings;
 }
 
 export type StealthScanMode = 'full' | 'fast' | 'skip';

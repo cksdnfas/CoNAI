@@ -42,7 +42,7 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
     // 비디오와 GIF는 원본 파일 사용 (애니메이션/재생 보존)
     if (isVideo || isGif) {
       const url = `${backendOrigin}/api/images/${image.composite_hash}/file`;
-      console.log('[MasonryImageCard] GIF/Video URL:', url, 'mime_type:', image.mime_type, 'isGif:', isGif, 'isVideo:', isVideo);
+      // console.log('[MasonryImageCard] GIF/Video URL:', url, 'mime_type:', image.mime_type, 'isGif:', isGif, 'isVideo:', isVideo);
       return url;
     }
     // 일반 이미지는 썸네일 사용
@@ -187,7 +187,8 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
         sx={{
           position: 'relative',
           width: '100%',
-          paddingTop: `${(1 / aspectRatio) * 100}%`,
+          // 동영상/GIF는 자연 높이 사용, 이미지는 padding-top으로 aspect ratio 유지
+          ...(isVideo || isGif ? {} : { paddingTop: `${(1 / aspectRatio) * 100}%` }),
           overflow: 'hidden',
           bgcolor: 'grey.200',
         }}
@@ -218,12 +219,27 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
               playsInline
               onLoadedData={handleImageLoad}
               sx={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
+                // 동영상은 자연 높이 사용 (원본 비율 유지)
                 width: '100%',
-                height: '100%',
-                objectFit: 'contain',
+                height: 'auto',
+                display: 'block',
+                opacity: imageLoaded ? 1 : 0,
+                transition: 'opacity 0.15s ease-in-out',
+              }}
+            />
+          ) : isGif ? (
+            <CardMedia
+              component="img"
+              image={imageUrl}
+              alt={image.original_file_path || 'Image'}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+              onLoad={handleImageLoad}
+              sx={{
+                // GIF는 자연 높이 사용 (원본 비율 유지)
+                width: '100%',
+                height: 'auto',
                 display: 'block',
                 opacity: imageLoaded ? 1 : 0,
                 transition: 'opacity 0.15s ease-in-out',
@@ -239,6 +255,7 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
               draggable={false}
               onLoad={handleImageLoad}
               sx={{
+                // 일반 이미지는 absolute positioning으로 aspect ratio 컨테이너 채우기
                 position: 'absolute',
                 top: 0,
                 left: 0,

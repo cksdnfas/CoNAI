@@ -10,6 +10,7 @@ import { ImageListResponse } from '../../types/image';
 import { runtimePaths, resolveUploadsPath } from '../../config/runtimePaths';
 import { enrichImageWithFileView } from './utils';
 import { QueryCacheService } from '../../services/QueryCacheService';
+import { db } from '../../database/init';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
@@ -292,7 +293,7 @@ router.post('/search/ids', asyncHandler(async (req: Request, res: Response) => {
 router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) => {
   const compositeHash = req.params.compositeHash;
 
-  if (!compositeHash || compositeHash.length !== 48) {
+  if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
     return res.status(400).json({
       success: false,
       error: 'Invalid composite hash'
@@ -300,23 +301,43 @@ router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) =
   }
 
   try {
-    const metadata = await ImageMetadataModel.findByHash(compositeHash);
+    // 파일 정보 먼저 조회하여 파일 타입 확인
+    const files = await ImageFileModel.findActiveByHash(compositeHash);
+
+    if (!files || files.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'File not found'
+      });
+    }
+
+    // 파일 타입에 따라 적절한 테이블에서 메타데이터 조회
+    const isVideo = files[0].file_type === 'video' || files[0].file_type === 'animated';
+    let metadata;
+
+    if (isVideo) {
+      // video_metadata 조회
+      metadata = db.prepare(`
+        SELECT * FROM video_metadata WHERE composite_hash = ?
+      `).get(compositeHash) as any;
+    } else {
+      // image_metadata 조회 (기존 로직)
+      metadata = await ImageMetadataModel.findByHash(compositeHash);
+    }
 
     if (!metadata) {
       return res.status(404).json({
         success: false,
-        error: 'Image not found'
+        error: isVideo ? 'Video metadata not found' : 'Image metadata not found'
       });
     }
 
-    // 파일 경로 조회
-    const files = await ImageFileModel.findActiveByHash(compositeHash);
     const imageWithFile = {
       ...metadata,
-      file_id: files.length > 0 ? files[0].id : null,
-      original_file_path: files.length > 0 ? files[0].original_file_path : null,
-      file_size: files.length > 0 ? files[0].file_size : null,
-      mime_type: files.length > 0 ? files[0].mime_type : 'image/jpeg'
+      file_id: files[0].id,
+      original_file_path: files[0].original_file_path,
+      file_size: files[0].file_size,
+      mime_type: files[0].mime_type || 'image/jpeg'
     };
 
     res.json({
@@ -482,7 +503,7 @@ router.get('/batch/thumbnails', asyncHandler(async (req: Request, res: Response)
 router.get('/:compositeHash/file', asyncHandler(async (req: Request, res: Response) => {
   const compositeHash = req.params.compositeHash;
 
-  if (!compositeHash || compositeHash.length !== 48) {
+  if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
     return res.status(400).json({
       success: false,
       error: 'Invalid composite hash'
@@ -582,7 +603,7 @@ router.get('/:compositeHash/file', asyncHandler(async (req: Request, res: Respon
 router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: Response) => {
   const compositeHash = req.params.compositeHash;
 
-  if (!compositeHash || compositeHash.length !== 48) {
+  if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
     return res.status(400).json({
       success: false,
       error: 'Invalid composite hash'
@@ -719,7 +740,7 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
 router.get('/:compositeHash/download/original', asyncHandler(async (req: Request, res: Response) => {
   const compositeHash = req.params.compositeHash;
 
-  if (!compositeHash || compositeHash.length !== 48) {
+  if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
     return res.status(400).json({
       success: false,
       error: 'Invalid composite hash'

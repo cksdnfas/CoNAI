@@ -303,14 +303,8 @@ export class ImageSearchModel {
       ${whereClause}
     `;
 
-    console.log('[AutoTagSearch] Generated Query:', countQuery);
-    console.log('[AutoTagSearch] Query Params:', queryBuilder.params);
-    console.log('[AutoTagSearch] Search Params:', JSON.stringify(searchParams, null, 2));
-
     const countRow = db.prepare(countQuery).get(...queryBuilder.params) as any;
     const total = countRow.total;
-
-    console.log('[AutoTagSearch] Total Results:', total);
 
     // 정렬 컬럼 매핑
     let sortColumn = 'im.first_seen_date';
