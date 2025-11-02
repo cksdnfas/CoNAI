@@ -36,7 +36,7 @@ export interface ImageRecord {
   file_size: number | null;            // File size in bytes
   mime_type: string;                   // MIME type (image/png, video/mp4, etc.)
   file_status?: 'active' | 'deleted';  // File status
-  file_hash: string | null;            // MD5 file hash (used for videos and animated images)
+  file_type?: 'image' | 'video' | 'animated';  // File type classification
 
   // Image metadata (from image_metadata table)
   width: number;                       // Image width in pixels

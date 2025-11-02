@@ -14,6 +14,7 @@ import { resolveFolderPath } from '../utils/pathResolver';
 import { ALL_SUPPORTED_EXTENSIONS, shouldProcessFileExtension, isVideoExtension } from '../constants/supportedExtensions';
 import { generateFileHash } from '../utils/fileHash';
 import { runtimePaths } from '../config/runtimePaths';
+import { FileType } from '../types/image';
 
 export interface ScanResult {
   folderId: number;
@@ -46,6 +47,22 @@ export class FolderScanService {
   private static readonly BATCH_SIZE = Math.min(Math.max(os.cpus().length * 5, 20), 100);
   private static readonly THUMBNAIL_SIZE = 1080;
   private static readonly PROGRESS_LOG_INTERVAL = 50; // 50개마다 진행 상황 로그
+
+  /**
+   * 파일 타입 결정 (image, video, animated)
+   */
+  private static determineFileType(mimeType: string, filePath: string): FileType {
+    if (mimeType.startsWith('video/')) {
+      return 'video';
+    }
+
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.gif' || ext === '.apng') {
+      return 'animated';
+    }
+
+    return 'image';
+  }
 
   /**
    * 폴더 스캔 실행 (병렬 처리 최적화)
@@ -230,12 +247,14 @@ export class FolderScanService {
           }
 
           // 3. composite_hash 없이 image_files에 등록
+          const fileType = this.determineFileType(mimeType, filePath);
           db.prepare(`
             INSERT INTO image_files (
-              composite_hash, original_file_path, folder_id,
+              composite_hash, file_type, original_file_path, folder_id,
               file_status, file_size, mime_type, file_modified_date
-            ) VALUES (NULL, ?, ?, 'active', ?, ?, ?)
+            ) VALUES (NULL, ?, ?, ?, 'active', ?, ?, ?)
           `).run(
+            fileType,
             filePath,
             folderId,
             stats.size,
@@ -325,6 +344,8 @@ export class FolderScanService {
 
   /**
    * Bulk 쿼리로 배치 처리 (핵심 최적화) - p-limit 동시성 제어 적용
+   * @deprecated Phase 1/2 시스템으로 대체됨 (processFastRegistration → backgroundProcessor)
+   * @removed 사용되지 않으므로 삭제 예정
    */
   private static async processBatchWithBulkQueries(
     files: string[],
@@ -412,13 +433,15 @@ export class FolderScanService {
 
       if (existingHashSet.has(hashes!.compositeHash)) {
         // 같은 이미지가 이미 존재 → image_files에만 추가
+        const fileType = this.determineFileType(mimeType, filePath);
         db.prepare(`
           INSERT INTO image_files (
-            composite_hash, original_file_path, folder_id,
+            composite_hash, file_type, original_file_path, folder_id,
             file_status, file_size, mime_type, file_modified_date
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           hashes!.compositeHash,
+          fileType,
           filePath,
           folderId,
           'active',
@@ -485,13 +508,15 @@ export class FolderScanService {
       );
 
       // image_files 삽입
+      const fileType = this.determineFileType(mimeType, filePath);
       db.prepare(`
         INSERT INTO image_files (
-          composite_hash, original_file_path, folder_id,
+          composite_hash, file_type, original_file_path, folder_id,
           file_status, file_size, mime_type, file_modified_date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         hashes.compositeHash,
+        fileType,
         filePath,
         folderId,
         'active',
@@ -572,13 +597,15 @@ export class FolderScanService {
 
     if (existingMetadata) {
       // 같은 이미지가 이미 존재 → image_files에만 추가
+      const fileType = this.determineFileType(mimeType, filePath);
       db.prepare(`
         INSERT INTO image_files (
-          composite_hash, original_file_path, folder_id,
+          composite_hash, file_type, original_file_path, folder_id,
           file_status, file_size, mime_type, file_modified_date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         hashes.compositeHash,
+        fileType,
         filePath,
         folderId,
         'active',
@@ -628,13 +655,15 @@ export class FolderScanService {
       );
 
       // 7. image_files 삽입
+      const fileType = this.determineFileType(mimeType, filePath);
       db.prepare(`
         INSERT INTO image_files (
-          composite_hash, original_file_path, folder_id,
+          composite_hash, file_type, original_file_path, folder_id,
           file_status, file_size, mime_type, file_modified_date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         hashes.compositeHash,
+        fileType,
         filePath,
         folderId,
         'active',

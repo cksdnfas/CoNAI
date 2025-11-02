@@ -153,8 +153,18 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     // 히스토리 컨텍스트일 때는 업로드 경로 직접 사용
     if (isHistoryContext && image.image_url) {
       link.href = image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
-    } else {
+    } else if (image.image_url) {
+      // 백엔드가 제공한 image_url 우선 사용
+      link.href = image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
+    } else if (image.original_file_path) {
+      // by-path 사용
+      link.href = `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path)}`;
+    } else if (image.composite_hash) {
+      // composite_hash 사용 (모든 파일 타입)
       link.href = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
+    } else {
+      console.error('Cannot download: no valid identifier found');
+      return;
     }
 
     link.download = image.original_file_path || `image_${image.composite_hash?.substring(0, 8) || 'unknown'}.png`;

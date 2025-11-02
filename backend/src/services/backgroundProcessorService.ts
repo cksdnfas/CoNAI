@@ -59,24 +59,20 @@ export class BackgroundProcessorService {
     };
 
     try {
-      // Query for files needing processing (images or videos)
-      // Static images need composite_hash, videos and animated images (GIF/WebP) need file_hash
+      // Query for files needing processing
+      // All files need composite_hash (perceptual hash for images, MD5 hash for videos/animated)
       const unhashedFiles = db
         .prepare(
           `
-        SELECT id, original_file_path, folder_id, mime_type
+        SELECT id, original_file_path, folder_id, mime_type, file_type
         FROM image_files
-        WHERE (
-          (mime_type LIKE 'image/%' AND mime_type NOT IN ('image/gif', 'image/webp') AND composite_hash IS NULL) OR
-          (mime_type LIKE 'video/%' AND file_hash IS NULL) OR
-          (mime_type IN ('image/gif', 'image/webp') AND file_hash IS NULL)
-        )
+        WHERE composite_hash IS NULL
           AND file_status = 'active'
         ORDER BY scan_date ASC
         LIMIT ?
       `
         )
-        .all(this.BATCH_SIZE) as UnhashedFile[];
+        .all(this.BATCH_SIZE) as (UnhashedFile & { file_type: string })[];
 
       if (unhashedFiles.length === 0) {
         console.log('✅ No unhashed images to process');
@@ -134,9 +130,8 @@ export class BackgroundProcessorService {
   /**
    * Process a single file: generate hash, check duplicates, create thumbnail
    */
-  private static async processFile(file: UnhashedFile): Promise<void> {
+  private static async processFile(file: UnhashedFile & { file_type: string }): Promise<void> {
     const fileName = path.basename(file.original_file_path);
-    const ext = path.extname(file.original_file_path);
 
     // Check if file still exists
     if (!fs.existsSync(file.original_file_path)) {
@@ -147,13 +142,14 @@ export class BackgroundProcessorService {
       return;
     }
 
-    // 비디오 파일 처리
-    if (file.mime_type.startsWith('video/') || isVideoExtension(ext)) {
+    // 파일 타입에 따라 처리
+    if (file.file_type === 'video' || file.file_type === 'animated') {
+      // 동영상 및 애니메이션 이미지: file_hash 생성 후 composite_hash에 저장
       await this.processVideoFile(file);
       return;
     }
 
-    // 이미지 파일 처리
+    // 일반 이미지: perceptual hash 생성
     await this.processImageFile(file);
   }
 
@@ -239,40 +235,40 @@ export class BackgroundProcessorService {
   }
 
   /**
-   * Process video file: generate MD5 hash, create video_metadata
+   * Process video/animated file: generate MD5 hash, store as composite_hash, create video_metadata
    */
   private static async processVideoFile(file: UnhashedFile): Promise<void> {
     const fileName = path.basename(file.original_file_path);
 
-    // Generate MD5 file hash
+    // Generate MD5 file hash (동영상과 애니메이션은 파일 해시 사용)
     const fileHash = await generateFileHash(file.original_file_path);
 
-    // Check if this hash already exists (duplicate detection - optional for videos)
+    // Check if this hash already exists (duplicate detection)
     const existing = db
-      .prepare(`SELECT file_hash FROM video_metadata WHERE file_hash = ?`)
-      .get(fileHash) as { file_hash: string } | undefined;
+      .prepare(`SELECT composite_hash FROM video_metadata WHERE composite_hash = ?`)
+      .get(fileHash) as { composite_hash: string } | undefined;
 
     if (existing) {
       // Video metadata already exists - just link file
-      db.prepare(`UPDATE image_files SET file_hash = ? WHERE id = ?`).run(
+      db.prepare(`UPDATE image_files SET composite_hash = ? WHERE id = ?`).run(
         fileHash,
         file.id
       );
 
-      console.log(`  ♻️  Video already processed: ${fileName}`);
+      console.log(`  ♻️  Video/Animated already processed: ${fileName}`);
       return;
     }
 
     // Create basic video_metadata record (FFprobe extraction happens in metadata extraction task)
     db.prepare(
       `
-      INSERT INTO video_metadata (file_hash)
+      INSERT INTO video_metadata (composite_hash)
       VALUES (?)
     `
     ).run(fileHash);
 
-    // Update image_files record with file_hash
-    db.prepare(`UPDATE image_files SET file_hash = ? WHERE id = ?`).run(
+    // Update image_files record with composite_hash (MD5 해시 값)
+    db.prepare(`UPDATE image_files SET composite_hash = ? WHERE id = ?`).run(
       fileHash,
       file.id
     );
@@ -291,7 +287,7 @@ export class BackgroundProcessorService {
       );
     }
 
-    console.log(`  ✨ Processed video: ${fileName}`);
+    console.log(`  ✨ Processed video/animated: ${fileName}`);
   }
 
   /**

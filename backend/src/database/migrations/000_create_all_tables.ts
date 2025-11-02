@@ -259,7 +259,7 @@ export const up = async (db: Database.Database): Promise<void> => {
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS video_metadata (
-      file_hash TEXT PRIMARY KEY,
+      composite_hash TEXT PRIMARY KEY,
       duration REAL,
       fps REAL,
       width INTEGER,
@@ -335,7 +335,7 @@ export const up = async (db: Database.Database): Promise<void> => {
     CREATE TABLE IF NOT EXISTS image_files (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       composite_hash TEXT,
-      file_hash TEXT,
+      file_type TEXT NOT NULL DEFAULT 'image',
       original_file_path TEXT NOT NULL UNIQUE,
       folder_id INTEGER NOT NULL,
       file_status TEXT NOT NULL DEFAULT 'active',
@@ -373,7 +373,7 @@ export const up = async (db: Database.Database): Promise<void> => {
     'CREATE INDEX IF NOT EXISTS idx_folders_active ON watched_folders(is_active)',
     'CREATE INDEX IF NOT EXISTS idx_folders_auto_scan ON watched_folders(auto_scan)',
     'CREATE INDEX IF NOT EXISTS idx_files_composite_hash ON image_files(composite_hash)',
-    'CREATE INDEX IF NOT EXISTS idx_files_file_hash ON image_files(file_hash)',
+    'CREATE INDEX IF NOT EXISTS idx_files_file_type ON image_files(file_type)',
     'CREATE INDEX IF NOT EXISTS idx_files_folder_id ON image_files(folder_id)',
     'CREATE INDEX IF NOT EXISTS idx_files_status ON image_files(file_status)',
     'CREATE INDEX IF NOT EXISTS idx_files_scan_date ON image_files(scan_date)',

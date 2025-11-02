@@ -87,11 +87,12 @@ export class ImageFileModel {
   static create(data: Omit<ImageFileRecord, 'id' | 'scan_date' | 'last_verified_date'>): number {
     const info = db.prepare(`
       INSERT INTO image_files (
-        composite_hash, original_file_path, folder_id,
+        composite_hash, file_type, original_file_path, folder_id,
         file_status, file_size, mime_type, file_modified_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.composite_hash,
+      data.file_type,
       data.original_file_path,
       data.folder_id,
       data.file_status,

@@ -58,6 +58,14 @@ export interface ImageMetadataRecord {
 }
 
 /**
+ * 파일 타입 정의
+ * - image: 일반 정적 이미지 (PNG, JPG 등)
+ * - video: 동영상 파일 (MP4, WEBM 등)
+ * - animated: 프레임이 있는 이미지 (GIF, APNG 등)
+ */
+export type FileType = 'image' | 'video' | 'animated';
+
+/**
  * 파일 위치 레코드 (원본 파일 접근 전용)
  * 다운로드, 삭제, 폴더 스캔에만 사용
  *
@@ -68,8 +76,8 @@ export interface ImageMetadataRecord {
  */
 export interface ImageFileRecord {
   id: number;
-  composite_hash: string | null; // 이미지: composite hash, 비디오: null
-  file_hash: string | null; // MD5 파일 해시 (비디오/GIF용)
+  composite_hash: string | null; // 모든 파일 타입에 사용
+  file_type: FileType; // 파일 타입 구분
   original_file_path: string;
   folder_id: number;
   file_status: 'active' | 'missing' | 'deleted';

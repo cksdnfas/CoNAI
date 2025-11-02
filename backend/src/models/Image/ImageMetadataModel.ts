@@ -370,6 +370,11 @@ export class ImageMetadataModel {
           im.batch_size,
           im.batch_index,
           im.auto_tags,
+          im.duration,
+          im.fps,
+          im.video_codec,
+          im.audio_codec,
+          im.bitrate,
           im.first_seen_date,
           im.metadata_updated_date,
           if.id as file_id,
@@ -378,7 +383,7 @@ export class ImageMetadataModel {
           if.mime_type,
           if.file_status,
           if.scan_date,
-          if.file_hash
+          if.file_type
         FROM image_files if
         LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
         WHERE if.file_status = 'active'
@@ -413,6 +418,11 @@ export class ImageMetadataModel {
           im.batch_size,
           im.batch_index,
           im.auto_tags,
+          im.duration,
+          im.fps,
+          im.video_codec,
+          im.audio_codec,
+          im.bitrate,
           im.first_seen_date,
           im.metadata_updated_date,
           if.id as file_id,
@@ -421,7 +431,7 @@ export class ImageMetadataModel {
           if.mime_type,
           if.file_status,
           if.scan_date,
-          if.file_hash,
+          if.file_type,
           CASE WHEN im.first_seen_date IS NULL THEN if.scan_date ELSE im.first_seen_date END as sort_date
         FROM image_files if
         LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
@@ -456,6 +466,11 @@ export class ImageMetadataModel {
           im.batch_size,
           im.batch_index,
           im.auto_tags,
+          im.duration,
+          im.fps,
+          im.video_codec,
+          im.audio_codec,
+          im.bitrate,
           im.first_seen_date,
           im.metadata_updated_date,
           if.id as file_id,
@@ -464,7 +479,7 @@ export class ImageMetadataModel {
           if.mime_type,
           if.file_status,
           if.scan_date,
-          if.file_hash
+          if.file_type
         FROM image_files if
         LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
         WHERE if.file_status = 'active'

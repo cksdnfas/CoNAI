@@ -99,9 +99,10 @@ const ImageCard: React.FC<ImageCardProps> = ({
 
   // ✅ composite_hash 사용 - API 엔드포인트를 통해 썸네일 및 원본 이미지 제공
   // Phase 1: composite_hash가 NULL이면 경로 기반 URL 사용
-  // GIF는 애니메이션 보존을 위해 원본 사용 (video/gif 또는 image/gif)
-  const isGif = image.mime_type === 'image/gif' || image.mime_type === 'video/gif';
-  const isVideo = image.mime_type?.startsWith('video/') && !isGif; // GIF 제외한 진짜 비디오
+  // GIF는 애니메이션 보존을 위해 원본 사용 (file_type='animated')
+  // file_type 우선 확인 (백엔드에서 정확히 분류됨)
+  const isGif = image.file_type === 'animated' || image.mime_type === 'image/gif' || image.mime_type === 'video/gif';
+  const isVideo = image.file_type === 'video' || (image.mime_type?.startsWith('video/') && image.file_type !== 'animated');
   const isProcessing = image.is_processing || !image.composite_hash;
 
   const thumbnailUrl = useMemo(() => {
@@ -109,13 +110,17 @@ const ImageCard: React.FC<ImageCardProps> = ({
       return `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path || '')}`;
     }
     // GIF와 비디오는 원본 파일 사용
+    // 모든 파일 타입이 composite_hash를 사용
     if (isGif || isVideo) {
       const url = `${backendOrigin}/api/images/${image.composite_hash}/file`;
-      console.log('[ImageCard] GIF/Video URL:', url, 'mime_type:', image.mime_type, 'isGif:', isGif, 'isVideo:', isVideo);
+      console.log('[ImageCard] GIF/Video URL:', url, 'mime_type:', image.mime_type, 'composite_hash:', image.composite_hash, 'isGif:', isGif, 'isVideo:', isVideo);
       return url;
     }
-    return `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
-  }, [isProcessing, isGif, isVideo, backendOrigin, image.composite_hash, image.original_file_path, image.mime_type]);
+    // 일반 이미지는 썸네일 사용
+    // 캐시 무효화: thumbnail_path가 있으면 타임스탬프 추가하여 브라우저가 새 썸네일을 로드하도록 함
+    const cacheBuster = image.thumbnail_path ? `?v=${Date.parse(image.first_seen_date)}` : '';
+    return `${backendOrigin}/api/images/${image.composite_hash}/thumbnail${cacheBuster}`;
+  }, [isProcessing, isGif, isVideo, backendOrigin, image.composite_hash, image.original_file_path, image.mime_type, image.thumbnail_path, image.first_seen_date]);
 
   const fallbackUrl = useMemo(() => {
     if (isProcessing) {

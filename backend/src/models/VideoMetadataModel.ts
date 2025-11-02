@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { db } from '../database/init';
 
 export interface VideoMetadata {
-  file_hash: string;
+  composite_hash: string;
   duration?: number;
   fps?: number;
   width?: number;
@@ -31,7 +31,7 @@ export interface VideoMetadata {
 }
 
 export interface CreateVideoMetadataParams {
-  file_hash: string;
+  composite_hash: string;
   duration?: number;
   fps?: number;
   width?: number;
@@ -65,13 +65,13 @@ export class VideoMetadataModel {
   }
 
   /**
-   * file_hash로 비디오 메타데이터 조회
+   * composite_hash로 비디오 메타데이터 조회
    */
-  findByFileHash(fileHash: string): VideoMetadata | null {
+  findByCompositeHash(compositeHash: string): VideoMetadata | null {
     const stmt = this.db.prepare(`
-      SELECT * FROM video_metadata WHERE file_hash = ?
+      SELECT * FROM video_metadata WHERE composite_hash = ?
     `);
-    return stmt.get(fileHash) as VideoMetadata | null;
+    return stmt.get(compositeHash) as VideoMetadata | null;
   }
 
   /**
@@ -80,14 +80,14 @@ export class VideoMetadataModel {
   create(params: CreateVideoMetadataParams): VideoMetadata {
     const stmt = this.db.prepare(`
       INSERT INTO video_metadata (
-        file_hash, duration, fps, width, height,
+        composite_hash, duration, fps, width, height,
         video_codec, audio_codec, bitrate,
         ai_tool, model_name, lora_models, steps, cfg_scale,
         sampler, seed, scheduler, prompt, negative_prompt,
         denoise_strength, generation_time, batch_size, batch_index,
         auto_tags, rating_score
       ) VALUES (
-        @file_hash, @duration, @fps, @width, @height,
+        @composite_hash, @duration, @fps, @width, @height,
         @video_codec, @audio_codec, @bitrate,
         @ai_tool, @model_name, @lora_models, @steps, @cfg_scale,
         @sampler, @seed, @scheduler, @prompt, @negative_prompt,
@@ -97,25 +97,25 @@ export class VideoMetadataModel {
     `);
 
     stmt.run(params);
-    return this.findByFileHash(params.file_hash)!;
+    return this.findByCompositeHash(params.composite_hash)!;
   }
 
   /**
    * 비디오 메타데이터 업데이트
    */
-  update(fileHash: string, params: Partial<CreateVideoMetadataParams>): VideoMetadata | null {
+  update(compositeHash: string, params: Partial<CreateVideoMetadataParams>): VideoMetadata | null {
     const updates: string[] = [];
-    const values: Record<string, any> = { file_hash: fileHash };
+    const values: Record<string, any> = { composite_hash: compositeHash };
 
     Object.entries(params).forEach(([key, value]) => {
-      if (key !== 'file_hash' && value !== undefined) {
+      if (key !== 'composite_hash' && value !== undefined) {
         updates.push(`${key} = @${key}`);
         values[key] = value;
       }
     });
 
     if (updates.length === 0) {
-      return this.findByFileHash(fileHash);
+      return this.findByCompositeHash(compositeHash);
     }
 
     updates.push('metadata_updated_date = CURRENT_TIMESTAMP');
@@ -123,28 +123,28 @@ export class VideoMetadataModel {
     const stmt = this.db.prepare(`
       UPDATE video_metadata
       SET ${updates.join(', ')}
-      WHERE file_hash = @file_hash
+      WHERE composite_hash = @composite_hash
     `);
 
     stmt.run(values);
-    return this.findByFileHash(fileHash);
+    return this.findByCompositeHash(compositeHash);
   }
 
   /**
    * 비디오 메타데이터 삭제
    */
-  delete(fileHash: string): boolean {
-    const stmt = this.db.prepare('DELETE FROM video_metadata WHERE file_hash = ?');
-    const result = stmt.run(fileHash);
+  delete(compositeHash: string): boolean {
+    const stmt = this.db.prepare('DELETE FROM video_metadata WHERE composite_hash = ?');
+    const result = stmt.run(compositeHash);
     return result.changes > 0;
   }
 
   /**
-   * file_hash 존재 여부 확인
+   * composite_hash 존재 여부 확인
    */
-  exists(fileHash: string): boolean {
-    const stmt = this.db.prepare('SELECT 1 FROM video_metadata WHERE file_hash = ? LIMIT 1');
-    return stmt.get(fileHash) !== undefined;
+  exists(compositeHash: string): boolean {
+    const stmt = this.db.prepare('SELECT 1 FROM video_metadata WHERE composite_hash = ? LIMIT 1');
+    return stmt.get(compositeHash) !== undefined;
   }
 
   /**

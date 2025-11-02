@@ -46,8 +46,10 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
       return url;
     }
     // 일반 이미지는 썸네일 사용
-    return `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
-  }, [isProcessing, isGif, isVideo, backendOrigin, image.composite_hash, image.original_file_path, image.mime_type]);
+    // 캐시 무효화: thumbnail_path가 있으면 타임스탬프 추가하여 브라우저가 새 썸네일을 로드하도록 함
+    const cacheBuster = image.thumbnail_path ? `?v=${Date.parse(image.first_seen_date)}` : '';
+    return `${backendOrigin}/api/images/${image.composite_hash}/thumbnail${cacheBuster}`;
+  }, [isProcessing, isGif, isVideo, backendOrigin, image.composite_hash, image.original_file_path, image.mime_type, image.thumbnail_path, image.first_seen_date]);
 
   const handleSelectionChange = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

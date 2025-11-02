@@ -40,15 +40,13 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
   // 원본 보기 버튼 클릭 시에만 원본 이미지 로드
   // GIF와 비디오는 항상 원본 사용 (애니메이션/재생 보존)
   const getImageUrl = () => {
-    const isGif = image.mime_type === 'image/gif';
-    const isVideo = image.mime_type?.startsWith('video/');
+    // file_type 우선 확인 (백엔드에서 정확히 분류됨)
+    const isGif = image.file_type === 'animated' || image.mime_type === 'image/gif';
+    const isVideo = image.file_type === 'video' || image.mime_type?.startsWith('video/');
 
-    // GIF와 비디오는 항상 원본 사용
+    // GIF와 비디오는 항상 원본 사용 (ImageCard와 동일하게 직접 엔드포인트 사용)
+    // 모든 파일 타입이 composite_hash를 사용
     if (isGif || isVideo) {
-      if (image.image_url) {
-        return image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
-      }
-      // Fallback: API 엔드포인트
       return `${backendOrigin}/api/images/${image.composite_hash}/file`;
     }
 
@@ -108,7 +106,7 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
           }}
         />
       )}
-      {image.mime_type?.startsWith('video/') ? (
+      {(image.file_type === 'video' && image.mime_type?.startsWith('video/')) ? (
         <Box
           component="video"
           key={`video-${image.composite_hash}`}

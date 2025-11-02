@@ -69,7 +69,7 @@ export const convertHistoryToImageRecord = (
 
     // File information (from image_files table JOIN)
     file_id: null,                             // History records don't have file_id yet
-    file_hash: '',                             // History records don't have separate file hash
+    file_type: 'image' as const,               // History records are typically images
     original_file_path: history.original_path || null,  // Replaces file_path
     file_size: history.file_size || null,
     mime_type: 'image/png',
