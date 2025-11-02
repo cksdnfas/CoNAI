@@ -93,7 +93,6 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
         filename: processedData.filename,
         original_name: file.originalname,
         thumbnail_url: '', // 스캔 시 생성
-        optimized_url: '', // 스캔 시 생성
         file_size: processedData.fileSize,
         mime_type: file.mimetype,
         width: processedData.width,
@@ -171,7 +170,6 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
           filename: processedData.filename,
           original_name: file.originalname,
           thumbnail_url: '', // 스캔 시 생성
-          optimized_url: '', // 스캔 시 생성
           file_size: processedData.fileSize,
           mime_type: file.mimetype,
           width: processedData.width,

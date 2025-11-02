@@ -35,7 +35,6 @@ export interface GenerationHistoryRecord {
   // Image Paths
   original_path?: string;
   thumbnail_path?: string;
-  optimized_path?: string;
   file_size?: number;
 
   // Link to main images DB
@@ -76,9 +75,9 @@ export class GenerationHistoryModel {
         comfyui_workflow, comfyui_prompt_id, workflow_id, workflow_name,
         nai_model, nai_sampler, nai_seed, nai_steps, nai_scale, nai_parameters,
         positive_prompt, negative_prompt, width, height,
-        original_path, thumbnail_path, optimized_path, file_size,
+        original_path, thumbnail_path, file_size,
         linked_image_id, assigned_group_id, error_message, metadata
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const info = stmt.run(
@@ -100,7 +99,6 @@ export class GenerationHistoryModel {
       data.height,
       data.original_path,
       data.thumbnail_path,
-      data.optimized_path,
       data.file_size,
       data.linked_image_id,
       data.assigned_group_id,
@@ -169,8 +167,11 @@ export class GenerationHistoryModel {
     const fields: string[] = [];
     const params: any[] = [];
 
+    // JOIN으로 계산된 필드 필터링 (actual_* 필드는 테이블에 없음)
+    const computedFields = ['actual_composite_hash', 'actual_thumbnail_path', 'actual_width', 'actual_height'];
+
     Object.entries(data).forEach(([key, value]) => {
-      if (key !== 'id' && value !== undefined) {
+      if (key !== 'id' && value !== undefined && !computedFields.includes(key)) {
         fields.push(`${key} = ?`);
         params.push(value);
       }
@@ -207,7 +208,6 @@ export class GenerationHistoryModel {
     paths: {
       original: string;
       thumbnail: string;
-      optimized: string;
       fileSize: number;
       compositeHash?: string;
     }
@@ -216,12 +216,11 @@ export class GenerationHistoryModel {
       UPDATE api_generation_history
       SET original_path = ?,
           thumbnail_path = ?,
-          optimized_path = ?,
           file_size = ?,
           composite_hash = ?
       WHERE id = ?
     `);
-    stmt.run(paths.original, paths.thumbnail, paths.optimized, paths.fileSize, paths.compositeHash || null, id);
+    stmt.run(paths.original, paths.thumbnail, paths.fileSize, paths.compositeHash || null, id);
   }
 
   /**
@@ -329,16 +328,20 @@ export class GenerationHistoryModel {
   static findByIdWithMetadata(id: number): (GenerationHistoryRecord & {
     actual_composite_hash?: string | null;
     actual_thumbnail_path?: string | null;
-    actual_optimized_path?: string | null;
+    actual_width?: number | null;
+    actual_height?: number | null;
   }) | null {
     const stmt = apiGenDb.prepare(`
       SELECT
         gh.*,
         if.composite_hash as actual_composite_hash,
         im.thumbnail_path as actual_thumbnail_path,
-        im.optimized_path as actual_optimized_path
+        im.width as actual_width,
+        im.height as actual_height
       FROM api_generation_history gh
-      LEFT JOIN main_db.image_files if ON if.original_file_path = gh.original_path
+      LEFT JOIN main_db.image_files if ON
+        (if.composite_hash = gh.composite_hash AND gh.composite_hash IS NOT NULL)
+        OR if.original_file_path LIKE '%' || gh.original_path
       LEFT JOIN main_db.image_metadata im ON im.composite_hash = if.composite_hash
       WHERE gh.id = ?
       LIMIT 1
@@ -355,16 +358,20 @@ export class GenerationHistoryModel {
   static findAllWithMetadata(filters: FilterOptions = {}): (GenerationHistoryRecord & {
     actual_composite_hash?: string | null;
     actual_thumbnail_path?: string | null;
-    actual_optimized_path?: string | null;
+    actual_width?: number | null;
+    actual_height?: number | null;
   })[] {
     let sql = `
       SELECT
         gh.*,
         if.composite_hash as actual_composite_hash,
         im.thumbnail_path as actual_thumbnail_path,
-        im.optimized_path as actual_optimized_path
+        im.width as actual_width,
+        im.height as actual_height
       FROM api_generation_history gh
-      LEFT JOIN main_db.image_files if ON if.original_file_path = gh.original_path
+      LEFT JOIN main_db.image_files if ON
+        (if.composite_hash = gh.composite_hash AND gh.composite_hash IS NOT NULL)
+        OR if.original_file_path LIKE '%' || gh.original_path
       LEFT JOIN main_db.image_metadata im ON im.composite_hash = if.composite_hash
       WHERE 1=1
     `;

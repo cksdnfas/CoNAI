@@ -228,18 +228,13 @@ export const imageApi = {
   },
 
   // ✅ 이미지 다운로드 URL 생성 (composite_hash 기반)
-  getDownloadUrl: (compositeHash: string, type: 'original' | 'optimized' = 'original'): string => {
-    return `${API_BASE_URL}/api/images/${compositeHash}/download/${type}`;
+  getDownloadUrl: (compositeHash: string): string => {
+    return `${API_BASE_URL}/api/images/${compositeHash}/download/original`;
   },
 
   // ✅ 썸네일 URL 생성 (composite_hash 기반)
   getThumbnailUrl: (compositeHash: string): string => {
     return `${API_BASE_URL}/api/images/${compositeHash}/thumbnail`;
-  },
-
-  // ✅ 최적화 이미지 URL 생성 (composite_hash 기반)
-  getOptimizedUrl: (compositeHash: string): string => {
-    return `${API_BASE_URL}/api/images/${compositeHash}/optimized`;
   },
 
   // 랜덤 이미지 조회

@@ -40,23 +40,27 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
   const backendOrigin = getBackendOrigin();
 
   // 히스토리 이미지는 thumbnail_url 사용, 일반 이미지는 API 사용
-  // GIF는 애니메이션 보존을 위해 원본 사용
+  // GIF와 비디오는 원본 사용
   const isGif = image.mime_type === 'image/gif';
+  const isVideo = image.mime_type?.startsWith('video/');
 
   // composite_hash가 유효한지 확인 (fallback "history_123" 형식이 아닌지)
   const hasValidHash = image.composite_hash && !image.composite_hash.startsWith('history_');
 
-  const imageUrl = isGif
-    ? (image.optimized_url
-        ? `${backendOrigin}${image.optimized_url}`
+  // URL이 이미 절대 경로(http:// 또는 https://)인지 확인
+  const isAbsoluteUrl = (url: string) => url.startsWith('http://') || url.startsWith('https://');
+
+  const imageUrl = (isGif || isVideo)
+    ? (image.image_url
+        ? (isAbsoluteUrl(image.image_url) ? image.image_url : `${backendOrigin}${image.image_url}`)
         : hasValidHash
-          ? `${backendOrigin}/api/images/${image.composite_hash}/optimized`
-          : (image.image_url ? `${backendOrigin}${image.image_url}` : ''))
+          ? `${backendOrigin}/api/images/${image.composite_hash}/file`
+          : '')
     : (image.thumbnail_url
-        ? `${backendOrigin}${image.thumbnail_url}`
+        ? (isAbsoluteUrl(image.thumbnail_url) ? image.thumbnail_url : `${backendOrigin}${image.thumbnail_url}`)
         : hasValidHash
           ? `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`
-          : (image.image_url ? `${backendOrigin}${image.image_url}` : ''));
+          : (image.image_url ? (isAbsoluteUrl(image.image_url) ? image.image_url : `${backendOrigin}${image.image_url}`) : ''));
 
   const handleSelectionChange = (e: React.MouseEvent) => {
     e.stopPropagation();

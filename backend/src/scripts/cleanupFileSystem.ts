@@ -7,7 +7,7 @@ import { runtimePaths } from '../config/runtimePaths';
  *
  * 작업 내용:
  * 1. Origin 폴더의 모든 파일을 상위 폴더로 이동
- * 2. Origin, thumbnails, optimized 폴더 삭제
+ * 2. Origin, thumbnails 폴더 삭제
  * 3. temp 폴더 완전 정리
  * 4. 이미지와 비디오 모두 처리
  */
@@ -118,14 +118,6 @@ export class FileSystemCleanup {
         this.deleteDirectoryRecursive(thumbnailsPath);
         result.deletedDirs++;
         console.log(`  ✅ thumbnails 폴더 삭제: ${path.basename(datePath)}/thumbnails`);
-      }
-
-      // optimized 폴더 삭제
-      const optimizedPath = path.join(datePath, 'optimized');
-      if (fs.existsSync(optimizedPath)) {
-        this.deleteDirectoryRecursive(optimizedPath);
-        result.deletedDirs++;
-        console.log(`  ✅ optimized 폴더 삭제: ${path.basename(datePath)}/optimized`);
       }
     } catch (error) {
       result.errors.push({

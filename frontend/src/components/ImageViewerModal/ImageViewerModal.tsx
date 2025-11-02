@@ -152,7 +152,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
     // 히스토리 컨텍스트일 때는 업로드 경로 직접 사용
     if (isHistoryContext && image.image_url) {
-      link.href = `${backendOrigin}${image.image_url}`;
+      link.href = image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
     } else {
       link.href = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
     }

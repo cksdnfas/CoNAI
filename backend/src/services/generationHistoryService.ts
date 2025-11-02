@@ -106,7 +106,6 @@ export class GenerationHistoryService {
       GenerationHistoryModel.updateImagePaths(historyId, {
         original: processedPaths.originalPath,
         thumbnail: '', // NULL - background scan will create
-        optimized: '', // NULL - background scan will create
         fileSize: processedPaths.fileSize
       });
 
@@ -196,7 +195,6 @@ export class GenerationHistoryService {
       GenerationHistoryModel.updateImagePaths(historyId, {
         original: processedPaths.originalPath,
         thumbnail: '', // Main system will auto-generate
-        optimized: '', // Main system will auto-generate
         fileSize: processedPaths.fileSize,
         compositeHash: processedPaths.compositeHash
       });
@@ -307,11 +305,10 @@ export class GenerationHistoryService {
     }
 
     // Delete image files if they exist
-    if (history.original_path && history.thumbnail_path && history.optimized_path) {
+    if (history.original_path && history.thumbnail_path) {
       await APIImageProcessor.deleteGeneratedImages({
         originalPath: history.original_path,
-        thumbnailPath: history.thumbnail_path,
-        optimizedPath: history.optimized_path
+        thumbnailPath: history.thumbnail_path
       });
     }
 

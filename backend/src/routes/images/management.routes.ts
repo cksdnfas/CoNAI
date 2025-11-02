@@ -58,7 +58,6 @@ router.delete('/:compositeHash', asyncHandler(async (req: Request, res: Response
             await VideoProcessor.deleteVideoFiles(
               file.original_file_path,
               metadata.thumbnail_path || '',
-              metadata.optimized_path || '',
               UPLOAD_BASE_PATH
             );
           } catch (fileError) {
@@ -72,7 +71,6 @@ router.delete('/:compositeHash', asyncHandler(async (req: Request, res: Response
             await ImageProcessor.deleteImageFiles(
               file.original_file_path,
               metadata.thumbnail_path || '',
-              metadata.optimized_path || '',
               UPLOAD_BASE_PATH
             );
           } catch (fileError) {

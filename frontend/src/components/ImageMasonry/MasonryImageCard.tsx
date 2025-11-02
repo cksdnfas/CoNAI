@@ -30,18 +30,24 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
   const cardRef = useRef<HTMLDivElement>(null);
   const backendOrigin = getBackendOrigin();
   // ✅ composite_hash 사용 - API 엔드포인트를 통해 썸네일 제공 (외부 네트워크 접근 보장)
-  // GIF는 애니메이션 보존을 위해 원본 사용
-  const isGif = image.mime_type === 'image/gif';
+  // GIF는 애니메이션 보존을 위해 원본 사용 (video/gif 또는 image/gif)
+  const isGif = image.mime_type === 'image/gif' || image.mime_type === 'video/gif';
+  const isVideo = image.mime_type?.startsWith('video/') && !isGif; // GIF 제외한 진짜 비디오
   const isProcessing = image.is_processing || !image.composite_hash;
 
   const imageUrl = useMemo(() => {
     if (isProcessing) {
       return `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path || '')}`;
     }
-    return isGif
-      ? `${backendOrigin}/api/images/${image.composite_hash}/optimized`
-      : `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
-  }, [isProcessing, isGif, backendOrigin, image.composite_hash, image.original_file_path]);
+    // 비디오와 GIF는 원본 파일 사용 (애니메이션/재생 보존)
+    if (isVideo || isGif) {
+      const url = `${backendOrigin}/api/images/${image.composite_hash}/file`;
+      console.log('[MasonryImageCard] GIF/Video URL:', url, 'mime_type:', image.mime_type, 'isGif:', isGif, 'isVideo:', isVideo);
+      return url;
+    }
+    // 일반 이미지는 썸네일 사용
+    return `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
+  }, [isProcessing, isGif, isVideo, backendOrigin, image.composite_hash, image.original_file_path, image.mime_type]);
 
   const handleSelectionChange = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -200,7 +206,7 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
 
         {/* 이미지/비디오 - 뷰포트에 들어왔을 때만 로드 */}
         {isVisible && (
-          image.mime_type?.startsWith('video/') ? (
+          isVideo ? (
             <Box
               component="video"
               src={imageUrl}
@@ -269,7 +275,7 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
       )}
 
       {/* 비디오 배지 (재생 시간 표시) */}
-      {image.mime_type?.startsWith('video/') && image.duration && (
+      {isVideo && image.duration && (
         <Box sx={{ position: 'absolute', bottom: 8, left: 8, zIndex: 1 }}>
           <Chip
             icon={<VideoLibraryIcon sx={{ fontSize: '0.8rem' }} />}

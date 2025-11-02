@@ -213,7 +213,6 @@ export const up = async (db: Database.Database): Promise<void> => {
       width INTEGER,
       height INTEGER,
       thumbnail_path TEXT,
-      optimized_path TEXT,
       ai_tool TEXT,
       model_name TEXT,
       lora_models TEXT,

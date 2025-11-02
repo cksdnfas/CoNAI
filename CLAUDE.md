@@ -35,6 +35,15 @@ npm run db:reset                # Delete database and re-run migrations
 cd backend && npm run db:migrate # Run database migrations manually
 ```
 
+**⚠️ Breaking Change Notice**: The `optimized_path` column has been removed from the database schema. If you have an existing database, you must delete it and start fresh:
+```bash
+# Delete existing database
+rm -rf backend/database/
+
+# Restart the server to recreate the database with the new schema
+npm run dev
+```
+
 ### Maintenance
 ```bash
 npm run clean                   # Remove all dist and node_modules folders
@@ -45,9 +54,9 @@ npm run clean                   # Remove all dist and node_modules folders
 ### Core System Components
 
 **Image Processing Pipeline**:
-- Upload → Sharp processing → Generate thumbnail + optimized → Extract AI metadata → Store in SQLite
+- Upload → Sharp processing → Generate thumbnail → Extract AI metadata → Store in SQLite
 - Supports ComfyUI, NovelAI, Stable Diffusion metadata
-- Creates 3 versions: original, thumbnail (1080px), optimized (WebP, 95%)
+- Creates 2 versions: original, thumbnail (1080px)
 
 **Auto-Collection System**:
 - Automatically groups images based on configurable conditions

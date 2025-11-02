@@ -99,25 +99,36 @@ const ImageCard: React.FC<ImageCardProps> = ({
 
   // ✅ composite_hash 사용 - API 엔드포인트를 통해 썸네일 및 원본 이미지 제공
   // Phase 1: composite_hash가 NULL이면 경로 기반 URL 사용
-  // GIF는 애니메이션 보존을 위해 원본 사용
-  const isGif = image.mime_type === 'image/gif';
+  // GIF는 애니메이션 보존을 위해 원본 사용 (video/gif 또는 image/gif)
+  const isGif = image.mime_type === 'image/gif' || image.mime_type === 'video/gif';
+  const isVideo = image.mime_type?.startsWith('video/') && !isGif; // GIF 제외한 진짜 비디오
   const isProcessing = image.is_processing || !image.composite_hash;
 
   const thumbnailUrl = useMemo(() => {
     if (isProcessing) {
       return `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path || '')}`;
     }
-    return isGif
-      ? `${backendOrigin}/api/images/${image.composite_hash}/optimized`
-      : `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
-  }, [isProcessing, isGif, backendOrigin, image.composite_hash, image.original_file_path]);
+    // GIF와 비디오는 원본 파일 사용
+    if (isGif || isVideo) {
+      const url = `${backendOrigin}/api/images/${image.composite_hash}/file`;
+      console.log('[ImageCard] GIF/Video URL:', url, 'mime_type:', image.mime_type, 'isGif:', isGif, 'isVideo:', isVideo);
+      return url;
+    }
+    return `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
+  }, [isProcessing, isGif, isVideo, backendOrigin, image.composite_hash, image.original_file_path, image.mime_type]);
 
   const fallbackUrl = useMemo(() => {
     if (isProcessing) {
       return `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path || '')}`;
     }
+    // GIF/비디오는 경로 기반 폴백 사용 (download는 attachment 헤더 때문에 표시 안됨)
+    if (isGif || isVideo) {
+      return image.original_file_path
+        ? `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path)}`
+        : `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
+    }
     return `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
-  }, [isProcessing, backendOrigin, image.composite_hash, image.original_file_path]);
+  }, [isProcessing, isGif, isVideo, backendOrigin, image.composite_hash, image.original_file_path]);
 
   return (
     <>
@@ -340,8 +351,8 @@ const ImageCard: React.FC<ImageCardProps> = ({
           </Box>
         </Box>
 
-        {/* 비디오인 경우 video 태그, 이미지인 경우 img 태그 */}
-        {image.mime_type?.startsWith('video/') ? (
+        {/* 비디오인 경우 video 태그, GIF와 이미지는 img 태그 */}
+        {isVideo ? (
           <Box
             component="video"
             height="250"
@@ -350,7 +361,10 @@ const ImageCard: React.FC<ImageCardProps> = ({
             loop
             autoPlay
             playsInline
-            onError={() => setImageError(true)}
+            onError={(e) => {
+              console.error('[ImageCard] Video load error:', thumbnailUrl, e);
+              setImageError(true);
+            }}
             sx={{
               width: '100%',
               objectFit: 'cover',
@@ -365,7 +379,10 @@ const ImageCard: React.FC<ImageCardProps> = ({
             image={imageError ? fallbackUrl : thumbnailUrl}
             alt={image.original_file_path ?? ''}
             draggable={false}
-            onError={() => setImageError(true)}
+            onError={(e) => {
+              console.error('[ImageCard] Image load error:', imageError ? fallbackUrl : thumbnailUrl, 'isGif:', isGif, 'mime_type:', image.mime_type, e);
+              setImageError(true);
+            }}
             sx={{
               objectFit: 'cover',
               cursor: 'pointer',

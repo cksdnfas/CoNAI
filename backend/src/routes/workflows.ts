@@ -393,8 +393,12 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
           try {
             const history = await GenerationHistoryService.getHistory(historyId);
             if (history) {
+              // JOIN으로 계산된 필드 제거 (actual_* 필드는 테이블에 없음)
+              const historyAny = history as any;
+              const { actual_composite_hash, actual_thumbnail_path, actual_width, actual_height, ...baseHistory } = historyAny;
+
               const updatedRecord = {
-                ...history,
+                ...baseHistory,
                 comfyui_prompt_id: promptId,
                 generation_status: 'processing' as const
               };
@@ -448,7 +452,6 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
               GenerationHistoryModel.updateImagePaths(historyId, {
                 original: relativePath,
                 thumbnail: '',
-                optimized: '',
                 fileSize: imageBuffer.length,
                 compositeHash: hashes.compositeHash
               });
@@ -917,7 +920,6 @@ router.post('/:id/generate-parallel', asyncHandler(async (req: Request, res: Res
                     original_name: path.basename(tempPath),
                     file_path: processed.originalPath,
                     thumbnail_path: processed.thumbnailPath,
-                    optimized_path: processed.optimizedPath,
                     file_size: processed.fileSize,
                     mime_type: `image/${ext}`,
                     width: processed.width,

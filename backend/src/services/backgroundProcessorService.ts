@@ -8,6 +8,7 @@ import { ImageSimilarityService } from './imageSimilarity';
 import { BackgroundQueueService } from './backgroundQueue';
 import { generateFileHash } from '../utils/fileHash';
 import { isVideoExtension } from '../constants/supportedExtensions';
+import { runtimePaths } from '../config/runtimePaths';
 
 interface UnhashedFile {
   id: number;
@@ -59,15 +60,16 @@ export class BackgroundProcessorService {
 
     try {
       // Query for files needing processing (images or videos)
-      // Images need composite_hash, videos need file_hash
+      // Static images need composite_hash, videos and animated images (GIF/WebP) need file_hash
       const unhashedFiles = db
         .prepare(
           `
         SELECT id, original_file_path, folder_id, mime_type
         FROM image_files
         WHERE (
-          (mime_type LIKE 'image/%' AND composite_hash IS NULL) OR
-          (mime_type LIKE 'video/%' AND file_hash IS NULL)
+          (mime_type LIKE 'image/%' AND mime_type NOT IN ('image/gif', 'image/webp') AND composite_hash IS NULL) OR
+          (mime_type LIKE 'video/%' AND file_hash IS NULL) OR
+          (mime_type IN ('image/gif', 'image/webp') AND file_hash IS NULL)
         )
           AND file_status = 'active'
         ORDER BY scan_date ASC
@@ -302,15 +304,19 @@ export class BackgroundProcessorService {
   ): Promise<string> {
     // Create date-based directory structure
     const dateStr = new Date().toISOString().split('T')[0];
-    const tempDir = path.join('uploads', 'temp', 'images', dateStr, 'thumbnails');
+    // 절대 경로로 디렉토리 생성 (uploads 폴더 내부)
+    const tempDir = path.join(runtimePaths.uploadsDir, 'temp', 'images', dateStr, 'thumbnails');
 
     // Ensure directory exists
     await fs.promises.mkdir(tempDir, { recursive: true });
 
-    const thumbnailPath = path.join(tempDir, `${compositeHash}.webp`);
+    // DB 저장용 상대 경로 (uploads 제외)
+    const thumbnailPath = path.join('temp', 'images', dateStr, 'thumbnails', `${compositeHash}.webp`);
+    // 파일 시스템용 절대 경로
+    const absoluteThumbnailPath = path.join(runtimePaths.uploadsDir, thumbnailPath);
 
     // Skip if thumbnail already exists
-    if (fs.existsSync(thumbnailPath)) {
+    if (fs.existsSync(absoluteThumbnailPath)) {
       return thumbnailPath;
     }
 
@@ -321,7 +327,7 @@ export class BackgroundProcessorService {
         withoutEnlargement: true,
       })
       .webp({ quality: 90 })
-      .toFile(thumbnailPath);
+      .toFile(absoluteThumbnailPath);
 
     return thumbnailPath;
   }

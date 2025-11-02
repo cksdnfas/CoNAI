@@ -15,12 +15,10 @@ export async function seedTestData(): Promise<void> {
   const testDateFolder = path.join(testUploadPath, today);
   const testOriginFolder = path.join(testDateFolder, 'Origin');
   const testThumbnailFolder = path.join(testDateFolder, 'thumbnails');
-  const testOptimizedFolder = path.join(testDateFolder, 'optimized');
 
   // 폴더 생성
   await fs.promises.mkdir(testOriginFolder, { recursive: true });
   await fs.promises.mkdir(testThumbnailFolder, { recursive: true });
-  await fs.promises.mkdir(testOptimizedFolder, { recursive: true });
 
   const testImages = [
     {
@@ -28,7 +26,6 @@ export async function seedTestData(): Promise<void> {
       original_name: 'comfyui_anime_girl.png',
       file_path: `${today}/Origin/2024_01_15_143020_test001.png`,
       thumbnail_path: `${today}/thumbnails/2024_01_15_143020_test001.webp`,
-      optimized_path: `${today}/optimized/2024_01_15_143020_test001_opt.webp`,
       file_size: 2048000,
       mime_type: 'image/png',
       width: 768,
@@ -61,7 +58,6 @@ export async function seedTestData(): Promise<void> {
       original_name: 'novelai_landscape.jpg',
       file_path: `${today}/Origin/2024_01_15_144530_test002.jpg`,
       thumbnail_path: `${today}/thumbnails/2024_01_15_144530_test002.webp`,
-      optimized_path: `${today}/optimized/2024_01_15_144530_test002_opt.webp`,
       file_size: 1024000,
       mime_type: 'image/jpeg',
       width: 1024,
@@ -93,7 +89,6 @@ export async function seedTestData(): Promise<void> {
       original_name: 'automatic1111_portrait.png',
       file_path: `${today}/Origin/2024_01_15_150045_test003.png`,
       thumbnail_path: `${today}/thumbnails/2024_01_15_150045_test003.webp`,
-      optimized_path: `${today}/optimized/2024_01_15_150045_test003_opt.webp`,
       file_size: 3072000,
       mime_type: 'image/png',
       width: 512,
@@ -126,7 +121,6 @@ export async function seedTestData(): Promise<void> {
       original_name: 'stable_diffusion_abstract.png',
       file_path: `${today}/Origin/2024_01_15_151200_test004.png`,
       thumbnail_path: `${today}/thumbnails/2024_01_15_151200_test004.webp`,
-      optimized_path: `${today}/optimized/2024_01_15_151200_test004_opt.webp`,
       file_size: 1536000,
       mime_type: 'image/png',
       width: 768,
@@ -159,7 +153,6 @@ export async function seedTestData(): Promise<void> {
       original_name: 'midjourney_concept.jpg',
       file_path: `${today}/Origin/2024_01_15_152315_test005.jpg`,
       thumbnail_path: `${today}/thumbnails/2024_01_15_152315_test005.webp`,
-      optimized_path: `${today}/optimized/2024_01_15_152315_test005_opt.webp`,
       file_size: 2560000,
       mime_type: 'image/jpeg',
       width: 1024,
@@ -192,11 +185,11 @@ export async function seedTestData(): Promise<void> {
     for (const [index, imageData] of testImages.entries()) {
       const stmt = db.prepare(`
         INSERT INTO images (
-          filename, original_name, file_path, thumbnail_path, optimized_path,
+          filename, original_name, file_path, thumbnail_path,
           file_size, mime_type, width, height, metadata,
           ai_tool, model_name, lora_models, steps, cfg_scale, sampler, seed, scheduler,
           prompt, negative_prompt, denoise_strength, generation_time, batch_size, batch_index
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       const info = stmt.run(
@@ -204,7 +197,6 @@ export async function seedTestData(): Promise<void> {
         imageData.original_name,
         imageData.file_path,
         imageData.thumbnail_path,
-        imageData.optimized_path,
         imageData.file_size,
         imageData.mime_type,
         imageData.width,
@@ -237,10 +229,6 @@ export async function seedTestData(): Promise<void> {
       );
       await fs.promises.writeFile(
         path.join(testUploadPath, imageData.thumbnail_path),
-        dummyContent
-      );
-      await fs.promises.writeFile(
-        path.join(testUploadPath, imageData.optimized_path),
         dummyContent
       );
     }

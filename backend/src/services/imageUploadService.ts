@@ -22,7 +22,6 @@ export class ImageUploadService {
       width: number;
       height: number;
       thumbnailPath: string;
-      optimizedPath: string | null;
       fileSize: number;
       mimeType: string;
       aiTool: string | null;
@@ -75,7 +74,6 @@ export class ImageUploadService {
         width: imageData.width,
         height: imageData.height,
         thumbnail_path: imageData.thumbnailPath,
-        optimized_path: imageData.optimizedPath,
         ai_tool: imageData.aiTool,
         model_name: imageData.modelName,
         lora_models: imageData.loraModels,

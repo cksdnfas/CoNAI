@@ -25,7 +25,6 @@ export interface ImageRecord {
   width: number | null;                // Image width in pixels
   height: number | null;               // Image height in pixels
   thumbnail_path: string;              // Thumbnail file path
-  optimized_path: string | null;       // Optimized image path (WebP)
 
   // AI metadata fields (image generation info)
   ai_tool: string | null;              // ComfyUI, NovelAI, Stable Diffusion, etc.
@@ -109,7 +108,6 @@ export interface UploadResponse {
     composite_hash: string;            // ✅ Changed from id
     original_file_path: string;        // ✅ Changed from filename
     thumbnail_url: string;
-    optimized_url: string;
     file_size: number;
     mime_type: string;
     width: number | null;

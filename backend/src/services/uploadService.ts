@@ -62,16 +62,11 @@ export class UploadService {
     const dirname = path.dirname(localFilePath);
 
     const thumbnailRelativePath = path.join(dirname, `${basename}_thumb.webp`);
-    const optimizedRelativePath = path.join(dirname, `${basename}_opt.webp`);
 
     const thumbnailPath = resolveUploadsPath(thumbnailRelativePath);
-    const optimizedPath = resolveUploadsPath(optimizedRelativePath);
 
-    // 썸네일과 최적화 이미지 생성
-    await Promise.all([
-      ImageProcessor.generateThumbnail(fullPath, thumbnailPath),
-      ImageProcessor.generateOptimized(fullPath, optimizedPath)
-    ]);
+    // 썸네일 생성
+    await ImageProcessor.generateThumbnail(fullPath, thumbnailPath);
 
     console.log('✅ Image processed successfully');
 
@@ -101,7 +96,6 @@ export class UploadService {
       original_name: path.basename(localFilePath),
       file_path: localFilePath.replace(/\\/g, '/'),
       thumbnail_path: thumbnailRelativePath.replace(/\\/g, '/'),
-      optimized_path: optimizedRelativePath.replace(/\\/g, '/'),
       file_size: stats.size,
       mime_type: 'image/' + ext.substring(1),
       width: imageInfo.width,

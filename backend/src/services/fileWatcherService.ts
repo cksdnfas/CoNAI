@@ -325,6 +325,15 @@ export class FileWatcherService {
    * 배치 스캔 실행 (디바운스 타이머 완료 후)
    */
   private static async executeBatchScan(folderId: number): Promise<void> {
+    // Safety check: verify folder still exists in database
+    const folderExists = db.prepare('SELECT id FROM watched_folders WHERE id = ?').get(folderId);
+
+    if (!folderExists) {
+      console.warn(`  ⚠️  배치 스캔 취소: 폴더 삭제됨 folderId=${folderId}`);
+      this.cleanupFolderState(folderId);
+      return;
+    }
+
     // 이미 스캔 중이면 스킵 (폴더 단위 락킹)
     if (this.processingFolders.has(folderId)) {
       console.log(`  ⏭️  폴더 스캔 이미 진행 중: folderId=${folderId}`);
@@ -413,12 +422,34 @@ export class FileWatcherService {
   }
 
   /**
+   * Clean up all in-memory state for a folder
+   */
+  private static cleanupFolderState(folderId: number): void {
+    // Clear pending files
+    this.pendingFiles.delete(folderId);
+
+    // Cancel and clear scan timer
+    const timer = this.folderScanTimers.get(folderId);
+    if (timer) {
+      clearTimeout(timer);
+      this.folderScanTimers.delete(folderId);
+    }
+
+    // Remove from processing set
+    this.processingFolders.delete(folderId);
+
+    console.log(`  🧹 상태 정리 완료: folderId=${folderId}`);
+  }
+
+  /**
    * 워처 중지
    */
   static async stopWatcher(folderId: number): Promise<void> {
     const entry = this.watcherRegistry.get(folderId);
     if (!entry) {
       console.log(`  ℹ️  워처가 없음: folderId=${folderId}`);
+      // Clean up state even if no watcher entry
+      this.cleanupFolderState(folderId);
       return;
     }
 
@@ -426,6 +457,10 @@ export class FileWatcherService {
       await entry.watcher.close();
       entry.state = 'stopped';
       this.watcherRegistry.delete(folderId);
+
+      // Clean up all related state
+      this.cleanupFolderState(folderId);
+
       this.updateWatcherStatus(folderId, 'stopped', null);
       console.log(`  ✅ 워처 중지: ${entry.folderName}`);
     } catch (error) {

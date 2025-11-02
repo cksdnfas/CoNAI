@@ -13,6 +13,7 @@ import { FileWatcherService } from './fileWatcherService';
 import { resolveFolderPath } from '../utils/pathResolver';
 import { ALL_SUPPORTED_EXTENSIONS, shouldProcessFileExtension, isVideoExtension } from '../constants/supportedExtensions';
 import { generateFileHash } from '../utils/fileHash';
+import { runtimePaths } from '../config/runtimePaths';
 
 export interface ScanResult {
   folderId: number;
@@ -456,19 +457,21 @@ export class FolderScanService {
 
       // 썸네일 경로 생성
       const dateStr = new Date().toISOString().split('T')[0];
-      const tempDir = path.join('uploads', 'temp', 'images', dateStr, 'thumbnails');
+      // 절대 경로로 디렉토리 생성 (uploads 폴더 내부)
+      const tempDir = path.join(runtimePaths.uploadsDir, 'temp', 'images', dateStr, 'thumbnails');
       await fs.promises.mkdir(tempDir, { recursive: true });
-      const thumbnailPath = path.join(tempDir, `${hashes.compositeHash}.webp`);
+      // DB 저장용 상대 경로 (uploads 제외)
+      const thumbnailPath = path.join('temp', 'images', dateStr, 'thumbnails', `${hashes.compositeHash}.webp`);
 
       // image_metadata 삽입
       db.prepare(`
         INSERT INTO image_metadata (
           composite_hash, perceptual_hash, dhash, ahash, color_histogram,
-          width, height, thumbnail_path, optimized_path,
+          width, height, thumbnail_path,
           ai_tool, model_name, lora_models, steps, cfg_scale, sampler, seed, scheduler,
           prompt, negative_prompt, denoise_strength, generation_time, batch_size, batch_index,
           auto_tags
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         hashes.compositeHash,
         hashes.perceptualHash,
@@ -478,7 +481,6 @@ export class FolderScanService {
         imageInfo.width,
         imageInfo.height,
         thumbnailPath,
-        null,
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
       );
 
@@ -499,8 +501,9 @@ export class FolderScanService {
       );
 
       // 썸네일 생성 (해시별 1개만)
-      if (!fs.existsSync(thumbnailPath)) {
-        await this.generateThumbnail(filePath, thumbnailPath, mimeType);
+      const absoluteThumbnailPath = path.join(runtimePaths.uploadsDir, thumbnailPath);
+      if (!fs.existsSync(absoluteThumbnailPath)) {
+        await this.generateThumbnail(filePath, absoluteThumbnailPath, mimeType);
         result.thumbnailsGenerated++;
       }
 
@@ -599,7 +602,7 @@ export class FolderScanService {
 
       // 썸네일 경로 생성 (temp 폴더에 저장, 해시 기반)
       const dateStr = new Date().toISOString().split('T')[0];
-      const tempDir = path.join('uploads', 'temp', 'images', dateStr, 'thumbnails');
+      const tempDir = path.join('temp', 'images', dateStr, 'thumbnails');
       await fs.promises.mkdir(tempDir, { recursive: true });
       const thumbnailPath = path.join(tempDir, `${hashes.compositeHash}.webp`);
 
@@ -607,11 +610,11 @@ export class FolderScanService {
       db.prepare(`
         INSERT INTO image_metadata (
           composite_hash, perceptual_hash, dhash, ahash, color_histogram,
-          width, height, thumbnail_path, optimized_path,
+          width, height, thumbnail_path,
           ai_tool, model_name, lora_models, steps, cfg_scale, sampler, seed, scheduler,
           prompt, negative_prompt, denoise_strength, generation_time, batch_size, batch_index,
           auto_tags
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         hashes.compositeHash,
         hashes.perceptualHash,
@@ -621,7 +624,6 @@ export class FolderScanService {
         imageInfo.width,
         imageInfo.height,
         thumbnailPath,
-        null, // optimized_path는 더 이상 사용 안 함
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
       );
 

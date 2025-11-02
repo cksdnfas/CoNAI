@@ -475,6 +475,107 @@ router.get('/batch/thumbnails', asyncHandler(async (req: Request, res: Response)
 }));
 
 /**
+ * 원본 파일 조회 (GIF/비디오용, composite_hash 기반)
+ * GET /api/images/:compositeHash/file
+ * GIF와 비디오는 썸네일을 생성하지 않고 원본 파일을 직접 제공
+ */
+router.get('/:compositeHash/file', asyncHandler(async (req: Request, res: Response) => {
+  const compositeHash = req.params.compositeHash;
+
+  if (!compositeHash || compositeHash.length !== 48) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid composite hash'
+    });
+  }
+
+  try {
+    const files = await ImageFileModel.findActiveByHash(compositeHash);
+
+    if (files.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'File not found'
+      });
+    }
+
+    const originalPath = resolveUploadsPath(files[0].original_file_path);
+
+    if (!fs.existsSync(originalPath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'File not found on disk'
+      });
+    }
+
+    const mimeType = files[0].mime_type;
+
+    // 비디오인 경우 Range 요청 지원
+    if (mimeType && mimeType.startsWith('video/')) {
+      const stat = fs.statSync(originalPath);
+      const fileSize = stat.size;
+      const range = req.headers.range;
+
+      if (range) {
+        // Range 요청 처리 (비디오 시킹 지원)
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunkSize = (end - start) + 1;
+        const fileStream = fs.createReadStream(originalPath, { start, end });
+
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize,
+          'Content-Type': mimeType,
+          'Cache-Control': 'public, max-age=31536000, immutable'
+        });
+
+        fileStream.pipe(res);
+        return;
+      } else {
+        // 전체 비디오 스트리밍
+        res.writeHead(200, {
+          'Content-Length': fileSize,
+          'Content-Type': mimeType,
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'public, max-age=31536000, immutable'
+        });
+
+        const fileStream = fs.createReadStream(originalPath);
+        fileStream.pipe(res);
+        return;
+      }
+    }
+
+    // GIF 또는 기타 파일인 경우 일반 스트리밍
+    const stats = await fs.promises.stat(originalPath);
+    const etag = generateETag(stats);
+
+    // Check If-None-Match header
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('ETag', etag);
+
+    const fileStream = fs.createReadStream(originalPath);
+    fileStream.pipe(res);
+    return;
+  } catch (error) {
+    console.error('File serve error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to serve file'
+    });
+    return;
+  }
+}));
+
+/**
  * 썸네일 이미지/비디오 조회 (스트림 방식, composite_hash 기반)
  * GET /api/images/:compositeHash/thumbnail
  */
@@ -557,14 +658,7 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
     }
 
     // 이미지인 경우 썸네일 제공
-    if (!metadata.thumbnail_path) {
-      return res.status(404).json({
-        success: false,
-        error: 'Thumbnail not found'
-      });
-    }
-
-    const thumbnailPath = resolveUploadsPath(metadata.thumbnail_path);
+    const thumbnailPath = metadata.thumbnail_path ? resolveUploadsPath(metadata.thumbnail_path) : '';
 
     if (!fs.existsSync(thumbnailPath)) {
       // 썸네일이 없으면 원본 이미지로 폴백
@@ -671,174 +765,6 @@ router.get('/:compositeHash/download/original', asyncHandler(async (req: Request
 }));
 
 /**
- * 최적화 이미지 조회 (스트림 방식, composite_hash 기반)
- * GET /api/images/:compositeHash/optimized
- */
-router.get('/:compositeHash/optimized', asyncHandler(async (req: Request, res: Response) => {
-  const compositeHash = req.params.compositeHash;
-
-  if (!compositeHash || compositeHash.length !== 48) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid composite hash'
-    });
-  }
-
-  try {
-    const metadata = await ImageMetadataModel.findByHash(compositeHash);
-
-    if (!metadata) {
-      return res.status(404).json({
-        success: false,
-        error: 'Image not found'
-      });
-    }
-
-    const files = await ImageFileModel.findActiveByHash(compositeHash);
-    if (files.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Image file not found'
-      });
-    }
-
-    if (!metadata.optimized_path) {
-      // 최적화 버전이 없으면 원본으로 폴백
-      const originalPath = resolveUploadsPath(files[0].original_file_path);
-      if (!fs.existsSync(originalPath)) {
-        return res.status(404).json({
-          success: false,
-          error: 'Optimized and original file not found'
-        });
-      }
-
-      // Original fallback with ETag
-      const stats = await fs.promises.stat(originalPath);
-      const etag = generateETag(stats);
-
-      if (req.headers['if-none-match'] === etag) {
-        return res.status(304).end();
-      }
-
-      res.setHeader('Content-Type', files[0].mime_type);
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      res.setHeader('ETag', etag);
-      const fileStream = fs.createReadStream(originalPath);
-      fileStream.pipe(res);
-      return;
-    }
-
-    const optimizedPath = resolveUploadsPath(metadata.optimized_path);
-
-    if (!fs.existsSync(optimizedPath)) {
-      // 최적화 파일이 없으면 원본으로 폴백
-      const originalPath = resolveUploadsPath(files[0].original_file_path);
-      if (!fs.existsSync(originalPath)) {
-        return res.status(404).json({
-          success: false,
-          error: 'Optimized and original file not found'
-        });
-      }
-
-      // Original fallback with ETag
-      const stats = await fs.promises.stat(originalPath);
-      const etag = generateETag(stats);
-
-      if (req.headers['if-none-match'] === etag) {
-        return res.status(304).end();
-      }
-
-      res.setHeader('Content-Type', files[0].mime_type);
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      res.setHeader('ETag', etag);
-      const fileStream = fs.createReadStream(originalPath);
-      fileStream.pipe(res);
-      return;
-    }
-
-    // 최적화 이미지 제공 with ETag
-    const stats = await fs.promises.stat(optimizedPath);
-    const etag = generateETag(stats);
-
-    if (req.headers['if-none-match'] === etag) {
-      return res.status(304).end();
-    }
-
-    res.setHeader('Content-Type', 'image/webp');
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    res.setHeader('ETag', etag);
-    const fileStream = fs.createReadStream(optimizedPath);
-    fileStream.pipe(res);
-    return;
-  } catch (error) {
-    console.error('Optimized image error:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to serve optimized image'
-    });
-    return;
-  }
-}));
-
-/**
- * 저용량 이미지 다운로드 (composite_hash 기반)
- * GET /api/images/:compositeHash/download/optimized
- */
-router.get('/:compositeHash/download/optimized', asyncHandler(async (req: Request, res: Response) => {
-  const compositeHash = req.params.compositeHash;
-
-  if (!compositeHash || compositeHash.length !== 48) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid composite hash'
-    });
-  }
-
-  try {
-    const metadata = await ImageMetadataModel.findByHash(compositeHash);
-
-    if (!metadata) {
-      return res.status(404).json({
-        success: false,
-        error: 'Image not found'
-      });
-    }
-
-    if (!metadata.optimized_path) {
-      return res.status(404).json({
-        success: false,
-        error: 'Optimized version not available'
-      });
-    }
-
-    const filePath = resolveUploadsPath(metadata.optimized_path);
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
-        success: false,
-        error: 'Optimized file not found'
-      });
-    }
-
-    // 파일 다운로드 헤더 설정
-    res.setHeader('Content-Disposition', `attachment; filename="${compositeHash}_optimized.webp"`);
-    res.setHeader('Content-Type', 'image/webp');
-
-    // 파일 스트림으로 전송
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.pipe(res);
-    return;
-  } catch (error) {
-    console.error('Optimized download error:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to download optimized image'
-    });
-    return;
-  }
-}));
-
-/**
  * 경로 기반 이미지 조회 (Phase 1 지원)
  * GET /api/images/by-path/:encodedPath
  * Phase 1에서 composite_hash가 없는 이미지를 위한 엔드포인트
@@ -868,7 +794,12 @@ router.get('/by-path/:encodedPath', asyncHandler(async (req: Request, res: Respo
       '.gif': 'image/gif',
       '.webp': 'image/webp',
       '.bmp': 'image/bmp',
-      '.svg': 'image/svg+xml'
+      '.svg': 'image/svg+xml',
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.mov': 'video/quicktime',
+      '.avi': 'video/x-msvideo',
+      '.mkv': 'video/x-matroska'
     };
     const mimeType = mimeTypes[ext] || 'application/octet-stream';
 

@@ -25,7 +25,6 @@ export interface ProcessedVideo {
   filename: string;
   originalPath: string;
   thumbnailPath: string;
-  optimizedPath: string | null;  // 향후 동영상 최적화 버전용
   width: number;
   height: number;
   fileSize: number;
@@ -86,23 +85,19 @@ export class VideoProcessor {
   ): Promise<{
     dateFolder: string;
     originFolder: string;
-    optimizedFolder: string;
   }> {
     const dateFolder = this.getDateFolder();
     // 동영상은 videos 서브폴더 사용
     const videosPath = path.join(baseUploadPath, 'videos');
     const dateFolderPath = path.join(videosPath, dateFolder);
     const originFolder = path.join(dateFolderPath, 'Origin');
-    const optimizedFolder = path.join(dateFolderPath, 'optimized');
 
     // 폴더 생성
     await fs.promises.mkdir(originFolder, { recursive: true });
-    await fs.promises.mkdir(optimizedFolder, { recursive: true });
 
     return {
       dateFolder: path.join('videos', dateFolder),
-      originFolder,
-      optimizedFolder
+      originFolder
     };
   }
 
@@ -382,7 +377,6 @@ export class VideoProcessor {
         filename,
         originalPath: relativeOriginal,
         thumbnailPath: relativeOriginal, // 썸네일 = 원본 비디오 경로
-        optimizedPath: null, // 향후 동영상 최적화 버전용
         width: metadata.width,
         height: metadata.height,
         fileSize: file.size,
@@ -411,7 +405,6 @@ export class VideoProcessor {
   static async deleteVideoFiles(
     originalPath: string,
     thumbnailPath: string,
-    optimizedPath: string | null,
     baseUploadPath: string
   ): Promise<void> {
     try {
@@ -450,7 +443,6 @@ export class VideoProcessor {
       // 비디오는 원본과 썸네일이 같은 경로일 수 있으므로 Set 사용으로 중복 자동 제거
       addPathIfValid(originalPath);
       addPathIfValid(thumbnailPath);
-      addPathIfValid(optimizedPath);
 
       // 각 파일을 개별적으로 삭제 (하나 실패해도 나머지 삭제 계속)
       const deletePromises = Array.from(pathsToDelete).map(async (filePath) => {

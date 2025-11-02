@@ -279,53 +279,6 @@ async function startServer() {
     autoTagScheduler.start();
     console.log('✅ Auto-tag scheduler started successfully');
 
-    // 11. API 생성 이미지 폴더를 watched folder로 등록
-    console.log('📂 Registering API images folder for automatic processing...');
-    try {
-      const { WatchedFolderService } = await import('./services/watchedFolderService');
-      const apiImagesPath = path.join(uploadsDir, 'API', 'images');
-
-      // 폴더가 존재하는지 확인
-      if (fs.existsSync(apiImagesPath)) {
-        // 이미 등록되어 있는지 확인
-        const folders = await WatchedFolderService.listFolders();
-        const existing = folders.find(f => f.folder_path === apiImagesPath);
-
-        if (!existing) {
-          // 신규 등록
-          await WatchedFolderService.addFolder({
-            folder_path: apiImagesPath,
-            folder_name: 'API Generated Images',
-            folder_type: 'scan',
-            auto_scan: true,
-            scan_interval: 5, // 5분마다 스캔
-            recursive: true,
-            exclude_extensions: [], // 모든 이미지 형식 스캔
-            exclude_patterns: [],
-            watcher_enabled: true
-          });
-          console.log('✅ API images folder registered as watched folder');
-        } else {
-          console.log('✅ API images folder already registered');
-        }
-
-        // 파일 워처가 활성화되어 있다면 해당 폴더 감시 시작
-        if (process.env.ENABLE_FILE_WATCHING !== 'false') {
-          const { FileWatcherService } = await import('./services/fileWatcherService');
-          const folderId = folders.find(f => f.folder_path === apiImagesPath)?.id;
-          if (folderId) {
-            await FileWatcherService.startWatcher(folderId);
-            console.log('✅ File watcher started for API images folder');
-          }
-        }
-      } else {
-        console.log('ℹ️  API images folder does not exist yet - will be created on first use');
-      }
-    } catch (error) {
-      console.warn('⚠️  Failed to register API images folder:', error instanceof Error ? error.message : error);
-      console.warn('   API images may not be automatically processed');
-    }
-
     const extractHost = (value?: string | null): string | undefined => {
       if (!value || value.trim().length === 0) {
         return undefined;

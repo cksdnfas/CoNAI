@@ -9,7 +9,6 @@ export function enrichImageRecord(image: any) {
     ...image,
     thumbnail_url: toUploadsUrl(image.thumbnail_path as string)!,
     image_url: toUploadsUrl(image.file_path as string)!,
-    optimized_url: image.optimized_path ? toUploadsUrl(image.optimized_path) : null,
 
     // 그룹 정보 (이미 있는 경우 그대로 유지)
     groups: image.groups || [],
@@ -75,10 +74,14 @@ export function enrichImageWithFileView(image: any) {
   const isExternalImage = image.original_file_path && require('path').isAbsolute(image.original_file_path);
 
   // Phase 1: composite_hash가 없는 경우 (빠른 등록만 완료)
-  // 비디오는 file_hash로, 이미지는 composite_hash로 처리 상태 판단
-  const isProcessing = image.mime_type?.startsWith('video/')
-    ? !image.file_hash      // 비디오는 file_hash 기반
-    : !image.composite_hash; // 이미지는 composite_hash 기반
+  // 비디오와 움직이는 이미지(GIF, WebP)는 file_hash로, 정적 이미지는 composite_hash로 처리 상태 판단
+  const isFileHashBased = image.mime_type?.startsWith('video/') ||
+                          image.mime_type === 'image/gif' ||
+                          image.mime_type === 'image/webp';
+
+  const isProcessing = isFileHashBased
+    ? !image.file_hash      // 비디오 & 움직이는 이미지는 file_hash 기반
+    : !image.composite_hash; // 정적 이미지는 composite_hash 기반
 
   const enriched = {
     ...image,
@@ -96,11 +99,6 @@ export function enrichImageWithFileView(image: any) {
       : (isExternalImage
         ? `/api/images/${image.composite_hash}/download/original`
         : (image.original_file_path ? toUploadsUrl(image.original_file_path) : null)),
-
-    // optimized: Phase 1이면 null, 아니면 thumbnail과 동일
-    optimized_url: isProcessing
-      ? null
-      : (toUploadsUrl(image.thumbnail_path as string) || `/api/images/${image.composite_hash}/thumbnail`),
 
     // 그룹 정보 (이미 있는 경우 그대로 유지)
     groups: image.groups || [],

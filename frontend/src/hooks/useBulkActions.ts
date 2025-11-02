@@ -42,7 +42,7 @@ export const useBulkActions = () => {
       // 브라우저에서 동시 다운로드 제한을 고려하여 순차 처리
       for (const compositeHash of compositeHashes) {
         const link = document.createElement('a');
-        link.href = imageApi.getDownloadUrl(compositeHash, 'original');
+        link.href = imageApi.getDownloadUrl(compositeHash);
         link.download = `image_${compositeHash.substring(0, 8)}`;  // 해시의 처음 8자만 사용
         document.body.appendChild(link);
         link.click();

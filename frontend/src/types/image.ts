@@ -36,12 +36,12 @@ export interface ImageRecord {
   file_size: number | null;            // File size in bytes
   mime_type: string;                   // MIME type (image/png, video/mp4, etc.)
   file_status?: 'active' | 'deleted';  // File status
+  file_hash: string | null;            // MD5 file hash (used for videos and animated images)
 
   // Image metadata (from image_metadata table)
   width: number;                       // Image width in pixels
   height: number;                      // Image height in pixels
   thumbnail_path: string;              // Thumbnail file path
-  optimized_path: string | null;       // Optimized image path (WebP)
 
   // AI generation metadata
   ai_tool: string | null;              // ComfyUI, NovelAI, Stable Diffusion, etc.
@@ -78,7 +78,6 @@ export interface ImageRecord {
   // URLs (automatically added by backend enrichImageWithFileView)
   thumbnail_url: string;               // Thumbnail URL
   image_url: string | null;            // Original image URL
-  optimized_url: string | null;        // Optimized image URL
 
   // Group information (when joined)
   groups?: Array<{
@@ -125,7 +124,6 @@ export interface UploadResponse {
     composite_hash: string;            // ✅ Changed from id
     original_file_path: string;        // ✅ Changed from filename
     thumbnail_url: string;
-    optimized_url: string;
     file_size: number;
     mime_type: string;
     width: number | null;

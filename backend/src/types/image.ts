@@ -22,7 +22,6 @@ export interface ImageMetadataRecord {
 
   // 캐시된 경로 (원본 파일 불필요)
   thumbnail_path: string | null;
-  optimized_path: string | null;
 
   // AI 생성 메타데이터 (검색/필터/통계의 핵심)
   ai_tool: string | null;
@@ -107,7 +106,6 @@ export interface ImageRecord {
   original_name: string;
   file_path: string;
   thumbnail_path: string;
-  optimized_path: string | null;
   file_size: number;
   mime_type: string;
   width: number | null;
@@ -188,7 +186,6 @@ export interface UploadResponse {
     filename: string;
     original_name: string;
     thumbnail_url: string;
-    optimized_url: string;
     file_size: number;
     mime_type: string;
     width: number | null;

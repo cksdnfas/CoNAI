@@ -38,7 +38,6 @@ export interface GenerationHistoryRecord {
   // Image Paths
   original_path?: string;
   thumbnail_path?: string;
-  optimized_path?: string;
   file_size?: number;
 
   // Link to main images DB

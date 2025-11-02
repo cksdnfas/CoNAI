@@ -10,7 +10,6 @@ export interface ProcessedImage {
   filename: string;
   originalPath: string;
   thumbnailPath: string;
-  optimizedPath: string;
   width: number;
   height: number;
   fileSize: number;
@@ -52,7 +51,7 @@ export class ImageProcessor {
     const imagesPath = path.join(baseUploadPath, 'images');
     const targetFolder = path.join(imagesPath, dateFolder);
 
-    // 폴더 생성 (Origin, thumbnails, optimized 폴더 제거)
+    // 폴더 생성 (Origin, thumbnails만 사용)
     await fs.promises.mkdir(targetFolder, { recursive: true });
 
     return {
@@ -106,31 +105,6 @@ export class ImageProcessor {
       .toFile(outputPath);
   }
 
-  /**
-   * 저용량 최적화 이미지 생성
-   */
-  static async generateOptimized(
-    inputPath: string,
-    outputPath: string
-  ): Promise<void> {
-    // GIF 파일은 원본 그대로 복사 (애니메이션 보존)
-    const ext = path.extname(inputPath).toLowerCase();
-    if (ext === '.gif') {
-      const gifOutputPath = outputPath.replace(/\.webp$/, '.gif');
-      await fs.promises.copyFile(inputPath, gifOutputPath);
-      return;
-    }
-
-    const image = sharp(inputPath);
-    const metadata = await image.metadata();
-
-    await image
-      .webp({
-        quality: this.OPTIMIZED_QUALITY,
-        effort: 6
-      })
-      .toFile(outputPath);
-  }
 
   /**
    * 이미지 정보 얻기
@@ -203,7 +177,6 @@ export class ImageProcessor {
         filename,
         originalPath: relativeOriginal,
         thumbnailPath: '', // 스캔 시 생성
-        optimizedPath: '', // 더 이상 사용 안 함 (썸네일로 대체)
         width: imageInfo.width,
         height: imageInfo.height,
         fileSize: file.size,
@@ -269,16 +242,11 @@ export class ImageProcessor {
       const dirname = path.dirname(relativePath);
 
       const thumbnailRelativePath = path.join(dirname, `${basename}_thumb.webp`);
-      const optimizedRelativePath = path.join(dirname, `${basename}_opt.webp`);
 
       const thumbnailPath = resolveUploadsPath(thumbnailRelativePath);
-      const optimizedPath = resolveUploadsPath(optimizedRelativePath);
 
-      // 썸네일과 최적화 이미지 생성
-      await Promise.all([
-        ImageProcessor.generateThumbnail(fullPath, thumbnailPath),
-        ImageProcessor.generateOptimized(fullPath, optimizedPath)
-      ]);
+      // 썸네일 생성
+      await ImageProcessor.generateThumbnail(fullPath, thumbnailPath);
 
       const aiInfo = metadata.ai_info || {};
 
@@ -288,7 +256,6 @@ export class ImageProcessor {
         original_name: path.basename(relativePath),
         file_path: relativePath.replace(/\\/g, '/'),
         thumbnail_path: thumbnailRelativePath.replace(/\\/g, '/'),
-        optimized_path: optimizedRelativePath.replace(/\\/g, '/'),
         file_size: stats.size,
         mime_type: 'image/' + ext.substring(1),
         width: imageInfo.width,
@@ -337,7 +304,6 @@ export class ImageProcessor {
   static async deleteImageFiles(
     originalPath: string,
     thumbnailPath: string,
-    optimizedPath: string,
     baseUploadPath: string
   ): Promise<void> {
     try {
@@ -375,7 +341,6 @@ export class ImageProcessor {
 
       addPathIfValid(originalPath);
       addPathIfValid(thumbnailPath);
-      addPathIfValid(optimizedPath);
 
       // 각 파일을 개별적으로 삭제 (하나 실패해도 나머지 삭제 계속)
       const deletePromises = Array.from(pathsToDelete).map(async (filePath) => {

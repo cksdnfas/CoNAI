@@ -213,7 +213,6 @@ CREATE TABLE images (
   filename TEXT,
   original_path TEXT,
   thumbnail_path TEXT,
-  optimized_path TEXT,
   mime_type TEXT,
   width INTEGER,
   height INTEGER,
@@ -299,15 +298,14 @@ Automatic execution on startup with version tracking.
 
 **Flow:**
 ```
-Upload → Sharp Processing → Generate Thumbnail + Optimized → Extract AI Metadata → Store in SQLite
+Upload → Sharp Processing → Generate Thumbnail → Extract AI Metadata → Store in SQLite
 ```
 
 **Features:**
 - Supports AI tool metadata extraction (ComfyUI, NovelAI, Stable Diffusion, etc.)
-- Creates 3 image versions:
+- Creates 2 image versions:
   - Original
   - Thumbnail (1080px)
-  - Optimized (WebP, 95% quality)
 
 **Implementation:** `backend/src/services/imageProcessor.ts`
 
@@ -359,7 +357,6 @@ Upload → Sharp Processing → Generate Thumbnail + Optimized → Extract AI Me
 - `processImage()`: Main processing pipeline
 - `extractMetadata()`: AI metadata extraction
 - `createThumbnail()`: Thumbnail generation
-- `optimizeImage()`: WebP optimization
 
 ### AutoCollectionService
 **Purpose:** Rule-based automatic image grouping
@@ -524,11 +521,10 @@ const images = await db.all<ImageRecord>(
 uploads/
 ├── images/YYYY-MM-DD/
 │   ├── Origin/
-│   ├── thumbnails/
-│   └── optimized/
+│   └── thumbnails/
 └── videos/YYYY-MM-DD/
     ├── Origin/
-    └── optimized/{video-filename}/
+    └── thumbnails/{video-filename}/
 ```
 
 **Features:**

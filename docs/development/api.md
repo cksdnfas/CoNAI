@@ -41,7 +41,6 @@ Upload a new image with optional AI metadata.
   "filename": "image.png",
   "path": "2025-10-10/uuid.png",
   "thumbnail_path": "2025-10-10/uuid_thumb.png",
-  "optimized_path": "2025-10-10/uuid_opt.webp",
   "width": 1024,
   "height": 1024,
   "file_size": 2048576,
@@ -121,7 +120,7 @@ Retrieve all images with pagination.
 **Endpoint:** `GET /api/images/:id/download`
 
 **Query Parameters:**
-- `version` (string, optional): "original", "thumbnail", "optimized" (default: "original")
+- `version` (string, optional): "original", "thumbnail" (default: "original")
 
 **Response:** Image file with proper headers
 

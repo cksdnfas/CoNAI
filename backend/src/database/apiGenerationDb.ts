@@ -159,7 +159,6 @@ function createTables(): void {
       height INTEGER,
       original_path TEXT,
       thumbnail_path TEXT,
-      optimized_path TEXT,
       file_size INTEGER,
       linked_image_id INTEGER,
       assigned_group_id INTEGER,

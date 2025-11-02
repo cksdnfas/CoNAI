@@ -38,17 +38,18 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
   // 이미지 URL 우선순위:
   // 새 정책: 기본적으로 썸네일 사용 (90% 품질, 1080px, 빠른 로딩)
   // 원본 보기 버튼 클릭 시에만 원본 이미지 로드
-  // GIF는 항상 원본 사용 (애니메이션 보존)
+  // GIF와 비디오는 항상 원본 사용 (애니메이션/재생 보존)
   const getImageUrl = () => {
     const isGif = image.mime_type === 'image/gif';
+    const isVideo = image.mime_type?.startsWith('video/');
 
-    // GIF는 항상 원본 사용 (애니메이션 보존)
-    if (isGif) {
+    // GIF와 비디오는 항상 원본 사용
+    if (isGif || isVideo) {
       if (image.image_url) {
         return image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
       }
       // Fallback: API 엔드포인트
-      return `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
+      return `${backendOrigin}/api/images/${image.composite_hash}/file`;
     }
 
     // 원본 보기 모드 (사용자가 버튼 클릭)

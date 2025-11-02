@@ -69,14 +69,14 @@ export class ImageMetadataModel {
     db.prepare(`
       INSERT INTO image_metadata (
         composite_hash, perceptual_hash, dhash, ahash, color_histogram,
-        width, height, thumbnail_path, optimized_path,
+        width, height, thumbnail_path,
         ai_tool, model_name, lora_models, steps, cfg_scale, sampler, seed, scheduler,
         prompt, negative_prompt, denoise_strength, generation_time, batch_size, batch_index,
         auto_tags, duration, fps, video_codec, audio_codec, bitrate, rating_score
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.composite_hash, data.perceptual_hash, data.dhash, data.ahash, data.color_histogram,
-      data.width, data.height, data.thumbnail_path, data.optimized_path,
+      data.width, data.height, data.thumbnail_path,
       data.ai_tool, data.model_name, data.lora_models, data.steps, data.cfg_scale,
       data.sampler, data.seed, data.scheduler, data.prompt, data.negative_prompt,
       data.denoise_strength, data.generation_time, data.batch_size, data.batch_index,
@@ -100,7 +100,7 @@ export class ImageMetadataModel {
       'ai_tool', 'model_name', 'lora_models', 'steps', 'cfg_scale',
       'sampler', 'seed', 'scheduler', 'denoise_strength',
       'generation_time', 'batch_size', 'batch_index',
-      'thumbnail_path', 'optimized_path', 'width', 'height'
+      'thumbnail_path', 'width', 'height'
     ];
 
     for (const field of updatableFields) {
@@ -355,50 +355,6 @@ export class ImageMetadataModel {
           im.width,
           im.height,
           im.thumbnail_path,
-          im.optimized_path,
-          im.ai_tool,
-          im.model_name,
-          im.lora_models,
-          im.steps,
-          im.cfg_scale,
-          im.sampler,
-          im.seed,
-          im.scheduler,
-          im.prompt,
-          im.negative_prompt,
-          im.denoise_strength,
-          im.generation_time,
-          im.batch_size,
-          im.batch_index,
-          im.auto_tags,
-          im.first_seen_date,
-          im.metadata_updated_date,
-          if.id as file_id,
-          if.original_file_path,
-          if.file_size,
-          if.mime_type,
-          if.file_status,
-          if.scan_date
-        FROM image_files if
-        LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
-        WHERE if.file_status = 'active'
-        ORDER BY if.scan_date ${sortOrder}
-        LIMIT ? OFFSET ?
-      `;
-    } else if (sortBy === 'first_seen_date') {
-      // first_seen_date로 정렬 시 idx_metadata_first_seen_desc 인덱스 활용
-      // NULL 값 처리: metadata가 없는 경우 scan_date 폴백
-      query = `
-        SELECT
-          im.composite_hash,
-          im.perceptual_hash,
-          im.dhash,
-          im.ahash,
-          im.color_histogram,
-          im.width,
-          im.height,
-          im.thumbnail_path,
-          im.optimized_path,
           im.ai_tool,
           im.model_name,
           im.lora_models,
@@ -422,15 +378,16 @@ export class ImageMetadataModel {
           if.mime_type,
           if.file_status,
           if.scan_date,
-          CASE WHEN im.first_seen_date IS NULL THEN if.scan_date ELSE im.first_seen_date END as sort_date
+          if.file_hash
         FROM image_files if
         LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
         WHERE if.file_status = 'active'
-        ORDER BY sort_date ${sortOrder}
+        ORDER BY if.scan_date ${sortOrder}
         LIMIT ? OFFSET ?
       `;
-    } else {
-      // 기타 metadata 필드로 정렬 - 폴백 로직 유지
+    } else if (sortBy === 'first_seen_date') {
+      // first_seen_date로 정렬 시 idx_metadata_first_seen_desc 인덱스 활용
+      // NULL 값 처리: metadata가 없는 경우 scan_date 폴백
       query = `
         SELECT
           im.composite_hash,
@@ -441,7 +398,6 @@ export class ImageMetadataModel {
           im.width,
           im.height,
           im.thumbnail_path,
-          im.optimized_path,
           im.ai_tool,
           im.model_name,
           im.lora_models,
@@ -464,7 +420,51 @@ export class ImageMetadataModel {
           if.file_size,
           if.mime_type,
           if.file_status,
-          if.scan_date
+          if.scan_date,
+          if.file_hash,
+          CASE WHEN im.first_seen_date IS NULL THEN if.scan_date ELSE im.first_seen_date END as sort_date
+        FROM image_files if
+        LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
+        WHERE if.file_status = 'active'
+        ORDER BY sort_date ${sortOrder}
+        LIMIT ? OFFSET ?
+      `;
+    } else {
+      // 기타 metadata 필드로 정렬 - 폴백 로직 유지
+      query = `
+        SELECT
+          im.composite_hash,
+          im.perceptual_hash,
+          im.dhash,
+          im.ahash,
+          im.color_histogram,
+          im.width,
+          im.height,
+          im.thumbnail_path,
+          im.ai_tool,
+          im.model_name,
+          im.lora_models,
+          im.steps,
+          im.cfg_scale,
+          im.sampler,
+          im.seed,
+          im.scheduler,
+          im.prompt,
+          im.negative_prompt,
+          im.denoise_strength,
+          im.generation_time,
+          im.batch_size,
+          im.batch_index,
+          im.auto_tags,
+          im.first_seen_date,
+          im.metadata_updated_date,
+          if.id as file_id,
+          if.original_file_path,
+          if.file_size,
+          if.mime_type,
+          if.file_status,
+          if.scan_date,
+          if.file_hash
         FROM image_files if
         LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
         WHERE if.file_status = 'active'

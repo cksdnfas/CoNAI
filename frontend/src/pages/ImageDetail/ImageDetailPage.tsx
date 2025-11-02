@@ -169,7 +169,7 @@ const ImageDetailPage: React.FC = () => {
   }
 
   // API 엔드포인트를 통해 이미지 제공 (외부 네트워크 접근 보장)
-  const imageUrl = image ? `${backendOrigin}/api/images/${image.composite_hash}/optimized` : '';
+  const imageUrl = image ? `${backendOrigin}/api/images/${image.composite_hash}/thumbnail` : '';
   const fallbackUrl = image ? `${backendOrigin}/api/images/${image.composite_hash}/download/original` : '';
 
   return (

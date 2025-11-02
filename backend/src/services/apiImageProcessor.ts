@@ -24,33 +24,25 @@ export class APIImageProcessor {
 
   /**
    * Create folder structure for API images
-   * Path: uploads/API/images/YYYY-MM-DD/origin|thumbnails|optimized/
+   * Path: uploads/API/images/YYYY-MM-DD/
    */
   static async createUploadFolders(): Promise<{
     dateFolder: string;
     originFolder: string;
-    thumbnailFolder: string;
-    optimizedFolder: string;
   }> {
     const baseUploadPath = this.getBaseUploadPath();
     const dateFolder = ImageProcessor.getDateFolder();
     const imagesPath = path.join(baseUploadPath, 'images');
     const dateFolderPath = path.join(imagesPath, dateFolder);
 
-    const originFolder = path.join(dateFolderPath, 'origin');
-    const thumbnailFolder = path.join(dateFolderPath, 'thumbnails');
-    const optimizedFolder = path.join(dateFolderPath, 'optimized');
+    const originFolder = dateFolderPath;
 
     // Create directories
     await fs.promises.mkdir(originFolder, { recursive: true });
-    await fs.promises.mkdir(thumbnailFolder, { recursive: true });
-    await fs.promises.mkdir(optimizedFolder, { recursive: true });
 
     return {
       dateFolder: path.join('API', 'images', dateFolder),
-      originFolder,
-      thumbnailFolder,
-      optimizedFolder
+      originFolder
     };
   }
 
@@ -73,7 +65,7 @@ export class APIImageProcessor {
   /**
    * Process generated image from buffer - SIMPLIFIED VERSION
    * Saves ONLY original file to uploads/API/images/YYYY-MM-DD/
-   * Thumbnail and optimized versions will be created by background scan
+   * Thumbnail version will be created by background scan
    *
    * @param imageBuffer - Image buffer from API response
    * @param serviceType - 'comfyui' or 'novelai'
@@ -100,12 +92,11 @@ export class APIImageProcessor {
   }
 
   /**
-   * Delete generated images (all versions)
+   * Delete generated images
    */
   static async deleteGeneratedImages(paths: {
     originalPath: string;
     thumbnailPath: string;
-    optimizedPath: string;
   }): Promise<void> {
     const uploadsBase = path.join(process.cwd(), 'uploads');
 
@@ -122,8 +113,7 @@ export class APIImageProcessor {
 
     await Promise.all([
       deleteFile(paths.originalPath),
-      deleteFile(paths.thumbnailPath),
-      deleteFile(paths.optimizedPath)
+      deleteFile(paths.thumbnailPath)
     ]);
   }
 
