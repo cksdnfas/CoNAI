@@ -30,9 +30,9 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
   const cardRef = useRef<HTMLDivElement>(null);
   const backendOrigin = getBackendOrigin();
   // ✅ composite_hash 사용 - API 엔드포인트를 통해 썸네일 제공 (외부 네트워크 접근 보장)
-  // GIF는 애니메이션 보존을 위해 원본 사용 (video/gif 또는 image/gif)
-  const isGif = image.mime_type === 'image/gif' || image.mime_type === 'video/gif';
-  const isVideo = image.mime_type?.startsWith('video/') && !isGif; // GIF 제외한 진짜 비디오
+  // GIF는 애니메이션 보존을 위해 원본 사용 (file_type='animated')
+  const isGif = image.file_type === 'animated';
+  const isVideo = image.file_type === 'video';
   const isProcessing = image.is_processing || !image.composite_hash;
 
   const imageUrl = useMemo(() => {

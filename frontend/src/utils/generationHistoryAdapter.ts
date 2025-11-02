@@ -62,6 +62,52 @@ export const convertHistoryToImageRecord = (
     });
   }
 
+  // 파일 타입 및 MIME 타입 감지 (파일 확장자 기반)
+  const detectFileTypeAndMimeType = (filePath: string | null): { file_type: 'image' | 'video' | 'animated'; mime_type: string } => {
+    if (!filePath) return { file_type: 'image', mime_type: 'image/png' };
+
+    const ext = filePath.toLowerCase().split('.').pop() || '';
+
+    // GIF는 animated로 분류
+    if (ext === 'gif') {
+      return { file_type: 'animated', mime_type: 'image/gif' };
+    }
+
+    // APNG는 animated로 분류
+    if (ext === 'apng') {
+      return { file_type: 'animated', mime_type: 'image/apng' };
+    }
+
+    // 비디오 파일
+    if (['mp4', 'webm', 'mov', 'avi'].includes(ext)) {
+      const mimeTypes: Record<string, string> = {
+        mp4: 'video/mp4',
+        webm: 'video/webm',
+        mov: 'video/quicktime',
+        avi: 'video/x-msvideo'
+      };
+      return { file_type: 'video', mime_type: mimeTypes[ext] || 'video/mp4' };
+    }
+
+    // 이미지 파일
+    const imageMimeTypes: Record<string, string> = {
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      webp: 'image/webp',
+      bmp: 'image/bmp',
+      tiff: 'image/tiff',
+      tif: 'image/tiff'
+    };
+
+    return {
+      file_type: 'image',
+      mime_type: imageMimeTypes[ext] || 'image/png'
+    };
+  };
+
+  const { file_type, mime_type } = detectFileTypeAndMimeType(history.original_path);
+
   return {
     // ✅ New structure - Primary identification
     composite_hash,  // Use actual composite_hash if available
@@ -69,10 +115,10 @@ export const convertHistoryToImageRecord = (
 
     // File information (from image_files table JOIN)
     file_id: null,                             // History records don't have file_id yet
-    file_type: 'image' as const,               // History records are typically images
+    file_type,                                 // Detect from file extension
     original_file_path: history.original_path || null,  // Replaces file_path
     file_size: history.file_size || null,
-    mime_type: 'image/png',
+    mime_type,                                 // Detect from file extension
     file_status: 'active' as const,
 
     // Image metadata - 메타데이터 있으면 실제 이미지 크기 사용, 없으면 히스토리 DB 크기 사용

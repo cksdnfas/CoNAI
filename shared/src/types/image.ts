@@ -18,8 +18,9 @@ export interface ImageRecord {
   file_id: number | null;              // Reference to image_files table
   original_file_path: string | null;   // Original file path (replaces file_path)
   file_size: number | null;            // File size in bytes
-  mime_type: string;                   // MIME type (image/png, video/mp4, etc.)
+  mime_type: string;                   // MIME type (for HTTP headers only)
   file_status?: 'active' | 'deleted';  // File status
+  file_type: 'image' | 'video' | 'animated';  // File type classification (use this for business logic)
 
   // Image metadata (from image_metadata table)
   width: number | null;                // Image width in pixels

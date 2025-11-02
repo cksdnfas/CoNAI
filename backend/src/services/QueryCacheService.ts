@@ -124,7 +124,7 @@ export class QueryCacheService {
    */
   static invalidateGalleryCache(): void {
     try {
-      this.galleryCache.clear();
+      this.galleryCache.reset();
       console.log('🗑️ Gallery cache invalidated');
     } catch (error) {
       console.warn('⚠️ Gallery cache invalidate error:', error instanceof Error ? error.message : error);
@@ -235,8 +235,8 @@ export class QueryCacheService {
       if (isBulkOperation || !compositeHash) {
         // 대량 작업이거나 composite_hash가 없는 경우 전체 무효화
         this.invalidateGalleryCache();
-        this.metadataCache.clear();
-        this.thumbnailCache.clear();
+        this.metadataCache.reset();
+        this.thumbnailCache.reset();
         console.log('🗑️ All image caches invalidated (bulk operation)');
       } else {
         // 단일 이미지 변경: 첫 페이지만 무효화 (성능 최적화)

@@ -13,22 +13,24 @@ import {
   IconButton,
   Chip,
   Card,
-  CardContent
+  CardContent,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
   Save as SaveIcon,
   Delete as DeleteIcon,
   Add as AddIcon,
-  Upload as UploadIcon,
-  Visibility as ViewIcon
+  Upload as UploadIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { workflowApi, type Workflow, type MarkedField } from '../../services/api/workflowApi';
 import { MarkedFieldsGuide } from './MarkedFieldsGuide';
 import { MarkedFieldsPreview } from './MarkedFieldsPreview';
-import WorkflowViewer from './components/WorkflowViewer';
+import WorkflowGraphViewer from './components/WorkflowGraphViewer';
+import WorkflowJsonViewer from './components/WorkflowJsonViewer';
 
 export default function WorkflowFormPage() {
   const navigate = useNavigate();
@@ -48,7 +50,7 @@ export default function WorkflowFormPage() {
   const [isActive, setIsActive] = useState(true);
   const [color, setColor] = useState('#2196f3');
   const [markedFields, setMarkedFields] = useState<MarkedField[]>([]);
-  const [viewerOpen, setViewerOpen] = useState(false);
+  const [jsonTabValue, setJsonTabValue] = useState(0);
 
   // Color picker debounce
   const colorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -314,66 +316,86 @@ export default function WorkflowFormPage() {
           <Typography variant="h6">
             {t('workflows:form.workflowJson')}
           </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            {workflowJson && !jsonError && (
-              <Button
-                variant="outlined"
-                startIcon={<ViewIcon />}
-                size="small"
-                onClick={() => setViewerOpen(true)}
-              >
-                View Graph
-              </Button>
-            )}
-            <Button
-              component="label"
-              startIcon={<UploadIcon />}
-              size="small"
-            >
-              {t('workflows:form.uploadFile')}
-              <input
-                type="file"
-                accept=".json"
-                hidden
-                onChange={handleFileUpload}
-              />
-            </Button>
-          </Box>
-        </Box>
-        <Divider sx={{ mb: 2 }} />
-
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          <Typography variant="body2">
-            <strong>{t('workflows:alerts.importantNote')}</strong> {t('workflows:alerts.apiFormatWarning')}
-          </Typography>
-        </Alert>
-
-        <TextField
-          fullWidth
-          multiline
-          rows={15}
-          value={workflowJson}
-          onChange={(e) => handleWorkflowJsonChange(e.target.value)}
-          placeholder={t('workflows:form.jsonPlaceholder')}
-          error={!!jsonError}
-          helperText={jsonError || t('workflows:form.jsonHelper')}
-          sx={{
-            '& .MuiInputBase-input': {
-              fontFamily: 'monospace',
-              fontSize: '0.875rem'
-            }
-          }}
-        />
-
-        {workflowJson && !jsonError && (
-          <Box sx={{ mt: 2 }}>
-            <Chip
-              label={t('workflows:form.jsonCharCount', { count: JSON.stringify(JSON.parse(workflowJson)).length })}
-              size="small"
-              color="success"
+          <Button
+            component="label"
+            startIcon={<UploadIcon />}
+            size="small"
+          >
+            {t('workflows:form.uploadFile')}
+            <input
+              type="file"
+              accept=".json"
+              hidden
+              onChange={handleFileUpload}
             />
-          </Box>
-        )}
+          </Button>
+        </Box>
+
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+          <Tabs value={jsonTabValue} onChange={(_, newValue) => setJsonTabValue(newValue)}>
+            <Tab label="JSON Editor" />
+            <Tab label="Graph View" disabled={!workflowJson || !!jsonError} />
+            <Tab label="JSON View" disabled={!workflowJson || !!jsonError} />
+          </Tabs>
+        </Box>
+
+        {/* Tab Panel 0: JSON Editor */}
+        <Box role="tabpanel" hidden={jsonTabValue !== 0}>
+          {jsonTabValue === 0 && (
+            <>
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  <strong>{t('workflows:alerts.importantNote')}</strong> {t('workflows:alerts.apiFormatWarning')}
+                </Typography>
+              </Alert>
+
+              <TextField
+                fullWidth
+                multiline
+                rows={15}
+                value={workflowJson}
+                onChange={(e) => handleWorkflowJsonChange(e.target.value)}
+                placeholder={t('workflows:form.jsonPlaceholder')}
+                error={!!jsonError}
+                helperText={jsonError || t('workflows:form.jsonHelper')}
+                sx={{
+                  '& .MuiInputBase-input': {
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem'
+                  }
+                }}
+              />
+
+              {workflowJson && !jsonError && (
+                <Box sx={{ mt: 2 }}>
+                  <Chip
+                    label={t('workflows:form.jsonCharCount', { count: JSON.stringify(JSON.parse(workflowJson)).length })}
+                    size="small"
+                    color="success"
+                  />
+                </Box>
+              )}
+            </>
+          )}
+        </Box>
+
+        {/* Tab Panel 1: Graph View */}
+        <Box role="tabpanel" hidden={jsonTabValue !== 1}>
+          {jsonTabValue === 1 && workflowJson && !jsonError && (
+            <Box sx={{ height: '600px', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+              <WorkflowGraphViewer workflowJson={workflowJson} />
+            </Box>
+          )}
+        </Box>
+
+        {/* Tab Panel 2: JSON View */}
+        <Box role="tabpanel" hidden={jsonTabValue !== 2}>
+          {jsonTabValue === 2 && workflowJson && !jsonError && (
+            <Box sx={{ height: '600px', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'auto' }}>
+              <WorkflowJsonViewer workflowJson={workflowJson} />
+            </Box>
+          )}
+        </Box>
       </Paper>
 
       {/* Marked Fields 가이드 */}
@@ -548,16 +570,6 @@ export default function WorkflowFormPage() {
           {saving ? t('workflows:actions.saving') : (isEditMode ? t('workflows:actions.update') : t('workflows:actions.create'))}
         </Button>
       </Box>
-
-      {/* Workflow Viewer Dialog */}
-      {workflowJson && !jsonError && (
-        <WorkflowViewer
-          open={viewerOpen}
-          onClose={() => setViewerOpen(false)}
-          workflowName={name || 'Workflow Preview'}
-          workflowJson={workflowJson}
-        />
-      )}
     </Box>
   );
 }

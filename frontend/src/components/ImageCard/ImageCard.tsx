@@ -100,9 +100,8 @@ const ImageCard: React.FC<ImageCardProps> = ({
   // ✅ composite_hash 사용 - API 엔드포인트를 통해 썸네일 및 원본 이미지 제공
   // Phase 1: composite_hash가 NULL이면 경로 기반 URL 사용
   // GIF는 애니메이션 보존을 위해 원본 사용 (file_type='animated')
-  // file_type 우선 확인 (백엔드에서 정확히 분류됨)
-  const isGif = image.file_type === 'animated' || image.mime_type === 'image/gif' || image.mime_type === 'video/gif';
-  const isVideo = image.file_type === 'video' || (image.mime_type?.startsWith('video/') && image.file_type !== 'animated');
+  const isGif = image.file_type === 'animated';
+  const isVideo = image.file_type === 'video';
   const isProcessing = image.is_processing || !image.composite_hash;
 
   const thumbnailUrl = useMemo(() => {

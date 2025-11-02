@@ -16,7 +16,6 @@ declare module 'lru-cache' {
     peek(key: K): V | undefined;
     has(key: K): boolean;
     delete(key: K): void;
-    clear(): void;
     reset(): void;
     readonly size: number;
     readonly max: number;

@@ -797,7 +797,7 @@ export class FolderScanService {
       '.webm': 'video/webm',
       '.mov': 'video/quicktime',
       '.avi': 'video/x-msvideo',
-      '.gif': 'video/gif'  // GIF는 비디오로 분류
+      '.gif': 'image/gif'  // GIF는 animated 타입으로 분류됨
     };
     return mimeTypes[ext] || 'application/octet-stream';
   }

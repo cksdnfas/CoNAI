@@ -19,16 +19,16 @@ export const SUPPORTED_IMAGE_EXTENSIONS = [
 ] as const;
 
 /**
- * Video extensions for future video processing support
- * Currently not processed, but reserved for future implementation
- * Note: GIF is classified as video due to animation support
+ * Video extensions for video processing support
+ * Note: GIF is included here for file extension grouping,
+ * but is classified as file_type='animated' (not 'video') in business logic
  */
 export const SUPPORTED_VIDEO_EXTENSIONS = [
   '.mp4',
   '.webm',
   '.mov',
   '.avi',
-  '.gif'
+  '.gif'  // file_type='animated', mime_type='image/gif'
 ] as const;
 
 /**

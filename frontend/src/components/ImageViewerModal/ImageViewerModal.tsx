@@ -297,7 +297,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             scale={transform.scale}
             isMobile={isMobile}
             showOriginal={showOriginal}
-            isGif={currentImage?.mime_type === 'image/gif'}
+            isGif={currentImage?.file_type === 'animated'}
             onZoomIn={transform.handleZoomIn}
             onZoomOut={transform.handleZoomOut}
             onRotateLeft={transform.handleRotateLeft}

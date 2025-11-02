@@ -41,8 +41,8 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
 
   // 히스토리 이미지는 thumbnail_url 사용, 일반 이미지는 API 사용
   // GIF와 비디오는 원본 사용
-  const isGif = image.mime_type === 'image/gif';
-  const isVideo = image.mime_type?.startsWith('video/');
+  const isGif = image.file_type === 'animated';
+  const isVideo = image.file_type === 'video';
 
   // composite_hash가 유효한지 확인 (fallback "history_123" 형식이 아닌지)
   const hasValidHash = image.composite_hash && !image.composite_hash.startsWith('history_');
