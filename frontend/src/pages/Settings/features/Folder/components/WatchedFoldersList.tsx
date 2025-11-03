@@ -13,7 +13,8 @@ import {
   CircularProgress,
   Grid,
   Tooltip,
-  Divider
+  Divider,
+  Switch
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -24,10 +25,7 @@ import {
   History as HistoryIcon,
   Autorenew as AutorenewIcon,
   Visibility as VisibilityIcon,
-  VisibilityOff as VisibilityOffIcon,
-  RestartAlt as RestartIcon,
-  Stop as StopIcon,
-  Error as ErrorIcon
+  VisibilityOff as VisibilityOffIcon
 } from '@mui/icons-material';
 import { folderApi } from '../../../../../services/folderApi';
 import FolderFormDialog from './FolderFormDialog';
@@ -166,63 +164,7 @@ const WatchedFoldersList: React.FC = () => {
     }
   };
 
-  // Watcher 재시작
-  const handleRestartWatcher = async (folderId: number) => {
-    setWatcherActioningId(folderId);
-    try {
-      await folderApi.restartWatcher(folderId);
-      loadFolders();
-    } catch (err) {
-      console.error('Failed to restart watcher:', err);
-      setError('실시간 감시 재시작에 실패했습니다');
-    } finally {
-      setWatcherActioningId(null);
-    }
-  };
-
-  // 상태 칩 색상
-  const getStatusColor = (status: string | null) => {
-    switch (status) {
-      case 'success':
-        return 'success';
-      case 'error':
-        return 'error';
-      case 'in_progress':
-        return 'info';
-      default:
-        return 'default';
-    }
-  };
-
-  // 상태 텍스트
-  const getStatusText = (status: string | null) => {
-    switch (status) {
-      case 'success':
-        return '성공';
-      case 'error':
-        return '오류';
-      case 'in_progress':
-        return '진행 중';
-      default:
-        return '대기';
-    }
-  };
-
-  // Watcher 상태 색상
-  const getWatcherStatusColor = (status: string | null) => {
-    switch (status) {
-      case 'watching':
-        return 'success';
-      case 'error':
-        return 'error';
-      case 'stopped':
-        return 'default';
-      default:
-        return 'default';
-    }
-  };
-
-  // Watcher 상태 텍스트
+  // Watcher 상태 텍스트 (툴팁용)
   const getWatcherStatusText = (folder: WatchedFolder) => {
     const { watcher_status, watcher_enabled } = folder;
 
@@ -240,27 +182,6 @@ const WatchedFoldersList: React.FC = () => {
         return '중지';
       default:
         return '비활성';
-    }
-  };
-
-  // Watcher 상태 아이콘
-  const getWatcherStatusIcon = (folder: WatchedFolder) => {
-    const { watcher_status, watcher_enabled } = folder;
-
-    // watcher_enabled가 1이고 status가 NULL이면 시작 중으로 간주
-    if (watcher_enabled === 1 && !watcher_status) {
-      return <CircularProgress size={16} />; // 로딩 아이콘
-    }
-
-    switch (watcher_status) {
-      case 'watching':
-        return <VisibilityIcon fontSize="small" />;
-      case 'error':
-        return <ErrorIcon fontSize="small" />;
-      case 'stopped':
-        return <StopIcon fontSize="small" />;
-      default:
-        return <VisibilityOffIcon fontSize="small" />;
     }
   };
 
@@ -306,13 +227,6 @@ const WatchedFoldersList: React.FC = () => {
           >
             새로고침
           </Button>
-          <Button
-            startIcon={<AddIcon />}
-            variant="contained"
-            onClick={() => handleOpenDialog()}
-          >
-            폴더 추가
-          </Button>
         </Box>
       </Box>
 
@@ -326,180 +240,220 @@ const WatchedFoldersList: React.FC = () => {
         {/* 기존 폴더 카드들 */}
         {folders.map((folder) => (
           <Grid size={{ xs: 12, sm: 6, md: 4 }} key={folder.id}>
-            <Tooltip title={folder.folder_path} placement="top" arrow>
-              <Card sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <CardContent sx={{ flexGrow: 1, pb: 1 }}>
-                  {/* 제목 + 활성 상태 */}
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
-                    <Typography variant="subtitle1" component="div" sx={{ fontWeight: 600 }}>
-                      {folder.folder_name || '이름 없음'}
-                    </Typography>
+            <Card
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                minHeight: 220,
+                position: 'relative',
+              }}
+            >
+              {/* 헤더: 폴더명 + 모든 상태 */}
+              <Box sx={{
+                p: 2,
+                pb: 1.5,
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+              }}>
+                <Tooltip title={folder.folder_path} placement="top" arrow>
+                  <Typography
+                    variant="h6"
+                    component="div"
+                    sx={{
+                      fontWeight: 600,
+                      fontSize: '1.1rem',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      mb: 0.5,
+                    }}
+                  >
+                    {folder.folder_name || '이름 없음'}
+                  </Typography>
+                </Tooltip>
+                <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {/* 활성 상태 */}
+                  <Chip
+                    label={folder.is_active ? '활성' : '비활성'}
+                    size="small"
+                    color={folder.is_active ? 'success' : 'default'}
+                    sx={{ height: 20, fontSize: '0.7rem' }}
+                  />
+
+                  {/* 자동 스캔 설정 */}
+                  {folder.auto_scan === 1 && (
                     <Chip
-                      label={folder.is_active ? '활성' : '비활성'}
+                      icon={<AutorenewIcon sx={{ fontSize: 14 }} />}
+                      label={`${folder.scan_interval}분`}
                       size="small"
-                      color={folder.is_active ? 'success' : 'default'}
+                      variant="outlined"
+                      sx={{ height: 20, fontSize: '0.7rem' }}
                     />
-                  </Box>
+                  )}
 
-                  {/* 설정 및 상태 정보 */}
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-                      {folder.auto_scan === 1 && (
-                        <Chip
-                          icon={<AutorenewIcon />}
-                          label={`자동 ${folder.scan_interval}분`}
-                          size="small"
-                          variant="outlined"
-                        />
-                      )}
-                      {folder.last_scan_status && (
-                        <Chip
-                          label={`스캔: ${getStatusText(folder.last_scan_status)}`}
-                          size="small"
-                          color={getStatusColor(folder.last_scan_status)}
-                        />
-                      )}
-                    </Box>
+                  {/* 스캔 상태 - 색상으로만 표시 */}
+                  {folder.last_scan_status && (
+                    <Chip
+                      label="스캔"
+                      size="small"
+                      sx={{
+                        height: 20,
+                        fontSize: '0.7rem',
+                        color:
+                          folder.last_scan_status === 'success' ? 'success.main' :
+                          folder.last_scan_status === 'error' ? 'error.main' :
+                          folder.last_scan_status === 'in_progress' ? 'info.main' : 'grey.500',
+                        borderColor:
+                          folder.last_scan_status === 'success' ? 'success.main' :
+                          folder.last_scan_status === 'error' ? 'error.main' :
+                          folder.last_scan_status === 'in_progress' ? 'info.main' : 'grey.400',
+                      }}
+                      variant="outlined"
+                    />
+                  )}
 
-                    {/* 실시간 감시 상태 */}
-                    {folder.watcher_enabled === 1 && (
-                      <>
-                        <Divider sx={{ my: 1 }} />
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Chip
-                              icon={getWatcherStatusIcon(folder)}
-                              label={getWatcherStatusText(folder)}
-                              size="small"
-                              color={getWatcherStatusColor(folder.watcher_status)}
-                              variant="outlined"
-                            />
-                          </Box>
-                          {folder.watcher_error && (
-                            <Typography variant="caption" color="error" sx={{ fontSize: '0.7rem' }}>
-                              {folder.watcher_error}
-                            </Typography>
-                          )}
-                          {folder.watcher_last_event && (
-                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-                              마지막 이벤트: {new Date(folder.watcher_last_event).toLocaleString('ko-KR', {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </Typography>
-                          )}
-                        </Box>
-                      </>
-                    )}
+                  {/* 감시 상태 - 아이콘으로만 표시 */}
+                  {folder.watcher_enabled === 1 && (
+                    <Tooltip title={getWatcherStatusText(folder)} arrow>
+                      <Box
+                        sx={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: 32,
+                          height: 20,
+                          border: '1px solid',
+                          borderRadius: '10px',
+                          color:
+                            folder.watcher_status === 'watching' ? 'success.main' :
+                            folder.watcher_status === 'error' ? 'error.main' : 'grey.500',
+                          borderColor:
+                            folder.watcher_status === 'watching' ? 'success.main' :
+                            folder.watcher_status === 'error' ? 'error.main' : 'grey.400',
+                        }}
+                      >
+                        {folder.watcher_status === 'watching' ? (
+                          <VisibilityIcon sx={{ fontSize: 14 }} />
+                        ) : folder.watcher_status === 'error' ? (
+                          <VisibilityOffIcon sx={{ fontSize: 14 }} />
+                        ) : (
+                          <VisibilityOffIcon sx={{ fontSize: 14 }} />
+                        )}
+                      </Box>
+                    </Tooltip>
+                  )}
+                </Box>
+              </Box>
 
-                    {folder.last_scan_date && (
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: folder.watcher_enabled === 1 ? 0 : 0.5 }}>
+              {/* 메인: 타임스탬프 + 에러 메시지 */}
+              <CardContent sx={{ flexGrow: 1, p: 2, pb: 1, minHeight: 60 }}>
+                {folder.watcher_error ? (
+                  <Alert severity="error" sx={{ py: 0.5, fontSize: '0.75rem' }}>
+                    {folder.watcher_error}
+                  </Alert>
+                ) : (
+                  <Box>
+                    {folder.last_scan_date ? (
+                      <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.75rem' }}>
                         마지막 스캔: {new Date(folder.last_scan_date).toLocaleString('ko-KR', {
-                          month: 'short',
+                          month: 'numeric',
                           day: 'numeric',
                           hour: '2-digit',
                           minute: '2-digit'
                         })}
                       </Typography>
+                    ) : (
+                      <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.75rem' }}>
+                        스캔 기록 없음
+                      </Typography>
                     )}
                   </Box>
-                </CardContent>
-
-                <CardActions sx={{ pt: 0, px: 2, pb: 1.5, gap: 0.5, flexWrap: 'wrap' }}>
-                {/* 실시간 감시 컨트롤 */}
-                {folder.watcher_enabled === 1 && (
-                  <>
-                    {folder.watcher_status === 'watching' ? (
-                      <>
-                        <Tooltip title="감시 중지" arrow>
-                          <span>
-                            <IconButton
-                              size="small"
-                              onClick={() => handleStopWatcher(folder.id)}
-                              disabled={watcherActioningId === folder.id}
-                              color="warning"
-                            >
-                              {watcherActioningId === folder.id ? <CircularProgress size={18} /> : <StopIcon fontSize="small" />}
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                        <Tooltip title="감시 재시작" arrow>
-                          <span>
-                            <IconButton
-                              size="small"
-                              onClick={() => handleRestartWatcher(folder.id)}
-                              disabled={watcherActioningId === folder.id}
-                              color="info"
-                            >
-                              {watcherActioningId === folder.id ? <CircularProgress size={18} /> : <RestartIcon fontSize="small" />}
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                      </>
-                    ) : (
-                      <Tooltip title="감시 시작" arrow>
-                        <span>
-                          <IconButton
-                            size="small"
-                            onClick={() => handleStartWatcher(folder.id)}
-                            disabled={watcherActioningId === folder.id}
-                            color="success"
-                          >
-                            {watcherActioningId === folder.id ? <CircularProgress size={18} /> : <VisibilityIcon fontSize="small" />}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    )}
-                    <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-                  </>
                 )}
-                <Tooltip title="스캔" arrow>
-                  <span>
+              </CardContent>
+
+              {/* 푸터: 토글 스위치 + 액션 버튼 */}
+              <CardActions sx={{
+                p: 2,
+                pt: 1,
+                borderTop: '1px solid',
+                borderColor: 'divider',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}>
+                {/* 왼쪽: 감시 토글 스위치 */}
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  {folder.watcher_enabled === 1 && (
+                    <Tooltip
+                      title={
+                        watcherActioningId === folder.id ? '처리 중...' :
+                        folder.watcher_status === 'watching' ? '감시 중지' : '감시 시작'
+                      }
+                      arrow
+                    >
+                      <Switch
+                        size="small"
+                        checked={folder.watcher_status === 'watching'}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            handleStartWatcher(folder.id);
+                          } else {
+                            handleStopWatcher(folder.id);
+                          }
+                        }}
+                        disabled={watcherActioningId === folder.id}
+                        color="success"
+                      />
+                    </Tooltip>
+                  )}
+                </Box>
+
+                {/* 오른쪽: 액션 버튼 */}
+                <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                  <Tooltip title="스캔" arrow>
+                    <span>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleScan(folder.id)}
+                        disabled={scanningFolderId === folder.id}
+                        color="primary"
+                      >
+                        {scanningFolderId === folder.id ? <CircularProgress size={18} /> : <PlayIcon fontSize="small" />}
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title="로그" arrow>
                     <IconButton
                       size="small"
-                      onClick={() => handleScan(folder.id)}
-                      disabled={scanningFolderId === folder.id}
-                      color="primary"
+                      onClick={() => {
+                        setLogFolderId(folder.id);
+                        setLogModalOpen(true);
+                      }}
                     >
-                      {scanningFolderId === folder.id ? <CircularProgress size={18} /> : <PlayIcon fontSize="small" />}
+                      <HistoryIcon fontSize="small" />
                     </IconButton>
-                  </span>
-                </Tooltip>
-                <Tooltip title="로그" arrow>
-                  <IconButton
-                    size="small"
-                    onClick={() => {
-                      setLogFolderId(folder.id);
-                      setLogModalOpen(true);
-                    }}
-                    color="primary"
-                  >
-                    <HistoryIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="편집" arrow>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleOpenDialog(folder)}
-                    color="primary"
-                  >
-                    <EditIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="삭제" arrow>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleDelete(folder)}
-                    color="error"
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
+                  </Tooltip>
+                  <Tooltip title="편집" arrow>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleOpenDialog(folder)}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="삭제" arrow>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleDelete(folder)}
+                      color="error"
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
               </CardActions>
-              </Card>
-            </Tooltip>
+            </Card>
           </Grid>
         ))}
 
@@ -508,7 +462,7 @@ const WatchedFoldersList: React.FC = () => {
           <Card
             sx={{
               border: '2px dashed',
-              borderColor: 'success.main',
+              borderColor: 'primary.main',
               backgroundColor: 'transparent',
               cursor: 'pointer',
               display: 'flex',
@@ -516,30 +470,39 @@ const WatchedFoldersList: React.FC = () => {
               alignItems: 'center',
               justifyContent: 'center',
               height: '100%',
-              minHeight: 180,
+              minHeight: 220,
               transition: 'all 0.2s',
               '&:hover': {
                 backgroundColor: 'action.hover',
-                borderColor: 'success.dark',
+                borderColor: 'primary.dark',
+                '& .add-icon-circle': {
+                  transform: 'scale(1.1)',
+                  backgroundColor: 'primary.dark',
+                },
               },
             }}
             onClick={() => handleOpenDialog()}
           >
             <Box sx={{ textAlign: 'center', p: 2 }}>
               <Box
+                className="add-icon-circle"
                 sx={{
-                  width: 80,
-                  height: 80,
+                  width: 60,
+                  height: 60,
                   borderRadius: '50%',
-                  backgroundColor: 'success.main',
+                  backgroundColor: 'primary.main',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  margin: '0 auto',
+                  margin: '0 auto 1rem',
+                  transition: 'all 0.2s',
                 }}
               >
-                <AddIcon sx={{ fontSize: 40, color: 'white' }} />
+                <AddIcon sx={{ fontSize: 32, color: 'white' }} />
               </Box>
+              <Typography variant="body2" color="text.secondary">
+                폴더 추가
+              </Typography>
             </Box>
           </Card>
         </Grid>

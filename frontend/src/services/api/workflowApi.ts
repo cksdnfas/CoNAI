@@ -26,6 +26,7 @@ export interface MarkedField {
   required?: boolean;
   min?: number;
   max?: number;
+  step?: number;
 }
 
 export interface GenerationHistory {

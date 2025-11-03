@@ -66,7 +66,8 @@ export function WorkflowFormFields({
             placeholder={field.placeholder}
             inputProps={{
               min: field.min,
-              max: field.max
+              max: field.max,
+              step: field.step || 1
             }}
             sx={{ mb: 2 }}
           />

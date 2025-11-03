@@ -1,9 +1,4 @@
 /**
- * 감시 폴더 타입
- */
-export type FolderType = 'upload' | 'scan' | 'archive';
-
-/**
  * 스캔 상태 타입
  */
 export type ScanStatus = 'success' | 'error' | 'in_progress' | null;
@@ -25,7 +20,6 @@ export interface WatchedFolder {
   id: number;
   folder_path: string;
   folder_name: string | null;
-  folder_type: FolderType;
   auto_scan: number;
   scan_interval: number;
   recursive: number;
@@ -50,7 +44,6 @@ export interface WatchedFolder {
 export interface WatchedFolderCreate {
   folder_path: string;
   folder_name?: string;
-  folder_type?: FolderType;
   auto_scan?: boolean;
   scan_interval?: number;
   recursive?: boolean;

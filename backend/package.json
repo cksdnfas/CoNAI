@@ -4,7 +4,7 @@
   "description": "Backend API server for ComfyUI Image Manager",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "nodemon --watch src --ext ts,json --ignore 'database/**' --ignore 'uploads/**' --ignore '**/*.db' --exec tsx src/index.ts",
     "build": "tsc && npm run copy:migrations",
     "copy:migrations": "copyfiles -u 1 \"src/database/migrations/**/*.sql\" dist/",
     "start": "node dist/index.js",
@@ -46,6 +46,7 @@
     "@types/node": "^20.19.24",
     "@types/uuid": "^10.0.0",
     "copyfiles": "^2.4.1",
+    "nodemon": "^3.1.10",
     "tsx": "^4.6.2",
     "typescript": "^5.3.3"
   }

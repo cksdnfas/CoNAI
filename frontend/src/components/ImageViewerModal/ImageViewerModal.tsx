@@ -89,6 +89,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     message: '',
     severity: 'success',
   });
+  const [lastFocusedElement, setLastFocusedElement] = useState<HTMLElement | null>(null); // Focus management for nested modals
 
   // Custom hooks - ✅ composite_hash 사용 (null 체크 포함)
   const transform = useImageTransform(image?.composite_hash || undefined, open);
@@ -187,6 +188,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   };
 
   const handleDeleteClick = () => {
+    // Store currently focused element for restoration
+    setLastFocusedElement(document.activeElement as HTMLElement);
     setDeleteDialogOpen(true);
   };
 
@@ -258,6 +261,28 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   const handleDeleteCancel = () => {
     setDeleteDialogOpen(false);
+    // Restore focus to the element that opened the dialog
+    if (lastFocusedElement) {
+      setTimeout(() => {
+        lastFocusedElement.focus();
+      }, 0);
+    }
+  };
+
+  const handleEditorOpen = () => {
+    // Store currently focused element for restoration
+    setLastFocusedElement(document.activeElement as HTMLElement);
+    setEditorOpen(true);
+  };
+
+  const handleEditorClose = () => {
+    setEditorOpen(false);
+    // Restore focus to the element that opened the editor
+    if (lastFocusedElement) {
+      setTimeout(() => {
+        lastFocusedElement.focus();
+      }, 0);
+    }
   };
 
   const handleSnackbarClose = () => {
@@ -312,7 +337,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             onFlipVertical={transform.handleFlipVertical}
             onReset={transform.handleReset}
             onToggleOriginal={() => setShowOriginal(prev => !prev)}
-            onEdit={() => setEditorOpen(true)}
+            onEdit={handleEditorOpen}
             onOpenDrawer={isMobile ? () => setDrawerOpen(true) : undefined}
             onClose={onClose}
           />
@@ -362,7 +387,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             open={drawerOpen}
             onClose={() => setDrawerOpen(false)}
             ModalProps={{
-              style: { zIndex: 1400 }
+              style: { zIndex: 1400 },
+              keepMounted: false,
+              disablePortal: false
             }}
             slotProps={{
               paper: {
@@ -450,6 +477,9 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         onClose={handleDeleteCancel}
         maxWidth="xs"
         fullWidth
+        hideBackdrop={false}
+        disablePortal={false}
+        style={{ zIndex: 1400 }}
       >
         <DialogTitle>{t('imageDetail:actions.delete')}</DialogTitle>
         <DialogContent>
@@ -483,7 +513,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       {currentImage && currentImage.file_id && (
         <ImageEditorModal
           open={editorOpen}
-          onClose={() => setEditorOpen(false)}
+          onClose={handleEditorClose}
           imageId={currentImage.file_id}
           imageUrl={buildUploadsUrl(showOriginal ? (currentImage.original_file_path || currentImage.thumbnail_path) : currentImage.thumbnail_path)}
           onSendToComfyUI={(tempId) => {

@@ -5,22 +5,19 @@ import {
   TextField,
   Typography,
   Paper,
-  Switch,
-  FormControlLabel,
   Alert,
   CircularProgress,
   Divider,
-  IconButton,
   Chip,
-  Card,
-  CardContent,
   Tabs,
-  Tab
+  Tab,
+  IconButton,
+  FormControlLabel,
+  Switch
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
   Save as SaveIcon,
-  Delete as DeleteIcon,
   Add as AddIcon,
   Upload as UploadIcon
 } from '@mui/icons-material';
@@ -31,6 +28,7 @@ import { MarkedFieldsGuide } from './MarkedFieldsGuide';
 import { MarkedFieldsPreview } from './MarkedFieldsPreview';
 import EnhancedWorkflowGraphViewer from './components/EnhancedWorkflowGraphViewer';
 import WorkflowJsonViewer from './components/WorkflowJsonViewer';
+import { MarkedFieldsList, useMarkedFieldValidation } from './components/MarkedFields';
 
 export default function WorkflowFormPage() {
   const navigate = useNavigate();
@@ -51,6 +49,9 @@ export default function WorkflowFormPage() {
   const [color, setColor] = useState('#2196f3');
   const [markedFields, setMarkedFields] = useState<MarkedField[]>([]);
   const [jsonTabValue, setJsonTabValue] = useState(0);
+
+  // Validation hook for marked fields
+  const validation = useMarkedFieldValidation(markedFields);
 
   // Color picker debounce
   const colorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -460,135 +461,29 @@ export default function WorkflowFormPage() {
         </Box>
         <Divider sx={{ mb: 2 }} />
 
-        {markedFields.map((field, index) => (
-          <Card key={field.id} sx={{ mb: 2 }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'flex-start' }}>
-                <TextField
-                  label={t('workflows:fieldForm.fieldId')}
-                  value={field.id}
-                  onChange={(e) => updateMarkedField(index, { id: e.target.value })}
-                  size="small"
-                  placeholder={t('workflows:fieldForm.fieldIdPlaceholder')}
-                  helperText={t('workflows:fieldForm.fieldIdHelper')}
-                  sx={{ flex: 1 }}
-                />
-                <TextField
-                  label={t('workflows:fieldForm.label')}
-                  value={field.label}
-                  onChange={(e) => updateMarkedField(index, { label: e.target.value })}
-                  size="small"
-                  placeholder={t('workflows:fieldForm.labelPlaceholder')}
-                  helperText={t('workflows:fieldForm.labelHelper')}
-                  sx={{ flex: 1 }}
-                />
-                <TextField
-                  select
-                  label={t('workflows:fieldForm.type')}
-                  value={field.type}
-                  onChange={(e) => updateMarkedField(index, { type: e.target.value as any })}
-                  size="small"
-                  helperText={t('workflows:fieldForm.typeHelper')}
-                  sx={{ flex: 1 }}
-                  SelectProps={{ native: true }}
-                >
-                  <option value="text">{t('workflows:fieldForm.typeText')}</option>
-                  <option value="textarea">{t('workflows:fieldForm.typeTextarea')}</option>
-                  <option value="number">{t('workflows:fieldForm.typeNumber')}</option>
-                  <option value="select">{t('workflows:fieldForm.typeSelect')}</option>
-                </TextField>
-                <IconButton
-                  onClick={() => removeMarkedField(index)}
-                  color="error"
-                  size="small"
-                  sx={{ mt: 1 }}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Box>
-
-              <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
-                <TextField
-                  fullWidth
-                  label={t('workflows:fieldForm.jsonPath')}
-                  value={field.jsonPath}
-                  onChange={(e) => updateMarkedField(index, { jsonPath: e.target.value })}
-                  placeholder={t('workflows:fieldForm.jsonPathPlaceholder')}
-                  size="small"
-                  helperText={t('workflows:fieldForm.jsonPathHelper')}
-                  sx={{ flex: 2 }}
-                />
-                <TextField
-                  fullWidth
-                  label={t('workflows:fieldForm.defaultValue')}
-                  value={field.default_value || ''}
-                  onChange={(e) => updateMarkedField(index, { default_value: e.target.value })}
-                  size="small"
-                  placeholder={t('workflows:fieldForm.defaultValuePlaceholder')}
-                  helperText={t('workflows:fieldForm.defaultValueHelper')}
-                  sx={{ flex: 1 }}
-                />
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={field.required || false}
-                      onChange={(e) => updateMarkedField(index, { required: e.target.checked })}
-                      size="small"
-                    />
-                  }
-                  label={t('workflows:fieldForm.required')}
-                  sx={{ mt: 1 }}
-                />
-              </Box>
-
-              {field.type === 'number' && (
-                <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
-                  <TextField
-                    label={t('workflows:fieldForm.minValue')}
-                    type="number"
-                    value={field.min || ''}
-                    onChange={(e) => updateMarkedField(index, { min: parseFloat(e.target.value) })}
-                    size="small"
-                    placeholder={t('workflows:fieldForm.minPlaceholder')}
-                    sx={{ flex: 1 }}
-                  />
-                  <TextField
-                    label={t('workflows:fieldForm.maxValue')}
-                    type="number"
-                    value={field.max || ''}
-                    onChange={(e) => updateMarkedField(index, { max: parseFloat(e.target.value) })}
-                    size="small"
-                    placeholder={t('workflows:fieldForm.maxPlaceholder')}
-                    sx={{ flex: 1 }}
-                  />
-                </Box>
-              )}
-
-              {field.type === 'select' && (
-                <TextField
-                  fullWidth
-                  label={t('workflows:fieldForm.selectOptions')}
-                  value={field.options?.join(', ') || ''}
-                  onChange={(e) => updateMarkedField(index, {
-                    options: e.target.value.split(',').map(s => s.trim()).filter(s => s)
-                  })}
-                  size="small"
-                  placeholder={t('workflows:fieldForm.selectOptionsPlaceholder')}
-                  helperText={t('workflows:fieldForm.selectOptionsHelper')}
-                  sx={{ mb: 1 }}
-                />
-              )}
-            </CardContent>
-          </Card>
-        ))}
-
-        {markedFields.length === 0 && (
-          <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
-            <Typography variant="body2">
-              {t('workflows:markedFields.noFields')}
-            </Typography>
-          </Box>
+        {/* Validation Summary */}
+        {(validation.errorCount > 0 || validation.warningCount > 0) && (
+          <Alert severity={validation.errorCount > 0 ? 'error' : 'warning'} sx={{ mb: 2 }}>
+            {validation.errorCount > 0 && (
+              <Typography variant="body2">
+                {validation.errorCount} error{validation.errorCount > 1 ? 's' : ''} found
+              </Typography>
+            )}
+            {validation.warningCount > 0 && (
+              <Typography variant="body2">
+                {validation.warningCount} warning{validation.warningCount > 1 ? 's' : ''} found
+              </Typography>
+            )}
+          </Alert>
         )}
+
+        {/* Marked Fields List with drag-and-drop */}
+        <MarkedFieldsList
+          fields={markedFields}
+          onFieldsChange={setMarkedFields}
+          onUpdateField={updateMarkedField}
+          onDeleteField={removeMarkedField}
+        />
       </Paper>
 
       {/* Marked Fields 미리보기 */}

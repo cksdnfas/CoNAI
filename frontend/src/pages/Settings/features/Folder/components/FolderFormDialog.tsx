@@ -8,17 +8,13 @@ import {
   Button,
   FormControlLabel,
   Switch,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Alert,
   Box,
   Chip
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { folderApi } from '../../../../../services/folderApi';
-import type { WatchedFolder, WatchedFolderCreate, WatchedFolderUpdate, FolderType } from '../../../../../types/folder';
+import type { WatchedFolder, WatchedFolderCreate, WatchedFolderUpdate } from '../../../../../types/folder';
 
 interface Props {
   open: boolean;
@@ -33,13 +29,12 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
   const [formData, setFormData] = useState<WatchedFolderCreate>({
     folder_path: '',
     folder_name: '',
-    folder_type: 'scan',
     auto_scan: true,
     scan_interval: 60,
     recursive: true,
     exclude_extensions: [],
     exclude_patterns: [],
-    watcher_enabled: false
+    watcher_enabled: true
   });
 
   const [newExtension, setNewExtension] = useState('');
@@ -53,7 +48,6 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
       setFormData({
         folder_path: folder.folder_path,
         folder_name: folder.folder_name || '',
-        folder_type: folder.folder_type,
         auto_scan: folder.auto_scan === 1,
         scan_interval: folder.scan_interval,
         recursive: folder.recursive === 1,
@@ -66,13 +60,12 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
       setFormData({
         folder_path: '',
         folder_name: '',
-        folder_type: 'scan',
         auto_scan: true,
         scan_interval: 60,
         recursive: true,
         exclude_extensions: [],
         exclude_patterns: [],
-        watcher_enabled: false
+        watcher_enabled: true
       });
     }
     setError(null);
@@ -188,20 +181,6 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
             onChange={(e) => setFormData({ ...formData, folder_name: e.target.value })}
             helperText="미입력 시 폴더명이 자동으로 사용됩니다"
           />
-
-          {/* 폴더 타입 */}
-          <FormControl fullWidth disabled={isEdit}>
-            <InputLabel>폴더 타입</InputLabel>
-            <Select
-              value={formData.folder_type}
-              label="폴더 타입"
-              onChange={(e) => setFormData({ ...formData, folder_type: e.target.value as FolderType })}
-            >
-              <MenuItem value="upload">직접 업로드</MenuItem>
-              <MenuItem value="scan">스캔 폴더</MenuItem>
-              <MenuItem value="archive">아카이브</MenuItem>
-            </Select>
-          </FormControl>
 
           {/* 자동 스캔 */}
           <FormControlLabel

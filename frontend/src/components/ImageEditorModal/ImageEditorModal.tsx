@@ -436,7 +436,15 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="lg"
+      fullWidth
+      hideBackdrop={false}
+      disablePortal={false}
+      style={{ zIndex: 1400 }}
+    >
       <DialogTitle>Edit Image for img2img</DialogTitle>
       <DialogContent>
         <Stack spacing={2}>
