@@ -114,6 +114,10 @@
       "daysAgo": "{{days}}일 전",
       "none": "없음"
     },
+    "status": {
+      "downloaded": "다운로드됨",
+      "notDownloaded": "미다운로드"
+    },
     "buttons": {
       "load": "로드",
       "unload": "언로드",
@@ -294,6 +298,7 @@
       "refreshButton": "통계 새로고침",
       "rebuildProgress": "해시 생성 진행 중... {{processed}}개 완료/{{total}}개 전체 ({{percent}}% 완료)",
       "allComplete": "모든 이미지의 해시가 생성되었습니다!",
+      "allCompleteShort": "완료",
       "rebuildComplete": "처리 완료: {{processed}}개의 이미지 해시가 생성되었습니다.",
       "rebuildCompleteWithErrors": "처리 완료: {{success}}개 성공, {{failed}}개 실패",
       "rebuildFailed": "해시 재생성 실패",

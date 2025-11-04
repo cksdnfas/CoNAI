@@ -189,6 +189,18 @@ function createTables(): void {
     )
   `);
 
+  // 7. Custom dropdown lists table (for reusable dropdown options)
+  userSettingsDb.exec(`
+    CREATE TABLE IF NOT EXISTS custom_dropdown_lists (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name VARCHAR(255) NOT NULL UNIQUE,
+      description TEXT,
+      items TEXT NOT NULL,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Create indexes
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows(name)',
@@ -203,7 +215,9 @@ function createTables(): void {
     'CREATE INDEX IF NOT EXISTS idx_wildcards_category ON wildcards(category)',
     'CREATE INDEX IF NOT EXISTS idx_wildcards_is_active ON wildcards(is_active)',
     'CREATE INDEX IF NOT EXISTS idx_wildcards_usage_count ON wildcards(usage_count)',
-    'CREATE INDEX IF NOT EXISTS idx_wildcard_items_wildcard_id ON wildcard_items(wildcard_id)'
+    'CREATE INDEX IF NOT EXISTS idx_wildcard_items_wildcard_id ON wildcard_items(wildcard_id)',
+    'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_name ON custom_dropdown_lists(name)',
+    'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_created_date ON custom_dropdown_lists(created_date)'
   ];
 
   indexes.forEach(sql => userSettingsDb.exec(sql));
@@ -212,7 +226,7 @@ function createTables(): void {
   userSettingsDb.prepare(`INSERT OR IGNORE INTO user_preferences (key, value) VALUES (?, ?)`)
     .run('language', 'ko');
 
-  console.log('  ✅ User settings tables created (6 tables + indexes)');
+  console.log('  ✅ User settings tables created (7 tables + indexes)');
 }
 
 /**

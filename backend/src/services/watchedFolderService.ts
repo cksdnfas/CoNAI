@@ -6,7 +6,6 @@ export interface WatchedFolder {
   id: number;
   folder_path: string;
   folder_name: string | null;
-  folder_type: 'upload' | 'scan' | 'archive';
   auto_scan: number;
   scan_interval: number;
   recursive: number;
@@ -24,7 +23,6 @@ export interface WatchedFolder {
 export interface WatchedFolderCreate {
   folder_path: string;
   folder_name?: string;
-  folder_type?: 'upload' | 'scan' | 'archive';
   auto_scan?: boolean;
   scan_interval?: number;
   recursive?: boolean;
@@ -75,13 +73,12 @@ export class WatchedFolderService {
     // 삽입
     const info = db.prepare(`
       INSERT INTO watched_folders (
-        folder_path, folder_name, folder_type, auto_scan, scan_interval,
+        folder_path, folder_name, auto_scan, scan_interval,
         recursive, exclude_extensions, exclude_patterns, watcher_enabled
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       absolutePath,
       folderData.folder_name || path.basename(absolutePath),
-      folderData.folder_type || 'scan',
       folderData.auto_scan ? 1 : 0,
       folderData.scan_interval || 60,
       folderData.recursive !== false ? 1 : 0,
@@ -97,16 +94,10 @@ export class WatchedFolderService {
    * 폴더 목록 조회
    */
   static async listFolders(options?: {
-    type?: 'upload' | 'scan' | 'archive';
     active_only?: boolean;
   }): Promise<WatchedFolder[]> {
     let query = 'SELECT * FROM watched_folders WHERE 1=1';
     const params: any[] = [];
-
-    if (options?.type) {
-      query += ' AND folder_type = ?';
-      params.push(options.type);
-    }
 
     if (options?.active_only) {
       query += ' AND is_active = 1';

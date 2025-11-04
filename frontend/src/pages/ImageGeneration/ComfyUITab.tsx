@@ -32,6 +32,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { workflowApi, type Workflow } from '../../services/api/workflowApi';
 import { comfyuiServerApi, type ComfyUIServer } from '../../services/api/comfyuiServerApi';
+import CustomDropdownListsSection from './CustomDropdownListsSection';
 
 export default function ComfyUITab() {
   const { t } = useTranslation(['workflows', 'servers', 'common']);
@@ -632,6 +633,10 @@ export default function ComfyUITab() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Custom Dropdown Lists Section */}
+      <Divider sx={{ my: 3 }} />
+      <CustomDropdownListsSection />
     </Box>
   );
 }

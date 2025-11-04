@@ -13,7 +13,6 @@ import {
   CircularProgress,
   Grid,
   Tooltip,
-  Divider,
   Switch
 } from '@mui/material';
 import {

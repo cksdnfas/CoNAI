@@ -19,7 +19,7 @@ export interface MarkedField {
   id: string;
   label: string;
   jsonPath: string;
-  type: 'text' | 'number' | 'select' | 'textarea';
+  type: 'text' | 'number' | 'select' | 'textarea' | 'image';
   default_value?: any;
   placeholder?: string;
   options?: string[];
@@ -138,6 +138,12 @@ export const workflowApi = {
   // 서버 연결 해제
   unlinkServer: async (id: number, serverId: number) => {
     const response = await axios.delete(`${API_BASE_URL}/workflows/${id}/servers/${serverId}`);
+    return response.data;
+  },
+
+  // Canvas 폴더 이미지 목록 조회
+  getCanvasImages: async () => {
+    const response = await axios.get(`${API_BASE_URL}/workflows/canvas-images`);
     return response.data;
   }
 };

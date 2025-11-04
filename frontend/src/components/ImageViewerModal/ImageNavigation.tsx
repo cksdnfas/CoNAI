@@ -63,8 +63,8 @@ const ImageNavigation: React.FC<ImageNavigationProps> = ({
           fontSize: isNarrow ? '0.75rem' : '0.875rem'
         }}
       >
-        {isRandomMode && currentImage
-          ? `image/${currentImage.composite_hash}`
+        {isRandomMode
+          ? 'Random'
           : totalCount > 0
             ? `${currentIndex + 1} / ${totalCount}`
             : '0 / 0'

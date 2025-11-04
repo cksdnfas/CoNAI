@@ -100,26 +100,6 @@ export const validateFolderPath = async (folderPath: string): Promise<PathValida
 };
 
 /**
- * 기본 업로드 폴더 조회
- */
-export const getDefaultFolder = async (): Promise<WatchedFolder> => {
-  const response = await axios.get(`${API_BASE_URL}/api/folders/default`);
-  return response.data.data;
-};
-
-/**
- * 기본 업로드 폴더 경로 변경
- */
-export const updateDefaultFolder = async (
-  folderPath: string
-): Promise<{ folder: WatchedFolder; message: string }> => {
-  const response = await axios.patch(`${API_BASE_URL}/api/folders/default`, {
-    folder_path: folderPath
-  });
-  return response.data.data;
-};
-
-/**
  * 실시간 감시 시작
  */
 export const startWatcher = async (id: number): Promise<{ message: string; status: WatcherStatusInfo }> => {
@@ -168,8 +148,6 @@ export const folderApi = {
   scanFolder,
   scanAllFolders,
   validateFolderPath,
-  getDefaultFolder,
-  updateDefaultFolder,
   startWatcher,
   stopWatcher,
   restartWatcher,

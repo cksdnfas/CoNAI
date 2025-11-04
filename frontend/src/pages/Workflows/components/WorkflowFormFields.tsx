@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Box,
   TextField,
@@ -7,11 +8,15 @@ import {
   Divider,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  Button,
+  Card,
+  CardMedia
 } from '@mui/material';
-import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
+import { ExpandMore as ExpandMoreIcon, Image as ImageIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { Workflow, MarkedField } from '../../../services/api/workflowApi';
+import ImageSelectionModal from './ImageSelectionModal';
 
 interface WorkflowFormFieldsProps {
   workflow: Workflow;
@@ -32,6 +37,21 @@ export function WorkflowFormFields({
   promptData
 }: WorkflowFormFieldsProps) {
   const { t } = useTranslation(['workflows']);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [currentImageField, setCurrentImageField] = useState<MarkedField | null>(null);
+
+  const handleOpenImageModal = (field: MarkedField) => {
+    setCurrentImageField(field);
+    setImageModalOpen(true);
+  };
+
+  const handleSelectImage = (imagePath: string) => {
+    if (currentImageField) {
+      onFieldChange(currentImageField.id, imagePath);
+    }
+    setImageModalOpen(false);
+    setCurrentImageField(null);
+  };
 
   const renderField = (field: MarkedField) => {
     const value = formData[field.id] || '';
@@ -95,6 +115,35 @@ export function WorkflowFormFields({
           </TextField>
         );
 
+      case 'image':
+        return (
+          <Box key={field.id} sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              {field.label} {field.required && <span style={{ color: 'red' }}>*</span>}
+            </Typography>
+            <Button
+              variant="outlined"
+              startIcon={<ImageIcon />}
+              onClick={() => handleOpenImageModal(field)}
+              fullWidth
+              sx={{ mb: 1 }}
+            >
+              이미지 선택
+            </Button>
+            {value && (
+              <Card sx={{ mt: 1 }}>
+                <CardMedia
+                  component="img"
+                  height="200"
+                  image={value.startsWith('data:') ? value : `http://localhost:1566${value}`}
+                  alt={field.label}
+                  sx={{ objectFit: 'contain' }}
+                />
+              </Card>
+            )}
+          </Box>
+        );
+
       default: // text
         return (
           <TextField
@@ -151,6 +200,19 @@ export function WorkflowFormFields({
           </Box>
         </AccordionDetails>
       </Accordion>
+
+      {/* Image Selection Modal */}
+      {currentImageField && (
+        <ImageSelectionModal
+          open={imageModalOpen}
+          onClose={() => {
+            setImageModalOpen(false);
+            setCurrentImageField(null);
+          }}
+          onSelect={handleSelectImage}
+          fieldLabel={currentImageField.label}
+        />
+      )}
     </Paper>
   );
 }

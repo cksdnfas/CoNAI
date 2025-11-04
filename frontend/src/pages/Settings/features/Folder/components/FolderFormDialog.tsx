@@ -10,9 +10,20 @@ import {
   Switch,
   Alert,
   Box,
-  Chip
+  Chip,
+  Tooltip,
+  IconButton,
+  Typography,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
 } from '@mui/material';
-import { Add as AddIcon } from '@mui/icons-material';
+import {
+  Add as AddIcon,
+  InfoOutlined as InfoOutlinedIcon,
+  HelpOutline as HelpOutlineIcon,
+  ExpandMore as ExpandMoreIcon
+} from '@mui/icons-material';
 import { folderApi } from '../../../../../services/folderApi';
 import type { WatchedFolder, WatchedFolderCreate, WatchedFolderUpdate } from '../../../../../types/folder';
 
@@ -162,7 +173,7 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
           </Alert>
         )}
 
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 0.5 }}>
           {/* 폴더 경로 */}
           <TextField
             fullWidth
@@ -181,6 +192,28 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
             onChange={(e) => setFormData({ ...formData, folder_name: e.target.value })}
             helperText="미입력 시 폴더명이 자동으로 사용됩니다"
           />
+
+          {/* 실시간 감시 */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.watcher_enabled}
+                  onChange={(e) => setFormData({ ...formData, watcher_enabled: e.target.checked })}
+                />
+              }
+              label="실시간 파일 감시 활성화"
+            />
+            <Tooltip
+              title="실시간 감시는 폴더 내 파일 추가/수정/삭제를 즉시 감지하여 자동으로 처리합니다. 자동 스캔과 별개로 동작하며, 더 빠른 반응 속도를 제공합니다."
+              arrow
+              placement="right"
+            >
+              <IconButton size="small">
+                <InfoOutlinedIcon fontSize="small" color="action" />
+              </IconButton>
+            </Tooltip>
+          </Box>
 
           {/* 자동 스캔 */}
           <FormControlLabel
@@ -205,95 +238,104 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
             />
           )}
 
-          {/* 재귀 스캔 */}
-          <FormControlLabel
-            control={
-              <Switch
-                checked={formData.recursive}
-                onChange={(e) => setFormData({ ...formData, recursive: e.target.checked })}
-              />
-            }
-            label="하위 폴더 포함 (재귀 스캔)"
-          />
-
-          {/* 실시간 감시 */}
-          <FormControlLabel
-            control={
-              <Switch
-                checked={formData.watcher_enabled}
-                onChange={(e) => setFormData({ ...formData, watcher_enabled: e.target.checked })}
-              />
-            }
-            label="실시간 파일 감시 활성화"
-          />
-          {formData.watcher_enabled && (
-            <Alert severity="info" sx={{ mt: -1 }}>
-              실시간 감시는 폴더 내 파일 추가/수정/삭제를 즉시 감지하여 자동으로 처리합니다.
-              자동 스캔과 별개로 동작하며, 더 빠른 반응 속도를 제공합니다.
-            </Alert>
-          )}
-
-          {/* 제외 확장자 */}
-          <Box>
-            <Alert severity="info" sx={{ mb: 2 }}>
-              기본적으로 모든 이미지 형식 (.jpg, .png, .webp, .gif, .bmp, .tiff)을 스캔합니다.
-              <br />
-              스캔하지 않을 확장자가 있다면 아래에 추가하세요.
-            </Alert>
-            <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-              <TextField
-                size="small"
-                label="제외할 확장자 (선택사항)"
-                value={newExtension}
-                onChange={(e) => setNewExtension(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleAddExtension()}
-                placeholder=".tmp"
-                helperText="스캔에서 제외할 확장자를 입력하세요"
-              />
-              <Button onClick={handleAddExtension} startIcon={<AddIcon />}>
-                추가
-              </Button>
-            </Box>
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              {formData.exclude_extensions?.map((ext) => (
-                <Chip
-                  key={ext}
-                  label={ext}
-                  onDelete={() => handleRemoveExtension(ext)}
-                  size="small"
-                  color="error"
-                  variant="outlined"
+          {/* 고급 옵션 */}
+          <Accordion sx={{ boxShadow: 'none', '&:before': { display: 'none' } }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, '& .MuiAccordionSummary-content': { my: 0.5 } }}>
+              <Typography variant="body2" color="text.secondary">고급 옵션</Typography>
+            </AccordionSummary>
+            <AccordionDetails sx={{ pt: 0 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {/* 재귀 스캔 */}
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={formData.recursive}
+                      onChange={(e) => setFormData({ ...formData, recursive: e.target.checked })}
+                    />
+                  }
+                  label="하위 폴더 포함 (재귀 스캔)"
                 />
-              ))}
-            </Box>
-          </Box>
 
-          {/* 제외 패턴 */}
-          <Box>
-            <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-              <TextField
-                size="small"
-                label="제외 패턴 추가"
-                value={newPattern}
-                onChange={(e) => setNewPattern(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleAddPattern()}
-                placeholder="예: node_modules, .git"
-              />
-              <Button onClick={handleAddPattern} startIcon={<AddIcon />}>
-                추가
-              </Button>
-            </Box>
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              {formData.exclude_patterns?.map((pattern) => (
-                <Chip
-                  key={pattern}
-                  label={pattern}
-                  onDelete={() => handleRemovePattern(pattern)}
-                  size="small"
-                />
-              ))}
-            </Box>
-          </Box>
+                {/* 제외 확장자 */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    제외할 확장자
+                  </Typography>
+                  <Tooltip
+                    title="기본적으로 모든 이미지 형식 (.jpg, .png, .webp, .gif, .bmp, .tiff)을 스캔합니다. 스캔하지 않을 확장자가 있다면 아래에 추가하세요."
+                    arrow
+                  >
+                    <HelpOutlineIcon fontSize="small" color="action" sx={{ cursor: 'help' }} />
+                  </Tooltip>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <TextField
+                    size="small"
+                    value={newExtension}
+                    onChange={(e) => setNewExtension(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddExtension()}
+                    placeholder=".tmp"
+                    sx={{ width: 200 }}
+                  />
+                  <Button onClick={handleAddExtension} startIcon={<AddIcon />} variant="outlined" size="small">
+                    추가
+                  </Button>
+                </Box>
+                {formData.exclude_extensions && formData.exclude_extensions.length > 0 && (
+                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                    {formData.exclude_extensions.map((ext) => (
+                      <Chip
+                        key={ext}
+                        label={ext}
+                        onDelete={() => handleRemoveExtension(ext)}
+                        size="small"
+                        color="error"
+                        variant="outlined"
+                      />
+                    ))}
+                  </Box>
+                )}
+
+                {/* 제외 패턴 */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    제외 패턴
+                  </Typography>
+                  <Tooltip
+                    title="특정 폴더나 파일 패턴을 스캔에서 제외할 수 있습니다. 예: node_modules, .git, temp"
+                    arrow
+                  >
+                    <HelpOutlineIcon fontSize="small" color="action" sx={{ cursor: 'help' }} />
+                  </Tooltip>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <TextField
+                    size="small"
+                    value={newPattern}
+                    onChange={(e) => setNewPattern(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddPattern()}
+                    placeholder="예: node_modules, .git"
+                    sx={{ width: 300 }}
+                  />
+                  <Button onClick={handleAddPattern} startIcon={<AddIcon />} variant="outlined" size="small">
+                    추가
+                  </Button>
+                </Box>
+                {formData.exclude_patterns && formData.exclude_patterns.length > 0 && (
+                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                    {formData.exclude_patterns.map((pattern) => (
+                      <Chip
+                        key={pattern}
+                        label={pattern}
+                        onDelete={() => handleRemovePattern(pattern)}
+                        size="small"
+                      />
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            </AccordionDetails>
+          </Accordion>
         </Box>
       </DialogContent>
       <DialogActions>

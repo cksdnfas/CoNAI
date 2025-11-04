@@ -1,0 +1,56 @@
+import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:1566/api';
+
+export interface CustomDropdownList {
+  id: number;
+  name: string;
+  description?: string;
+  items: string[];
+  created_date: string;
+  updated_date: string;
+}
+
+export interface CreateCustomDropdownListData {
+  name: string;
+  description?: string;
+  items: string[];
+}
+
+export interface UpdateCustomDropdownListData {
+  name?: string;
+  description?: string;
+  items?: string[];
+}
+
+export const customDropdownListApi = {
+  // 모든 커스텀 드롭다운 목록 조회
+  getAllLists: async () => {
+    const response = await axios.get(`${API_BASE_URL}/custom-dropdown-lists`);
+    return response.data;
+  },
+
+  // 특정 커스텀 드롭다운 목록 조회
+  getList: async (id: number) => {
+    const response = await axios.get(`${API_BASE_URL}/custom-dropdown-lists/${id}`);
+    return response.data;
+  },
+
+  // 커스텀 드롭다운 목록 생성
+  createList: async (data: CreateCustomDropdownListData) => {
+    const response = await axios.post(`${API_BASE_URL}/custom-dropdown-lists`, data);
+    return response.data;
+  },
+
+  // 커스텀 드롭다운 목록 수정
+  updateList: async (id: number, data: UpdateCustomDropdownListData) => {
+    const response = await axios.put(`${API_BASE_URL}/custom-dropdown-lists/${id}`, data);
+    return response.data;
+  },
+
+  // 커스텀 드롭다운 목록 삭제
+  deleteList: async (id: number) => {
+    const response = await axios.delete(`${API_BASE_URL}/custom-dropdown-lists/${id}`);
+    return response.data;
+  },
+};

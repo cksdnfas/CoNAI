@@ -1048,4 +1048,54 @@ router.post('/:id/generate-parallel', asyncHandler(async (req: Request, res: Res
 }));
 */
 
+/**
+ * Get canvas folder images for image-to-image workflows
+ * GET /api/workflows/canvas-images
+ */
+router.get('/canvas-images', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const canvasPath = path.join(runtimePaths.uploadsDir, 'temp', 'canvas');
+
+    // Ensure canvas directory exists
+    if (!fs.existsSync(canvasPath)) {
+      fs.mkdirSync(canvasPath, { recursive: true });
+      return res.json({
+        success: true,
+        data: []
+      });
+    }
+
+    // Read directory and filter image files
+    const files = fs.readdirSync(canvasPath);
+    const imageFiles = files.filter(file => {
+      const ext = path.extname(file).toLowerCase();
+      return ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext);
+    });
+
+    // Get file stats and create response data
+    const images = imageFiles.map(file => {
+      const filePath = path.join(canvasPath, file);
+      const stats = fs.statSync(filePath);
+      return {
+        filename: file,
+        path: `/uploads/temp/canvas/${file}`,
+        size: stats.size,
+        created: stats.birthtime,
+        modified: stats.mtime
+      };
+    }).sort((a, b) => b.modified.getTime() - a.modified.getTime()); // Sort by newest first
+
+    return res.json({
+      success: true,
+      data: images
+    });
+  } catch (error) {
+    console.error('Error getting canvas images:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get canvas images'
+    });
+  }
+}));
+
 export { router as workflowRoutes };

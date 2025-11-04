@@ -2,15 +2,43 @@ import type { Workflow, MarkedField } from '../../../services/api/workflowApi';
 import { parseObjectWildcards } from '../../../utils/wildcardParser';
 
 /**
+ * 이미지를 Base64로 변환하는 헬퍼 함수
+ * @param imagePath 이미지 경로 또는 Data URL
+ * @returns Base64 문자열
+ */
+async function imageToBase64(imagePath: string): Promise<string> {
+  // 이미 Base64 Data URL인 경우
+  if (imagePath.startsWith('data:')) {
+    return imagePath;
+  }
+
+  // 서버 경로인 경우 fetch로 가져와서 Base64로 변환
+  try {
+    const response = await fetch(`http://localhost:1566${imagePath}`);
+    const blob = await response.blob();
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error('Failed to convert image to Base64:', error);
+    throw error;
+  }
+}
+
+/**
  * 워크플로우 JSON과 폼 데이터를 결합하여 최종 prompt 데이터 생성
  * @param workflow 워크플로우 객체
  * @param formData 폼 입력 데이터
  * @returns 생성된 prompt 데이터
  */
-export function buildPromptData(
+export async function buildPromptData(
   workflow: Workflow | null,
   formData: Record<string, any>
-): Record<string, any> {
+): Promise<Record<string, any>> {
   if (!workflow?.workflow_json || !workflow?.marked_fields) {
     return {};
   }
@@ -19,8 +47,8 @@ export function buildPromptData(
     const workflowObj = JSON.parse(workflow.workflow_json);
     const promptData = JSON.parse(JSON.stringify(workflowObj)); // Deep clone
 
-    // Marked Fields 값을 JSON Path에 따라 설정
-    workflow.marked_fields.forEach((field: MarkedField) => {
+    // Marked Fields 값을 JSON Path에 따라 설정 (비동기 처리)
+    for (const field of workflow.marked_fields) {
       const path = field.jsonPath.split('.');
       let current: any = promptData;
 
@@ -37,10 +65,17 @@ export function buildPromptData(
       // 타입에 따라 변환
       if (field.type === 'number') {
         current[lastKey] = parseFloat(value) || 0;
+      } else if (field.type === 'image') {
+        // 이미지는 Base64로 변환
+        if (value) {
+          current[lastKey] = await imageToBase64(value);
+        } else {
+          current[lastKey] = '';
+        }
       } else {
         current[lastKey] = value;
       }
-    });
+    }
 
     return promptData;
   } catch (err) {
@@ -59,7 +94,7 @@ export async function buildPromptDataWithWildcards(
   workflow: Workflow | null,
   formData: Record<string, any>
 ): Promise<Record<string, any>> {
-  const promptData = buildPromptData(workflow, formData);
+  const promptData = await buildPromptData(workflow, formData);
 
   // 와일드카드 파싱 (객체 전체를 재귀적으로 파싱)
   return await parseObjectWildcards(promptData, 'comfyui');

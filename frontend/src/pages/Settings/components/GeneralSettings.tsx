@@ -15,7 +15,9 @@ import {
   TextField,
   Switch,
   Divider,
+  Tooltip,
 } from '@mui/material';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useTranslation } from 'react-i18next';
 import type {
   GeneralSettings as GeneralSettingsType,
@@ -133,9 +135,14 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
         <Divider sx={{ my: 4 }} />
 
         {/* Delete Protection Settings */}
-        <Typography variant="h6" gutterBottom>
-          {t('general.deleteProtection.title')}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6">
+            {t('general.deleteProtection.title')}
+          </Typography>
+          <Tooltip title={t('general.deleteProtection.info')} arrow>
+            <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
+          </Tooltip>
+        </Box>
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           {t('general.deleteProtection.description')}
@@ -172,18 +179,17 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
           }
         />
 
-        <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-          <Typography variant="body2">
-            {t('general.deleteProtection.info')}
-          </Typography>
-        </Alert>
-
         <Divider sx={{ my: 4 }} />
 
         {/* Metadata Extraction Optimization */}
-        <Typography variant="h6" gutterBottom>
-          {t('general.metadata.title')}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6">
+            {t('general.metadata.title')}
+          </Typography>
+          <Tooltip title={t('general.metadata.performanceNote')} arrow>
+            <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
+          </Tooltip>
+        </Box>
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           {t('general.metadata.description')}
@@ -338,13 +344,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
           />
         </Box>
       </Paper>
-
-      {/* Performance Info */}
-      <Alert severity="info" sx={{ mt: 2 }}>
-        <Typography variant="body2">
-          {t('general.metadata.performanceNote')}
-        </Typography>
-      </Alert>
     </Box>
   );
 };

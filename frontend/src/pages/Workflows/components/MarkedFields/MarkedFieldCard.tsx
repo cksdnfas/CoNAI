@@ -11,16 +11,27 @@ import {
   Typography,
   Chip,
   alpha,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
   ExpandMore as ExpandMoreIcon,
   DragIndicator as DragIndicatorIcon,
+  PlaylistAdd as PlaylistAddIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { MarkedField } from '../../../../services/api/workflowApi';
 import { generateFieldId } from './utils/smartDefaults';
 import type { FieldError } from './hooks/useMarkedFieldValidation';
+import { customDropdownListApi, type CustomDropdownList } from '../../../../services/api/customDropdownListApi';
 
 // Field type configuration
 const FIELD_TYPE_CONFIG = {
@@ -44,6 +55,11 @@ const FIELD_TYPE_CONFIG = {
     icon: '📋',
     color: '#ff9800',
   },
+  image: {
+    label: 'Image',
+    icon: '🖼️',
+    color: '#9c27b0',
+  },
 };
 
 interface MarkedFieldCardProps {
@@ -65,6 +81,8 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
 }) => {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
+  const [listDialogOpen, setListDialogOpen] = useState(false);
+  const [customLists, setCustomLists] = useState<CustomDropdownList[]>([]);
 
   const typeConfig = FIELD_TYPE_CONFIG[field.type];
 
@@ -74,6 +92,23 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
 
   const handleToggleExpand = () => {
     setExpanded(!expanded);
+  };
+
+  const handleOpenListDialog = async () => {
+    try {
+      const response = await customDropdownListApi.getAllLists();
+      setCustomLists(response.data || []);
+      setListDialogOpen(true);
+    } catch (error) {
+      console.error('Failed to load custom lists:', error);
+    }
+  };
+
+  const handleSelectList = (list: CustomDropdownList) => {
+    onUpdate(index, {
+      options: list.items
+    });
+    setListDialogOpen(false);
   };
 
   // Auto-generate Field ID from label
@@ -271,6 +306,7 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
               <option value="textarea">{t('workflows:fieldForm.typeTextarea')}</option>
               <option value="number">{t('workflows:fieldForm.typeNumber')}</option>
               <option value="select">{t('workflows:fieldForm.typeSelect')}</option>
+              <option value="image">Image</option>
             </TextField>
           </Box>
 
@@ -335,23 +371,32 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
 
           {/* Select Options */}
           {field.type === 'select' && (
-            <TextField
-              fullWidth
-              label={t('workflows:fieldForm.selectOptions')}
-              value={field.options?.join(', ') || ''}
-              onChange={(e) =>
-                onUpdate(index, {
-                  options: e.target.value
-                    .split(',')
-                    .map((s) => s.trim())
-                    .filter((s) => s),
-                })
-              }
-              size="small"
-              placeholder={t('workflows:fieldForm.selectOptionsPlaceholder')}
-              helperText={t('workflows:fieldForm.selectOptionsHelper')}
-              sx={{ mb: 2 }}
-            />
+            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+              <TextField
+                fullWidth
+                label={t('workflows:fieldForm.selectOptions')}
+                value={field.options?.join(', ') || ''}
+                onChange={(e) =>
+                  onUpdate(index, {
+                    options: e.target.value
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter((s) => s),
+                  })
+                }
+                size="small"
+                placeholder={t('workflows:fieldForm.selectOptionsPlaceholder')}
+                helperText={t('workflows:fieldForm.selectOptionsHelper')}
+              />
+              <IconButton
+                size="small"
+                onClick={handleOpenListDialog}
+                title="커스텀 목록에서 불러오기"
+                sx={{ alignSelf: 'flex-start', mt: 0.5 }}
+              >
+                <PlaylistAddIcon />
+              </IconButton>
+            </Box>
           )}
 
           {/* Actions */}
@@ -372,6 +417,39 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
           </Box>
         </CardContent>
       </Collapse>
+
+      {/* Custom List Selection Dialog */}
+      <Dialog
+        open={listDialogOpen}
+        onClose={() => setListDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>커스텀 목록에서 불러오기</DialogTitle>
+        <DialogContent>
+          {customLists.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 2 }}>
+              등록된 커스텀 목록이 없습니다.
+            </Typography>
+          ) : (
+            <List>
+              {customLists.map((list) => (
+                <ListItem key={list.id} disablePadding>
+                  <ListItemButton onClick={() => handleSelectList(list)}>
+                    <ListItemText
+                      primary={list.name}
+                      secondary={`${list.items.length}개 항목 - ${list.items.slice(0, 3).join(', ')}${list.items.length > 3 ? '...' : ''}`}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setListDialogOpen(false)}>취소</Button>
+        </DialogActions>
+      </Dialog>
     </Card>
   );
 };

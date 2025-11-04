@@ -21,7 +21,7 @@ export interface MarkedField {
   id: string; // 고유 식별자 (예: "positive_prompt")
   label: string; // 사용자에게 표시될 라벨 (예: "Positive Prompt")
   jsonPath: string; // JSON 경로 (예: "6.inputs.text")
-  type: 'text' | 'number' | 'select' | 'textarea';
+  type: 'text' | 'number' | 'select' | 'textarea' | 'image';
   default_value?: any;
   placeholder?: string;
   options?: string[]; // select 타입인 경우 선택 옵션

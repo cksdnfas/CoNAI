@@ -5,9 +5,10 @@ import {
   Stack,
   FormControlLabel,
   Switch,
-  Alert,
   Slider,
+  Tooltip,
 } from '@mui/material';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useTranslation } from 'react-i18next';
 import type { TaggerSettings } from '../../../../../services/settingsApi';
 
@@ -32,23 +33,27 @@ export const TaggerMemoryManagement: React.FC<TaggerMemoryManagementProps> = ({
       </Typography>
 
       <Stack spacing={2}>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={localSettings.keepModelLoaded}
-              onChange={(e) => onUpdateSettings({ keepModelLoaded: e.target.checked })}
-            />
-          }
-          label={t('tagger.memoryManagement.keepModelLoaded')}
-        />
-
-        <Alert severity="info">
-          {localSettings.keepModelLoaded ? (
-            t('tagger.memoryManagement.keepLoadedAlert')
-          ) : (
-            t('tagger.memoryManagement.notKeepLoadedAlert')
-          )}
-        </Alert>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={localSettings.keepModelLoaded}
+                onChange={(e) => onUpdateSettings({ keepModelLoaded: e.target.checked })}
+              />
+            }
+            label={t('tagger.memoryManagement.keepModelLoaded')}
+          />
+          <Tooltip
+            title={
+              localSettings.keepModelLoaded
+                ? t('tagger.memoryManagement.keepLoadedAlert')
+                : t('tagger.memoryManagement.notKeepLoadedAlert')
+            }
+            arrow
+          >
+            <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
+          </Tooltip>
+        </Box>
 
         {localSettings.keepModelLoaded && (
           <Box>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, IconButton, Tooltip, Snackbar, Alert } from '@mui/material';
+import { ContentCopy as CopyIcon, HourglassEmpty as WaitingIcon } from '@mui/icons-material';
 import type { ImageRecord } from '../../../types/image';
 import PromptDisplay from '../../PromptDisplay';
 import { FileInfoSection } from './FileInfoSection';
@@ -31,6 +32,7 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
 }) => {
   const [linkedImage, setLinkedImage] = useState<ImageRecord | null>(null);
   const [loadingLinkedImage, setLoadingLinkedImage] = useState(false);
+  const [copySnackbarOpen, setCopySnackbarOpen] = useState(false);
 
   // 히스토리 컨텍스트에서는 linked_image_id 조회를 비활성화
   // 히스토리 이미지는 항상 히스토리 폴더의 원본 프롬프트만 사용
@@ -74,6 +76,18 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
   const hasAutoTags = image.auto_tags && Object.keys(image.auto_tags).length > 0;
   const shouldShowPromptSection = hasPrompts || isTaggerEnabled || showAutoPrompts || hasAutoTags;
 
+  // Handle hash copy
+  const handleCopyHash = async () => {
+    if (image.composite_hash) {
+      try {
+        await navigator.clipboard.writeText(image.composite_hash);
+        setCopySnackbarOpen(true);
+      } catch (err) {
+        console.error('Failed to copy hash:', err);
+      }
+    }
+  };
+
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Top info section - scrollable */}
@@ -81,6 +95,64 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
         <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
           이미지 정보
         </Typography>
+
+        {/* Hash display section */}
+        <Box
+          sx={{
+            mb: 2,
+            p: 1.5,
+            bgcolor: 'action.hover',
+            borderRadius: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+          }}
+        >
+          {image.composite_hash ? (
+            <>
+              <Tooltip title="클릭하여 복사">
+                <Box
+                  onClick={handleCopyHash}
+                  sx={{
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    cursor: 'pointer',
+                    fontFamily: 'monospace',
+                    fontSize: '0.75rem',
+                    color: 'text.secondary',
+                    '&:hover': {
+                      color: 'primary.main',
+                    },
+                  }}
+                >
+                  {image.composite_hash}
+                </Box>
+              </Tooltip>
+              <Tooltip title="해시 복사">
+                <IconButton
+                  size="small"
+                  onClick={handleCopyHash}
+                  sx={{ flexShrink: 0 }}
+                >
+                  <CopyIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </>
+          ) : (
+            <>
+              <WaitingIcon fontSize="small" color="disabled" />
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontStyle: 'italic' }}
+              >
+                해시 생성 대기 중...
+              </Typography>
+            </>
+          )}
+        </Box>
 
         <FileInfoSection image={image} />
         <GroupInfoSection groups={image.groups} onGroupClick={onGroupClick} />
@@ -105,6 +177,18 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
           />
         </Box>
       )}
+
+      {/* Copy success snackbar */}
+      <Snackbar
+        open={copySnackbarOpen}
+        autoHideDuration={2000}
+        onClose={() => setCopySnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setCopySnackbarOpen(false)} severity="success" variant="filled">
+          해시가 복사되었습니다
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

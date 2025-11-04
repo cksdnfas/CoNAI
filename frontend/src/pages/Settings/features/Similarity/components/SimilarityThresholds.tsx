@@ -5,13 +5,14 @@ import {
   CardContent,
   Typography,
   Slider,
-  Alert,
   Stack,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
+  Tooltip,
 } from '@mui/material';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useTranslation } from 'react-i18next';
 
 interface SimilarityThresholdsProps {
@@ -40,9 +41,14 @@ export const SimilarityThresholds: React.FC<SimilarityThresholdsProps> = ({
   return (
     <Card>
       <CardContent>
-        <Typography variant="h6" gutterBottom>
-          {t('similarity.thresholds.title')}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6">
+            {t('similarity.thresholds.title')}
+          </Typography>
+          <Tooltip title={t('similarity.thresholds.localStorageNote')} arrow>
+            <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
+          </Tooltip>
+        </Box>
         <Typography variant="body2" color="text.secondary" paragraph>
           {t('similarity.thresholds.description')}
         </Typography>
@@ -128,10 +134,6 @@ export const SimilarityThresholds: React.FC<SimilarityThresholdsProps> = ({
               <MenuItem value={100}>{t('similarity.thresholds.searchLimit.options.100')}</MenuItem>
             </Select>
           </FormControl>
-
-          <Alert severity="info">
-            {t('similarity.thresholds.localStorageNote')}
-          </Alert>
         </Stack>
       </CardContent>
     </Card>

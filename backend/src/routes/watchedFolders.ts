@@ -12,34 +12,10 @@ const router = Router();
  * 감시 폴더 목록 조회
  */
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
-  const type = req.query.type as 'upload' | 'scan' | 'archive' | undefined;
   const activeOnly = req.query.active_only === 'true';
 
-  const folders = await WatchedFolderService.listFolders({ type, active_only: activeOnly });
+  const folders = await WatchedFolderService.listFolders({ active_only: activeOnly });
   return res.json(successResponse(folders));
-}));
-
-/**
- * GET /api/folders/default
- * 기본 업로드 폴더 조회
- *
- * 중요: 이 라우트는 /:id 보다 먼저 정의되어야 합니다.
- * Express는 라우트를 순서대로 매칭하므로, 특정 문자열 경로가
- * 파라미터 경로보다 먼저 와야 합니다.
- */
-router.get('/default', asyncHandler(async (_req: Request, res: Response) => {
-  const folders = await WatchedFolderService.listFolders({ type: 'upload' });
-  // Windows와 Unix 경로 구분자를 모두 처리하기 위해 정규화
-  const defaultFolder = folders.find(f => {
-    const normalizedPath = f.folder_path.replace(/\\/g, '/');
-    return normalizedPath.includes('uploads/images');
-  });
-
-  if (!defaultFolder) {
-    return res.status(404).json(errorResponse('기본 업로드 폴더를 찾을 수 없습니다'));
-  }
-
-  return res.json(successResponse(defaultFolder));
 }));
 
 /**
@@ -84,7 +60,6 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   const {
     folder_path,
     folder_name,
-    folder_type,
     auto_scan,
     scan_interval,
     recursive,
@@ -101,7 +76,6 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     const id = await WatchedFolderService.addFolder({
       folder_path,
       folder_name,
-      folder_type,
       auto_scan,
       scan_interval,
       recursive,
@@ -178,53 +152,6 @@ router.post('/validate-path', asyncHandler(async (req: Request, res: Response) =
   return res.json(successResponse({
     valid: true,
     message: '유효한 폴더 경로입니다'
-  }));
-}));
-
-/**
- * PATCH /api/folders/default
- * 기본 업로드 폴더 경로 변경
- */
-router.patch('/default', asyncHandler(async (req: Request, res: Response) => {
-  const { folder_path } = req.body;
-
-  if (!folder_path) {
-    return res.status(400).json(errorResponse('folder_path가 필요합니다'));
-  }
-
-  // 경로 유효성 검증
-  const validation = await WatchedFolderService.validateFolderPath(folder_path);
-  if (!validation.exists || !validation.isDirectory) {
-    return res.status(400).json(errorResponse(validation.error || '유효하지 않은 경로'));
-  }
-
-  // 기존 기본 폴더 찾기
-  const folders = await WatchedFolderService.listFolders({ type: 'upload' });
-  // Windows와 Unix 경로 구분자를 모두 처리하기 위해 정규화
-  const defaultFolder = folders.find(f => {
-    const normalizedPath = f.folder_path.replace(/\\/g, '/');
-    return normalizedPath.includes('uploads/images');
-  });
-
-  if (!defaultFolder) {
-    return res.status(404).json(errorResponse('기본 업로드 폴더를 찾을 수 없습니다'));
-  }
-
-  // 폴더 경로 업데이트
-  const success = await WatchedFolderService.updateFolder(defaultFolder.id, {
-    folder_name: '직접 업로드'
-  });
-
-  if (!success) {
-    return res.status(500).json(errorResponse('폴더 업데이트 실패'));
-  }
-
-  // 업데이트된 폴더 정보 반환
-  const updatedFolder = await WatchedFolderService.getFolder(defaultFolder.id);
-
-  return res.json(successResponse({
-    folder: updatedFolder,
-    message: '기본 업로드 폴더가 업데이트되었습니다'
   }));
 }));
 

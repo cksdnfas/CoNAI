@@ -125,13 +125,11 @@ export class DatabaseReset {
     const defaultFolders = [
       {
         folder_path: `${runtimePaths.uploadsDir}/images`,
-        folder_name: '직접 업로드 (이미지)',
-        folder_type: 'upload'
+        folder_name: '직접 업로드 (이미지)'
       },
       {
         folder_path: `${runtimePaths.uploadsDir}/videos`,
-        folder_name: '직접 업로드 (비디오)',
-        folder_type: 'upload'
+        folder_name: '직접 업로드 (비디오)'
       }
     ];
 
@@ -139,9 +137,9 @@ export class DatabaseReset {
       try {
         const info = db.prepare(`
           INSERT OR IGNORE INTO watched_folders (
-            folder_path, folder_name, folder_type, is_active, recursive
-          ) VALUES (?, ?, ?, 1, 1)
-        `).run(folder.folder_path, folder.folder_name, folder.folder_type);
+            folder_path, folder_name, is_active, recursive
+          ) VALUES (?, ?, 1, 1)
+        `).run(folder.folder_path, folder.folder_name);
 
         if (info.changes > 0) {
           console.log(`  ✅ ${folder.folder_name} 등록`);

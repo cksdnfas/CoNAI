@@ -13,13 +13,14 @@ import {
   Stack,
   Chip,
   CircularProgress,
-  Alert,
   Button,
+  Tooltip,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
   CloudDownload as CloudDownloadIcon,
   Refresh as RefreshIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { TaggerSettings, TaggerModel, TaggerDevice } from '../../../../../services/settingsApi';
@@ -135,13 +136,28 @@ export const TaggerConfigForm: React.FC<TaggerConfigFormProps> = ({
       {/* Download Status and Button */}
       {localSettings.enabled && (
         <Box>
-          <Alert severity={isModelDownloaded ? 'success' : 'warning'} sx={{ mb: 2 }}>
-            {isModelDownloaded ? (
-              <span dangerouslySetInnerHTML={{ __html: t('tagger.alerts.modelDownloaded', { model: currentModel?.label }) }} />
-            ) : (
-              <span dangerouslySetInnerHTML={{ __html: t('tagger.alerts.modelNotDownloaded', { model: currentModel?.label }) }} />
-            )}
-          </Alert>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
+            <Chip
+              icon={isModelDownloaded ? <CheckCircleIcon /> : <InfoIcon />}
+              label={
+                isModelDownloaded
+                  ? t('tagger.status.downloaded')
+                  : t('tagger.status.notDownloaded')
+              }
+              color={isModelDownloaded ? 'success' : 'warning'}
+              size="small"
+            />
+            <Tooltip
+              title={
+                isModelDownloaded
+                  ? t('tagger.alerts.modelDownloaded', { model: currentModel?.label })
+                  : t('tagger.alerts.modelNotDownloaded', { model: currentModel?.label })
+              }
+              arrow
+            >
+              <InfoIcon fontSize="small" sx={{ color: 'text.secondary', cursor: 'help' }} />
+            </Tooltip>
+          </Box>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <Button

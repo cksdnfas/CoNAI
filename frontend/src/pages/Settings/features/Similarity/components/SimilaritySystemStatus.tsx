@@ -10,8 +10,8 @@ import {
   LinearProgress,
   FormControlLabel,
   Switch,
-  Alert,
   Box,
+  Tooltip,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -124,9 +124,14 @@ export const SimilaritySystemStatus: React.FC<SimilaritySystemStatusProps> = ({
           </Stack>
 
           {stats.imagesWithoutHash === 0 && (
-            <Alert severity="success">
-              {t('similarity.systemStatus.allComplete')}
-            </Alert>
+            <Tooltip title={t('similarity.systemStatus.allComplete')} arrow>
+              <Chip
+                icon={<CheckCircleIcon />}
+                label={t('similarity.systemStatus.allCompleteShort')}
+                color="success"
+                size="small"
+              />
+            </Tooltip>
           )}
         </Stack>
       </CardContent>
