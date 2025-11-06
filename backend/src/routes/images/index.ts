@@ -5,6 +5,8 @@ import { taggingRoutes } from './tagging.routes';
 import { managementRoutes } from './management.routes';
 import { similarityRoutes } from './similarity.routes';
 import complexSearchRoutes from './complex-search.routes';
+import metadataRoutes from './metadata.routes';
+import hashRoutes from './hash.routes';
 
 const router = Router();
 
@@ -19,6 +21,12 @@ router.use('/', uploadRoutes);
 
 // Tagging routes (must come before queryRoutes to avoid /:id catching /untagged-count)
 router.use('/', taggingRoutes);
+
+// Metadata routes (composite_hash 기반 메타데이터 조회)
+router.use('/metadata', metadataRoutes);
+
+// Hash generation routes (안전장치: 해시 생성)
+router.use('/', hashRoutes);
 
 // Query and download routes
 router.use('/', queryRoutes);

@@ -48,6 +48,11 @@ export class ImageSearchModel {
     const conditions: string[] = [];
     const params: any[] = [];
 
+    // composite_hash 필수 조건 (해시 생성 완료된 이미지만)
+    conditions.push('im.composite_hash IS NOT NULL');
+    conditions.push('if.file_status = ?');
+    params.push('active');
+
     // 프롬프트 검색
     if (searchParams.search_text) {
       conditions.push('im.prompt LIKE ?');
@@ -207,8 +212,13 @@ export class ImageSearchModel {
   ): Promise<{ images: any[], total: number }> {
     const offset = (page - 1) * limit;
 
-    // 총 개수 조회
-    const countRow = db.prepare('SELECT COUNT(*) as total FROM image_metadata').get() as any;
+    // 총 개수 조회 (composite_hash 있는 것만)
+    const countRow = db.prepare(`
+      SELECT COUNT(*) as total
+      FROM image_metadata im
+      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
+      WHERE im.composite_hash IS NOT NULL AND if.file_status = 'active'
+    `).get() as any;
     const total = countRow.total;
 
     // 정렬 컬럼 매핑
@@ -238,6 +248,7 @@ export class ImageSearchModel {
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       LEFT JOIN image_groups ig ON im.composite_hash = ig.composite_hash
       LEFT JOIN groups g ON ig.group_id = g.id
+      WHERE im.composite_hash IS NOT NULL
       GROUP BY im.composite_hash
       ORDER BY ${sortColumn} ${sortOrder}
       LIMIT ? OFFSET ?

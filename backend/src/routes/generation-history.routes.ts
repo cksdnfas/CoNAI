@@ -371,4 +371,75 @@ router.get(
   })
 );
 
+/**
+ * POST /api/generation-history/cleanup
+ * Cleanup orphaned, failed, and stale generation history records
+ *
+ * Query Parameters:
+ * - dry_run: boolean (default: false) - Preview cleanup without deleting
+ *
+ * Cleanup Rules:
+ * 1. Failed records >24h old → Delete
+ * 2. Orphaned records (files missing) → Delete
+ * 3. Completed records without hash >24h old → Delete
+ * 4. Stale pending/processing records >1h old → Update to 'failed'
+ */
+router.post(
+  '/cleanup',
+  asyncHandler(async (req: Request, res: Response) => {
+    const dryRun = req.query.dry_run === 'true';
+
+    // Import CleanupService dynamically
+    const { CleanupService } = await import('../services/cleanupService');
+
+    const report = await CleanupService.executeCleanup({ dryRun });
+
+    res.json({
+      success: true,
+      message: dryRun ? 'Cleanup preview completed (no changes made)' : 'Cleanup completed successfully',
+      dry_run: dryRun,
+      deleted: report.deleted,
+      updated: report.updated,
+      summary: report.summary,
+      details: report.details
+    });
+  })
+);
+
+/**
+ * GET /api/generation-history/job/:jobId
+ * Get job status and progress
+ * Returns temporary job info before DB records are created
+ */
+router.get(
+  '/job/:jobId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { jobId } = req.params;
+
+    const { JobTracker } = await import('../services/jobTracker');
+    const job = JobTracker.getJob(jobId);
+
+    if (!job) {
+      res.status(404).json({
+        success: false,
+        error: 'Job not found or expired'
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      job: {
+        jobId: job.jobId,
+        status: job.status,
+        progress: job.progress,
+        historyIds: job.historyIds,
+        error: job.error,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt
+      }
+    });
+  })
+);
+
 export default router;

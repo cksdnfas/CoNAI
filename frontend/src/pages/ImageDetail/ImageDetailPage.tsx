@@ -10,12 +10,16 @@ import {
   IconButton,
   Skeleton,
   Alert,
+  Tooltip,
+  Snackbar,
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import {
   ArrowBack as ArrowBackIcon,
   Download as DownloadIcon,
   ExpandMore as ExpandMoreIcon,
+  ContentCopy as CopyIcon,
+  HourglassEmpty as WaitingIcon,
 } from '@mui/icons-material';
 import Accordion from '@mui/material/Accordion';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -36,6 +40,7 @@ const ImageDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
   const [isTaggerEnabled, setIsTaggerEnabled] = useState(false);
+  const [copySnackbarOpen, setCopySnackbarOpen] = useState(false);
   const backendOrigin = getBackendOrigin();
 
   // Load settings to check if tagger is enabled
@@ -131,6 +136,17 @@ const ImageDetailPage: React.FC = () => {
     const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.'));
     const truncatedName = nameWithoutExt.substring(0, maxLength - ext!.length - 4) + '...';
     return `${truncatedName}.${ext}`;
+  };
+
+  const handleCopyHash = async () => {
+    if (image?.composite_hash) {
+      try {
+        await navigator.clipboard.writeText(image.composite_hash);
+        setCopySnackbarOpen(true);
+      } catch (err) {
+        console.error('Failed to copy hash:', err);
+      }
+    }
   };
 
   if (loading) {
@@ -333,9 +349,71 @@ const ImageDetailPage: React.FC = () => {
         </Box>
         </Grid>
 
-        {/* 2열: AI생성정보, 프롬프트정보 */}
+        {/* 2열: 해쉬정보, AI생성정보, 프롬프트정보 */}
         <Grid size={{ xs: 12, md: 5 }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 325 }}>
+            {/* 이미지 해쉬 영역 */}
+            <Paper sx={{ p: 2, borderRadius: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                이미지 해쉬
+              </Typography>
+              <Box
+                sx={{
+                  p: 1.5,
+                  bgcolor: 'action.hover',
+                  borderRadius: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                }}
+              >
+                {image.composite_hash ? (
+                  <>
+                    <Tooltip title="클릭하여 복사">
+                      <Box
+                        onClick={handleCopyHash}
+                        sx={{
+                          flex: 1,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer',
+                          fontFamily: 'monospace',
+                          fontSize: '0.75rem',
+                          color: 'text.secondary',
+                          '&:hover': {
+                            color: 'primary.main',
+                          },
+                        }}
+                      >
+                        {image.composite_hash}
+                      </Box>
+                    </Tooltip>
+                    <Tooltip title="해시 복사">
+                      <IconButton
+                        size="small"
+                        onClick={handleCopyHash}
+                        sx={{ flexShrink: 0 }}
+                      >
+                        <CopyIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </>
+                ) : (
+                  <>
+                    <WaitingIcon fontSize="small" color="disabled" />
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ fontStyle: 'italic' }}
+                    >
+                      해시 생성 대기 중...
+                    </Typography>
+                  </>
+                )}
+              </Box>
+            </Paper>
+
             {/* AI 생성 정보 영역 */}
             {image.ai_metadata && (
               <Paper sx={{ p: 2, borderRadius: 2 }}>
@@ -455,6 +533,18 @@ const ImageDetailPage: React.FC = () => {
           </AccordionDetails>
         </Accordion>
       </Box>
+
+      {/* Copy success snackbar */}
+      <Snackbar
+        open={copySnackbarOpen}
+        autoHideDuration={2000}
+        onClose={() => setCopySnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setCopySnackbarOpen(false)} severity="success" variant="filled">
+          해시가 복사되었습니다
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

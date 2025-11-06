@@ -23,6 +23,18 @@ export interface UpdateCustomDropdownListData {
   items?: string[];
 }
 
+export interface ComfyUIModelFolder {
+  folderName: string;
+  displayName: string;
+  files: string[];
+}
+
+export interface ScanComfyUIModelsResponse {
+  success: boolean;
+  data: ComfyUIModelFolder[];
+  message?: string;
+}
+
 export const customDropdownListApi = {
   // 모든 커스텀 드롭다운 목록 조회
   getAllLists: async () => {
@@ -51,6 +63,14 @@ export const customDropdownListApi = {
   // 커스텀 드롭다운 목록 삭제
   deleteList: async (id: number) => {
     const response = await axios.delete(`${API_BASE_URL}/custom-dropdown-lists/${id}`);
+    return response.data;
+  },
+
+  // ComfyUI 모델 스캔
+  scanComfyUIModels: async (modelsPath: string): Promise<ScanComfyUIModelsResponse> => {
+    const response = await axios.post(`${API_BASE_URL}/custom-dropdown-lists/scan-comfyui-models`, {
+      modelsPath
+    });
     return response.data;
   },
 };

@@ -235,6 +235,20 @@ async function startServer() {
     initializeApiGenerationDb(); // Synchronous call (better-sqlite3)
     console.log('✅ API Generation History DB initialized successfully');
 
+    // 5-1. Generation History Cleanup (startup)
+    console.log('🧹 Running generation history startup cleanup...');
+    try {
+      const { CleanupService } = await import('./services/cleanupService');
+      await CleanupService.runStartupCleanup();
+    } catch (error) {
+      console.warn('⚠️  Failed to run startup cleanup:', error instanceof Error ? error.message : error);
+    }
+
+    // 5-2. Job Tracker 초기화 (generation progress tracking)
+    console.log('📋 Initializing job tracker...');
+    const { JobTracker } = await import('./services/jobTracker');
+    JobTracker.initialize();
+
     // 6. 쿼리 캐시 서비스 초기화
     console.log('💾 Query cache service 초기화 중...');
     QueryCacheService.initialize();
@@ -446,6 +460,14 @@ ${divider}`);
         console.log('✅ Tagger daemon stopped');
       } catch (error) {
         console.warn('⚠️  Error stopping tagger daemon:', error);
+      }
+
+      // Stop job tracker
+      try {
+        const { JobTracker } = await import('./services/jobTracker');
+        JobTracker.shutdown();
+      } catch (error) {
+        console.warn('⚠️  Error stopping job tracker:', error);
       }
 
       // Close server

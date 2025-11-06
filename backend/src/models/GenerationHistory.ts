@@ -36,6 +36,7 @@ export interface GenerationHistoryRecord {
   original_path?: string;
   thumbnail_path?: string;
   file_size?: number;
+  composite_hash?: string;          // 48-character composite hash (perceptual + color)
 
   // Link to main images DB
   linked_image_id?: number;
@@ -360,6 +361,7 @@ export class GenerationHistoryModel {
     actual_thumbnail_path?: string | null;
     actual_width?: number | null;
     actual_height?: number | null;
+    actual_auto_tags?: string | null;
   })[] {
     let sql = `
       SELECT
@@ -367,7 +369,8 @@ export class GenerationHistoryModel {
         if.composite_hash as actual_composite_hash,
         im.thumbnail_path as actual_thumbnail_path,
         im.width as actual_width,
-        im.height as actual_height
+        im.height as actual_height,
+        im.auto_tags as actual_auto_tags
       FROM api_generation_history gh
       LEFT JOIN main_db.image_files if ON
         (if.composite_hash = gh.composite_hash AND gh.composite_hash IS NOT NULL)
@@ -451,5 +454,67 @@ export class GenerationHistoryModel {
       pending: result?.pending || 0,
       processing: result?.processing || 0
     };
+  }
+
+  /**
+   * Find records by status with optional time filter
+   * Used by cleanup service to find old failed records
+   * @param status - Generation status to filter by
+   * @param olderThan - ISO timestamp, return records created before this time
+   */
+  static findByStatus(status: GenerationStatus, olderThan?: string): GenerationHistoryRecord[] {
+    let sql = 'SELECT * FROM api_generation_history WHERE generation_status = ?';
+    const params: any[] = [status];
+
+    if (olderThan) {
+      sql += ' AND created_at < ?';
+      params.push(olderThan);
+    }
+
+    sql += ' ORDER BY created_at DESC';
+
+    const stmt = apiGenDb.prepare(sql);
+    return stmt.all(...params) as GenerationHistoryRecord[];
+  }
+
+  /**
+   * Find records by multiple statuses with optional time filter
+   * Used by cleanup service to find stale pending/processing records
+   * @param statuses - Array of generation statuses to filter by
+   * @param olderThan - ISO timestamp, return records created before this time
+   */
+  static findByStatuses(statuses: GenerationStatus[], olderThan?: string): GenerationHistoryRecord[] {
+    if (statuses.length === 0) return [];
+
+    const placeholders = statuses.map(() => '?').join(',');
+    let sql = `SELECT * FROM api_generation_history WHERE generation_status IN (${placeholders})`;
+    const params: any[] = [...statuses];
+
+    if (olderThan) {
+      sql += ' AND created_at < ?';
+      params.push(olderThan);
+    }
+
+    sql += ' ORDER BY created_at DESC';
+
+    const stmt = apiGenDb.prepare(sql);
+    return stmt.all(...params) as GenerationHistoryRecord[];
+  }
+
+  /**
+   * Delete multiple records by IDs
+   * Used by cleanup service for batch deletion
+   * @param ids - Array of record IDs to delete
+   * @returns Number of records deleted
+   */
+  static deleteMany(ids: number[]): number {
+    if (ids.length === 0) return 0;
+
+    const placeholders = ids.map(() => '?').join(',');
+    const sql = `DELETE FROM api_generation_history WHERE id IN (${placeholders})`;
+    const stmt = apiGenDb.prepare(sql);
+    const info = stmt.run(...ids);
+
+    return info.changes;
   }
 }

@@ -152,7 +152,7 @@ export const convertHistoryToImageRecord = (
     generation_time: null,
     batch_size: null,
     batch_index: null,
-    auto_tags: null,
+    auto_tags: history.actual_auto_tags || null,
 
     // 이미지 유사도 검색 필드
     perceptual_hash: null,

@@ -187,7 +187,7 @@ export class ImageGroupModel {
     collectionType?: 'manual' | 'auto'
   ): Promise<{ images: ImageMetadataRecord[], total: number }> {
     const offset = (page - 1) * limit;
-    let whereClause = 'WHERE ig.group_id = ?';
+    let whereClause = 'WHERE ig.group_id = ? AND ig.composite_hash IS NOT NULL';
     let queryParams: (number | string)[] = [groupId];
 
     if (collectionType) {
@@ -195,13 +195,13 @@ export class ImageGroupModel {
       queryParams.push(collectionType);
     }
 
-    // 총 개수 조회
+    // 총 개수 조회 (composite_hash 있는 것만)
     const countRow = db.prepare(
       `SELECT COUNT(*) as total FROM image_groups ig ${whereClause}`
     ).get(...queryParams) as any;
     const total = countRow.total;
 
-    // 메타데이터 조회 (composite_hash 기반)
+    // 메타데이터 조회 (composite_hash 기반, 해시 생성 완료된 이미지만)
     const query = `
       SELECT im.*
       FROM image_groups ig
@@ -227,7 +227,7 @@ export class ImageGroupModel {
     collectionType?: 'manual' | 'auto'
   ): Promise<{ images: ImageWithFileView[], total: number }> {
     const offset = (page - 1) * limit;
-    let whereClause = 'WHERE ig.group_id = ?';
+    let whereClause = 'WHERE ig.group_id = ? AND ig.composite_hash IS NOT NULL';
     let queryParams: (number | string)[] = [groupId];
 
     if (collectionType) {
@@ -235,13 +235,13 @@ export class ImageGroupModel {
       queryParams.push(collectionType);
     }
 
-    // 총 개수 조회
+    // 총 개수 조회 (composite_hash 있는 것만)
     const countRow = db.prepare(
       `SELECT COUNT(*) as total FROM image_groups ig ${whereClause}`
     ).get(...queryParams) as any;
     const total = countRow.total;
 
-    // 메타데이터 + 파일 정보 조회
+    // 메타데이터 + 파일 정보 조회 (해시 생성 완료된 이미지만)
     const query = `
       SELECT
         im.*,

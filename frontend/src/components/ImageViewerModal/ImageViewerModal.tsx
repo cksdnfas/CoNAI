@@ -128,12 +128,40 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   }, []);
 
   // Update current image when prop changes (but only when not in random mode)
+  // ✅ composite_hash 기반 메타데이터 조회 로직 추가
   useEffect(() => {
     // 랜덤 모드가 아닐 때만 prop 변경사항 반영
-    if (!isRandomMode) {
-      // console.log('[ImageViewerModal] Received image prop, auto_tags:', image?.auto_tags);
-      // console.log('[ImageViewerModal] Full image object:', image);
-      setCurrentImage(image);
+    if (!isRandomMode && image) {
+      // 1단계: composite_hash 확인
+      if (!image.composite_hash) {
+        console.warn('[ImageViewerModal] No composite_hash, using props data');
+        setCurrentImage(image);
+        return;
+      }
+
+      // 2단계: 해시 길이로 타입 판단
+      const isVideo = image.composite_hash.length === 32;
+      const isImage = image.composite_hash.length === 48;
+
+      if (!isVideo && !isImage) {
+        console.warn('[ImageViewerModal] Invalid composite_hash length, using props data');
+        setCurrentImage(image);
+        return;
+      }
+
+      // 3단계: DB에서 메타데이터 조회
+      const fetchMetadata = async () => {
+        try {
+          const metadata = await imageApi.getMetadata(image.composite_hash!);
+          setCurrentImage(metadata);
+        } catch (error) {
+          // 4단계: 실패 시 props 데이터 사용 (안전장치)
+          console.error('[ImageViewerModal] Metadata fetch failed, using props data:', error);
+          setCurrentImage(image);
+        }
+      };
+
+      fetchMetadata();
     }
   }, [image, isRandomMode]);
 
@@ -375,7 +403,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               isTaggerEnabled={isTaggerEnabled}
               onAutoTagGenerated={handleAutoTagGenerated}
               isHistoryContext={isHistoryContext}
-              linkedImageId={historyRecord?.linked_image_id}
             />
           </Paper>
         )}
@@ -406,7 +433,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               isTaggerEnabled={isTaggerEnabled}
               onAutoTagGenerated={handleAutoTagGenerated}
               isHistoryContext={isHistoryContext}
-              linkedImageId={historyRecord?.linked_image_id}
             />
           </Drawer>
         )}

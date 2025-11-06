@@ -315,7 +315,7 @@ export class ImageMetadataModel {
 
   /**
    * 파일 경로 포함 전체 조회 (image_files JOIN)
-   * Phase 1 지원: composite_hash가 NULL인 이미지도 조회
+   * composite_hash가 NULL인 이미지는 제외 (해시 생성 완료된 이미지만 표시)
    */
   static findAllWithFiles(options: {
     page?: number;
@@ -329,18 +329,14 @@ export class ImageMetadataModel {
     const sortOrder = options.sortOrder || 'DESC';
     const offset = (page - 1) * limit;
 
-    // 카운트: image_files (composite_hash 있는 것) + image_metadata (composite_hash 없는 것)
+    // 카운트: composite_hash가 있는 이미지만 (해시 생성 완료)
     const countRow = db.prepare(`
-      SELECT COUNT(*) as total FROM (
-        SELECT composite_hash FROM image_metadata
-        UNION ALL
-        SELECT id as composite_hash FROM image_files WHERE composite_hash IS NULL AND file_status = 'active'
-      )
+      SELECT COUNT(*) as total
+      FROM image_files
+      WHERE file_status = 'active' AND composite_hash IS NOT NULL
     `).get() as { total: number };
 
-    // Phase 1 + Phase 2 이미지 모두 조회
-    // 1. composite_hash가 있는 이미지 (정상 처리 완료)
-    // 2. composite_hash가 NULL인 이미지 (Phase 1만 완료)
+    // composite_hash가 있는 이미지만 조회 (해시 생성 완료)
     // 인덱스 활용을 위해 COALESCE 제거 - sortBy에 따라 조건부 쿼리 실행
     let query: string;
     if (sortBy === 'scan_date') {
@@ -387,13 +383,12 @@ export class ImageMetadataModel {
         FROM image_files if
         LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
         LEFT JOIN video_metadata vm ON if.composite_hash = vm.composite_hash
-        WHERE if.file_status = 'active'
+        WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
         ORDER BY if.scan_date ${sortOrder}
         LIMIT ? OFFSET ?
       `;
     } else if (sortBy === 'first_seen_date') {
       // first_seen_date로 정렬 시 idx_metadata_first_seen_desc 인덱스 활용
-      // NULL 값 처리: metadata가 없는 경우 scan_date 폴백
       query = `
         SELECT
           COALESCE(im.composite_hash, vm.composite_hash) as composite_hash,
@@ -433,16 +428,16 @@ export class ImageMetadataModel {
           if.file_status,
           if.scan_date,
           if.file_type,
-          CASE WHEN COALESCE(im.first_seen_date, vm.first_seen_date) IS NULL THEN if.scan_date ELSE COALESCE(im.first_seen_date, vm.first_seen_date) END as sort_date
+          COALESCE(im.first_seen_date, vm.first_seen_date) as sort_date
         FROM image_files if
         LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
         LEFT JOIN video_metadata vm ON if.composite_hash = vm.composite_hash
-        WHERE if.file_status = 'active'
+        WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
         ORDER BY sort_date ${sortOrder}
         LIMIT ? OFFSET ?
       `;
     } else {
-      // 기타 metadata 필드로 정렬 - 폴백 로직 유지
+      // 기타 metadata 필드로 정렬
       query = `
         SELECT
           COALESCE(im.composite_hash, vm.composite_hash) as composite_hash,
@@ -485,7 +480,7 @@ export class ImageMetadataModel {
         FROM image_files if
         LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
         LEFT JOIN video_metadata vm ON if.composite_hash = vm.composite_hash
-        WHERE if.file_status = 'active'
+        WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
         ORDER BY COALESCE(im.${sortBy}, vm.${sortBy}, if.scan_date) ${sortOrder}
         LIMIT ? OFFSET ?
       `;
@@ -498,18 +493,52 @@ export class ImageMetadataModel {
 
   /**
    * 랜덤 이미지 조회 (파일 경로 포함)
+   * composite_hash가 있는 이미지만 조회
    */
   static getRandomImage(): any | null {
     const row = db.prepare(`
       SELECT
-        im.*,
+        COALESCE(im.composite_hash, vm.composite_hash) as composite_hash,
+        im.perceptual_hash,
+        im.dhash,
+        im.ahash,
+        im.color_histogram,
+        COALESCE(im.width, vm.width) as width,
+        COALESCE(im.height, vm.height) as height,
+        im.thumbnail_path,
+        COALESCE(im.ai_tool, vm.ai_tool) as ai_tool,
+        COALESCE(im.model_name, vm.model_name) as model_name,
+        COALESCE(im.lora_models, vm.lora_models) as lora_models,
+        COALESCE(im.steps, vm.steps) as steps,
+        COALESCE(im.cfg_scale, vm.cfg_scale) as cfg_scale,
+        COALESCE(im.sampler, vm.sampler) as sampler,
+        COALESCE(im.seed, vm.seed) as seed,
+        COALESCE(im.scheduler, vm.scheduler) as scheduler,
+        COALESCE(im.prompt, vm.prompt) as prompt,
+        COALESCE(im.negative_prompt, vm.negative_prompt) as negative_prompt,
+        COALESCE(im.denoise_strength, vm.denoise_strength) as denoise_strength,
+        COALESCE(im.generation_time, vm.generation_time) as generation_time,
+        COALESCE(im.batch_size, vm.batch_size) as batch_size,
+        COALESCE(im.batch_index, vm.batch_index) as batch_index,
+        COALESCE(im.auto_tags, vm.auto_tags) as auto_tags,
+        COALESCE(im.duration, vm.duration) as duration,
+        COALESCE(im.fps, vm.fps) as fps,
+        COALESCE(im.video_codec, vm.video_codec) as video_codec,
+        COALESCE(im.audio_codec, vm.audio_codec) as audio_codec,
+        COALESCE(im.bitrate, vm.bitrate) as bitrate,
+        COALESCE(im.first_seen_date, vm.first_seen_date) as first_seen_date,
+        COALESCE(im.metadata_updated_date, vm.metadata_updated_date) as metadata_updated_date,
         if.id as file_id,
         if.original_file_path,
         if.file_size,
         if.mime_type,
-        if.file_status
-      FROM image_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
+        if.file_status,
+        if.scan_date,
+        if.file_type
+      FROM image_files if
+      LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
+      LEFT JOIN video_metadata vm ON if.composite_hash = vm.composite_hash
+      WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
       ORDER BY RANDOM()
       LIMIT 1
     `).get();

@@ -160,7 +160,7 @@ function createTables(): void {
       original_path TEXT,
       thumbnail_path TEXT,
       file_size INTEGER,
-      linked_image_id INTEGER,
+      linked_composite_hash TEXT,
       assigned_group_id INTEGER,
       composite_hash TEXT,
       error_message TEXT,
@@ -173,7 +173,7 @@ function createTables(): void {
     'CREATE INDEX IF NOT EXISTS idx_api_gen_service_type ON api_generation_history(service_type)',
     'CREATE INDEX IF NOT EXISTS idx_api_gen_status ON api_generation_history(generation_status)',
     'CREATE INDEX IF NOT EXISTS idx_api_gen_created_at ON api_generation_history(created_at DESC)',
-    'CREATE INDEX IF NOT EXISTS idx_api_gen_linked_image ON api_generation_history(linked_image_id)',
+    'CREATE INDEX IF NOT EXISTS idx_api_gen_linked_composite_hash ON api_generation_history(linked_composite_hash)',
     'CREATE INDEX IF NOT EXISTS idx_api_gen_composite_hash ON api_generation_history(composite_hash)',
     'CREATE INDEX IF NOT EXISTS idx_api_gen_workflow_id ON api_generation_history(workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_api_gen_group_id ON api_generation_history(group_id)'

@@ -282,7 +282,26 @@ export class GenerationHistoryService {
       generation_status: filters?.generation_status
     });
 
-    return { records, total };
+    // Parse auto_tags JSON if it exists
+    const enrichedRecords = records.map(record => {
+      const enriched: any = { ...record };
+
+      // Parse actual_auto_tags from JSON string to object
+      if (enriched.actual_auto_tags && typeof enriched.actual_auto_tags === 'string') {
+        try {
+          enriched.actual_auto_tags = JSON.parse(enriched.actual_auto_tags);
+        } catch (e) {
+          // If parsing fails, leave as null
+          enriched.actual_auto_tags = null;
+        }
+      } else if (!enriched.actual_auto_tags) {
+        enriched.actual_auto_tags = null;
+      }
+
+      return enriched;
+    });
+
+    return { records: enrichedRecords, total };
   }
 
   /**

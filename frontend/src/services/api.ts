@@ -254,6 +254,32 @@ export const imageApi = {
     const response = await api.post('/api/images/search/ids', params);
     return response.data;
   },
+
+  // ✅ Composite Hash로 메타데이터 조회
+  getMetadata: async (compositeHash: string): Promise<ImageRecord> => {
+    const response = await api.get(`/api/images/metadata/${compositeHash}`);
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to fetch metadata');
+  },
+
+  // ✅ 이미지 파일의 Composite Hash 생성 (안전장치)
+  generateHash: async (params: { file_path?: string; file_id?: number }): Promise<{
+    success: boolean;
+    data?: {
+      composite_hash: string;
+      perceptual_hash: string;
+      dhash: string;
+      ahash: string;
+      file_path: string;
+      saved_to_db: boolean;
+    };
+    error?: string;
+  }> => {
+    const response = await api.post('/api/images/generate-hash', params);
+    return response.data;
+  },
 };
 
 // 그룹 관련 API
