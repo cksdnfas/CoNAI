@@ -27,7 +27,7 @@ import {
   VideoLibrary as VideoLibraryIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { imageApi } from '../../services/api';
+import { uploadApi } from '../../services/api';
 import type { UploadProgressEvent, UploadStage } from '../../types/image';
 
 interface UploadZoneProps {
@@ -75,7 +75,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
     try {
       if (acceptedFiles.length === 1) {
         // 단일 파일 업로드 (기존 API 사용)
-        const response = await imageApi.uploadImage(acceptedFiles[0]);
+        const response = await uploadApi.uploadImage(acceptedFiles[0]);
         if (response.success) {
           setFileProgressList([{
             filename: acceptedFiles[0].name,
@@ -97,7 +97,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
         let completed = 0;
         let failed = 0;
 
-        await imageApi.uploadImagesWithProgress(acceptedFiles, (event: UploadProgressEvent) => {
+        await uploadApi.uploadImagesWithProgress(acceptedFiles, (event: UploadProgressEvent) => {
           const fileIndex = event.currentFile - 1;
           setCurrentFileIndex(fileIndex);
 

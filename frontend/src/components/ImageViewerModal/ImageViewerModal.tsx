@@ -69,7 +69,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   groupId,
   allImageIds = [],
   isHistoryContext = false,
-  historyRecord,
 }) => {
   const { t } = useTranslation();
   const theme = useTheme();

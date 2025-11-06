@@ -2,7 +2,7 @@
  * 샘플 이미지를 생성하여 해시 알고리즘 테스트
  */
 
-import { ImageSimilarityService } from './imageSimilarity';
+import { ImageSimilarityService } from '../../src/services/imageSimilarity';
 import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs';

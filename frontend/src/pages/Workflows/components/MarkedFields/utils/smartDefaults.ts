@@ -120,7 +120,7 @@ export function applySmartDefaults(
   const combined = `${label} ${jsonPath}`;
 
   // Find matching smart default
-  for (const [key, defaults] of Object.entries(SMART_DEFAULTS)) {
+  for (const [, defaults] of Object.entries(SMART_DEFAULTS)) {
     if (defaults.keywords.some((keyword) => combined.includes(keyword))) {
       return {
         ...field,

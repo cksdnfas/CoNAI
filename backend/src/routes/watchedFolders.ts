@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import { WatchedFolderService } from '../services/watchedFolderService';
-import { FolderScanService } from '../services/folderScanService';
+import { FolderScanService } from '../services/folderScan';
 import { FileWatcherService } from '../services/fileWatcherService';
 import { successResponse, errorResponse } from '@comfyui-image-manager/shared';
 

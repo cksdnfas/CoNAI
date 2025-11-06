@@ -42,8 +42,11 @@ interface GraphNode extends Node {
   data: EnhancedNodeData;
 }
 
-interface GraphEdge extends Edge {
+interface GraphEdge extends Omit<Edge, 'markerEnd'> {
   dataType?: string;
+  id: string;
+  source: string;
+  target: string;
 }
 
 /**
@@ -127,7 +130,7 @@ function getLayoutedElements(
   nodes: GraphNode[],
   edges: GraphEdge[],
   direction: 'TB' | 'LR' = 'LR'
-): { nodes: Node[]; edges: Edge[] } {
+): { nodes: Node[]; edges: GraphEdge[] } {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({ rankdir: direction, ranksep: 150, nodesep: 80 });
@@ -145,24 +148,24 @@ function getLayoutedElements(
 
   const layoutedNodes: Node[] = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
-    const height = node.style?.height || calculateNodeHeight(node.data);
+    const height = (node.style?.height as number) || calculateNodeHeight(node.data);
 
     return {
       ...node,
       position: {
         x: nodeWithPosition.x - 125, // Half of width (250/2)
-        y: nodeWithPosition.y - height / 2,
+        y: (nodeWithPosition.y as number) - height / 2,
       },
     };
   });
 
-  const layoutedEdges: Edge[] = edges.map((edge) => ({
+  const layoutedEdges: GraphEdge[] = edges.map((edge) => ({
     ...edge,
     markerEnd: {
       type: MarkerType.ArrowClosed,
       width: 20,
       height: 20,
-      color: edge.style?.stroke || '#757575',
+      color: (edge as any).style?.stroke || '#757575',
     },
   }));
 
@@ -336,13 +339,13 @@ const EnhancedWorkflowGraphViewer: React.FC<EnhancedWorkflowGraphViewerProps> = 
           style={{ backgroundColor: '#1a1a1a' }}
         />
         <Controls
-          style={{
-            button: {
-              backgroundColor: '#2a2a2a',
-              border: '1px solid #404040',
-              color: '#ffffff',
-            },
-          }}
+          style={
+            {
+              '--rf-control-button-background': '#2a2a2a',
+              '--rf-control-button-border': '1px solid #404040',
+              '--rf-control-button-color': '#ffffff',
+            } as any
+          }
         />
         <MiniMap
           nodeColor={(node) => {

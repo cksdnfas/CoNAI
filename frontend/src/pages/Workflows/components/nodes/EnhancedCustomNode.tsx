@@ -14,7 +14,7 @@ import {
   Output as OutputIcon,
   Settings as SettingsIcon,
 } from '@mui/icons-material';
-import type { EnhancedNodeData, NodeInput, NodeOutput } from '../../utils/nodeDataParser';
+import type { EnhancedNodeData } from '../../utils/nodeDataParser';
 import { getDataTypeColor, getDataTypeLabel } from '../../utils/dataTypeColors';
 
 /**

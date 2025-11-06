@@ -154,7 +154,7 @@ export default function CustomDropdownListsPage() {
 
       <Grid container spacing={2}>
         {lists.length === 0 ? (
-          <Grid item xs={12}>
+          <Grid size={{ xs: 12 }}>
             <Card>
               <CardContent>
                 <Typography variant="body1" color="text.secondary" align="center">
@@ -165,7 +165,7 @@ export default function CustomDropdownListsPage() {
           </Grid>
         ) : (
           lists.map((list) => (
-            <Grid item xs={12} sm={6} md={4} key={list.id}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={list.id}>
               <Card>
                 <CardContent>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>

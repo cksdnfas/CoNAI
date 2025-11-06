@@ -9,6 +9,7 @@ export interface GenerationHistoryRecordWithMetadata extends GenerationHistoryRe
   actual_thumbnail_path?: string | null;
   actual_width?: number | null;
   actual_height?: number | null;
+  actual_auto_tags?: string | null;
 }
 
 /**
@@ -48,7 +49,7 @@ export const convertHistoryToImageRecord = (
 
   // ✅ actual_composite_hash로 메타데이터 등록 여부 판단
   // actual_composite_hash가 null이면 null 유지 (fallback ID 사용 안 함)
-  const composite_hash = history.actual_composite_hash;
+  const composite_hash = history.actual_composite_hash ?? null;
   const hasMetadata = !!composite_hash; // 메타데이터 DB에 등록되었는지 여부
 
   // 디버깅: composite_hash가 null인 경우 로그 출력
@@ -74,7 +75,7 @@ export const convertHistoryToImageRecord = (
   }
 
   // 파일 타입 및 MIME 타입 감지 (파일 확장자 기반)
-  const detectFileTypeAndMimeType = (filePath: string | null): { file_type: 'image' | 'video' | 'animated'; mime_type: string } => {
+  const detectFileTypeAndMimeType = (filePath: string | null | undefined): { file_type: 'image' | 'video' | 'animated'; mime_type: string } => {
     if (!filePath) return { file_type: 'image', mime_type: 'image/png' };
 
     const ext = filePath.toLowerCase().split('.').pop() || '';
@@ -119,23 +120,35 @@ export const convertHistoryToImageRecord = (
 
   const { file_type, mime_type } = detectFileTypeAndMimeType(history.original_path);
 
+  // Parse auto_tags if available
+  let parsedAutoTags: any = null;
+  if (history.actual_auto_tags) {
+    try {
+      parsedAutoTags = typeof history.actual_auto_tags === 'string'
+        ? JSON.parse(history.actual_auto_tags)
+        : history.actual_auto_tags;
+    } catch (e) {
+      console.warn('Failed to parse auto_tags:', e);
+    }
+  }
+
   return {
     // ✅ New structure - Primary identification
     composite_hash,  // Use actual composite_hash if available
-    first_seen_date: history.created_at,      // Replaces upload_date
+    first_seen_date: history.created_at ?? null,      // Replaces upload_date
 
     // File information (from image_files table JOIN)
     file_id: null,                             // History records don't have file_id yet
     file_type,                                 // Detect from file extension
-    original_file_path: history.original_path || null,  // Replaces file_path
-    file_size: history.file_size || null,
+    original_file_path: history.original_path ?? null,  // Replaces file_path
+    file_size: history.file_size ?? null,
     mime_type,                                 // Detect from file extension
     file_status: 'active' as const,
 
     // Image metadata - 메타데이터 있으면 실제 이미지 크기 사용, 없으면 히스토리 DB 크기 사용
-    width: hasMetadata ? (history.actual_width || history.width || 0) : (history.width || 0),
-    height: hasMetadata ? (history.actual_height || history.height || 0) : (history.height || 0),
-    thumbnail_path: hasMetadata ? (history.actual_thumbnail_path || '') : '',
+    width: hasMetadata ? (history.actual_width ?? history.width ?? 0) : (history.width ?? 0),
+    height: hasMetadata ? (history.actual_height ?? history.height ?? 0) : (history.height ?? 0),
+    thumbnail_path: hasMetadata ? (history.actual_thumbnail_path ?? '') : '',
 
     // AI 메타데이터 - 서비스별 매핑
     ai_tool: isComfyUI ? 'ComfyUI' : 'NovelAI',
@@ -152,7 +165,7 @@ export const convertHistoryToImageRecord = (
     generation_time: null,
     batch_size: null,
     batch_index: null,
-    auto_tags: history.actual_auto_tags || null,
+    auto_tags: parsedAutoTags,
 
     // 이미지 유사도 검색 필드
     perceptual_hash: null,

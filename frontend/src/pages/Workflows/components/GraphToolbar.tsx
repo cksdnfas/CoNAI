@@ -14,7 +14,6 @@ import {
 import type { SelectChangeEvent } from '@mui/material/Select';
 import {
   Search as SearchIcon,
-  FilterList as FilterIcon,
   ViewModule as ViewModuleIcon,
   ViewList as ViewListIcon,
   UnfoldMore as ExpandAllIcon,

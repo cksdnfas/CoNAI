@@ -145,8 +145,7 @@ export default function WorkflowFormPage() {
   const handleParameterRightClick = (
     nodeId: string,
     paramKey: string,
-    paramValue: any,
-    paramType: string
+    paramValue: any
   ) => {
     const jsonPath = `${nodeId}.inputs.${paramKey}`;
 

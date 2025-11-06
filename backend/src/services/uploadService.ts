@@ -1,7 +1,6 @@
 import path from 'path';
 import fs from 'fs';
 import { ImageProcessor } from './imageProcessor';
-import { ImageModel } from '../models/Image';
 import { ImageMetadataModel } from '../models/Image/ImageMetadataModel';
 import { ImageSimilarityModel } from '../models/Image/ImageSimilarityModel';
 import { ImageSimilarityService } from './imageSimilarity';
@@ -11,6 +10,7 @@ import { imageTaggerService, ImageTaggerService } from './imageTaggerService';
 import { settingsService } from './settingsService';
 import { runtimePaths, resolveUploadsPath } from '../config/runtimePaths';
 import { refinePrimaryPrompt } from '@comfyui-image-manager/shared';
+import { db } from '../database/init';
 
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
 
@@ -91,45 +91,50 @@ export class UploadService {
     console.log('💾 Saving to database...');
 
     // 데이터베이스에 저장 (정제된 프롬프트 사용)
-    const imageId = await ImageModel.create({
-      filename: path.basename(localFilePath),
-      original_name: path.basename(localFilePath),
-      file_path: localFilePath.replace(/\\/g, '/'),
-      thumbnail_path: thumbnailRelativePath.replace(/\\/g, '/'),
-      file_size: stats.size,
-      mime_type: 'image/' + ext.substring(1),
-      width: imageInfo.width,
-      height: imageInfo.height,
-      metadata: JSON.stringify(metadata),
+    const result = db.prepare(`
+      INSERT INTO images (
+        filename, original_name, file_path, thumbnail_path, file_size, mime_type,
+        width, height, metadata, ai_tool, model_name, lora_models, steps, cfg_scale,
+        sampler, seed, scheduler, prompt, negative_prompt, denoise_strength,
+        generation_time, batch_size, batch_index, auto_tags,
+        duration, fps, video_codec, audio_codec, bitrate,
+        perceptual_hash, color_histogram
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      path.basename(localFilePath),
+      path.basename(localFilePath),
+      localFilePath.replace(/\\/g, '/'),
+      thumbnailRelativePath.replace(/\\/g, '/'),
+      stats.size,
+      'image/' + ext.substring(1),
+      imageInfo.width,
+      imageInfo.height,
+      JSON.stringify(metadata),
+      aiInfo.ai_tool || null,
+      aiInfo.model || null,
+      aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
+      aiInfo.steps || null,
+      aiInfo.cfg_scale || null,
+      aiInfo.sampler || null,
+      aiInfo.seed || null,
+      aiInfo.scheduler || null,
+      refinedPrompt,
+      refinedNegativePrompt,
+      aiInfo.denoise_strength || null,
+      aiInfo.generation_time || null,
+      aiInfo.batch_size || null,
+      aiInfo.batch_index || null,
+      null, // auto_tags
+      null, // duration
+      null, // fps
+      null, // video_codec
+      null, // audio_codec
+      null, // bitrate
+      null, // perceptual_hash
+      null  // color_histogram
+    );
 
-      // AI 메타데이터 필드들 (정제된 프롬프트 사용)
-      ai_tool: aiInfo.ai_tool || null,
-      model_name: aiInfo.model || null,
-      lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
-      steps: aiInfo.steps || null,
-      cfg_scale: aiInfo.cfg_scale || null,
-      sampler: aiInfo.sampler || null,
-      seed: aiInfo.seed || null,
-      scheduler: aiInfo.scheduler || null,
-      prompt: refinedPrompt,
-      negative_prompt: refinedNegativePrompt,
-      denoise_strength: aiInfo.denoise_strength || null,
-      generation_time: aiInfo.generation_time || null,
-      batch_size: aiInfo.batch_size || null,
-      batch_index: aiInfo.batch_index || null,
-      auto_tags: null,  // 업로드 시에는 null, 자동 태깅으로 추가
-
-      // 동영상 메타데이터 필드들 (이미지는 null)
-      duration: null,
-      fps: null,
-      video_codec: null,
-      audio_codec: null,
-      bitrate: null,
-
-      // 유사도 검색 필드들 (기존 이미지는 나중에 생성 가능)
-      perceptual_hash: null,
-      color_histogram: null
-    });
+    const imageId = Number(result.lastInsertRowid);
 
     console.log('✅ Database save successful, ID:', imageId);
 

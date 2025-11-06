@@ -60,7 +60,6 @@ export default function ImageSelectionModal({
 }: ImageSelectionModalProps) {
   const [currentTab, setCurrentTab] = useState(0);
   const [hashInput, setHashInput] = useState('');
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
   const [canvasImages, setCanvasImages] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -88,7 +87,6 @@ export default function ImageSelectionModal({
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      setUploadedFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setUploadPreview(reader.result as string);
@@ -104,7 +102,6 @@ export default function ImageSelectionModal({
 
   const handleClose = () => {
     setHashInput('');
-    setUploadedFile(null);
     setUploadPreview(null);
     setError(null);
     onClose();
@@ -238,7 +235,7 @@ export default function ImageSelectionModal({
           ) : (
             <Grid container spacing={2}>
               {canvasImages.map((image, index) => (
-                <Grid item xs={6} sm={4} md={3} key={index}>
+                <Grid size={{ xs: 6, sm: 4, md: 3 }} key={index}>
                   <Card>
                     <CardActionArea onClick={() => handleSelectImage(image.path)}>
                       <CardMedia

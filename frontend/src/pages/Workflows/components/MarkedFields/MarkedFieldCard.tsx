@@ -86,10 +86,6 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
 
   const typeConfig = FIELD_TYPE_CONFIG[field.type];
 
-  // Check if field has errors or warnings
-  const hasErrors = fieldErrors.some((e) => e.severity === 'error');
-  const hasWarnings = fieldErrors.some((e) => e.severity === 'warning');
-
   const handleToggleExpand = () => {
     setExpanded(!expanded);
   };

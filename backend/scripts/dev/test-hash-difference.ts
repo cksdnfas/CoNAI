@@ -3,7 +3,7 @@
  * 동일한 이미지에서 3개 해시가 서로 다른 값을 생성하는지 확인
  */
 
-import { ImageSimilarityService } from './imageSimilarity';
+import { ImageSimilarityService } from '../../src/services/imageSimilarity';
 import path from 'path';
 import fs from 'fs';
 
@@ -12,7 +12,7 @@ async function testHashDifferences() {
   console.log('=' .repeat(60));
 
   // 테스트 이미지 경로 (업로드된 이미지 중 하나 사용)
-  const uploadsDir = path.join(__dirname, '../../uploads');
+  const uploadsDir = path.join(__dirname, '../../../uploads');
 
   // 첫 번째 이미지 찾기
   let testImagePath: string | null = null;

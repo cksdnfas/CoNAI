@@ -1,5 +1,5 @@
-import { db } from '../database/init';
-import { autoTagScheduler } from './autoTagScheduler';
+import { db } from '../../src/database/init';
+import { autoTagScheduler } from '../../src/services/autoTagScheduler';
 
 console.log('=== Auto-Tag Status Check ===\n');
 

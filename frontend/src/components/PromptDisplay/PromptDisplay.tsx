@@ -70,7 +70,6 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
   autoTags,
   isTaggerEnabled = false,
   onAutoTagGenerated,
-  isHistoryContext = false,
 }) => {
   const { t } = useTranslation('promptManagement');
   const [tabValue, setTabValue] = useState(0);

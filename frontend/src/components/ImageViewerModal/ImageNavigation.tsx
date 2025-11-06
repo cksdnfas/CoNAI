@@ -33,7 +33,6 @@ const ImageNavigation: React.FC<ImageNavigationProps> = ({
   onRandom,
   disabled = false,
   isRandomMode = false,
-  currentImage = null,
 }) => {
   const { t } = useTranslation();
   const isNarrow = useMediaQuery('(max-width:420px)');

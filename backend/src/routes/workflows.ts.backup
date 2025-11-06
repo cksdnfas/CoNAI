@@ -3,7 +3,6 @@ import { WorkflowModel } from '../models/Workflow';
 import { createComfyUIService, ParallelGenerationService } from '../services/comfyuiService';
 import { WorkflowResponse, WorkflowCreateData, WorkflowUpdateData, GenerationRequest, GenerationStatusResponse } from '../types/workflow';
 import { asyncHandler } from '../middleware/errorHandler';
-import { ImageModel } from '../models/Image';
 import { enrichImageRecord } from './images/utils';
 import { ComfyUIServerModel, WorkflowServerModel } from '../models/ComfyUIServer';
 import { ImageProcessor } from '../services/imageProcessor';
@@ -19,6 +18,8 @@ import { ComfyUIWorkflowParser } from '../utils/comfyuiWorkflowParser';
 import { GenerationHistoryModel } from '../models/GenerationHistory';
 import { refinePrimaryPrompt } from '@comfyui-image-manager/shared';
 import { FileSaver } from '../utils/fileSaver';
+import { ImageUploadService } from '../services/imageUploadService';
+import { ImageMetadataModel } from '../models/Image/ImageMetadataModel';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
@@ -604,12 +605,10 @@ router.get('/history/:historyId', asyncHandler(async (req: Request, res: Respons
 
     // 생성된 이미지 정보 조회
     let generatedImage = null;
-    if (history.linked_image_id) {
-      const image = await ImageModel.findById(history.linked_image_id);
-      if (image) {
-        generatedImage = enrichImageRecord(image);
-      }
-    }
+    // TODO: Migrate api_generation_history.linked_image_id from INT to TEXT (composite_hash)
+    // Currently broken: ImageModel.findById() throws error
+    // See: docs/development/IMAGE_MODEL_MIGRATION_STATUS.md
+    // DISABLED: Cannot query by linked_image_id until database migration completed
 
     const statusResponse: GenerationStatusResponse = {
       id: history.id!,
@@ -901,7 +900,7 @@ router.post('/:id/generate-parallel', asyncHandler(async (req: Request, res: Res
               }
 
               // ImageProcessor로 처리하여 완전한 업로드 파이프라인 실행
-              const imageIds: number[] = [];
+              const imageIds: string[] = []; // composite_hash strings
               for (const tempPath of tempFilePaths) {
                 try {
                   // Multer File 객체 생성
@@ -936,42 +935,40 @@ router.post('/:id/generate-parallel', asyncHandler(async (req: Request, res: Res
                     refinedNegativePrompt = refinePrimaryPrompt(refinedNegativePrompt);
                   }
 
-                  // DB 저장 (정제된 프롬프트 사용)
-                  const imageId = await ImageModel.create({
-                    filename: processed.filename,
-                    original_name: path.basename(tempPath),
-                    file_path: processed.originalPath,
-                    thumbnail_path: processed.thumbnailPath,
-                    file_size: processed.fileSize,
-                    mime_type: `image/${ext}`,
-                    width: processed.width,
-                    height: processed.height,
-                    metadata: JSON.stringify(processed.metadata),
-                    ai_tool: 'ComfyUI',
-                    model_name: aiInfo.model || null,
-                    lora_models: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
-                    steps: aiInfo.steps || null,
-                    cfg_scale: aiInfo.cfg_scale || null,
-                    sampler: aiInfo.sampler || null,
-                    seed: aiInfo.seed || null,
-                    scheduler: aiInfo.scheduler || null,
-                    prompt: refinedPrompt,
-                    negative_prompt: refinedNegativePrompt,
-                    denoise_strength: aiInfo.denoise_strength || null,
-                    generation_time: aiInfo.generation_time || null,
-                    batch_size: aiInfo.batch_size || null,
-                    batch_index: aiInfo.batch_index || null,
-                    auto_tags: null,
-                    duration: null,
-                    fps: null,
-                    video_codec: null,
-                    audio_codec: null,
-                    bitrate: null,
-                    perceptual_hash: processed.perceptualHash || null,
-                    color_histogram: processed.colorHistogram || null
-                  });
+                  // DB 저장 (정제된 프롬프트 사용) - Using new composite_hash system
+                  const compositeHash = await ImageUploadService.saveUploadedImage(
+                    processed.originalPath, // imagePath
+                    {
+                      width: processed.width,
+                      height: processed.height,
+                      thumbnailPath: processed.thumbnailPath,
+                      fileSize: processed.fileSize,
+                      mimeType: `image/${ext}`,
+                      aiTool: 'ComfyUI',
+                      modelName: aiInfo.model || null,
+                      loraModels: aiInfo.lora_models ? JSON.stringify(aiInfo.lora_models) : null,
+                      steps: aiInfo.steps || null,
+                      cfgScale: aiInfo.cfg_scale || null,
+                      sampler: aiInfo.sampler || null,
+                      seed: aiInfo.seed || null,
+                      scheduler: aiInfo.scheduler || null,
+                      prompt: refinedPrompt,
+                      negativePrompt: refinedNegativePrompt,
+                      denoiseStrength: aiInfo.denoise_strength || null,
+                      generationTime: aiInfo.generation_time || null,
+                      batchSize: aiInfo.batch_size || null,
+                      batchIndex: aiInfo.batch_index || null,
+                      autoTags: null,
+                      duration: null,
+                      fps: null,
+                      videoCodec: null,
+                      audioCodec: null,
+                      bitrate: null
+                    },
+                    1 // folderId: 1 = direct upload / ComfyUI generation
+                  );
 
-                  imageIds.push(imageId);
+                  imageIds.push(compositeHash);
 
                   // STEP 3: 프롬프트 수집 (정제된 프롬프트 사용)
                   try {
@@ -986,11 +983,10 @@ router.post('/:id/generate-parallel', asyncHandler(async (req: Request, res: Res
                   // 자동 태깅은 AutoTagScheduler에서 백그라운드로 처리됨
 
                   // 자동수집 그룹 처리
-                  try {
-                    await AutoCollectionService.runAutoCollectionForNewImageById(imageId);
-                  } catch (autoCollectError) {
-                    console.warn('⚠️ Failed to run auto collection:', autoCollectError);
-                  }
+                  // TODO: Update AutoCollectionService to accept composite_hash instead of numeric ID
+                  // See: docs/development/IMAGE_MODEL_MIGRATION_STATUS.md
+                  // DISABLED: AutoCollectionService.runAutoCollectionForNewImageById(compositeHash)
+                  // This method only works with composite_hash strings now
 
                 } catch (error) {
                   console.error(`❌ Failed to process image ${tempPath}:`, error);

@@ -2,8 +2,10 @@ import { Router, Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import { asyncHandler } from '../../middleware/errorHandler';
-import { ImageModel } from '../../models/Image';
 import { ImageMetadataModel } from '../../models/Image/ImageMetadataModel';
+import { ImageTaggingModel } from '../../models/Image/ImageTaggingModel';
+import { ImageSearchModel } from '../../models/Image/ImageSearchModel';
+import { ImageStatsModel } from '../../models/Image/ImageStatsModel';
 import { db } from '../../database/init';
 import { imageTaggerService, ImageTaggerService } from '../../services/imageTaggerService';
 import { ImageListResponse } from '../../types/image';
@@ -302,7 +304,7 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
 
   try {
     // 미처리 이미지 조회 (composite_hash, file_path 포함)
-    const untaggedImages = await ImageModel.findUntagged(maxLimit);
+    const untaggedImages = await ImageTaggingModel.findUntagged(maxLimit);
 
     if (untaggedImages.length === 0) {
       res.json({
@@ -569,7 +571,7 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
  */
 router.get('/untagged-count', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const count = await ImageModel.countUntagged();
+    const count = await ImageTaggingModel.countUntagged();
 
     res.json({
       success: true,
@@ -654,7 +656,7 @@ router.post('/search-by-autotags', asyncHandler(async (req: Request, res: Respon
     }
 
     // 오토태그 검색 실행 (기본 검색 조건 포함)
-    const result = await ImageModel.searchByAutoTags(searchParams, basicSearchParams);
+    const result = await ImageSearchModel.searchByAutoTags(searchParams, basicSearchParams);
 
     // URL과 구조화된 메타데이터 추가
     const enrichedImages = result.images.map(enrichImageRecord);
@@ -687,7 +689,7 @@ router.post('/search-by-autotags', asyncHandler(async (req: Request, res: Respon
  */
 router.get('/autotag-stats', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const stats = await ImageModel.getAutoTagStats();
+    const stats = await ImageStatsModel.getAutoTagStats();
 
     res.json({
       success: true,

@@ -3,7 +3,10 @@ import path from 'path';
 import fs from 'fs';
 import { TempImageService, EditOptions } from './tempImageService';
 import { runtimePaths } from '../config/runtimePaths';
-import { ImageModel } from '../models/Image';
+import { ImageMetadataModel } from '../models/Image/ImageMetadataModel';
+import { ImageFileModel } from '../models/Image/ImageFileModel';
+import { ImageUploadService } from './imageUploadService';
+import { db } from '../database/init';
 
 export interface EditResult {
   tempId: string;
@@ -29,16 +32,16 @@ export class ImageEditorService {
     editOptions: EditOptions,
     expirationMinutes: number = 30
   ): Promise<EditResult> {
-    // Get original image info
-    const image = await ImageModel.findById(imageId);
-    if (!image) {
+    // Get original image info from legacy images table
+    const row = db.prepare('SELECT file_path FROM images WHERE id = ?').get(imageId) as { file_path: string } | undefined;
+    if (!row) {
       throw new Error(`Image not found: ${imageId}`);
     }
 
-    const originalPath = path.join(runtimePaths.uploadsDir, image.file_path);
+    const originalPath = path.join(runtimePaths.uploadsDir, row.file_path);
 
     if (!fs.existsSync(originalPath)) {
-      throw new Error(`Image file not found: ${image.file_path}`);
+      throw new Error(`Image file not found: ${row.file_path}`);
     }
 
     // Create temp ID and paths
@@ -115,8 +118,15 @@ export class ImageEditorService {
     editOptions: EditOptions,
     customName?: string
   ): Promise<number> {
-    // Get original image
-    const originalImage = await ImageModel.findById(imageId);
+    // Get original image from legacy images table
+    const originalImage = db.prepare(`
+      SELECT filename, file_path, ai_tool, model_name, lora_models, steps, cfg_scale, sampler,
+             seed, scheduler, prompt, negative_prompt, denoise_strength, generation_time,
+             batch_size, batch_index, auto_tags
+      FROM images
+      WHERE id = ?
+    `).get(imageId) as any;
+
     if (!originalImage) {
       throw new Error(`Image not found: ${imageId}`);
     }
@@ -173,50 +183,55 @@ export class ImageEditorService {
     const relativeImagePath = path.join(folders.dateFolder, filename).replace(/\\/g, '/');
     const relativeThumbnailPath = path.join(folders.dateFolder, thumbnailFilename).replace(/\\/g, '/');
 
-    // Save to database
-    const newImageId = await ImageModel.create({
+    // Save to legacy database
+    const result = db.prepare(`
+      INSERT INTO images (
+        filename, original_name, file_path, thumbnail_path, file_size, mime_type,
+        width, height, metadata, ai_tool, model_name, lora_models, steps, cfg_scale,
+        sampler, seed, scheduler, prompt, negative_prompt, denoise_strength,
+        generation_time, batch_size, batch_index, auto_tags,
+        duration, fps, video_codec, audio_codec, bitrate,
+        perceptual_hash, color_histogram
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
       filename,
-      original_name: customName || `${originalImage.original_name} (edited)`,
-      file_path: relativeImagePath,
-      thumbnail_path: relativeThumbnailPath,
-      file_size: stats.size,
-      mime_type: 'image/png',
-      width: metadata.width || 0,
-      height: metadata.height || 0,
-      metadata: JSON.stringify({
+      customName || `${originalImage.filename} (edited)`,
+      relativeImagePath,
+      relativeThumbnailPath,
+      stats.size,
+      'image/png',
+      metadata.width || 0,
+      metadata.height || 0,
+      JSON.stringify({
         ai_info: {},
         edited_from: imageId,
         edit_options: editOptions
       }),
+      originalImage.ai_tool,
+      originalImage.model_name,
+      originalImage.lora_models,
+      originalImage.steps,
+      originalImage.cfg_scale,
+      originalImage.sampler,
+      originalImage.seed,
+      originalImage.scheduler,
+      originalImage.prompt,
+      originalImage.negative_prompt,
+      originalImage.denoise_strength,
+      originalImage.generation_time,
+      originalImage.batch_size,
+      originalImage.batch_index,
+      originalImage.auto_tags,
+      null, // duration
+      null, // fps
+      null, // video_codec
+      null, // audio_codec
+      null, // bitrate
+      null, // perceptual_hash
+      null  // color_histogram
+    );
 
-      // Copy AI metadata from original if available
-      ai_tool: originalImage.ai_tool,
-      model_name: originalImage.model_name,
-      lora_models: originalImage.lora_models,
-      steps: originalImage.steps,
-      cfg_scale: originalImage.cfg_scale,
-      sampler: originalImage.sampler,
-      seed: originalImage.seed,
-      scheduler: originalImage.scheduler,
-      prompt: originalImage.prompt,
-      negative_prompt: originalImage.negative_prompt,
-      denoise_strength: originalImage.denoise_strength,
-      generation_time: originalImage.generation_time,
-      batch_size: originalImage.batch_size,
-      batch_index: originalImage.batch_index,
-      auto_tags: originalImage.auto_tags,
-
-      // Video fields (null for images)
-      duration: null,
-      fps: null,
-      video_codec: null,
-      audio_codec: null,
-      bitrate: null,
-
-      // Similarity fields (will be generated later if needed)
-      perceptual_hash: null,
-      color_histogram: null
-    });
+    const newImageId = Number(result.lastInsertRowid);
 
     console.log(`✅ Saved edited image as new: ID ${newImageId}, path: ${relativeImagePath}`);
     return newImageId;

@@ -6,7 +6,6 @@ import type {
   FolderScanResult,
   ScanAllSummary,
   PathValidationResult,
-  FolderType,
   WatcherStatusInfo,
   WatcherHealthCheck
 } from '../types/folder';
@@ -17,7 +16,6 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1566';
  * 폴더 목록 조회
  */
 export const getFolders = async (params?: {
-  type?: FolderType;
   active_only?: boolean;
 }): Promise<WatchedFolder[]> => {
   const response = await axios.get(`${API_BASE_URL}/api/folders`, { params });

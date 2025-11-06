@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import path from 'path';
 import { asyncHandler } from '../../middleware/errorHandler';
-import { ImageModel } from '../../models/Image';
 import { ImageMetadataModel } from '../../models/Image/ImageMetadataModel';
 import { ImageSimilarityModel } from '../../models/Image/ImageSimilarityModel';
 import { ImageSimilarityService } from '../../services/imageSimilarity';
@@ -66,12 +65,12 @@ router.get('/:id/duplicates', asyncHandler(async (req: Request, res: Response) =
     } else {
       // 레거시: imageId 기반
       const imageId = value as number;
-      image = await ImageModel.findById(imageId);
-      if (!image) {
+      const legacyImage = db.prepare('SELECT perceptual_hash FROM images WHERE id = ?').get(imageId) as { perceptual_hash: string | null } | undefined;
+      if (!legacyImage) {
         return res.status(404).json(errorResponse('Image not found'));
       }
 
-      if (!image.perceptual_hash) {
+      if (!legacyImage.perceptual_hash) {
         return res.status(400).json(errorResponse('Image does not have perceptual hash. Please rebuild hashes.'));
       }
 
@@ -142,12 +141,12 @@ router.get('/:id/similar', asyncHandler(async (req: Request, res: Response) => {
     } else {
       // 레거시: imageId 기반
       const imageId = value as number;
-      image = await ImageModel.findById(imageId);
-      if (!image) {
+      const legacyImage = db.prepare('SELECT perceptual_hash FROM images WHERE id = ?').get(imageId) as { perceptual_hash: string | null } | undefined;
+      if (!legacyImage) {
         return res.status(404).json(errorResponse('Image not found'));
       }
 
-      if (!image.perceptual_hash) {
+      if (!legacyImage.perceptual_hash) {
         return res.status(400).json(errorResponse('Image does not have perceptual hash. Please rebuild hashes.'));
       }
 
@@ -212,12 +211,12 @@ router.get('/:id/similar-color', asyncHandler(async (req: Request, res: Response
     } else {
       // 레거시: imageId 기반
       const imageId = value as number;
-      image = await ImageModel.findById(imageId);
-      if (!image) {
+      const legacyImage = db.prepare('SELECT color_histogram FROM images WHERE id = ?').get(imageId) as { color_histogram: string | null } | undefined;
+      if (!legacyImage) {
         return res.status(404).json(errorResponse('Image not found'));
       }
 
-      if (!image.color_histogram) {
+      if (!legacyImage.color_histogram) {
         return res.status(400).json(errorResponse('Image does not have color histogram. Please rebuild hashes.'));
       }
 

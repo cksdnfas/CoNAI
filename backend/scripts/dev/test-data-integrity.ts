@@ -1,4 +1,4 @@
-import { db } from '../database/init';
+import { db } from '../../src/database/init';
 
 console.log('=== Data Integrity Check ===\n');
 
