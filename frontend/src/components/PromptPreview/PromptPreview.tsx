@@ -23,6 +23,7 @@ const PromptPreview: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -34,6 +35,11 @@ const PromptPreview: React.FC = () => {
     setError(null);
 
     try {
+      // Create image preview URL
+      const previewUrl = URL.createObjectURL(file);
+      setImagePreview(previewUrl);
+
+      // Extract metadata
       const extracted = await extractMetadata(file);
       setMetadata(extracted);
     } catch (err) {
@@ -84,6 +90,15 @@ const PromptPreview: React.FC = () => {
   const loraInfo = metadata?.positivePrompt
     ? parsePromptWithLoRAs(metadata.positivePrompt)
     : null;
+
+  // Cleanup image preview URL on unmount
+  React.useEffect(() => {
+    return () => {
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
 
   return (
     <Paper
@@ -169,6 +184,37 @@ const PromptPreview: React.FC = () => {
       {/* Metadata Display */}
       {metadata && !loading && (
         <Box sx={{ mt: 3 }}>
+          {/* Image Preview */}
+          {imagePreview && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                {t('upload:promptPreview.imagePreview')}
+              </Typography>
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 1,
+                  backgroundColor: 'background.default',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center'
+                }}
+              >
+                <Box
+                  component="img"
+                  src={imagePreview}
+                  alt="Preview"
+                  sx={{
+                    maxWidth: '100%',
+                    maxHeight: 400,
+                    objectFit: 'contain',
+                    borderRadius: 1
+                  }}
+                />
+              </Paper>
+            </Box>
+          )}
+
           {/* AI Tool */}
           <Box sx={{ mb: 2 }}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>

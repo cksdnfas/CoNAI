@@ -86,9 +86,32 @@ export const imageApi = {
    */
   deleteImages: async (
     compositeHashes: string[]
-  ): Promise<{ success: boolean; error?: string }[]> => {
-    const promises = compositeHashes.map((hash) => imageApi.deleteImage(hash));
-    return Promise.all(promises);
+  ): Promise<{ success: boolean; error?: string; details?: any }> => {
+    try {
+      const results = await Promise.all(
+        compositeHashes.map((hash) => imageApi.deleteImage(hash))
+      );
+
+      const failed = results.filter(r => !r.success);
+
+      if (failed.length > 0) {
+        return {
+          success: false,
+          error: `${failed.length}/${compositeHashes.length} 이미지 삭제 실패`,
+          details: { failed, total: compositeHashes.length }
+        };
+      }
+
+      return {
+        success: true,
+        details: { deleted: compositeHashes.length }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: '이미지 삭제 중 오류가 발생했습니다.'
+      };
+    }
   },
 
   /**

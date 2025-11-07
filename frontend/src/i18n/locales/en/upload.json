@@ -57,6 +57,7 @@
     "dragOrClick": "Drag or click to select an image",
     "dropHere": "Drop file here",
     "noUpload": "Images are analyzed in browser only, not uploaded to server",
+    "imagePreview": "Image Preview",
     "aiTool": "AI Tool",
     "positivePrompt": "Prompt",
     "negativePrompt": "Negative Prompt",

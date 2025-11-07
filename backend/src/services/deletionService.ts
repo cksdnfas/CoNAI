@@ -98,6 +98,8 @@ export class DeletionService {
    * @returns 삭제 성공 여부
    */
   static async deleteImage(compositeHash: string): Promise<boolean> {
+    console.log(`🔍 Starting deleteImage for: ${compositeHash}`);
+
     // 1. composite_hash 검증
     if (!compositeHash || compositeHash.length !== 48) {
       throw new Error('Invalid composite hash');
@@ -123,6 +125,7 @@ export class DeletionService {
     console.log(`🗑️ Deleting image ${compositeHash}:`, {
       isDuplicated,
       useRecycleBin,
+      recycleBinPath: settings.general.deleteProtection.recycleBinPath,
       fileCount: files.length
     });
 
@@ -136,8 +139,32 @@ export class DeletionService {
         console.log(`✅ Deleted image_file record: ${file.id} (${file.original_file_path})`);
       }
 
-      // 프롬프트 정리 (중복이므로 프롬프트는 유지)
-      // 삭제하지 않음
+      // 삭제 후 남은 파일 확인
+      const remainingFiles = ImageFileModel.findActiveByHash(compositeHash);
+
+      if (remainingFiles.length === 0) {
+        // 모든 파일이 삭제되었으면 메타데이터와 썸네일도 삭제
+        console.log('⚠️ No remaining files after deletion - cleaning up metadata');
+
+        // 프롬프트 정리
+        await this.cleanupPromptCollection(
+          metadata.prompt || null,
+          metadata.negative_prompt || null
+        );
+
+        // 썸네일 삭제
+        if (metadata.thumbnail_path) {
+          try {
+            await this.deletePhysicalFile(metadata.thumbnail_path, false);
+          } catch (error) {
+            console.warn(`⚠️ Failed to delete thumbnail: ${metadata.thumbnail_path}`, error);
+          }
+        }
+
+        // 메타데이터 삭제
+        ImageMetadataModel.delete(compositeHash);
+        console.log(`✅ Metadata cleaned up for ${compositeHash}`);
+      }
 
       return true;
     } else {

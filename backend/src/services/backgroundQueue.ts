@@ -203,6 +203,15 @@ export class BackgroundQueueService {
 
     console.log(`  ✅ 메타데이터 추출 완료: ${path.basename(task.filePath)}`);
 
+    // 프롬프트가 있으면 프롬프트 수집 작업 추가
+    if (aiInfo.prompt) {
+      try {
+        this.addPromptCollectionTask(task.filePath, task.compositeHash);
+      } catch (error) {
+        console.warn(`  ⚠️  프롬프트 수집 작업 추가 실패: ${path.basename(task.filePath)}`, error);
+      }
+    }
+
     // 새 이미지가 추가되었으므로 갤러리 캐시 무효화
     QueryCacheService.invalidateGalleryCache();
   }

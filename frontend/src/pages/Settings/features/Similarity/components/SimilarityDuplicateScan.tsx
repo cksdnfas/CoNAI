@@ -104,15 +104,13 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
     setDeleting(true);
     try {
       const compositeHashes = Array.from(selectedImages);
-      const results = await imageApi.deleteImages(compositeHashes);
+      const result = await imageApi.deleteImages(compositeHashes);
 
-      const successCount = results.filter(r => r.success).length;
-      const failCount = results.filter(r => !r.success).length;
-
-      if (failCount > 0) {
-        alert(t('similarity.duplicateScan.deletePartialSuccess', { success: successCount, failed: failCount }));
+      if (!result.success) {
+        alert(result.error || t('similarity.duplicateScan.deleteError'));
       } else {
-        alert(t('similarity.duplicateScan.deleteSuccess', { count: successCount }));
+        const count = result.details?.deleted || compositeHashes.length;
+        alert(t('similarity.duplicateScan.deleteSuccess', { count }));
       }
 
       // 선택 초기화

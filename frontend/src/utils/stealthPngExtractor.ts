@@ -4,6 +4,8 @@
  * Based on NAI-Tag-Viewer implementation
  */
 
+import pako from 'pako';
+
 const SIGNATURES = {
   ALPHA_UNCOMPRESSED: 'stealth_pnginfo',
   ALPHA_COMPRESSED: 'stealth_pngcomp',
@@ -213,11 +215,18 @@ async function extractStealthPngLSB(file: File): Promise<string | null> {
           let decodedData: string;
 
           if (compressed) {
-            console.log('🗜️ [LSB] Data is compressed - decompression not supported in browser');
-            // Browser doesn't have built-in gzip decompression for raw bytes
-            // This would require a library like pako
-            resolve(null);
-            return;
+            console.log('🗜️ [LSB] Decompressing gzip data with pako...');
+            try {
+              // Use pako to decompress gzip data
+              const decompressed = pako.ungzip(new Uint8Array(byteData));
+              const decoder = new TextDecoder('utf-8');
+              decodedData = decoder.decode(decompressed);
+              console.log('✅ [LSB] Successfully decompressed gzip data');
+            } catch (decompError) {
+              console.error('❌ [LSB] Decompression error:', decompError);
+              resolve(null);
+              return;
+            }
           } else {
             const decoder = new TextDecoder('utf-8');
             decodedData = decoder.decode(new Uint8Array(byteData));

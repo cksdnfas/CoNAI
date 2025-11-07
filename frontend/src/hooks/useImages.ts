@@ -47,18 +47,37 @@ export const useImages = () => {
     localStorage.setItem('imagePageSize', newPageSize.toString());
   }, [fetchImages]);
 
-  // ✅ composite_hash 기반으로 변경
+  // ✅ composite_hash 기반으로 변경 + 즉시 UI 업데이트
   const deleteImages = useCallback(async (compositeHashes: string[]) => {
-    setLoading(true);
+    console.log('🗑️ [Frontend] Deleting images:', compositeHashes);
+
     try {
-      await imageApi.deleteImages(compositeHashes);
-      // 삭제 후 현재 페이지 새로고침
+      // 즉시 UI에서 제거 (낙관적 업데이트)
+      setImages(prevImages => {
+        const filtered = prevImages.filter(
+          img => img.composite_hash && !compositeHashes.includes(img.composite_hash)
+        );
+        console.log('🗑️ [Frontend] Images after optimistic update:', filtered.length);
+        return filtered;
+      });
+
+      // 백엔드 삭제 요청
+      const result = await imageApi.deleteImages(compositeHashes);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Delete failed');
+      }
+
+      console.log('✅ [Frontend] Delete successful, refreshing data');
+
+      // 성공 후 전체 데이터 새로고침 (페이지네이션 정보 업데이트)
       await fetchImages(currentPage, pageSize);
     } catch (err) {
+      console.error('❌ [Frontend] Delete error:', err);
       setError('이미지 삭제에 실패했습니다.');
-      console.error('Error deleting images:', err);
-    } finally {
-      setLoading(false);
+
+      // 에러 발생 시 서버 데이터로 복구
+      await fetchImages(currentPage, pageSize);
     }
   }, [fetchImages, currentPage, pageSize]);
 

@@ -13,14 +13,14 @@ export const useBulkActions = () => {
     setError(null);
 
     try {
-      const results = await imageApi.deleteImages(compositeHashes);
-      const failedCount = results.filter(result => !result.success).length;
+      const result = await imageApi.deleteImages(compositeHashes);
 
-      if (failedCount > 0) {
-        setError(`${failedCount}개 이미지 삭제에 실패했습니다.`);
+      if (!result.success) {
+        setError(result.error || '이미지 삭제에 실패했습니다.');
+        return false;
       }
 
-      return failedCount === 0;
+      return true;
     } catch (err) {
       setError('이미지 삭제 중 오류가 발생했습니다.');
       console.error('Bulk delete error:', err);
