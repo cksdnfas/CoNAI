@@ -617,6 +617,8 @@ function parseRawData(rawData: any): AIMetadata {
 
 /**
  * Detect AI tool from metadata
+ *
+ * Supports: ComfyUI, NovelAI, WebUI (Automatic1111)
  */
 function detectAITool(metadata: any): string {
   if (metadata.ai_tool) return metadata.ai_tool;
@@ -629,10 +631,6 @@ function detectAITool(metadata: any): string {
     return 'NovelAI';
   } else if (text.includes('automatic1111') || text.includes('webui')) {
     return 'Automatic1111';
-  } else if (text.includes('invokeai') || text.includes('invoke ai')) {
-    return 'InvokeAI';
-  } else if (text.includes('stable diffusion') || text.includes('sd ')) {
-    return 'Stable Diffusion';
   }
 
   return 'Unknown';
