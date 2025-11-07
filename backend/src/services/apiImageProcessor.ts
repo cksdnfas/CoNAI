@@ -93,28 +93,16 @@ export class APIImageProcessor {
 
   /**
    * Delete generated images
+   *
+   * @deprecated Use DeletionService.deleteGeneratedImages() instead
    */
   static async deleteGeneratedImages(paths: {
     originalPath: string;
     thumbnailPath: string;
   }): Promise<void> {
-    const uploadsBase = path.join(process.cwd(), 'uploads');
-
-    const deleteFile = async (relativePath: string) => {
-      try {
-        const fullPath = path.join(uploadsBase, relativePath);
-        if (fs.existsSync(fullPath)) {
-          await fs.promises.unlink(fullPath);
-        }
-      } catch (error) {
-        console.warn(`Failed to delete file: ${relativePath}`, error);
-      }
-    };
-
-    await Promise.all([
-      deleteFile(paths.originalPath),
-      deleteFile(paths.thumbnailPath)
-    ]);
+    // DeletionService로 위임
+    const { DeletionService } = await import('./deletionService');
+    await DeletionService.deleteGeneratedImages(paths);
   }
 
   /**

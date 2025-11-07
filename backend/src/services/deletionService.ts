@@ -326,4 +326,44 @@ export class DeletionService {
     console.log(`✅ Batch deletion completed: ${successCount} success, ${failedCount} failed`);
     return { success: successCount, failed: failedCount, errors };
   }
+
+  /**
+   * 이미지 파일과 썸네일 삭제 (원본 + 썸네일)
+   * ImageProcessor에서 사용하는 메서드 대체
+   *
+   * @param originalPath - 원본 파일 경로 (상대 또는 절대)
+   * @param thumbnailPath - 썸네일 파일 경로 (상대 또는 절대)
+   * @param useRecycleBin - RecycleBin 사용 여부 (기본값: settings에서 가져옴)
+   */
+  static async deleteImageWithThumbnail(
+    originalPath: string,
+    thumbnailPath: string,
+    useRecycleBin?: boolean
+  ): Promise<void> {
+    const settings = settingsService.loadSettings();
+    const shouldUseRecycleBin = useRecycleBin ?? settings.general.deleteProtection.enabled;
+
+    const filesToDelete = [originalPath, thumbnailPath].filter(Boolean);
+
+    for (const filePath of filesToDelete) {
+      try {
+        await this.deletePhysicalFile(filePath, shouldUseRecycleBin);
+      } catch (error) {
+        console.warn(`⚠️ Failed to delete file: ${filePath}`, error);
+      }
+    }
+  }
+
+  /**
+   * API에서 생성된 이미지 삭제 (APIImageProcessor 대체)
+   *
+   * @param paths - 삭제할 파일 경로 (originalPath, thumbnailPath)
+   */
+  static async deleteGeneratedImages(paths: {
+    originalPath: string;
+    thumbnailPath: string;
+  }): Promise<void> {
+    // 생성된 이미지는 RecycleBin 없이 즉시 삭제 (임시 파일 성격)
+    await this.deleteImageWithThumbnail(paths.originalPath, paths.thumbnailPath, false);
+  }
 }

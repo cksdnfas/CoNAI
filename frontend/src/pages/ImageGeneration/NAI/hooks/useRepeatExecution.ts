@@ -6,6 +6,21 @@ interface UseRepeatExecutionOptions {
   onComplete?: () => void;
 }
 
+/**
+ * NovelAI 단일 작업 순차 반복 실행 Hook
+ *
+ * **용도**: 단일 생성 작업의 순차적 반복 실행
+ *
+ * **특징**:
+ * - 내부 상태 관리 (repeatConfig, repeatState)
+ * - setTimeout 기반 순차 반복
+ * - 무한 반복 지원 (count: -1)
+ * - 최대 100회 안전 제한
+ *
+ * **차이점**: ComfyUI의 useRepeatExecution은 다중 서버 병렬 실행 조율용
+ *
+ * @see frontend/src/pages/Workflows/hooks/useRepeatExecution.ts - 다중 서버 조율용
+ */
 export function useRepeatExecution({ onExecute, onComplete }: UseRepeatExecutionOptions) {
   const [repeatConfig, setRepeatConfig] = useState<RepeatConfig>({
     enabled: false,

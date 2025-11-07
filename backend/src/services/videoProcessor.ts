@@ -402,7 +402,7 @@ export class VideoProcessor {
   /**
    * 동영상 파일 삭제
    *
-   * @deprecated Use DeletionService.deleteImage() instead
+   * @deprecated Use DeletionService.deleteVideoFiles() instead
    *             통합 삭제 서비스(DeletionService)를 사용하세요.
    *             - RecycleBin 지원
    *             - composite_hash 중복 검사
@@ -413,62 +413,8 @@ export class VideoProcessor {
     thumbnailPath: string,
     baseUploadPath: string
   ): Promise<void> {
-    try {
-      // 경로 검증 및 정규화
-      const pathsToDelete = new Set<string>();
-
-      // 각 경로 검증 및 추가
-      const addPathIfValid = (relativePath: string | null) => {
-        // 빈 문자열이거나 null/undefined 체크
-        if (!relativePath || relativePath.trim() === '') {
-          return;
-        }
-
-        // 절대 경로 생성
-        const fullPath = path.join(baseUploadPath, relativePath);
-
-        // 경로가 baseUploadPath 내부에 있는지 확인 (보안)
-        const resolvedPath = path.resolve(fullPath);
-        const resolvedBase = path.resolve(baseUploadPath);
-        if (!resolvedPath.startsWith(resolvedBase)) {
-          console.warn(`⚠️ Path outside base directory, skipping: ${relativePath}`);
-          return;
-        }
-
-        // 파일 존재 여부 및 파일 타입 확인
-        if (fs.existsSync(fullPath)) {
-          const stats = fs.statSync(fullPath);
-          if (stats.isFile()) {
-            pathsToDelete.add(fullPath);
-          } else {
-            console.warn(`⚠️ Not a file (possibly a directory), skipping: ${fullPath}`);
-          }
-        }
-      };
-
-      // 비디오는 원본과 썸네일이 같은 경로일 수 있으므로 Set 사용으로 중복 자동 제거
-      addPathIfValid(originalPath);
-      addPathIfValid(thumbnailPath);
-
-      // 각 파일을 개별적으로 삭제 (하나 실패해도 나머지 삭제 계속)
-      const deletePromises = Array.from(pathsToDelete).map(async (filePath) => {
-        try {
-          await fs.promises.unlink(filePath);
-          console.log(`✅ Deleted video file: ${path.relative(baseUploadPath, filePath)}`);
-        } catch (error) {
-          console.error(`❌ Failed to delete video file: ${path.relative(baseUploadPath, filePath)}`, error);
-          // 개별 파일 삭제 실패는 전체 작업을 중단하지 않음
-        }
-      });
-
-      await Promise.all(deletePromises);
-
-      if (pathsToDelete.size === 0) {
-        console.warn('⚠️ No valid video files found to delete');
-      }
-    } catch (error) {
-      console.error('Failed to delete video files:', error);
-      throw error instanceof Error ? error : new Error('Unknown error occurred while deleting files');
-    }
+    // DeletionService로 위임
+    const { DeletionService } = await import('./deletionService');
+    await DeletionService.deleteVideoFiles(originalPath, thumbnailPath);
   }
 }

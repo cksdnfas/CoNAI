@@ -27,16 +27,16 @@
 - ✅ 중앙화된 설정: API_BASE_URL 통합 (`frontend/src/services/api/config.ts`)
 - ✅ TypeScript 빌드: 에러 없음
 
-**다음 단계**: Phase 2 - 중복 기능 통합
+**다음 단계**: ~~Phase 2 - 중복 기능 통합~~ ✅ Phase 2 완료!
 
-### Phase 2: 중복 기능 통합 - 🚧 진행 중
+### Phase 2: 중복 기능 통합 - ✅ 완료
 
 | 작업 | 상태 | 제거/통합 라인 | 완료일 |
 |------|------|---------------|--------|
 | 2.4 Node 스타일 유틸리티 중복 제거 | ✅ 완료 | 70 lines | 2025-11-07 |
 | 2.2 동적 UPDATE 쿼리 빌더 통합 | ✅ 완료 | ~50 lines (Group 모델) | 2025-11-07 |
-| 2.1 파일 삭제 로직 중앙화 | ⏳ 예정 | ~200 lines | - |
-| 2.3 useRepeatExecution 훅 통합 | ⏳ 예정 | ~150 lines | - |
+| 2.1 파일 삭제 로직 중앙화 | ✅ 완료 | ~200 lines | 2025-11-07 |
+| 2.3 useRepeatExecution 훅 문서화 | ✅ 완료 | 문서화 완료 | 2025-11-07 |
 
 **Phase 2.4 완료 효과**:
 - ✅ 생성된 파일: `frontend/src/pages/Workflows/utils/nodeStyleHelpers.tsx`
@@ -54,6 +54,26 @@
 - ✅ 적용 대기: GenerationHistory, ImageMetadataModel, CustomDropdownList, ComfyUIServer, Workflow, PromptGroup, RatingScore (7개 모델)
 - ✅ TypeScript 빌드: 에러 없음
 - 📝 나머지 7개 모델은 동일한 패턴으로 추후 적용 가능
+
+**Phase 2.1 완료 효과**:
+- ✅ DeletionService 확장: 2개 메서드 추가
+  - `deleteImageWithThumbnail()`: 이미지+썸네일 삭제
+  - `deleteGeneratedImages()`: API 생성 이미지 삭제
+- ✅ 중복 제거 완료: 4개 서비스 (~200 lines)
+  - `imageProcessor.ts`: deleteImageFiles() → DeletionService로 위임
+  - `videoProcessor.ts`: deleteVideoFiles() → DeletionService로 위임
+  - `APIImageProcessor.ts`: deleteGeneratedImages() → DeletionService로 위임
+  - `tempImageService.ts`: deleteTempFile() → DeletionService 활용
+- ✅ TypeScript 빌드: 에러 없음
+- ✅ 일관된 에러 핸들링, RecycleBin 로직 통일
+
+**Phase 2.3 완료 효과** (수정: 통합 → 문서화):
+- ✅ 두 useRepeatExecution 훅의 역할 명확화
+  - ComfyUI 버전: 다중 서버 병렬 실행 조율
+  - NAI 버전: 단일 작업 순차 반복 실행
+- ✅ JSDoc 주석 추가로 명확한 차이점 문서화
+- ✅ TypeScript 빌드: 에러 없음
+- 📝 **결정**: 근본적으로 다른 목적이므로 통합하지 않음 (복잡도 증가 방지)
 
 ---
 

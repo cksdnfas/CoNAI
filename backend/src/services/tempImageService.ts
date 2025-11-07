@@ -134,6 +134,9 @@ export class TempImageService {
       return;
     }
 
+    // DeletionService를 사용하여 파일 삭제
+    const { DeletionService } = await import('./deletionService');
+
     const filesToDelete = [tempInfo.tempPath];
     if (tempInfo.tempMaskPath) {
       filesToDelete.push(tempInfo.tempMaskPath);
@@ -141,10 +144,8 @@ export class TempImageService {
 
     for (const filePath of filesToDelete) {
       try {
-        if (await this.exists(filePath)) {
-          await fs.promises.unlink(filePath);
-          console.log(`✅ Deleted temp file: ${path.basename(filePath)}`);
-        }
+        await DeletionService.deleteTempFile(filePath);
+        console.log(`✅ Deleted temp file: ${path.basename(filePath)}`);
       } catch (error) {
         console.error(`Failed to delete temp file: ${filePath}`, error);
       }

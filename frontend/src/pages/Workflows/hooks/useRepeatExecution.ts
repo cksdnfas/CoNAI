@@ -12,9 +12,18 @@ interface UseRepeatExecutionProps {
 }
 
 /**
- * 반복 실행 Hook (동시 생성 조율)
+ * ComfyUI 다중 서버 반복 실행 조율 Hook
+ *
+ * **용도**: 여러 ComfyUI 서버에 대한 병렬 생성 요청 조율
+ *
+ * **특징**:
+ * - 다중 서버 동시 실행 (Promise.all)
  * - 각 서버에 독립적인 반복 명령 전달
- * - 단일 실행 시 모든 서버 동시 실행
+ * - 서버별 연결 상태 검증
+ *
+ * **차이점**: NAI의 useRepeatExecution은 단일 작업 순차 반복 실행
+ *
+ * @see frontend/src/pages/ImageGeneration/NAI/hooks/useRepeatExecution.ts - 단일 작업 반복용
  */
 export function useRepeatExecution({
   servers,
