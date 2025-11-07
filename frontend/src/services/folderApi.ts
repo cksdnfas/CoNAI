@@ -9,8 +9,7 @@ import type {
   WatcherStatusInfo,
   WatcherHealthCheck
 } from '../types/folder';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1566';
+import { API_BASE_URL } from './api/config';
 
 /**
  * 폴더 목록 조회

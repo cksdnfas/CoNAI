@@ -1,7 +1,6 @@
 import axios from 'axios';
 import type { BackgroundQueueStatus } from '../types/folder';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1566';
+import { API_BASE_URL } from './api/config';
 
 /**
  * 백그라운드 큐 상태 조회

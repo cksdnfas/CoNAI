@@ -147,9 +147,18 @@ export class VideoMetadataModel {
     return stmt.get(compositeHash) !== undefined;
   }
 
-  /**
-   * 모든 비디오 메타데이터 조회 (페이징 지원)
-   */
+  // ========================================================================
+  // RESERVED METHODS - 현재 미사용, 향후 비디오 검색/관리 기능에서 사용 예정
+  // ========================================================================
+  // 아래 메서드들은 현재 코드베이스에서 호출되지 않으나,
+  // 향후 비디오 갤러리, 검색, 통계 기능 구현 시 필요할 수 있어 주석 처리함
+  // 필요 시 주석 해제하여 사용 가능
+  //
+  // Reference: docs/REFACTORING_PLAN.md Phase 1.2
+  // ========================================================================
+
+  /*
+  // 모든 비디오 메타데이터 조회 (페이징 지원)
   findAll(limit: number = 100, offset: number = 0): VideoMetadata[] {
     const stmt = this.db.prepare(`
       SELECT * FROM video_metadata
@@ -159,18 +168,14 @@ export class VideoMetadataModel {
     return stmt.all(limit, offset) as VideoMetadata[];
   }
 
-  /**
-   * 비디오 메타데이터 총 개수
-   */
+  // 비디오 메타데이터 총 개수
   count(): number {
     const stmt = this.db.prepare('SELECT COUNT(*) as count FROM video_metadata');
     const result = stmt.get() as { count: number };
     return result.count;
   }
 
-  /**
-   * AI 툴별 비디오 개수
-   */
+  // AI 툴별 비디오 개수
   countByAiTool(): Record<string, number> {
     const stmt = this.db.prepare(`
       SELECT ai_tool, COUNT(*) as count
@@ -186,9 +191,7 @@ export class VideoMetadataModel {
     }, {} as Record<string, number>);
   }
 
-  /**
-   * 프롬프트로 검색
-   */
+  // 프롬프트로 검색
   searchByPrompt(searchTerm: string, limit: number = 50): VideoMetadata[] {
     const stmt = this.db.prepare(`
       SELECT * FROM video_metadata
@@ -200,9 +203,7 @@ export class VideoMetadataModel {
     return stmt.all(pattern, pattern, limit) as VideoMetadata[];
   }
 
-  /**
-   * 자동 태그로 검색
-   */
+  // 자동 태그로 검색
   searchByTag(tag: string, limit: number = 50): VideoMetadata[] {
     const stmt = this.db.prepare(`
       SELECT * FROM video_metadata
@@ -213,6 +214,7 @@ export class VideoMetadataModel {
     const pattern = `%${tag}%`;
     return stmt.all(pattern, limit) as VideoMetadata[];
   }
+  */
 }
 
 export default new VideoMetadataModel();
