@@ -1,6 +1,7 @@
 import { db } from '../database/init';
 import { GroupRecord, ImageGroupRecord, GroupCreateData, GroupUpdateData, GroupWithStats, AutoCollectCondition } from '@comfyui-image-manager/shared';
 import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
+import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 
 export class GroupModel {
   /**
@@ -69,43 +70,27 @@ export class GroupModel {
    * 그룹 업데이트
    */
   static async update(id: number, groupData: GroupUpdateData): Promise<boolean> {
-    const fields: string[] = [];
-    const values: any[] = [];
+    // undefined 값 제거 및 데이터 변환
+    const updates = filterDefined({
+      name: groupData.name,
+      description: groupData.description,
+      color: groupData.color,
+      parent_id: groupData.parent_id,
+      auto_collect_enabled: groupData.auto_collect_enabled !== undefined
+        ? (groupData.auto_collect_enabled ? 1 : 0)
+        : undefined,
+      auto_collect_conditions: groupData.auto_collect_conditions !== undefined
+        ? (groupData.auto_collect_conditions ? JSON.stringify(groupData.auto_collect_conditions) : null)
+        : undefined,
+      updated_date: sqlLiteral('CURRENT_TIMESTAMP'), // SQL 함수 사용
+    });
 
-    if (groupData.name !== undefined) {
-      fields.push('name = ?');
-      values.push(groupData.name);
-    }
-    if (groupData.description !== undefined) {
-      fields.push('description = ?');
-      values.push(groupData.description);
-    }
-    if (groupData.color !== undefined) {
-      fields.push('color = ?');
-      values.push(groupData.color);
-    }
-    if (groupData.parent_id !== undefined) {
-      fields.push('parent_id = ?');
-      values.push(groupData.parent_id);
-    }
-    if (groupData.auto_collect_enabled !== undefined) {
-      fields.push('auto_collect_enabled = ?');
-      values.push(groupData.auto_collect_enabled ? 1 : 0);
-    }
-    if (groupData.auto_collect_conditions !== undefined) {
-      fields.push('auto_collect_conditions = ?');
-      values.push(groupData.auto_collect_conditions ? JSON.stringify(groupData.auto_collect_conditions) : null);
+    if (Object.keys(updates).filter(k => k !== 'updated_date').length === 0) {
+      return false; // updated_date만 있으면 업데이트 필요 없음
     }
 
-    if (fields.length === 0) {
-      return false;
-    }
-
-    fields.push('updated_date = CURRENT_TIMESTAMP');
-    values.push(id);
-
-    const query = `UPDATE groups SET ${fields.join(', ')} WHERE id = ?`;
-    const info = db.prepare(query).run(...values);
+    const { sql, values } = buildUpdateQuery('groups', updates, { id });
+    const info = db.prepare(sql).run(...values);
     return info.changes > 0;
   }
 

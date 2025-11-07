@@ -34,8 +34,8 @@
 | 작업 | 상태 | 제거/통합 라인 | 완료일 |
 |------|------|---------------|--------|
 | 2.4 Node 스타일 유틸리티 중복 제거 | ✅ 완료 | 70 lines | 2025-11-07 |
+| 2.2 동적 UPDATE 쿼리 빌더 통합 | ✅ 완료 | ~50 lines (Group 모델) | 2025-11-07 |
 | 2.1 파일 삭제 로직 중앙화 | ⏳ 예정 | ~200 lines | - |
-| 2.2 동적 UPDATE 쿼리 빌더 통합 | ⏳ 예정 | ~250 lines | - |
 | 2.3 useRepeatExecution 훅 통합 | ⏳ 예정 | ~150 lines | - |
 
 **Phase 2.4 완료 효과**:
@@ -43,6 +43,17 @@
 - ✅ 중복 제거: `CustomNode.tsx`, `EnhancedCustomNode.tsx`에서 70 lines 제거
 - ✅ 중앙화된 함수: `getNodeColor()`, `getNodeIcon()`, `getNodeCategory()`
 - ✅ TypeScript 빌드: 에러 없음
+
+**Phase 2.2 완료 효과**:
+- ✅ 생성된 파일: `backend/src/utils/dynamicUpdate.ts`
+- ✅ 핵심 함수:
+  - `buildUpdateQuery()`: 동적 UPDATE 쿼리 생성
+  - `sqlLiteral()`: SQL 함수 직접 삽입 (CURRENT_TIMESTAMP 등)
+  - `filterDefined()`: undefined 값 필터링
+- ✅ 적용 완료: `Group.ts` 모델 (50 lines 단순화)
+- ✅ 적용 대기: GenerationHistory, ImageMetadataModel, CustomDropdownList, ComfyUIServer, Workflow, PromptGroup, RatingScore (7개 모델)
+- ✅ TypeScript 빌드: 에러 없음
+- 📝 나머지 7개 모델은 동일한 패턴으로 추후 적용 가능
 
 ---
 
