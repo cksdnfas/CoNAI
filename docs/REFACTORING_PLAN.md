@@ -28,6 +28,7 @@
 - ✅ TypeScript 빌드: 에러 없음
 
 **다음 단계**: ~~Phase 2 - 중복 기능 통합~~ ✅ Phase 2 완료!
+**Phase 3 진행**: 불필요한 분할 방지, 실질적 개선에 집중 ✅
 
 ### Phase 2: 중복 기능 통합 - ✅ 완료
 
@@ -74,6 +75,29 @@
 - ✅ JSDoc 주석 추가로 명확한 차이점 문서화
 - ✅ TypeScript 빌드: 에러 없음
 - 📝 **결정**: 근본적으로 다른 목적이므로 통합하지 않음 (복잡도 증가 방지)
+
+---
+
+### Phase 3: 과도한 책임 분리 - ✅ 부분 완료 (실질적 개선만 적용)
+
+| 작업 | 상태 | 결과 | 완료일 |
+|------|------|------|--------|
+| 3.1 ImageMetadataModel.ts 분할 | ⏭️ 스킵 | 불필요하다고 판단 | 2025-11-07 |
+| 3.4 metadataReader.ts 정리 | ✅ 완료 | 불필요 AI 도구 제거 | 2025-11-07 |
+| 3.2, 3.3 기타 대형 파일 분할 | ⏸️ 보류 | 향후 필요시 진행 | - |
+
+**Phase 3.1 스킵 결정**:
+- ✅ ImageMetadataModel.ts (548 lines)는 이미 잘 구조화되어 있음
+- ✅ 모든 메서드가 image_metadata 테이블 관련 작업 (단일 책임 준수)
+- ✅ findAllWithFiles(), getRandomImage()는 복잡한 JOIN 쿼리로 분리 시 중복 증가
+- 📝 **결정**: 분할하면 오히려 복잡도 증가, 현재 상태 유지
+
+**Phase 3.4 완료 효과**:
+- ✅ 불필요한 AI 도구 감지 코드 제거 (InvokeAI, Stable Diffusion)
+- ✅ 지원 AI 도구 명시: ComfyUI, NovelAI, WebUI (Automatic1111)
+- ✅ detectAITool() 함수 간소화
+- ✅ TypeScript 빌드: 에러 없음
+- 📝 **결정**: 실제 사용하는 AI 도구만 유지 (명확성 향상)
 
 ---
 
