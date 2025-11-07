@@ -1,62 +1,13 @@
 import React, { memo } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { Box, Typography, Paper } from '@mui/material';
-import {
-  Category as CategoryIcon,
-  Image as ImageIcon,
-  Tune as TuneIcon,
-  TextFields as TextIcon,
-  Save as SaveIcon,
-  Folder as FolderIcon,
-} from '@mui/icons-material';
+import { getNodeColor, getNodeIcon } from '../../utils/nodeStyleHelpers';
 
 interface CustomNodeData {
   label: string;
   classType: string;
   inputs: Record<string, any>;
   rawNode: any;
-}
-
-/**
- * Get node color based on class type category
- */
-function getNodeColor(classType: string): string {
-  if (classType.includes('Loader') || classType.includes('Load')) {
-    return '#4CAF50'; // Green for loaders
-  } else if (classType.includes('Sampler')) {
-    return '#2196F3'; // Blue for samplers
-  } else if (classType.includes('Text') || classType.includes('CLIP')) {
-    return '#FF9800'; // Orange for text/CLIP
-  } else if (classType.includes('VAE') || classType.includes('Decode') || classType.includes('Encode')) {
-    return '#9C27B0'; // Purple for VAE
-  } else if (classType.includes('Save') || classType.includes('Output')) {
-    return '#F44336'; // Red for output
-  } else if (classType.includes('Latent')) {
-    return '#00BCD4'; // Cyan for latent
-  } else if (classType.includes('Image')) {
-    return '#673AB7'; // Deep purple for image processing
-  }
-
-  return '#757575'; // Gray for unknown types
-}
-
-/**
- * Get icon based on node class type
- */
-function getNodeIcon(classType: string) {
-  if (classType.includes('Loader') || classType.includes('Load')) {
-    return <FolderIcon fontSize="small" />;
-  } else if (classType.includes('Sampler')) {
-    return <TuneIcon fontSize="small" />;
-  } else if (classType.includes('Text') || classType.includes('CLIP')) {
-    return <TextIcon fontSize="small" />;
-  } else if (classType.includes('Save') || classType.includes('Output')) {
-    return <SaveIcon fontSize="small" />;
-  } else if (classType.includes('Image') || classType.includes('Latent')) {
-    return <ImageIcon fontSize="small" />;
-  }
-
-  return <CategoryIcon fontSize="small" />;
 }
 
 const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => {

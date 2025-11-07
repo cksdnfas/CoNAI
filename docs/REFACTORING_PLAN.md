@@ -29,6 +29,21 @@
 
 **다음 단계**: Phase 2 - 중복 기능 통합
 
+### Phase 2: 중복 기능 통합 - 🚧 진행 중
+
+| 작업 | 상태 | 제거/통합 라인 | 완료일 |
+|------|------|---------------|--------|
+| 2.4 Node 스타일 유틸리티 중복 제거 | ✅ 완료 | 70 lines | 2025-11-07 |
+| 2.1 파일 삭제 로직 중앙화 | ⏳ 예정 | ~200 lines | - |
+| 2.2 동적 UPDATE 쿼리 빌더 통합 | ⏳ 예정 | ~250 lines | - |
+| 2.3 useRepeatExecution 훅 통합 | ⏳ 예정 | ~150 lines | - |
+
+**Phase 2.4 완료 효과**:
+- ✅ 생성된 파일: `frontend/src/pages/Workflows/utils/nodeStyleHelpers.tsx`
+- ✅ 중복 제거: `CustomNode.tsx`, `EnhancedCustomNode.tsx`에서 70 lines 제거
+- ✅ 중앙화된 함수: `getNodeColor()`, `getNodeIcon()`, `getNodeCategory()`
+- ✅ TypeScript 빌드: 에러 없음
+
 ---
 
 ## 📊 Executive Summary

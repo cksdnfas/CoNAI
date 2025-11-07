@@ -4,58 +4,13 @@ import { Box, Typography, Paper, Collapse, Tooltip, IconButton, Divider } from '
 import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
-  Category as CategoryIcon,
-  Image as ImageIcon,
-  Tune as TuneIcon,
-  TextFields as TextIcon,
-  Save as SaveIcon,
-  Folder as FolderIcon,
   Input as InputIcon,
   Output as OutputIcon,
   Settings as SettingsIcon,
 } from '@mui/icons-material';
 import type { EnhancedNodeData } from '../../utils/nodeDataParser';
 import { getDataTypeColor, getDataTypeLabel } from '../../utils/dataTypeColors';
-
-/**
- * Get node color based on class type category
- */
-function getNodeColor(classType: string): string {
-  if (classType.includes('Loader') || classType.includes('Load')) {
-    return '#4CAF50';
-  } else if (classType.includes('Sampler')) {
-    return '#2196F3';
-  } else if (classType.includes('Text') || classType.includes('CLIP')) {
-    return '#FF9800';
-  } else if (classType.includes('VAE') || classType.includes('Decode') || classType.includes('Encode')) {
-    return '#9C27B0';
-  } else if (classType.includes('Save') || classType.includes('Output')) {
-    return '#F44336';
-  } else if (classType.includes('Latent')) {
-    return '#00BCD4';
-  } else if (classType.includes('Image')) {
-    return '#673AB7';
-  }
-  return '#757575';
-}
-
-/**
- * Get icon based on node class type
- */
-function getNodeIcon(classType: string) {
-  if (classType.includes('Loader') || classType.includes('Load')) {
-    return <FolderIcon fontSize="small" />;
-  } else if (classType.includes('Sampler')) {
-    return <TuneIcon fontSize="small" />;
-  } else if (classType.includes('Text') || classType.includes('CLIP')) {
-    return <TextIcon fontSize="small" />;
-  } else if (classType.includes('Save') || classType.includes('Output')) {
-    return <SaveIcon fontSize="small" />;
-  } else if (classType.includes('Image') || classType.includes('Latent')) {
-    return <ImageIcon fontSize="small" />;
-  }
-  return <CategoryIcon fontSize="small" />;
-}
+import { getNodeColor, getNodeIcon } from '../../utils/nodeStyleHelpers';
 
 /**
  * Format value for display
