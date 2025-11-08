@@ -6,6 +6,7 @@ import {
   ComfyUIServerUpdateData,
   WorkflowServerRecord
 } from '../types/comfyuiServer';
+import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 
 export class ComfyUIServerModel {
   /**
@@ -62,35 +63,26 @@ export class ComfyUIServerModel {
    * 서버 업데이트
    */
   static async update(id: number, serverData: ComfyUIServerUpdateData): Promise<boolean> {
-    const fields: string[] = [];
-    const values: any[] = [];
+    // is_active를 boolean에서 number로 변환
+    const cleanData: Record<string, any> = {
+      ...serverData,
+      is_active: serverData.is_active !== undefined ? (serverData.is_active ? 1 : 0) : undefined
+    };
 
-    if (serverData.name !== undefined) {
-      fields.push('name = ?');
-      values.push(serverData.name);
-    }
-    if (serverData.endpoint !== undefined) {
-      fields.push('endpoint = ?');
-      values.push(serverData.endpoint);
-    }
-    if (serverData.description !== undefined) {
-      fields.push('description = ?');
-      values.push(serverData.description);
-    }
-    if (serverData.is_active !== undefined) {
-      fields.push('is_active = ?');
-      values.push(serverData.is_active ? 1 : 0);
-    }
+    const updates = filterDefined(cleanData);
 
-    if (fields.length === 0) {
+    if (Object.keys(updates).length === 0) {
       return false;
     }
 
-    fields.push('updated_date = CURRENT_TIMESTAMP');
-    values.push(id);
+    // updated_date는 SQL 함수로 직접 삽입
+    const finalUpdates = {
+      ...updates,
+      updated_date: sqlLiteral('CURRENT_TIMESTAMP')
+    };
 
-    const query = `UPDATE comfyui_servers SET ${fields.join(', ')} WHERE id = ?`;
-    const info = userSettingsDb.prepare(query).run(...values);
+    const { sql, values } = buildUpdateQuery('comfyui_servers', finalUpdates, { id });
+    const info = userSettingsDb.prepare(sql).run(...values);
     return info.changes > 0;
   }
 

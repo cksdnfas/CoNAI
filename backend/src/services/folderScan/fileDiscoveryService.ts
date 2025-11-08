@@ -1,6 +1,7 @@
 import path from 'path';
 import fg from 'fast-glob';
 import { ALL_SUPPORTED_EXTENSIONS, shouldProcessFileExtension } from '../../constants/supportedExtensions';
+import { normalizeWindowsDriveLetter } from '../../utils/pathResolver';
 
 /**
  * 파일 검색 및 수집 서비스
@@ -46,11 +47,13 @@ export class FileDiscoveryService {
 
       console.log(`Fast-glob 결과: ${allFiles.length}개 파일 발견`);
 
-      // Step 2: 제외 확장자 필터링
-      const filteredFiles = allFiles.filter(file => {
-        const ext = path.extname(file).toLowerCase();
-        return shouldProcessFileExtension(ext, options.excludeExtensions);
-      });
+      // Step 2: 제외 확장자 필터링 + Windows 드라이브 문자 정규화
+      const filteredFiles = allFiles
+        .filter(file => {
+          const ext = path.extname(file).toLowerCase();
+          return shouldProcessFileExtension(ext, options.excludeExtensions);
+        })
+        .map(file => normalizeWindowsDriveLetter(file)); // Windows 드라이브 문자를 대문자로 통일
 
       if (filteredFiles.length < allFiles.length) {
         console.log(`제외 필터 적용: ${allFiles.length} -> ${filteredFiles.length}개 파일`);

@@ -5,6 +5,7 @@ import {
   WorkflowUpdateData,
   MarkedField
 } from '../types/workflow';
+import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 
 export class WorkflowModel {
   /**
@@ -57,47 +58,29 @@ export class WorkflowModel {
    * 워크플로우 업데이트
    */
   static async update(id: number, workflowData: WorkflowUpdateData): Promise<boolean> {
-    const fields: string[] = [];
-    const values: any[] = [];
+    // 특수 처리가 필요한 필드들 변환
+    const cleanData: Record<string, any> = {
+      ...workflowData,
+      marked_fields: workflowData.marked_fields !== undefined
+        ? (workflowData.marked_fields ? JSON.stringify(workflowData.marked_fields) : null)
+        : undefined,
+      is_active: workflowData.is_active !== undefined ? (workflowData.is_active ? 1 : 0) : undefined
+    };
 
-    if (workflowData.name !== undefined) {
-      fields.push('name = ?');
-      values.push(workflowData.name);
-    }
-    if (workflowData.description !== undefined) {
-      fields.push('description = ?');
-      values.push(workflowData.description);
-    }
-    if (workflowData.workflow_json !== undefined) {
-      fields.push('workflow_json = ?');
-      values.push(workflowData.workflow_json);
-    }
-    if (workflowData.marked_fields !== undefined) {
-      fields.push('marked_fields = ?');
-      values.push(workflowData.marked_fields ? JSON.stringify(workflowData.marked_fields) : null);
-    }
-    if (workflowData.api_endpoint !== undefined) {
-      fields.push('api_endpoint = ?');
-      values.push(workflowData.api_endpoint);
-    }
-    if (workflowData.is_active !== undefined) {
-      fields.push('is_active = ?');
-      values.push(workflowData.is_active ? 1 : 0);
-    }
-    if (workflowData.color !== undefined) {
-      fields.push('color = ?');
-      values.push(workflowData.color);
-    }
+    const updates = filterDefined(cleanData);
 
-    if (fields.length === 0) {
+    if (Object.keys(updates).length === 0) {
       return false;
     }
 
-    fields.push('updated_date = CURRENT_TIMESTAMP');
-    values.push(id);
+    // updated_date는 SQL 함수로 직접 삽입
+    const finalUpdates = {
+      ...updates,
+      updated_date: sqlLiteral('CURRENT_TIMESTAMP')
+    };
 
-    const query = `UPDATE workflows SET ${fields.join(', ')} WHERE id = ?`;
-    const info = userSettingsDb.prepare(query).run(...values);
+    const { sql, values } = buildUpdateQuery('workflows', finalUpdates, { id });
+    const info = userSettingsDb.prepare(sql).run(...values);
     return info.changes > 0;
   }
 

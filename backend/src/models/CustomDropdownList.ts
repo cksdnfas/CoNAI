@@ -1,4 +1,5 @@
 import { userSettingsDb } from '../database/userSettingsDb';
+import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 
 export interface CustomDropdownListRecord {
   id: number;
@@ -95,31 +96,26 @@ export class CustomDropdownListModel {
    * 커스텀 드롭다운 목록 업데이트
    */
   static async update(id: number, listData: CustomDropdownListUpdateData): Promise<boolean> {
-    const fields: string[] = [];
-    const values: any[] = [];
+    // items는 JSON.stringify 처리
+    const cleanData: Record<string, any> = {
+      ...listData,
+      items: listData.items !== undefined ? JSON.stringify(listData.items) : undefined
+    };
 
-    if (listData.name !== undefined) {
-      fields.push('name = ?');
-      values.push(listData.name);
-    }
-    if (listData.description !== undefined) {
-      fields.push('description = ?');
-      values.push(listData.description);
-    }
-    if (listData.items !== undefined) {
-      fields.push('items = ?');
-      values.push(JSON.stringify(listData.items));
-    }
+    const updates = filterDefined(cleanData);
 
-    if (fields.length === 0) {
+    if (Object.keys(updates).length === 0) {
       return false;
     }
 
-    fields.push('updated_date = CURRENT_TIMESTAMP');
-    values.push(id);
+    // updated_date는 SQL 함수로 직접 삽입
+    const finalUpdates = {
+      ...updates,
+      updated_date: sqlLiteral('CURRENT_TIMESTAMP')
+    };
 
-    const query = `UPDATE custom_dropdown_lists SET ${fields.join(', ')} WHERE id = ?`;
-    const info = userSettingsDb.prepare(query).run(...values);
+    const { sql, values } = buildUpdateQuery('custom_dropdown_lists', finalUpdates, { id });
+    const info = userSettingsDb.prepare(sql).run(...values);
     return info.changes > 0;
   }
 

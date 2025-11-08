@@ -1,4 +1,5 @@
 import { db } from '../../database/init';
+import { normalizeWindowsDriveLetter } from '../../utils/pathResolver';
 
 /**
  * 중복 이미지 감지 서비스
@@ -32,11 +33,13 @@ export class DuplicateDetectionService {
 
   /**
    * 경로로 기존 파일 확인
+   * Windows 경로의 드라이브 문자를 정규화하여 비교
    */
   static getExistingFileByPath(filePath: string): { id: number; composite_hash: string | null } | undefined {
+    const normalizedPath = normalizeWindowsDriveLetter(filePath);
     return db.prepare(
       'SELECT id, composite_hash FROM image_files WHERE original_file_path = ?'
-    ).get(filePath) as { id: number; composite_hash: string | null } | undefined;
+    ).get(normalizedPath) as { id: number; composite_hash: string | null } | undefined;
   }
 
   /**

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -22,10 +22,11 @@ import ImageGrid from '../../components/ImageGrid/ImageGrid';
 import BulkActionBar from '../../components/BulkActionBar/BulkActionBar';
 import { useImages } from '../../hooks/useImages';
 import { useSelection } from '../../hooks/useSelection';
+import { imageApi } from '../../services/api';
 
 // ✅ first_seen_date로 변경
 type SortBy = 'first_seen_date' | 'file_size' | 'width' | 'height';
-type SortOrder = 'asc' | 'desc';
+type SortOrder = 'ASC' | 'DESC';
 
 const GalleryPage: React.FC = () => {
   const { t } = useTranslation(['gallery', 'common']);
@@ -38,11 +39,19 @@ const GalleryPage: React.FC = () => {
     pageSize,
     totalPages,
     total,
+    sortBy,
+    sortOrder,
+    aiToolFilter,
     changePage,
     changePageSize,
+    changeSorting,
+    changeAiToolFilter,
     deleteImages,
     refreshImages,
-  } = useImages();
+  } = useImages({
+    initialSortBy: 'first_seen_date',
+    initialSortOrder: 'DESC',
+  });
 
   const {
     selectedIds,
@@ -51,10 +60,6 @@ const GalleryPage: React.FC = () => {
     deselectAll,
     selectedCount,
   } = useSelection();
-
-  const [sortBy, setSortBy] = useState<SortBy>('first_seen_date');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [filterAiTool, setFilterAiTool] = useState<string>('');
 
   // ✅ composite_hash 기반으로 변경
   const handleSelectionChange = (newSelectedIds: string[]) => {
@@ -75,45 +80,42 @@ const GalleryPage: React.FC = () => {
     refreshImages();
   };
 
-  // 정렬된 이미지 목록 (클라이언트 정렬)
-  const sortedImages = [...images].sort((a, b) => {
-    let aValue: any = a[sortBy];
-    let bValue: any = b[sortBy];
-
-    // 날짜 정렬의 경우
-    if (sortBy === 'first_seen_date') {
-      aValue = new Date(aValue).getTime();
-      bValue = new Date(bValue).getTime();
-    }
-
-    // 문자열 정렬의 경우
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-      aValue = aValue.toLowerCase();
-      bValue = bValue.toLowerCase();
-    }
-
-    if (sortOrder === 'asc') {
-      return aValue > bValue ? 1 : -1;
-    } else {
-      return aValue < bValue ? 1 : -1;
-    }
-  });
-
-  // AI 도구별 필터링
-  const filteredImages = filterAiTool
-    ? sortedImages.filter(image => image.ai_tool === filterAiTool)
-    : sortedImages;
-
-  // 고유한 AI 도구 목록 추출
-  const aiTools = Array.from(new Set(images.map(image => image.ai_tool).filter(Boolean)));
-
-  const clearFilters = () => {
-    setFilterAiTool('');
-    setSortBy('first_seen_date');
-    setSortOrder('desc');
+  // Handle sort changes
+  const handleSortByChange = (newSortBy: SortBy) => {
+    changeSorting(newSortBy, sortOrder);
   };
 
-  const hasActiveFilters = filterAiTool !== '';
+  const handleSortOrderChange = (newSortOrder: SortOrder) => {
+    changeSorting(sortBy, newSortOrder);
+  };
+
+  // 고유한 AI 도구 목록 추출 (모든 이미지에서)
+  const [aiTools, setAiTools] = useState<string[]>([]);
+
+  useEffect(() => {
+    // 전체 AI 도구 목록을 가져오기 위해 필터 없이 조회
+    const fetchAiTools = async () => {
+      try {
+        const response = await imageApi.getImages(1, 1000, 'first_seen_date', 'DESC');
+        if (response.success && response.data) {
+          const tools = Array.from(new Set(
+            response.data.images.map(img => img.ai_tool).filter(Boolean)
+          ));
+          setAiTools(tools);
+        }
+      } catch (err) {
+        console.error('Failed to fetch AI tools:', err);
+      }
+    };
+    fetchAiTools();
+  }, []);
+
+  const clearFilters = () => {
+    changeAiToolFilter('');
+    changeSorting('first_seen_date', 'DESC');
+  };
+
+  const hasActiveFilters = aiToolFilter !== '';
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -160,9 +162,9 @@ const GalleryPage: React.FC = () => {
             <FormControl size="small" sx={{ minWidth: 150 }}>
               <InputLabel>{t('gallery:filters.aiTool')}</InputLabel>
               <Select
-                value={filterAiTool}
+                value={aiToolFilter}
                 label={t('gallery:filters.aiTool')}
-                onChange={(e) => setFilterAiTool(e.target.value)}
+                onChange={(e) => changeAiToolFilter(e.target.value)}
               >
                 <MenuItem value="">{t('gallery:filters.all')}</MenuItem>
                 {aiTools.map((tool) => tool && (
@@ -179,7 +181,7 @@ const GalleryPage: React.FC = () => {
               <Select
                 value={sortBy}
                 label={t('gallery:filters.sortBy')}
-                onChange={(e) => setSortBy(e.target.value as SortBy)}
+                onChange={(e) => handleSortByChange(e.target.value as SortBy)}
               >
                 <MenuItem value="first_seen_date">{t('gallery:sorting.uploadDate')}</MenuItem>
                 <MenuItem value="file_size">{t('gallery:sorting.fileSize')}</MenuItem>
@@ -194,10 +196,10 @@ const GalleryPage: React.FC = () => {
               <Select
                 value={sortOrder}
                 label={t('gallery:filters.order')}
-                onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+                onChange={(e) => handleSortOrderChange(e.target.value as SortOrder)}
               >
-                <MenuItem value="desc">{t('gallery:sorting.descending')}</MenuItem>
-                <MenuItem value="asc">{t('gallery:sorting.ascending')}</MenuItem>
+                <MenuItem value="DESC">{t('gallery:sorting.descending')}</MenuItem>
+                <MenuItem value="ASC">{t('gallery:sorting.ascending')}</MenuItem>
               </Select>
             </FormControl>
           </Box>
@@ -227,10 +229,10 @@ const GalleryPage: React.FC = () => {
         {/* 활성 필터 표시 */}
         {hasActiveFilters && (
           <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            {filterAiTool && (
+            {aiToolFilter && (
               <Chip
-                label={t('gallery:filters.aiToolLabel', { tool: filterAiTool })}
-                onDelete={() => setFilterAiTool('')}
+                label={t('gallery:filters.aiToolLabel', { tool: aiToolFilter })}
+                onDelete={() => changeAiToolFilter('')}
                 size="small"
                 variant="outlined"
               />
@@ -256,7 +258,7 @@ const GalleryPage: React.FC = () => {
 
       {/* 이미지 그리드 (상시 선택모드) */}
       <ImageGrid
-        images={filteredImages}
+        images={images}
         loading={loading}
         selectable={true}
         selectedIds={selectedIds}
@@ -274,7 +276,7 @@ const GalleryPage: React.FC = () => {
       <BulkActionBar
         selectedCount={selectedCount}
         selectedIds={selectedIds}
-        selectedImages={filteredImages.filter(img => img.composite_hash && selectedIds.includes(img.composite_hash))}
+        selectedImages={images.filter(img => img.composite_hash && selectedIds.includes(img.composite_hash))}
         onSelectionClear={deselectAll}
         onActionComplete={handleBulkActionComplete}
       />

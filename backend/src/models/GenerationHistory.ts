@@ -1,4 +1,5 @@
 import { apiGenDb } from '../database/apiGenerationDb';
+import { buildUpdateQuery, filterDefined } from '../utils/dynamicUpdate';
 
 export type ServiceType = 'comfyui' | 'novelai';
 export type GenerationStatus = 'pending' | 'processing' | 'completed' | 'failed';
@@ -165,27 +166,23 @@ export class GenerationHistoryModel {
    * Update generation history record
    */
   static update(id: number, data: Partial<GenerationHistoryRecord>): void {
-    const fields: string[] = [];
-    const params: any[] = [];
-
     // JOIN으로 계산된 필드 필터링 (actual_* 필드는 테이블에 없음)
     const computedFields = ['actual_composite_hash', 'actual_thumbnail_path', 'actual_width', 'actual_height'];
 
-    Object.entries(data).forEach(([key, value]) => {
-      if (key !== 'id' && value !== undefined && !computedFields.includes(key)) {
-        fields.push(`${key} = ?`);
-        params.push(value);
-      }
-    });
+    // id와 computed fields 제거
+    const cleanData = Object.fromEntries(
+      Object.entries(data).filter(([key]) => key !== 'id' && !computedFields.includes(key))
+    );
 
-    if (fields.length === 0) {
+    const updates = filterDefined(cleanData);
+
+    if (Object.keys(updates).length === 0) {
       return;
     }
 
-    params.push(id);
-    const sql = `UPDATE api_generation_history SET ${fields.join(', ')} WHERE id = ?`;
+    const { sql, values } = buildUpdateQuery('api_generation_history', updates, { id });
     const stmt = apiGenDb.prepare(sql);
-    stmt.run(...params);
+    stmt.run(...values);
   }
 
   /**

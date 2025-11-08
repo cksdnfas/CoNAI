@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { ImageMetadataModel } from '../../models/Image/ImageMetadataModel';
 import { VideoMetadataModel } from '../../models/VideoMetadataModel';
+import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { successResponse, errorResponse } from '@comfyui-image-manager/shared';
 import { enrichImageWithFileView } from './utils';
@@ -32,24 +33,37 @@ router.get('/:composite_hash', asyncHandler(async (req: Request, res: Response) 
   }
 
   try {
+    // 먼저 파일 정보를 조회하여 실제 file_type 확인
+    const files = await ImageFileModel.findActiveByHash(composite_hash);
+    if (!files || files.length === 0) {
+      return res.status(404).json(errorResponse('File not found'));
+    }
+
+    const actualFileType = files[0].file_type;
+    const isVideoOrAnimated = actualFileType === 'video' || actualFileType === 'animated';
+
     let metadata;
 
-    if (isImage) {
+    if (isVideoOrAnimated) {
+      // 비디오/애니메이션 메타데이터 조회
+      metadata = videoMetadataModel.findByCompositeHash(composite_hash);
+    } else {
       // 이미지 메타데이터 조회
       metadata = ImageMetadataModel.findByHash(composite_hash);
-    } else {
-      // 비디오 메타데이터 조회
-      metadata = videoMetadataModel.findByCompositeHash(composite_hash);
     }
 
     if (!metadata) {
       return res.status(404).json(errorResponse('Metadata not found'));
     }
 
-    // ImageRecord 구조로 변환 (URL, ai_metadata, auto_tags JSON 파싱)
+    // ImageRecord 구조로 변환 (실제 file_type 사용)
     const enrichedMetadata = enrichImageWithFileView({
       ...metadata,
-      file_type: isVideo ? 'video' : 'image'
+      file_id: files[0].id,
+      original_file_path: files[0].original_file_path,
+      file_size: files[0].file_size,
+      mime_type: files[0].mime_type,
+      file_type: files[0].file_type  // 실제 파일 타입 사용
     });
 
     return res.json(successResponse(enrichedMetadata));

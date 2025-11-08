@@ -14,6 +14,34 @@ export function normalizePath(pathStr: string, forceUnix: boolean = false): stri
 }
 
 /**
+ * Windows 경로의 드라이브 문자를 대문자로 정규화
+ * fast-glob이 반환하는 경로의 드라이브 문자 대소문자 불일치 문제 해결
+ *
+ * @param filePath 파일 경로
+ * @returns 드라이브 문자가 대문자로 정규화된 경로
+ *
+ * @example
+ * normalizeWindowsDriveLetter('d:\\_Dev\\file.txt') // 'D:\\_Dev\\file.txt'
+ * normalizeWindowsDriveLetter('D:\\_Dev\\file.txt') // 'D:\\_Dev\\file.txt'
+ * normalizeWindowsDriveLetter('/unix/path') // '/unix/path'
+ */
+export function normalizeWindowsDriveLetter(filePath: string): string {
+  // Windows 드라이브 문자 패턴 (예: d:\ 또는 d:/)
+  const driveLetterPattern = /^([a-z]):([\\/])/i;
+  const match = filePath.match(driveLetterPattern);
+
+  if (match) {
+    // 드라이브 문자를 대문자로 변환
+    return filePath.replace(driveLetterPattern, (_, letter, slash) =>
+      `${letter.toUpperCase()}:${slash}`
+    );
+  }
+
+  // Windows 경로가 아니면 그대로 반환
+  return filePath;
+}
+
+/**
  * 폴더 경로를 해석하여 절대 경로로 변환
  *
  * - 절대 경로: 그대로 반환

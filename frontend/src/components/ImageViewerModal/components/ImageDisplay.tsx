@@ -95,6 +95,15 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
   const imageUrl = getImageUrl();
   const fallbackUrl = getFallbackUrl();
 
+  // 디버그: file_type 확인
+  console.log('[ImageDisplay] Rendering image:', {
+    composite_hash: image.composite_hash,
+    file_type: image.file_type,
+    mime_type: image.mime_type,
+    isVideo: image.file_type === 'video',
+    isAnimated: image.file_type === 'animated'
+  });
+
   return (
     <Box
       id="image-container"

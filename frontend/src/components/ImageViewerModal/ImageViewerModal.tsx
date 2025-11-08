@@ -138,17 +138,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         return;
       }
 
-      // 2단계: 해시 길이로 타입 판단
-      const isVideo = image.composite_hash.length === 32;
-      const isImage = image.composite_hash.length === 48;
-
-      if (!isVideo && !isImage) {
-        console.warn('[ImageViewerModal] Invalid composite_hash length, using props data');
-        setCurrentImage(image);
-        return;
-      }
-
-      // 3단계: DB에서 메타데이터 조회
+      // 2단계: DB에서 메타데이터 조회 (file_type 포함)
       const fetchMetadata = async () => {
         try {
           const metadata = await imageApi.getMetadata(image.composite_hash!);

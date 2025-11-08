@@ -22,8 +22,15 @@ export const imageApi = {
   /**
    * Get paginated list of images
    */
-  getImages: async (page: number = 1, limit: number = 25): Promise<ImageListResponse> => {
-    const response = await apiClient.get(`/api/images?page=${page}&limit=${limit}`);
+  getImages: async (
+    page: number = 1,
+    limit: number = 25,
+    sortBy: 'first_seen_date' | 'width' | 'height' | 'file_size' = 'first_seen_date',
+    sortOrder: 'ASC' | 'DESC' = 'DESC'
+  ): Promise<ImageListResponse> => {
+    const response = await apiClient.get(
+      `/api/images?page=${page}&limit=${limit}&sortBy=${sortBy}&sortOrder=${sortOrder}`
+    );
     return response.data;
   },
 

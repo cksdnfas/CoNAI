@@ -1,5 +1,6 @@
 import { db } from '../../database/init';
 import { ImageMetadataRecord } from '../../types/image';
+import { buildUpdateQuery, filterDefined, sqlLiteral } from '../../utils/dynamicUpdate';
 
 /**
  * 이미지 메타데이터 모델
@@ -91,10 +92,7 @@ export class ImageMetadataModel {
    * 메타데이터 업데이트
    */
   static update(compositeHash: string, updates: Partial<ImageMetadataRecord>): boolean {
-    const fields: string[] = [];
-    const values: any[] = [];
-
-    // 업데이트 가능한 필드들
+    // 업데이트 가능한 필드들만 필터링
     const updatableFields = [
       'prompt', 'negative_prompt', 'auto_tags', 'rating_score',
       'ai_tool', 'model_name', 'lora_models', 'steps', 'cfg_scale',
@@ -103,21 +101,22 @@ export class ImageMetadataModel {
       'thumbnail_path', 'width', 'height'
     ];
 
-    for (const field of updatableFields) {
-      if (updates[field as keyof ImageMetadataRecord] !== undefined) {
-        fields.push(`${field} = ?`);
-        values.push(updates[field as keyof ImageMetadataRecord]);
-      }
-    }
+    const cleanUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([key]) => updatableFields.includes(key))
+    );
 
-    if (fields.length === 0) return false;
+    const filteredUpdates = filterDefined(cleanUpdates);
 
-    fields.push('metadata_updated_date = CURRENT_TIMESTAMP');
-    values.push(compositeHash);
+    if (Object.keys(filteredUpdates).length === 0) return false;
 
-    const info = db.prepare(`
-      UPDATE image_metadata SET ${fields.join(', ')} WHERE composite_hash = ?
-    `).run(...values);
+    // metadata_updated_date는 SQL 함수로 직접 삽입
+    const finalUpdates = {
+      ...filteredUpdates,
+      metadata_updated_date: sqlLiteral('CURRENT_TIMESTAMP')
+    };
+
+    const { sql, values } = buildUpdateQuery('image_metadata', finalUpdates, { composite_hash: compositeHash });
+    const info = db.prepare(sql).run(...values);
 
     return info.changes > 0;
   }
@@ -320,7 +319,7 @@ export class ImageMetadataModel {
   static findAllWithFiles(options: {
     page?: number;
     limit?: number;
-    sortBy?: 'first_seen_date' | 'width' | 'height' | 'scan_date';
+    sortBy?: 'first_seen_date' | 'width' | 'height' | 'scan_date' | 'file_size';
     sortOrder?: 'ASC' | 'DESC';
   }): { items: any[], total: number } {
     const page = options.page || 1;
@@ -385,6 +384,54 @@ export class ImageMetadataModel {
         LEFT JOIN video_metadata vm ON if.composite_hash = vm.composite_hash
         WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
         ORDER BY if.scan_date ${sortOrder}
+        LIMIT ? OFFSET ?
+      `;
+    } else if (sortBy === 'file_size') {
+      // file_size로 정렬 (image_files 테이블의 컬럼)
+      query = `
+        SELECT
+          COALESCE(im.composite_hash, vm.composite_hash) as composite_hash,
+          im.perceptual_hash,
+          im.dhash,
+          im.ahash,
+          im.color_histogram,
+          COALESCE(im.width, vm.width) as width,
+          COALESCE(im.height, vm.height) as height,
+          im.thumbnail_path,
+          COALESCE(im.ai_tool, vm.ai_tool) as ai_tool,
+          COALESCE(im.model_name, vm.model_name) as model_name,
+          COALESCE(im.lora_models, vm.lora_models) as lora_models,
+          COALESCE(im.steps, vm.steps) as steps,
+          COALESCE(im.cfg_scale, vm.cfg_scale) as cfg_scale,
+          COALESCE(im.sampler, vm.sampler) as sampler,
+          COALESCE(im.seed, vm.seed) as seed,
+          COALESCE(im.scheduler, vm.scheduler) as scheduler,
+          COALESCE(im.prompt, vm.prompt) as prompt,
+          COALESCE(im.negative_prompt, vm.negative_prompt) as negative_prompt,
+          COALESCE(im.denoise_strength, vm.denoise_strength) as denoise_strength,
+          COALESCE(im.generation_time, vm.generation_time) as generation_time,
+          COALESCE(im.batch_size, vm.batch_size) as batch_size,
+          COALESCE(im.batch_index, vm.batch_index) as batch_index,
+          COALESCE(im.auto_tags, vm.auto_tags) as auto_tags,
+          COALESCE(im.duration, vm.duration) as duration,
+          COALESCE(im.fps, vm.fps) as fps,
+          COALESCE(im.video_codec, vm.video_codec) as video_codec,
+          COALESCE(im.audio_codec, vm.audio_codec) as audio_codec,
+          COALESCE(im.bitrate, vm.bitrate) as bitrate,
+          COALESCE(im.first_seen_date, vm.first_seen_date) as first_seen_date,
+          COALESCE(im.metadata_updated_date, vm.metadata_updated_date) as metadata_updated_date,
+          if.id as file_id,
+          if.original_file_path,
+          if.file_size,
+          if.mime_type,
+          if.file_status,
+          if.scan_date,
+          if.file_type
+        FROM image_files if
+        LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
+        LEFT JOIN video_metadata vm ON if.composite_hash = vm.composite_hash
+        WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
+        ORDER BY if.file_size ${sortOrder}
         LIMIT ? OFFSET ?
       `;
     } else if (sortBy === 'first_seen_date') {

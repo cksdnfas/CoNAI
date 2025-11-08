@@ -35,7 +35,7 @@
 | 작업 | 상태 | 제거/통합 라인 | 완료일 |
 |------|------|---------------|--------|
 | 2.4 Node 스타일 유틸리티 중복 제거 | ✅ 완료 | 70 lines | 2025-11-07 |
-| 2.2 동적 UPDATE 쿼리 빌더 통합 | ✅ 완료 | ~50 lines (Group 모델) | 2025-11-07 |
+| 2.2 동적 UPDATE 쿼리 빌더 통합 | ✅ 완료 | ~250 lines (8개 모델) | 2025-11-07 |
 | 2.1 파일 삭제 로직 중앙화 | ✅ 완료 | ~200 lines | 2025-11-07 |
 | 2.3 useRepeatExecution 훅 문서화 | ✅ 완료 | 문서화 완료 | 2025-11-07 |
 
@@ -45,16 +45,25 @@
 - ✅ 중앙화된 함수: `getNodeColor()`, `getNodeIcon()`, `getNodeCategory()`
 - ✅ TypeScript 빌드: 에러 없음
 
-**Phase 2.2 완료 효과**:
+**Phase 2.2 완료 효과** (2025-11-07 확장 적용 완료):
 - ✅ 생성된 파일: `backend/src/utils/dynamicUpdate.ts`
 - ✅ 핵심 함수:
   - `buildUpdateQuery()`: 동적 UPDATE 쿼리 생성
   - `sqlLiteral()`: SQL 함수 직접 삽입 (CURRENT_TIMESTAMP 등)
   - `filterDefined()`: undefined 값 필터링
-- ✅ 적용 완료: `Group.ts` 모델 (50 lines 단순화)
-- ✅ 적용 대기: GenerationHistory, ImageMetadataModel, CustomDropdownList, ComfyUIServer, Workflow, PromptGroup, RatingScore (7개 모델)
+  - `addTimestamp()`: 타임스탬프 필드 자동 추가
+  - `buildUpdateQueryNamed()`: Named 파라미터 방식 쿼리 빌더
+- ✅ 적용 완료: 8개 모델 전체 (~200 lines 중복 코드 제거)
+  - `Group.ts` (50 lines 단순화)
+  - `GenerationHistory.ts` (22 lines → 18 lines)
+  - `ImageMetadataModel.ts` (32 lines → 29 lines)
+  - `CustomDropdownList.ts` (28 lines → 22 lines)
+  - `ComfyUIServer.ts` (33 lines → 23 lines)
+  - `Workflow.ts` (44 lines → 26 lines)
+  - `PromptGroup.ts` (34 lines → 29 lines)
+  - `RatingScore.ts` (38 lines → 17 lines)
 - ✅ TypeScript 빌드: 에러 없음
-- 📝 나머지 7개 모델은 동일한 패턴으로 추후 적용 가능
+- 📝 **최종 효과**: 250+ lines 보일러플레이트 제거, 일관된 쿼리 생성 로직, SQL 인젝션 방지 통일
 
 **Phase 2.1 완료 효과**:
 - ✅ DeletionService 확장: 2개 메서드 추가

@@ -6,6 +6,7 @@ import {
   PromptGroupWithPrompts,
   GroupImportData
 } from '../types/promptGroup';
+import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 
 export class PromptGroupModel {
   /**
@@ -112,32 +113,26 @@ export class PromptGroupModel {
   ): Promise<boolean> {
     const tableName = type === 'positive' ? 'prompt_groups' : 'negative_prompt_groups';
 
-    const updateFields: string[] = [];
-    const values: any[] = [];
+    // is_visible을 boolean에서 number로 변환
+    const cleanData: Record<string, any> = {
+      ...data,
+      is_visible: data.is_visible !== undefined ? (data.is_visible ? 1 : 0) : undefined
+    };
 
-    if (data.group_name !== undefined) {
-      updateFields.push('group_name = ?');
-      values.push(data.group_name);
-    }
+    const updates = filterDefined(cleanData);
 
-    if (data.display_order !== undefined) {
-      updateFields.push('display_order = ?');
-      values.push(data.display_order);
-    }
-
-    if (data.is_visible !== undefined) {
-      updateFields.push('is_visible = ?');
-      values.push(data.is_visible ? 1 : 0);
-    }
-
-    if (updateFields.length === 0) {
+    if (Object.keys(updates).length === 0) {
       return false;
     }
 
-    updateFields.push('updated_at = CURRENT_TIMESTAMP');
-    values.push(id);
+    // updated_at은 SQL 함수로 직접 삽입
+    const finalUpdates = {
+      ...updates,
+      updated_at: sqlLiteral('CURRENT_TIMESTAMP')
+    };
 
-    const info = db.prepare(`UPDATE ${tableName} SET ${updateFields.join(', ')} WHERE id = ?`).run(...values);
+    const { sql, values } = buildUpdateQuery(tableName, finalUpdates, { id });
+    const info = db.prepare(sql).run(...values);
     return info.changes > 0;
   }
 

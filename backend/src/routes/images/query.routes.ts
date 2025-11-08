@@ -31,7 +31,7 @@ function generateETag(stats: fs.Stats): string {
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 20;
-  const sortBy = (req.query.sortBy as 'first_seen_date' | 'width' | 'height') || 'first_seen_date';
+  const sortBy = (req.query.sortBy as 'first_seen_date' | 'width' | 'height' | 'file_size') || 'first_seen_date';
   const sortOrder = (req.query.sortOrder as 'ASC' | 'DESC') || 'DESC';
 
   try {
@@ -337,7 +337,8 @@ router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) =
       file_id: files[0].id,
       original_file_path: files[0].original_file_path,
       file_size: files[0].file_size,
-      mime_type: files[0].mime_type || 'image/jpeg'
+      mime_type: files[0].mime_type || 'image/jpeg',
+      file_type: files[0].file_type  // 파일 타입 명시적 포함
     };
 
     res.json({
@@ -466,8 +467,10 @@ router.get('/batch/thumbnails', asyncHandler(async (req: Request, res: Response)
             return;
           }
 
-          // 이미지인 경우 썸네일 경로 반환
-          const thumbnailPath = metadata.thumbnail_path || files[0].original_file_path;
+          // 이미지인 경우 썸네일 경로 반환 (썸네일이 없으면 원본 사용)
+          const thumbnailPath = (metadata.thumbnail_path && fs.existsSync(resolveUploadsPath(metadata.thumbnail_path)))
+            ? metadata.thumbnail_path
+            : files[0].original_file_path;
           results[hash] = {
             success: true,
             thumbnailPath,
@@ -679,9 +682,10 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
     }
 
     // 이미지인 경우 썸네일 제공
-    const thumbnailPath = metadata.thumbnail_path ? resolveUploadsPath(metadata.thumbnail_path) : '';
+    // thumbnail_path가 없거나 파일이 존재하지 않으면 원본 이미지 사용
+    const thumbnailPath = metadata.thumbnail_path ? resolveUploadsPath(metadata.thumbnail_path) : null;
 
-    if (!fs.existsSync(thumbnailPath)) {
+    if (!thumbnailPath || !fs.existsSync(thumbnailPath)) {
       // 썸네일이 없으면 원본 이미지로 폴백
       const originalPath = resolveUploadsPath(files[0].original_file_path);
       if (!fs.existsSync(originalPath)) {

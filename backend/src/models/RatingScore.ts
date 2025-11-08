@@ -1,5 +1,6 @@
 import { db } from '../database/init';
 import { RatingWeights, RatingWeightsUpdate, RatingTier, RatingTierInput } from '../types/rating';
+import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 
 /**
  * RatingScoreModel
@@ -112,38 +113,19 @@ export class RatingScoreModel {
    * 등급 수정
    */
   static async updateTier(id: number, tierData: Partial<RatingTierInput>): Promise<RatingTier> {
-    const fields: string[] = [];
-    const values: any[] = [];
+    const updates = filterDefined(tierData);
 
-    if (tierData.tier_name !== undefined) {
-      fields.push('tier_name = ?');
-      values.push(tierData.tier_name);
-    }
-    if (tierData.min_score !== undefined) {
-      fields.push('min_score = ?');
-      values.push(tierData.min_score);
-    }
-    if (tierData.max_score !== undefined) {
-      fields.push('max_score = ?');
-      values.push(tierData.max_score);
-    }
-    if (tierData.tier_order !== undefined) {
-      fields.push('tier_order = ?');
-      values.push(tierData.tier_order);
-    }
-    if (tierData.color !== undefined) {
-      fields.push('color = ?');
-      values.push(tierData.color);
-    }
-
-    if (fields.length === 0) {
+    if (Object.keys(updates).length === 0) {
       throw new Error('No fields to update');
     }
 
-    fields.push('updated_at = CURRENT_TIMESTAMP');
-    values.push(id);
+    // updated_at은 SQL 함수로 직접 삽입
+    const finalUpdates = {
+      ...updates,
+      updated_at: sqlLiteral('CURRENT_TIMESTAMP')
+    };
 
-    const sql = `UPDATE rating_tiers SET ${fields.join(', ')} WHERE id = ?`;
+    const { sql, values } = buildUpdateQuery('rating_tiers', finalUpdates, { id });
     db.prepare(sql).run(...values);
 
     const result = await this.getTierById(id);
