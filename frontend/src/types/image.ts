@@ -38,7 +38,7 @@ export interface ImageRecord {
   file_status?: 'active' | 'deleted';  // File status
   file_type: 'image' | 'video' | 'animated';  // File type classification (use this for business logic)
 
-  // Image metadata (from image_metadata table)
+  // Media metadata (from media_metadata table)
   width: number;                       // Image width in pixels
   height: number;                      // Image height in pixels
   thumbnail_path: string;              // Thumbnail file path
@@ -220,6 +220,6 @@ export interface UploadProgressEvent {
 // Image selection related types
 export interface ImageSelectionProps {
   selectable?: boolean;
-  selectedIds?: string[];                            // ✅ Changed to string[]
-  onSelectionChange?: (selectedIds: string[]) => void;  // ✅ Changed to string[]
+  selectedIds?: number[];                            // ✅ Changed to number[] (image_files.id)
+  onSelectionChange?: (selectedIds: number[]) => void;  // ✅ Changed to number[] (image_files.id)
 }

@@ -19,7 +19,7 @@ export class DuplicateDetectionService {
       const placeholders = hashChunk.map(() => '?').join(',');
 
       const existingMetadata = db.prepare(`
-        SELECT composite_hash FROM image_metadata
+        SELECT composite_hash FROM media_metadata
         WHERE composite_hash IN (${placeholders})
       `).all(...hashChunk) as Array<{ composite_hash: string }>;
 

@@ -6,7 +6,7 @@ const indexes = db.prepare(`
   SELECT name, sql
   FROM sqlite_master
   WHERE type='index'
-    AND tbl_name IN ('image_files', 'image_metadata', 'image_groups')
+    AND tbl_name IN ('image_files', 'media_metadata', 'image_groups')
     AND name NOT LIKE 'sqlite_%'
   ORDER BY name
 `).all();

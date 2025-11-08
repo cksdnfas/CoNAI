@@ -3,6 +3,8 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { settingsService } from '../services/settingsService';
 import { imageTaggerService } from '../services/imageTaggerService';
 import { RatingScoreService } from '../services/ratingScoreService';
+import { SystemSettingsService } from '../services/systemSettingsService';
+import { AutoScanScheduler } from '../services/autoScanScheduler';
 import { GeneralSettings, TaggerSettings, SimilaritySettings, MetadataExtractionSettings, SupportedLanguage } from '../types/settings';
 import { RatingWeightsUpdate, RatingTierInput, RatingData } from '../types/rating';
 
@@ -566,6 +568,136 @@ router.post(
         error: (error as Error).message,
       });
     }
+    return;
+  })
+);
+
+// ==================== System Settings Routes ====================
+
+/**
+ * GET /api/settings/phase2-interval
+ * Get Phase 2 background processing interval
+ */
+router.get(
+  '/phase2-interval',
+  asyncHandler(async (req: Request, res: Response) => {
+    const interval = SystemSettingsService.getPhase2Interval();
+    res.json({
+      success: true,
+      data: { interval },
+    });
+    return;
+  })
+);
+
+/**
+ * PUT /api/settings/phase2-interval
+ * Update Phase 2 background processing interval and restart scheduler
+ */
+router.put(
+  '/phase2-interval',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { interval } = req.body;
+
+    if (typeof interval !== 'number' || interval < 5 || interval > 300) {
+      res.status(400).json({
+        success: false,
+        error: 'Phase 2 간격은 5-300초 사이여야 합니다',
+      });
+      return;
+    }
+
+    // 설정 업데이트
+    SystemSettingsService.updatePhase2Interval(interval);
+
+    // 스케줄러 재시작
+    AutoScanScheduler.restart();
+
+    res.json({
+      success: true,
+      data: { interval },
+      message: `Phase 2 처리 간격이 ${interval}초로 업데이트되었습니다`,
+    });
+    return;
+  })
+);
+
+// ==================== Auto-Tagging Scheduler Settings Routes ====================
+
+/**
+ * GET /api/settings/auto-tag-config
+ * Get auto-tagging scheduler configuration
+ */
+router.get(
+  '/auto-tag-config',
+  asyncHandler(async (req: Request, res: Response) => {
+    const pollingInterval = SystemSettingsService.getAutoTagPollingInterval();
+    const batchSize = SystemSettingsService.getAutoTagBatchSize();
+
+    res.json({
+      success: true,
+      data: {
+        pollingInterval,
+        batchSize,
+      },
+    });
+    return;
+  })
+);
+
+/**
+ * PUT /api/settings/auto-tag-config
+ * Update auto-tagging scheduler configuration and restart scheduler
+ */
+router.put(
+  '/auto-tag-config',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { pollingInterval, batchSize } = req.body;
+
+    // 폴링 간격 검증
+    if (pollingInterval !== undefined) {
+      if (typeof pollingInterval !== 'number' || pollingInterval < 5 || pollingInterval > 300) {
+        res.status(400).json({
+          success: false,
+          error: '자동 태깅 폴링 간격은 5-300초 사이여야 합니다',
+        });
+        return;
+      }
+    }
+
+    // 배치 크기 검증
+    if (batchSize !== undefined) {
+      if (typeof batchSize !== 'number' || batchSize < 1 || batchSize > 100) {
+        res.status(400).json({
+          success: false,
+          error: '자동 태깅 배치 크기는 1-100 사이여야 합니다',
+        });
+        return;
+      }
+    }
+
+    // 설정 업데이트
+    if (pollingInterval !== undefined) {
+      SystemSettingsService.updateAutoTagPollingInterval(pollingInterval);
+    }
+    if (batchSize !== undefined) {
+      SystemSettingsService.updateAutoTagBatchSize(batchSize);
+    }
+
+    // 자동 태깅 스케줄러 재시작
+    const { autoTagScheduler } = await import('../services/autoTagScheduler');
+    autoTagScheduler.restart();
+
+    const updatedConfig = {
+      pollingInterval: SystemSettingsService.getAutoTagPollingInterval(),
+      batchSize: SystemSettingsService.getAutoTagBatchSize(),
+    };
+
+    res.json({
+      success: true,
+      data: updatedConfig,
+      message: '자동 태깅 스케줄러 설정이 업데이트되었습니다',
+    });
     return;
   })
 );

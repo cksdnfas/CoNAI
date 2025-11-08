@@ -27,13 +27,24 @@ const BackgroundStatusMonitor: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [autoRefresh] = useState(true);
+  const [hashStats, setHashStats] = useState<{
+    totalImages: number;
+    imagesWithoutHash: number;
+    imagesWithHash: number;
+    completionPercentage: number;
+  } | null>(null);
+  const [rebuildingHashes, setRebuildingHashes] = useState(false);
 
   // 상태 조회
   const fetchStatus = async () => {
     try {
       setError(null);
-      const data = await backgroundQueueApi.getQueueStatus();
-      setStatus(data);
+      const [queueData, hashData] = await Promise.all([
+        backgroundQueueApi.getQueueStatus(),
+        backgroundQueueApi.getHashStats()
+      ]);
+      setStatus(queueData);
+      setHashStats(hashData);
     } catch (err) {
       console.error('Failed to fetch background queue status:', err);
       setError('백그라운드 큐 상태를 불러오는데 실패했습니다');
@@ -65,6 +76,33 @@ const BackgroundStatusMonitor: React.FC = () => {
     } catch (err) {
       console.error('Failed to trigger auto-tag:', err);
       setError('자동 태깅 트리거에 실패했습니다');
+    }
+  };
+
+  // 해시 재생성 트리거
+  const handleRebuildHashes = async () => {
+    if (!hashStats || hashStats.imagesWithoutHash === 0) {
+      return;
+    }
+
+    if (!window.confirm(`${hashStats.imagesWithoutHash}개의 이미지 해시를 생성하시겠습니까?`)) {
+      return;
+    }
+
+    try {
+      setRebuildingHashes(true);
+      setError(null);
+      const result = await backgroundQueueApi.rebuildHashes();
+      await fetchStatus();
+
+      if (result.failed > 0) {
+        setError(`해시 생성 완료: 성공 ${result.processed}개, 실패 ${result.failed}개`);
+      }
+    } catch (err) {
+      console.error('Failed to rebuild hashes:', err);
+      setError('해시 재생성에 실패했습니다');
+    } finally {
+      setRebuildingHashes(false);
     }
   };
 
@@ -147,11 +185,6 @@ const BackgroundStatusMonitor: React.FC = () => {
           />
         </Box>
 
-        {status.queue.queueLength === 0 && !status.queue.processing && (
-          <Alert severity="success" sx={{ mb: 2 }}>
-            모든 백그라운드 작업이 완료되었습니다.
-          </Alert>
-        )}
 
         {/* 작업 타입별 통계 */}
         {status.queue.queueLength > 0 && (
@@ -217,27 +250,48 @@ const BackgroundStatusMonitor: React.FC = () => {
             variant="outlined"
           />
         </Box>
-
-        {status.autoTag.untaggedCount === 0 && status.autoTag.isRunning && (
-          <Alert severity="success">
-            모든 이미지가 태깅되었습니다.
-          </Alert>
-        )}
-
-        {status.autoTag.untaggedCount > 0 && status.autoTag.isRunning && (
-          <Alert severity="info">
-            {status.autoTag.untaggedCount}개의 이미지가 자동 태깅 대기 중입니다.
-            스케줄러가 순차적으로 처리합니다.
-          </Alert>
-        )}
-
-        {!status.autoTag.isRunning && (
-          <Alert severity="warning">
-            자동 태깅 스케줄러가 실행되지 않고 있습니다.
-            설정에서 자동 태깅을 활성화하세요.
-          </Alert>
-        )}
       </Box>
+
+      <Divider sx={{ my: 3 }} />
+
+      {/* 해시 미생성 이미지 처리 */}
+      {hashStats && (
+        <Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+              이미지 해시 상태
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={rebuildingHashes ? <CircularProgress size={16} /> : <PlayArrowIcon />}
+              onClick={handleRebuildHashes}
+              disabled={rebuildingHashes || hashStats.imagesWithoutHash === 0}
+            >
+              해시 생성
+            </Button>
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Chip
+              label={`전체: ${hashStats.totalImages}개`}
+              variant="outlined"
+            />
+            <Chip
+              label={`해시 생성 완료: ${hashStats.imagesWithHash}개`}
+              color="success"
+            />
+            <Chip
+              label={`미생성: ${hashStats.imagesWithoutHash}개`}
+              color={hashStats.imagesWithoutHash > 0 ? 'warning' : 'default'}
+            />
+            <Chip
+              label={`완료율: ${hashStats.completionPercentage}%`}
+              color={hashStats.completionPercentage === 100 ? 'success' : 'default'}
+            />
+          </Box>
+        </Box>
+      )}
 
       {/* 자동 새로고침 안내 */}
       <Box sx={{ mt: 2 }}>

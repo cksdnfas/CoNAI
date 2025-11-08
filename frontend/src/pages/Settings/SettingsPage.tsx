@@ -16,6 +16,7 @@ import TaggerSettings from './features/Tagger/TaggerSettings';
 import RatingScoreSettings from './features/Rating/RatingScoreSettings';
 import SimilaritySettings from './features/Similarity/SimilaritySettings';
 import FolderSettings from './features/Folder/FolderSettings';
+import { AuthSettings } from './features/Auth/AuthSettings';
 import PromptList from '../PromptManagement/components/PromptList';
 import { settingsApi, type AppSettings, type GeneralSettings as GeneralSettingsType, type TaggerSettings as TaggerSettingsType, type MetadataExtractionSettings } from '../../services/settingsApi';
 
@@ -173,6 +174,7 @@ const SettingsPage: React.FC = () => {
             <Tab label={t('tabs.prompts')} />
             <Tab label={t('tabs.rating')} />
             <Tab label={t('tabs.similarity')} />
+            <Tab label="Account" />
             <Tab label={t('tabs.advanced')} disabled />
           </Tabs>
         </Box>
@@ -227,6 +229,10 @@ const SettingsPage: React.FC = () => {
         </TabPanel>
 
         <TabPanel value={tabValue} index={6}>
+          <AuthSettings />
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={7}>
           <Alert severity="info">
             고급 설정 기능은 향후 추가될 예정입니다.
           </Alert>

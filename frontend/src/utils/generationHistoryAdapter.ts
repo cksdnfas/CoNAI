@@ -2,7 +2,7 @@ import type { GenerationHistoryRecord } from '@comfyui-image-manager/shared';
 import type { ImageRecord } from '../types/image';
 
 /**
- * Extended GenerationHistoryRecord with metadata JOIN fields
+ * Extended GenerationHistoryRecord with media metadata JOIN fields
  */
 export interface GenerationHistoryRecordWithMetadata extends GenerationHistoryRecord {
   actual_composite_hash?: string | null;
@@ -17,7 +17,7 @@ export interface GenerationHistoryRecordWithMetadata extends GenerationHistoryRe
  * ImageMasonry 컴포넌트에서 사용할 수 있도록 어댑터 패턴 적용
  * ComfyUI와 NovelAI 모두 지원
  *
- * actual_* 필드 우선 사용 (image_files/image_metadata JOIN 결과)
+ * actual_* 필드 우선 사용 (image_files/media_metadata JOIN 결과)
  * 없으면 history 자체 필드로 fallback (아직 처리 안된 이미지)
  */
 export const convertHistoryToImageRecord = (
@@ -145,7 +145,7 @@ export const convertHistoryToImageRecord = (
     mime_type,                                 // Detect from file extension
     file_status: 'active' as const,
 
-    // Image metadata - 메타데이터 있으면 실제 이미지 크기 사용, 없으면 히스토리 DB 크기 사용
+    // Media metadata - 메타데이터 있으면 실제 이미지 크기 사용, 없으면 히스토리 DB 크기 사용
     width: hasMetadata ? (history.actual_width ?? history.width ?? 0) : (history.width ?? 0),
     height: hasMetadata ? (history.actual_height ?? history.height ?? 0) : (history.height ?? 0),
     thumbnail_path: hasMetadata ? (history.actual_thumbnail_path ?? '') : '',

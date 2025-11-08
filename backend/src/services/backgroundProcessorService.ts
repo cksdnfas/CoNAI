@@ -169,7 +169,7 @@ export class BackgroundProcessorService {
     // Check if this hash already exists (duplicate detection)
     const existing = db
       .prepare(
-        `SELECT composite_hash FROM image_metadata WHERE composite_hash = ?`
+        `SELECT composite_hash FROM media_metadata WHERE composite_hash = ?`
       )
       .get(hashes.compositeHash) as { composite_hash: string } | undefined;
 
@@ -193,10 +193,10 @@ export class BackgroundProcessorService {
       hashes.compositeHash
     );
 
-    // Insert image_metadata record
+    // Insert media_metadata record
     db.prepare(
       `
-      INSERT INTO image_metadata (
+      INSERT INTO media_metadata (
         composite_hash, perceptual_hash, dhash, ahash,
         color_histogram, width, height, thumbnail_path
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -236,7 +236,7 @@ export class BackgroundProcessorService {
   }
 
   /**
-   * Process video/animated file: generate MD5 hash, store as composite_hash, create video_metadata
+   * Process video/animated file: generate MD5 hash, store as composite_hash, create media_metadata
    */
   private static async processVideoFile(file: UnhashedFile): Promise<void> {
     const filePath = file.original_file_path;
@@ -247,46 +247,16 @@ export class BackgroundProcessorService {
 
     // Check if this hash already exists (duplicate detection)
     const existing = db
-      .prepare(`SELECT composite_hash FROM video_metadata WHERE composite_hash = ?`)
+      .prepare(`SELECT composite_hash FROM media_metadata WHERE composite_hash = ?`)
       .get(fileHash) as { composite_hash: string } | undefined;
 
     if (existing) {
-      // Video metadata already exists - just link file
+      // Metadata already exists - just link file
       db.prepare(`UPDATE image_files SET composite_hash = ? WHERE id = ?`).run(
         fileHash,
         file.id
       );
-
-      // Check if image_metadata record exists (for legacy videos)
-      const imageMetadata = db
-        .prepare(`SELECT composite_hash FROM image_metadata WHERE composite_hash = ?`)
-        .get(fileHash) as { composite_hash: string } | undefined;
-
-      if (!imageMetadata) {
-        // Legacy video without image_metadata - extract and create record
-        console.log(`  🔄 Migrating legacy video metadata: ${fileName}`);
-        try {
-          const metadata = await VideoProcessor.extractMetadata(filePath);
-
-          db.prepare(
-            `
-            INSERT INTO image_metadata (
-              composite_hash, width, height, file_size, first_seen_date
-            ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-          `
-          ).run(fileHash, metadata.width, metadata.height, fs.statSync(filePath).size);
-
-          console.log(`  ✅ Migrated: ${fileName} (${metadata.width}x${metadata.height})`);
-        } catch (error) {
-          console.warn(
-            `  ⚠️  Failed to migrate metadata for ${fileName}:`,
-            error instanceof Error ? error.message : error
-          );
-        }
-      } else {
-        console.log(`  ♻️  Video/Animated already processed: ${fileName}`);
-      }
-
+      console.log(`  ♻️  Video/Animated already processed: ${fileName}`);
       return;
     }
 
@@ -318,23 +288,14 @@ export class BackgroundProcessorService {
       // Continue processing even if metadata extraction fails
     }
 
-    // Create video_metadata record with extracted metadata
+    // Create media_metadata record with video metadata
     db.prepare(
       `
-      INSERT INTO video_metadata (
+      INSERT INTO media_metadata (
         composite_hash, duration, fps, width, height, video_codec, audio_codec, bitrate, first_seen_date
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `
     ).run(fileHash, duration, fps, width, height, videoCodec, audioCodec, bitrate);
-
-    // Create image_metadata record with dimensions (CRITICAL: needed for dimension display)
-    db.prepare(
-      `
-      INSERT INTO image_metadata (
-        composite_hash, width, height, file_size, first_seen_date
-      ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `
-    ).run(fileHash, width, height, fs.statSync(filePath).size);
 
     // Update image_files record with composite_hash (MD5 해시 값)
     db.prepare(`UPDATE image_files SET composite_hash = ? WHERE id = ?`).run(

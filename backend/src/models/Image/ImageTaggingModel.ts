@@ -4,10 +4,10 @@ import { ImageRecord, ImageMetadataRecord, ImageWithFileView } from '../../types
 /**
  * 태깅 관련 작업을 담당하는 이미지 모델 (새 구조 기반)
  *
- * ✅ 새 구조 전환 완료: image_metadata 기반
+ * ✅ 새 구조 전환 완료: media_metadata 기반
  *
  * 변경사항:
- * - images 테이블 → image_metadata 테이블
+ * - images 테이블 → media_metadata 테이블
  * - image_id → composite_hash
  * - upload_date → first_seen_date
  * - 모든 기존 기능 유지
@@ -27,7 +27,7 @@ export class ImageTaggingModel {
         if.file_size,
         if.mime_type,
         if.folder_id
-      FROM image_metadata im
+      FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       WHERE im.auto_tags IS NULL
       ORDER BY im.first_seen_date DESC
@@ -48,8 +48,8 @@ export class ImageTaggingModel {
    */
   static async findAllIds(limit?: number): Promise<number[]> {
     const query = limit
-      ? `SELECT composite_hash FROM image_metadata ORDER BY first_seen_date DESC LIMIT ?`
-      : `SELECT composite_hash FROM image_metadata ORDER BY first_seen_date DESC`;
+      ? `SELECT composite_hash FROM media_metadata ORDER BY first_seen_date DESC LIMIT ?`
+      : `SELECT composite_hash FROM media_metadata ORDER BY first_seen_date DESC`;
 
     const rows = limit
       ? db.prepare(query).all(limit) as any[]
@@ -74,8 +74,8 @@ export class ImageTaggingModel {
    */
   static async findAllCompositeHashes(limit?: number): Promise<string[]> {
     const query = limit
-      ? `SELECT composite_hash FROM image_metadata ORDER BY first_seen_date DESC LIMIT ?`
-      : `SELECT composite_hash FROM image_metadata ORDER BY first_seen_date DESC`;
+      ? `SELECT composite_hash FROM media_metadata ORDER BY first_seen_date DESC LIMIT ?`
+      : `SELECT composite_hash FROM media_metadata ORDER BY first_seen_date DESC`;
 
     const rows = limit
       ? db.prepare(query).all(limit) as any[]
@@ -89,7 +89,7 @@ export class ImageTaggingModel {
    */
   static async countUntagged(): Promise<number> {
     const row = db.prepare(
-      `SELECT COUNT(*) as count FROM image_metadata WHERE auto_tags IS NULL`
+      `SELECT COUNT(*) as count FROM media_metadata WHERE auto_tags IS NULL`
     ).get() as any;
     return row.count;
   }

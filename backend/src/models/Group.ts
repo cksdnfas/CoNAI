@@ -190,7 +190,7 @@ export class ImageGroupModel {
     const query = `
       SELECT im.*
       FROM image_groups ig
-      INNER JOIN image_metadata im ON ig.composite_hash = im.composite_hash
+      INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
       ${whereClause}
       ORDER BY ig.order_index ASC, ig.added_date DESC
       LIMIT ? OFFSET ?
@@ -236,7 +236,7 @@ export class ImageGroupModel {
         if.folder_id,
         wf.folder_name
       FROM image_groups ig
-      INNER JOIN image_metadata im ON ig.composite_hash = im.composite_hash
+      INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
       LEFT JOIN image_files if ON if.composite_hash = im.composite_hash AND if.file_status = 'active'
       LEFT JOIN watched_folders wf ON if.folder_id = wf.id
       ${whereClause}
@@ -304,7 +304,7 @@ export class ImageGroupModel {
     const query = `
       SELECT im.*
       FROM image_groups ig
-      INNER JOIN image_metadata im ON ig.composite_hash = im.composite_hash
+      INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
       WHERE ig.group_id = ?
       ORDER BY RANDOM()
       LIMIT 1
@@ -327,5 +327,23 @@ export class ImageGroupModel {
 
     const rows = db.prepare(query).all(groupId) as { composite_hash: string }[];
     return rows.map(row => row.composite_hash);
+  }
+
+  /**
+   * 그룹에 속한 모든 image_files.id 조회 (선택 기능용)
+   * composite_hash가 같아도 서로 다른 파일로 구분됨
+   */
+  static async getImageFileIdsForGroup(groupId: number): Promise<number[]> {
+    const query = `
+      SELECT if.id
+      FROM image_groups ig
+      INNER JOIN image_files if ON ig.composite_hash = if.composite_hash
+      WHERE ig.group_id = ?
+        AND if.file_status = 'active'
+      ORDER BY ig.order_index ASC, ig.added_date DESC, if.id ASC
+    `;
+
+    const rows = db.prepare(query).all(groupId) as { id: number }[];
+    return rows.map(row => row.id);
   }
 }

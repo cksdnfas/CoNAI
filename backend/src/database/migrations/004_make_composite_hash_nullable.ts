@@ -38,7 +38,7 @@ export const up = (db: Database) => {
         file_modified_date DATETIME,
         scan_date DATETIME DEFAULT CURRENT_TIMESTAMP,
         last_verified_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (composite_hash) REFERENCES image_metadata(composite_hash) ON DELETE SET NULL,
+        FOREIGN KEY (composite_hash) REFERENCES media_metadata(composite_hash) ON DELETE SET NULL,
         FOREIGN KEY (folder_id) REFERENCES watched_folders(id) ON DELETE CASCADE
       )
     `);
@@ -75,7 +75,7 @@ export const down = (db: Database) => {
       file_modified_date DATETIME,
       scan_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       last_verified_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (composite_hash) REFERENCES image_metadata(composite_hash) ON DELETE CASCADE,
+      FOREIGN KEY (composite_hash) REFERENCES media_metadata(composite_hash) ON DELETE CASCADE,
       FOREIGN KEY (folder_id) REFERENCES watched_folders(id) ON DELETE CASCADE
     )
   `);

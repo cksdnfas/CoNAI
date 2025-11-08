@@ -26,7 +26,7 @@ export class ImageSimilarityModel {
     colorHistogram: string
   ): Promise<boolean> {
     const info = db.prepare(`
-      UPDATE image_metadata
+      UPDATE media_metadata
       SET perceptual_hash = ?, color_histogram = ?, metadata_updated_date = CURRENT_TIMESTAMP
       WHERE composite_hash = ?
     `).run(perceptualHash, colorHistogram, compositeHash);
@@ -73,7 +73,7 @@ export class ImageSimilarityModel {
     } = options;
 
     // 대상 이미지 조회
-    const targetImage = db.prepare('SELECT * FROM image_metadata WHERE composite_hash = ?').get(compositeHash) as ImageMetadataRecord | undefined;
+    const targetImage = db.prepare('SELECT * FROM media_metadata WHERE composite_hash = ?').get(compositeHash) as ImageMetadataRecord | undefined;
     if (!targetImage) {
       throw new Error('Image not found with the provided composite hash');
     }
@@ -90,7 +90,7 @@ export class ImageSimilarityModel {
         if.file_size,
         if.mime_type,
         if.file_status
-      FROM image_metadata im
+      FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
       WHERE im.composite_hash != ? AND im.perceptual_hash IS NOT NULL
     `;
@@ -178,7 +178,7 @@ export class ImageSimilarityModel {
     } = options;
 
     // 대상 이미지 조회
-    const targetImage = db.prepare('SELECT * FROM image_metadata WHERE composite_hash = ?').get(compositeHash) as ImageMetadataRecord | undefined;
+    const targetImage = db.prepare('SELECT * FROM media_metadata WHERE composite_hash = ?').get(compositeHash) as ImageMetadataRecord | undefined;
     if (!targetImage) {
       throw new Error('Image not found with the provided composite hash');
     }
@@ -195,7 +195,7 @@ export class ImageSimilarityModel {
         if.file_size,
         if.mime_type,
         if.file_status
-      FROM image_metadata im
+      FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
       WHERE im.composite_hash != ? AND im.perceptual_hash IS NOT NULL
     `).all(compositeHash) as any[];
@@ -250,7 +250,7 @@ export class ImageSimilarityModel {
         const bDate = (b.image as any).first_seen_date || (b.image as any).upload_date;
         comparison = new Date(aDate).getTime() - new Date(bDate).getTime();
       } else if (sortBy === 'file_size') {
-        // file_size는 image_metadata에 없으므로 스킵
+        // file_size는 media_metadata에 없으므로 스킵
         comparison = 0;
       }
 
@@ -290,7 +290,7 @@ export class ImageSimilarityModel {
    * 전체 중복 이미지 그룹 검색 (composite_hash 기반)
    *
    * 처리 과정:
-   * 1. image_metadata에서 유사 이미지 그룹 찾기 (Hamming distance 기반)
+   * 1. media_metadata에서 유사 이미지 그룹 찾기 (Hamming distance 기반)
    * 2. 각 그룹의 composite_hash로 image_files 테이블에서 실제 중복 파일 조회
    * 3. 유사 이미지 + 중복 파일을 모두 포함한 그룹 반환
    */
@@ -302,10 +302,10 @@ export class ImageSimilarityModel {
       minGroupSize = 2
     } = options;
 
-    // STEP 1: image_metadata에서 고유한 이미지 메타데이터만 조회 (중복 제거된 상태)
+    // STEP 1: media_metadata에서 고유한 이미지 메타데이터만 조회 (중복 제거된 상태)
     const allMetadata = db.prepare(`
       SELECT *
-      FROM image_metadata
+      FROM media_metadata
       WHERE perceptual_hash IS NOT NULL
       ORDER BY composite_hash
     `).all() as ImageMetadataRecord[];
@@ -376,7 +376,7 @@ export class ImageSimilarityModel {
           if.mime_type,
           if.file_status
         FROM image_files if
-        JOIN image_metadata im ON if.composite_hash = im.composite_hash
+        JOIN media_metadata im ON if.composite_hash = im.composite_hash
         WHERE if.composite_hash IN (${placeholders})
           AND if.file_status = 'active'
         ORDER BY if.composite_hash, if.id
@@ -439,7 +439,7 @@ export class ImageSimilarityModel {
     limit: number = 20
   ): Promise<SimilarImage[]> {
     // 대상 이미지 조회
-    const targetImage = db.prepare('SELECT * FROM image_metadata WHERE composite_hash = ?').get(compositeHash) as ImageMetadataRecord | undefined;
+    const targetImage = db.prepare('SELECT * FROM media_metadata WHERE composite_hash = ?').get(compositeHash) as ImageMetadataRecord | undefined;
     if (!targetImage) {
       throw new Error('Image not found with the provided composite hash');
     }
@@ -458,7 +458,7 @@ export class ImageSimilarityModel {
         if.file_size,
         if.mime_type,
         if.file_status
-      FROM image_metadata im
+      FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
       WHERE im.composite_hash != ? AND im.color_histogram IS NOT NULL
     `).all(compositeHash) as any[];
@@ -532,7 +532,7 @@ export class ImageSimilarityModel {
    */
   static async countImagesWithoutHash(): Promise<number> {
     const result = db.prepare(
-      'SELECT COUNT(*) as count FROM image_metadata WHERE perceptual_hash IS NULL'
+      'SELECT COUNT(*) as count FROM media_metadata WHERE perceptual_hash IS NULL'
     ).get() as { count: number };
 
     return result.count;
@@ -543,13 +543,13 @@ export class ImageSimilarityModel {
    */
   static async getImagesWithoutHash(limit: number = 100): Promise<ImageMetadataRecord[]> {
     return db.prepare(
-      'SELECT * FROM image_metadata WHERE perceptual_hash IS NULL LIMIT ?'
+      'SELECT * FROM media_metadata WHERE perceptual_hash IS NULL LIMIT ?'
     ).all(limit) as ImageMetadataRecord[];
   }
 
   /**
    * 해시가 없는 이미지 개수 조회 (레거시: images 테이블)
-   * @deprecated 새 코드에서는 image_metadata 버전 사용
+   * @deprecated 새 코드에서는 media_metadata 버전 사용
    */
   static async countImagesWithoutHashLegacy(): Promise<number> {
     const result = db.prepare(
@@ -561,7 +561,7 @@ export class ImageSimilarityModel {
 
   /**
    * 해시가 없는 이미지 목록 조회 (레거시: images 테이블)
-   * @deprecated 새 코드에서는 image_metadata 버전 사용
+   * @deprecated 새 코드에서는 media_metadata 버전 사용
    */
   static async getImagesWithoutHashLegacy(limit: number = 100): Promise<ImageRecord[]> {
     return db.prepare(

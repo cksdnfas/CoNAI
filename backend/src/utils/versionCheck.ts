@@ -33,14 +33,14 @@ export function checkLegacyDatabase(db: Database.Database): LegacyCheckResult {
     `).get();
     result.hasImagesTable = !!imagesTable;
 
-    // image_metadata 테이블 존재 여부 확인
+    // media_metadata 테이블 존재 여부 확인
     const metadataTable = db.prepare(`
       SELECT name FROM sqlite_master
-      WHERE type='table' AND name='image_metadata'
+      WHERE type='table' AND name='media_metadata'
     `).get();
     result.hasImageMetadataTable = !!metadataTable;
 
-    // 레거시 판정: images 테이블은 있지만 image_metadata는 없는 경우
+    // 레거시 판정: images 테이블은 있지만 media_metadata는 없는 경우
     result.isLegacy = result.hasImagesTable && !result.hasImageMetadataTable;
 
     // 기존 데이터 카운트 (레거시인 경우에만)

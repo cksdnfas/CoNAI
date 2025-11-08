@@ -14,7 +14,7 @@ interface MasonryImageCardProps {
   onClick: () => void;
   selected?: boolean;
   selectable?: boolean;
-  onSelectionChange?: (compositeHash: string, event?: React.MouseEvent) => void;
+  onSelectionChange?: (id: number, event?: React.MouseEvent) => void;  // ✅ image_files.id
 }
 
 const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
@@ -53,10 +53,15 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
 
   const handleSelectionChange = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onSelectionChange && image.composite_hash) {
-      onSelectionChange(image.composite_hash, e);
+    console.log('[MasonryImageCard] Selection clicked:', {
+      imageId: image.id,
+      hasCallback: !!onSelectionChange,
+      selectable
+    });
+    if (onSelectionChange && image.id) {
+      onSelectionChange(image.id, e);
     }
-  }, [onSelectionChange, image.composite_hash]);
+  }, [onSelectionChange, image.id, selectable]);
 
   const handleCardClick = useCallback((e: React.MouseEvent) => {
     // 체크박스 클릭이면 무시

@@ -4,7 +4,7 @@
  * Purpose: 폴더 스캔 및 이미지 조회 성능 최적화를 위한 복합 인덱스 추가
  * - image_files 테이블: folder_id + file_status 복합 인덱스
  * - image_files 테이블: original_file_path + composite_hash 복합 인덱스
- * - image_metadata 테이블: composite_hash 기반 조회 최적화
+ * - media_metadata 테이블: composite_hash 기반 조회 최적화
  */
 
 import Database from 'better-sqlite3';
@@ -28,11 +28,11 @@ export function up(db: Database.Database): void {
   `);
   console.log('  ✅ 인덱스 추가: idx_files_path (original_file_path)');
 
-  // 3. image_metadata: composite_hash + 개별 해시 복합 인덱스
+  // 3. media_metadata: composite_hash + 개별 해시 복합 인덱스
   // 사용 케이스: 유사 이미지 검색 및 중복 이미지 확인
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_metadata_composite_lookup
-      ON image_metadata(composite_hash, perceptual_hash, dhash, ahash);
+      ON media_metadata(composite_hash, perceptual_hash, dhash, ahash);
   `);
   console.log('  ✅ 인덱스 추가: idx_metadata_composite_lookup (해시 조회 최적화)');
 

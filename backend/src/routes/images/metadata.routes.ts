@@ -1,13 +1,11 @@
 import { Router, Request, Response } from 'express';
-import { ImageMetadataModel } from '../../models/Image/ImageMetadataModel';
-import { VideoMetadataModel } from '../../models/VideoMetadataModel';
+import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { successResponse, errorResponse } from '@comfyui-image-manager/shared';
 import { enrichImageWithFileView } from './utils';
 
 const router = Router();
-const videoMetadataModel = new VideoMetadataModel();
 
 /**
  * Composite Hash로 메타데이터 조회
@@ -39,18 +37,8 @@ router.get('/:composite_hash', asyncHandler(async (req: Request, res: Response) 
       return res.status(404).json(errorResponse('File not found'));
     }
 
-    const actualFileType = files[0].file_type;
-    const isVideoOrAnimated = actualFileType === 'video' || actualFileType === 'animated';
-
-    let metadata;
-
-    if (isVideoOrAnimated) {
-      // 비디오/애니메이션 메타데이터 조회
-      metadata = videoMetadataModel.findByCompositeHash(composite_hash);
-    } else {
-      // 이미지 메타데이터 조회
-      metadata = ImageMetadataModel.findByHash(composite_hash);
-    }
+    // 통합 media_metadata 테이블에서 조회
+    const metadata = await MediaMetadataModel.findByHash(composite_hash);
 
     if (!metadata) {
       return res.status(404).json(errorResponse('Metadata not found'));

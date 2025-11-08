@@ -3,22 +3,22 @@ import { ImageMetadataRecord } from '../../types/image';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../../utils/dynamicUpdate';
 
 /**
- * 이미지 메타데이터 모델
+ * 미디어 메타데이터 모델
  * 원본 파일 접근이 필요 없는 모든 작업의 핵심
  *
  * 사용 케이스:
- * - 이미지 브라우징 (썸네일은 캐시에 있음)
+ * - 미디어 브라우징 (썸네일은 캐시에 있음)
  * - 검색/필터 (prompt, model, tags 기반)
  * - 통계/분석 (모델 사용량, 프롬프트 분석)
  * - 그룹 관리 (composite_hash 기반)
  */
-export class ImageMetadataModel {
+export class MediaMetadataModel {
   /**
    * composite_hash로 메타데이터 조회
    */
   static findByHash(compositeHash: string): ImageMetadataRecord | null {
     const row = db.prepare(
-      'SELECT * FROM image_metadata WHERE composite_hash = ?'
+      'SELECT * FROM media_metadata WHERE composite_hash = ?'
     ).get(compositeHash);
     return row as ImageMetadataRecord | null;
   }
@@ -31,7 +31,7 @@ export class ImageMetadataModel {
 
     const placeholders = compositeHashes.map(() => '?').join(',');
     const rows = db.prepare(
-      `SELECT * FROM image_metadata WHERE composite_hash IN (${placeholders})`
+      `SELECT * FROM media_metadata WHERE composite_hash IN (${placeholders})`
     ).all(...compositeHashes);
     return rows as ImageMetadataRecord[];
   }
@@ -52,10 +52,10 @@ export class ImageMetadataModel {
     const sortOrder = options.sortOrder || 'DESC';
     const offset = (page - 1) * limit;
 
-    const countRow = db.prepare('SELECT COUNT(*) as total FROM image_metadata').get() as { total: number };
+    const countRow = db.prepare('SELECT COUNT(*) as total FROM media_metadata').get() as { total: number };
 
     const items = db.prepare(`
-      SELECT * FROM image_metadata
+      SELECT * FROM media_metadata
       ORDER BY ${sortBy} ${sortOrder}
       LIMIT ? OFFSET ?
     `).all(limit, offset) as ImageMetadataRecord[];
@@ -68,7 +68,7 @@ export class ImageMetadataModel {
    */
   static create(data: Omit<ImageMetadataRecord, 'first_seen_date' | 'metadata_updated_date'>): string {
     db.prepare(`
-      INSERT INTO image_metadata (
+      INSERT INTO media_metadata (
         composite_hash, perceptual_hash, dhash, ahash, color_histogram,
         width, height, thumbnail_path,
         ai_tool, model_name, lora_models, steps, cfg_scale, sampler, seed, scheduler,
@@ -115,7 +115,7 @@ export class ImageMetadataModel {
       metadata_updated_date: sqlLiteral('CURRENT_TIMESTAMP')
     };
 
-    const { sql, values } = buildUpdateQuery('image_metadata', finalUpdates, { composite_hash: compositeHash });
+    const { sql, values } = buildUpdateQuery('media_metadata', finalUpdates, { composite_hash: compositeHash });
     const info = db.prepare(sql).run(...values);
 
     return info.changes > 0;
@@ -125,7 +125,7 @@ export class ImageMetadataModel {
    * 메타데이터 삭제 (CASCADE로 image_files도 삭제됨)
    */
   static delete(compositeHash: string): boolean {
-    const info = db.prepare('DELETE FROM image_metadata WHERE composite_hash = ?').run(compositeHash);
+    const info = db.prepare('DELETE FROM media_metadata WHERE composite_hash = ?').run(compositeHash);
     return info.changes > 0;
   }
 
@@ -137,7 +137,7 @@ export class ImageMetadataModel {
 
     const placeholders = compositeHashes.map(() => '?').join(',');
     const info = db.prepare(
-      `DELETE FROM image_metadata WHERE composite_hash IN (${placeholders})`
+      `DELETE FROM media_metadata WHERE composite_hash IN (${placeholders})`
     ).run(...compositeHashes);
 
     return info.changes;
@@ -154,7 +154,7 @@ export class ImageMetadataModel {
     const offset = options?.offset || 0;
 
     return db.prepare(`
-      SELECT * FROM image_metadata
+      SELECT * FROM media_metadata
       WHERE prompt LIKE ? OR negative_prompt LIKE ? OR model_name LIKE ?
       ORDER BY first_seen_date DESC
       LIMIT ? OFFSET ?
@@ -173,11 +173,11 @@ export class ImageMetadataModel {
     const offset = (page - 1) * limit;
 
     const countRow = db.prepare(
-      'SELECT COUNT(*) as total FROM image_metadata WHERE ai_tool = ?'
+      'SELECT COUNT(*) as total FROM media_metadata WHERE ai_tool = ?'
     ).get(aiTool) as { total: number };
 
     const items = db.prepare(`
-      SELECT * FROM image_metadata
+      SELECT * FROM media_metadata
       WHERE ai_tool = ?
       ORDER BY first_seen_date DESC
       LIMIT ? OFFSET ?
@@ -198,11 +198,11 @@ export class ImageMetadataModel {
     const offset = (page - 1) * limit;
 
     const countRow = db.prepare(
-      'SELECT COUNT(*) as total FROM image_metadata WHERE model_name = ?'
+      'SELECT COUNT(*) as total FROM media_metadata WHERE model_name = ?'
     ).get(modelName) as { total: number };
 
     const items = db.prepare(`
-      SELECT * FROM image_metadata
+      SELECT * FROM media_metadata
       WHERE model_name = ?
       ORDER BY first_seen_date DESC
       LIMIT ? OFFSET ?
@@ -225,11 +225,11 @@ export class ImageMetadataModel {
     const offset = (_page - 1) * _limit;
 
     const countRow = db.prepare(
-      'SELECT COUNT(*) as total FROM image_metadata WHERE first_seen_date BETWEEN ? AND ?'
+      'SELECT COUNT(*) as total FROM media_metadata WHERE first_seen_date BETWEEN ? AND ?'
     ).get(startDate, endDate) as { total: number };
 
     const items = db.prepare(`
-      SELECT * FROM image_metadata
+      SELECT * FROM media_metadata
       WHERE first_seen_date BETWEEN ? AND ?
       ORDER BY first_seen_date DESC
       LIMIT ? OFFSET ?
@@ -254,11 +254,11 @@ export class ImageMetadataModel {
     const offset = (page - 1) * limit;
 
     const countRow = db.prepare(
-      'SELECT COUNT(*) as total FROM image_metadata WHERE rating_score BETWEEN ? AND ?'
+      'SELECT COUNT(*) as total FROM media_metadata WHERE rating_score BETWEEN ? AND ?'
     ).get(minRating, maxRating) as { total: number };
 
     const items = db.prepare(`
-      SELECT * FROM image_metadata
+      SELECT * FROM media_metadata
       WHERE rating_score BETWEEN ? AND ?
       ORDER BY rating_score DESC, first_seen_date DESC
       LIMIT ? OFFSET ?
@@ -273,7 +273,7 @@ export class ImageMetadataModel {
   static getAIToolStats(): Array<{ ai_tool: string; count: number }> {
     return db.prepare(`
       SELECT ai_tool, COUNT(*) as count
-      FROM image_metadata
+      FROM media_metadata
       WHERE ai_tool IS NOT NULL
       GROUP BY ai_tool
       ORDER BY count DESC
@@ -286,7 +286,7 @@ export class ImageMetadataModel {
   static getModelStats(): Array<{ model_name: string; count: number }> {
     return db.prepare(`
       SELECT model_name, COUNT(*) as count
-      FROM image_metadata
+      FROM media_metadata
       WHERE model_name IS NOT NULL
       GROUP BY model_name
       ORDER BY count DESC
@@ -298,7 +298,7 @@ export class ImageMetadataModel {
    * 총 개수
    */
   static count(): number {
-    const row = db.prepare('SELECT COUNT(*) as count FROM image_metadata').get() as { count: number };
+    const row = db.prepare('SELECT COUNT(*) as count FROM media_metadata').get() as { count: number };
     return row.count;
   }
 
@@ -307,7 +307,7 @@ export class ImageMetadataModel {
    */
   static exists(compositeHash: string): boolean {
     const row = db.prepare(
-      'SELECT 1 FROM image_metadata WHERE composite_hash = ? LIMIT 1'
+      'SELECT 1 FROM media_metadata WHERE composite_hash = ? LIMIT 1'
     ).get(compositeHash);
     return !!row;
   }
@@ -336,42 +336,42 @@ export class ImageMetadataModel {
     `).get() as { total: number };
 
     // composite_hash가 있는 이미지만 조회 (해시 생성 완료)
-    // 인덱스 활용을 위해 COALESCE 제거 - sortBy에 따라 조건부 쿼리 실행
+    // 인덱스 활용을 위해 sortBy에 따라 조건부 쿼리 실행
     let query: string;
     if (sortBy === 'scan_date') {
       // scan_date로 정렬 시 idx_files_scan_date_desc 인덱스 활용
       query = `
         SELECT
-          COALESCE(im.composite_hash, vm.composite_hash) as composite_hash,
-          im.perceptual_hash,
-          im.dhash,
-          im.ahash,
-          im.color_histogram,
-          COALESCE(im.width, vm.width) as width,
-          COALESCE(im.height, vm.height) as height,
-          im.thumbnail_path,
-          COALESCE(im.ai_tool, vm.ai_tool) as ai_tool,
-          COALESCE(im.model_name, vm.model_name) as model_name,
-          COALESCE(im.lora_models, vm.lora_models) as lora_models,
-          COALESCE(im.steps, vm.steps) as steps,
-          COALESCE(im.cfg_scale, vm.cfg_scale) as cfg_scale,
-          COALESCE(im.sampler, vm.sampler) as sampler,
-          COALESCE(im.seed, vm.seed) as seed,
-          COALESCE(im.scheduler, vm.scheduler) as scheduler,
-          COALESCE(im.prompt, vm.prompt) as prompt,
-          COALESCE(im.negative_prompt, vm.negative_prompt) as negative_prompt,
-          COALESCE(im.denoise_strength, vm.denoise_strength) as denoise_strength,
-          COALESCE(im.generation_time, vm.generation_time) as generation_time,
-          COALESCE(im.batch_size, vm.batch_size) as batch_size,
-          COALESCE(im.batch_index, vm.batch_index) as batch_index,
-          COALESCE(im.auto_tags, vm.auto_tags) as auto_tags,
-          COALESCE(im.duration, vm.duration) as duration,
-          COALESCE(im.fps, vm.fps) as fps,
-          COALESCE(im.video_codec, vm.video_codec) as video_codec,
-          COALESCE(im.audio_codec, vm.audio_codec) as audio_codec,
-          COALESCE(im.bitrate, vm.bitrate) as bitrate,
-          COALESCE(im.first_seen_date, vm.first_seen_date) as first_seen_date,
-          COALESCE(im.metadata_updated_date, vm.metadata_updated_date) as metadata_updated_date,
+          mm.composite_hash,
+          mm.perceptual_hash,
+          mm.dhash,
+          mm.ahash,
+          mm.color_histogram,
+          mm.width,
+          mm.height,
+          mm.thumbnail_path,
+          mm.ai_tool,
+          mm.model_name,
+          mm.lora_models,
+          mm.steps,
+          mm.cfg_scale,
+          mm.sampler,
+          mm.seed,
+          mm.scheduler,
+          mm.prompt,
+          mm.negative_prompt,
+          mm.denoise_strength,
+          mm.generation_time,
+          mm.batch_size,
+          mm.batch_index,
+          mm.auto_tags,
+          mm.duration,
+          mm.fps,
+          mm.video_codec,
+          mm.audio_codec,
+          mm.bitrate,
+          mm.first_seen_date,
+          mm.metadata_updated_date,
           if.id as file_id,
           if.original_file_path,
           if.file_size,
@@ -380,8 +380,7 @@ export class ImageMetadataModel {
           if.scan_date,
           if.file_type
         FROM image_files if
-        LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
-        LEFT JOIN video_metadata vm ON if.composite_hash = vm.composite_hash
+        LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
         WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
         ORDER BY if.scan_date ${sortOrder}
         LIMIT ? OFFSET ?
@@ -390,36 +389,36 @@ export class ImageMetadataModel {
       // file_size로 정렬 (image_files 테이블의 컬럼)
       query = `
         SELECT
-          COALESCE(im.composite_hash, vm.composite_hash) as composite_hash,
-          im.perceptual_hash,
-          im.dhash,
-          im.ahash,
-          im.color_histogram,
-          COALESCE(im.width, vm.width) as width,
-          COALESCE(im.height, vm.height) as height,
-          im.thumbnail_path,
-          COALESCE(im.ai_tool, vm.ai_tool) as ai_tool,
-          COALESCE(im.model_name, vm.model_name) as model_name,
-          COALESCE(im.lora_models, vm.lora_models) as lora_models,
-          COALESCE(im.steps, vm.steps) as steps,
-          COALESCE(im.cfg_scale, vm.cfg_scale) as cfg_scale,
-          COALESCE(im.sampler, vm.sampler) as sampler,
-          COALESCE(im.seed, vm.seed) as seed,
-          COALESCE(im.scheduler, vm.scheduler) as scheduler,
-          COALESCE(im.prompt, vm.prompt) as prompt,
-          COALESCE(im.negative_prompt, vm.negative_prompt) as negative_prompt,
-          COALESCE(im.denoise_strength, vm.denoise_strength) as denoise_strength,
-          COALESCE(im.generation_time, vm.generation_time) as generation_time,
-          COALESCE(im.batch_size, vm.batch_size) as batch_size,
-          COALESCE(im.batch_index, vm.batch_index) as batch_index,
-          COALESCE(im.auto_tags, vm.auto_tags) as auto_tags,
-          COALESCE(im.duration, vm.duration) as duration,
-          COALESCE(im.fps, vm.fps) as fps,
-          COALESCE(im.video_codec, vm.video_codec) as video_codec,
-          COALESCE(im.audio_codec, vm.audio_codec) as audio_codec,
-          COALESCE(im.bitrate, vm.bitrate) as bitrate,
-          COALESCE(im.first_seen_date, vm.first_seen_date) as first_seen_date,
-          COALESCE(im.metadata_updated_date, vm.metadata_updated_date) as metadata_updated_date,
+          mm.composite_hash,
+          mm.perceptual_hash,
+          mm.dhash,
+          mm.ahash,
+          mm.color_histogram,
+          mm.width,
+          mm.height,
+          mm.thumbnail_path,
+          mm.ai_tool,
+          mm.model_name,
+          mm.lora_models,
+          mm.steps,
+          mm.cfg_scale,
+          mm.sampler,
+          mm.seed,
+          mm.scheduler,
+          mm.prompt,
+          mm.negative_prompt,
+          mm.denoise_strength,
+          mm.generation_time,
+          mm.batch_size,
+          mm.batch_index,
+          mm.auto_tags,
+          mm.duration,
+          mm.fps,
+          mm.video_codec,
+          mm.audio_codec,
+          mm.bitrate,
+          mm.first_seen_date,
+          mm.metadata_updated_date,
           if.id as file_id,
           if.original_file_path,
           if.file_size,
@@ -428,8 +427,7 @@ export class ImageMetadataModel {
           if.scan_date,
           if.file_type
         FROM image_files if
-        LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
-        LEFT JOIN video_metadata vm ON if.composite_hash = vm.composite_hash
+        LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
         WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
         ORDER BY if.file_size ${sortOrder}
         LIMIT ? OFFSET ?
@@ -438,85 +436,36 @@ export class ImageMetadataModel {
       // first_seen_date로 정렬 시 idx_metadata_first_seen_desc 인덱스 활용
       query = `
         SELECT
-          COALESCE(im.composite_hash, vm.composite_hash) as composite_hash,
-          im.perceptual_hash,
-          im.dhash,
-          im.ahash,
-          im.color_histogram,
-          COALESCE(im.width, vm.width) as width,
-          COALESCE(im.height, vm.height) as height,
-          im.thumbnail_path,
-          COALESCE(im.ai_tool, vm.ai_tool) as ai_tool,
-          COALESCE(im.model_name, vm.model_name) as model_name,
-          COALESCE(im.lora_models, vm.lora_models) as lora_models,
-          COALESCE(im.steps, vm.steps) as steps,
-          COALESCE(im.cfg_scale, vm.cfg_scale) as cfg_scale,
-          COALESCE(im.sampler, vm.sampler) as sampler,
-          COALESCE(im.seed, vm.seed) as seed,
-          COALESCE(im.scheduler, vm.scheduler) as scheduler,
-          COALESCE(im.prompt, vm.prompt) as prompt,
-          COALESCE(im.negative_prompt, vm.negative_prompt) as negative_prompt,
-          COALESCE(im.denoise_strength, vm.denoise_strength) as denoise_strength,
-          COALESCE(im.generation_time, vm.generation_time) as generation_time,
-          COALESCE(im.batch_size, vm.batch_size) as batch_size,
-          COALESCE(im.batch_index, vm.batch_index) as batch_index,
-          COALESCE(im.auto_tags, vm.auto_tags) as auto_tags,
-          COALESCE(im.duration, vm.duration) as duration,
-          COALESCE(im.fps, vm.fps) as fps,
-          COALESCE(im.video_codec, vm.video_codec) as video_codec,
-          COALESCE(im.audio_codec, vm.audio_codec) as audio_codec,
-          COALESCE(im.bitrate, vm.bitrate) as bitrate,
-          COALESCE(im.first_seen_date, vm.first_seen_date) as first_seen_date,
-          COALESCE(im.metadata_updated_date, vm.metadata_updated_date) as metadata_updated_date,
-          if.id as file_id,
-          if.original_file_path,
-          if.file_size,
-          if.mime_type,
-          if.file_status,
-          if.scan_date,
-          if.file_type,
-          COALESCE(im.first_seen_date, vm.first_seen_date) as sort_date
-        FROM image_files if
-        LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
-        LEFT JOIN video_metadata vm ON if.composite_hash = vm.composite_hash
-        WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
-        ORDER BY sort_date ${sortOrder}
-        LIMIT ? OFFSET ?
-      `;
-    } else {
-      // 기타 metadata 필드로 정렬
-      query = `
-        SELECT
-          COALESCE(im.composite_hash, vm.composite_hash) as composite_hash,
-          im.perceptual_hash,
-          im.dhash,
-          im.ahash,
-          im.color_histogram,
-          COALESCE(im.width, vm.width) as width,
-          COALESCE(im.height, vm.height) as height,
-          im.thumbnail_path,
-          COALESCE(im.ai_tool, vm.ai_tool) as ai_tool,
-          COALESCE(im.model_name, vm.model_name) as model_name,
-          COALESCE(im.lora_models, vm.lora_models) as lora_models,
-          COALESCE(im.steps, vm.steps) as steps,
-          COALESCE(im.cfg_scale, vm.cfg_scale) as cfg_scale,
-          COALESCE(im.sampler, vm.sampler) as sampler,
-          COALESCE(im.seed, vm.seed) as seed,
-          COALESCE(im.scheduler, vm.scheduler) as scheduler,
-          COALESCE(im.prompt, vm.prompt) as prompt,
-          COALESCE(im.negative_prompt, vm.negative_prompt) as negative_prompt,
-          COALESCE(im.denoise_strength, vm.denoise_strength) as denoise_strength,
-          COALESCE(im.generation_time, vm.generation_time) as generation_time,
-          COALESCE(im.batch_size, vm.batch_size) as batch_size,
-          COALESCE(im.batch_index, vm.batch_index) as batch_index,
-          COALESCE(im.auto_tags, vm.auto_tags) as auto_tags,
-          COALESCE(im.duration, vm.duration) as duration,
-          COALESCE(im.fps, vm.fps) as fps,
-          COALESCE(im.video_codec, vm.video_codec) as video_codec,
-          COALESCE(im.audio_codec, vm.audio_codec) as audio_codec,
-          COALESCE(im.bitrate, vm.bitrate) as bitrate,
-          COALESCE(im.first_seen_date, vm.first_seen_date) as first_seen_date,
-          COALESCE(im.metadata_updated_date, vm.metadata_updated_date) as metadata_updated_date,
+          mm.composite_hash,
+          mm.perceptual_hash,
+          mm.dhash,
+          mm.ahash,
+          mm.color_histogram,
+          mm.width,
+          mm.height,
+          mm.thumbnail_path,
+          mm.ai_tool,
+          mm.model_name,
+          mm.lora_models,
+          mm.steps,
+          mm.cfg_scale,
+          mm.sampler,
+          mm.seed,
+          mm.scheduler,
+          mm.prompt,
+          mm.negative_prompt,
+          mm.denoise_strength,
+          mm.generation_time,
+          mm.batch_size,
+          mm.batch_index,
+          mm.auto_tags,
+          mm.duration,
+          mm.fps,
+          mm.video_codec,
+          mm.audio_codec,
+          mm.bitrate,
+          mm.first_seen_date,
+          mm.metadata_updated_date,
           if.id as file_id,
           if.original_file_path,
           if.file_size,
@@ -525,10 +474,56 @@ export class ImageMetadataModel {
           if.scan_date,
           if.file_type
         FROM image_files if
-        LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
-        LEFT JOIN video_metadata vm ON if.composite_hash = vm.composite_hash
+        LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
         WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
-        ORDER BY COALESCE(im.${sortBy}, vm.${sortBy}, if.scan_date) ${sortOrder}
+        ORDER BY mm.first_seen_date ${sortOrder}
+        LIMIT ? OFFSET ?
+      `;
+    } else {
+      // 기타 metadata 필드로 정렬
+      query = `
+        SELECT
+          mm.composite_hash,
+          mm.perceptual_hash,
+          mm.dhash,
+          mm.ahash,
+          mm.color_histogram,
+          mm.width,
+          mm.height,
+          mm.thumbnail_path,
+          mm.ai_tool,
+          mm.model_name,
+          mm.lora_models,
+          mm.steps,
+          mm.cfg_scale,
+          mm.sampler,
+          mm.seed,
+          mm.scheduler,
+          mm.prompt,
+          mm.negative_prompt,
+          mm.denoise_strength,
+          mm.generation_time,
+          mm.batch_size,
+          mm.batch_index,
+          mm.auto_tags,
+          mm.duration,
+          mm.fps,
+          mm.video_codec,
+          mm.audio_codec,
+          mm.bitrate,
+          mm.first_seen_date,
+          mm.metadata_updated_date,
+          if.id as file_id,
+          if.original_file_path,
+          if.file_size,
+          if.mime_type,
+          if.file_status,
+          if.scan_date,
+          if.file_type
+        FROM image_files if
+        LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
+        WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
+        ORDER BY mm.${sortBy} ${sortOrder}
         LIMIT ? OFFSET ?
       `;
     }
@@ -545,36 +540,36 @@ export class ImageMetadataModel {
   static getRandomImage(): any | null {
     const row = db.prepare(`
       SELECT
-        COALESCE(im.composite_hash, vm.composite_hash) as composite_hash,
-        im.perceptual_hash,
-        im.dhash,
-        im.ahash,
-        im.color_histogram,
-        COALESCE(im.width, vm.width) as width,
-        COALESCE(im.height, vm.height) as height,
-        im.thumbnail_path,
-        COALESCE(im.ai_tool, vm.ai_tool) as ai_tool,
-        COALESCE(im.model_name, vm.model_name) as model_name,
-        COALESCE(im.lora_models, vm.lora_models) as lora_models,
-        COALESCE(im.steps, vm.steps) as steps,
-        COALESCE(im.cfg_scale, vm.cfg_scale) as cfg_scale,
-        COALESCE(im.sampler, vm.sampler) as sampler,
-        COALESCE(im.seed, vm.seed) as seed,
-        COALESCE(im.scheduler, vm.scheduler) as scheduler,
-        COALESCE(im.prompt, vm.prompt) as prompt,
-        COALESCE(im.negative_prompt, vm.negative_prompt) as negative_prompt,
-        COALESCE(im.denoise_strength, vm.denoise_strength) as denoise_strength,
-        COALESCE(im.generation_time, vm.generation_time) as generation_time,
-        COALESCE(im.batch_size, vm.batch_size) as batch_size,
-        COALESCE(im.batch_index, vm.batch_index) as batch_index,
-        COALESCE(im.auto_tags, vm.auto_tags) as auto_tags,
-        COALESCE(im.duration, vm.duration) as duration,
-        COALESCE(im.fps, vm.fps) as fps,
-        COALESCE(im.video_codec, vm.video_codec) as video_codec,
-        COALESCE(im.audio_codec, vm.audio_codec) as audio_codec,
-        COALESCE(im.bitrate, vm.bitrate) as bitrate,
-        COALESCE(im.first_seen_date, vm.first_seen_date) as first_seen_date,
-        COALESCE(im.metadata_updated_date, vm.metadata_updated_date) as metadata_updated_date,
+        mm.composite_hash,
+        mm.perceptual_hash,
+        mm.dhash,
+        mm.ahash,
+        mm.color_histogram,
+        mm.width,
+        mm.height,
+        mm.thumbnail_path,
+        mm.ai_tool,
+        mm.model_name,
+        mm.lora_models,
+        mm.steps,
+        mm.cfg_scale,
+        mm.sampler,
+        mm.seed,
+        mm.scheduler,
+        mm.prompt,
+        mm.negative_prompt,
+        mm.denoise_strength,
+        mm.generation_time,
+        mm.batch_size,
+        mm.batch_index,
+        mm.auto_tags,
+        mm.duration,
+        mm.fps,
+        mm.video_codec,
+        mm.audio_codec,
+        mm.bitrate,
+        mm.first_seen_date,
+        mm.metadata_updated_date,
         if.id as file_id,
         if.original_file_path,
         if.file_size,
@@ -583,8 +578,7 @@ export class ImageMetadataModel {
         if.scan_date,
         if.file_type
       FROM image_files if
-      LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
-      LEFT JOIN video_metadata vm ON if.composite_hash = vm.composite_hash
+      LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
       WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
       ORDER BY RANDOM()
       LIMIT 1

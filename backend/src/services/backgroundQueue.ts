@@ -166,9 +166,9 @@ export class BackgroundQueueService {
     const aiMetadata = await MetadataExtractor.extractMetadata(task.filePath);
     const aiInfo = aiMetadata.ai_info || {};
 
-    // image_metadata 업데이트
+    // media_metadata 업데이트
     db.prepare(`
-      UPDATE image_metadata
+      UPDATE media_metadata
       SET
         ai_tool = ?,
         model_name = ?,
@@ -223,7 +223,7 @@ export class BackgroundQueueService {
   private static async processPromptCollection(task: BackgroundTask): Promise<void> {
     // 메타데이터에서 프롬프트 조회
     const metadata = db.prepare(
-      'SELECT prompt, negative_prompt FROM image_metadata WHERE composite_hash = ?'
+      'SELECT prompt, negative_prompt FROM media_metadata WHERE composite_hash = ?'
     ).get(task.compositeHash) as any;
 
     if (!metadata || !metadata.prompt) {

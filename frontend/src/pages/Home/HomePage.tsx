@@ -15,10 +15,14 @@ const HomePage: React.FC = () => {
     refreshImages,
   } = useInfiniteImages();
 
-  // ✅ 선택 상태 관리 (상시 선택모드) - composite_hash 기반
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // ✅ 선택 상태 관리 (상시 선택모드) - id 기반 (중복 이미지 개별 선택)
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
-  const handleSelectionChange = (newSelectedIds: string[]) => {
+  const handleSelectionChange = (newSelectedIds: number[]) => {
+    console.log('[HomePage] handleSelectionChange called:', {
+      newSelectedIds,
+      currentSelectedIds: selectedIds
+    });
     setSelectedIds(newSelectedIds);
   };
 
@@ -26,10 +30,16 @@ const HomePage: React.FC = () => {
     setSelectedIds([]);
   };
 
-  const handleActionComplete = async (deletedIds?: string[]) => {
+  const handleActionComplete = async (deletedHashes?: string[]) => {
     // 삭제된 이미지가 있으면 선택에서 제거
-    if (deletedIds && deletedIds.length > 0) {
-      setSelectedIds(prev => prev.filter(id => !deletedIds.includes(id)));
+    if (deletedHashes && deletedHashes.length > 0) {
+      // composite_hash로 이미지를 찾아서 id를 제거
+      const deletedImageIds = images
+        .filter(img => img.composite_hash && deletedHashes.includes(img.composite_hash))
+        .map(img => img.id)
+        .filter((id): id is number => id !== undefined);
+
+      setSelectedIds(prev => prev.filter(id => !deletedImageIds.includes(id)));
     }
     // 이미지 목록 새로고침
     await refreshImages();
@@ -108,7 +118,7 @@ const HomePage: React.FC = () => {
       <BulkActionBar
         selectedCount={selectedIds.length}
         selectedIds={selectedIds}
-        selectedImages={images.filter(img => img.composite_hash && selectedIds.includes(img.composite_hash))}
+        selectedImages={images.filter(img => img.id && selectedIds.includes(img.id))}
         onSelectionClear={handleSelectionClear}
         onActionComplete={handleActionComplete}
       />

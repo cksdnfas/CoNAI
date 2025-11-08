@@ -18,11 +18,16 @@ import WorkflowFormPage from './pages/Workflows/WorkflowFormPage';
 import WorkflowGeneratePage from './pages/Workflows/WorkflowGeneratePage';
 import HelpPage from './pages/Help/HelpPage';
 
+// Auth 컴포넌트들
+import { LoginPage } from './components/Auth/LoginPage';
+import { ProtectedRoute } from './components/Auth/ProtectedRoute';
+
 // 레이아웃 컴포넌트들
 import { Layout } from './components/Layout';
 
-// 테마 컨텍스트
+// 컨텍스트
 import { ThemeProvider } from './contexts/ThemeContext';
+import { AuthProvider } from './contexts/AuthContext';
 
 // React Query 클라이언트 설정
 const queryClient = new QueryClient({
@@ -42,22 +47,37 @@ function App() {
       <ThemeProvider>
         <CssBaseline />
         <Router>
-          <Layout>
+          <AuthProvider>
             <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/gallery" element={<GalleryPage />} />
-              <Route path="/image-groups" element={<ImageGroupsPage />} />
-              <Route path="/upload" element={<UploadPage />} />
-              <Route path="/search" element={<SearchPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/help" element={<HelpPage />} />
-              <Route path="/image/:compositeHash" element={<ImageDetailPage />} />
-              <Route path="/image-generation" element={<ImageGenerationPage />} />
-              <Route path="/image-generation/new" element={<WorkflowFormPage />} />
-              <Route path="/image-generation/:id/edit" element={<WorkflowFormPage />} />
-              <Route path="/image-generation/:id/generate" element={<WorkflowGeneratePage />} />
+              {/* Login page (no auth required) */}
+              <Route path="/login" element={<LoginPage />} />
+
+              {/* Protected routes */}
+              <Route
+                path="/*"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Routes>
+                        <Route path="/" element={<HomePage />} />
+                        <Route path="/gallery" element={<GalleryPage />} />
+                        <Route path="/image-groups" element={<ImageGroupsPage />} />
+                        <Route path="/upload" element={<UploadPage />} />
+                        <Route path="/search" element={<SearchPage />} />
+                        <Route path="/settings" element={<SettingsPage />} />
+                        <Route path="/help" element={<HelpPage />} />
+                        <Route path="/image/:compositeHash" element={<ImageDetailPage />} />
+                        <Route path="/image-generation" element={<ImageGenerationPage />} />
+                        <Route path="/image-generation/new" element={<WorkflowFormPage />} />
+                        <Route path="/image-generation/:id/edit" element={<WorkflowFormPage />} />
+                        <Route path="/image-generation/:id/generate" element={<WorkflowGeneratePage />} />
+                      </Routes>
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
             </Routes>
-          </Layout>
+          </AuthProvider>
         </Router>
       </ThemeProvider>
     </QueryClientProvider>

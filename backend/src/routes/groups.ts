@@ -65,7 +65,7 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
       return res.status(404).json(errorResponse('No images found in group'));
     }
 
-    // 썸네일 파일 경로 사용 (image_metadata에 저장됨)
+    // 썸네일 파일 경로 사용 (media_metadata에 저장됨)
     if (!randomImage.thumbnail_path) {
       return res.status(404).json(errorResponse('Thumbnail not found for image'));
     }
@@ -478,20 +478,20 @@ router.post('/auto-collect-all', asyncHandler(async (req: Request, res: Response
 }));
 
 /**
- * 그룹에 속한 모든 이미지 composite_hash 조회 (랜덤 선택용)
+ * 그룹에 속한 모든 이미지 파일 ID 조회 (선택 기능용)
  * GET /api/groups/:id/image-ids
  *
- * Note: 엔드포인트 이름은 image-ids지만 실제로는 composite_hash 배열을 반환합니다
+ * Note: image_files.id 배열을 반환 (중복 이미지 개별 선택 가능)
  */
 router.get('/:id/image-ids', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(req.params.id, 'Group ID');
 
-    const hashes = await ImageGroupModel.getCompositeHashesForGroup(id);
+    const fileIds = await ImageGroupModel.getImageFileIdsForGroup(id);
 
     return res.json(successResponse({
-      ids: hashes, // 클라이언트 호환성을 위해 'ids' 키 유지
-      total: hashes.length
+      ids: fileIds,
+      total: fileIds.length
     }));
   } catch (error) {
     console.error('Error getting image IDs from group:', error);

@@ -58,7 +58,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   onImagesAssigned,
 }) => {
   const { t } = useTranslation(['imageGroups', 'common']);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);  // ✅ id 기반 (중복 이미지 개별 선택)
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
 
@@ -80,7 +80,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   }, [currentGroup?.id]);
 
   // 선택된 이미지 정보
-  const selectedImages = images.filter(img => img.composite_hash && selectedIds.includes(img.composite_hash));
+  const selectedImages = images.filter(img => img.id && selectedIds.includes(img.id));
   const hasManualSelected = selectedImages.some(img => {
     const groupInfo = img.groups?.find(g => g.id === currentGroup?.id);
     return groupInfo?.collection_type === 'manual';

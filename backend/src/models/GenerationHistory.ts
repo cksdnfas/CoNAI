@@ -319,7 +319,7 @@ export class GenerationHistoryModel {
   }
 
   /**
-   * Find history record by ID with metadata from image_files and image_metadata tables
+   * Find history record by ID with metadata from image_files and media_metadata tables
    * Returns history with actual composite_hash, thumbnails, and metadata if available
    * Uses ATTACH DATABASE for cross-database queries (main_db = images.db)
    */
@@ -340,7 +340,7 @@ export class GenerationHistoryModel {
       LEFT JOIN main_db.image_files if ON
         (if.composite_hash = gh.composite_hash AND gh.composite_hash IS NOT NULL)
         OR if.original_file_path LIKE '%' || gh.original_path
-      LEFT JOIN main_db.image_metadata im ON im.composite_hash = if.composite_hash
+      LEFT JOIN main_db.media_metadata im ON im.composite_hash = if.composite_hash
       WHERE gh.id = ?
       LIMIT 1
     `);
@@ -349,7 +349,7 @@ export class GenerationHistoryModel {
   }
 
   /**
-   * Find all records with metadata from image_files and image_metadata tables
+   * Find all records with metadata from image_files and media_metadata tables
    * Returns history records with actual composite_hash, thumbnails, and metadata if available
    * Uses ATTACH DATABASE for cross-database queries (main_db = images.db)
    */
@@ -372,7 +372,7 @@ export class GenerationHistoryModel {
       LEFT JOIN main_db.image_files if ON
         (if.composite_hash = gh.composite_hash AND gh.composite_hash IS NOT NULL)
         OR if.original_file_path LIKE '%' || gh.original_path
-      LEFT JOIN main_db.image_metadata im ON im.composite_hash = if.composite_hash
+      LEFT JOIN main_db.media_metadata im ON im.composite_hash = if.composite_hash
       WHERE 1=1
     `;
     const params: any[] = [];

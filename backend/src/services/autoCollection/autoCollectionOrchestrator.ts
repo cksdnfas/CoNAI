@@ -14,7 +14,7 @@ import {
   AutoCollectResult,
   ComplexFilter
 } from '@comfyui-image-manager/shared';
-import { ImageMetadataModel } from '../../models/Image/ImageMetadataModel';
+import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ComplexFilterService } from '../complexFilterService';
 import { checkImageMatchesConditions } from './conditionEvaluator';
 import { EvaluableImage } from './types';
@@ -100,7 +100,7 @@ export class AutoCollectionOrchestrator {
     let hasMore = true;
 
     while (hasMore) {
-      const result = await ImageMetadataModel.findAll({ page, limit });
+      const result = await MediaMetadataModel.findAll({ page, limit });
       const images = result.items;
 
       if (images.length === 0) {
@@ -246,7 +246,7 @@ export class AutoCollectionOrchestrator {
   ): Promise<AutoCollectResult[]> {
     try {
       // Get image metadata
-      const image = ImageMetadataModel.findByHash(compositeHash);
+      const image = MediaMetadataModel.findByHash(compositeHash);
       if (!image) {
         throw new Error(`Image metadata not found for hash: ${compositeHash.substring(0, 16)}...`);
       }

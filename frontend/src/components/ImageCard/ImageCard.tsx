@@ -26,8 +26,8 @@ interface ImageCardProps {
   image: ImageRecord;
   selected?: boolean;
   selectable?: boolean;
-  onSelectionChange?: (compositeHash: string, event?: React.MouseEvent) => void;  // composite_hash
-  onDelete?: (compositeHash: string) => void;  // composite_hash
+  onSelectionChange?: (id: number, event?: React.MouseEvent) => void;  // ✅ image_files.id
+  onDelete?: (compositeHash: string) => void;  // composite_hash (메타데이터 작업용)
   onImageClick?: () => void;
   showCollectionType?: boolean; // 그룹 모달에서만 collection_type 표시
   currentGroupId?: number; // 현재 그룹 ID (collection_type 표시용)
@@ -54,13 +54,13 @@ const ImageCard: React.FC<ImageCardProps> = ({
     : null;
   const isAutoCollected = currentGroupInfo?.collection_type === 'auto';
 
-  // ✅ composite_hash 사용 (NULL 처리 포함)
+  // ✅ id 사용 (중복 이미지 개별 선택 가능)
   const handleSelectionClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation(); // 이벤트 전파 방지
-    if (onSelectionChange && image.composite_hash) {
-      onSelectionChange(image.composite_hash, e);
+    if (onSelectionChange && image.id) {
+      onSelectionChange(image.id, e);
     }
-  }, [onSelectionChange, image.composite_hash]);
+  }, [onSelectionChange, image.id]);
 
   const handleDownload = useCallback((e: React.MouseEvent) => {
     e.stopPropagation(); // 이벤트 전파 방지

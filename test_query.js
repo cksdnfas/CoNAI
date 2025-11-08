@@ -5,9 +5,9 @@ const query = `
     if.id as file_id,
     if.mime_type,
     if.file_hash,
-    im.composite_hash
+    mm.composite_hash
   FROM image_files if
-  LEFT JOIN image_metadata im ON if.composite_hash = im.composite_hash
+  LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
   WHERE if.file_status = 'active' AND if.mime_type LIKE 'video/%'
   LIMIT 1
 `;

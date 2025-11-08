@@ -2,11 +2,12 @@ import { db } from '../database/init';
 import { taggerDaemon } from './taggerDaemon';
 import { settingsService } from './settingsService';
 import { imageTaggerService, ImageTaggerService } from './imageTaggerService';
+import { SystemSettingsService } from './systemSettingsService';
 import path from 'path';
 
 /**
  * 자동 태깅 스케줄러
- * - image_metadata 테이블에서 auto_tags가 NULL인 항목 검색
+ * - media_metadata 테이블에서 auto_tags가 NULL인 항목 검색
  * - 발견된 이미지들을 순차적으로 태깅 처리
  * - 주기적으로 반복 실행
  */
@@ -14,9 +15,21 @@ export class AutoTagScheduler {
   private isRunning = false;
   private pollingTimer: NodeJS.Timeout | null = null;
   private processingTimer: NodeJS.Timeout | null = null;
-  private readonly POLLING_INTERVAL_MS = 30000; // 30초마다 확인
-  private readonly BATCH_SIZE = 10; // 한 번에 처리할 최대 이미지 수
   private readonly PROCESSING_DELAY_MS = 1000; // 이미지 간 처리 간격 (1초)
+
+  /**
+   * 폴링 간격 조회 (밀리초)
+   */
+  private getPollingIntervalMs(): number {
+    return SystemSettingsService.getAutoTagPollingInterval() * 1000;
+  }
+
+  /**
+   * 배치 크기 조회
+   */
+  private getBatchSize(): number {
+    return SystemSettingsService.getAutoTagBatchSize();
+  }
 
   /**
    * 스케줄러 시작
@@ -33,9 +46,12 @@ export class AutoTagScheduler {
       return;
     }
 
+    const pollingIntervalMs = this.getPollingIntervalMs();
+    const batchSize = this.getBatchSize();
+
     console.log('[AutoTagScheduler] Starting auto-tag scheduler...');
-    console.log(`[AutoTagScheduler] Polling interval: ${this.POLLING_INTERVAL_MS / 1000}s`);
-    console.log(`[AutoTagScheduler] Batch size: ${this.BATCH_SIZE}`);
+    console.log(`[AutoTagScheduler] Polling interval: ${pollingIntervalMs / 1000}s`);
+    console.log(`[AutoTagScheduler] Batch size: ${batchSize}`);
 
     this.isRunning = true;
 
@@ -45,7 +61,7 @@ export class AutoTagScheduler {
     // 주기적 실행 시작
     this.pollingTimer = setInterval(() => {
       this.processUntaggedImages();
-    }, this.POLLING_INTERVAL_MS);
+    }, pollingIntervalMs);
   }
 
   /**
@@ -81,50 +97,31 @@ export class AutoTagScheduler {
     }
 
     try {
+      const batchSize = this.getBatchSize();
+
       // 태깅되지 않은 이미지/비디오 조회 (image_files에서 active한 파일 경로 가져오기)
-      // file_type은 태깅 방식 결정, metadata_table은 업데이트할 테이블 결정
+      // file_type은 태깅 방식 결정
       const untaggedImages = db.prepare(`
         SELECT
-          im.composite_hash,
+          mm.composite_hash,
           if_.original_file_path,
-          if_.file_type as media_type,
-          'image' as metadata_table
-        FROM image_metadata im
-        LEFT JOIN image_files if_ ON im.composite_hash = if_.composite_hash
-        WHERE im.auto_tags IS NULL
-          AND if_.original_file_path IS NOT NULL
-          AND if_.file_status = 'active'
-        UNION
-        SELECT
-          vm.composite_hash,
-          if_.original_file_path,
-          if_.file_type as media_type,
-          'video' as metadata_table
-        FROM video_metadata vm
-        LEFT JOIN image_files if_ ON vm.composite_hash = if_.composite_hash
-        WHERE vm.auto_tags IS NULL
+          if_.file_type as media_type
+        FROM media_metadata mm
+        LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
+        WHERE mm.auto_tags IS NULL
           AND if_.original_file_path IS NOT NULL
           AND if_.file_status = 'active'
         LIMIT ?
-      `).all(this.BATCH_SIZE) as Array<{ composite_hash: string; original_file_path: string; media_type: string; metadata_table: 'image' | 'video' }>;
+      `).all(batchSize) as Array<{ composite_hash: string; original_file_path: string; media_type: string }>;
 
       // 총 미태깅 개수도 확인
       const totalUntagged = db.prepare(`
-        SELECT COUNT(*) as count FROM (
-          SELECT im.composite_hash
-          FROM image_metadata im
-          LEFT JOIN image_files if_ ON im.composite_hash = if_.composite_hash
-          WHERE im.auto_tags IS NULL
-            AND if_.original_file_path IS NOT NULL
-            AND if_.file_status = 'active'
-          UNION
-          SELECT vm.composite_hash
-          FROM video_metadata vm
-          LEFT JOIN image_files if_ ON vm.composite_hash = if_.composite_hash
-          WHERE vm.auto_tags IS NULL
-            AND if_.original_file_path IS NOT NULL
-            AND if_.file_status = 'active'
-        )
+        SELECT COUNT(*) as count
+        FROM media_metadata mm
+        LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
+        WHERE mm.auto_tags IS NULL
+          AND if_.original_file_path IS NOT NULL
+          AND if_.file_status = 'active'
       `).get() as { count: number };
 
       if (untaggedImages.length === 0) {
@@ -139,7 +136,7 @@ export class AutoTagScheduler {
         const image = untaggedImages[i];
 
         try {
-          await this.tagSingleImage(image.composite_hash, image.original_file_path, image.media_type, image.metadata_table);
+          await this.tagSingleImage(image.composite_hash, image.original_file_path, image.media_type);
 
           // 마지막 이미지가 아니면 대기
           if (i < untaggedImages.length - 1) {
@@ -172,8 +169,7 @@ export class AutoTagScheduler {
   private async tagSingleImage(
     compositeHash: string,
     filePath: string,
-    mediaType: string,
-    metadataTable: 'image' | 'video'
+    mediaType: string
   ): Promise<void> {
     console.log(`[AutoTagScheduler] Tagging (${mediaType}): ${path.basename(filePath)}`);
 
@@ -200,21 +196,12 @@ export class AutoTagScheduler {
       thresholds: result.thresholds
     });
 
-    // metadata_table에 따라 적절한 테이블 업데이트
-    // image_metadata 또는 video_metadata (file_type과 무관)
-    if (metadataTable === 'image') {
-      db.prepare(`
-        UPDATE image_metadata
-        SET auto_tags = ?
-        WHERE composite_hash = ?
-      `).run(autoTags, compositeHash);
-    } else {
-      db.prepare(`
-        UPDATE video_metadata
-        SET auto_tags = ?
-        WHERE composite_hash = ?
-      `).run(autoTags, compositeHash);
-    }
+    // media_metadata 테이블 업데이트
+    db.prepare(`
+      UPDATE media_metadata
+      SET auto_tags = ?
+      WHERE composite_hash = ?
+    `).run(autoTags, compositeHash);
 
     console.log(`[AutoTagScheduler] ✅ Tagged (${mediaType}): ${path.basename(filePath)}`);
   }
@@ -240,9 +227,9 @@ export class AutoTagScheduler {
     try {
       const result = db.prepare(`
         SELECT COUNT(*) as count
-        FROM image_metadata im
-        LEFT JOIN image_files if_ ON im.composite_hash = if_.composite_hash
-        WHERE im.auto_tags IS NULL
+        FROM media_metadata mm
+        LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
+        WHERE mm.auto_tags IS NULL
           AND if_.original_file_path IS NOT NULL
           AND if_.file_status = 'active'
       `).get() as { count: number };
@@ -254,10 +241,21 @@ export class AutoTagScheduler {
 
     return {
       isRunning: this.isRunning,
-      pollingIntervalSeconds: this.POLLING_INTERVAL_MS / 1000,
-      batchSize: this.BATCH_SIZE,
+      pollingIntervalSeconds: this.getPollingIntervalMs() / 1000,
+      batchSize: this.getBatchSize(),
       untaggedCount
     };
+  }
+
+  /**
+   * 스케줄러 재시작 (설정 변경 시)
+   */
+  restart(): void {
+    if (this.isRunning) {
+      this.stop();
+      // 약간의 지연 후 재시작
+      setTimeout(() => this.start(), 100);
+    }
   }
 
   /**

@@ -61,17 +61,18 @@ const GalleryPage: React.FC = () => {
     selectedCount,
   } = useSelection();
 
-  // ✅ composite_hash 기반으로 변경
-  const handleSelectionChange = (newSelectedIds: string[]) => {
+  // ✅ id 기반으로 변경 (중복 이미지 개별 선택)
+  const handleSelectionChange = (newSelectedIds: number[]) => {
     // 선택 상태를 직접 업데이트
     selectAll(newSelectedIds);
   };
 
   const handleImageDelete = async (compositeHash: string) => {
     await deleteImages([compositeHash]);
-    // 선택 목록에서도 제거
-    if (selectedIds.includes(compositeHash)) {
-      toggleSelection(compositeHash);
+    // 선택 목록에서도 제거 (composite_hash로 id 찾기)
+    const imageToDelete = images.find(img => img.composite_hash === compositeHash);
+    if (imageToDelete?.id && selectedIds.includes(imageToDelete.id)) {
+      toggleSelection(imageToDelete.id);
     }
   };
 
@@ -276,7 +277,7 @@ const GalleryPage: React.FC = () => {
       <BulkActionBar
         selectedCount={selectedCount}
         selectedIds={selectedIds}
-        selectedImages={images.filter(img => img.composite_hash && selectedIds.includes(img.composite_hash))}
+        selectedImages={images.filter(img => img.id && selectedIds.includes(img.id))}
         onSelectionClear={deselectAll}
         onActionComplete={handleBulkActionComplete}
       />

@@ -3,6 +3,7 @@ import { FolderScanService } from './folderScan';
 import { WatchedFolderService } from './watchedFolderService';
 import { FileWatcherService } from './fileWatcherService';
 import { BackgroundProcessorService } from './backgroundProcessorService';
+import { SystemSettingsService } from './systemSettingsService';
 
 /**
  * 자동 스캔 스케줄러
@@ -13,7 +14,7 @@ import { BackgroundProcessorService } from './backgroundProcessorService';
  */
 export class AutoScanScheduler {
   private static cronTask: cron.ScheduledTask | null = null;
-  private static phase2CronTask: cron.ScheduledTask | null = null;
+  private static phase2Timer: NodeJS.Timeout | null = null;
   private static isRunning = false;
 
   /**
@@ -46,8 +47,11 @@ export class AutoScanScheduler {
       }
     });
 
-    // Phase 2 백그라운드 처리 스케줄러 (매 5분마다)
-    this.phase2CronTask = cron.schedule('*/5 * * * *', async () => {
+    // Phase 2 백그라운드 처리 스케줄러 (초 단위로 동작)
+    const phase2IntervalSeconds = SystemSettingsService.getPhase2Interval();
+    const phase2IntervalMs = phase2IntervalSeconds * 1000;
+
+    const runPhase2 = async () => {
       const unprocessedCount = BackgroundProcessorService.getUnprocessedCount();
       if (unprocessedCount > 0) {
         console.log(`🔨 Phase 2 처리 시작: ${unprocessedCount}개 대기 중`);
@@ -57,16 +61,22 @@ export class AutoScanScheduler {
           console.error('❌ Phase 2 처리 중 오류 발생:', error);
         }
       }
-    });
+    };
 
-    console.log('✅ 자동 스캔 스케줄러 시작됨 (Phase 1: 1분마다, Phase 2: 5분마다)');
+    // 즉시 한 번 실행
+    runPhase2();
+
+    // 주기적 실행
+    this.phase2Timer = setInterval(runPhase2, phase2IntervalMs);
+
+    console.log(`✅ 자동 스캔 스케줄러 시작됨 (Phase 1: 1분마다, Phase 2: ${phase2IntervalSeconds}초마다)`);
   }
 
   /**
    * 스케줄러 중지
    */
   static stop(): void {
-    if (!this.cronTask && !this.phase2CronTask) {
+    if (!this.cronTask && !this.phase2Timer) {
       console.log('⚠️  자동 스캔 스케줄러가 실행 중이 아닙니다');
       return;
     }
@@ -76,9 +86,9 @@ export class AutoScanScheduler {
       this.cronTask = null;
     }
 
-    if (this.phase2CronTask) {
-      this.phase2CronTask.stop();
-      this.phase2CronTask = null;
+    if (this.phase2Timer) {
+      clearInterval(this.phase2Timer);
+      this.phase2Timer = null;
     }
 
     console.log('🛑 자동 스캔 스케줄러 중지됨 (Phase 1 + Phase 2)');
@@ -111,5 +121,14 @@ export class AutoScanScheduler {
     } finally {
       this.isRunning = false;
     }
+  }
+
+  /**
+   * 스케줄러 재시작 (설정 변경 시)
+   */
+  static restart(): void {
+    console.log('🔄 자동 스캔 스케줄러 재시작 중...');
+    this.stop();
+    this.start();
   }
 }

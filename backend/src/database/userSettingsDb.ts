@@ -201,6 +201,26 @@ function createTables(): void {
     )
   `);
 
+  // 8. Authentication credentials table (single user)
+  userSettingsDb.exec(`
+    CREATE TABLE IF NOT EXISTS auth_credentials (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      username TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // 9. Sessions table (express-session storage)
+  userSettingsDb.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      sid TEXT PRIMARY KEY,
+      sess TEXT NOT NULL,
+      expired INTEGER NOT NULL
+    )
+  `);
+
   // Create indexes
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows(name)',
@@ -217,7 +237,8 @@ function createTables(): void {
     'CREATE INDEX IF NOT EXISTS idx_wildcards_usage_count ON wildcards(usage_count)',
     'CREATE INDEX IF NOT EXISTS idx_wildcard_items_wildcard_id ON wildcard_items(wildcard_id)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_name ON custom_dropdown_lists(name)',
-    'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_created_date ON custom_dropdown_lists(created_date)'
+    'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_created_date ON custom_dropdown_lists(created_date)',
+    'CREATE INDEX IF NOT EXISTS idx_sessions_expired ON sessions(expired)'
   ];
 
   indexes.forEach(sql => userSettingsDb.exec(sql));
@@ -226,7 +247,7 @@ function createTables(): void {
   userSettingsDb.prepare(`INSERT OR IGNORE INTO user_preferences (key, value) VALUES (?, ?)`)
     .run('language', 'ko');
 
-  console.log('  ✅ User settings tables created (7 tables + indexes)');
+  console.log('  ✅ User settings tables created (9 tables + indexes)');
 }
 
 /**

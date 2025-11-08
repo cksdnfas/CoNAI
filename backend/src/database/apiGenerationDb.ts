@@ -82,7 +82,7 @@ export function initializeApiGenerationDb(): void {
 
 /**
  * Attach main images database for cross-database queries
- * Allows JOINs between api_generation_history and image_files/image_metadata tables
+ * Allows JOINs between api_generation_history and image_files/media_metadata tables
  */
 function attachMainDatabase(): void {
   try {

@@ -184,7 +184,7 @@ export class WatchedFolderService {
   static async deleteFolder(id: number, deleteFiles: boolean = false): Promise<boolean> {
     if (deleteFiles) {
       // image_files에서도 삭제 (CASCADE로 자동 처리됨)
-      // 하지만 image_metadata는 유지 (다른 폴더에서 참조 가능)
+      // 하지만 media_metadata는 유지 (다른 폴더에서 참조 가능)
     }
 
     const info = db.prepare('DELETE FROM watched_folders WHERE id = ?').run(id);

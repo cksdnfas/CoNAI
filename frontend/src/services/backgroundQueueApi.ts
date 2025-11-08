@@ -26,8 +26,37 @@ export const triggerAutoTag = async (): Promise<{ message: string }> => {
   return response.data.data;
 };
 
+/**
+ * 해시 미생성 이미지 통계 조회
+ */
+export const getHashStats = async (): Promise<{
+  totalImages: number;
+  imagesWithoutHash: number;
+  imagesWithHash: number;
+  completionPercentage: number;
+}> => {
+  const response = await axios.get(`${API_BASE_URL}/api/images/similarity/stats`);
+  return response.data.data;
+};
+
+/**
+ * 해시 재생성 작업 트리거
+ */
+export const rebuildHashes = async (): Promise<{
+  message: string;
+  processed: number;
+  failed: number;
+  total: number;
+  remaining: number;
+}> => {
+  const response = await axios.post(`${API_BASE_URL}/api/images/similarity/rebuild-hashes`);
+  return response.data.data;
+};
+
 export const backgroundQueueApi = {
   getQueueStatus,
   clearQueue,
-  triggerAutoTag
+  triggerAutoTag,
+  getHashStats,
+  rebuildHashes
 };

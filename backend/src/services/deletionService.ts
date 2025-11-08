@@ -1,8 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { ImageMetadataModel } from '../models/Image/ImageMetadataModel';
+import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../models/Image/ImageFileModel';
-import { VideoMetadataModel } from '../models/VideoMetadataModel';
 import { GenerationHistoryModel } from '../models/GenerationHistory';
 import { PromptCollectionService } from './promptCollectionService';
 import { settingsService } from './settingsService';
@@ -89,24 +88,24 @@ export class DeletionService {
   }
 
   /**
-   * 이미지 삭제 (전략적 삭제 로직)
+   * 이미지/비디오 삭제 (전략적 삭제 로직)
    *
    * - composite_hash 중복 시: image_files 테이블에서만 삭제
-   * - composite_hash 단일 시: 파일 + image_metadata + image_files + video_metadata 모두 삭제
+   * - composite_hash 단일 시: 파일 + media_metadata + image_files 모두 삭제
    *
-   * @param compositeHash - 삭제할 composite_hash
+   * @param compositeHash - 삭제할 composite_hash (이미지: 48자, 비디오: 32자)
    * @returns 삭제 성공 여부
    */
   static async deleteImage(compositeHash: string): Promise<boolean> {
     console.log(`🔍 Starting deleteImage for: ${compositeHash}`);
 
-    // 1. composite_hash 검증
-    if (!compositeHash || compositeHash.length !== 48) {
+    // 1. composite_hash 검증 (이미지: 48자, 비디오: 32자)
+    if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
       throw new Error('Invalid composite hash');
     }
 
     // 2. 메타데이터 조회
-    const metadata = ImageMetadataModel.findByHash(compositeHash);
+    const metadata = MediaMetadataModel.findByHash(compositeHash);
     if (!metadata) {
       throw new Error('Image not found');
     }
@@ -162,7 +161,7 @@ export class DeletionService {
         }
 
         // 메타데이터 삭제
-        ImageMetadataModel.delete(compositeHash);
+        MediaMetadataModel.delete(compositeHash);
         console.log(`✅ Metadata cleaned up for ${compositeHash}`);
       }
 
@@ -196,8 +195,8 @@ export class DeletionService {
         }
       }
 
-      // 7. 데이터베이스 삭제 (CASCADE로 image_files, video_metadata 자동 삭제)
-      const deleted = ImageMetadataModel.delete(compositeHash);
+      // 7. 데이터베이스 삭제 (CASCADE로 image_files 자동 삭제)
+      const deleted = MediaMetadataModel.delete(compositeHash);
 
       if (!deleted) {
         throw new Error('Failed to delete image from database');

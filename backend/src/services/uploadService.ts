@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import { ImageProcessor } from './imageProcessor';
-import { ImageMetadataModel } from '../models/Image/ImageMetadataModel';
+import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { ImageSimilarityModel } from '../models/Image/ImageSimilarityModel';
 import { ImageSimilarityService } from './imageSimilarity';
 import { PromptCollectionService } from './promptCollectionService';

@@ -3,14 +3,13 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { asyncHandler } from '../../middleware/errorHandler';
-import { ImageMetadataModel } from '../../models/Image/ImageMetadataModel';
+import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { ImageSearchModel } from '../../models/Image/ImageSearchModel';
 import { ImageListResponse } from '../../types/image';
 import { runtimePaths, resolveUploadsPath } from '../../config/runtimePaths';
 import { enrichImageWithFileView } from './utils';
 import { QueryCacheService } from '../../services/QueryCacheService';
-import { db } from '../../database/init';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
@@ -41,8 +40,8 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
       return res.json(cached);
     }
 
-    // ImageMetadataModel로 조회 (파일 경로 포함)
-    const result = await ImageMetadataModel.findAllWithFiles({
+    // MediaMetadataModel로 조회 (파일 경로 포함)
+    const result = await MediaMetadataModel.findAllWithFiles({
       page,
       limit,
       sortBy,
@@ -83,7 +82,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/random', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const image = await ImageMetadataModel.getRandomImage();
+    const image = await MediaMetadataModel.getRandomImage();
 
     if (!image) {
       return res.status(404).json({
@@ -229,7 +228,7 @@ router.post('/search', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
- * 검색 조건에 맞는 composite_hash만 조회 (랜덤 선택용)
+ * 검색 조건에 맞는 image_files.id만 조회 (선택 기능용)
  * POST /api/images/search/ids
  */
 router.post('/search/ids', asyncHandler(async (req: Request, res: Response) => {
@@ -266,13 +265,13 @@ router.post('/search/ids', asyncHandler(async (req: Request, res: Response) => {
       group_id: group_id !== undefined ? parseInt(group_id) : undefined
     };
 
-    const compositeHashes = await ImageSearchModel.searchCompositeHashes(searchParams);
+    const ids = await ImageSearchModel.searchImageFileIds(searchParams);
 
     res.json({
       success: true,
       data: {
-        composite_hashes: compositeHashes,
-        total: compositeHashes.length
+        ids: ids,
+        total: ids.length
       }
     });
     return;
@@ -301,7 +300,7 @@ router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) =
   }
 
   try {
-    // 파일 정보 먼저 조회하여 파일 타입 확인
+    // 파일 정보 먼저 조회
     const files = await ImageFileModel.findActiveByHash(compositeHash);
 
     if (!files || files.length === 0) {
@@ -311,24 +310,13 @@ router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) =
       });
     }
 
-    // 파일 타입에 따라 적절한 테이블에서 메타데이터 조회
-    const isVideo = files[0].file_type === 'video' || files[0].file_type === 'animated';
-    let metadata;
-
-    if (isVideo) {
-      // video_metadata 조회
-      metadata = db.prepare(`
-        SELECT * FROM video_metadata WHERE composite_hash = ?
-      `).get(compositeHash) as any;
-    } else {
-      // image_metadata 조회 (기존 로직)
-      metadata = await ImageMetadataModel.findByHash(compositeHash);
-    }
+    // 통합 media_metadata 테이블에서 조회
+    const metadata = await MediaMetadataModel.findByHash(compositeHash);
 
     if (!metadata) {
       return res.status(404).json({
         success: false,
-        error: isVideo ? 'Video metadata not found' : 'Image metadata not found'
+        error: 'Metadata not found'
       });
     }
 
@@ -366,7 +354,7 @@ router.get('/date/:startDate/:endDate', asyncHandler(async (req: Request, res: R
   const limit = parseInt(req.query.limit as string) || 20;
 
   try {
-    const result = await ImageMetadataModel.findByDateRange(startDate, endDate, page, limit);
+    const result = await MediaMetadataModel.findByDateRange(startDate, endDate, page, limit);
 
     const enrichedImages = result.items.map(enrichImageWithFileView);
 
@@ -438,7 +426,7 @@ router.get('/batch/thumbnails', asyncHandler(async (req: Request, res: Response)
           let metadata = cached;
 
           if (!metadata) {
-            metadata = await ImageMetadataModel.findByHash(hash);
+            metadata = await MediaMetadataModel.findByHash(hash);
             if (metadata) {
               QueryCacheService.setMetadataCache(hash, metadata);
             }
@@ -614,7 +602,7 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
   }
 
   try {
-    const metadata = await ImageMetadataModel.findByHash(compositeHash);
+    const metadata = await MediaMetadataModel.findByHash(compositeHash);
 
     if (!metadata) {
       return res.status(404).json({

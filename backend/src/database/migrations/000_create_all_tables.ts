@@ -6,7 +6,7 @@ import path from 'path';
  * - 프롬프트 관리 (prompt_collection, negative_prompt_collection, prompt_groups, negative_prompt_groups)
  * - 그룹 관리 (groups, image_groups)
  * - 평가 시스템 (rating_weights, rating_tiers)
- * - 이미지 메타데이터 (image_metadata, image_files)
+ * - 미디어 메타데이터 (media_metadata, image_files)
  * - 폴더 관리 (watched_folders, scan_logs)
  * - 워크플로우 (workflows, comfyui_servers, workflow_servers)
  * - API 생성 히스토리 (generation_history)
@@ -116,7 +116,7 @@ export const up = async (db: Database.Database): Promise<void> => {
       collection_type VARCHAR(10) DEFAULT 'manual',
       auto_collected_date DATETIME,
       FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
-      FOREIGN KEY (composite_hash) REFERENCES image_metadata(composite_hash) ON DELETE CASCADE,
+      FOREIGN KEY (composite_hash) REFERENCES media_metadata(composite_hash) ON DELETE CASCADE,
       UNIQUE(group_id, composite_hash)
     )
   `);
@@ -199,16 +199,16 @@ export const up = async (db: Database.Database): Promise<void> => {
   console.log('  ✅ 평가 테이블 2개 + 기본 데이터 생성 완료\n');
 
   // ============================================
-  // 4. 이미지 메타데이터 시스템
+  // 4. 미디어 메타데이터 시스템
   // ============================================
-  console.log('🖼️  이미지 메타데이터 테이블 생성 중...');
+  console.log('🖼️  미디어 메타데이터 테이블 생성 중...');
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS image_metadata (
+    CREATE TABLE IF NOT EXISTS media_metadata (
       composite_hash TEXT PRIMARY KEY,
-      perceptual_hash TEXT NOT NULL,
-      dhash TEXT NOT NULL,
-      ahash TEXT NOT NULL,
+      perceptual_hash TEXT,
+      dhash TEXT,
+      ahash TEXT,
       color_histogram TEXT,
       width INTEGER,
       height INTEGER,
@@ -239,66 +239,18 @@ export const up = async (db: Database.Database): Promise<void> => {
     )
   `);
 
-  // 이미지 메타데이터 인덱스
+  // 미디어 메타데이터 인덱스
   const metadataIndexes = [
-    'CREATE INDEX IF NOT EXISTS idx_metadata_phash ON image_metadata(perceptual_hash)',
-    'CREATE INDEX IF NOT EXISTS idx_metadata_dhash ON image_metadata(dhash)',
-    'CREATE INDEX IF NOT EXISTS idx_metadata_ahash ON image_metadata(ahash)',
-    'CREATE INDEX IF NOT EXISTS idx_metadata_ai_tool ON image_metadata(ai_tool)',
-    'CREATE INDEX IF NOT EXISTS idx_metadata_model ON image_metadata(model_name)',
-    'CREATE INDEX IF NOT EXISTS idx_metadata_first_seen ON image_metadata(first_seen_date)'
+    'CREATE INDEX IF NOT EXISTS idx_metadata_phash ON media_metadata(perceptual_hash)',
+    'CREATE INDEX IF NOT EXISTS idx_metadata_dhash ON media_metadata(dhash)',
+    'CREATE INDEX IF NOT EXISTS idx_metadata_ahash ON media_metadata(ahash)',
+    'CREATE INDEX IF NOT EXISTS idx_metadata_ai_tool ON media_metadata(ai_tool)',
+    'CREATE INDEX IF NOT EXISTS idx_metadata_model ON media_metadata(model_name)',
+    'CREATE INDEX IF NOT EXISTS idx_metadata_first_seen ON media_metadata(first_seen_date)'
   ];
 
   metadataIndexes.forEach(sql => db.exec(sql));
-  console.log('  ✅ 이미지 메타데이터 테이블 + 인덱스 생성 완료\n');
-
-  // ============================================
-  // 4-2. 비디오 메타데이터 시스템
-  // ============================================
-  console.log('🎬 비디오 메타데이터 테이블 생성 중...');
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS video_metadata (
-      composite_hash TEXT PRIMARY KEY,
-      duration REAL,
-      fps REAL,
-      width INTEGER,
-      height INTEGER,
-      video_codec TEXT,
-      audio_codec TEXT,
-      bitrate INTEGER,
-      ai_tool TEXT,
-      model_name TEXT,
-      lora_models TEXT,
-      steps INTEGER,
-      cfg_scale REAL,
-      sampler TEXT,
-      seed INTEGER,
-      scheduler TEXT,
-      prompt TEXT,
-      negative_prompt TEXT,
-      denoise_strength REAL,
-      generation_time REAL,
-      batch_size INTEGER,
-      batch_index INTEGER,
-      auto_tags TEXT,
-      rating_score INTEGER DEFAULT 0,
-      first_seen_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-      metadata_updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // 비디오 메타데이터 인덱스
-  const videoMetadataIndexes = [
-    'CREATE INDEX IF NOT EXISTS idx_video_ai_tool ON video_metadata(ai_tool)',
-    'CREATE INDEX IF NOT EXISTS idx_video_model ON video_metadata(model_name)',
-    'CREATE INDEX IF NOT EXISTS idx_video_first_seen ON video_metadata(first_seen_date)',
-    'CREATE INDEX IF NOT EXISTS idx_video_duration ON video_metadata(duration)',
-    'CREATE INDEX IF NOT EXISTS idx_video_codec ON video_metadata(video_codec)'
-  ];
-
-  videoMetadataIndexes.forEach(sql => db.exec(sql));
-  console.log('  ✅ 비디오 메타데이터 테이블 + 인덱스 생성 완료\n');
+  console.log('  ✅ 미디어 메타데이터 테이블 + 인덱스 생성 완료\n');
 
   // ============================================
   // 5. 폴더 스캔 시스템
@@ -344,7 +296,8 @@ export const up = async (db: Database.Database): Promise<void> => {
       file_modified_date DATETIME,
       scan_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       last_verified_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (folder_id) REFERENCES watched_folders(id) ON DELETE CASCADE
+      FOREIGN KEY (folder_id) REFERENCES watched_folders(id) ON DELETE CASCADE,
+      FOREIGN KEY (composite_hash) REFERENCES media_metadata(composite_hash) ON DELETE SET NULL
     )
   `);
 
@@ -412,7 +365,29 @@ export const up = async (db: Database.Database): Promise<void> => {
   console.log('  ✅ 폴더 테이블 3개 + 인덱스 + 기본 폴더 3개 생성 완료\n');
 
   // ============================================
-  // 6. API 생성 히스토리 (apiGenerationDb.ts에서 관리)
+  // 6. 시스템 설정
+  // ============================================
+  console.log('⚙️  시스템 설정 테이블 생성 중...');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      description TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // 기본 설정값 삽입
+  db.prepare(`
+    INSERT OR IGNORE INTO system_settings (key, value, description)
+    VALUES (?, ?, ?)
+  `).run('phase2_interval', '5', 'Phase 2 백그라운드 해시 생성 간격 (분)');
+
+  console.log('  ✅ 시스템 설정 테이블 + 기본값 생성 완료\n');
+
+  // ============================================
+  // 7. API 생성 히스토리 (apiGenerationDb.ts에서 관리)
   // ============================================
   // Note: generation_history 테이블은 별도 DB에서 관리됨
 
@@ -421,9 +396,9 @@ export const up = async (db: Database.Database): Promise<void> => {
   console.log('   - 프롬프트: 4개 테이블');
   console.log('   - 그룹: 2개 테이블');
   console.log('   - 평가: 2개 테이블');
-  console.log('   - 이미지 메타데이터: 1개 테이블');
-  console.log('   - 비디오 메타데이터: 1개 테이블');
+  console.log('   - 미디어 메타데이터: 1개 테이블');
   console.log('   - 폴더 관리: 3개 테이블');
+  console.log('   - 시스템 설정: 1개 테이블');
   console.log('   총 13개 테이블 + 인덱스 생성');
   console.log('   (워크플로우, 사용자 설정, API 생성 히스토리는 별도 DB)\n');
 };
@@ -433,6 +408,7 @@ export const down = async (db: Database.Database): Promise<void> => {
 
   // 역순으로 테이블 제거 (images.db 테이블만)
   const tables = [
+    'system_settings',
     'scan_logs',
     'image_files',
     'watched_folders',
@@ -444,8 +420,7 @@ export const down = async (db: Database.Database): Promise<void> => {
     'prompt_groups',
     'negative_prompt_collection',
     'prompt_collection',
-    'video_metadata',
-    'image_metadata'
+    'media_metadata'
   ];
 
   tables.forEach(table => {

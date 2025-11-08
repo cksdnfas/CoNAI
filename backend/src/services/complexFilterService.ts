@@ -10,7 +10,7 @@ import {
  * Complex Filter Service
  * PoE-style advanced filtering with AND/OR/NOT logic
  *
- * 새 구조: image_metadata + image_files 기반 쿼리
+ * 새 구조: media_metadata + image_files 기반 쿼리
  *
  * Execution order (priority):
  * 1. Exclude (NOT) group - highest priority
@@ -24,7 +24,7 @@ export class ComplexFilterService {
    * Build complex search query with CTE (Common Table Expression)
    * Uses multi-stage filtering for optimal performance
    *
-   * 새 구조: image_metadata 테이블 기반, composite_hash로 식별
+   * 새 구조: media_metadata 테이블 기반, composite_hash로 식별
    */
   static buildComplexQuery(
     filter: ComplexFilter,
@@ -67,7 +67,7 @@ export class ComplexFilterService {
       ctes.push(`
         excluded AS (
           SELECT DISTINCT im.composite_hash
-          FROM image_metadata im
+          FROM media_metadata im
           ${basicWhere}
           ${excludeResult.conditions.length > 0 ? (basicWhere ? 'AND' : 'WHERE') + ' (' + excludeResult.conditions.join(' OR ') + ')' : ''}
         )
@@ -83,7 +83,7 @@ export class ComplexFilterService {
         ctes.push(`
           or_results AS (
             SELECT DISTINCT im.composite_hash
-            FROM image_metadata im
+            FROM media_metadata im
             ${basicWhere}
             ${(basicWhere ? 'AND' : 'WHERE') + ' (' + orResult.conditions.join(' OR ') + ')'}
           )
@@ -100,7 +100,7 @@ export class ComplexFilterService {
         ctes.push(`
           and_results AS (
             SELECT DISTINCT im.composite_hash
-            FROM image_metadata im
+            FROM media_metadata im
             ${basicWhere}
             ${(basicWhere ? 'AND' : 'WHERE') + ' (' + andResult.conditions.join(' AND ') + ')'}
           )
@@ -127,8 +127,8 @@ export class ComplexFilterService {
       : basicWhere;
 
     const query = ctes.length > 0
-      ? `WITH ${ctes.join(', ')} SELECT im.* FROM image_metadata im ${finalWhere}`
-      : `SELECT im.* FROM image_metadata im ${finalWhere}`;
+      ? `WITH ${ctes.join(', ')} SELECT im.* FROM media_metadata im ${finalWhere}`
+      : `SELECT im.* FROM media_metadata im ${finalWhere}`;
 
     return { query, params };
   }
@@ -173,7 +173,7 @@ export class ComplexFilterService {
 
   /**
    * Build SQL for basic conditions (ai_tool, model_name)
-   * 새 구조: image_metadata 테이블 사용 (im 별칭)
+   * 새 구조: media_metadata 테이블 사용 (im 별칭)
    */
   private static buildBasicConditionSQL(condition: FilterCondition, params: any[]): string | null {
     if (condition.type === 'ai_tool') {
@@ -189,7 +189,7 @@ export class ComplexFilterService {
 
   /**
    * Build SQL for prompt conditions
-   * 새 구조: image_metadata 테이블 사용 (im 별칭)
+   * 새 구조: media_metadata 테이블 사용 (im 별칭)
    */
   private static buildPromptConditionSQL(
     condition: FilterCondition,
@@ -222,7 +222,7 @@ export class ComplexFilterService {
 
   /**
    * Build SQL for auto-tag conditions
-   * 새 구조: image_metadata 테이블 사용 (im 별칭)
+   * 새 구조: media_metadata 테이블 사용 (im 별칭)
    */
   private static buildAutoTagConditionSQL(condition: FilterCondition, params: any[]): string | null {
     // Auto-tag exists
@@ -376,7 +376,7 @@ export class ComplexFilterService {
 
   /**
    * Execute complex search query
-   * 새 구조: image_metadata 기반 검색, composite_hash 사용
+   * 새 구조: media_metadata 기반 검색, composite_hash 사용
    */
   static async executeComplexSearch(
     filter: ComplexFilter,

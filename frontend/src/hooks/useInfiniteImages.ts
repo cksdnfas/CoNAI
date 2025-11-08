@@ -55,10 +55,15 @@ export const useInfiniteImages = () => {
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  // 새로고침
-  const refreshImages = useCallback(() => {
-    refetch();
-  }, [refetch]);
+  // 새로고침 (캐시 무효화 + 강제 재조회)
+  const refreshImages = useCallback(async () => {
+    console.log('🔄 [useInfiniteImages] Refreshing images...');
+    // 1. 캐시 완전 초기화
+    queryClient.removeQueries({ queryKey: ['images'] });
+    // 2. 강제 재조회
+    await refetch();
+    console.log('✅ [useInfiniteImages] Refresh complete');
+  }, [queryClient, refetch]);
 
   // 이미지 삭제
   const deleteImage = useCallback(async (compositeHash: string) => {

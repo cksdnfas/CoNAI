@@ -150,7 +150,7 @@ export const imageApi = {
    */
   searchImageIds: async (params: ImageSearchParams): Promise<{
     success: boolean;
-    data?: { composite_hashes: string[]; total: number };
+    data?: { ids: number[]; total: number };  // ✅ Changed to ids: number[]
     error?: string;
   }> => {
     const response = await apiClient.post('/api/images/search/ids', params);

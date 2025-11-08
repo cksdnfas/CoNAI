@@ -22,7 +22,7 @@ export interface ImageRecord {
   file_status?: 'active' | 'deleted';  // File status
   file_type: 'image' | 'video' | 'animated';  // File type classification (use this for business logic)
 
-  // Image metadata (from image_metadata table)
+  // Image metadata (from media_metadata table)
   width: number | null;                // Image width in pixels
   height: number | null;               // Image height in pixels
   thumbnail_path: string;              // Thumbnail file path

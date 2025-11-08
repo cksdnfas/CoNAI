@@ -10,6 +10,7 @@ import path from 'path';
  * Manages dual storage:
  * 1. api-generation-history.db - API generation history with workflow/parameters
  * 2. images.db - via existing image upload API (for search/management)
+ * Uses media_metadata table for unified metadata storage
  */
 export class GenerationHistoryService {
   /**
@@ -258,7 +259,7 @@ export class GenerationHistoryService {
 
   /**
    * Get generation history by ID
-   * Returns history with actual composite_hash and thumbnails from image_files/image_metadata if available
+   * Returns history with actual composite_hash and thumbnails from image_files/media_metadata if available
    */
   static async getHistory(id: number): Promise<GenerationHistoryRecord | null> {
     // Use JOIN query to get actual thumbnails and metadata
@@ -267,7 +268,7 @@ export class GenerationHistoryService {
 
   /**
    * Get all generation history with filters
-   * Returns history with actual composite_hash and thumbnails from image_files/image_metadata if available
+   * Returns history with actual composite_hash and thumbnails from image_files/media_metadata if available
    */
   static async getAllHistory(filters?: {
     service_type?: ServiceType;
@@ -361,7 +362,7 @@ export class GenerationHistoryService {
 
   /**
    * Get generation history by workflow ID
-   * Returns history with actual composite_hash and thumbnails from image_files/image_metadata if available
+   * Returns history with actual composite_hash and thumbnails from image_files/media_metadata if available
    */
   static async getHistoryByWorkflow(
     workflowId: number,

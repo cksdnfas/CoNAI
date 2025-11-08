@@ -21,9 +21,9 @@ router.delete('/:compositeHash', asyncHandler(async (req: Request, res: Response
   // 통합 삭제 서비스 호출
   await DeletionService.deleteImage(compositeHash);
 
-  // 캐시 무효화
-  QueryCacheService.invalidateImageCache(compositeHash);
-  console.log('🗑️ Cache invalidated for deleted image');
+  // 캐시 완전 무효화 (삭제는 모든 페이지에 영향)
+  QueryCacheService.invalidateImageCache(compositeHash, true);
+  console.log('🗑️ All caches invalidated for deleted image');
 
   res.json(successResponse({ message: 'Image deleted successfully' }));
 }));

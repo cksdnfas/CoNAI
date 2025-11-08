@@ -5,14 +5,14 @@ console.log('=== Auto-Tag Status Check ===\n');
 
 // 1. 전체 이미지 개수
 const totalImages = db.prepare(`
-  SELECT COUNT(*) as count FROM image_metadata
+  SELECT COUNT(*) as count FROM media_metadata
 `).get() as { count: number };
 console.log(`Total images: ${totalImages.count}`);
 
 // 2. auto_tags가 NULL인 이미지
 const nullTags = db.prepare(`
   SELECT COUNT(*) as count
-  FROM image_metadata
+  FROM media_metadata
   WHERE auto_tags IS NULL
 `).get() as { count: number };
 console.log(`Images with NULL auto_tags: ${nullTags.count}`);
@@ -20,7 +20,7 @@ console.log(`Images with NULL auto_tags: ${nullTags.count}`);
 // 3. auto_tags가 설정된 이미지
 const withTags = db.prepare(`
   SELECT COUNT(*) as count
-  FROM image_metadata
+  FROM media_metadata
   WHERE auto_tags IS NOT NULL
 `).get() as { count: number };
 console.log(`Images with auto_tags: ${withTags.count}`);
@@ -28,9 +28,9 @@ console.log(`Images with auto_tags: ${withTags.count}`);
 // 4. active 파일과 조인한 미태깅 이미지
 const activeUntagged = db.prepare(`
   SELECT COUNT(*) as count
-  FROM image_metadata im
-  JOIN image_files if_ ON im.composite_hash = if_.composite_hash
-  WHERE im.auto_tags IS NULL
+  FROM media_metadata mm
+  JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
+  WHERE mm.auto_tags IS NULL
     AND if_.file_status = 'active'
 `).get() as { count: number };
 console.log(`Active untagged images (scheduler query): ${activeUntagged.count}`);
@@ -46,13 +46,13 @@ console.log(`  Batch Size: ${schedulerStatus.batchSize}`);
 // 6. 샘플 데이터 (처음 5개)
 const samples = db.prepare(`
   SELECT
-    im.composite_hash,
-    im.auto_tags,
+    mm.composite_hash,
+    mm.auto_tags,
     if_.original_file_path,
     if_.file_status
-  FROM image_metadata im
-  LEFT JOIN image_files if_ ON im.composite_hash = if_.composite_hash
-  WHERE im.auto_tags IS NULL
+  FROM media_metadata mm
+  LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
+  WHERE mm.auto_tags IS NULL
   LIMIT 5
 `).all() as Array<{
   composite_hash: string;

@@ -19,13 +19,13 @@ import { useBulkActions } from '../../hooks/useBulkActions';
 import GroupAssignModal from '../GroupAssignModal';
 import type { ImageRecord } from '../../types/image';
 
-// ✅ composite_hash 기반으로 변경
+// ✅ id 기반으로 변경 (중복 이미지 개별 선택)
 interface BulkActionBarProps {
   selectedCount: number;
-  selectedIds: string[];  // composite_hash[]
+  selectedIds: number[];  // ✅ image_files.id[]
   selectedImages?: ImageRecord[];
   onSelectionClear: () => void;
-  onActionComplete?: (deletedIds?: string[]) => void;  // composite_hash[]
+  onActionComplete?: (deletedIds?: string[]) => void;  // composite_hash[] (메타데이터 작업용)
   onModalStateChange?: (isOpen: boolean) => void;
 }
 
@@ -71,23 +71,35 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
       return;
     }
 
-    const deletedIds = [...selectedIds];
-    const success = await deleteImages(deletedIds);
+    // selectedImages에서 composite_hash 추출 (메타데이터 작업용)
+    const compositeHashes = selectedImages
+      .map(img => img.composite_hash)
+      .filter((hash): hash is string => hash !== null);
+
+    const success = await deleteImages(compositeHashes);
     if (success) {
-      // 삭제된 ID를 전달하여 선택에서 제거
+      // 삭제된 composite_hash를 전달하여 선택에서 제거
       if (onActionComplete) {
-        onActionComplete(deletedIds);
+        onActionComplete(compositeHashes);
       }
     }
   };
 
   const handleDownload = async () => {
-    await downloadImages(selectedIds);
+    // selectedImages에서 composite_hash 추출 (메타데이터 작업용)
+    const compositeHashes = selectedImages
+      .map(img => img.composite_hash)
+      .filter((hash): hash is string => hash !== null);
+    await downloadImages(compositeHashes);
     // 다운로드는 선택 유지 (아무 작업도 하지 않음)
   };
 
   const handleGroupAssign = async (groupId: number) => {
-    const success = await assignToGroup(selectedIds, groupId);
+    // selectedImages에서 composite_hash 추출 (메타데이터 작업용)
+    const compositeHashes = selectedImages
+      .map(img => img.composite_hash)
+      .filter((hash): hash is string => hash !== null);
+    const success = await assignToGroup(compositeHashes, groupId);
 
     if (success) {
       // 그룹 할당 성공 시 모달 닫기

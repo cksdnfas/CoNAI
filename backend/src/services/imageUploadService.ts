@@ -1,4 +1,4 @@
-import { ImageMetadataModel } from '../models/Image/ImageMetadataModel';
+import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../models/Image/ImageFileModel';
 import { ImageSimilarityService } from './imageSimilarity';
 import { ImageMetadataRecord, FileType } from '../types/image';
@@ -60,8 +60,8 @@ export class ImageUploadService {
       console.warn('색상 히스토그램 생성 실패:', error);
     }
 
-    // 3. image_metadata에 존재 여부 확인
-    const existingMetadata = ImageMetadataModel.findByHash(compositeHash);
+    // 3. media_metadata에 존재 여부 확인
+    const existingMetadata = MediaMetadataModel.findByHash(compositeHash);
 
     if (!existingMetadata) {
       // 3-1. 신규 메타데이터 생성
@@ -97,7 +97,7 @@ export class ImageUploadService {
         rating_score: 0
       };
 
-      ImageMetadataModel.create(metadataRecord);
+      MediaMetadataModel.create(metadataRecord);
       console.log(`✅ 신규 메타데이터 생성: ${compositeHash.substring(0, 16)}...`);
     } else {
       console.log(`♻️  기존 메타데이터 재사용: ${compositeHash.substring(0, 16)}...`);
@@ -152,7 +152,7 @@ export class ImageUploadService {
    * composite_hash로 메타데이터 조회
    */
   static getMetadataByHash(compositeHash: string): ImageMetadataRecord | null {
-    return ImageMetadataModel.findByHash(compositeHash);
+    return MediaMetadataModel.findByHash(compositeHash);
   }
 
   /**

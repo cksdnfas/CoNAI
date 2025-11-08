@@ -67,7 +67,7 @@ export class DatabaseReset {
       'image_files',
 
       // 부모 테이블
-      'image_metadata',
+      'media_metadata',
       'groups',
       'watched_folders',
 
@@ -159,7 +159,7 @@ export class DatabaseReset {
     console.log('🔍 테이블 구조 확인...\n');
 
     const requiredTables = [
-      'image_metadata',
+      'media_metadata',
       'image_files',
       'watched_folders',
       'groups',

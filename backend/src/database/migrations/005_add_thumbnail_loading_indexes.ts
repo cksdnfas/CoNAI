@@ -4,7 +4,7 @@
  * Purpose: 썸네일 로딩 성능 최적화를 위한 인덱스 추가
  * - image_files 테이블: composite_hash + file_status 복합 인덱스 (JOIN 최적화)
  * - image_files 테이블: scan_date DESC 인덱스 (정렬 최적화)
- * - image_metadata 테이블: first_seen_date DESC 인덱스 (정렬 최적화)
+ * - media_metadata 테이블: first_seen_date DESC 인덱스 (정렬 최적화)
  * - image_groups 테이블: composite_hash 인덱스 (JOIN 최적화)
  */
 
@@ -31,11 +31,11 @@ export function up(db: Database.Database): void {
   `);
   console.log('  ✅ 인덱스 추가: idx_files_scan_date_desc (scan_date DESC)');
 
-  // 3. image_metadata: first_seen_date 내림차순 인덱스
+  // 3. media_metadata: first_seen_date 내림차순 인덱스
   // 사용 케이스: ORDER BY first_seen_date DESC 쿼리 최적화
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_metadata_first_seen_desc
-      ON image_metadata(first_seen_date DESC);
+      ON media_metadata(first_seen_date DESC);
   `);
   console.log('  ✅ 인덱스 추가: idx_metadata_first_seen_desc (first_seen_date DESC)');
 

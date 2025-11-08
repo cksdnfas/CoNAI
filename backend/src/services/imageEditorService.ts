@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { TempImageService, EditOptions } from './tempImageService';
 import { runtimePaths } from '../config/runtimePaths';
-import { ImageMetadataModel } from '../models/Image/ImageMetadataModel';
+import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../models/Image/ImageFileModel';
 import { ImageUploadService } from './imageUploadService';
 import { db } from '../database/init';

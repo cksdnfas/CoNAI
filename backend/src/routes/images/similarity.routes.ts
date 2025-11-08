@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import path from 'path';
 import { asyncHandler } from '../../middleware/errorHandler';
-import { ImageMetadataModel } from '../../models/Image/ImageMetadataModel';
+import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageSimilarityModel } from '../../models/Image/ImageSimilarityModel';
 import { ImageSimilarityService } from '../../services/imageSimilarity';
 import {
@@ -49,7 +49,7 @@ router.get('/:id/duplicates', asyncHandler(async (req: Request, res: Response) =
     if (isHash) {
       // 새 구조: composite_hash 기반
       const compositeHash = value as string;
-      image = ImageMetadataModel.findByHash(compositeHash);
+      image = MediaMetadataModel.findByHash(compositeHash);
       if (!image) {
         return res.status(404).json(errorResponse('Image metadata not found'));
       }
@@ -122,7 +122,7 @@ router.get('/:id/similar', asyncHandler(async (req: Request, res: Response) => {
     if (isHash) {
       // 새 구조: composite_hash 기반
       const compositeHash = value as string;
-      image = ImageMetadataModel.findByHash(compositeHash);
+      image = MediaMetadataModel.findByHash(compositeHash);
       if (!image) {
         return res.status(404).json(errorResponse('Image metadata not found'));
       }
@@ -198,7 +198,7 @@ router.get('/:id/similar-color', asyncHandler(async (req: Request, res: Response
     if (isHash) {
       // 새 구조: composite_hash 기반
       const compositeHash = value as string;
-      image = ImageMetadataModel.findByHash(compositeHash);
+      image = MediaMetadataModel.findByHash(compositeHash);
       if (!image) {
         return res.status(404).json(errorResponse('Image metadata not found'));
       }
@@ -286,7 +286,7 @@ router.get('/duplicates/all', asyncHandler(async (req: Request, res: Response) =
  * POST /api/images/similarity/rebuild
  * 이미지 메타데이터의 해시를 재생성
  *
- * image_metadata 테이블에서 perceptual_hash, dhash, ahash, color_histogram이 없는 이미지를
+ * media_metadata 테이블에서 perceptual_hash, dhash, ahash, color_histogram이 없는 이미지를
  * 찾아서 해시를 생성합니다.
  */
 router.post('/similarity/rebuild', asyncHandler(async (req: Request, res: Response) => {
@@ -296,7 +296,7 @@ router.post('/similarity/rebuild', asyncHandler(async (req: Request, res: Respon
     // 해시가 없는 이미지 메타데이터 조회
     const imagesWithoutHash = db.prepare(`
       SELECT im.composite_hash, if.file_path
-      FROM image_metadata im
+      FROM media_metadata im
       JOIN image_files if ON im.composite_hash = if.composite_hash
       WHERE if.file_type = 'original'
         AND (im.perceptual_hash IS NULL OR im.color_histogram IS NULL)
@@ -354,11 +354,11 @@ router.post('/similarity/rebuild', asyncHandler(async (req: Request, res: Respon
       }
     }
 
-    // 남은 이미지 수 계산
+    // 남은 파일 수 계산 (composite_hash가 NULL인 파일)
     const remainingCount = db.prepare(`
       SELECT COUNT(*) as count
-      FROM image_metadata
-      WHERE perceptual_hash IS NULL OR color_histogram IS NULL
+      FROM image_files
+      WHERE composite_hash IS NULL
     `).get() as { count: number };
 
     return res.json(successResponse({
@@ -376,19 +376,50 @@ router.post('/similarity/rebuild', asyncHandler(async (req: Request, res: Respon
 }));
 
 /**
+ * POST /api/images/similarity/rebuild-hashes
+ * composite_hash가 NULL인 파일들을 처리하여 해시 생성
+ */
+router.post('/similarity/rebuild-hashes', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { BackgroundProcessorService } = await import('../../services/backgroundProcessorService');
+
+    // 백그라운드 프로세서 실행
+    const result = await BackgroundProcessorService.processUnhashedImages();
+
+    // 남은 파일 수 계산
+    const remainingCount = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM image_files
+      WHERE composite_hash IS NULL
+    `).get() as { count: number };
+
+    return res.json(successResponse({
+      message: `Processed ${result.processed} files, ${result.errors} failed`,
+      processed: result.processed,
+      failed: result.errors,
+      total: result.processed + result.errors,
+      remaining: remainingCount.count
+    }));
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to rebuild hashes';
+    return res.status(500).json(errorResponse(errorMessage));
+  }
+}));
+
+/**
  * GET /api/images/similarity/stats
- * 유사도 검색 통계 (image_metadata 기반)
+ * 유사도 검색 통계 (image_files 테이블 기반)
  */
 router.get('/similarity/stats', asyncHandler(async (req: Request, res: Response) => {
   try {
-    // 전체 이미지 수
-    const totalCount = db.prepare('SELECT COUNT(*) as count FROM image_metadata').get() as { count: number };
+    // 전체 파일 수 (image_files 테이블)
+    const totalCount = db.prepare('SELECT COUNT(*) as count FROM image_files').get() as { count: number };
 
-    // 해시가 없는 이미지 수
+    // composite_hash가 NULL인 파일 수
     const withoutHashCount = db.prepare(`
       SELECT COUNT(*) as count
-      FROM image_metadata
-      WHERE perceptual_hash IS NULL OR color_histogram IS NULL
+      FROM image_files
+      WHERE composite_hash IS NULL
     `).get() as { count: number };
 
     const totalImages = totalCount.count;

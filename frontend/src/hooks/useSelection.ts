@@ -1,30 +1,30 @@
 import { useState, useCallback } from 'react';
 
-// ✅ composite_hash 기반으로 완전 전환
+// ✅ image_files.id 기반으로 전환 (중복 이미지 개별 선택 가능)
 export const useSelection = () => {
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
-  const toggleSelection = useCallback((compositeHash: string) => {
+  const toggleSelection = useCallback((id: number) => {
     setSelectedIds(prev =>
-      prev.includes(compositeHash)
-        ? prev.filter(selectedId => selectedId !== compositeHash)
-        : [...prev, compositeHash]
+      prev.includes(id)
+        ? prev.filter(selectedId => selectedId !== id)
+        : [...prev, id]
     );
   }, []);
 
-  const selectAll = useCallback((compositeHashes: string[]) => {
-    setSelectedIds(compositeHashes);
+  const selectAll = useCallback((ids: number[]) => {
+    setSelectedIds(ids);
   }, []);
 
   const deselectAll = useCallback(() => {
     setSelectedIds([]);
   }, []);
 
-  const isSelected = useCallback((compositeHash: string) => {
-    return selectedIds.includes(compositeHash);
+  const isSelected = useCallback((id: number) => {
+    return selectedIds.includes(id);
   }, [selectedIds]);
 
-  const toggleSelectAll = useCallback((allIds: string[]) => {
+  const toggleSelectAll = useCallback((allIds: number[]) => {
     if (selectedIds.length === allIds.length) {
       deselectAll();
     } else {

@@ -204,7 +204,7 @@ export const groupApi = {
    */
   getImageIdsForGroup: async (id: number): Promise<{
     success: boolean;
-    data?: { composite_hashes: string[]; total: number };
+    data?: { ids: number[]; total: number };  // ✅ Changed to ids: number[]
     error?: string;
   }> => {
     const response = await apiClient.get(`/api/groups/${id}/image-ids`);

@@ -13,8 +13,11 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import session from 'express-session';
+import BetterSqlite3Store from 'better-sqlite3-session-store';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { runtimePaths, ensureRuntimeDirectories } from './config/runtimePaths';
 import { prepareHttpsOptions } from './utils/httpsOptions';
 import { getNetworkInfo, formatNetworkInfo } from './utils/networkInfo';
@@ -35,10 +38,12 @@ import { watchedFoldersRoutes } from './routes/watchedFolders';
 import { backgroundQueueRoutes } from './routes/backgroundQueue';
 import { systemRoutes } from './routes/system.routes';
 import imageEditorRoutes from './routes/image-editor.routes';
+import { authRoutes } from './routes/auth.routes';
 import { initializeDatabase } from './database/init';
-import { initializeUserSettingsDb } from './database/userSettingsDb';
+import { initializeUserSettingsDb, getUserSettingsDb } from './database/userSettingsDb';
 import { initializeApiGenerationDb } from './database/apiGenerationDb';
 import { errorHandler } from './middleware/errorHandler';
+import { optionalAuth } from './middleware/authMiddleware';
 import { imageTaggerService } from './services/imageTaggerService';
 import { APIImageProcessor } from './services/APIImageProcessor';
 import { PORTS, IMAGE_PROCESSING } from '@comfyui-image-manager/shared';
@@ -50,13 +55,23 @@ import { QueryCacheService } from './services/QueryCacheService';
 const app = express();
 const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;
 
-// Rate limiting (개발 환경에서는 더 관대하게 설정)
-const limiter = rateLimit({
+// Rate limiting for login endpoint (prevent brute-force attacks)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15분
+  max: 5, // 최대 5회 시도
+  message: 'Too many login attempts, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true // 성공한 요청은 카운트 제외
+});
+
+// General API rate limiting
+const apiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1분
-  max: 1000, // 최대 1000 요청 (개발용)
+  max: 100, // 최대 100 요청
   message: 'Too many requests from this IP',
-  standardHeaders: true, // rate limit 정보를 `RateLimit-*` 헤더에 포함
-  legacyHeaders: false, // X-RateLimit-* 헤더 비활성화
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 // Middleware
@@ -87,7 +102,8 @@ app.use(helmet({
   },
 
 }));
-app.use(limiter);
+app.use(apiLimiter);
+
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:1577',
@@ -103,6 +119,10 @@ app.use(cors({
 app.use(express.json({ limit: `${IMAGE_PROCESSING.MAX_FILE_SIZE_MB}mb`, strict: false }));
 app.use(express.urlencoded({ extended: true, limit: `${IMAGE_PROCESSING.MAX_FILE_SIZE_MB}mb` }));
 
+// Session configuration (must be initialized after User Settings DB is ready)
+// Will be configured in startServer() after database initialization
+let sessionMiddleware: express.RequestHandler;
+
 // .env 파일 자동 생성
 const createEnvFileIfNotExists = () => {
   const envPath = path.join(__dirname, '../.env');
@@ -117,7 +137,8 @@ const createEnvFileIfNotExists = () => {
 const uploadsDir = runtimePaths.uploadsDir;
 
 // 정적 파일 서빙 (썸네일 및 원본 이미지) - CORS 및 캐시 헤더 추가
-app.use('/uploads', express.static(uploadsDir, {
+// 인증이 설정된 경우 로그인 필요
+app.use('/uploads', optionalAuth, express.static(uploadsDir, {
   // 외부 네트워크에서도 접근 가능하도록 CORS 헤더 추가
   setHeaders: (res, filePath) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -136,23 +157,27 @@ app.use('/uploads', express.static(uploadsDir, {
   maxAge: '1y'
 }));
 
-// Routes
-app.use('/api/images', imageRoutes);
-app.use('/api/prompt-collection', promptCollectionRoutes);
-app.use('/api/prompt-groups', promptGroupRoutes);
-app.use('/api/negative-prompt-groups', negativePromptGroupRoutes);
-app.use('/api/groups', groupRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/workflows', workflowRoutes);
-app.use('/api/comfyui-servers', comfyuiServerRoutes);
-app.use('/api/custom-dropdown-lists', customDropdownListRoutes);
-app.use('/api/nai', naiRoutes);
-app.use('/api/generation-history', generationHistoryRoutes);
-app.use('/api/wildcards', wildcardRoutes);
-app.use('/api/folders', watchedFoldersRoutes);
-app.use('/api/background-queue', backgroundQueueRoutes);
-app.use('/api/system', systemRoutes);
-app.use('/api/image-editor', imageEditorRoutes);
+// Routes (auth routes don't need authentication)
+app.use('/api/auth/login', loginLimiter); // Apply login rate limiter
+app.use('/api/auth', authRoutes);
+
+// Protected routes (require authentication if configured)
+app.use('/api/images', optionalAuth, imageRoutes);
+app.use('/api/prompt-collection', optionalAuth, promptCollectionRoutes);
+app.use('/api/prompt-groups', optionalAuth, promptGroupRoutes);
+app.use('/api/negative-prompt-groups', optionalAuth, negativePromptGroupRoutes);
+app.use('/api/groups', optionalAuth, groupRoutes);
+app.use('/api/settings', optionalAuth, settingsRoutes);
+app.use('/api/workflows', optionalAuth, workflowRoutes);
+app.use('/api/comfyui-servers', optionalAuth, comfyuiServerRoutes);
+app.use('/api/custom-dropdown-lists', optionalAuth, customDropdownListRoutes);
+app.use('/api/nai', optionalAuth, naiRoutes);
+app.use('/api/generation-history', optionalAuth, generationHistoryRoutes);
+app.use('/api/wildcards', optionalAuth, wildcardRoutes);
+app.use('/api/folders', optionalAuth, watchedFoldersRoutes);
+app.use('/api/background-queue', optionalAuth, backgroundQueueRoutes);
+app.use('/api/system', optionalAuth, systemRoutes);
+app.use('/api/image-editor', optionalAuth, imageEditorRoutes);
 
 // Frontend static file serving
 const frontendDistPath = process.env.FRONTEND_DIST_PATH
@@ -229,6 +254,39 @@ async function startServer() {
     console.log('🗄️  User Settings DB 초기화 중...');
     initializeUserSettingsDb(); // Synchronous call (better-sqlite3)
     console.log('✅ User Settings DB initialized successfully');
+
+    // 4-1. Session configuration
+    console.log('🔐 Configuring session management...');
+    const SqliteStore = BetterSqlite3Store(session);
+    const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+
+    if (!process.env.SESSION_SECRET) {
+      console.warn('⚠️  SESSION_SECRET not set in .env, using random generated secret');
+      console.warn('   Sessions will be invalidated on server restart');
+    }
+
+    sessionMiddleware = session({
+      store: new SqliteStore({
+        client: getUserSettingsDb(),
+        expired: {
+          clear: true,
+          intervalMs: 900000 // 15분마다 만료 세션 정리
+        }
+      }),
+      secret: sessionSecret,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30일
+        httpOnly: true,
+        secure: isSecureContext, // HTTPS에서만 true
+        sameSite: 'lax'
+      },
+      name: 'comfyui.sid' // Custom session cookie name
+    });
+
+    app.use(sessionMiddleware);
+    console.log('✅ Session management configured successfully');
 
     // 5. API Generation History DB 초기화
     console.log('🗄️  API Generation History DB 초기화 중...');

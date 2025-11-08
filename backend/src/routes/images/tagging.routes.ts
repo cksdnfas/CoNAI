@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import { asyncHandler } from '../../middleware/errorHandler';
-import { ImageMetadataModel } from '../../models/Image/ImageMetadataModel';
+import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageTaggingModel } from '../../models/Image/ImageTaggingModel';
 import { ImageSearchModel } from '../../models/Image/ImageSearchModel';
 import { ImageStatsModel } from '../../models/Image/ImageStatsModel';
@@ -38,37 +38,20 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
   try {
     console.log('[TagRoute] Querying database for composite_hash:', compositeHash);
 
-    // 이미지/비디오 메타데이터 및 파일 정보 조회
-    // 먼저 image_metadata 확인
-    let imageData = db.prepare(`
+    // 통합 media_metadata 테이블에서 메타데이터 및 파일 정보 조회
+    const imageData = db.prepare(`
       SELECT
-        im.*,
+        mm.*,
         if.original_file_path,
-        if.mime_type as file_mime_type,
-        'image' as media_type
-      FROM image_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
-      WHERE im.composite_hash = ?
+        if.mime_type as file_mime_type
+      FROM media_metadata mm
+      LEFT JOIN image_files if ON mm.composite_hash = if.composite_hash AND if.file_status = 'active'
+      WHERE mm.composite_hash = ?
       LIMIT 1
     `).get(compositeHash) as any;
 
-    // image_metadata에 없으면 video_metadata 확인
     if (!imageData) {
-      imageData = db.prepare(`
-        SELECT
-          vm.*,
-          if.original_file_path,
-          if.mime_type as file_mime_type,
-          'video' as media_type
-        FROM video_metadata vm
-        LEFT JOIN image_files if ON vm.composite_hash = if.composite_hash AND if.file_status = 'active'
-        WHERE vm.composite_hash = ?
-        LIMIT 1
-      `).get(compositeHash) as any;
-    }
-
-    if (!imageData) {
-      console.log('[TagRoute] Image/Video not found in database');
+      console.log('[TagRoute] Media not found in database');
       return res.status(404).json({
         success: false,
         error: 'Image or video not found'
@@ -128,23 +111,14 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
-    // 데이터베이스에 저장 (media_type에 따라 적절한 테이블 업데이트)
+    // 데이터베이터에 저장 (통합 media_metadata 테이블 업데이트)
     const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
     console.log('[ImageTag] Formatted JSON length:', autoTagsJson?.length || 0);
     console.log('[ImageTag] Formatted JSON preview:', autoTagsJson?.substring(0, 100));
 
-    if (imageData.media_type === 'image') {
-      ImageMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
-    } else {
-      // video_metadata 업데이트
-      db.prepare(`
-        UPDATE video_metadata
-        SET auto_tags = ?
-        WHERE composite_hash = ?
-      `).run(autoTagsJson, compositeHash);
-    }
+    MediaMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
 
-    console.log(`[ImageTag] Successfully tagged ${imageData.media_type} ${compositeHash}`);
+    console.log(`[ImageTag] Successfully tagged ${compositeHash}`);
 
     res.json({
       success: true,
@@ -186,15 +160,15 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
 
     for (const compositeHash of image_ids) {
       try {
-        // 이미지 메타데이터 및 파일 정보 조회
+        // 메타데이터 및 파일 정보 조회
         const imageData = db.prepare(`
           SELECT
-            im.*,
+            mm.*,
             if.original_file_path,
             if.mime_type as file_mime_type
-          FROM image_metadata im
-          LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
-          WHERE im.composite_hash = ?
+          FROM media_metadata mm
+          LEFT JOIN image_files if ON mm.composite_hash = if.composite_hash AND if.file_status = 'active'
+          WHERE mm.composite_hash = ?
           LIMIT 1
         `).get(compositeHash) as any;
 
@@ -252,7 +226,7 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
 
         // 데이터베이스에 저장
         const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-        ImageMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
+        MediaMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
 
         results.push({
           composite_hash: compositeHash,
@@ -373,7 +347,7 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
         }
 
         const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-        ImageMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
+        MediaMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
 
         results.push({
           composite_hash: compositeHash,
@@ -426,10 +400,10 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
   const forceRetag = force !== undefined ? force : true;
 
   try {
-    // 전체 이미지 composite_hash 조회
+    // 전체 미디어 composite_hash 조회
     const query = maxLimit
-      ? `SELECT composite_hash FROM image_metadata ORDER BY first_seen_date DESC LIMIT ?`
-      : `SELECT composite_hash FROM image_metadata ORDER BY first_seen_date DESC`;
+      ? `SELECT composite_hash FROM media_metadata ORDER BY first_seen_date DESC LIMIT ?`
+      : `SELECT composite_hash FROM media_metadata ORDER BY first_seen_date DESC`;
 
     const hashRows = maxLimit
       ? db.prepare(query).all(maxLimit) as any[]
@@ -459,15 +433,15 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
 
     for (const compositeHash of compositeHashes) {
       try {
-        // 이미지 메타데이터 및 파일 정보 조회
+        // 메타데이터 및 파일 정보 조회
         const imageData = db.prepare(`
           SELECT
-            im.*,
+            mm.*,
             if.original_file_path,
             if.mime_type as file_mime_type
-          FROM image_metadata im
-          LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
-          WHERE im.composite_hash = ?
+          FROM media_metadata mm
+          LEFT JOIN image_files if ON mm.composite_hash = if.composite_hash AND if.file_status = 'active'
+          WHERE mm.composite_hash = ?
           LIMIT 1
         `).get(compositeHash) as any;
 
@@ -523,7 +497,7 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
         }
 
         const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-        ImageMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
+        MediaMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
 
         results.push({
           composite_hash: compositeHash,

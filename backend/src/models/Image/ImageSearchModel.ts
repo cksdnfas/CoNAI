@@ -6,10 +6,10 @@ import { ImageWithFileView } from '../../types/image';
 /**
  * 이미지 검색 모델 (새 구조 기반)
  *
- * ✅ 새 구조 전환 완료: image_metadata + image_files 기반
+ * ✅ 새 구조 전환 완료: media_metadata + image_files 기반
  *
  * 변경사항:
- * - images 테이블 → image_metadata + image_files JOIN
+ * - images 테이블 → media_metadata + image_files JOIN
  * - image_id → composite_hash
  * - upload_date → first_seen_date
  * - 모든 기존 기능 유지
@@ -132,7 +132,7 @@ export class ImageSearchModel {
     // 총 개수 조회
     const countQuery = `
       SELECT COUNT(DISTINCT im.composite_hash) as total
-      FROM image_metadata im
+      FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       ${groupJoinClause}
       ${whereClause}
@@ -169,7 +169,7 @@ export class ImageSearchModel {
         GROUP_CONCAT(DISTINCT g.name) as group_names,
         GROUP_CONCAT(DISTINCT g.color) as group_colors,
         GROUP_CONCAT(DISTINCT ig.collection_type) as collection_types
-      FROM image_metadata im
+      FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       ${groupJoinClause}
       LEFT JOIN image_groups ig ON im.composite_hash = ig.composite_hash
@@ -215,7 +215,7 @@ export class ImageSearchModel {
     // 총 개수 조회 (composite_hash 있는 것만)
     const countRow = db.prepare(`
       SELECT COUNT(*) as total
-      FROM image_metadata im
+      FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
       WHERE im.composite_hash IS NOT NULL AND if.file_status = 'active'
     `).get() as any;
@@ -244,7 +244,7 @@ export class ImageSearchModel {
         GROUP_CONCAT(g.name) as group_names,
         GROUP_CONCAT(g.color) as group_colors,
         GROUP_CONCAT(ig.collection_type) as collection_types
-      FROM image_metadata im
+      FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       LEFT JOIN image_groups ig ON im.composite_hash = ig.composite_hash
       LEFT JOIN groups g ON ig.group_id = g.id
@@ -291,10 +291,10 @@ export class ImageSearchModel {
     const sortOrder = searchParams.sortOrder || 'DESC';
     const offset = (page - 1) * limit;
 
-    // AutoTagSearchService가 쿼리 조건을 생성 (image_metadata 기반으로 수정 필요)
+    // AutoTagSearchService가 쿼리 조건을 생성 (media_metadata 기반으로 수정 필요)
     const queryBuilder = await AutoTagSearchService.buildAutoTagSearchQuery(searchParams, basicSearchParams);
 
-    // 조건을 image_metadata 테이블 기준으로 변경
+    // 조건을 media_metadata 테이블 기준으로 변경
     const conditions = queryBuilder.conditions.map((cond: string) => {
       return cond
         .replace(/\bi\.upload_date\b/g, 'im.first_seen_date')
@@ -310,7 +310,7 @@ export class ImageSearchModel {
     // 총 개수 조회
     const countQuery = `
       SELECT COUNT(DISTINCT im.composite_hash) as total
-      FROM image_metadata im
+      FROM media_metadata im
       ${whereClause}
     `;
 
@@ -339,7 +339,7 @@ export class ImageSearchModel {
         GROUP_CONCAT(DISTINCT g.name) as group_names,
         GROUP_CONCAT(DISTINCT g.color) as group_colors,
         GROUP_CONCAT(DISTINCT ig.collection_type) as collection_types
-      FROM image_metadata im
+      FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       LEFT JOIN image_groups ig ON im.composite_hash = ig.composite_hash
       LEFT JOIN groups g ON ig.group_id = g.id
@@ -389,6 +389,111 @@ export class ImageSearchModel {
   ): Promise<string[]> {
     // searchCompositeHashes() 메서드로 위임
     return this.searchCompositeHashes(searchParams);
+  }
+
+  /**
+   * image_files.id 목록 조회 (선택 기능용 - 중복 이미지 개별 선택 가능)
+   * @returns image_files.id 숫자 배열
+   */
+  static async searchImageFileIds(
+    searchParams: {
+      search_text?: string;
+      negative_text?: string;
+      ai_tool?: string;
+      model_name?: string;
+      min_width?: number;
+      max_width?: number;
+      min_height?: number;
+      max_height?: number;
+      min_file_size?: number;
+      max_file_size?: number;
+      start_date?: string;
+      end_date?: string;
+      group_id?: number;
+    }
+  ): Promise<number[]> {
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    // composite_hash 필수 조건 (해시 생성 완료된 이미지만)
+    conditions.push('im.composite_hash IS NOT NULL');
+    conditions.push('if.file_status = ?');
+    params.push('active');
+
+    if (searchParams.search_text) {
+      conditions.push('im.prompt LIKE ?');
+      params.push(`%${searchParams.search_text}%`);
+    }
+    if (searchParams.negative_text) {
+      conditions.push('im.negative_prompt LIKE ?');
+      params.push(`%${searchParams.negative_text}%`);
+    }
+    if (searchParams.ai_tool) {
+      conditions.push('im.ai_tool = ?');
+      params.push(searchParams.ai_tool);
+    }
+    if (searchParams.model_name) {
+      conditions.push('im.model_name LIKE ?');
+      params.push(`%${searchParams.model_name}%`);
+    }
+    if (searchParams.min_width) {
+      conditions.push('im.width >= ?');
+      params.push(searchParams.min_width);
+    }
+    if (searchParams.max_width) {
+      conditions.push('im.width <= ?');
+      params.push(searchParams.max_width);
+    }
+    if (searchParams.min_height) {
+      conditions.push('im.height >= ?');
+      params.push(searchParams.min_height);
+    }
+    if (searchParams.max_height) {
+      conditions.push('im.height <= ?');
+      params.push(searchParams.max_height);
+    }
+    if (searchParams.min_file_size) {
+      conditions.push('if.file_size >= ?');
+      params.push(searchParams.min_file_size);
+    }
+    if (searchParams.max_file_size) {
+      conditions.push('if.file_size <= ?');
+      params.push(searchParams.max_file_size);
+    }
+    if (searchParams.start_date) {
+      conditions.push('DATE(im.first_seen_date) >= DATE(?)');
+      params.push(searchParams.start_date);
+    }
+    if (searchParams.end_date) {
+      conditions.push('DATE(im.first_seen_date) <= DATE(?)');
+      params.push(searchParams.end_date);
+    }
+
+    let groupJoinClause = '';
+    if (searchParams.group_id !== undefined) {
+      if (searchParams.group_id === 0) {
+        groupJoinClause = 'LEFT JOIN image_groups ig_filter ON im.composite_hash = ig_filter.composite_hash';
+        conditions.push('ig_filter.composite_hash IS NULL');
+      } else {
+        groupJoinClause = 'INNER JOIN image_groups ig_filter ON im.composite_hash = ig_filter.composite_hash';
+        conditions.push('ig_filter.group_id = ?');
+        params.push(searchParams.group_id);
+      }
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const query = `
+      SELECT if.id
+      FROM media_metadata im
+      INNER JOIN image_files if ON im.composite_hash = if.composite_hash
+      ${groupJoinClause}
+      ${whereClause}
+      ORDER BY im.first_seen_date DESC, if.id ASC
+    `;
+
+    const rows = db.prepare(query).all(...params) as Array<{ id: number }>;
+    return rows.map(row => row.id);
   }
 
   /**
@@ -480,7 +585,7 @@ export class ImageSearchModel {
 
     const query = `
       SELECT DISTINCT im.composite_hash
-      FROM image_metadata im
+      FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       ${groupJoinClause}
       ${whereClause}
@@ -587,7 +692,7 @@ export class ImageSearchModel {
         if.file_size,
         if.mime_type,
         if.folder_id
-      FROM image_metadata im
+      FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       ${groupJoinClause}
       ${whereClause}
