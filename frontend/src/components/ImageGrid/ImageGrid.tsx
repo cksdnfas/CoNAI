@@ -151,8 +151,10 @@ const ImageGrid: React.FC<ImageGridProps> = ({
     }
   };
 
-  const isAllSelected = safeImages.length > 0 && selectedIds.length === safeImages.length;
-  const isIndeterminate = selectedIds.length > 0 && selectedIds.length < safeImages.length;
+  // ✅ ID가 있는 이미지만 선택 가능하므로, 선택 가능한 이미지 개수 계산
+  const selectableImagesCount = safeImages.filter(img => img.id !== undefined && img.id !== null).length;
+  const isAllSelected = selectableImagesCount > 0 && selectedIds.length === selectableImagesCount;
+  const isIndeterminate = selectedIds.length > 0 && selectedIds.length < selectableImagesCount;
 
   const handleImageClick = (imageIndex: number) => {
     setCurrentImageIndex(imageIndex);

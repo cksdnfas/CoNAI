@@ -165,5 +165,16 @@
     "loadingError": "그룹 목록을 불러오는 중 오류가 발생했습니다.",
     "buttonAssign": "할당",
     "buttonCancel": "취소"
+  },
+  "download": {
+    "menuTitle": "다운로드 옵션",
+    "scopeAll": "전체 다운로드",
+    "scopeSelected": "선택된 {{count}}개만",
+    "typeThumbnail": "이미지 (썸네일)",
+    "typeOriginal": "이미지 (원본)",
+    "typeVideo": "동영상 및 애니메이트 (원본)",
+    "confirmTitle": "대용량 다운로드 확인",
+    "confirmMessage": "{{count}}개의 파일을 다운로드합니다. 계속하시겠습니까?",
+    "confirmButton": "다운로드"
   }
 }

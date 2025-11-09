@@ -46,21 +46,16 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
     // Simple search mode (quick text search)
     if (requestBody.simple_search?.text) {
-      // Simple search: search in prompt + auto_tags (no weight filtering)
+      // Simple search: search in positive prompt + auto_tags only (no negative prompt, no weight filtering)
       const searchText = requestBody.simple_search.text;
 
-      // Use basic search with text matching in prompt and auto_tags
+      // Use basic search with text matching in positive prompt and auto_tags
       // This is a simplified version - we'll use complex filter with OR logic
       const simpleFilter: ComplexFilter = {
         or_group: [
           {
             category: 'positive_prompt',
             type: 'prompt_contains',
-            value: searchText
-          },
-          {
-            category: 'negative_prompt',
-            type: 'negative_prompt_contains',
             value: searchText
           },
           {
@@ -166,11 +161,6 @@ router.post('/ids', asyncHandler(async (req: Request, res: Response) => {
           {
             category: 'positive_prompt',
             type: 'prompt_contains',
-            value: searchText
-          },
-          {
-            category: 'negative_prompt',
-            type: 'negative_prompt_contains',
             value: searchText
           },
           {

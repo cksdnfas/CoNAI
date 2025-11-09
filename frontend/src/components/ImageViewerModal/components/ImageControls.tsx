@@ -21,6 +21,7 @@ interface ImageControlsProps {
   isMobile: boolean;
   showOriginal: boolean; // 원본 이미지 표시 여부
   isGif: boolean; // GIF 파일 여부 (GIF는 원본 전환 버튼 숨김)
+  isVideo: boolean; // 비디오 파일 여부 (비디오는 원본 전환 및 편집 버튼 숨김)
   onZoomIn: () => void;
   onZoomOut: () => void;
   onRotateLeft: () => void;
@@ -42,6 +43,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
   isMobile,
   showOriginal,
   isGif,
+  isVideo,
   onZoomIn,
   onZoomOut,
   onRotateLeft,
@@ -133,8 +135,8 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
           <ResetIcon />
         </IconButton>
 
-        {/* 원본/썸네일 전환 버튼 (GIF는 제외) */}
-        {!isGif && (
+        {/* 원본/썸네일 전환 버튼 (GIF와 비디오는 제외) */}
+        {!isGif && !isVideo && (
           <IconButton
             onClick={onToggleOriginal}
             sx={{
@@ -151,8 +153,8 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
           </IconButton>
         )}
 
-        {/* Edit button for img2img */}
-        {onEdit && (
+        {/* Edit button for img2img (이미지 파일만) */}
+        {onEdit && !isGif && !isVideo && (
           <IconButton
             onClick={onEdit}
             sx={{ color: 'white' }}

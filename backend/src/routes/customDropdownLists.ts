@@ -157,6 +157,22 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
+    // 자동 수집된 항목인지 확인
+    const existingList = await CustomDropdownListModel.findById(id);
+    if (!existingList) {
+      return res.status(404).json({
+        success: false,
+        error: 'List not found'
+      } as ApiResponse);
+    }
+
+    if (existingList.is_auto_collected) {
+      return res.status(403).json({
+        success: false,
+        error: '자동 수집된 항목은 수정할 수 없습니다. 재스캔을 사용하세요.'
+      } as ApiResponse);
+    }
+
     // 이름 중복 확인 (변경하는 경우)
     if (name) {
       const exists = await CustomDropdownListModel.existsByName(name, id);
@@ -268,6 +284,12 @@ router.post('/scan-comfyui-models', asyncHandler(async (req: Request, res: Respo
       } as ApiResponse);
     }
 
+    // 재스캔 - 같은 경로로 수집된 기존 항목 삭제
+    const deletedCount = await CustomDropdownListModel.deleteBySourcePath(modelsPath);
+    if (deletedCount > 0) {
+      console.log(`Rescanning: Deleted ${deletedCount} existing lists from ${modelsPath}`);
+    }
+
     // 스캔할 기본 폴더 목록
     const targetFolders = ['checkpoints', 'unet', 'upscale_models'];
 
@@ -298,10 +320,35 @@ router.post('/scan-comfyui-models', asyncHandler(async (req: Request, res: Respo
       result.push(...scannedFolders);
     }
 
+    // 스캔된 폴더별로 자동 수집 목록 생성
+    let createdCount = 0;
+    for (const folder of result) {
+      if (folder.files.length > 0) {
+        try {
+          await CustomDropdownListModel.create({
+            name: folder.displayName,
+            description: `ComfyUI ${folder.folderName} 모델 목록 (자동 수집)`,
+            items: folder.files,
+            is_auto_collected: 1,
+            source_path: modelsPath
+          });
+          createdCount++;
+        } catch (error) {
+          console.error(`Error creating list for ${folder.displayName}:`, error);
+        }
+      }
+    }
+
     const response: ApiResponse = {
       success: true,
-      data: result,
-      error: result.length === 0 ? '스캔된 모델이 없습니다.' : undefined
+      data: {
+        scannedFolders: result.length,
+        createdLists: createdCount,
+        isRescan: deletedCount > 0,
+        message: deletedCount > 0
+          ? `${createdCount}개 목록이 업데이트되었습니다.`
+          : `${createdCount}개 목록이 생성되었습니다.`
+      }
     };
 
     return res.json(response);

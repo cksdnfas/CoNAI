@@ -187,10 +187,19 @@ export class ImageGroupModel {
     const total = countRow.total;
 
     // 메타데이터 조회 (composite_hash 기반, 해시 생성 완료된 이미지만)
+    // ✅ image_files 테이블 JOIN 추가하여 id 필드 포함
     const query = `
-      SELECT im.*
+      SELECT
+        im.*,
+        if.id,
+        if.original_file_path,
+        if.file_status,
+        if.file_type,
+        if.file_size,
+        if.mime_type
       FROM image_groups ig
       INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
+      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       ${whereClause}
       ORDER BY ig.order_index ASC, ig.added_date DESC
       LIMIT ? OFFSET ?

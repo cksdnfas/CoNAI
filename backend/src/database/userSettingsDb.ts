@@ -196,6 +196,8 @@ function createTables(): void {
       name VARCHAR(255) NOT NULL UNIQUE,
       description TEXT,
       items TEXT NOT NULL,
+      is_auto_collected INTEGER DEFAULT 0,
+      source_path TEXT,
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -221,6 +223,17 @@ function createTables(): void {
     )
   `);
 
+  // Migrate existing custom_dropdown_lists table if needed
+  // Check if is_auto_collected column exists
+  const tableInfo = userSettingsDb.prepare(`PRAGMA table_info(custom_dropdown_lists)`).all() as any[];
+  const hasAutoCollectedColumn = tableInfo.some((col: any) => col.name === 'is_auto_collected');
+
+  if (!hasAutoCollectedColumn) {
+    console.log('Migrating custom_dropdown_lists table: adding is_auto_collected and source_path columns');
+    userSettingsDb.exec(`ALTER TABLE custom_dropdown_lists ADD COLUMN is_auto_collected INTEGER DEFAULT 0`);
+    userSettingsDb.exec(`ALTER TABLE custom_dropdown_lists ADD COLUMN source_path TEXT`);
+  }
+
   // Create indexes
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows(name)',
@@ -238,6 +251,7 @@ function createTables(): void {
     'CREATE INDEX IF NOT EXISTS idx_wildcard_items_wildcard_id ON wildcard_items(wildcard_id)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_name ON custom_dropdown_lists(name)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_created_date ON custom_dropdown_lists(created_date)',
+    'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_is_auto_collected ON custom_dropdown_lists(is_auto_collected)',
     'CREATE INDEX IF NOT EXISTS idx_sessions_expired ON sessions(expired)'
   ];
 

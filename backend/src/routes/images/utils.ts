@@ -79,6 +79,8 @@ export function enrichImageWithFileView(image: any) {
 
   const enriched = {
     ...image,
+    // ✅ file_id를 id로 매핑 (프론트엔드 호환성)
+    id: image.file_id || image.id,
     // Phase 1 상태 플래그
     is_processing: isProcessing,
 

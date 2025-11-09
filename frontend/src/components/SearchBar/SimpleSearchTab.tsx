@@ -5,8 +5,10 @@ import {
   Typography,
   Stack,
   InputAdornment,
+  Tooltip,
+  IconButton,
 } from '@mui/material';
-import { Search as SearchIcon } from '@mui/icons-material';
+import { Search as SearchIcon, HelpOutline as HelpIcon } from '@mui/icons-material';
 
 interface SimpleSearchTabProps {
   searchText: string;
@@ -21,9 +23,26 @@ const SimpleSearchTab: React.FC<SimpleSearchTabProps> = ({
 }) => {
   return (
     <Box sx={{ py: 2 }}>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        프롬프트와 오토태그에서 검색합니다. 가중치는 고려하지 않습니다.
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <Typography variant="body2" color="text.secondary">
+          긍정 프롬프트와 오토태그에서 검색합니다.
+        </Typography>
+        <Tooltip
+          title={
+            <Stack spacing={0.5}>
+              <Typography variant="caption">• 검색 범위: 긍정 프롬프트, 오토태그 General/Character</Typography>
+              <Typography variant="caption">• 가중치는 무시됩니다</Typography>
+              <Typography variant="caption">• 복잡한 조건은 "고급 검색" 사용</Typography>
+            </Stack>
+          }
+          arrow
+          placement="right"
+        >
+          <IconButton size="small" sx={{ p: 0.5 }}>
+            <HelpIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
       <TextField
         fullWidth
@@ -39,20 +58,7 @@ const SimpleSearchTab: React.FC<SimpleSearchTabProps> = ({
             </InputAdornment>
           ),
         }}
-        sx={{ mb: 2 }}
       />
-
-      <Stack spacing={1}>
-        <Typography variant="caption" color="text.secondary">
-          💡 <strong>팁</strong>: 일반 검색은 빠르고 간단합니다.
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          • 긍정 프롬프트, 네거티브 프롬프트, 오토태그의 General/Character 태그에서 검색
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          • 복잡한 조건이 필요하면 "고급 검색" 탭을 사용하세요
-        </Typography>
-      </Stack>
     </Box>
   );
 };

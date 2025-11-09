@@ -47,8 +47,9 @@ router.post('/:id/temp', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
- * Save edited image as new permanent image
+ * Save edited image to temp/canvas directory
  * POST /api/image-editor/:id/save
+ * Body: { imageData: base64 string, maskData?: base64 string }
  */
 router.post('/:id/save', asyncHandler(async (req: Request, res: Response) => {
   const imageId = parseInt(req.params.id);
@@ -60,27 +61,36 @@ router.post('/:id/save', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  const { editOptions, customName } = req.body;
+  const { imageData, maskData } = req.body;
 
-  if (!editOptions) {
+  if (!imageData) {
     return res.status(400).json({
       success: false,
-      error: 'Edit options are required'
+      error: 'Image data is required'
     });
   }
 
   try {
-    const newImageId = await ImageEditorService.saveEditedImageAsNew(
+    // Convert base64 to Buffer
+    const imageBuffer = Buffer.from(imageData.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+    const maskBuffer = maskData ? Buffer.from(maskData.replace(/^data:image\/\w+;base64,/, ''), 'base64') : undefined;
+
+    const result = await ImageEditorService.saveEditedImageAsNew(
+      imageBuffer,
       imageId,
-      editOptions,
-      customName
+      maskBuffer
     );
 
     return res.json({
       success: true,
       data: {
-        newImageId,
-        message: 'Image saved successfully'
+        tempId: result.tempId,
+        tempImagePath: result.tempImagePath,
+        tempMaskPath: result.tempMaskPath,
+        expiresAt: result.expiresAt,
+        width: result.width,
+        height: result.height,
+        message: `Image saved to: ${path.dirname(result.tempImagePath)}`
       }
     });
   } catch (error) {

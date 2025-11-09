@@ -7,6 +7,8 @@ export interface CustomDropdownList {
   name: string;
   description?: string;
   items: string[];
+  is_auto_collected: boolean;
+  source_path?: string;
   created_date: string;
   updated_date: string;
 }
@@ -31,8 +33,12 @@ export interface ComfyUIModelFolder {
 
 export interface ScanComfyUIModelsResponse {
   success: boolean;
-  data: ComfyUIModelFolder[];
-  message?: string;
+  data: {
+    scannedFolders: number;
+    createdLists: number;
+    isRescan: boolean;
+    message: string;
+  };
 }
 
 export const customDropdownListApi = {

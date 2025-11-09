@@ -4,12 +4,22 @@
     "menu": {
       "home": "Home",
       "gallery": "Gallery",
-      "imageGroups": "Image Groups",
+      "imageGroups": "Groups",
       "search": "Search",
       "upload": "Upload",
       "imageGeneration": "Image Generation",
       "settings": "Settings",
       "help": "Help"
+    },
+    "tooltip": {
+      "home": "Go to home page",
+      "gallery": "View image gallery",
+      "imageGroups": "Manage groups",
+      "search": "Search images",
+      "upload": "Upload images",
+      "imageGeneration": "Generate AI images",
+      "settings": "Manage settings",
+      "help": "View help"
     },
     "theme": {
       "light": "Light Mode",

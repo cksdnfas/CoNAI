@@ -72,10 +72,12 @@ export class TempImageService {
 
   /**
    * Get temp file path
+   * Edited images are saved to canvas subdirectory
    */
   static getTempFilePath(tempId: string, type: 'image' | 'mask' = 'image'): string {
     const suffix = type === 'mask' ? '_mask.png' : '.png';
-    return path.join(this.tempDir, `${tempId}${suffix}`);
+    // Save edited images to canvas directory
+    return path.join(this.canvasDir, `${tempId}${suffix}`);
   }
 
   /**

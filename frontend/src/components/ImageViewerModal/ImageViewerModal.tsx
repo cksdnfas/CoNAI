@@ -50,7 +50,7 @@ interface ImageViewerModalProps {
   searchContext?: 'all' | 'search' | 'group';
   searchParams?: ImageSearchParams;
   groupId?: number;
-  allImageIds?: string[]; // ✅ 전체 이미지 composite_hash 목록 (랜덤 선택용)
+  allImageIds?: number[]; // ✅ 전체 이미지 image_files.id 목록 (랜덤 선택용)
   // 히스토리 컨텍스트
   isHistoryContext?: boolean;
   historyRecord?: GenerationHistoryRecord;
@@ -346,6 +346,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             isMobile={isMobile}
             showOriginal={showOriginal}
             isGif={currentImage?.file_type === 'animated'}
+            isVideo={currentImage?.file_type === 'video'}
             onZoomIn={transform.handleZoomIn}
             onZoomOut={transform.handleZoomOut}
             onRotateLeft={transform.handleRotateLeft}
@@ -354,7 +355,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             onFlipVertical={transform.handleFlipVertical}
             onReset={transform.handleReset}
             onToggleOriginal={() => setShowOriginal(prev => !prev)}
-            onEdit={handleEditorOpen}
+            onEdit={currentImage?.file_type === 'image' ? handleEditorOpen : undefined}
             onOpenDrawer={isMobile ? () => setDrawerOpen(true) : undefined}
             onClose={onClose}
           />
@@ -531,22 +532,6 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           onClose={handleEditorClose}
           imageId={currentImage.file_id}
           imageUrl={buildUploadsUrl(showOriginal ? (currentImage.original_file_path || currentImage.thumbnail_path) : currentImage.thumbnail_path)}
-          onSendToComfyUI={(tempId) => {
-            console.log('Send to ComfyUI:', tempId);
-            setSnackbar({
-              open: true,
-              message: 'Image prepared for ComfyUI (feature coming soon)',
-              severity: 'success'
-            });
-          }}
-          onSaveAsNew={(newImageId) => {
-            console.log('Saved as new image:', newImageId);
-            setSnackbar({
-              open: true,
-              message: `New image created (ID: ${newImageId})`,
-              severity: 'success'
-            });
-          }}
         />
       )}
     </Dialog>

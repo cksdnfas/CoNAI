@@ -165,5 +165,16 @@
     "loadingError": "An error occurred while loading groups.",
     "buttonAssign": "Assign",
     "buttonCancel": "Cancel"
+  },
+  "download": {
+    "menuTitle": "Download Options",
+    "scopeAll": "Download All",
+    "scopeSelected": "Selected {{count}} Only",
+    "typeThumbnail": "Images (Thumbnail)",
+    "typeOriginal": "Images (Original)",
+    "typeVideo": "Videos & Animations (Original)",
+    "confirmTitle": "Confirm Large Download",
+    "confirmMessage": "Download {{count}} files. Continue?",
+    "confirmButton": "Download"
   }
 }

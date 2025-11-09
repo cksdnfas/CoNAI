@@ -4,12 +4,22 @@
     "menu": {
       "home": "首页",
       "gallery": "图库",
-      "imageGroups": "图像分组",
+      "imageGroups": "分组",
       "search": "搜索",
       "upload": "上传",
       "imageGeneration": "图像生成",
       "settings": "设置",
       "help": "帮助"
+    },
+    "tooltip": {
+      "home": "前往首页",
+      "gallery": "查看图库",
+      "imageGroups": "管理分组",
+      "search": "搜索图像",
+      "upload": "上传图像",
+      "imageGeneration": "生成AI图像",
+      "settings": "管理设置",
+      "help": "查看帮助"
     },
     "theme": {
       "light": "浅色模式",

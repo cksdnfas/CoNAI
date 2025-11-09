@@ -11,7 +11,7 @@ interface UseImageNavigationProps {
   searchContext?: 'all' | 'search' | 'group';
   searchParams?: ImageSearchParams;
   groupId?: number;
-  allImageIds?: string[]; // 전체 이미지 composite_hash 목록 (랜덤 선택용)
+  allImageIds?: number[]; // ✅ 전체 이미지 image_files.id 목록 (랜덤 선택용)
   onRandomImageLoaded?: (image: ImageRecord) => void;
   onRandomModeChange?: (isRandom: boolean) => void;
 }
@@ -66,8 +66,8 @@ export const useImageNavigation = ({
         // 메모리의 ID 목록에서 랜덤 선택
         const randomId = allImageIds[Math.floor(Math.random() * allImageIds.length)];
 
-        // 현재 배열에 있는지 확인
-        const foundIndex = images?.findIndex(img => img.composite_hash === randomId) ?? -1;
+        // 현재 배열에 있는지 확인 (id 기반)
+        const foundIndex = images?.findIndex(img => img.id === randomId) ?? -1;
 
         if (foundIndex >= 0 && onImageChange) {
           // 현재 페이지에 있음 - 바로 이동
@@ -76,16 +76,9 @@ export const useImageNavigation = ({
             onRandomModeChange(false);
           }
         } else {
-          // 현재 페이지에 없음 - API로 조회
-          const result = await imageApi.getImage(randomId);
-          if (result.success && result.data) {
-            if (onRandomImageLoaded) {
-              onRandomImageLoaded(result.data);
-            }
-            if (onRandomModeChange) {
-              onRandomModeChange(true);
-            }
-          }
+          // 현재 페이지에 없음 - 폴백으로 API 랜덤 조회 사용
+          // ID 기반 직접 조회는 현재 지원하지 않으므로 폴백 로직으로 넘어감
+          console.warn('Random image not in current page - falling back to API random');
         }
         return;
       } catch (error) {

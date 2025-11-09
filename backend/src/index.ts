@@ -478,6 +478,15 @@ ${divider}`);
     const shutdown = async () => {
       console.log('\n🛑 Shutting down gracefully...');
 
+      // Stop file watcher service (first to prevent new events)
+      try {
+        const { FileWatcherService } = await import('./services/fileWatcherService');
+        await FileWatcherService.stopAll();
+        console.log('✅ File watcher service stopped');
+      } catch (error) {
+        console.warn('⚠️  Error stopping file watcher service:', error);
+      }
+
       // Stop auto-scan scheduler
       try {
         AutoScanScheduler.stop();
@@ -526,6 +535,31 @@ ${divider}`);
         JobTracker.shutdown();
       } catch (error) {
         console.warn('⚠️  Error stopping job tracker:', error);
+      }
+
+      // Close database connections
+      try {
+        const { closeDatabase } = await import('./database/init');
+        closeDatabase();
+        console.log('✅ Main database connection closed');
+      } catch (error) {
+        console.warn('⚠️  Error closing main database:', error);
+      }
+
+      try {
+        const { closeUserSettingsDb } = await import('./database/userSettingsDb');
+        closeUserSettingsDb();
+        console.log('✅ User settings database connection closed');
+      } catch (error) {
+        console.warn('⚠️  Error closing user settings database:', error);
+      }
+
+      try {
+        const { closeApiGenerationDb } = await import('./database/apiGenerationDb');
+        closeApiGenerationDb();
+        console.log('✅ API generation database connection closed');
+      } catch (error) {
+        console.warn('⚠️  Error closing API generation database:', error);
       }
 
       // Close server

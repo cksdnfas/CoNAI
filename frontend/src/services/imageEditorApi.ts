@@ -58,16 +58,16 @@ export const imageEditorApi = {
   },
 
   /**
-   * Save edited image as new permanent image
+   * Save edited canvas image to temp/canvas directory
    */
   async saveEditedImage(
     imageId: number,
-    editOptions: EditOptions,
-    customName?: string
+    imageData: string,
+    maskData?: string
   ): Promise<SaveImageResponse> {
     const response = await axios.post<SaveImageResponse>(
       `${API_BASE_URL}/api/image-editor/${imageId}/save`,
-      { editOptions, customName }
+      { imageData, maskData }
     );
     return response.data;
   },

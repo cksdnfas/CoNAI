@@ -6,6 +6,8 @@ export interface CustomDropdownListRecord {
   name: string;
   description: string | null;
   items: string; // JSON string array
+  is_auto_collected: number; // 0 or 1
+  source_path: string | null;
   created_date: string;
   updated_date: string;
 }
@@ -14,6 +16,8 @@ export interface CustomDropdownListCreateData {
   name: string;
   description?: string;
   items: string[]; // Array of strings
+  is_auto_collected?: number; // 0 or 1
+  source_path?: string;
 }
 
 export interface CustomDropdownListUpdateData {
@@ -22,8 +26,9 @@ export interface CustomDropdownListUpdateData {
   items?: string[];
 }
 
-export interface CustomDropdownListWithParsedItems extends Omit<CustomDropdownListRecord, 'items'> {
+export interface CustomDropdownListWithParsedItems extends Omit<CustomDropdownListRecord, 'items' | 'is_auto_collected'> {
   items: string[];
+  is_auto_collected: boolean;
 }
 
 export class CustomDropdownListModel {
@@ -35,12 +40,14 @@ export class CustomDropdownListModel {
 
     const info = userSettingsDb.prepare(`
       INSERT INTO custom_dropdown_lists (
-        name, description, items
-      ) VALUES (?, ?, ?)
+        name, description, items, is_auto_collected, source_path
+      ) VALUES (?, ?, ?, ?, ?)
     `).run(
       listData.name,
       listData.description || null,
-      itemsJson
+      itemsJson,
+      listData.is_auto_collected || 0,
+      listData.source_path || null
     );
 
     return info.lastInsertRowid as number;
@@ -58,7 +65,8 @@ export class CustomDropdownListModel {
 
     return {
       ...row,
-      items: JSON.parse(row.items) as string[]
+      items: JSON.parse(row.items) as string[],
+      is_auto_collected: row.is_auto_collected === 1
     };
   }
 
@@ -74,7 +82,8 @@ export class CustomDropdownListModel {
 
     return {
       ...row,
-      items: JSON.parse(row.items) as string[]
+      items: JSON.parse(row.items) as string[],
+      is_auto_collected: row.is_auto_collected === 1
     };
   }
 
@@ -88,7 +97,8 @@ export class CustomDropdownListModel {
 
     return rows.map(row => ({
       ...row,
-      items: JSON.parse(row.items) as string[]
+      items: JSON.parse(row.items) as string[],
+      is_auto_collected: row.is_auto_collected === 1
     }));
   }
 
@@ -153,5 +163,30 @@ export class CustomDropdownListModel {
       'SELECT COUNT(*) as count FROM custom_dropdown_lists'
     ).get() as { count: number };
     return result.count;
+  }
+
+  /**
+   * 특정 소스 경로로 수집된 목록 조회
+   */
+  static async findBySourcePath(sourcePath: string): Promise<CustomDropdownListWithParsedItems[]> {
+    const rows = userSettingsDb.prepare(
+      'SELECT * FROM custom_dropdown_lists WHERE source_path = ?'
+    ).all(sourcePath) as CustomDropdownListRecord[];
+
+    return rows.map(row => ({
+      ...row,
+      items: JSON.parse(row.items) as string[],
+      is_auto_collected: row.is_auto_collected === 1
+    }));
+  }
+
+  /**
+   * 특정 소스 경로로 수집된 모든 목록 삭제 (재스캔용)
+   */
+  static async deleteBySourcePath(sourcePath: string): Promise<number> {
+    const info = userSettingsDb.prepare(
+      'DELETE FROM custom_dropdown_lists WHERE source_path = ?'
+    ).run(sourcePath);
+    return info.changes;
   }
 }

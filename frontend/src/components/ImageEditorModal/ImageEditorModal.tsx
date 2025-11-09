@@ -22,15 +22,13 @@ import {
   Undo as UndoIcon,
   Redo as RedoIcon
 } from '@mui/icons-material';
-import { imageEditorApi, type EditOptions } from '../../services/imageEditorApi';
+import { imageEditorApi } from '../../services/imageEditorApi';
 
 interface ImageEditorModalProps {
   open: boolean;
   onClose: () => void;
   imageId: number;
   imageUrl: string;
-  onSendToComfyUI?: (tempId: string, editOptions: EditOptions) => void;
-  onSaveAsNew?: (newImageId: number) => void;
 }
 
 type Tool = 'crop' | 'brush' | 'eraser';
@@ -46,9 +44,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   open,
   onClose,
   imageId,
-  imageUrl,
-  onSendToComfyUI,
-  onSaveAsNew
+  imageUrl
 }) => {
   const [tool, setTool] = useState<Tool>('crop');
   const [brushSize, setBrushSize] = useState(20);
@@ -67,6 +63,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const maskCanvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const colorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [history, setHistory] = useState<ImageData[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -234,7 +231,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
     ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
 
-    // Convert hex color to rgba with opacity
+    // Convert hex color to rgb
     const hexToRgb = (hex: string) => {
       const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
       return result ? {
@@ -245,7 +242,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     };
 
     const rgb = hexToRgb(brushColor);
-    ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${brushOpacity})`;
+    // Use full opacity for actual mask data
+    ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 1.0)`;
     ctx.beginPath();
     ctx.arc(x, y, brushSize, 0, Math.PI * 2);
     ctx.fill();
@@ -343,86 +341,97 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(imageRef.current, 0, 0);
 
-    // Draw mask overlay
-    ctx.globalAlpha = 0.5;
+    // Draw mask overlay with user-defined opacity for visualization
+    ctx.globalAlpha = brushOpacity;
     ctx.drawImage(maskCanvasRef.current, 0, 0);
     ctx.globalAlpha = 1.0;
   };
 
-  const getEditOptions = async (): Promise<EditOptions> => {
-    const options: EditOptions = {};
-
-    // Add crop
-    if (cropArea && cropArea.width > 0 && cropArea.height > 0) {
-      options.crop = {
-        x: Math.min(cropArea.x, cropArea.x + cropArea.width),
-        y: Math.min(cropArea.y, cropArea.y + cropArea.height),
-        width: Math.abs(cropArea.width),
-        height: Math.abs(cropArea.height)
-      };
-    }
-
-    // Add mask
-    if (maskCanvasRef.current) {
-      const maskBlob = await new Promise<Blob | null>((resolve) => {
-        maskCanvasRef.current?.toBlob(resolve, 'image/png');
-      });
-
-      if (maskBlob) {
-        const buffer = await maskBlob.arrayBuffer();
-        options.mask = { data: buffer };
-      }
-    }
-
-    return options;
-  };
-
-  const handleSendToComfyUI = async () => {
+  const handleSaveImage = async () => {
     try {
       setLoading(true);
       setError(null);
       setSavingStatus('saving');
 
-      const editOptions = await getEditOptions();
-      const response = await imageEditorApi.createTempEditedImage(imageId, editOptions);
+      if (!canvasRef.current || !imageRef.current) {
+        throw new Error('Canvas not ready');
+      }
 
-      if (response.success && response.data) {
-        setSavingStatus('success');
-        setSuccessMessage('Image prepared for ComfyUI!');
-        const tempId = response.data.tempId;
-        setTimeout(() => {
-          onSendToComfyUI?.(tempId, editOptions);
-          onClose();
-        }, 500);
+      // Create a temporary canvas for final output
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      if (!tempCtx) throw new Error('Failed to create temp canvas');
+
+      let sourceCanvas = canvasRef.current;
+      let sourceWidth = sourceCanvas.width;
+      let sourceHeight = sourceCanvas.height;
+
+      // Apply crop if specified
+      if (cropArea && cropArea.width > 0 && cropArea.height > 0) {
+        const cropX = Math.min(cropArea.x, cropArea.x + cropArea.width);
+        const cropY = Math.min(cropArea.y, cropArea.y + cropArea.height);
+        const cropW = Math.abs(cropArea.width);
+        const cropH = Math.abs(cropArea.height);
+
+        tempCanvas.width = cropW;
+        tempCanvas.height = cropH;
+
+        // Draw cropped image (without mask overlay)
+        tempCtx.drawImage(
+          imageRef.current,
+          cropX, cropY, cropW, cropH,
+          0, 0, cropW, cropH
+        );
+
+        sourceCanvas = tempCanvas;
+        sourceWidth = cropW;
+        sourceHeight = cropH;
       } else {
-        setSavingStatus('error');
-        setError(response.error || 'Failed to create temp image');
+        tempCanvas.width = sourceWidth;
+        tempCanvas.height = sourceHeight;
+        tempCtx.drawImage(imageRef.current, 0, 0);
+        sourceCanvas = tempCanvas;
       }
-    } catch (err) {
-      setSavingStatus('error');
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const handleSaveAsNew = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      setSavingStatus('saving');
+      // Get final image as base64
+      const imageData = sourceCanvas.toDataURL('image/png');
 
-      const editOptions = await getEditOptions();
-      const response = await imageEditorApi.saveEditedImage(imageId, editOptions);
+      // Get mask as base64 if exists
+      let maskData: string | undefined;
+      if (maskCanvasRef.current) {
+        // Apply crop to mask if needed
+        if (cropArea && cropArea.width > 0 && cropArea.height > 0) {
+          const maskTempCanvas = document.createElement('canvas');
+          const maskTempCtx = maskTempCanvas.getContext('2d');
+          if (maskTempCtx) {
+            const cropX = Math.min(cropArea.x, cropArea.x + cropArea.width);
+            const cropY = Math.min(cropArea.y, cropArea.y + cropArea.height);
+            const cropW = Math.abs(cropArea.width);
+            const cropH = Math.abs(cropArea.height);
+
+            maskTempCanvas.width = cropW;
+            maskTempCanvas.height = cropH;
+            maskTempCtx.drawImage(
+              maskCanvasRef.current,
+              cropX, cropY, cropW, cropH,
+              0, 0, cropW, cropH
+            );
+            maskData = maskTempCanvas.toDataURL('image/png');
+          }
+        } else {
+          maskData = maskCanvasRef.current.toDataURL('image/png');
+        }
+      }
+
+      const response = await imageEditorApi.saveEditedImage(imageId, imageData, maskData);
 
       if (response.success && response.data) {
         setSavingStatus('success');
-        setSuccessMessage('Image saved successfully!');
-        const newImageId = response.data.newImageId;
+        const folderPath = response.data.message || 'uploads/temp/canvas/';
+        setSuccessMessage(folderPath);
         setTimeout(() => {
-          onSaveAsNew?.(newImageId);
           onClose();
-        }, 1000);
+        }, 2000);
       } else {
         setSavingStatus('error');
         setError(response.error || 'Failed to save image');
@@ -505,8 +514,16 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                   <input
                     type="color"
-                    value={brushColor}
-                    onChange={(e) => setBrushColor(e.target.value)}
+                    defaultValue={brushColor}
+                    onInput={(e) => {
+                      const newColor = (e.target as HTMLInputElement).value;
+                      if (colorTimeoutRef.current) {
+                        clearTimeout(colorTimeoutRef.current);
+                      }
+                      colorTimeoutRef.current = setTimeout(() => {
+                        setBrushColor(newColor);
+                      }, 50);
+                    }}
                     style={{
                       width: '60px',
                       height: '40px',
@@ -591,20 +608,12 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           Cancel
         </Button>
         <Button
-          onClick={handleSaveAsNew}
-          disabled={loading}
-          variant="outlined"
-          startIcon={loading && savingStatus === 'saving' ? <CircularProgress size={16} /> : null}
-        >
-          {loading && savingStatus === 'saving' ? 'Saving...' : 'Save as New Image'}
-        </Button>
-        <Button
-          onClick={handleSendToComfyUI}
+          onClick={handleSaveImage}
           disabled={loading}
           variant="contained"
           startIcon={loading && savingStatus === 'saving' ? <CircularProgress size={16} /> : null}
         >
-          {loading && savingStatus === 'saving' ? 'Preparing...' : 'Send to ComfyUI'}
+          {loading && savingStatus === 'saving' ? 'Saving...' : 'Save Image'}
         </Button>
       </DialogActions>
 

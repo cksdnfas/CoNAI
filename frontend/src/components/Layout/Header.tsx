@@ -11,15 +11,25 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
+  ListItemIcon,
   useMediaQuery,
   useTheme as useMuiTheme,
   Divider,
+  Tooltip,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
   Close as CloseIcon,
   Brightness4 as DarkIcon,
   Brightness7 as LightIcon,
+  Home as HomeIcon,
+  PhotoLibrary as GalleryIcon,
+  Folder as FolderIcon,
+  Search as SearchIcon,
+  CloudUpload as UploadIcon,
+  AutoAwesome as GenerationIcon,
+  Settings as SettingsIcon,
+  Help as HelpIcon,
 } from '@mui/icons-material';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -31,17 +41,18 @@ const Header: React.FC = () => {
   const theme = useMuiTheme();
   const { mode, toggleMode } = useAppTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isNarrow = useMediaQuery(theme.breakpoints.down('lg')); // Below 1200px
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { label: t('header.menu.home'), path: '/' },
-    { label: t('header.menu.gallery'), path: '/gallery' },
-    { label: t('header.menu.imageGroups'), path: '/image-groups' },
-    { label: t('header.menu.search'), path: '/search' },
-    { label: t('header.menu.upload'), path: '/upload' },
-    { label: t('header.menu.imageGeneration'), path: '/image-generation' },
-    { label: t('header.menu.settings'), path: '/settings' },
-    { label: t('header.menu.help'), path: '/help' },
+    { label: t('header.menu.home'), path: '/', icon: HomeIcon, tooltip: t('header.tooltip.home') },
+    { label: t('header.menu.gallery'), path: '/gallery', icon: GalleryIcon, tooltip: t('header.tooltip.gallery') },
+    { label: t('header.menu.imageGroups'), path: '/image-groups', icon: FolderIcon, tooltip: t('header.tooltip.imageGroups') },
+    { label: t('header.menu.search'), path: '/search', icon: SearchIcon, tooltip: t('header.tooltip.search') },
+    { label: t('header.menu.upload'), path: '/upload', icon: UploadIcon, tooltip: t('header.tooltip.upload') },
+    { label: t('header.menu.imageGeneration'), path: '/image-generation', icon: GenerationIcon, tooltip: t('header.tooltip.imageGeneration') },
+    { label: t('header.menu.settings'), path: '/settings', icon: SettingsIcon, tooltip: t('header.tooltip.settings') },
+    { label: t('header.menu.help'), path: '/help', icon: HelpIcon, tooltip: t('header.tooltip.help') },
   ];
 
   const handleMobileMenuToggle = () => {
@@ -78,23 +89,32 @@ const Header: React.FC = () => {
       </Box>
       <Divider />
       <List>
-        {navItems.map((item) => (
-          <ListItem key={item.path} disablePadding>
-            <ListItemButton
-              component={RouterLink}
-              to={item.path}
-              selected={location.pathname === item.path}
-              onClick={handleMobileMenuClose}
-            >
-              <ListItemText primary={item.label} />
-            </ListItemButton>
-          </ListItem>
-        ))}
+        {navItems.map((item) => {
+          const IconComponent = item.icon;
+          return (
+            <ListItem key={item.path} disablePadding>
+              <ListItemButton
+                component={RouterLink}
+                to={item.path}
+                selected={location.pathname === item.path}
+                onClick={handleMobileMenuClose}
+              >
+                <ListItemIcon>
+                  <IconComponent />
+                </ListItemIcon>
+                <ListItemText primary={item.label} />
+              </ListItemButton>
+            </ListItem>
+          );
+        })}
       </List>
       <Divider />
       <List>
         <ListItem disablePadding>
           <ListItemButton onClick={toggleMode}>
+            <ListItemIcon>
+              {mode === 'dark' ? <LightIcon /> : <DarkIcon />}
+            </ListItemIcon>
             <ListItemText
               primary={mode === 'dark' ? t('header.theme.light') : t('header.theme.dark')}
               secondary={t('header.theme.toggle')}
@@ -138,33 +158,59 @@ const Header: React.FC = () => {
           {/* 데스크톱 네비게이션 */}
           {!isMobile && (
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              {navItems.map((item) => (
-                <Button
-                  key={item.path}
+              {navItems.map((item) => {
+                const IconComponent = item.icon;
+                const showIconOnly = isNarrow && !isMobile;
+
+                return (
+                  <Tooltip key={item.path} title={item.tooltip} arrow>
+                    <Button
+                      color="inherit"
+                      component={RouterLink}
+                      to={item.path}
+                      variant={location.pathname === item.path ? 'outlined' : 'text'}
+                      sx={{
+                        color: 'inherit',
+                        borderColor: location.pathname === item.path ? 'currentColor' : 'transparent',
+                        minWidth: 'auto',
+                        px: showIconOnly ? 1.5 : 2,
+                        '&:hover': {
+                          backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                        },
+                      }}
+                    >
+                      <IconComponent sx={{ fontSize: 20, mr: showIconOnly ? 0 : 1 }} />
+                      {!showIconOnly && item.label}
+                    </Button>
+                  </Tooltip>
+                );
+              })}
+
+              {/* 테마 토글 버튼 */}
+              <Tooltip title={t('header.theme.toggle')} arrow>
+                <IconButton
                   color="inherit"
-                  component={RouterLink}
-                  to={item.path}
-                  variant={location.pathname === item.path ? 'outlined' : 'text'}
+                  onClick={toggleMode}
                   sx={{
-                    color: 'inherit',
-                    borderColor: location.pathname === item.path ? 'currentColor' : 'transparent',
-                    minWidth: 'auto',
-                    px: 2,
+                    ml: 1,
                     '&:hover': {
                       backgroundColor: 'rgba(255, 255, 255, 0.1)',
                     },
                   }}
                 >
-                  {item.label}
-                </Button>
-              ))}
+                  {mode === 'dark' ? <LightIcon /> : <DarkIcon />}
+                </IconButton>
+              </Tooltip>
+            </Box>
+          )}
 
-              {/* 테마 토글 버튼 */}
+          {/* 모바일에서만 테마 토글 버튼 */}
+          {isMobile && (
+            <Tooltip title={t('header.theme.toggle')} arrow>
               <IconButton
                 color="inherit"
                 onClick={toggleMode}
                 sx={{
-                  ml: 1,
                   '&:hover': {
                     backgroundColor: 'rgba(255, 255, 255, 0.1)',
                   },
@@ -172,22 +218,7 @@ const Header: React.FC = () => {
               >
                 {mode === 'dark' ? <LightIcon /> : <DarkIcon />}
               </IconButton>
-            </Box>
-          )}
-
-          {/* 모바일에서만 테마 토글 버튼 */}
-          {isMobile && (
-            <IconButton
-              color="inherit"
-              onClick={toggleMode}
-              sx={{
-                '&:hover': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                },
-              }}
-            >
-              {mode === 'dark' ? <LightIcon /> : <DarkIcon />}
-            </IconButton>
+            </Tooltip>
           )}
         </Toolbar>
       </AppBar>

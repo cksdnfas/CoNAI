@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { GroupModel, ImageGroupModel } from '../models/Group';
 import { AutoCollectionService } from '../services/autoCollectionService';
 import { ComplexFilterService } from '../services/complexFilterService';
+import { GroupDownloadService, DownloadType } from '../services/groupDownloadService';
 import {
   GroupResponse,
   GroupCreateData,
@@ -519,6 +520,101 @@ router.get('/:id/random-image', asyncHandler(async (req: Request, res: Response)
   } catch (error) {
     console.error('Error getting random image from group:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to get random image from group';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
+  }
+}));
+
+/**
+ * 그룹 이미지 다운로드 (ZIP)
+ * GET /api/groups/:id/download
+ *
+ * Query params:
+ * - type: 'thumbnail' | 'original' | 'video'
+ * - hashes: composite_hash 배열 (JSON string, optional - 선택된 이미지만 다운로드)
+ */
+router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const groupId = validateId(req.params.id, 'Group ID');
+    const downloadType = (req.query.type as DownloadType) || 'thumbnail';
+
+    // 선택된 이미지 해시 파싱 (옵션)
+    let compositeHashes: string[] | undefined;
+    if (req.query.hashes) {
+      try {
+        compositeHashes = JSON.parse(req.query.hashes as string);
+        if (!Array.isArray(compositeHashes)) {
+          return res.status(400).json(errorResponse('Invalid hashes parameter: must be an array'));
+        }
+      } catch (parseError) {
+        return res.status(400).json(errorResponse('Invalid hashes parameter: must be valid JSON'));
+      }
+    }
+
+    // 다운로드 타입 검증
+    if (!['thumbnail', 'original', 'video'].includes(downloadType)) {
+      return res.status(400).json(errorResponse('Invalid download type. Must be: thumbnail, original, or video'));
+    }
+
+    // ZIP 파일 생성
+    const result = await GroupDownloadService.createGroupZip({
+      groupId,
+      downloadType,
+      compositeHashes
+    });
+
+    // ZIP 파일 다운로드
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(result.fileName)}"`);
+    res.setHeader('X-File-Count', result.fileCount.toString());
+
+    // 파일 스트리밍
+    const fileStream = fs.createReadStream(result.zipPath);
+
+    fileStream.on('error', (error) => {
+      console.error('Error streaming zip file:', error);
+      if (!res.headersSent) {
+        res.status(500).json(errorResponse('Failed to download zip file'));
+      }
+    });
+
+    fileStream.on('end', async () => {
+      // 다운로드 완료 후 임시 파일 삭제
+      await GroupDownloadService.cleanupTempFile(result.zipPath);
+    });
+
+    // 파일 스트리밍 후 명시적 반환 (TypeScript 요구사항)
+    return fileStream.pipe(res);
+  } catch (error) {
+    console.error('Error downloading group images:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to download group images';
+
+    // 특정 에러 메시지에 따른 상태 코드
+    let statusCode = 500;
+    if (errorMessage.includes('not found') || errorMessage.includes('No images')) {
+      statusCode = 404;
+    } else if (errorMessage.includes('Invalid')) {
+      statusCode = 400;
+    }
+
+    return res.status(statusCode).json(errorResponse(errorMessage));
+  }
+}));
+
+/**
+ * 그룹의 파일 타입별 개수 조회 (다운로드 전 미리보기용)
+ * GET /api/groups/:id/file-counts
+ */
+router.get('/:id/file-counts', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const id = validateId(req.params.id, 'Group ID');
+
+    const counts = await GroupDownloadService.getFileCountByType(id);
+
+    return res.json(successResponse(counts));
+  } catch (error) {
+    console.error('Error getting file counts:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get file counts';
     const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
     return res.status(statusCode).json(errorResponse(errorMessage));
   }

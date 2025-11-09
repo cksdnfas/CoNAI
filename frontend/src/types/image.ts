@@ -23,7 +23,8 @@ export interface AutoTagsData {
  * - File info: Now comes from image_files table (file_id, file_status, etc.)
  */
 export interface ImageRecord {
-  // ✅ New structure - Primary identification
+  // ✅ Dual identification (migration period)
+  id?: number;                         // image_files.id (for selection and operations)
   composite_hash: string | null;       // 48-character hash (PRIMARY KEY) - NULL during Phase 1
   first_seen_date: string;             // ISO 8601 date (replaces upload_date)
 
@@ -110,7 +111,6 @@ export interface ImageRecord {
   };
 
   // ❌ REMOVED LEGACY FIELDS:
-  // - id: number
   // - filename: string
   // - original_name: string
   // - file_path: string (now original_file_path from JOIN)

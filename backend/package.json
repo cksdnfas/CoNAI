@@ -4,7 +4,7 @@
   "description": "Backend API server for ComfyUI Image Manager",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "nodemon --watch src --ext ts,json --ignore 'database/**' --ignore 'uploads/**' --ignore '**/*.db' --exec tsx src/index.ts",
+    "dev": "nodemon --watch src --ext ts,json --ignore 'database/**' --ignore 'uploads/**' --ignore '**/*.db' --signal SIGTERM --exec tsx src/index.ts",
     "build": "tsc && npm run copy:migrations",
     "copy:migrations": "copyfiles -u 1 \"src/database/migrations/**/*.sql\" dist/",
     "start": "node dist/index.js",
@@ -40,6 +40,7 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/express-session": "^1.18.2",

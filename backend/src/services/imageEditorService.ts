@@ -32,16 +32,17 @@ export class ImageEditorService {
     editOptions: EditOptions,
     expirationMinutes: number = 30
   ): Promise<EditResult> {
-    // Get original image info from legacy images table
-    const row = db.prepare('SELECT file_path FROM images WHERE id = ?').get(imageId) as { file_path: string } | undefined;
-    if (!row) {
-      throw new Error(`Image not found: ${imageId}`);
+    // Get original image info from image_files table
+    const imageFile = ImageFileModel.findById(imageId);
+    if (!imageFile) {
+      throw new Error(`Image file not found: ${imageId}`);
     }
 
-    const originalPath = path.join(runtimePaths.uploadsDir, row.file_path);
+    // original_file_path is already an absolute path
+    const originalPath = imageFile.original_file_path;
 
     if (!fs.existsSync(originalPath)) {
-      throw new Error(`Image file not found: ${row.file_path}`);
+      throw new Error(`Image file not found: ${imageFile.original_file_path}`);
     }
 
     // Create temp ID and paths
@@ -71,6 +72,11 @@ export class ImageEditorService {
       });
     }
 
+    // If no edits, just clone the image
+    if (!editOptions.crop && !editOptions.resize) {
+      imageProcessor = imageProcessor.clone();
+    }
+
     // Save edited image
     await imageProcessor.png().toFile(tempImagePath);
 
@@ -84,8 +90,11 @@ export class ImageEditorService {
     if (editOptions.mask?.data) {
       tempMaskPath = TempImageService.getTempFilePath(tempId, 'mask');
 
+      // Convert ArrayBuffer to Buffer
+      const maskBuffer = Buffer.from(editOptions.mask.data);
+
       // Save mask as grayscale PNG
-      await sharp(editOptions.mask.data)
+      await sharp(maskBuffer)
         .greyscale()
         .png()
         .toFile(tempMaskPath);
@@ -111,130 +120,51 @@ export class ImageEditorService {
   }
 
   /**
-   * Save edited image as a new permanent image
+   * Save edited canvas image to temp/canvas directory
+   * Simply saves the provided image data without re-processing from original
    */
   static async saveEditedImageAsNew(
+    imageData: Buffer,
     imageId: number,
-    editOptions: EditOptions,
-    customName?: string
-  ): Promise<number> {
-    // Get original image from legacy images table
-    const originalImage = db.prepare(`
-      SELECT filename, file_path, ai_tool, model_name, lora_models, steps, cfg_scale, sampler,
-             seed, scheduler, prompt, negative_prompt, denoise_strength, generation_time,
-             batch_size, batch_index, auto_tags
-      FROM images
-      WHERE id = ?
-    `).get(imageId) as any;
+    maskData?: Buffer,
+    expirationMinutes: number = 30
+  ): Promise<EditResult> {
+    // Create temp ID and paths
+    const tempId = TempImageService.createTempId();
+    const tempImagePath = TempImageService.getTempFilePath(tempId, 'image');
 
-    if (!originalImage) {
-      throw new Error(`Image not found: ${imageId}`);
+    // Save edited image directly
+    await sharp(imageData).png().toFile(tempImagePath);
+
+    // Get final dimensions
+    const metadata = await sharp(tempImagePath).metadata();
+    const finalWidth = metadata.width || 0;
+    const finalHeight = metadata.height || 0;
+
+    // Handle mask if provided
+    let tempMaskPath: string | undefined;
+    if (maskData) {
+      tempMaskPath = TempImageService.getTempFilePath(tempId, 'mask');
+      await sharp(maskData).greyscale().png().toFile(tempMaskPath);
     }
 
-    const originalPath = path.join(runtimePaths.uploadsDir, originalImage.file_path);
-
-    if (!fs.existsSync(originalPath)) {
-      throw new Error(`Image file not found: ${originalImage.file_path}`);
-    }
-
-    // Create date-based folder
-    const { ImageProcessor } = await import('./imageProcessor');
-    const folders = await ImageProcessor.createUploadFolders(runtimePaths.uploadsDir);
-
-    // Generate filename
-    const baseName = customName || path.parse(originalImage.filename).name + '_edited';
-    const filename = `${baseName}_${Date.now()}.png`;
-    const newImagePath = path.join(folders.targetFolder, filename);
-
-    // Apply edits
-    let imageProcessor = sharp(originalPath);
-
-    if (editOptions.crop) {
-      const { x, y, width, height } = editOptions.crop;
-      imageProcessor = imageProcessor.extract({
-        left: Math.max(0, Math.floor(x)),
-        top: Math.max(0, Math.floor(y)),
-        width: Math.max(1, Math.floor(width)),
-        height: Math.max(1, Math.floor(height))
-      });
-    }
-
-    if (editOptions.resize) {
-      const { width, height } = editOptions.resize;
-      imageProcessor = imageProcessor.resize(width, height, {
-        fit: 'fill',
-        kernel: sharp.kernel.lanczos3
-      });
-    }
-
-    // Save new image
-    await imageProcessor.png().toFile(newImagePath);
-
-    // Get image info
-    const metadata = await sharp(newImagePath).metadata();
-    const stats = await fs.promises.stat(newImagePath);
-
-    // Create thumbnail
-    const thumbnailFilename = `${path.parse(filename).name}_thumb.webp`;
-    const thumbnailPath = path.join(folders.targetFolder, thumbnailFilename);
-    await ImageProcessor.generateThumbnail(newImagePath, thumbnailPath);
-
-    // Create relative paths
-    const relativeImagePath = path.join(folders.dateFolder, filename).replace(/\\/g, '/');
-    const relativeThumbnailPath = path.join(folders.dateFolder, thumbnailFilename).replace(/\\/g, '/');
-
-    // Save to legacy database
-    const result = db.prepare(`
-      INSERT INTO images (
-        filename, original_name, file_path, thumbnail_path, file_size, mime_type,
-        width, height, metadata, ai_tool, model_name, lora_models, steps, cfg_scale,
-        sampler, seed, scheduler, prompt, negative_prompt, denoise_strength,
-        generation_time, batch_size, batch_index, auto_tags,
-        duration, fps, video_codec, audio_codec, bitrate,
-        perceptual_hash, color_histogram
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      filename,
-      customName || `${originalImage.filename} (edited)`,
-      relativeImagePath,
-      relativeThumbnailPath,
-      stats.size,
-      'image/png',
-      metadata.width || 0,
-      metadata.height || 0,
-      JSON.stringify({
-        ai_info: {},
-        edited_from: imageId,
-        edit_options: editOptions
-      }),
-      originalImage.ai_tool,
-      originalImage.model_name,
-      originalImage.lora_models,
-      originalImage.steps,
-      originalImage.cfg_scale,
-      originalImage.sampler,
-      originalImage.seed,
-      originalImage.scheduler,
-      originalImage.prompt,
-      originalImage.negative_prompt,
-      originalImage.denoise_strength,
-      originalImage.generation_time,
-      originalImage.batch_size,
-      originalImage.batch_index,
-      originalImage.auto_tags,
-      null, // duration
-      null, // fps
-      null, // video_codec
-      null, // audio_codec
-      null, // bitrate
-      null, // perceptual_hash
-      null  // color_histogram
+    // Register temporary files
+    const tempInfo = TempImageService.registerTempFile(
+      tempId,
+      imageId,
+      tempImagePath,
+      tempMaskPath,
+      expirationMinutes
     );
 
-    const newImageId = Number(result.lastInsertRowid);
-
-    console.log(`✅ Saved edited image as new: ID ${newImageId}, path: ${relativeImagePath}`);
-    return newImageId;
+    return {
+      tempId,
+      tempImagePath,
+      tempMaskPath,
+      expiresAt: tempInfo.expiresAt,
+      width: finalWidth,
+      height: finalHeight
+    };
   }
 
   /**

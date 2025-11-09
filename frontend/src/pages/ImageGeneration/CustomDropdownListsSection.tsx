@@ -15,7 +15,11 @@ import {
   TextField,
   Alert,
   CircularProgress,
-  Stack
+  Stack,
+  Tabs,
+  Tab,
+  Tooltip,
+  Badge
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -23,7 +27,10 @@ import {
   Delete as DeleteIcon,
   List as ListIcon,
   FolderOpen as FolderOpenIcon,
-  Upload as UploadIcon
+  Upload as UploadIcon,
+  CloudSync as CloudSyncIcon,
+  Person as PersonIcon,
+  Storage as StorageIcon
 } from '@mui/icons-material';
 import { customDropdownListApi, type CustomDropdownList } from '../../services/api/customDropdownListApi';
 
@@ -31,6 +38,7 @@ export default function CustomDropdownListsSection() {
   const [lists, setLists] = useState<CustomDropdownList[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentTab, setCurrentTab] = useState(0); // 0: 자동 수집, 1: 수동 생성
   const [openDialog, setOpenDialog] = useState(false);
   const [editingList, setEditingList] = useState<CustomDropdownList | null>(null);
   const [openComfyUIDialog, setOpenComfyUIDialog] = useState(false);
@@ -42,6 +50,10 @@ export default function CustomDropdownListsSection() {
     description: '',
     itemsText: ''
   });
+
+  // 탭별로 목록 필터링
+  const autoCollectedLists = lists.filter(list => list.is_auto_collected);
+  const manualLists = lists.filter(list => !list.is_auto_collected);
 
   useEffect(() => {
     loadLists();
@@ -171,22 +183,10 @@ export default function CustomDropdownListsSection() {
       const response = await customDropdownListApi.scanComfyUIModels(comfyUIPath);
 
       if (response.success && response.data) {
-        // 스캔된 각 폴더별로 드롭다운 리스트 생성
-        for (const folder of response.data) {
-          if (folder.files.length > 0) {
-            await customDropdownListApi.createList({
-              name: folder.displayName,
-              description: `ComfyUI ${folder.folderName} 모델 목록`,
-              items: folder.files
-            });
-          }
-        }
-
         handleCloseComfyUIDialog();
         loadLists(); // 목록 새로고침
-        alert(`${response.data.length}개의 폴더에서 모델을 불러왔습니다.`);
-      } else {
-        setError(response.message || '모델 스캔에 실패했습니다.');
+        setCurrentTab(0); // 자동 수집 탭으로 이동
+        alert(response.data.message);
       }
     } catch (err: any) {
       setError(err.response?.data?.error || err.message);
@@ -211,14 +211,16 @@ export default function CustomDropdownListsSection() {
           >
             ComfyUI 모델 불러오기
           </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={() => handleOpenDialog()}
-          >
-            새 목록 추가
-          </Button>
+          {currentTab === 1 && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={() => handleOpenDialog()}
+            >
+              새 목록 추가
+            </Button>
+          )}
         </Box>
       </Box>
 
@@ -228,92 +230,228 @@ export default function CustomDropdownListsSection() {
         </Alert>
       )}
 
+      <Tabs
+        value={currentTab}
+        onChange={(_, newValue) => setCurrentTab(newValue)}
+        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tab
+          icon={<StorageIcon />}
+          iconPosition="start"
+          label={
+            <Badge badgeContent={autoCollectedLists.length} color="primary" max={999}>
+              <Box sx={{ mr: 2 }}>자동 수집</Box>
+            </Badge>
+          }
+        />
+        <Tab
+          icon={<PersonIcon />}
+          iconPosition="start"
+          label={
+            <Badge badgeContent={manualLists.length} color="secondary" max={999}>
+              <Box sx={{ mr: 2 }}>수동 생성</Box>
+            </Badge>
+          }
+        />
+      </Tabs>
+
       {loading ? (
         <Box display="flex" justifyContent="center" p={3}>
           <CircularProgress size={30} />
         </Box>
-      ) : lists.length === 0 ? (
-        <Card>
-          <CardContent>
-            <Typography variant="body2" color="text.secondary" align="center">
-              등록된 커스텀 드롭다운 목록이 없습니다.
-            </Typography>
-          </CardContent>
-        </Card>
       ) : (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: {
-              xs: '1fr',
-              sm: 'repeat(2, 1fr)',
-              md: 'repeat(3, 1fr)',
-              lg: 'repeat(4, 1fr)',
-            },
-            gap: 1.5,
-          }}
-        >
-          {lists.map((list) => (
-            <Card key={list.id} sx={{ height: '100%' }}>
-              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                <Stack spacing={1}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600, fontSize: '0.9rem' }}>
-                      {list.name}
-                    </Typography>
-                    <Chip
-                      label={`${list.items.length}개`}
-                      size="small"
-                      color="primary"
-                      sx={{ height: '18px', fontSize: '0.7rem' }}
-                    />
-                  </Box>
-                  {list.description && (
-                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-                      {list.description}
-                    </Typography>
-                  )}
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {list.items.slice(0, 3).map((item, index) => (
-                      <Chip
-                        key={index}
-                        label={item}
+        <>
+          {/* 자동 수집 탭 */}
+          {currentTab === 0 && (
+            autoCollectedLists.length === 0 ? (
+              <Card>
+                <CardContent>
+                  <Typography variant="body2" color="text.secondary" align="center">
+                    자동 수집된 목록이 없습니다. "ComfyUI 모델 불러오기" 버튼을 사용하여 모델을 스캔하세요.
+                  </Typography>
+                </CardContent>
+              </Card>
+            ) : (
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: '1fr',
+                    sm: 'repeat(2, 1fr)',
+                    md: 'repeat(3, 1fr)',
+                    lg: 'repeat(4, 1fr)',
+                  },
+                  gap: 1.5,
+                }}
+              >
+                {autoCollectedLists.map((list) => (
+                  <Card key={list.id} sx={{ height: '100%', borderLeft: 3, borderColor: 'primary.main' }}>
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Stack spacing={1}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 600, fontSize: '0.9rem', flex: 1 }}>
+                            {list.name}
+                          </Typography>
+                          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                            <Chip
+                              label="자동"
+                              size="small"
+                              color="primary"
+                              sx={{ height: '18px', fontSize: '0.65rem' }}
+                            />
+                            <Chip
+                              label={`${list.items.length}개`}
+                              size="small"
+                              color="default"
+                              sx={{ height: '18px', fontSize: '0.65rem' }}
+                            />
+                          </Box>
+                        </Box>
+                        {list.source_path && (
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', wordBreak: 'break-all' }}>
+                            📁 {list.source_path}
+                          </Typography>
+                        )}
+                        {list.description && (
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                            {list.description}
+                          </Typography>
+                        )}
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, userSelect: 'text' }}>
+                          {list.items.slice(0, 3).map((item, index) => (
+                            <Chip
+                              key={index}
+                              label={item}
+                              size="small"
+                              variant="outlined"
+                              sx={{ height: '20px', fontSize: '0.7rem', cursor: 'text' }}
+                            />
+                          ))}
+                          {list.items.length > 3 && (
+                            <Chip
+                              label={`+${list.items.length - 3}`}
+                              size="small"
+                              variant="outlined"
+                              sx={{ height: '20px', fontSize: '0.7rem' }}
+                            />
+                          )}
+                        </Box>
+                      </Stack>
+                    </CardContent>
+                    <CardActions sx={{ p: 1, pt: 0, justifyContent: 'flex-end' }}>
+                      <Tooltip title="자동 수집된 항목은 편집할 수 없습니다">
+                        <span>
+                          <IconButton
+                            size="small"
+                            disabled
+                            sx={{ p: 0.5 }}
+                          >
+                            <EditIcon sx={{ fontSize: '1rem' }} />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <IconButton
                         size="small"
-                        variant="outlined"
-                        sx={{ height: '20px', fontSize: '0.7rem' }}
-                      />
-                    ))}
-                    {list.items.length > 3 && (
-                      <Chip
-                        label={`+${list.items.length - 3}`}
+                        color="error"
+                        onClick={() => handleDelete(list.id)}
+                        sx={{ p: 0.5 }}
+                      >
+                        <DeleteIcon sx={{ fontSize: '1rem' }} />
+                      </IconButton>
+                    </CardActions>
+                  </Card>
+                ))}
+              </Box>
+            )
+          )}
+
+          {/* 수동 생성 탭 */}
+          {currentTab === 1 && (
+            manualLists.length === 0 ? (
+              <Card>
+                <CardContent>
+                  <Typography variant="body2" color="text.secondary" align="center">
+                    수동으로 생성한 목록이 없습니다. "새 목록 추가" 버튼을 사용하여 목록을 만드세요.
+                  </Typography>
+                </CardContent>
+              </Card>
+            ) : (
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: '1fr',
+                    sm: 'repeat(2, 1fr)',
+                    md: 'repeat(3, 1fr)',
+                    lg: 'repeat(4, 1fr)',
+                  },
+                  gap: 1.5,
+                }}
+              >
+                {manualLists.map((list) => (
+                  <Card key={list.id} sx={{ height: '100%' }}>
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Stack spacing={1}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                            {list.name}
+                          </Typography>
+                          <Chip
+                            label={`${list.items.length}개`}
+                            size="small"
+                            color="secondary"
+                            sx={{ height: '18px', fontSize: '0.7rem' }}
+                          />
+                        </Box>
+                        {list.description && (
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                            {list.description}
+                          </Typography>
+                        )}
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {list.items.slice(0, 3).map((item, index) => (
+                            <Chip
+                              key={index}
+                              label={item}
+                              size="small"
+                              variant="outlined"
+                              sx={{ height: '20px', fontSize: '0.7rem' }}
+                            />
+                          ))}
+                          {list.items.length > 3 && (
+                            <Chip
+                              label={`+${list.items.length - 3}`}
+                              size="small"
+                              variant="outlined"
+                              sx={{ height: '20px', fontSize: '0.7rem' }}
+                            />
+                          )}
+                        </Box>
+                      </Stack>
+                    </CardContent>
+                    <CardActions sx={{ p: 1, pt: 0, justifyContent: 'flex-end' }}>
+                      <IconButton
                         size="small"
-                        variant="outlined"
-                        sx={{ height: '20px', fontSize: '0.7rem' }}
-                      />
-                    )}
-                  </Box>
-                </Stack>
-              </CardContent>
-              <CardActions sx={{ p: 1, pt: 0, justifyContent: 'flex-end' }}>
-                <IconButton
-                  size="small"
-                  onClick={() => handleOpenDialog(list)}
-                  sx={{ p: 0.5 }}
-                >
-                  <EditIcon sx={{ fontSize: '1rem' }} />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  color="error"
-                  onClick={() => handleDelete(list.id)}
-                  sx={{ p: 0.5 }}
-                >
-                  <DeleteIcon sx={{ fontSize: '1rem' }} />
-                </IconButton>
-              </CardActions>
-            </Card>
-          ))}
-        </Box>
+                        onClick={() => handleOpenDialog(list)}
+                        sx={{ p: 0.5 }}
+                      >
+                        <EditIcon sx={{ fontSize: '1rem' }} />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => handleDelete(list.id)}
+                        sx={{ p: 0.5 }}
+                      >
+                        <DeleteIcon sx={{ fontSize: '1rem' }} />
+                      </IconButton>
+                    </CardActions>
+                  </Card>
+                ))}
+              </Box>
+            )
+          )}
+        </>
       )}
 
       {/* 생성/수정 다이얼로그 */}
@@ -413,8 +551,10 @@ export default function CustomDropdownListsSection() {
               </Button>
             </Box>
             <Alert severity="warning" sx={{ fontSize: '0.85rem' }}>
-              기본적으로 checkpoints, unet, upscale_models 폴더를 스캔합니다.
-              각 폴더의 하위 구조가 그대로 드롭다운 목록으로 생성됩니다.
+              <strong>스캔 안내:</strong><br />
+              • checkpoints, unet, upscale_models 폴더를 자동으로 스캔합니다<br />
+              • 이미 수집된 경로를 다시 스캔하면 <strong>항목이 최신화</strong>됩니다<br />
+              • 자동 수집된 항목은 "자동 수집" 탭에서 확인할 수 있습니다
             </Alert>
           </Box>
         </DialogContent>

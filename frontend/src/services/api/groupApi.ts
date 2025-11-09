@@ -210,4 +210,30 @@ export const groupApi = {
     const response = await apiClient.get(`/api/groups/${id}/image-ids`);
     return response.data;
   },
+
+  /**
+   * Get download URL for group images (ZIP)
+   * @param id Group ID
+   * @param type Download type: 'thumbnail' | 'original' | 'video'
+   * @param compositeHashes Optional array of composite hashes for selected images
+   */
+  getDownloadUrl: (id: number, type: 'thumbnail' | 'original' | 'video', compositeHashes?: string[]): string => {
+    let url = `${API_BASE_URL}/api/groups/${id}/download?type=${type}`;
+    if (compositeHashes && compositeHashes.length > 0) {
+      url += `&hashes=${encodeURIComponent(JSON.stringify(compositeHashes))}`;
+    }
+    return url;
+  },
+
+  /**
+   * Get file counts by type for group (for download preview)
+   */
+  getFileCountsByType: async (id: number): Promise<{
+    success: boolean;
+    data?: { thumbnail: number; original: number; video: number };
+    error?: string;
+  }> => {
+    const response = await apiClient.get(`/api/groups/${id}/file-counts`);
+    return response.data;
+  },
 };
