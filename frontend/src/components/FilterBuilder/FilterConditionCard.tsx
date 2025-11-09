@@ -42,7 +42,7 @@ const CONDITION_TYPES: Record<FilterCategory, Array<{ value: string; label: stri
     { value: 'negative_prompt_regex', label: '정규식' },
   ],
   auto_tag: [
-    { value: 'auto_tag_exists', label: '오토태그 존재' },
+    { value: 'auto_tag_exists', label: '자동태그 존재' },
     { value: 'auto_tag_has_character', label: '캐릭터 존재' },
     { value: 'auto_tag_rating', label: 'Rating 타입' },
     { value: 'auto_tag_rating_score', label: 'Rating 점수' },
@@ -59,7 +59,7 @@ const CONDITION_TYPES: Record<FilterCategory, Array<{ value: string; label: stri
 const CATEGORY_LABELS: Record<FilterCategory, string> = {
   positive_prompt: '긍정 프롬프트',
   negative_prompt: '네거티브 프롬프트',
-  auto_tag: '오토태그',
+  auto_tag: '자동태그',
   basic: '기본',
 };
 

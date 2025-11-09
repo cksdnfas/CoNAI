@@ -12,7 +12,7 @@ import { AutoTagStats } from '../../types/autoTag';
  */
 export class ImageStatsModel {
   /**
-   * 오토태그 통계 정보 조회
+   * 자동태그 통계 정보 조회
    */
   static async getAutoTagStats(): Promise<AutoTagStats> {
     // 1. 기본 통계

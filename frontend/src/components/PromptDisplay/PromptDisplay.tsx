@@ -86,18 +86,24 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
   // AUTO 탭 표시 조건: isTaggerEnabled 또는 autoTags 존재
   const showAutoTab = (isTaggerEnabled && imageId !== undefined) || (autoTags && Object.keys(autoTags).length > 0);
 
+  // Memoize prompts to prevent unnecessary re-renders
+  // Only recalculate when the actual prompt string content changes
+  const memoizedPrompt = React.useMemo(() => prompt?.trim() || '', [prompt?.trim()]);
+  const memoizedNegativePrompt = React.useMemo(() => negativePrompt?.trim() || '', [negativePrompt?.trim()]);
+
   // showGrouped가 true일 때 프롬프트 그룹화 처리
+  // Optimized to only trigger when actual prompt content or showGrouped changes
   useEffect(() => {
     if (showGrouped) {
       const loadGroupedData = async () => {
         setLoading(true);
         try {
           if (hasPrompt) {
-            const positiveResult = await groupPromptTerms(prompt, 'positive');
+            const positiveResult = await groupPromptTerms(memoizedPrompt, 'positive');
             setPositiveGrouped(positiveResult);
           }
           if (hasNegativePrompt) {
-            const negativeResult = await groupPromptTerms(negativePrompt, 'negative');
+            const negativeResult = await groupPromptTerms(memoizedNegativePrompt, 'negative');
             setNegativeGrouped(negativeResult);
           }
         } catch (error) {
@@ -112,7 +118,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
       setPositiveGrouped(null);
       setNegativeGrouped(null);
     }
-  }, [showGrouped, prompt, negativePrompt, hasPrompt, hasNegativePrompt]);
+  }, [showGrouped, memoizedPrompt, memoizedNegativePrompt, hasPrompt, hasNegativePrompt]);
 
   // 이미지 변경 시 이전에 선택했던 탭 종류를 찾아서 이동 (없으면 첫 번째로)
   useEffect(() => {

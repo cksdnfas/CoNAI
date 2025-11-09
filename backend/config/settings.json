@@ -4,7 +4,8 @@
     "deleteProtection": {
       "enabled": true,
       "recycleBinPath": "RecycleBin"
-    }
+    },
+    "enableGallery": false
   },
   "tagger": {
     "enabled": true,

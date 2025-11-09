@@ -834,4 +834,37 @@ router.get('/by-path/:encodedPath', asyncHandler(async (req: Request, res: Respo
   }
 }));
 
+/**
+ * 플레이스홀더 이미지 제공
+ * GET /api/images/placeholder
+ * 이미지 로드 실패 시 표시할 대체 이미지
+ */
+router.get('/placeholder', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const placeholderPath = resolveUploadsPath('placeholder-image.svg');
+
+    if (!fs.existsSync(placeholderPath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'Placeholder image not found'
+      });
+    }
+
+    // SVG 파일 제공
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); // 1년 캐시
+
+    const fileStream = fs.createReadStream(placeholderPath);
+    fileStream.pipe(res);
+    return;
+  } catch (error) {
+    console.error('Placeholder image error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to serve placeholder image'
+    });
+    return;
+  }
+}));
+
 export { router as queryRoutes };

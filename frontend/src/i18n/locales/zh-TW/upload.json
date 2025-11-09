@@ -42,13 +42,5 @@
     "multipleSuccess": "已成功上傳{{count}}張圖像。",
     "allFailed": "所有圖像上傳失敗。",
     "partialSuccess": "{{success}}個成功，{{failed}}個失敗。"
-  },
-  "guide": {
-    "title": "上傳指南",
-    "metadataExtraction": "將自動提取由ComfyUI、Stable Diffusion、NovelAI等生成的圖像的後設資料。",
-    "videoProcessing": "影片檔案透過FFmpeg提取後設資料（時長、編解碼器、解析度等）並生成動畫縮圖。",
-    "dataAnalysis": "自動分析提示詞、模型名稱、生成參數等，用於搜尋和分類。",
-    "imageVersions": "上傳的圖像以三種版本儲存：原始、最佳化和縮圖。",
-    "autoGrouping": "如果設定了自動收集規則，上傳時將自動分類到相關群組。"
   }
 }

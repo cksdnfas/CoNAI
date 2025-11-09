@@ -25,12 +25,12 @@ const SimpleSearchTab: React.FC<SimpleSearchTabProps> = ({
     <Box sx={{ py: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
         <Typography variant="body2" color="text.secondary">
-          긍정 프롬프트와 오토태그에서 검색합니다.
+          긍정 프롬프트와 자동태그에서 검색합니다.
         </Typography>
         <Tooltip
           title={
             <Stack spacing={0.5}>
-              <Typography variant="caption">• 검색 범위: 긍정 프롬프트, 오토태그 General/Character</Typography>
+              <Typography variant="caption">• 검색 범위: 긍정 프롬프트, 자동태그 General/Character</Typography>
               <Typography variant="caption">• 가중치는 무시됩니다</Typography>
               <Typography variant="caption">• 복잡한 조건은 "고급 검색" 사용</Typography>
             </Stack>

@@ -112,7 +112,7 @@ const AutoCollectTab: React.FC<AutoCollectTabProps> = ({
   };
 
   const handleHelpClick = () => {
-    window.open('/help?page=filters', '_blank');
+    window.open('/help?page=filters#/help', '_blank');
   };
 
   const filterCount =

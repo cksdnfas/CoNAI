@@ -72,8 +72,37 @@ export const fetchGroupPrompts = async (
   }
 };
 
+// Cache for prompt groups to prevent redundant API calls
+const promptGroupsCache = new Map<string, { data: PromptGroup[], timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Cached version of fetchPromptGroups
+ */
+const fetchPromptGroupsCached = async (type: 'positive' | 'negative'): Promise<PromptGroup[]> => {
+  const cacheKey = `groups_${type}`;
+  const cached = promptGroupsCache.get(cacheKey);
+
+  // Return cached data if valid
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+
+  // Fetch new data
+  const groups = await fetchPromptGroups(type);
+
+  // Update cache
+  promptGroupsCache.set(cacheKey, {
+    data: groups,
+    timestamp: Date.now(),
+  });
+
+  return groups;
+};
+
 /**
  * 현재 프롬프트 텍스트를 그룹별로 분류하는 함수
+ * Optimized with parallel fetching and caching
  */
 export const groupPromptTerms = async (
   promptText: string,
@@ -89,16 +118,27 @@ export const groupPromptTerms = async (
   // 2. LoRA와 일반 프롬프트 분리
   const { loras, terms } = parsePromptWithLoRAs(refinedPrompt);
 
-  // 3. 그룹 목록 가져오기
-  const groups = await fetchPromptGroups(type);
+  // 3. 그룹 목록 가져오기 (cached)
+  const groups = await fetchPromptGroupsCached(type);
 
-  // 4. 각 그룹의 프롬프트 목록 가져오기
+  // 4. 각 그룹의 프롬프트 목록 가져오기 (병렬 처리로 최적화)
   const groupPromptMap = new Map<number, string[]>();
 
-  for (const group of groups) {
+  // Fetch all group prompts in parallel instead of sequentially
+  const groupPromptPromises = groups.map(async (group) => {
     const groupPrompts = await fetchGroupPrompts(group.id, type);
-    // 콜렉션 프롬프트는 이미 cleanPromptTerm 또는 removeLoRAWeight 처리된 상태
-    groupPromptMap.set(group.id, groupPrompts.map(p => p.toLowerCase()));
+    return {
+      groupId: group.id,
+      prompts: groupPrompts.map(p => p.toLowerCase()),
+    };
+  });
+
+  // Wait for all promises to resolve
+  const groupPromptResults = await Promise.all(groupPromptPromises);
+
+  // Populate the map with results
+  for (const result of groupPromptResults) {
+    groupPromptMap.set(result.groupId, result.prompts);
   }
 
   // 5. 각 항목을 그룹에 매칭

@@ -65,11 +65,29 @@ const loginLimiter = rateLimit({
   skipSuccessfulRequests: true // 성공한 요청은 카운트 제외
 });
 
-// General API rate limiting
+// General API rate limiting - Increased for UI intensive operations
 const apiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1분
-  max: 100, // 최대 100 요청
+  max: 1000, // 최대 1000 요청 (from 100, increased for heavy UI operations)
   message: 'Too many requests from this IP',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Stricter rate limiting for upload endpoints
+const uploadLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1분
+  max: 50, // 최대 50 업로드 요청
+  message: 'Too many upload requests, please slow down',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Lenient rate limiting for read-only endpoints (metadata, groups, etc.)
+const readOnlyLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1분
+  max: 2000, // 최대 2000 요청 (very lenient for UI browsing)
+  message: 'Too many read requests from this IP',
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -162,22 +180,23 @@ app.use('/api/auth/login', loginLimiter); // Apply login rate limiter
 app.use('/api/auth', authRoutes);
 
 // Protected routes (require authentication if configured)
-app.use('/api/images', optionalAuth, imageRoutes);
-app.use('/api/prompt-collection', optionalAuth, promptCollectionRoutes);
-app.use('/api/prompt-groups', optionalAuth, promptGroupRoutes);
-app.use('/api/negative-prompt-groups', optionalAuth, negativePromptGroupRoutes);
-app.use('/api/groups', optionalAuth, groupRoutes);
+// Apply lenient rate limiting to read-heavy endpoints
+app.use('/api/images', readOnlyLimiter, optionalAuth, imageRoutes);
+app.use('/api/prompt-collection', readOnlyLimiter, optionalAuth, promptCollectionRoutes);
+app.use('/api/prompt-groups', readOnlyLimiter, optionalAuth, promptGroupRoutes);
+app.use('/api/negative-prompt-groups', readOnlyLimiter, optionalAuth, negativePromptGroupRoutes);
+app.use('/api/groups', readOnlyLimiter, optionalAuth, groupRoutes);
 app.use('/api/settings', optionalAuth, settingsRoutes);
-app.use('/api/workflows', optionalAuth, workflowRoutes);
+app.use('/api/workflows', readOnlyLimiter, optionalAuth, workflowRoutes);
 app.use('/api/comfyui-servers', optionalAuth, comfyuiServerRoutes);
 app.use('/api/custom-dropdown-lists', optionalAuth, customDropdownListRoutes);
-app.use('/api/nai', optionalAuth, naiRoutes);
-app.use('/api/generation-history', optionalAuth, generationHistoryRoutes);
+app.use('/api/nai', uploadLimiter, optionalAuth, naiRoutes); // Upload endpoint
+app.use('/api/generation-history', readOnlyLimiter, optionalAuth, generationHistoryRoutes);
 app.use('/api/wildcards', optionalAuth, wildcardRoutes);
 app.use('/api/folders', optionalAuth, watchedFoldersRoutes);
 app.use('/api/background-queue', optionalAuth, backgroundQueueRoutes);
 app.use('/api/system', optionalAuth, systemRoutes);
-app.use('/api/image-editor', optionalAuth, imageEditorRoutes);
+app.use('/api/image-editor', uploadLimiter, optionalAuth, imageEditorRoutes); // Upload endpoint
 
 // Frontend static file serving
 const frontendDistPath = process.env.FRONTEND_DIST_PATH

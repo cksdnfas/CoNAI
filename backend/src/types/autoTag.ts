@@ -1,5 +1,5 @@
 /**
- * 오토태그 (WD v3 Tagger) 관련 타입 정의
+ * 자동태그 (WD v3 Tagger) 관련 타입 정의
  */
 
 /**
@@ -20,7 +20,7 @@ export interface TagScore {
 }
 
 /**
- * 오토태그 전체 데이터 구조
+ * 자동태그 전체 데이터 구조
  */
 export interface AutoTagData {
   caption: string;
@@ -66,7 +66,7 @@ export interface CharacterFilter {
 }
 
 /**
- * 오토태그 검색 파라미터
+ * 자동태그 검색 파라미터
  */
 export interface AutoTagSearchParams {
   rating?: RatingFilter;
@@ -74,7 +74,7 @@ export interface AutoTagSearchParams {
   general_tags?: TagFilter[];
   character?: CharacterFilter;
   model?: string;
-  has_auto_tags?: boolean; // true: 오토태그 있음, false: 없음, undefined: 상관없음
+  has_auto_tags?: boolean; // true: 자동태그 있음, false: 없음, undefined: 상관없음
   page?: number;
   limit?: number;
   sortBy?: 'upload_date' | 'filename' | 'file_size' | 'width' | 'height';
@@ -82,7 +82,7 @@ export interface AutoTagSearchParams {
 }
 
 /**
- * 오토태그 통계 데이터
+ * 자동태그 통계 데이터
  */
 export interface AutoTagStats {
   total_images: number;

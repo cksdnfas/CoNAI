@@ -126,9 +126,23 @@ export class ComplexFilterService {
       ? `WHERE ${finalConditions.join(' AND ')}`
       : basicWhere;
 
+    // ✅ image_files JOIN 추가하여 id 필드 포함
+    const selectClause = `
+      SELECT
+        im.*,
+        if.id,
+        if.original_file_path,
+        if.file_status,
+        if.file_type,
+        if.file_size,
+        if.mime_type
+      FROM media_metadata im
+      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
+    `;
+
     const query = ctes.length > 0
-      ? `WITH ${ctes.join(', ')} SELECT im.* FROM media_metadata im ${finalWhere}`
-      : `SELECT im.* FROM media_metadata im ${finalWhere}`;
+      ? `WITH ${ctes.join(', ')} ${selectClause} ${finalWhere}`
+      : `${selectClause} ${finalWhere}`;
 
     return { query, params };
   }

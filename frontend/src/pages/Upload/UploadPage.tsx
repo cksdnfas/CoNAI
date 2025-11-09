@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Typography, Paper } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import UploadZone from '../../components/UploadZone/UploadZone';
 import PromptPreview from '../../components/PromptPreview/PromptPreview';
@@ -37,82 +37,6 @@ const UploadPage: React.FC = () => {
       </Typography>
 
       <UploadZone onUploadComplete={handleUploadComplete} />
-
-      <Paper
-        elevation={1}
-        sx={{
-          p: { xs: 2, sm: 3 },
-          mt: { xs: 3, sm: 4 },
-          borderRadius: 2,
-        }}
-      >
-        <Typography
-          variant="h6"
-          gutterBottom
-          sx={{
-            fontSize: { xs: '1.1rem', sm: '1.25rem' },
-            fontWeight: 600,
-          }}
-        >
-          {t('upload:guide.title')}
-        </Typography>
-        <Box component="ul" sx={{ pl: { xs: 2, sm: 2 }, m: 0 }}>
-          <Typography
-            component="li"
-            variant="body2"
-            sx={{
-              mb: 1,
-              fontSize: { xs: '0.8rem', sm: '0.875rem' },
-              lineHeight: 1.5,
-            }}
-          >
-            {t('upload:guide.metadataExtraction')}
-          </Typography>
-          <Typography
-            component="li"
-            variant="body2"
-            sx={{
-              mb: 1,
-              fontSize: { xs: '0.8rem', sm: '0.875rem' },
-              lineHeight: 1.5,
-            }}
-          >
-            {t('upload:guide.videoProcessing')}
-          </Typography>
-          <Typography
-            component="li"
-            variant="body2"
-            sx={{
-              mb: 1,
-              fontSize: { xs: '0.8rem', sm: '0.875rem' },
-              lineHeight: 1.5,
-            }}
-          >
-            {t('upload:guide.dataAnalysis')}
-          </Typography>
-          <Typography
-            component="li"
-            variant="body2"
-            sx={{
-              mb: 1,
-              fontSize: { xs: '0.8rem', sm: '0.875rem' },
-              lineHeight: 1.5,
-            }}
-          >
-            {t('upload:guide.imageVersions')}
-          </Typography>
-          <Typography
-            component="li"
-            variant="body2"
-            sx={{
-              fontSize: { xs: '0.8rem', sm: '0.875rem' },
-              lineHeight: 1.5,
-            }}
-          >
-            {t('upload:guide.autoGrouping')}
-          </Typography>
-        </Box>
-      </Paper>
 
       {/* Prompt Preview Section */}
       <PromptPreview />

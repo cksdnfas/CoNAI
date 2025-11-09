@@ -426,39 +426,37 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
         </MenuItem>
 
         {/* 선택된 이미지만 다운로드 */}
-        {selectedIds.length > 0 && (
-          <>
-            <MenuItem disabled sx={{ opacity: '1 !important', mt: 1 }}>
-              <Typography variant="caption" color="text.secondary">
-                {t('imageGroups:download.scopeSelected', { count: selectedIds.length })}
-              </Typography>
-            </MenuItem>
-            <MenuItem onClick={() => handleDownloadTypeSelect('thumbnail', 'selected')}>
-              <ListItemIcon>
-                <ImageIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>
-                {t('imageGroups:download.typeThumbnail')}
-              </ListItemText>
-            </MenuItem>
-            <MenuItem onClick={() => handleDownloadTypeSelect('original', 'selected')}>
-              <ListItemIcon>
-                <PhotoLibraryIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>
-                {t('imageGroups:download.typeOriginal')}
-              </ListItemText>
-            </MenuItem>
-            <MenuItem onClick={() => handleDownloadTypeSelect('video', 'selected')}>
-              <ListItemIcon>
-                <VideocamIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>
-                {t('imageGroups:download.typeVideo')}
-              </ListItemText>
-            </MenuItem>
-          </>
-        )}
+        {selectedIds.length > 0 && [
+          <MenuItem key="selected-header" disabled sx={{ opacity: '1 !important', mt: 1 }}>
+            <Typography variant="caption" color="text.secondary">
+              {t('imageGroups:download.scopeSelected', { count: selectedIds.length })}
+            </Typography>
+          </MenuItem>,
+          <MenuItem key="selected-thumbnail" onClick={() => handleDownloadTypeSelect('thumbnail', 'selected')}>
+            <ListItemIcon>
+              <ImageIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>
+              {t('imageGroups:download.typeThumbnail')}
+            </ListItemText>
+          </MenuItem>,
+          <MenuItem key="selected-original" onClick={() => handleDownloadTypeSelect('original', 'selected')}>
+            <ListItemIcon>
+              <PhotoLibraryIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>
+              {t('imageGroups:download.typeOriginal')}
+            </ListItemText>
+          </MenuItem>,
+          <MenuItem key="selected-video" onClick={() => handleDownloadTypeSelect('video', 'selected')}>
+            <ListItemIcon>
+              <VideocamIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>
+              {t('imageGroups:download.typeVideo')}
+            </ListItemText>
+          </MenuItem>
+        ]}
       </Menu>
 
       {/* 대용량 다운로드 확인 다이얼로그 */}

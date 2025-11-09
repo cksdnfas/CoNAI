@@ -282,8 +282,21 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
 
     const result = await ImageGroupModel.findImagesByGroup(id, page, limit, collectionType);
 
-    // URL과 구조화된 메타데이터 추가
-    const enrichedImages = result.images.map(enrichImageRecord);
+    // 그룹 정보 조회 (collection_type 표시용)
+    const group = await GroupModel.findById(id);
+
+    // URL과 구조화된 메타데이터 추가, groups 배열에 현재 그룹 정보 포함
+    const enrichedImages = result.images.map(image => {
+      const enriched = enrichImageRecord(image);
+      // groups 배열에 현재 그룹의 collection_type 정보 추가
+      enriched.groups = [{
+        id: group!.id,
+        name: group!.name,
+        color: group!.color,
+        collection_type: (image as any).collection_type || 'manual'
+      }];
+      return enriched;
+    });
 
     return res.json(
       successResponse({

@@ -196,7 +196,8 @@ export class ImageGroupModel {
         if.file_status,
         if.file_type,
         if.file_size,
-        if.mime_type
+        if.mime_type,
+        ig.collection_type
       FROM image_groups ig
       INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'

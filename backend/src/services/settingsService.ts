@@ -39,7 +39,8 @@ export class SettingsService {
         deleteProtection: {
           enabled: true,  // 기본값: 활성화
           recycleBinPath: 'RecycleBin'
-        }
+        },
+        enableGallery: true  // 기본값: 갤러리 활성화
       },
       tagger: {
         enabled: process.env.TAGGER_ENABLED === 'true',

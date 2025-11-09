@@ -9,6 +9,7 @@
     "prompts": "프롬프트 관리",
     "metadata": "메타데이터 추출",
     "folders": "폴더 관리",
+    "account": "계정",
     "advanced": "고급 설정"
   },
   "general": {
@@ -22,18 +23,16 @@
       "zh-CN": "简体中文",
       "zh-TW": "繁體中文"
     },
+    "gallery": {
+      "label": "갤러리 활성화",
+      "tooltip": "메뉴와 네비게이션에서 갤러리 페이지를 표시합니다. 비활성화하면 마소니 뷰만 사용됩니다."
+    },
     "deleteProtection": {
-      "title": "삭제 파일 보호",
-      "description": "삭제된 파일을 RecycleBin 폴더에 보관하여 복구할 수 있도록 합니다.",
-      "enabled": {
-        "label": "삭제된 파일을 RecycleBin에 보관",
-        "description": "활성화 시 삭제된 파일이 완전히 제거되지 않고 RecycleBin 폴더에 백업됩니다."
-      },
-      "info": "RecycleBin 폴더는 프로젝트 루트에 생성되며, 삭제된 파일은 타임스탬프와 함께 저장됩니다. 파일 복구가 필요한 경우 RecycleBin 폴더에서 직접 복사할 수 있습니다."
+      "label": "삭제된 파일을 RecycleBin에 보관",
+      "tooltip": "활성화 시 삭제된 파일이 완전히 제거되지 않고 RecycleBin 폴더에 백업됩니다. RecycleBin 폴더는 프로젝트 루트에 생성되며, 삭제된 파일은 타임스탬프와 함께 저장됩니다."
     },
     "metadata": {
       "title": "메타데이터 추출 최적화",
-      "description": "AI 이미지 메타데이터 추출 성능을 최적화합니다. 기본 설정으로 ComfyUI 이미지 처리가 99.85% 빨라집니다.",
       "scanMode": {
         "title": "Stealth PNG 스캔 모드",
         "fast": {
@@ -397,6 +396,37 @@
         }
       },
       "localStorageNote": "설정값은 로컬에만 저장되며, 검색 시 실시간으로 적용됩니다."
+    }
+  },
+  "auth": {
+    "setup": {
+      "title": "인증 설정",
+      "description": "사용자 이름과 비밀번호를 설정하여 이미지 관리자를 무단 접근으로부터 보호합니다. 설정 후 애플리케이션에 접근하려면 로그인이 필요합니다.",
+      "username": "사용자 이름",
+      "password": "비밀번호",
+      "confirmPassword": "비밀번호 확인",
+      "button": "인증 설정",
+      "success": "인증이 성공적으로 구성되었습니다! 다음 방문 시 로그인이 필요합니다.",
+      "errors": {
+        "required": "사용자 이름과 비밀번호는 필수입니다",
+        "mismatch": "비밀번호가 일치하지 않습니다",
+        "failed": "인증 설정에 실패했습니다"
+      }
+    },
+    "update": {
+      "title": "자격 증명 변경",
+      "description": "자격 증명을 변경하면 새 자격 증명으로 다시 로그인해야 합니다.",
+      "currentPassword": "현재 비밀번호",
+      "newUsername": "새 사용자 이름",
+      "newPassword": "새 비밀번호",
+      "confirmNewPassword": "새 비밀번호 확인",
+      "button": "자격 증명 업데이트",
+      "success": "자격 증명이 성공적으로 업데이트되었습니다!",
+      "errors": {
+        "required": "모든 필드는 필수입니다",
+        "mismatch": "새 비밀번호가 일치하지 않습니다",
+        "failed": "자격 증명 업데이트에 실패했습니다"
+      }
     }
   },
   "messages": {

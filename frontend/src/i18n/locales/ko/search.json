@@ -175,7 +175,7 @@
         "description": "이미지 생성에 사용된 네거티브 프롬프트 검색"
       },
       "auto_tag": {
-        "label": "오토태그 (WD Tagger)",
+        "label": "자동태그 (WD Tagger)",
         "description": "WD v3 Tagger로 자동 생성된 태그 검색"
       },
       "basic": {

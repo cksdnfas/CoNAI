@@ -11,6 +11,7 @@ export interface DeleteProtectionSettings {
 export interface GeneralSettings {
   language: SupportedLanguage;
   deleteProtection: DeleteProtectionSettings;
+  enableGallery?: boolean;
 }
 
 export interface TaggerModel {

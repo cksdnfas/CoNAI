@@ -592,7 +592,7 @@ router.get('/tagger/check', asyncHandler(async (req: Request, res: Response) => 
 }));
 
 /**
- * 오토태그 기반 이미지 검색 (기본 검색 조건 결합 지원)
+ * 자동태그 기반 이미지 검색 (기본 검색 조건 결합 지원)
  * POST /api/images/search-by-autotags
  */
 router.post('/search-by-autotags', asyncHandler(async (req: Request, res: Response) => {
@@ -629,7 +629,7 @@ router.post('/search-by-autotags', asyncHandler(async (req: Request, res: Respon
       });
     }
 
-    // 오토태그 검색 실행 (기본 검색 조건 포함)
+    // 자동태그 검색 실행 (기본 검색 조건 포함)
     const result = await ImageSearchModel.searchByAutoTags(searchParams, basicSearchParams);
 
     // URL과 구조화된 메타데이터 추가
@@ -658,7 +658,7 @@ router.post('/search-by-autotags', asyncHandler(async (req: Request, res: Respon
 }));
 
 /**
- * 오토태그 통계 정보 조회
+ * 자동태그 통계 정보 조회
  * GET /api/images/autotag-stats
  */
 router.get('/autotag-stats', asyncHandler(async (req: Request, res: Response) => {

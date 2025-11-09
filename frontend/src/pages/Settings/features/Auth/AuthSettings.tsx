@@ -10,10 +10,12 @@ import {
   CircularProgress
 } from '@mui/material';
 import { Security, VpnKey } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { authApi } from '../../../../services/authApi';
 import { useAuth } from '../../../../contexts/AuthContext';
 
 export const AuthSettings: React.FC = () => {
+  const { t } = useTranslation('settings');
   const { hasCredentials, checkAuth } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -52,26 +54,26 @@ export const AuthSettings: React.FC = () => {
     clearMessages();
 
     if (!setupUsername || !setupPassword) {
-      setError('Username and password are required');
+      setError(t('auth.setup.errors.required'));
       return;
     }
 
     if (setupPassword !== setupConfirmPassword) {
-      setError('Passwords do not match');
+      setError(t('auth.setup.errors.mismatch'));
       return;
     }
 
     setIsLoading(true);
     try {
       await authApi.setup(setupUsername, setupPassword);
-      setSuccess('Authentication configured successfully! You will need to login on your next visit.');
+      setSuccess(t('auth.setup.success'));
       clearSetupForm();
       await checkAuth(); // Refresh auth status
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(err.message || 'Failed to setup authentication');
+        setError(err.message || t('auth.setup.errors.failed'));
       } else {
-        setError('Failed to setup authentication');
+        setError(t('auth.setup.errors.failed'));
       }
     } finally {
       setIsLoading(false);
@@ -82,26 +84,26 @@ export const AuthSettings: React.FC = () => {
     clearMessages();
 
     if (!currentPassword || !newUsername || !newPassword) {
-      setError('All fields are required');
+      setError(t('auth.update.errors.required'));
       return;
     }
 
     if (newPassword !== confirmNewPassword) {
-      setError('New passwords do not match');
+      setError(t('auth.update.errors.mismatch'));
       return;
     }
 
     setIsLoading(true);
     try {
       await authApi.updateCredentials(currentPassword, newUsername, newPassword);
-      setSuccess('Credentials updated successfully!');
+      setSuccess(t('auth.update.success'));
       clearUpdateForm();
       await checkAuth(); // Refresh auth status
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(err.message || 'Failed to update credentials');
+        setError(err.message || t('auth.update.errors.failed'));
       } else {
-        setError('Failed to update credentials');
+        setError(t('auth.update.errors.failed'));
       }
     } finally {
       setIsLoading(false);
@@ -126,17 +128,16 @@ export const AuthSettings: React.FC = () => {
         <Paper sx={{ p: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <Security sx={{ mr: 1, color: 'primary.main' }} />
-            <Typography variant="h6">Setup Authentication</Typography>
+            <Typography variant="h6">{t('auth.setup.title')}</Typography>
           </Box>
 
           <Alert severity="info" sx={{ mb: 3 }}>
-            Configure username and password to protect your image manager from unauthorized access.
-            Once set, you will need to login to access the application.
+            {t('auth.setup.description')}
           </Alert>
 
           <TextField
             fullWidth
-            label="Username"
+            label={t('auth.setup.username')}
             value={setupUsername}
             onChange={(e) => setSetupUsername(e.target.value)}
             disabled={isLoading}
@@ -146,7 +147,7 @@ export const AuthSettings: React.FC = () => {
           <TextField
             fullWidth
             type="password"
-            label="Password"
+            label={t('auth.setup.password')}
             value={setupPassword}
             onChange={(e) => setSetupPassword(e.target.value)}
             disabled={isLoading}
@@ -156,7 +157,7 @@ export const AuthSettings: React.FC = () => {
           <TextField
             fullWidth
             type="password"
-            label="Confirm Password"
+            label={t('auth.setup.confirmPassword')}
             value={setupConfirmPassword}
             onChange={(e) => setSetupConfirmPassword(e.target.value)}
             disabled={isLoading}
@@ -169,7 +170,7 @@ export const AuthSettings: React.FC = () => {
             disabled={isLoading || !setupUsername || !setupPassword || !setupConfirmPassword}
             fullWidth
           >
-            {isLoading ? <CircularProgress size={24} /> : 'Setup Authentication'}
+            {isLoading ? <CircularProgress size={24} /> : t('auth.setup.button')}
           </Button>
         </Paper>
       ) : (
@@ -177,17 +178,17 @@ export const AuthSettings: React.FC = () => {
         <Paper sx={{ p: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <VpnKey sx={{ mr: 1, color: 'primary.main' }} />
-            <Typography variant="h6">Change Credentials</Typography>
+            <Typography variant="h6">{t('auth.update.title')}</Typography>
           </Box>
 
           <Alert severity="warning" sx={{ mb: 3 }}>
-            Changing your credentials will require you to login again with the new credentials.
+            {t('auth.update.description')}
           </Alert>
 
           <TextField
             fullWidth
             type="password"
-            label="Current Password"
+            label={t('auth.update.currentPassword')}
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             disabled={isLoading}
@@ -198,7 +199,7 @@ export const AuthSettings: React.FC = () => {
 
           <TextField
             fullWidth
-            label="New Username"
+            label={t('auth.update.newUsername')}
             value={newUsername}
             onChange={(e) => setNewUsername(e.target.value)}
             disabled={isLoading}
@@ -208,7 +209,7 @@ export const AuthSettings: React.FC = () => {
           <TextField
             fullWidth
             type="password"
-            label="New Password"
+            label={t('auth.update.newPassword')}
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             disabled={isLoading}
@@ -218,7 +219,7 @@ export const AuthSettings: React.FC = () => {
           <TextField
             fullWidth
             type="password"
-            label="Confirm New Password"
+            label={t('auth.update.confirmNewPassword')}
             value={confirmNewPassword}
             onChange={(e) => setConfirmNewPassword(e.target.value)}
             disabled={isLoading}
@@ -231,7 +232,7 @@ export const AuthSettings: React.FC = () => {
             disabled={isLoading || !currentPassword || !newUsername || !newPassword || !confirmNewPassword}
             fullWidth
           >
-            {isLoading ? <CircularProgress size={24} /> : 'Update Credentials'}
+            {isLoading ? <CircularProgress size={24} /> : t('auth.update.button')}
           </Button>
         </Paper>
       )}

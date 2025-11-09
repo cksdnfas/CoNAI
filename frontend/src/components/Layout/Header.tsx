@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -34,6 +34,7 @@ import {
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
+import { settingsApi } from '../../services/settingsApi';
 
 const Header: React.FC = () => {
   const { t } = useTranslation('navigation');
@@ -43,8 +44,24 @@ const Header: React.FC = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isNarrow = useMediaQuery(theme.breakpoints.down('lg')); // Below 1200px
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [enableGallery, setEnableGallery] = useState(true);
 
-  const navItems = [
+  // Load settings to check if gallery is enabled
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const settings = await settingsApi.getSettings();
+        setEnableGallery(settings.general.enableGallery ?? true);
+      } catch (error) {
+        console.error('Failed to load gallery setting:', error);
+        // Default to enabled on error
+        setEnableGallery(true);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  const allNavItems = [
     { label: t('header.menu.home'), path: '/', icon: HomeIcon, tooltip: t('header.tooltip.home') },
     { label: t('header.menu.gallery'), path: '/gallery', icon: GalleryIcon, tooltip: t('header.tooltip.gallery') },
     { label: t('header.menu.imageGroups'), path: '/image-groups', icon: FolderIcon, tooltip: t('header.tooltip.imageGroups') },
@@ -54,6 +71,11 @@ const Header: React.FC = () => {
     { label: t('header.menu.settings'), path: '/settings', icon: SettingsIcon, tooltip: t('header.tooltip.settings') },
     { label: t('header.menu.help'), path: '/help', icon: HelpIcon, tooltip: t('header.tooltip.help') },
   ];
+
+  // Filter out gallery if disabled
+  const navItems = enableGallery
+    ? allNavItems
+    : allNavItems.filter(item => item.path !== '/gallery');
 
   const handleMobileMenuToggle = () => {
     setMobileMenuOpen(!mobileMenuOpen);

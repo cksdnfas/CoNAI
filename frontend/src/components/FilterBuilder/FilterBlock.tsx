@@ -54,7 +54,7 @@ const GROUP_CONFIG = {
 const CATEGORY_LABELS: Record<string, string> = {
   positive_prompt: '긍정 프롬프트',
   negative_prompt: '네거티브 프롬프트',
-  auto_tag: '오토태그',
+  auto_tag: '자동태그',
   basic: '기본',
 };
 
@@ -64,7 +64,7 @@ const TYPE_LABELS: Record<string, string> = {
   prompt_regex: '정규식',
   negative_prompt_contains: '포함',
   negative_prompt_regex: '정규식',
-  auto_tag_exists: '오토태그 존재',
+  auto_tag_exists: '자동태그 존재',
   auto_tag_has_character: '캐릭터 존재',
   auto_tag_rating: 'Rating 타입',
   auto_tag_rating_score: 'Rating 점수',

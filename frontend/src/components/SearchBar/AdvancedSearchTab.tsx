@@ -56,7 +56,7 @@ const AdvancedSearchTab: React.FC<AdvancedSearchTabProps> = ({
   };
 
   const handleHelpClick = () => {
-    window.open('/help?page=filters', '_blank');
+    window.open('/help?page=filters#/help', '_blank');
   };
 
   return (

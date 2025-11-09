@@ -42,13 +42,5 @@
     "multipleSuccess": "已成功上传{{count}}张图像。",
     "allFailed": "所有图像上传失败。",
     "partialSuccess": "{{success}}个成功，{{failed}}个失败。"
-  },
-  "guide": {
-    "title": "上传指南",
-    "metadataExtraction": "将自动提取由ComfyUI、Stable Diffusion、NovelAI等生成的图像的元数据。",
-    "videoProcessing": "视频文件通过FFmpeg提取元数据（时长、编解码器、分辨率等）并生成动画缩略图。",
-    "dataAnalysis": "自动分析提示词、模型名称、生成参数等，用于搜索和分类。",
-    "imageVersions": "上传的图像以三种版本存储：原始、优化和缩略图。",
-    "autoGrouping": "如果配置了自动收集规则，上传时将自动分类到相关组。"
   }
 }

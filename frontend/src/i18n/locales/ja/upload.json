@@ -42,13 +42,5 @@
     "multipleSuccess": "{{count}}個の画像のアップロードが完了しました。",
     "allFailed": "すべての画像のアップロードに失敗しました。",
     "partialSuccess": "{{success}}個成功、{{failed}}個失敗しました。"
-  },
-  "guide": {
-    "title": "アップロードガイド",
-    "metadataExtraction": "ComfyUI、Stable Diffusion、NovelAIなどで生成された画像のメタデータが自動的に抽出されます。",
-    "videoProcessing": "動画ファイルはFFmpegを通じてメタデータ（再生時間、コーデック、解像度など）を抽出し、アニメーションサムネイルを生成します。",
-    "dataAnalysis": "プロンプト、モデル名、生成パラメータなどが自動的に分析され、検索と分類に活用されます。",
-    "imageVersions": "アップロードされた画像は、オリジナル、最適化版、サムネイルの3つのバージョンで保存されます。",
-    "autoGrouping": "自動収集ルールが設定されている場合、アップロードと同時に関連グループに自動分類されます。"
   }
 }

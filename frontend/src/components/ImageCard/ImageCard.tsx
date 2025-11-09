@@ -112,7 +112,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
     // 모든 파일 타입이 composite_hash를 사용
     if (isGif || isVideo) {
       const url = `${backendOrigin}/api/images/${image.composite_hash}/file`;
-      console.log('[ImageCard] GIF/Video URL:', url, 'mime_type:', image.mime_type, 'composite_hash:', image.composite_hash, 'isGif:', isGif, 'isVideo:', isVideo);
+      // console.log('[ImageCard] GIF/Video URL:', url, 'mime_type:', image.mime_type, 'composite_hash:', image.composite_hash, 'isGif:', isGif, 'isVideo:', isVideo);
       return url;
     }
     // 일반 이미지는 썸네일 사용
@@ -147,15 +147,22 @@ const ImageCard: React.FC<ImageCardProps> = ({
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          border: selected ? 3 : (showCollectionType && isAutoCollected ? 2 : 1),
+          border: selected ? 3 : (showCollectionType && isAutoCollected ? 3 : 1),
           borderColor: selected
             ? 'primary.main'
-            : (showCollectionType && isAutoCollected ? 'info.light' : 'divider'),
+            : (showCollectionType && isAutoCollected
+                ? (theme) => theme.palette.mode === 'dark' ? '#42a5f5' : '#1976d2'
+                : 'divider'),
           borderStyle: (showCollectionType && isAutoCollected) ? 'dashed' : 'solid',
           borderRadius: 2,
           transition: 'all 0.3s ease',
+          boxShadow: (showCollectionType && isAutoCollected)
+            ? (theme) => `0 0 8px ${theme.palette.mode === 'dark' ? 'rgba(66, 165, 245, 0.4)' : 'rgba(25, 118, 210, 0.3)'}`
+            : 'none',
           '&:hover': {
-            boxShadow: 8,
+            boxShadow: (showCollectionType && isAutoCollected)
+              ? (theme) => `0 4px 12px ${theme.palette.mode === 'dark' ? 'rgba(66, 165, 245, 0.5)' : 'rgba(25, 118, 210, 0.4)'}, 0 8px 24px rgba(0,0,0,0.2)`
+              : 8,
             transform: 'translateY(-2px)',
           },
         }}
@@ -293,25 +300,6 @@ const ImageCard: React.FC<ImageCardProps> = ({
 
         <Box className="image-card-actions" sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
           <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <Tooltip title={t('common:imageCard.tooltips.viewDetails')}>
-              <IconButton
-                size="small"
-                onClick={handleInfoClick}
-                sx={{
-                  bgcolor: (theme) => theme.palette.mode === 'dark'
-                    ? 'rgba(0, 0, 0, 0.6)'
-                    : 'rgba(255, 255, 255, 0.8)',
-                  borderRadius: 1,
-                  '&:hover': {
-                    bgcolor: (theme) => theme.palette.mode === 'dark'
-                      ? 'rgba(0, 0, 0, 0.8)'
-                      : 'rgba(255, 255, 255, 0.9)',
-                  },
-                }}
-              >
-                <InfoIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
             <Tooltip title={t('common:imageCard.tooltips.download')}>
               <IconButton
                 size="small"

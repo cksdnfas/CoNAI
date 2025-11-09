@@ -9,6 +9,7 @@
     "prompts": "Prompt Management",
     "metadata": "Metadata Extraction",
     "folders": "Folder Management",
+    "account": "Account",
     "advanced": "Advanced Settings"
   },
   "general": {
@@ -33,7 +34,6 @@
     },
     "metadata": {
       "title": "Metadata Extraction Optimization",
-      "description": "Optimize AI image metadata extraction performance. Default settings improve ComfyUI image processing by 99.85%.",
       "scanMode": {
         "title": "Stealth PNG Scan Mode",
         "fast": {
@@ -169,6 +169,37 @@
       "deleteSuccess": "{{count}} images deleted successfully.",
       "deletePartialSuccess": "{{success}} succeeded, {{failed}} failed",
       "deleteFailed": "Failed to delete images."
+    }
+  },
+  "auth": {
+    "setup": {
+      "title": "Setup Authentication",
+      "description": "Configure username and password to protect your image manager from unauthorized access. Once set, you will need to login to access the application.",
+      "username": "Username",
+      "password": "Password",
+      "confirmPassword": "Confirm Password",
+      "button": "Setup Authentication",
+      "success": "Authentication configured successfully! You will need to login on your next visit.",
+      "errors": {
+        "required": "Username and password are required",
+        "mismatch": "Passwords do not match",
+        "failed": "Failed to setup authentication"
+      }
+    },
+    "update": {
+      "title": "Change Credentials",
+      "description": "Changing your credentials will require you to login again with the new credentials.",
+      "currentPassword": "Current Password",
+      "newUsername": "New Username",
+      "newPassword": "New Password",
+      "confirmNewPassword": "Confirm New Password",
+      "button": "Update Credentials",
+      "success": "Credentials updated successfully!",
+      "errors": {
+        "required": "All fields are required",
+        "mismatch": "New passwords do not match",
+        "failed": "Failed to update credentials"
+      }
     }
   },
   "messages": {

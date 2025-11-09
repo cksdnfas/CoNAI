@@ -29,7 +29,7 @@
     "autoCollectEnable": "자동수집 활성화",
     "autoCollectDescription": "설정한 조건에 맞는 이미지를 자동으로 이 그룹에 추가합니다.",
     "orConditionInfo": "OR 조건: 여러 조건을 추가하면 하나라도 만족하는 이미지가 자동수집됩니다.",
-    "orConditionExample": "예시: \"프롬프트에 'anime' 포함\" + \"오토태그 캐릭터 존재\" → 둘 중 하나만 만족해도 수집",
+    "orConditionExample": "예시: \"프롬프트에 'anime' 포함\" + \"자동태그 캐릭터 존재\" → 둘 중 하나만 만족해도 수집",
     "conditionsTitle": "자동수집 조건",
     "addCondition": "조건 추가",
     "conditionType": "조건 유형",

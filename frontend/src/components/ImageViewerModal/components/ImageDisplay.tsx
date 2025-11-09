@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Skeleton } from '@mui/material';
 import type { ImageRecord } from '../../../types/image';
 import { getBackendOrigin } from '../../../utils/backend';
@@ -14,6 +14,7 @@ interface ImageDisplayProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   onMouseDown: (e: React.MouseEvent) => void;
   showOriginal?: boolean; // 원본 이미지 표시 여부 (기본값: false, 썸네일 사용)
+  onOriginalLoadError?: () => void; // 원본 이미지 로드 실패 시 콜백
 }
 
 /**
@@ -30,18 +31,46 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
   containerRef,
   onMouseDown,
   showOriginal = false, // 기본값: 썸네일 사용
+  onOriginalLoadError,
 }) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
+  const [useFallback, setUseFallback] = useState(false);
+  const [usePlaceholder, setUsePlaceholder] = useState(false);
   const backendOrigin = getBackendOrigin();
+
+  // Reset error states when image or showOriginal changes
+  useEffect(() => {
+    setImageError(false);
+    setUseFallback(false);
+    setUsePlaceholder(false);
+    setImageLoading(true);
+  }, [image.composite_hash, showOriginal]);
 
   // 이미지 URL 우선순위:
   // 새 정책: 기본적으로 썸네일 사용 (90% 품질, 1080px, 빠른 로딩)
   // 원본 보기 버튼 클릭 시에만 원본 이미지 로드
   // GIF와 비디오는 항상 원본 사용 (애니메이션/재생 보존)
   const getImageUrl = () => {
+    // 플레이스홀더 표시 중
+    if (usePlaceholder) {
+      return `${backendOrigin}/api/images/placeholder`;
+    }
+
     const isGif = image.file_type === 'animated';
     const isVideo = image.file_type === 'video';
+
+    // Fallback 모드: 썸네일 사용
+    if (useFallback) {
+      if (image.thumbnail_url) {
+        return image.thumbnail_url.startsWith('http') ? image.thumbnail_url : `${backendOrigin}${image.thumbnail_url}`;
+      }
+      if (image.composite_hash) {
+        return `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
+      }
+      // 썸네일도 없으면 플레이스홀더로 전환
+      return `${backendOrigin}/api/images/placeholder`;
+    }
 
     // composite_hash null 체크
     if (!image.composite_hash) {
@@ -52,7 +81,7 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
       if (image.thumbnail_url) {
         return image.thumbnail_url.startsWith('http') ? image.thumbnail_url : `${backendOrigin}${image.thumbnail_url}`;
       }
-      return ''; // 둘 다 없으면 빈 문자열
+      return `${backendOrigin}/api/images/placeholder`;
     }
 
     // GIF와 비디오는 항상 원본 사용 (ImageCard와 동일하게 직접 엔드포인트 사용)
@@ -78,31 +107,30 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
     return `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
   };
 
-  const getFallbackUrl = () => {
-    if (image.image_url) {
-      return image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
-    }
-    if (image.thumbnail_url) {
-      return image.thumbnail_url.startsWith('http') ? image.thumbnail_url : `${backendOrigin}${image.thumbnail_url}`;
-    }
-    // composite_hash가 있을 때만 API 엔드포인트 사용
-    if (image.composite_hash) {
-      return `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
-    }
-    return ''; // 모든 경로가 없으면 빈 문자열
-  };
-
   const imageUrl = getImageUrl();
-  const fallbackUrl = getFallbackUrl();
 
-  // 디버그: file_type 확인
-  console.log('[ImageDisplay] Rendering image:', {
-    composite_hash: image.composite_hash,
-    file_type: image.file_type,
-    mime_type: image.mime_type,
-    isVideo: image.file_type === 'video',
-    isAnimated: image.file_type === 'animated'
-  });
+  // 이미지 로드 에러 핸들러 (다단계 폴백)
+  const handleImageError = () => {
+    if (!imageError) {
+      setImageError(true);
+
+      // 원본 이미지 요청이 실패한 경우
+      if (showOriginal && !useFallback) {
+        // 썸네일로 폴백
+        setUseFallback(true);
+        setImageLoading(true);
+        // 부모 컴포넌트에 알림 (토스트 표시)
+        if (onOriginalLoadError) {
+          onOriginalLoadError();
+        }
+      } else if (useFallback && !usePlaceholder) {
+        // 썸네일도 실패 -> 플레이스홀더 표시
+        setUsePlaceholder(true);
+        setImageLoading(true);
+      }
+      // 플레이스홀더도 실패하면 더 이상 폴백 없음
+    }
+  };
 
   return (
     <Box
@@ -133,13 +161,13 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
       {image.file_type === 'video' ? (
         <Box
           component="video"
-          key={`video-${image.composite_hash}`}
-          src={imageError ? fallbackUrl : imageUrl}
+          key={`video-${image.composite_hash}-${useFallback}-${usePlaceholder}`}
+          src={imageUrl}
           controls
           autoPlay
           loop
           muted
-          onError={() => setImageError(true)}
+          onError={handleImageError}
           onLoadedData={() => setImageLoading(false)}
           sx={{
             maxWidth: '100%',
@@ -157,11 +185,11 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
       ) : (
         <Box
           component="img"
-          key={`img-${image.composite_hash}`}
-          src={imageError ? fallbackUrl : imageUrl}
+          key={`img-${image.composite_hash}-${useFallback}-${usePlaceholder}`}
+          src={imageUrl}
           alt={image.original_file_path ?? ''}
           draggable={false}
-          onError={() => setImageError(true)}
+          onError={handleImageError}
           onLoad={() => setImageLoading(false)}
           sx={{
             maxWidth: '100%',

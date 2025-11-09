@@ -8,6 +8,7 @@ export interface DeleteProtectionSettings {
 export interface GeneralSettings {
   language: SupportedLanguage;
   deleteProtection: DeleteProtectionSettings;
+  enableGallery?: boolean;
 }
 
 export type StealthScanMode = 'full' | 'fast' | 'skip';

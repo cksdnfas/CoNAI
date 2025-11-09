@@ -128,6 +128,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   // Update current image when prop changes (but only when not in random mode)
   // ✅ composite_hash 기반 메타데이터 조회 로직 추가
+  // Optimized to prevent redundant fetches for the same composite_hash
   useEffect(() => {
     // 랜덤 모드가 아닐 때만 prop 변경사항 반영
     if (!isRandomMode && image) {
@@ -135,6 +136,12 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       if (!image.composite_hash) {
         console.warn('[ImageViewerModal] No composite_hash, using props data');
         setCurrentImage(image);
+        return;
+      }
+
+      // Skip fetching if the composite_hash hasn't changed
+      // This prevents redundant requests when only the image object reference changes
+      if (currentImage?.composite_hash === image.composite_hash) {
         return;
       }
 
@@ -152,7 +159,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
       fetchMetadata();
     }
-  }, [image, isRandomMode]);
+  }, [image?.composite_hash, isRandomMode, currentImage?.composite_hash]);
 
   // ✅ Reload image after auto-tag generation (composite_hash)
   const handleAutoTagGenerated = async () => {
@@ -306,6 +313,17 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     setSnackbar({ ...snackbar, open: false });
   };
 
+  // 원본 이미지 로드 실패 시 토스트 알림
+  const handleOriginalLoadError = () => {
+    setSnackbar({
+      open: true,
+      message: '원본 이미지를 찾을 수 없습니다. 썸네일을 표시합니다.',
+      severity: 'error'
+    });
+    // 원본 모드를 해제하여 썸네일로 전환
+    setShowOriginal(false);
+  };
+
   if (!currentImage) return null;
 
   return (
@@ -372,6 +390,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             containerRef={transform.imageContainerRef}
             onMouseDown={transform.handleMouseDown}
             showOriginal={showOriginal}
+            onOriginalLoadError={handleOriginalLoadError}
           />
         </Box>
 

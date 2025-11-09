@@ -8,13 +8,13 @@ import {
 import { RatingScoreService } from './ratingScoreService';
 
 /**
- * 오토태그 검색 서비스
+ * 자동태그 검색 서비스
  * SQLite JSON 함수를 활용한 동적 쿼리 빌더
  */
 export class AutoTagSearchService {
   /**
-   * 오토태그 검색 파라미터를 SQL WHERE 조건으로 변환
-   * @param searchParams 오토태그 검색 파라미터
+   * 자동태그 검색 파라미터를 SQL WHERE 조건으로 변환
+   * @param searchParams 자동태그 검색 파라미터
    * @param basicSearchParams 기본 검색 파라미터 (선택)
    */
   static async buildAutoTagSearchQuery(
@@ -59,7 +59,7 @@ export class AutoTagSearchService {
       }
     }
 
-    // 1. 오토태그 존재 여부 필터
+    // 1. 자동태그 존재 여부 필터
     if (searchParams.has_auto_tags !== undefined) {
       if (searchParams.has_auto_tags === true) {
         conditions.push('i.auto_tags IS NOT NULL');
@@ -68,7 +68,7 @@ export class AutoTagSearchService {
       }
     }
 
-    // 오토태그가 없어야 하는 경우, 다른 조건은 무의미하므로 early return
+    // 자동태그가 없어야 하는 경우, 다른 조건은 무의미하므로 early return
     if (searchParams.has_auto_tags === false) {
       return { conditions, params };
     }
@@ -538,19 +538,19 @@ export class AutoTagSearchService {
   }
 
   /**
-   * 오토태그가 검색 조건과 일치하는지 확인 (메모리 내 필터링)
+   * 자동태그가 검색 조건과 일치하는지 확인 (메모리 내 필터링)
    * 주로 자동수집 서비스에서 사용
    */
   static async matchesAutoTagConditions(
     autoTagsJson: string | null,
     searchParams: AutoTagSearchParams
   ): Promise<boolean> {
-    // 오토태그가 없는 경우
+    // 자동태그가 없는 경우
     if (!autoTagsJson) {
       return searchParams.has_auto_tags === false;
     }
 
-    // 오토태그가 없어야 하는데 있는 경우
+    // 자동태그가 없어야 하는데 있는 경우
     if (searchParams.has_auto_tags === false) {
       return false;
     }

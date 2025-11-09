@@ -167,15 +167,19 @@ const SettingsPage: React.FC = () => {
 
         {/* Tabs */}
         <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-          <Tabs value={tabValue} onChange={handleTabChange}>
+          <Tabs
+            value={tabValue}
+            onChange={handleTabChange}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
             <Tab label={t('tabs.general')} />
             <Tab label={t('tabs.folders')} />
             <Tab label={t('tabs.tagger')} />
             <Tab label={t('tabs.prompts')} />
             <Tab label={t('tabs.rating')} />
             <Tab label={t('tabs.similarity')} />
-            <Tab label="Account" />
-            <Tab label={t('tabs.advanced')} disabled />
+            <Tab label={t('tabs.account')} />
           </Tabs>
         </Box>
 
@@ -230,12 +234,6 @@ const SettingsPage: React.FC = () => {
 
         <TabPanel value={tabValue} index={6}>
           <AuthSettings />
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={7}>
-          <Alert severity="info">
-            고급 설정 기능은 향후 추가될 예정입니다.
-          </Alert>
         </TabPanel>
       </Box>
     </Container>

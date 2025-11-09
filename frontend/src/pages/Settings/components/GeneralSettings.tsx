@@ -128,61 +128,74 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
           </Select>
         </FormControl>
 
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          {t('general.language.description')}
-        </Typography>
-
-        <Divider sx={{ my: 4 }} />
-
-        {/* Delete Protection Settings */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <Typography variant="h6">
-            {t('general.deleteProtection.title')}
-          </Typography>
-          <Tooltip title={t('general.deleteProtection.info')} arrow>
-            <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
-          </Tooltip>
+        {/* Gallery Enable/Disable */}
+        <Box sx={{ mb: 2, mt: 3 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={settings.enableGallery ?? true}
+                onChange={async (e) => {
+                  try {
+                    await onUpdate({
+                      enableGallery: e.target.checked
+                    });
+                  } catch (err) {
+                    console.error('Failed to update gallery setting:', err);
+                    setError(t('messages.saveFailed'));
+                  }
+                }}
+                disabled={updating}
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography variant="body1">{t('general.gallery.label')}</Typography>
+                <Tooltip title={t('general.gallery.tooltip')} arrow>
+                  <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
+                </Tooltip>
+              </Box>
+            }
+          />
         </Box>
 
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          {t('general.deleteProtection.description')}
-        </Typography>
-
-        <FormControlLabel
-          control={
-            <Switch
-              checked={settings.deleteProtection?.enabled ?? true}
-              onChange={async (e) => {
-                try {
-                  await onUpdate({
-                    deleteProtection: {
-                      ...settings.deleteProtection,
-                      enabled: e.target.checked,
-                      recycleBinPath: 'RecycleBin'
-                    }
-                  });
-                } catch (err) {
-                  console.error('Failed to update delete protection:', err);
-                  setError(t('messages.saveFailed'));
-                }
-              }}
-              disabled={updating}
-            />
-          }
-          label={
-            <Box>
-              <Typography variant="body1">{t('general.deleteProtection.enabled.label')}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {t('general.deleteProtection.enabled.description')}
-              </Typography>
-            </Box>
-          }
-        />
+        {/* Delete Protection Settings */}
+        <Box sx={{ mb: 2 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={settings.deleteProtection?.enabled ?? true}
+                onChange={async (e) => {
+                  try {
+                    await onUpdate({
+                      deleteProtection: {
+                        ...settings.deleteProtection,
+                        enabled: e.target.checked,
+                        recycleBinPath: 'RecycleBin'
+                      }
+                    });
+                  } catch (err) {
+                    console.error('Failed to update delete protection:', err);
+                    setError(t('messages.saveFailed'));
+                  }
+                }}
+                disabled={updating}
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography variant="body1">{t('general.deleteProtection.label')}</Typography>
+                <Tooltip title={t('general.deleteProtection.tooltip')} arrow>
+                  <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
+                </Tooltip>
+              </Box>
+            }
+          />
+        </Box>
 
         <Divider sx={{ my: 4 }} />
 
         {/* Metadata Extraction Optimization */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
           <Typography variant="h6">
             {t('general.metadata.title')}
           </Typography>
@@ -190,10 +203,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
             <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
           </Tooltip>
         </Box>
-
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          {t('general.metadata.description')}
-        </Typography>
 
         {/* Scan Mode */}
         <FormControl component="fieldset" fullWidth sx={{ mb: 3 }} disabled={updating}>
