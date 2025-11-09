@@ -549,8 +549,11 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         <ImageEditorModal
           open={editorOpen}
           onClose={handleEditorClose}
-          imageId={currentImage.file_id}
           imageUrl={buildUploadsUrl(showOriginal ? (currentImage.original_file_path || currentImage.thumbnail_path) : currentImage.thumbnail_path)}
+          onSave={async (blob: Blob) => {
+            // TODO: Implement image save logic
+            console.log('Image saved:', blob);
+          }}
         />
       )}
     </Dialog>
