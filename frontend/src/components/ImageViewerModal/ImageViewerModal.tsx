@@ -549,10 +549,20 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         <ImageEditorModal
           open={editorOpen}
           onClose={handleEditorClose}
+          imageId={currentImage.file_id}
           imageUrl={buildUploadsUrl(showOriginal ? (currentImage.original_file_path || currentImage.thumbnail_path) : currentImage.thumbnail_path)}
-          onSave={async (blob: Blob) => {
-            // TODO: Implement image save logic
-            console.log('Image saved:', blob);
+          onSaved={async () => {
+            // Reload image metadata after save
+            if (currentImage.composite_hash) {
+              try {
+                const response = await imageApi.getImage(currentImage.composite_hash);
+                if (response.success && response.data) {
+                  setCurrentImage(response.data);
+                }
+              } catch (err) {
+                console.error('Failed to reload image after editing:', err);
+              }
+            }
           }}
         />
       )}

@@ -1,1 +1,2 @@
-export { ImageEditorModal } from './ImageEditorModal';
+export { default as ImageEditorModal } from './ImageEditorModal';
+export type { ImageEditorModalProps, Tool, DrawLine } from './types/EditorTypes';
