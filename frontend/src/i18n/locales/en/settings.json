@@ -23,6 +23,14 @@
       "zh-CN": "简体中文",
       "zh-TW": "繁體中文"
     },
+    "gallery": {
+      "label": "Enable Gallery",
+      "tooltip": "Show gallery page in menu and navigation. When disabled, only masonry view will be used."
+    },
+    "canvasCleanup": {
+      "label": "Auto cleanup Canvas folder on shutdown",
+      "tooltip": "Automatically delete edited images in the Canvas folder when the server shuts down. When disabled, edited images are preserved."
+    },
     "deleteProtection": {
       "title": "Delete File Protection",
       "description": "Store deleted files in RecycleBin folder for recovery",

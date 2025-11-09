@@ -534,7 +534,13 @@ ${divider}`);
       // Cleanup all temp files on shutdown
       try {
         const { TempImageService } = await import('./services/tempImageService');
-        await TempImageService.cleanupAll();
+        const { settingsService } = await import('./services/settingsService');
+
+        // Check user setting for canvas cleanup
+        const settings = await settingsService.getSettings();
+        const shouldCleanupCanvas = settings.general.autoCleanupCanvasOnShutdown ?? false;
+
+        await TempImageService.cleanupAll(!shouldCleanupCanvas);  // skipCanvas = !shouldCleanup
         console.log('✅ All temp files cleaned up');
       } catch (error) {
         console.warn('⚠️  Error cleaning up temp files:', error);

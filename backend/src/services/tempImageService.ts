@@ -185,8 +185,9 @@ export class TempImageService {
 
   /**
    * Cleanup all temporary files (for startup/shutdown)
+   * @param skipCanvas - If true, skip cleaning canvas directory (default: false)
    */
-  static async cleanupAll(): Promise<void> {
+  static async cleanupAll(skipCanvas: boolean = false): Promise<void> {
     try {
       // Clean main temp directory
       const files = await fs.promises.readdir(this.tempDir);
@@ -205,26 +206,30 @@ export class TempImageService {
         }
       }
 
-      // Clean canvas subdirectory
-      try {
-        const canvasFiles = await fs.promises.readdir(this.canvasDir);
-        for (const file of canvasFiles) {
-          const filePath = path.join(this.canvasDir, file);
-          try {
-            await fs.promises.unlink(filePath);
-          } catch (error) {
-            console.error(`Failed to delete canvas file: ${file}`, error);
+      // Clean canvas subdirectory (unless skipCanvas is true)
+      if (!skipCanvas) {
+        try {
+          const canvasFiles = await fs.promises.readdir(this.canvasDir);
+          for (const file of canvasFiles) {
+            const filePath = path.join(this.canvasDir, file);
+            try {
+              await fs.promises.unlink(filePath);
+            } catch (error) {
+              console.error(`Failed to delete canvas file: ${file}`, error);
+            }
+          }
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            console.error('Failed to cleanup canvas directory:', error);
           }
         }
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          console.error('Failed to cleanup canvas directory:', error);
-        }
+      } else {
+        console.log('⏭️  Skipping canvas directory cleanup (user setting)');
       }
 
       // Clear registry
       this.tempFiles.clear();
-      console.log(`✅ All temp files cleaned up`);
+      console.log(`✅ All temp files cleaned up${skipCanvas ? ' (canvas folder preserved)' : ''}`);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.error('Failed to cleanup temp directory:', error);

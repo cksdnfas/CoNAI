@@ -158,6 +158,36 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
           />
         </Box>
 
+        {/* Canvas Cleanup on Shutdown */}
+        <Box sx={{ mb: 2 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={settings.autoCleanupCanvasOnShutdown ?? false}
+                onChange={async (e) => {
+                  try {
+                    await onUpdate({
+                      autoCleanupCanvasOnShutdown: e.target.checked
+                    });
+                  } catch (err) {
+                    console.error('Failed to update canvas cleanup setting:', err);
+                    setError(t('messages.saveFailed'));
+                  }
+                }}
+                disabled={updating}
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography variant="body1">{t('general.canvasCleanup.label')}</Typography>
+                <Tooltip title={t('general.canvasCleanup.tooltip')} arrow>
+                  <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
+                </Tooltip>
+              </Box>
+            }
+          />
+        </Box>
+
         {/* Delete Protection Settings */}
         <Box sx={{ mb: 2 }}>
           <FormControlLabel

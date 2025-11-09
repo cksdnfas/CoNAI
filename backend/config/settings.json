@@ -5,7 +5,8 @@
       "enabled": true,
       "recycleBinPath": "RecycleBin"
     },
-    "enableGallery": false
+    "enableGallery": false,
+    "autoCleanupCanvasOnShutdown": false
   },
   "tagger": {
     "enabled": true,

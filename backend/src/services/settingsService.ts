@@ -40,7 +40,8 @@ export class SettingsService {
           enabled: true,  // 기본값: 활성화
           recycleBinPath: 'RecycleBin'
         },
-        enableGallery: true  // 기본값: 갤러리 활성화
+        enableGallery: true,  // 기본값: 갤러리 활성화
+        autoCleanupCanvasOnShutdown: false  // 기본값: Canvas 폴더 유지 (삭제하지 않음)
       },
       tagger: {
         enabled: process.env.TAGGER_ENABLED === 'true',

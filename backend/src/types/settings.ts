@@ -9,6 +9,7 @@ export interface GeneralSettings {
   language: SupportedLanguage;
   deleteProtection: DeleteProtectionSettings;
   enableGallery?: boolean;
+  autoCleanupCanvasOnShutdown?: boolean;
 }
 
 export type StealthScanMode = 'full' | 'fast' | 'skip';
