@@ -52,7 +52,8 @@ export const imageEditorApi = {
   ): Promise<TempImageResponse> {
     const response = await axios.post<TempImageResponse>(
       `${API_BASE_URL}/api/image-editor/${imageId}/temp`,
-      editOptions
+      editOptions,
+      { withCredentials: true }
     );
     return response.data;
   },
@@ -67,7 +68,8 @@ export const imageEditorApi = {
   ): Promise<SaveImageResponse> {
     const response = await axios.post<SaveImageResponse>(
       `${API_BASE_URL}/api/image-editor/${imageId}/save`,
-      { imageData, maskData }
+      { imageData, maskData },
+      { withCredentials: true }
     );
     return response.data;
   },
@@ -77,7 +79,8 @@ export const imageEditorApi = {
    */
   async deleteTempFile(tempId: string): Promise<{ success: boolean; message: string }> {
     const response = await axios.delete(
-      `${API_BASE_URL}/api/image-editor/temp/${tempId}`
+      `${API_BASE_URL}/api/image-editor/temp/${tempId}`,
+      { withCredentials: true }
     );
     return response.data;
   },
@@ -106,7 +109,7 @@ export const imageEditorApi = {
     const response = await axios.post(`${API_BASE_URL}/api/image-editor/mask/blank`, {
       width,
       height
-    });
+    }, { withCredentials: true });
     return response.data;
   },
 
@@ -114,7 +117,7 @@ export const imageEditorApi = {
    * Get temp files stats (for debugging)
    */
   async getTempFilesStats(): Promise<any> {
-    const response = await axios.get(`${API_BASE_URL}/api/image-editor/temp`);
+    const response = await axios.get(`${API_BASE_URL}/api/image-editor/temp`, { withCredentials: true });
     return response.data;
   }
 };

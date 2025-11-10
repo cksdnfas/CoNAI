@@ -219,7 +219,7 @@ function createTables(): void {
     CREATE TABLE IF NOT EXISTS sessions (
       sid TEXT PRIMARY KEY,
       sess TEXT NOT NULL,
-      expired INTEGER NOT NULL
+      expire INTEGER NOT NULL
     )
   `);
 
@@ -252,7 +252,7 @@ function createTables(): void {
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_name ON custom_dropdown_lists(name)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_created_date ON custom_dropdown_lists(created_date)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_is_auto_collected ON custom_dropdown_lists(is_auto_collected)',
-    'CREATE INDEX IF NOT EXISTS idx_sessions_expired ON sessions(expired)'
+    'CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire)'
   ];
 
   indexes.forEach(sql => userSettingsDb.exec(sql));

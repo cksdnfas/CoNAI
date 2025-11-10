@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
+import { normalizeFilename } from './pathResolver';
 
 /**
  * RecycleBin 유틸리티
@@ -13,22 +14,24 @@ export const RECYCLE_BIN_PATH = runtimePaths.recycleBinDir;
 /**
  * RecycleBin용 파일명 생성
  * 형식: {timestamp}_{original_filename}
+ * 유니코드 정규화를 적용하여 한글/중국어/일본어 파일명 지원
  *
  * @param originalPath - 원본 파일 경로
- * @returns RecycleBin용 파일명
+ * @returns RecycleBin용 파일명 (유니코드 정규화 적용)
  *
  * @example
- * generateRecycleBinFileName('uploads/2025-01-15/abc123.png')
- * // Returns: '2025-01-15T12-30-45-123Z_abc123.png'
+ * generateRecycleBinFileName('uploads/2025-01-15/한글_이미지.png')
+ * // Returns: '2025-01-15T12-30-45-123Z_한글_이미지.png'
  */
 export function generateRecycleBinFileName(originalPath: string): string {
   // ISO 8601 타임스탬프 생성 (콜론과 점을 하이픈으로 변경하여 파일명 호환성 확보)
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
-  // 원본 파일명 추출
+  // 원본 파일명 추출 및 유니코드 정규화
   const fileName = path.basename(originalPath);
+  const normalizedFileName = normalizeFilename(fileName);
 
-  return `${timestamp}_${fileName}`;
+  return `${timestamp}_${normalizedFileName}`;
 }
 
 /**

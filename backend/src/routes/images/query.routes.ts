@@ -758,9 +758,15 @@ router.get('/:compositeHash/download/original', asyncHandler(async (req: Request
       });
     }
 
-    // 파일 다운로드 헤더 설정
+    // 파일 다운로드 헤더 설정 (RFC 2231 - Unicode 파일명 지원)
     const filename = path.basename(files[0].original_file_path);
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    const encodedFilename = encodeURIComponent(filename);
+
+    // RFC 2231 형식: filename*=UTF-8''encoded-filename
+    // 이전 브라우저 호환성을 위해 filename도 함께 제공
+    res.setHeader('Content-Disposition',
+      `attachment; filename="${filename}"; filename*=UTF-8''${encodedFilename}`
+    );
     res.setHeader('Content-Type', files[0].mime_type);
 
     // 파일 스트림으로 전송

@@ -1,8 +1,19 @@
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { AuthCredentials } from '../models/AuthCredentials';
 import { asyncHandler } from '../middleware/asyncHandler';
 
 const router = Router();
+
+// Rate limiting for login endpoint (prevent brute-force attacks)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15분
+  max: 5, // 최대 5회 시도
+  message: 'Too many login attempts, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true // 성공한 요청은 카운트 제외
+});
 
 /**
  * Check authentication status
@@ -23,7 +34,7 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
  * Login
  * POST /api/auth/login
  */
-router.post('/login', asyncHandler(async (req: Request, res: Response) => {
+router.post('/login', loginLimiter, asyncHandler(async (req: Request, res: Response) => {
   const { username, password } = req.body;
 
   // Validation

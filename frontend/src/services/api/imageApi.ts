@@ -122,6 +122,25 @@ export const imageApi = {
   },
 
   /**
+   * Delete specific image files by file_id (for individual file deletion in duplicate groups)
+   */
+  deleteImageFiles: async (
+    fileIds: number[]
+  ): Promise<{ success: boolean; error?: string; details?: any }> => {
+    try {
+      const response = await apiClient.delete('/api/images/files/bulk', {
+        data: { fileIds }
+      });
+      return response.data;
+    } catch (error) {
+      return {
+        success: false,
+        error: '파일 삭제 중 오류가 발생했습니다.'
+      };
+    }
+  },
+
+  /**
    * Get random image
    */
   getRandomImage: async (): Promise<{

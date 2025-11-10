@@ -17,7 +17,7 @@ import { API_BASE_URL } from './api/config';
 export const getFolders = async (params?: {
   active_only?: boolean;
 }): Promise<WatchedFolder[]> => {
-  const response = await axios.get(`${API_BASE_URL}/api/folders`, { params });
+  const response = await axios.get(`${API_BASE_URL}/api/folders`, { params, withCredentials: true });
   return response.data.data;
 };
 
@@ -25,7 +25,7 @@ export const getFolders = async (params?: {
  * 특정 폴더 정보 조회
  */
 export const getFolder = async (id: number): Promise<WatchedFolder> => {
-  const response = await axios.get(`${API_BASE_URL}/api/folders/${id}`);
+  const response = await axios.get(`${API_BASE_URL}/api/folders/${id}`, { withCredentials: true });
   return response.data.data;
 };
 
@@ -37,7 +37,7 @@ export const addFolder = async (folderData: WatchedFolderCreate): Promise<{
   folder: WatchedFolder;
   message: string;
 }> => {
-  const response = await axios.post(`${API_BASE_URL}/api/folders`, folderData);
+  const response = await axios.post(`${API_BASE_URL}/api/folders`, folderData, { withCredentials: true });
   return response.data.data;
 };
 
@@ -48,7 +48,7 @@ export const updateFolder = async (
   id: number,
   updates: WatchedFolderUpdate
 ): Promise<{ folder: WatchedFolder; message: string }> => {
-  const response = await axios.patch(`${API_BASE_URL}/api/folders/${id}`, updates);
+  const response = await axios.patch(`${API_BASE_URL}/api/folders/${id}`, updates, { withCredentials: true });
   return response.data.data;
 };
 
@@ -60,7 +60,8 @@ export const deleteFolder = async (
   deleteFiles: boolean = false
 ): Promise<{ message: string }> => {
   const response = await axios.delete(`${API_BASE_URL}/api/folders/${id}`, {
-    params: { delete_files: deleteFiles }
+    params: { delete_files: deleteFiles },
+    withCredentials: true
   });
   return response.data.data;
 };
@@ -73,7 +74,8 @@ export const scanFolder = async (
   fullRescan: boolean = false
 ): Promise<FolderScanResult> => {
   const response = await axios.post(`${API_BASE_URL}/api/folders/${id}/scan`, null, {
-    params: { full: fullRescan }
+    params: { full: fullRescan },
+    withCredentials: true
   });
   return response.data.data;
 };
@@ -82,7 +84,7 @@ export const scanFolder = async (
  * 모든 활성 폴더 스캔
  */
 export const scanAllFolders = async (): Promise<ScanAllSummary> => {
-  const response = await axios.post(`${API_BASE_URL}/api/folders/scan-all`);
+  const response = await axios.post(`${API_BASE_URL}/api/folders/scan-all`, null, { withCredentials: true });
   return response.data.data;
 };
 
@@ -92,7 +94,7 @@ export const scanAllFolders = async (): Promise<ScanAllSummary> => {
 export const validateFolderPath = async (folderPath: string): Promise<PathValidationResult> => {
   const response = await axios.post(`${API_BASE_URL}/api/folders/validate-path`, {
     folder_path: folderPath
-  });
+  }, { withCredentials: true });
   return response.data.data;
 };
 
@@ -100,7 +102,7 @@ export const validateFolderPath = async (folderPath: string): Promise<PathValida
  * 실시간 감시 시작
  */
 export const startWatcher = async (id: number): Promise<{ message: string; status: WatcherStatusInfo }> => {
-  const response = await axios.post(`${API_BASE_URL}/api/folders/${id}/watcher/start`);
+  const response = await axios.post(`${API_BASE_URL}/api/folders/${id}/watcher/start`, null, { withCredentials: true });
   return response.data.data;
 };
 
@@ -108,7 +110,7 @@ export const startWatcher = async (id: number): Promise<{ message: string; statu
  * 실시간 감시 중지
  */
 export const stopWatcher = async (id: number): Promise<{ message: string }> => {
-  const response = await axios.post(`${API_BASE_URL}/api/folders/${id}/watcher/stop`);
+  const response = await axios.post(`${API_BASE_URL}/api/folders/${id}/watcher/stop`, null, { withCredentials: true });
   return response.data.data;
 };
 
@@ -116,7 +118,7 @@ export const stopWatcher = async (id: number): Promise<{ message: string }> => {
  * 실시간 감시 재시작
  */
 export const restartWatcher = async (id: number): Promise<{ message: string; status: WatcherStatusInfo }> => {
-  const response = await axios.post(`${API_BASE_URL}/api/folders/${id}/watcher/restart`);
+  const response = await axios.post(`${API_BASE_URL}/api/folders/${id}/watcher/restart`, null, { withCredentials: true });
   return response.data.data;
 };
 
@@ -124,7 +126,7 @@ export const restartWatcher = async (id: number): Promise<{ message: string; sta
  * 감시자 상태 조회
  */
 export const getWatcherStatus = async (id: number): Promise<WatcherStatusInfo> => {
-  const response = await axios.get(`${API_BASE_URL}/api/folders/${id}/watcher/status`);
+  const response = await axios.get(`${API_BASE_URL}/api/folders/${id}/watcher/status`, { withCredentials: true });
   return response.data.data;
 };
 
@@ -132,7 +134,7 @@ export const getWatcherStatus = async (id: number): Promise<WatcherStatusInfo> =
  * 모든 감시자 헬스체크
  */
 export const getWatchersHealth = async (): Promise<WatcherHealthCheck> => {
-  const response = await axios.get(`${API_BASE_URL}/api/folders/watchers/health`);
+  const response = await axios.get(`${API_BASE_URL}/api/folders/watchers/health`, { withCredentials: true });
   return response.data.data;
 };
 

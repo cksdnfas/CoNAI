@@ -407,6 +407,94 @@ router.post('/similarity/rebuild-hashes', asyncHandler(async (req: Request, res:
 }));
 
 /**
+ * DELETE /api/images/files/bulk
+ * 개별 파일 삭제 (file_id 기반)
+ * 중복 이미지에서 특정 파일만 선택적으로 삭제할 때 사용
+ */
+router.delete('/files/bulk', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { fileIds } = req.body;
+
+    if (!Array.isArray(fileIds) || fileIds.length === 0) {
+      return res.status(400).json(errorResponse('fileIds must be a non-empty array'));
+    }
+
+    // Validate all fileIds are numbers
+    const validFileIds = fileIds.filter(id => typeof id === 'number' && !isNaN(id));
+    if (validFileIds.length !== fileIds.length) {
+      return res.status(400).json(errorResponse('All fileIds must be valid numbers'));
+    }
+
+    const fs = await import('fs/promises');
+    const deletedFiles: number[] = [];
+    const failedFiles: Array<{ fileId: number; error: string }> = [];
+    const orphanedHashes: string[] = [];
+
+    // Start transaction
+    const deleteStmt = db.prepare('DELETE FROM image_files WHERE id = ?');
+    const getFileStmt = db.prepare('SELECT id, file_path, composite_hash FROM image_files WHERE id = ?');
+    const checkRemainingStmt = db.prepare('SELECT COUNT(*) as count FROM image_files WHERE composite_hash = ?');
+    const deleteMetadataStmt = db.prepare('DELETE FROM media_metadata WHERE composite_hash = ?');
+
+    for (const fileId of validFileIds) {
+      try {
+        // Get file info
+        const fileRecord = getFileStmt.get(fileId) as { id: number; file_path: string; composite_hash: string | null } | undefined;
+
+        if (!fileRecord) {
+          failedFiles.push({ fileId, error: 'File not found' });
+          continue;
+        }
+
+        const filePath = path.join(UPLOAD_BASE_PATH, fileRecord.file_path);
+        const compositeHash = fileRecord.composite_hash;
+
+        // Delete physical file
+        try {
+          await fs.unlink(filePath);
+        } catch (fsError) {
+          // File might not exist on disk, continue with DB deletion
+          console.warn(`Physical file not found: ${filePath}`);
+        }
+
+        // Delete from database
+        const result = deleteStmt.run(fileId);
+
+        if (result.changes > 0) {
+          deletedFiles.push(fileId);
+
+          // Check if this was the last file with this composite_hash
+          if (compositeHash) {
+            const remaining = checkRemainingStmt.get(compositeHash) as { count: number };
+            if (remaining.count === 0) {
+              // Delete orphaned metadata
+              deleteMetadataStmt.run(compositeHash);
+              orphanedHashes.push(compositeHash);
+            }
+          }
+        } else {
+          failedFiles.push({ fileId, error: 'Failed to delete from database' });
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        failedFiles.push({ fileId, error: errorMessage });
+      }
+    }
+
+    return res.json(successResponse({
+      message: `Deleted ${deletedFiles.length} files, ${failedFiles.length} failed`,
+      deletedFiles,
+      failedFiles: failedFiles.length > 0 ? failedFiles : undefined,
+      orphanedMetadataRemoved: orphanedHashes.length,
+      total: fileIds.length
+    }));
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete files';
+    return res.status(500).json(errorResponse(errorMessage));
+  }
+}));
+
+/**
  * GET /api/images/similarity/stats
  * 유사도 검색 통계 (image_files 테이블 기반)
  */

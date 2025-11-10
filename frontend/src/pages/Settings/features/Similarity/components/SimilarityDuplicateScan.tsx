@@ -48,34 +48,34 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
 }) => {
   const { t } = useTranslation('settings');
 
-  // 선택된 이미지 관리
-  const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
+  // 선택된 이미지 관리 (file_id 기반으로 변경)
+  const [selectedImages, setSelectedImages] = useState<Set<number>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // 이미지 선택 토글
-  const handleToggleImage = (compositeHash: string) => {
+  // 이미지 선택 토글 (file_id 사용)
+  const handleToggleImage = (fileId: number) => {
     setSelectedImages(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(compositeHash)) {
-        newSet.delete(compositeHash);
+      if (newSet.has(fileId)) {
+        newSet.delete(fileId);
       } else {
-        newSet.add(compositeHash);
+        newSet.add(fileId);
       }
       return newSet;
     });
   };
 
-  // 그룹 전체 선택/해제
+  // 그룹 전체 선택/해제 (file_id 사용)
   const handleToggleGroup = (group: DuplicateGroup, selectAll: boolean) => {
     setSelectedImages(prev => {
       const newSet = new Set(prev);
       group.images.forEach(image => {
-        if (image.composite_hash) {
+        if (image.file_id) {
           if (selectAll) {
-            newSet.add(image.composite_hash);
+            newSet.add(image.file_id);
           } else {
-            newSet.delete(image.composite_hash);
+            newSet.delete(image.file_id);
           }
         }
       });
@@ -83,33 +83,33 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
     });
   };
 
-  // 그룹에서 하나만 남기고 나머지 선택
+  // 그룹에서 하나만 남기고 나머지 선택 (file_id 사용)
   const handleSelectAllButOne = (group: DuplicateGroup) => {
     setSelectedImages(prev => {
       const newSet = new Set(prev);
       // 첫 번째 이미지를 제외한 나머지 모두 선택
       group.images.slice(1).forEach(image => {
-        if (image.composite_hash) {
-          newSet.add(image.composite_hash);
+        if (image.file_id) {
+          newSet.add(image.file_id);
         }
       });
       return newSet;
     });
   };
 
-  // 선택된 이미지 삭제
+  // 선택된 이미지 삭제 (file_id 기반)
   const handleDeleteSelected = async () => {
     if (selectedImages.size === 0) return;
 
     setDeleting(true);
     try {
-      const compositeHashes = Array.from(selectedImages);
-      const result = await imageApi.deleteImages(compositeHashes);
+      const fileIds = Array.from(selectedImages);
+      const result = await imageApi.deleteImageFiles(fileIds);
 
       if (!result.success) {
         alert(result.error || t('similarity.duplicateScan.deleteError'));
       } else {
-        const count = result.details?.deleted || compositeHashes.length;
+        const count = result.data?.deletedFiles?.length || fileIds.length;
         alert(t('similarity.duplicateScan.deleteSuccess', { count }));
       }
 
@@ -129,14 +129,14 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
     }
   };
 
-  // 그룹이 모두 선택되었는지 확인
+  // 그룹이 모두 선택되었는지 확인 (file_id 사용)
   const isGroupFullySelected = (group: DuplicateGroup) => {
-    return group.images.every(image => image.composite_hash && selectedImages.has(image.composite_hash));
+    return group.images.every(image => image.file_id && selectedImages.has(image.file_id));
   };
 
-  // 그룹이 부분적으로 선택되었는지 확인
+  // 그룹이 부분적으로 선택되었는지 확인 (file_id 사용)
   const isGroupPartiallySelected = (group: DuplicateGroup) => {
-    return group.images.some(image => image.composite_hash && selectedImages.has(image.composite_hash)) && !isGroupFullySelected(group);
+    return group.images.some(image => image.file_id && selectedImages.has(image.file_id)) && !isGroupFullySelected(group);
   };
 
   return (
@@ -242,11 +242,11 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
                     {/* 이미지 그리드 */}
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(5, 1fr)' }, gap: 2 }}>
                       {group.images.map((image, index) => {
-                        if (!image.composite_hash) return null;
-                        const isSelected = selectedImages.has(image.composite_hash);
+                        if (!image.file_id) return null;
+                        const isSelected = selectedImages.has(image.file_id);
                         return (
                           <Box
-                            key={image.file_id ? `file-${image.file_id}` : `hash-${image.composite_hash}-${index}`}
+                            key={`file-${image.file_id}`}
                             sx={{
                               position: 'relative',
                               cursor: 'pointer',
@@ -260,12 +260,12 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
                                 transform: 'scale(1.02)',
                               },
                             }}
-                            onClick={() => handleToggleImage(image.composite_hash!)}
+                            onClick={() => handleToggleImage(image.file_id!)}
                           >
                             {/* 체크박스 */}
                             <Checkbox
                               checked={isSelected}
-                              onChange={() => handleToggleImage(image.composite_hash!)}
+                              onChange={() => handleToggleImage(image.file_id!)}
                               sx={{
                                 position: 'absolute',
                                 top: 4,
@@ -295,7 +295,7 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
                             {/* 이미지 정보 */}
                             <Box sx={{ p: 1, bgcolor: isSelected ? 'error.light' : 'background.paper' }}>
                               <Typography variant="caption" display="block" noWrap sx={{ color: isSelected ? 'error.contrastText' : 'text.primary' }}>
-                                ID: {image.composite_hash}
+                                ID: {image.file_id}
                               </Typography>
                               <Typography variant="caption" display="block" noWrap sx={{ color: isSelected ? 'error.contrastText' : 'text.secondary' }}>
                                 {image.width} × {image.height}

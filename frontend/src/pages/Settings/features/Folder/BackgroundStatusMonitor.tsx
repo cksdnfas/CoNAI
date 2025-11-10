@@ -259,7 +259,7 @@ const BackgroundStatusMonitor: React.FC = () => {
         <Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-              이미지 해시 상태
+              미디어 해시 상태
             </Typography>
             <Button
               variant="outlined"

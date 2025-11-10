@@ -102,7 +102,11 @@ export class VideoProcessor {
   }
 
   /**
-   * 고유한 파일명 생성
+   * 원본 파일명 기반으로 고유한 파일명 생성
+   * 중복 방지를 위해 타임스탬프와 랜덤 문자열을 파일명 앞에 추가
+   *
+   * @param originalName 원본 파일명 (예: "한글 비디오.mp4")
+   * @returns 고유한 파일명 (예: "20250109_143025_abc123_한글 비디오.mp4")
    */
   static generateUniqueFilename(originalName: string): string {
     const now = new Date();
@@ -113,9 +117,17 @@ export class VideoProcessor {
     const minute = String(now.getMinutes()).padStart(2, '0');
     const second = String(now.getSeconds()).padStart(2, '0');
     const random = Math.random().toString(36).substring(2, 8);
-    const ext = path.extname(originalName);
 
-    return `${year}_${month}_${day}_${hour}${minute}${second}_${random}${ext}`;
+    // 유니코드 정규화 및 안전한 파일명 처리
+    const { normalizeFilename } = require('../utils/pathResolver');
+    const safeOriginalName = normalizeFilename(originalName);
+
+    // 확장자 분리
+    const ext = path.extname(safeOriginalName);
+    const nameWithoutExt = path.basename(safeOriginalName, ext);
+
+    // 타임스탬프_랜덤값_원본파일명.확장자 형식
+    return `${year}${month}${day}_${hour}${minute}${second}_${random}_${nameWithoutExt}${ext}`;
   }
 
   /**

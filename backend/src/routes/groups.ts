@@ -576,9 +576,12 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
       compositeHashes
     });
 
-    // ZIP 파일 다운로드
+    // ZIP 파일 다운로드 (RFC 2231 - Unicode 파일명 지원)
+    const encodedFilename = encodeURIComponent(result.fileName);
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(result.fileName)}"`);
+    res.setHeader('Content-Disposition',
+      `attachment; filename="${result.fileName}"; filename*=UTF-8''${encodedFilename}`
+    );
     res.setHeader('X-File-Count', result.fileCount.toString());
 
     // 파일 스트리밍

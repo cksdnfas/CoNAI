@@ -2,6 +2,11 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:1566/api';
 
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+});
+
 export interface Wildcard {
   id: number;
   name: string;
@@ -72,8 +77,8 @@ export const wildcardApi = {
    * 모든 와일드카드 조회
    */
   getAllWildcards: async (withItems: boolean = true) => {
-    const response = await axios.get<{ success: boolean; data: WildcardWithItems[] }>(
-      `${API_BASE_URL}/wildcards`,
+    const response = await api.get<{ success: boolean; data: WildcardWithItems[] }>(
+      '/wildcards',
       { params: { withItems } }
     );
     return response.data;
@@ -83,8 +88,8 @@ export const wildcardApi = {
    * 특정 와일드카드 조회
    */
   getWildcard: async (id: number) => {
-    const response = await axios.get<{ success: boolean; data: WildcardWithItems }>(
-      `${API_BASE_URL}/wildcards/${id}`
+    const response = await api.get<{ success: boolean; data: WildcardWithItems }>(
+      `/wildcards/${id}`
     );
     return response.data;
   },
@@ -93,12 +98,12 @@ export const wildcardApi = {
    * 와일드카드 생성
    */
   createWildcard: async (data: WildcardCreateData) => {
-    const response = await axios.post<{
+    const response = await api.post<{
       success: boolean;
       data: WildcardWithItems;
       warning?: string;
     }>(
-      `${API_BASE_URL}/wildcards`,
+      '/wildcards',
       data
     );
     return response.data;
@@ -108,12 +113,12 @@ export const wildcardApi = {
    * 와일드카드 수정
    */
   updateWildcard: async (id: number, data: WildcardUpdateData) => {
-    const response = await axios.put<{
+    const response = await api.put<{
       success: boolean;
       data: WildcardWithItems;
       warning?: string;
     }>(
-      `${API_BASE_URL}/wildcards/${id}`,
+      `/wildcards/${id}`,
       data
     );
     return response.data;
@@ -123,8 +128,8 @@ export const wildcardApi = {
    * 와일드카드 삭제
    */
   deleteWildcard: async (id: number) => {
-    const response = await axios.delete<{ success: boolean; message: string }>(
-      `${API_BASE_URL}/wildcards/${id}`
+    const response = await api.delete<{ success: boolean; message: string }>(
+      `/wildcards/${id}`
     );
     return response.data;
   },
@@ -133,8 +138,8 @@ export const wildcardApi = {
    * 와일드카드 파싱 (프리뷰용)
    */
   parseWildcards: async (parseRequest: ParseRequest) => {
-    const response = await axios.post<{ success: boolean; data: ParseResponse }>(
-      `${API_BASE_URL}/wildcards/parse`,
+    const response = await api.post<{ success: boolean; data: ParseResponse }>(
+      '/wildcards/parse',
       parseRequest
     );
     return response.data;
@@ -144,8 +149,8 @@ export const wildcardApi = {
    * 와일드카드 통계
    */
   getStatistics: async () => {
-    const response = await axios.get<{ success: boolean; data: WildcardStatistics }>(
-      `${API_BASE_URL}/wildcards/stats/summary`
+    const response = await api.get<{ success: boolean; data: WildcardStatistics }>(
+      '/wildcards/stats/summary'
     );
     return response.data;
   },
@@ -154,8 +159,8 @@ export const wildcardApi = {
    * 순환 참조 검사
    */
   checkCircularReference: async (id: number) => {
-    const response = await axios.get<{ success: boolean; data: CircularCheckResponse }>(
-      `${API_BASE_URL}/wildcards/${id}/circular-check`
+    const response = await api.get<{ success: boolean; data: CircularCheckResponse }>(
+      `/wildcards/${id}/circular-check`
     );
     return response.data;
   }

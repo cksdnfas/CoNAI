@@ -136,9 +136,9 @@ export class BackgroundProcessorService {
 
     // Check if file still exists
     if (!fs.existsSync(file.original_file_path)) {
-      console.log(`  ⚠️  File not found, marking as deleted: ${fileName}`);
+      console.log(`  ⚠️  File not found, deleting DB record: ${fileName}`);
       db.prepare(
-        `UPDATE image_files SET file_status = 'deleted' WHERE id = ?`
+        `DELETE FROM image_files WHERE id = ?`
       ).run(file.id);
       return;
     }

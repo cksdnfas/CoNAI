@@ -137,10 +137,6 @@ app.use(cors({
 app.use(express.json({ limit: `${IMAGE_PROCESSING.MAX_FILE_SIZE_MB}mb`, strict: false }));
 app.use(express.urlencoded({ extended: true, limit: `${IMAGE_PROCESSING.MAX_FILE_SIZE_MB}mb` }));
 
-// Session configuration (must be initialized after User Settings DB is ready)
-// Will be configured in startServer() after database initialization
-let sessionMiddleware: express.RequestHandler;
-
 // .env 파일 자동 생성
 const createEnvFileIfNotExists = () => {
   const envPath = path.join(__dirname, '../.env');
@@ -153,6 +149,45 @@ const createEnvFileIfNotExists = () => {
 };
 
 const uploadsDir = runtimePaths.uploadsDir;
+
+// Initialize session middleware early (will be configured in initializeSessionMiddleware)
+async function initializeSessionMiddleware() {
+  console.log('🗄️  User Settings DB 초기화 중...');
+  initializeUserSettingsDb(); // Synchronous call (better-sqlite3)
+  console.log('✅ User Settings DB initialized successfully');
+
+  console.log('🔐 Configuring session management...');
+  const SqliteStore = BetterSqlite3Store(session);
+  const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+
+  if (!process.env.SESSION_SECRET) {
+    console.warn('⚠️  SESSION_SECRET not set in .env, using random generated secret');
+    console.warn('   Sessions will be invalidated on server restart');
+  }
+
+  const sessionMiddleware = session({
+    store: new SqliteStore({
+      client: getUserSettingsDb(),
+      expired: {
+        clear: true,
+        intervalMs: 900000 // 15분마다 만료 세션 정리
+      }
+    }),
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30일
+      httpOnly: true,
+      secure: isSecureContext, // HTTPS에서만 true
+      sameSite: 'lax'
+    },
+    name: 'comfyui.sid' // Custom session cookie name
+  });
+
+  app.use(sessionMiddleware);
+  console.log('✅ Session management configured successfully');
+}
 
 // 정적 파일 서빙 (썸네일 및 원본 이미지) - CORS 및 캐시 헤더 추가
 // 인증이 설정된 경우 로그인 필요
@@ -175,28 +210,42 @@ app.use('/uploads', optionalAuth, express.static(uploadsDir, {
   maxAge: '1y'
 }));
 
-// Routes (auth routes don't need authentication)
-app.use('/api/auth/login', loginLimiter); // Apply login rate limiter
-app.use('/api/auth', authRoutes);
+// Routes configuration (must be called after session middleware is initialized)
+async function registerRoutes() {
+  console.log('📋 Registering API routes...');
 
-// Protected routes (require authentication if configured)
-// Apply lenient rate limiting to read-heavy endpoints
-app.use('/api/images', readOnlyLimiter, optionalAuth, imageRoutes);
-app.use('/api/prompt-collection', readOnlyLimiter, optionalAuth, promptCollectionRoutes);
-app.use('/api/prompt-groups', readOnlyLimiter, optionalAuth, promptGroupRoutes);
-app.use('/api/negative-prompt-groups', readOnlyLimiter, optionalAuth, negativePromptGroupRoutes);
-app.use('/api/groups', readOnlyLimiter, optionalAuth, groupRoutes);
-app.use('/api/settings', optionalAuth, settingsRoutes);
-app.use('/api/workflows', readOnlyLimiter, optionalAuth, workflowRoutes);
-app.use('/api/comfyui-servers', optionalAuth, comfyuiServerRoutes);
-app.use('/api/custom-dropdown-lists', optionalAuth, customDropdownListRoutes);
-app.use('/api/nai', uploadLimiter, optionalAuth, naiRoutes); // Upload endpoint
-app.use('/api/generation-history', readOnlyLimiter, optionalAuth, generationHistoryRoutes);
-app.use('/api/wildcards', optionalAuth, wildcardRoutes);
-app.use('/api/folders', optionalAuth, watchedFoldersRoutes);
-app.use('/api/background-queue', optionalAuth, backgroundQueueRoutes);
-app.use('/api/system', optionalAuth, systemRoutes);
-app.use('/api/image-editor', uploadLimiter, optionalAuth, imageEditorRoutes); // Upload endpoint
+  // Routes (auth routes don't need authentication)
+  app.use('/api/auth', authRoutes);
+
+  // Protected routes (require authentication if configured)
+  // Apply lenient rate limiting to read-heavy endpoints
+  app.use('/api/images', readOnlyLimiter, optionalAuth, imageRoutes);
+  app.use('/api/prompt-collection', readOnlyLimiter, optionalAuth, promptCollectionRoutes);
+  app.use('/api/prompt-groups', readOnlyLimiter, optionalAuth, promptGroupRoutes);
+  app.use('/api/negative-prompt-groups', readOnlyLimiter, optionalAuth, negativePromptGroupRoutes);
+  app.use('/api/groups', readOnlyLimiter, optionalAuth, groupRoutes);
+  app.use('/api/settings', optionalAuth, settingsRoutes);
+  app.use('/api/workflows', readOnlyLimiter, optionalAuth, workflowRoutes);
+  app.use('/api/comfyui-servers', optionalAuth, comfyuiServerRoutes);
+  app.use('/api/custom-dropdown-lists', optionalAuth, customDropdownListRoutes);
+  app.use('/api/nai', uploadLimiter, optionalAuth, naiRoutes); // Upload endpoint
+  app.use('/api/generation-history', readOnlyLimiter, optionalAuth, generationHistoryRoutes);
+  app.use('/api/wildcards', optionalAuth, wildcardRoutes);
+  app.use('/api/folders', optionalAuth, watchedFoldersRoutes);
+  app.use('/api/background-queue', optionalAuth, backgroundQueueRoutes);
+  app.use('/api/system', optionalAuth, systemRoutes);
+  app.use('/api/image-editor', uploadLimiter, optionalAuth, imageEditorRoutes); // Upload endpoint
+
+  console.log('✅ All API routes registered successfully');
+
+  // Error handling (must be registered AFTER all routes)
+  app.use(errorHandler);
+
+  // 404 handler (must be the LAST middleware)
+  app.use('*', (req, res) => {
+    res.status(404).json({ error: 'Not Found' });
+  });
+}
 
 // Frontend static file serving
 const frontendDistPath = process.env.FRONTEND_DIST_PATH
@@ -236,14 +285,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Error handling
-app.use(errorHandler);
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Not Found' });
-});
-
 // 데이터베이스 초기화 및 서버 시작
 async function startServer() {
   try {
@@ -269,43 +310,11 @@ async function startServer() {
       console.log('💡 자동 스캔 스케줄러가 곧 첫 스캔을 시작합니다');
     }
 
-    // 4. User Settings DB 초기화
-    console.log('🗄️  User Settings DB 초기화 중...');
-    initializeUserSettingsDb(); // Synchronous call (better-sqlite3)
-    console.log('✅ User Settings DB initialized successfully');
+    // 4. Initialize session middleware (User Settings DB + Session configuration)
+    await initializeSessionMiddleware();
 
-    // 4-1. Session configuration
-    console.log('🔐 Configuring session management...');
-    const SqliteStore = BetterSqlite3Store(session);
-    const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
-
-    if (!process.env.SESSION_SECRET) {
-      console.warn('⚠️  SESSION_SECRET not set in .env, using random generated secret');
-      console.warn('   Sessions will be invalidated on server restart');
-    }
-
-    sessionMiddleware = session({
-      store: new SqliteStore({
-        client: getUserSettingsDb(),
-        expired: {
-          clear: true,
-          intervalMs: 900000 // 15분마다 만료 세션 정리
-        }
-      }),
-      secret: sessionSecret,
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30일
-        httpOnly: true,
-        secure: isSecureContext, // HTTPS에서만 true
-        sameSite: 'lax'
-      },
-      name: 'comfyui.sid' // Custom session cookie name
-    });
-
-    app.use(sessionMiddleware);
-    console.log('✅ Session management configured successfully');
+    // 4-1. Register all routes (after session middleware is configured)
+    await registerRoutes();
 
     // 5. API Generation History DB 초기화
     console.log('🗄️  API Generation History DB 초기화 중...');
@@ -381,10 +390,15 @@ async function startServer() {
     console.log('✅ Auto-tag scheduler started successfully');
 
     // 11. 임시 이미지 정리 스케줄러 시작
-    console.log('🧹 Starting temp image cleanup scheduler...');
-    const { TempImageCleanupScheduler } = await import('./cron/tempImageCleanup');
-    TempImageCleanupScheduler.start();
-    console.log('✅ Temp image cleanup scheduler started successfully');
+    try {
+      console.log('🧹 Starting temp image cleanup scheduler...');
+      const { TempImageCleanupScheduler } = await import('./cron/tempImageCleanup');
+      TempImageCleanupScheduler.start();
+      console.log('✅ Temp image cleanup scheduler started successfully');
+    } catch (error) {
+      console.warn('⚠️  Failed to start temp image cleanup scheduler:', error instanceof Error ? error.message : error);
+      console.warn('   Temp files will not be automatically cleaned up');
+    }
 
     const extractHost = (value?: string | null): string | undefined => {
       if (!value || value.trim().length === 0) {
@@ -537,7 +551,7 @@ ${divider}`);
         const { settingsService } = await import('./services/settingsService');
 
         // Check user setting for canvas cleanup
-        const settings = await settingsService.getSettings();
+        const settings = settingsService.loadSettings();
         const shouldCleanupCanvas = settings.general.autoCleanupCanvasOnShutdown ?? false;
 
         await TempImageService.cleanupAll(!shouldCleanupCanvas);  // skipCanvas = !shouldCleanup

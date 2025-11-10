@@ -47,13 +47,15 @@ export class FileDiscoveryService {
 
       console.log(`Fast-glob 결과: ${allFiles.length}개 파일 발견`);
 
-      // Step 2: 제외 확장자 필터링 + Windows 드라이브 문자 정규화
+      // Step 2: 제외 확장자 필터링 + Windows 드라이브 문자 정규화 + 유니코드 정규화
+      const { normalizePath } = require('../../utils/pathResolver');
       const filteredFiles = allFiles
         .filter(file => {
           const ext = path.extname(file).toLowerCase();
           return shouldProcessFileExtension(ext, options.excludeExtensions);
         })
-        .map(file => normalizeWindowsDriveLetter(file)); // Windows 드라이브 문자를 대문자로 통일
+        .map(file => normalizeWindowsDriveLetter(file)) // Windows 드라이브 문자를 대문자로 통일
+        .map(file => normalizePath(file)); // 유니코드 정규화 (NFC) 적용
 
       if (filteredFiles.length < allFiles.length) {
         console.log(`제외 필터 적용: ${allFiles.length} -> ${filteredFiles.length}개 파일`);

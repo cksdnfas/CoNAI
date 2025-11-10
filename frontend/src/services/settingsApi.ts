@@ -85,6 +85,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
 export const settingsApi = {
@@ -200,6 +201,7 @@ const imageApi = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
 export interface BatchTagResult {
