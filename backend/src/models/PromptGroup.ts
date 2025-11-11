@@ -15,6 +15,12 @@ export class PromptGroupModel {
   static async create(data: PromptGroupData, type: 'positive' | 'negative' = 'positive'): Promise<number> {
     const tableName = type === 'positive' ? 'prompt_groups' : 'negative_prompt_groups';
 
+    // Check if group already exists
+    const existing = await this.findByName(data.group_name, type);
+    if (existing) {
+      return existing.id;
+    }
+
     // display_order가 없으면 자동으로 최대값 + 1
     if (data.display_order === undefined) {
       const row = db.prepare(`SELECT MAX(display_order) as max_order FROM ${tableName}`).get() as { max_order: number | null };
@@ -30,13 +36,23 @@ export class PromptGroupModel {
     data: PromptGroupData
   ): number {
     const info = db.prepare(`
-      INSERT INTO ${tableName} (group_name, display_order, is_visible)
+      INSERT OR IGNORE INTO ${tableName} (group_name, display_order, is_visible)
       VALUES (?, ?, ?)
     `).run(
       data.group_name,
       data.display_order || 0,
       data.is_visible !== undefined ? (data.is_visible ? 1 : 0) : 1
     );
+
+    // If insert was ignored (duplicate), fetch the existing group ID
+    if (info.changes === 0) {
+      const existing = db.prepare(`SELECT id FROM ${tableName} WHERE group_name = ?`)
+        .get(data.group_name) as { id: number } | undefined;
+
+      if (existing) {
+        return existing.id;
+      }
+    }
 
     return info.lastInsertRowid as number;
   }

@@ -207,6 +207,13 @@ function runMigrations(): void {
     .filter(file => file.endsWith('.sql'))
     .sort();
 
+  // If folder exists but has no .sql files, create tables directly
+  if (files.length === 0) {
+    console.log('📊 No migration files found in folder, creating tables directly...');
+    createTables();
+    return;
+  }
+
   // Filter out already applied migrations
   const pendingMigrations = files.filter(file => !appliedMigrations.includes(file));
 

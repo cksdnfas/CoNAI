@@ -9,7 +9,7 @@ import type {
   WatcherStatusInfo,
   WatcherHealthCheck
 } from '../types/folder';
-import { API_BASE_URL } from './api/config';
+import { API_BASE_URL } from './api/apiClient';
 
 /**
  * 폴더 목록 조회

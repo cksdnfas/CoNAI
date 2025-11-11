@@ -92,15 +92,22 @@ if (fs.existsSync(migrationsSource)) {
   const apiGenMigrationsTarget = path.join(migrationsTarget, 'api-generation');
 
   if (fs.existsSync(apiGenMigrationsSource)) {
-    fs.ensureDirSync(apiGenMigrationsTarget);
-    fs.copySync(apiGenMigrationsSource, apiGenMigrationsTarget, {
-      filter: (src) => {
-        // .sql 파일만 복사
-        return src.endsWith('.sql') || fs.statSync(src).isDirectory();
-      }
-    });
-    const apiGenFiles = fs.readdirSync(apiGenMigrationsTarget).filter(f => f.endsWith('.sql'));
-    console.log(`   ✅ Copied ${apiGenFiles.length} API generation migration files`);
+    // Check if there are any .sql files in the source
+    const sqlFiles = fs.readdirSync(apiGenMigrationsSource).filter(f => f.endsWith('.sql'));
+
+    if (sqlFiles.length > 0) {
+      fs.ensureDirSync(apiGenMigrationsTarget);
+      fs.copySync(apiGenMigrationsSource, apiGenMigrationsTarget, {
+        filter: (src) => {
+          // .sql 파일만 복사
+          return src.endsWith('.sql') || fs.statSync(src).isDirectory();
+        }
+      });
+      const apiGenFiles = fs.readdirSync(apiGenMigrationsTarget).filter(f => f.endsWith('.sql'));
+      console.log(`   ✅ Copied ${apiGenFiles.length} API generation migration files`);
+    } else {
+      console.log('   ℹ️  No API generation migration files found, skipping folder (will use fallback)');
+    }
   } else {
     console.warn('   ⚠️  API generation migrations not found');
   }

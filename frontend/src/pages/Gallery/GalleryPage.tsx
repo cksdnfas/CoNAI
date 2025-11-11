@@ -100,7 +100,7 @@ const GalleryPage: React.FC = () => {
         const response = await imageApi.getImages(1, 1000, 'first_seen_date', 'DESC');
         if (response.success && response.data) {
           const tools = Array.from(new Set(
-            response.data.images.map(img => img.ai_tool).filter(Boolean)
+            response.data.images.map(img => img.ai_tool).filter((tool): tool is string => tool !== null)
           ));
           setAiTools(tools);
         }

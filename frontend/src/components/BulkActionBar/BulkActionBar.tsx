@@ -31,7 +31,7 @@ interface BulkActionBarProps {
 
 const BulkActionBar: React.FC<BulkActionBarProps> = ({
   selectedCount,
-  selectedIds,
+  selectedIds: _selectedIds,
   selectedImages = [],
   onSelectionClear,
   onActionComplete,

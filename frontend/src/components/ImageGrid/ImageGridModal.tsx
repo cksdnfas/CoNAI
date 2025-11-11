@@ -18,8 +18,8 @@ interface ImageGridModalProps {
   images: ImageRecord[];
   loading?: boolean;
   selectable?: boolean;
-  selectedIds?: string[];
-  onSelectionChange?: (selectedIds: string[]) => void;
+  selectedIds?: number[];
+  onSelectionChange?: (selectedIds: number[]) => void;
   pageSize?: PageSize;
   onPageSizeChange?: (size: PageSize) => void;
   currentPage?: number;

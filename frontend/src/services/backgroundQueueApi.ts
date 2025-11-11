@@ -1,6 +1,6 @@
 import axios from 'axios';
 import type { BackgroundQueueStatus } from '../types/folder';
-import { API_BASE_URL } from './api/config';
+import { API_BASE_URL } from './api/apiClient';
 
 /**
  * 백그라운드 큐 상태 조회

@@ -246,7 +246,7 @@ apiClient.request = function <T = any, D = any>(config: InternalAxiosRequestConf
     return deduplicator.deduplicate(config, () => originalRequest(config));
   }
   return originalRequest(config);
-};
+} as typeof apiClient.request;
 
 /**
  * Export cache control utilities

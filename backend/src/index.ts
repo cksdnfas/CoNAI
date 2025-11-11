@@ -39,6 +39,7 @@ import { backgroundQueueRoutes } from './routes/backgroundQueue';
 import { systemRoutes } from './routes/system.routes';
 import imageEditorRoutes from './routes/image-editor.routes';
 import { authRoutes } from './routes/auth.routes';
+import fileVerificationRoutes from './routes/fileVerification';
 import { initializeDatabase } from './database/init';
 import { initializeUserSettingsDb, getUserSettingsDb } from './database/userSettingsDb';
 import { initializeApiGenerationDb } from './database/apiGenerationDb';
@@ -235,6 +236,7 @@ async function registerRoutes() {
   app.use('/api/background-queue', optionalAuth, backgroundQueueRoutes);
   app.use('/api/system', optionalAuth, systemRoutes);
   app.use('/api/image-editor', uploadLimiter, optionalAuth, imageEditorRoutes); // Upload endpoint
+  app.use('/api/file-verification', optionalAuth, fileVerificationRoutes);
 
   console.log('✅ All API routes registered successfully');
 

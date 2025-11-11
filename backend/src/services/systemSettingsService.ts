@@ -103,4 +103,36 @@ export class SystemSettingsService {
     }
     this.updateSetting('auto_tag_batch_size', batchSize.toString());
   }
+
+  /**
+   * 파일 검증 활성화 여부 조회
+   */
+  static isFileVerificationEnabled(): boolean {
+    const value = this.getSetting('file_verification_enabled');
+    return value === 'true';
+  }
+
+  /**
+   * 파일 검증 활성화 여부 업데이트
+   */
+  static updateFileVerificationEnabled(enabled: boolean): void {
+    this.updateSetting('file_verification_enabled', enabled.toString());
+  }
+
+  /**
+   * 파일 검증 간격 조회 (초)
+   */
+  static getFileVerificationInterval(): number {
+    return this.getSettingAsNumber('file_verification_interval', 3600);
+  }
+
+  /**
+   * 파일 검증 간격 업데이트 (초)
+   */
+  static updateFileVerificationInterval(seconds: number): void {
+    if (seconds < 300 || seconds > 86400) {
+      throw new Error('파일 검증 간격은 300-86400초 사이여야 합니다');
+    }
+    this.updateSetting('file_verification_interval', seconds.toString());
+  }
 }

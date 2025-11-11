@@ -81,11 +81,19 @@ export function ensureRuntimeDirectories(): void {
     }
   });
 
-  // Create video subdirectories
-  const videosDir = path.join(uploadsDir, 'videos');
-  if (!fs.existsSync(videosDir)) {
-    fs.mkdirSync(videosDir, { recursive: true });
-  }
+  // Create upload subdirectories to match default database folders
+  const subdirectories = [
+    path.join(uploadsDir, 'images'),           // 직접 업로드
+    path.join(uploadsDir, 'API', 'images'),    // API 생성 이미지
+    path.join(uploadsDir, 'videos')            // 비디오 업로드
+  ];
+
+  subdirectories.forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      console.log(`✅ Created subdirectory: ${path.relative(basePath, dir)}`);
+    }
+  });
 }
 
 export function resolveUploadsPath(...segments: string[]): string {

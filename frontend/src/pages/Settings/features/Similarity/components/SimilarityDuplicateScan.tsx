@@ -109,7 +109,7 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
       if (!result.success) {
         alert(result.error || t('similarity.duplicateScan.deleteError'));
       } else {
-        const count = result.data?.deletedFiles?.length || fileIds.length;
+        const count = result.details?.deletedFiles?.length || fileIds.length;
         alert(t('similarity.duplicateScan.deleteSuccess', { count }));
       }
 
@@ -241,7 +241,7 @@ export const SimilarityDuplicateScan: React.FC<SimilarityDuplicateScanProps> = (
 
                     {/* 이미지 그리드 */}
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(5, 1fr)' }, gap: 2 }}>
-                      {group.images.map((image, index) => {
+                      {group.images.map((image) => {
                         if (!image.file_id) return null;
                         const isSelected = selectedImages.has(image.file_id);
                         return (

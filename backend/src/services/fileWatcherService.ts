@@ -103,11 +103,18 @@ export class FileWatcherService {
         }
       }
 
-      console.log(`✅ FileWatcherService 초기화 완료: ${startedCount}개 워처 시작, ${errorCount}개 오류`);
+      if (startedCount > 0) {
+        console.log(`✅ FileWatcherService 초기화 완료: ${startedCount}개 워처 시작, ${errorCount}개 오류`);
+      } else if (errorCount > 0) {
+        console.warn(`⚠️  FileWatcherService 초기화: 모든 워처 시작 실패 (${errorCount}개 오류)`);
+      } else {
+        console.log(`ℹ️  FileWatcherService 초기화: 활성화된 워처 없음`);
+      }
 
     } catch (error) {
       console.error('❌ FileWatcherService 초기화 실패:', error);
-      throw error;
+      // 개별 워처 실패는 이미 처리되었으므로, 전체 초기화는 실패로 처리하지 않음
+      console.warn('⚠️  일부 워처 초기화 실패. 서버는 계속 실행됩니다.');
     }
   }
 
@@ -148,8 +155,24 @@ export class FileWatcherService {
     const resolvedPath = resolveFolderPath(folder.folder_path);
     console.log(`👀 [Watcher Debug] 경로 해석: ${folder.folder_path} → ${resolvedPath}`);
 
+    // 폴더가 존재하지 않는 경우 처리
     if (!fs.existsSync(resolvedPath)) {
-      throw new Error(`폴더 경로가 존재하지 않음: ${resolvedPath}`);
+      // 상대 경로인 경우 자동으로 생성 시도
+      if (!path.isAbsolute(folder.folder_path)) {
+        try {
+          fs.mkdirSync(resolvedPath, { recursive: true });
+          console.log(`  ✅ 폴더 자동 생성: ${resolvedPath}`);
+        } catch (error) {
+          console.warn(`  ⚠️  워처 건너뜀 (폴더 생성 실패): ${folder.folder_name}`);
+          console.warn(`     경로: ${resolvedPath}`);
+          return; // 에러를 던지지 않고 건너뜀
+        }
+      } else {
+        // 절대 경로인 경우 생성하지 않고 경고만 출력
+        console.warn(`  ⚠️  워처 건너뜀 (폴더 없음): ${folder.folder_name}`);
+        console.warn(`     경로: ${resolvedPath}`);
+        return; // 에러를 던지지 않고 건너뜀
+      }
     }
 
     // 접근 권한 확인
@@ -157,7 +180,9 @@ export class FileWatcherService {
       fs.accessSync(resolvedPath, fs.constants.R_OK);
       console.log(`👀 [Watcher Debug] 경로 접근 권한 확인 완료`);
     } catch (error) {
-      throw new Error(`폴더 읽기 권한 없음: ${resolvedPath}`);
+      console.warn(`  ⚠️  워처 건너뜀 (읽기 권한 없음): ${folder.folder_name}`);
+      console.warn(`     경로: ${resolvedPath}`);
+      return; // 에러를 던지지 않고 건너뜀
     }
 
     // 워처 옵션 구성

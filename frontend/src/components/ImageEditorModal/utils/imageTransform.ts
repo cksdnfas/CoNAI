@@ -3,7 +3,7 @@ import type { ImageTransform, CanvasSize } from '../types/EditorTypes';
 export const getImageTransform = (
   image: HTMLImageElement | null,
   canvasSize: CanvasSize,
-  rotation: number,
+  _rotation: number,
   viewportWidth: number,
   viewportHeight: number
 ): ImageTransform => {

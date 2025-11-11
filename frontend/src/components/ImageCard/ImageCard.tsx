@@ -9,7 +9,6 @@ import {
   Tooltip,
 } from '@mui/material';
 import {
-  Info as InfoIcon,
   Download as DownloadIcon,
   Delete as DeleteIcon,
   AutoAwesome as AutoAwesomeIcon,
@@ -89,13 +88,6 @@ const ImageCard: React.FC<ImageCardProps> = ({
       onDelete(image.composite_hash);
     }
   }, [onDelete, image.composite_hash, image.mime_type, t]);
-
-  const handleInfoClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation(); // 이벤트 전파 방지
-    if (image.composite_hash) {
-      window.open(`/#/image/${image.composite_hash}`, '_blank');
-    }
-  }, [image.composite_hash]);
 
   // ✅ composite_hash 사용 - API 엔드포인트를 통해 썸네일 및 원본 이미지 제공
   // Phase 1: composite_hash가 NULL이면 경로 기반 URL 사용

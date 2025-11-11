@@ -28,7 +28,6 @@ import {
   List as ListIcon,
   FolderOpen as FolderOpenIcon,
   Upload as UploadIcon,
-  CloudSync as CloudSyncIcon,
   Person as PersonIcon,
   Storage as StorageIcon
 } from '@mui/icons-material';

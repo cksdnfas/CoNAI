@@ -83,7 +83,14 @@ export const up = async (db: Database.Database): Promise<void> => {
   ];
 
   promptIndexes.forEach(sql => db.exec(sql));
-  console.log('  ✅ 프롬프트 테이블 4개 + 인덱스 생성 완료\n');
+
+  // Pre-create LoRA groups to avoid race conditions during prompt collection
+  db.prepare(`INSERT OR IGNORE INTO prompt_groups (group_name, display_order, is_visible)
+    VALUES (?, ?, ?)`).run('LoRA', 999, 1);
+  db.prepare(`INSERT OR IGNORE INTO negative_prompt_groups (group_name, display_order, is_visible)
+    VALUES (?, ?, ?)`).run('LoRA', 999, 1);
+
+  console.log('  ✅ 프롬프트 테이블 4개 + 인덱스 + LoRA 그룹 생성 완료\n');
 
   // ============================================
   // 2. 그룹 관리 시스템
@@ -246,7 +253,11 @@ export const up = async (db: Database.Database): Promise<void> => {
     'CREATE INDEX IF NOT EXISTS idx_metadata_ahash ON media_metadata(ahash)',
     'CREATE INDEX IF NOT EXISTS idx_metadata_ai_tool ON media_metadata(ai_tool)',
     'CREATE INDEX IF NOT EXISTS idx_metadata_model ON media_metadata(model_name)',
-    'CREATE INDEX IF NOT EXISTS idx_metadata_first_seen ON media_metadata(first_seen_date)'
+    'CREATE INDEX IF NOT EXISTS idx_metadata_first_seen ON media_metadata(first_seen_date)',
+    // Performance index for composite hash lookup (from migration 002)
+    'CREATE INDEX IF NOT EXISTS idx_metadata_composite_lookup ON media_metadata(composite_hash, perceptual_hash, dhash, ahash)',
+    // Thumbnail loading index for chronological queries (from migration 005)
+    'CREATE INDEX IF NOT EXISTS idx_metadata_first_seen_desc ON media_metadata(first_seen_date DESC)'
   ];
 
   metadataIndexes.forEach(sql => db.exec(sql));
@@ -262,11 +273,9 @@ export const up = async (db: Database.Database): Promise<void> => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       folder_path TEXT NOT NULL UNIQUE,
       folder_name TEXT,
-      folder_type TEXT DEFAULT 'scan',
       auto_scan INTEGER DEFAULT 0,
       scan_interval INTEGER DEFAULT 60,
       recursive INTEGER DEFAULT 1,
-      file_extensions TEXT,
       exclude_patterns TEXT,
       exclude_extensions TEXT,
       watcher_enabled INTEGER DEFAULT 0,
@@ -321,18 +330,24 @@ export const up = async (db: Database.Database): Promise<void> => {
 
   // 폴더 시스템 인덱스
   const folderIndexes = [
-    'CREATE INDEX IF NOT EXISTS idx_folders_type ON watched_folders(folder_type)',
     'CREATE INDEX IF NOT EXISTS idx_folders_active ON watched_folders(is_active)',
     'CREATE INDEX IF NOT EXISTS idx_folders_auto_scan ON watched_folders(auto_scan)',
     'CREATE INDEX IF NOT EXISTS idx_files_composite_hash ON image_files(composite_hash)',
     'CREATE INDEX IF NOT EXISTS idx_files_file_type ON image_files(file_type)',
     'CREATE INDEX IF NOT EXISTS idx_files_folder_id ON image_files(folder_id)',
-    'CREATE INDEX IF NOT EXISTS idx_files_status ON image_files(file_status)',
+    // Partial index for active files (optimized for common queries)
+    "CREATE INDEX IF NOT EXISTS idx_files_status ON image_files(file_status) WHERE file_status = 'active'",
     'CREATE INDEX IF NOT EXISTS idx_files_scan_date ON image_files(scan_date)',
     'CREATE INDEX IF NOT EXISTS idx_files_path ON image_files(original_file_path)',
     'CREATE INDEX IF NOT EXISTS idx_scan_logs_folder_id ON scan_logs(folder_id)',
     'CREATE INDEX IF NOT EXISTS idx_scan_logs_scan_date ON scan_logs(scan_date)',
-    'CREATE INDEX IF NOT EXISTS idx_scan_logs_status ON scan_logs(scan_status)'
+    'CREATE INDEX IF NOT EXISTS idx_scan_logs_status ON scan_logs(scan_status)',
+    // Performance indexes (from migration 002)
+    'CREATE INDEX IF NOT EXISTS idx_files_folder_status ON image_files(folder_id, file_status)',
+    'CREATE INDEX IF NOT EXISTS idx_files_hash_folder ON image_files(composite_hash, folder_id)',
+    // Thumbnail loading indexes (from migration 005)
+    "CREATE INDEX IF NOT EXISTS idx_files_composite_status ON image_files(composite_hash, file_status) WHERE file_status = 'active'",
+    'CREATE INDEX IF NOT EXISTS idx_files_scan_date_desc ON image_files(scan_date DESC)'
   ];
 
   folderIndexes.forEach(sql => db.exec(sql));
@@ -342,25 +357,25 @@ export const up = async (db: Database.Database): Promise<void> => {
   const defaultUploadPath = path.join('uploads', 'images');
   db.prepare(`
     INSERT OR IGNORE INTO watched_folders
-    (folder_path, folder_name, folder_type, auto_scan, scan_interval, recursive, is_active, watcher_enabled)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(defaultUploadPath, '직접 업로드', 'upload', 1, 60, 1, 1, 1);
+    (folder_path, folder_name, auto_scan, scan_interval, recursive, is_active, watcher_enabled)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(defaultUploadPath, '직접 업로드', 1, 60, 1, 1, 1);
 
   // API 생성 이미지 폴더 등록
   const apiUploadPath = path.join('uploads', 'API', 'images');
   db.prepare(`
     INSERT OR IGNORE INTO watched_folders
-    (folder_path, folder_name, folder_type, auto_scan, scan_interval, recursive, is_active, watcher_enabled)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(apiUploadPath, 'API 생성 이미지', 'api', 1, 60, 1, 1, 1);
+    (folder_path, folder_name, auto_scan, scan_interval, recursive, is_active, watcher_enabled)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(apiUploadPath, 'API 생성 이미지', 1, 60, 1, 1, 1);
 
   // 비디오 업로드 폴더 등록
   const videoUploadPath = path.join('uploads', 'videos');
   db.prepare(`
     INSERT OR IGNORE INTO watched_folders
-    (folder_path, folder_name, folder_type, auto_scan, scan_interval, recursive, is_active, watcher_enabled)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(videoUploadPath, '비디오 업로드', 'upload', 1, 60, 1, 1, 1);
+    (folder_path, folder_name, auto_scan, scan_interval, recursive, is_active, watcher_enabled)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(videoUploadPath, '비디오 업로드', 1, 60, 1, 1, 1);
 
   console.log('  ✅ 폴더 테이블 3개 + 인덱스 + 기본 폴더 3개 생성 완료\n');
 
@@ -387,7 +402,35 @@ export const up = async (db: Database.Database): Promise<void> => {
   console.log('  ✅ 시스템 설정 테이블 + 기본값 생성 완료\n');
 
   // ============================================
-  // 7. API 생성 히스토리 (apiGenerationDb.ts에서 관리)
+  // 7. 파일 검증 로그 시스템
+  // ============================================
+  console.log('🔍 파일 검증 로그 테이블 생성 중...');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS file_verification_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      verification_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      total_checked INTEGER DEFAULT 0,
+      missing_found INTEGER DEFAULT 0,
+      deleted_records INTEGER DEFAULT 0,
+      duration_ms INTEGER,
+      verification_type TEXT DEFAULT 'manual',
+      error_count INTEGER DEFAULT 0,
+      error_details TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // 검증 날짜 인덱스 (로그 조회 성능 향상)
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_file_verification_logs_date
+    ON file_verification_logs(verification_date DESC)
+  `);
+
+  console.log('  ✅ 파일 검증 로그 테이블 + 인덱스 생성 완료\n');
+
+  // ============================================
+  // 8. API 생성 히스토리 (apiGenerationDb.ts에서 관리)
   // ============================================
   // Note: generation_history 테이블은 별도 DB에서 관리됨
 
@@ -399,7 +442,8 @@ export const up = async (db: Database.Database): Promise<void> => {
   console.log('   - 미디어 메타데이터: 1개 테이블');
   console.log('   - 폴더 관리: 3개 테이블');
   console.log('   - 시스템 설정: 1개 테이블');
-  console.log('   총 13개 테이블 + 인덱스 생성');
+  console.log('   - 파일 검증 로그: 1개 테이블');
+  console.log('   총 14개 테이블 + 인덱스 생성');
   console.log('   (워크플로우, 사용자 설정, API 생성 히스토리는 별도 DB)\n');
 };
 
@@ -408,6 +452,7 @@ export const down = async (db: Database.Database): Promise<void> => {
 
   // 역순으로 테이블 제거 (images.db 테이블만)
   const tables = [
+    'file_verification_logs',
     'system_settings',
     'scan_logs',
     'image_files',

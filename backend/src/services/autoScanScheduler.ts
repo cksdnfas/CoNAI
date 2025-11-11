@@ -4,6 +4,7 @@ import { WatchedFolderService } from './watchedFolderService';
 import { FileWatcherService } from './fileWatcherService';
 import { BackgroundProcessorService } from './backgroundProcessorService';
 import { SystemSettingsService } from './systemSettingsService';
+import { FileVerificationService } from './fileVerificationService';
 
 /**
  * 자동 스캔 스케줄러
@@ -15,6 +16,7 @@ import { SystemSettingsService } from './systemSettingsService';
 export class AutoScanScheduler {
   private static cronTask: cron.ScheduledTask | null = null;
   private static phase2Timer: NodeJS.Timeout | null = null;
+  private static phase3Timer: NodeJS.Timeout | null = null;
   private static isRunning = false;
 
   /**
@@ -69,6 +71,44 @@ export class AutoScanScheduler {
     // 주기적 실행
     this.phase2Timer = setInterval(runPhase2, phase2IntervalMs);
 
+    // Phase 3 파일 검증 스케줄러 (초 단위로 동작, 활성화 시만)
+    const startFileVerification = () => {
+      if (SystemSettingsService.isFileVerificationEnabled()) {
+        const verificationIntervalSeconds = SystemSettingsService.getFileVerificationInterval();
+        const verificationIntervalMs = verificationIntervalSeconds * 1000;
+
+        const runVerification = async () => {
+          // 활성화 상태 다시 확인 (런타임에 비활성화될 수 있음)
+          if (!SystemSettingsService.isFileVerificationEnabled()) {
+            return;
+          }
+
+          const progress = FileVerificationService.getProgress();
+          if (progress.isRunning) {
+            console.log('  ⏳ 파일 검증이 이미 진행 중입니다. 건너뜁니다.');
+            return;
+          }
+
+          console.log('🔍 Phase 3 파일 검증 시작...');
+          try {
+            await FileVerificationService.verifyAllFiles();
+          } catch (error) {
+            console.error('❌ Phase 3 파일 검증 중 오류 발생:', error);
+          }
+        };
+
+        // 주기적 실행
+        this.phase3Timer = setInterval(runVerification, verificationIntervalMs);
+
+        console.log(`✅ 파일 검증 스케줄러 시작됨 (Phase 3: ${verificationIntervalSeconds}초마다)`);
+      } else {
+        console.log('ℹ️  파일 검증이 비활성화되어 있습니다');
+      }
+    };
+
+    // 파일 검증 스케줄러 시작
+    startFileVerification();
+
     console.log(`✅ 자동 스캔 스케줄러 시작됨 (Phase 1: 1분마다, Phase 2: ${phase2IntervalSeconds}초마다)`);
   }
 
@@ -76,7 +116,7 @@ export class AutoScanScheduler {
    * 스케줄러 중지
    */
   static stop(): void {
-    if (!this.cronTask && !this.phase2Timer) {
+    if (!this.cronTask && !this.phase2Timer && !this.phase3Timer) {
       console.log('⚠️  자동 스캔 스케줄러가 실행 중이 아닙니다');
       return;
     }
@@ -91,7 +131,12 @@ export class AutoScanScheduler {
       this.phase2Timer = null;
     }
 
-    console.log('🛑 자동 스캔 스케줄러 중지됨 (Phase 1 + Phase 2)');
+    if (this.phase3Timer) {
+      clearInterval(this.phase3Timer);
+      this.phase3Timer = null;
+    }
+
+    console.log('🛑 자동 스캔 스케줄러 중지됨 (Phase 1 + Phase 2 + Phase 3)');
   }
 
   /**
