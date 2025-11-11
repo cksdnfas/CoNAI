@@ -23,12 +23,20 @@ const basePath = (() => {
   return path.resolve(process.cwd());
 })();
 
-const uploadsDir = path.join(basePath, 'uploads');
-const databaseDir = path.join(basePath, 'database');
-const logsDir = path.join(basePath, 'logs');
-const tempDir = path.join(basePath, 'temp');
-const modelsDir = path.join(basePath, 'models');
-const recycleBinDir = path.join(basePath, 'RecycleBin');
+// Helper function to resolve individual paths with environment variable support
+function resolvePath(envVar: string | undefined, defaultPath: string): string {
+  if (envVar && envVar.trim().length > 0) {
+    return path.resolve(envVar.trim());
+  }
+  return defaultPath;
+}
+
+const uploadsDir = resolvePath(process.env.RUNTIME_UPLOADS_DIR, path.join(basePath, 'uploads'));
+const databaseDir = resolvePath(process.env.RUNTIME_DATABASE_DIR, path.join(basePath, 'database'));
+const logsDir = resolvePath(process.env.RUNTIME_LOGS_DIR, path.join(basePath, 'logs'));
+const tempDir = resolvePath(process.env.RUNTIME_TEMP_DIR, path.join(basePath, 'temp'));
+const modelsDir = resolvePath(process.env.RUNTIME_MODELS_DIR, path.join(basePath, 'models'));
+const recycleBinDir = resolvePath(process.env.RUNTIME_RECYCLE_BIN_DIR, path.join(basePath, 'RecycleBin'));
 const databaseFile = path.join(databaseDir, 'images.db');
 
 function stripTrailingSlash(url: string): string {

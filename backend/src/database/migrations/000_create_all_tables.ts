@@ -354,6 +354,10 @@ export const up = async (db: Database.Database): Promise<void> => {
 
   // 기본 업로드 폴더 등록 (상대 경로)
   // 모든 폴더를 동일하게 취급 - auto_scan 및 watcher_enabled 활성화
+  //
+  // 주의: 상대 경로로 저장되며, 런타임에 resolveFolderPath()가 환경변수를 고려하여 절대 경로로 변환
+  // - RUNTIME_BASE_PATH 또는 RUNTIME_UPLOADS_DIR 설정 시 해당 경로 기준으로 해석됨
+  // - ensureRuntimeDirectories()가 실제 폴더를 생성함
   const defaultUploadPath = path.join('uploads', 'images');
   db.prepare(`
     INSERT OR IGNORE INTO watched_folders

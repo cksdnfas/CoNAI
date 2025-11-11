@@ -4,6 +4,7 @@ import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { ImageProcessor } from './imageProcessor';
 import { FileSaver } from '../utils/fileSaver';
+import { runtimePaths } from '../config/runtimePaths';
 
 /**
  * API Image Processor
@@ -19,7 +20,7 @@ export class APIImageProcessor {
    * Get base upload path for API images
    */
   private static getBaseUploadPath(): string {
-    return path.join(process.cwd(), 'uploads', 'API');
+    return path.join(runtimePaths.uploadsDir, 'API');
   }
 
   /**
@@ -132,7 +133,7 @@ export class APIImageProcessor {
 
     try {
       // 1. Buffer를 임시 파일로 저장
-      const tempDir = path.join(process.cwd(), 'temp');
+      const tempDir = runtimePaths.tempDir;
       await fs.promises.mkdir(tempDir, { recursive: true });
 
       tempPath = path.join(tempDir, `metadata_extract_${Date.now()}.png`);

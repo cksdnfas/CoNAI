@@ -108,10 +108,21 @@ backend/src/
 
 ### Key Configuration
 
-- Port: 1566 (configurable via PORT env var)
-- Upload path: `uploads/` directory (auto-created)
-- Database: `database/images.db` (auto-created)
+- Port: 1566 (configurable via `PORT` env var)
 - Rate limiting: 1000 requests/minute (development setting)
+
+**Runtime Paths** (configurable via environment variables):
+- All data paths default to executable location if not configured
+- `RUNTIME_BASE_PATH`: Set base directory for all data (overrides default behavior)
+- Individual path overrides (take precedence over `RUNTIME_BASE_PATH`):
+  - `RUNTIME_UPLOADS_DIR`: Upload directory (default: `basePath/uploads/`)
+  - `RUNTIME_DATABASE_DIR`: Database directory (default: `basePath/database/`)
+  - `RUNTIME_LOGS_DIR`: Log directory (default: `basePath/logs/`)
+  - `RUNTIME_TEMP_DIR`: Temporary files (default: `basePath/temp/`)
+  - `RUNTIME_MODELS_DIR`: AI models (default: `basePath/models/`)
+  - `RUNTIME_RECYCLE_BIN_DIR`: Deleted files (default: `basePath/RecycleBin/`)
+- Path resolution managed by `backend/src/config/runtimePaths.ts`
+- Initial watch folders (`uploads/images`, `uploads/API/images`, `uploads/videos`) auto-created at configured upload path
 
 ## Development Patterns
 
