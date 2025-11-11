@@ -513,71 +513,23 @@ console.log('✅ Startup scripts created\n');
 
 // Step 9: Create environment template
 console.log('Step 9: Creating environment template...');
-const envTemplate = `# ComfyUI Image Manager Configuration
+
+// Read the source .env.example from backend
+const sourceEnvPath = path.join(__dirname, '..', 'backend', '.env.example');
+let envContent = fs.readFileSync(sourceEnvPath, 'utf8');
+
+// Add portable-specific header
+const portableHeader = `# ComfyUI Image Manager Configuration
 #
-# This file was auto-generated. Rename to .env to use.
+# This file was auto-generated from backend/.env.example
+# Rename to .env to use.
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Server Configuration
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# Port to run the server on
-PORT=1566
-
-# Host binding (0.0.0.0 allows external connections)
-HOST=0.0.0.0
-
-# Protocol (http or https)
-BACKEND_PROTOCOL=http
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Remote Access Configuration
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# For external access, set your public IP or domain
-# PUBLIC_BASE_URL=http://your-external-ip:1566
-# BACKEND_HOST=your-external-ip
-
-# Enable external IP detection (requires internet)
-# ENABLE_EXTERNAL_IP=true
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Runtime Paths (Optional)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# Where to store data (uploads, database, logs)
-# Leave empty to use the current directory
-# RUNTIME_BASE_PATH=./data
-
-# Where frontend files are located
-# FRONTEND_DIST_PATH=./app/frontend
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ComfyUI Integration (Future)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# ComfyUI server URL for workflow integration
-# COMFYUI_SERVER_URL=http://localhost:8188
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Locale
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# Supported: en, ko, ja, zh
-LOCALE=en
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# WD v3 Tagger Configuration
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# Note: Tagger settings are managed via Settings UI (config/settings.json)
-# The values below are only used as initial defaults on first run
-# After first run, change all tagger settings through the Settings page in the web UI
-#
-# For instructions on Python setup, see app/python/README.md
 `;
 
-fs.writeFileSync(path.join(PORTABLE_OUTPUT_DIR, '.env.example'), envTemplate, 'utf8');
+// Combine header with source content
+const finalEnvContent = portableHeader + envContent;
+
+fs.writeFileSync(path.join(PORTABLE_OUTPUT_DIR, '.env.example'), finalEnvContent, 'utf8');
 console.log('✅ Environment template created\n');
 
 // Step 10: Create data directories

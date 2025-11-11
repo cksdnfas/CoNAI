@@ -150,7 +150,7 @@ RUN apk add --no-cache python3 make g++
 COPY package.json ./
 
 # Install production dependencies and rebuild native modules for Alpine Linux
-RUN npm ci --only=production && \\
+RUN npm install --production --no-package-lock && \\
     npm rebuild sharp better-sqlite3 argon2 blake2
 
 # ============================================================================
@@ -161,7 +161,6 @@ FROM node:20-alpine
 # Install runtime dependencies
 RUN apk add --no-cache \\
     ffmpeg \\
-    ffprobe \\
     python3 \\
     py3-pip
 

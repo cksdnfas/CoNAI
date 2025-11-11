@@ -195,60 +195,24 @@ try {
 // Step 9: Create environment template
 console.log('Step 9: Creating environment template...');
 try {
-  const envTemplate = `# ComfyUI Image Manager Configuration
+  // Read the source .env.example from backend
+  const sourceEnvPath = path.join(__dirname, '..', 'backend', '.env.example');
+  let envContent = fs.readFileSync(sourceEnvPath, 'utf8');
+
+  // Add SEA build header
+  const seaHeader = `# ComfyUI Image Manager Configuration
 #
-# This file was auto-generated. Rename to .env to use.
+# This file was auto-generated from backend/.env.example
+# Rename to .env to use.
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Server Configuration
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# Port to run the server on
-PORT=1566
-
-# Host binding (0.0.0.0 allows external connections)
-HOST=0.0.0.0
-
-# Protocol (http or https)
-BACKEND_PROTOCOL=http
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Remote Access Configuration
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# For external access, set your public IP or domain
-# PUBLIC_BASE_URL=http://your-external-ip:1566
-# BACKEND_HOST=your-external-ip
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Runtime Paths (Optional)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# Where to store data (uploads, database, logs)
-# Leave empty to use the directory where executable is located
-# RUNTIME_BASE_PATH=./data
-
-# Where frontend files are located
-# FRONTEND_DIST_PATH=./frontend
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ComfyUI Integration (Future)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# ComfyUI server URL for workflow integration
-# COMFYUI_SERVER_URL=http://localhost:8188
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Locale
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# Supported: en, ko, ja, zh
-LOCALE=en
 `;
+
+  // Combine header with source content
+  const finalEnvContent = seaHeader + envContent;
 
   fs.writeFileSync(
     path.join(PKG_OUTPUT_DIR, '.env.example'),
-    envTemplate,
+    finalEnvContent,
     'utf8'
   );
   console.log('✅ Environment template created\n');
