@@ -2,6 +2,7 @@ import { db } from '../database/init';
 import { GroupRecord, ImageGroupRecord, GroupCreateData, GroupUpdateData, GroupWithStats, AutoCollectCondition } from '@comfyui-image-manager/shared';
 import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
+import { getGroupHierarchyService } from '../services/groupHierarchyService';
 
 export class GroupModel {
   /**
@@ -114,6 +115,101 @@ export class GroupModel {
       'UPDATE groups SET auto_collect_last_run = CURRENT_TIMESTAMP WHERE id = ?'
     ).run(id);
     return info.changes > 0;
+  }
+
+  // ===== 계층 구조 관련 메서드 =====
+
+  /**
+   * 루트 그룹들 조회 (parent_id가 NULL인 그룹들)
+   */
+  static async findRoots(): Promise<GroupWithStats[]> {
+    const query = `
+      SELECT
+        g.*,
+        COUNT(ig.id) as image_count,
+        COUNT(CASE WHEN ig.collection_type = 'auto' THEN 1 END) as auto_collected_count,
+        COUNT(CASE WHEN ig.collection_type = 'manual' THEN 1 END) as manual_added_count
+      FROM groups g
+      LEFT JOIN image_groups ig ON g.id = ig.group_id
+      WHERE g.parent_id IS NULL
+      GROUP BY g.id
+      ORDER BY g.created_date DESC
+    `;
+
+    const rows = db.prepare(query).all() as GroupWithStats[];
+    return rows || [];
+  }
+
+  /**
+   * 특정 부모의 자식 그룹들 조회
+   */
+  static async findChildren(parentId: number): Promise<GroupWithStats[]> {
+    const query = `
+      SELECT
+        g.*,
+        COUNT(ig.id) as image_count,
+        COUNT(CASE WHEN ig.collection_type = 'auto' THEN 1 END) as auto_collected_count,
+        COUNT(CASE WHEN ig.collection_type = 'manual' THEN 1 END) as manual_added_count
+      FROM groups g
+      LEFT JOIN image_groups ig ON g.id = ig.group_id
+      WHERE g.parent_id = ?
+      GROUP BY g.id
+      ORDER BY g.created_date DESC
+    `;
+
+    const rows = db.prepare(query).all(parentId) as GroupWithStats[];
+    return rows || [];
+  }
+
+  /**
+   * 브레드크럼 경로 조회 (현재 그룹에서 루트까지)
+   */
+  static async getBreadcrumbPath(groupId: number): Promise<Array<{ id: number; name: string; color: string | null }>> {
+    const hierarchyService = getGroupHierarchyService();
+    const ancestors = hierarchyService.getAncestorPath(groupId);
+
+    // depth 역순으로 정렬 (루트부터 현재까지)
+    return ancestors.map(node => ({
+      id: node.id,
+      name: node.name,
+      color: null // 필요하면 추가 쿼리로 조회
+    }));
+  }
+
+  /**
+   * 모든 그룹 조회 (자식 개수 포함)
+   */
+  static async findAllWithHierarchy(): Promise<Array<GroupWithStats & { child_count: number; has_children: boolean }>> {
+    const groups = await this.findAllWithStats();
+    const hierarchyService = getGroupHierarchyService();
+
+    const groupIds = groups.map(g => g.id);
+    const childCountMap = hierarchyService.getChildCountBatch(groupIds);
+
+    return groups.map(group => ({
+      ...group,
+      child_count: childCountMap.get(group.id) || 0,
+      has_children: (childCountMap.get(group.id) || 0) > 0
+    }));
+  }
+
+  /**
+   * 특정 부모의 자식 그룹들 조회 (자식 개수 포함)
+   */
+  static async findChildrenWithHierarchy(parentId: number | null): Promise<Array<GroupWithStats & { child_count: number; has_children: boolean }>> {
+    const groups = parentId === null
+      ? await this.findRoots()
+      : await this.findChildren(parentId);
+
+    const hierarchyService = getGroupHierarchyService();
+    const groupIds = groups.map(g => g.id);
+    const childCountMap = hierarchyService.getChildCountBatch(groupIds);
+
+    return groups.map(group => ({
+      ...group,
+      child_count: childCountMap.get(group.id) || 0,
+      has_children: (childCountMap.get(group.id) || 0) > 0
+    }));
   }
 }
 
