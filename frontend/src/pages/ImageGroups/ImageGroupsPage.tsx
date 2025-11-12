@@ -35,6 +35,7 @@ import type { ImageRecord, PageSize } from '../../types/image';
 import GroupCreateEditModal from './components/GroupCreateEditModal';
 import GroupImageGridModal from './components/GroupImageGridModal';
 import { GroupBreadcrumb } from './components/GroupBreadcrumb';
+import AutoFolderGroupsContent from './components/AutoFolderGroupsContent';
 
 const ImageGroupsPage: React.FC = () => {
   const { t } = useTranslation(['imageGroups', 'common']);
@@ -639,11 +640,7 @@ const ImageGroupsPage: React.FC = () => {
 
       {/* 자동폴더 그룹 탭 */}
       {tabValue === 1 && (
-        <Box sx={{ p: 3, textAlign: 'center' }}>
-          <Typography variant="h6" color="text.secondary">
-            자동폴더 그룹 기능 준비 중...
-          </Typography>
-        </Box>
+        <AutoFolderGroupsContent onShowSnackbar={showSnackbar} />
       )}
     </Container>
   );

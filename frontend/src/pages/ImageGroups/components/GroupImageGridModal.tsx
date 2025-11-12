@@ -49,6 +49,7 @@ interface GroupImageGridModalProps {
   onPageChange?: (page: number) => void;
   onImagesRemoved?: (selectedImageIds: string[]) => void;
   onImagesAssigned?: (targetGroupId: number, selectedImageIds: string[]) => void;
+  readOnly?: boolean;
 }
 
 const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
@@ -64,6 +65,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   totalPages = 1,
   total = 0,
   onPageChange,
+  readOnly = false,
   onImagesRemoved,
   onImagesAssigned,
 }) => {
@@ -295,24 +297,28 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
               {t('imageGroups:imageModal.selectedCount', { count: selectedIds.length })}
             </Typography>
             <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button
-                variant="outlined"
-                color="error"
-                startIcon={<DeleteIcon />}
-                onClick={handleRemoveClick}
-                disabled={!canRemove}
-              >
-                {t('imageGroups:imageModal.buttonRemove')}
-              </Button>
-              <Button
-                variant="outlined"
-                color="primary"
-                startIcon={<MoveIcon />}
-                onClick={handleAssignClick}
-                disabled={!canAssign}
-              >
-                {t('imageGroups:imageModal.buttonAssign')}
-              </Button>
+              {!readOnly && (
+                <>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    startIcon={<DeleteIcon />}
+                    onClick={handleRemoveClick}
+                    disabled={!canRemove}
+                  >
+                    {t('imageGroups:imageModal.buttonRemove')}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    startIcon={<MoveIcon />}
+                    onClick={handleAssignClick}
+                    disabled={!canAssign}
+                  >
+                    {t('imageGroups:imageModal.buttonAssign')}
+                  </Button>
+                </>
+              )}
             </Box>
           </Toolbar>
         )}
