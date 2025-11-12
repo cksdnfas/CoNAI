@@ -16,6 +16,7 @@ export { default } from './apiClient';
 // Re-export all domain APIs (refactored from monolithic api.ts)
 export { imageApi } from './imageApi';
 export { groupApi } from './groupApi';
+export { autoFolderGroupsApi } from './autoFolderGroupsApi';
 export { promptCollectionApi, promptGroupApi } from './promptApi';
 export { uploadApi } from './uploadApi';
 export { generationHistoryApi } from './generationHistoryApi';
@@ -28,6 +29,7 @@ export type { Workflow, MarkedField, GenerationHistory } from './workflowApi';
 // For backward compatibility, also export as default object
 import { imageApi } from './imageApi';
 import { groupApi } from './groupApi';
+import { autoFolderGroupsApi } from './autoFolderGroupsApi';
 import { promptCollectionApi, promptGroupApi } from './promptApi';
 import { uploadApi } from './uploadApi';
 import { generationHistoryApi } from './generationHistoryApi';
@@ -37,6 +39,7 @@ import { workflowApi } from './workflowApi';
 export const allApis = {
   imageApi,
   groupApi,
+  autoFolderGroupsApi,
   promptCollectionApi,
   promptGroupApi,
   uploadApi,
