@@ -36,6 +36,11 @@ export interface ComfyUIModelFolder {
   files: string[];
 }
 
+export interface ScanComfyUIModelsRequest {
+  modelFolders: ComfyUIModelFolder[];
+  sourcePath?: string;
+}
+
 export interface ScanComfyUIModelsResponse {
   success: boolean;
   data: {
@@ -77,11 +82,9 @@ export const customDropdownListApi = {
     return response.data;
   },
 
-  // ComfyUI 모델 스캔
-  scanComfyUIModels: async (modelsPath: string): Promise<ScanComfyUIModelsResponse> => {
-    const response = await api.post('/custom-dropdown-lists/scan-comfyui-models', {
-      modelsPath
-    });
+  // ComfyUI 모델 수집 (프론트엔드 기반)
+  scanComfyUIModels: async (request: ScanComfyUIModelsRequest): Promise<ScanComfyUIModelsResponse> => {
+    const response = await api.post('/custom-dropdown-lists/scan-comfyui-models', request);
     return response.data;
   },
 };

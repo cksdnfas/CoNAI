@@ -31,7 +31,7 @@ import {
   Person as PersonIcon,
   Storage as StorageIcon
 } from '@mui/icons-material';
-import { customDropdownListApi, type CustomDropdownList } from '../../services/api/customDropdownListApi';
+import { customDropdownListApi, type CustomDropdownList, type ComfyUIModelFolder } from '../../services/api/customDropdownListApi';
 
 export default function CustomDropdownListsSection() {
   const [lists, setLists] = useState<CustomDropdownList[]>([]);
@@ -41,7 +41,7 @@ export default function CustomDropdownListsSection() {
   const [openDialog, setOpenDialog] = useState(false);
   const [editingList, setEditingList] = useState<CustomDropdownList | null>(null);
   const [openComfyUIDialog, setOpenComfyUIDialog] = useState(false);
-  const [comfyUIPath, setComfyUIPath] = useState('');
+  const [selectedModelFolders, setSelectedModelFolders] = useState<ComfyUIModelFolder[]>([]);
   const [scanLoading, setScanLoading] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -137,41 +137,74 @@ export default function CustomDropdownListsSection() {
   };
 
   const handleOpenComfyUIDialog = () => {
-    setComfyUIPath('');
+    setSelectedModelFolders([]);
     setOpenComfyUIDialog(true);
   };
 
   const handleCloseComfyUIDialog = () => {
     setOpenComfyUIDialog(false);
-    setComfyUIPath('');
+    setSelectedModelFolders([]);
     setError(null);
   };
 
-  const handleBrowseFolder = () => {
-    // 브라우저에서는 폴더 선택을 직접 지원하지 않으므로,
-    // 사용자가 경로를 직접 입력하도록 안내
-    const input = document.createElement('input');
-    input.type = 'file';
-    // @ts-ignore - webkitdirectory는 표준이 아니지만 대부분의 브라우저에서 지원
-    input.webkitdirectory = true;
-    input.onchange = (e: any) => {
-      const files = e.target.files;
-      if (files && files.length > 0) {
-        // 첫 번째 파일의 경로에서 models 디렉토리까지의 경로 추출
-        const path = files[0].webkitRelativePath || files[0].path;
-        if (path) {
-          // webkitRelativePath에서 폴더 이름만 추출
-          const folderName = path.split('/')[0];
-          setComfyUIPath(folderName);
-        }
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setError(null);
+
+    // 모델 파일 확장자
+    const modelExtensions = ['.safetensors', '.ckpt', '.pt', '.pth', '.bin'];
+
+    // 타겟 폴더 이름 (checkpoints, unet, upscale_models)
+    const targetFolders = ['checkpoints', 'unet', 'upscale_models'];
+
+    // 폴더별로 파일 그룹화
+    const folderMap = new Map<string, string[]>();
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const pathParts = file.webkitRelativePath.split('/');
+
+      // 확장자 확인
+      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+      if (!modelExtensions.includes(ext)) continue;
+
+      // 경로 분석: models/checkpoints/subfolder/file.safetensors 형식
+      // pathParts[0] = 'models', pathParts[1] = 'checkpoints', pathParts[2...] = 하위경로
+      if (pathParts.length < 2) continue;
+
+      const baseFolderName = pathParts[1]; // checkpoints, unet, upscale_models 등
+      if (!targetFolders.includes(baseFolderName)) continue;
+
+      // 하위 폴더 경로 구성
+      const subPath = pathParts.slice(2, -1).join('/');
+      const displayName = subPath
+        ? `${baseFolderName}/${subPath}`
+        : baseFolderName;
+
+      if (!folderMap.has(displayName)) {
+        folderMap.set(displayName, []);
       }
-    };
-    input.click();
+      folderMap.get(displayName)!.push(file.name);
+    }
+
+    // Map을 ComfyUIModelFolder 배열로 변환
+    const modelFolders: ComfyUIModelFolder[] = Array.from(folderMap.entries()).map(([displayName, files]) => {
+      const baseFolderName = displayName.split('/')[0];
+      return {
+        folderName: baseFolderName,
+        displayName,
+        files: files.sort()
+      };
+    });
+
+    setSelectedModelFolders(modelFolders);
   };
 
   const handleScanModels = async () => {
-    if (!comfyUIPath.trim()) {
-      setError('ComfyUI models 경로를 입력해주세요.');
+    if (selectedModelFolders.length === 0) {
+      setError('모델 폴더를 선택해주세요.');
       return;
     }
 
@@ -179,7 +212,10 @@ export default function CustomDropdownListsSection() {
       setScanLoading(true);
       setError(null);
 
-      const response = await customDropdownListApi.scanComfyUIModels(comfyUIPath);
+      const response = await customDropdownListApi.scanComfyUIModels({
+        modelFolders: selectedModelFolders,
+        sourcePath: 'client-selected'
+      });
 
       if (response.success && response.data) {
         handleCloseComfyUIDialog();
@@ -513,7 +549,7 @@ export default function CustomDropdownListsSection() {
       <Dialog
         open={openComfyUIDialog}
         onClose={handleCloseComfyUIDialog}
-        maxWidth="sm"
+        maxWidth="md"
         fullWidth
       >
         <DialogTitle>
@@ -527,32 +563,45 @@ export default function CustomDropdownListsSection() {
           )}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
             <Alert severity="info" sx={{ fontSize: '0.85rem' }}>
-              ComfyUI의 models 폴더 경로를 입력해주세요.<br />
-              예: C:\ComfyUI\models 또는 /home/user/ComfyUI/models
+              ComfyUI의 models 폴더를 선택해주세요.<br />
+              브라우저 파일 선택 창에서 ComfyUI의 <strong>models</strong> 폴더를 선택하세요.
             </Alert>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <TextField
-                autoFocus
-                label="ComfyUI models 경로"
-                fullWidth
-                value={comfyUIPath}
-                onChange={(e) => setComfyUIPath(e.target.value)}
-                placeholder="예: C:\ComfyUI\models"
-                helperText="절대 경로를 입력하거나 폴더 찾기 버튼을 사용하세요"
+            <Button
+              variant="contained"
+              startIcon={<FolderOpenIcon />}
+              component="label"
+              fullWidth
+              size="large"
+            >
+              models 폴더 선택
+              <input
+                type="file"
+                hidden
+                // @ts-ignore - webkitdirectory is not in the standard types
+                webkitdirectory=""
+                directory=""
+                onChange={handleFileSelect}
               />
-              <Button
-                variant="outlined"
-                startIcon={<FolderOpenIcon />}
-                onClick={handleBrowseFolder}
-                sx={{ minWidth: '120px' }}
-              >
-                폴더 찾기
-              </Button>
-            </Box>
+            </Button>
+            {selectedModelFolders.length > 0 && (
+              <Alert severity="success" sx={{ fontSize: '0.85rem' }}>
+                <strong>{selectedModelFolders.length}개 폴더</strong>에서 모델 파일을 발견했습니다:
+                <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2 }}>
+                  {selectedModelFolders.slice(0, 5).map((folder, idx) => (
+                    <li key={idx}>
+                      <strong>{folder.displayName}</strong>: {folder.files.length}개 파일
+                    </li>
+                  ))}
+                  {selectedModelFolders.length > 5 && (
+                    <li>...외 {selectedModelFolders.length - 5}개 폴더</li>
+                  )}
+                </Box>
+              </Alert>
+            )}
             <Alert severity="warning" sx={{ fontSize: '0.85rem' }}>
               <strong>스캔 안내:</strong><br />
-              • checkpoints, unet, upscale_models 폴더를 자동으로 스캔합니다<br />
-              • 이미 수집된 경로를 다시 스캔하면 <strong>항목이 최신화</strong>됩니다<br />
+              • checkpoints, unet, upscale_models 폴더를 자동으로 수집합니다<br />
+              • 같은 폴더를 다시 수집하면 <strong>항목이 최신화</strong>됩니다<br />
               • 자동 수집된 항목은 "자동 수집" 탭에서 확인할 수 있습니다
             </Alert>
           </Box>
@@ -564,10 +613,10 @@ export default function CustomDropdownListsSection() {
           <Button
             onClick={handleScanModels}
             variant="contained"
-            disabled={!comfyUIPath.trim() || scanLoading}
+            disabled={selectedModelFolders.length === 0 || scanLoading}
             startIcon={scanLoading ? <CircularProgress size={16} /> : <UploadIcon />}
           >
-            {scanLoading ? '스캔 중...' : '모델 스캔'}
+            {scanLoading ? '수집 중...' : '모델 수집'}
           </Button>
         </DialogActions>
       </Dialog>
