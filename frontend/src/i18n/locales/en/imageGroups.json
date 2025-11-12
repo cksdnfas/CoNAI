@@ -26,6 +26,9 @@
     "groupName": "Group Name",
     "description": "Description",
     "groupColor": "Group Color",
+    "parentGroup": "Parent Group",
+    "noParent": "None (Root Level)",
+    "selectParent": "Select Parent Group",
     "autoCollectEnable": "Enable Auto-collection",
     "autoCollectDescription": "Automatically add images that match the configured conditions to this group.",
     "orConditionInfo": "OR Condition: Multiple conditions will collect images that satisfy at least one condition.",
@@ -38,6 +41,19 @@
     "buttonCreate": "Create",
     "buttonUpdate": "Update",
     "buttonCancel": "Cancel"
+  },
+  "hierarchy": {
+    "root": "Root",
+    "childGroups": "{{count}} subgroups",
+    "openSubgroups": "Open Subgroups",
+    "backToParent": "Back to Parent",
+    "moveGroup": "Move Group",
+    "moveToRoot": "Move to Root",
+    "cannotMoveToSelf": "Cannot move to itself",
+    "cannotMoveToDescendant": "Cannot move to descendant group",
+    "maxDepthExceeded": "Maximum depth (5 levels) exceeded",
+    "circularReference": "Circular reference detected",
+    "hierarchyInvalid": "Invalid hierarchy structure"
   },
   "conditions": {
     "conditionNumber": "Condition {{number}}",

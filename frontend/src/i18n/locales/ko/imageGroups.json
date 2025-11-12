@@ -26,6 +26,9 @@
     "groupName": "그룹명",
     "description": "설명",
     "groupColor": "그룹 색상",
+    "parentGroup": "상위 그룹",
+    "noParent": "없음 (최상위)",
+    "selectParent": "상위 그룹 선택",
     "autoCollectEnable": "자동수집 활성화",
     "autoCollectDescription": "설정한 조건에 맞는 이미지를 자동으로 이 그룹에 추가합니다.",
     "orConditionInfo": "OR 조건: 여러 조건을 추가하면 하나라도 만족하는 이미지가 자동수집됩니다.",
@@ -38,6 +41,19 @@
     "buttonCreate": "생성",
     "buttonUpdate": "수정",
     "buttonCancel": "취소"
+  },
+  "hierarchy": {
+    "root": "최상위",
+    "childGroups": "하위 그룹 {{count}}개",
+    "openSubgroups": "하위 그룹 열기",
+    "backToParent": "상위 그룹으로",
+    "moveGroup": "그룹 이동",
+    "moveToRoot": "최상위로 이동",
+    "cannotMoveToSelf": "자기 자신으로 이동할 수 없습니다",
+    "cannotMoveToDescendant": "하위 그룹으로 이동할 수 없습니다",
+    "maxDepthExceeded": "최대 깊이(5단계)를 초과했습니다",
+    "circularReference": "순환 참조가 감지되었습니다",
+    "hierarchyInvalid": "잘못된 계층 구조입니다"
   },
   "conditions": {
     "conditionNumber": "조건 {{number}}",
