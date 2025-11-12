@@ -28,16 +28,17 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { groupApi } from '../../services/api';
-import type { GroupWithStats } from '@comfyui-image-manager/shared';
+import type { GroupWithStats, GroupWithHierarchy, BreadcrumbItem } from '@comfyui-image-manager/shared';
 import type { ImageRecord, PageSize } from '../../types/image';
 import GroupCreateEditModal from './components/GroupCreateEditModal';
 import GroupImageGridModal from './components/GroupImageGridModal';
+import { GroupBreadcrumb } from './components/GroupBreadcrumb';
 
 const ImageGroupsPage: React.FC = () => {
   const { t } = useTranslation(['imageGroups', 'common']);
-  const [groups, setGroups] = useState<GroupWithStats[]>([]);
+  const [groups, setGroups] = useState<GroupWithHierarchy[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedGroup, setSelectedGroup] = useState<GroupWithStats | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<GroupWithHierarchy | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -52,6 +53,10 @@ const ImageGroupsPage: React.FC = () => {
     severity: 'success',
   });
 
+  // 계층 네비게이션 상태
+  const [currentParentId, setCurrentParentId] = useState<number | null>(null);
+  const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>([]);
+
   // 그룹 이미지 모달 관련 상태
   const [groupImagesModalOpen, setGroupImagesModalOpen] = useState(false);
   const [selectedGroupForImages, setSelectedGroupForImages] = useState<GroupWithStats | null>(null);
@@ -62,11 +67,14 @@ const ImageGroupsPage: React.FC = () => {
   const [groupImagesTotal, setGroupImagesTotal] = useState(0);
   const [groupImagesPageSize, setGroupImagesPageSize] = useState<PageSize>(25);
 
-  // 그룹 목록 조회
-  const fetchGroups = async () => {
+  // 그룹 목록 조회 (계층 기반)
+  const fetchGroups = async (parentId: number | null = null) => {
     try {
       setLoading(true);
-      const response = await groupApi.getGroups();
+      const response = parentId === null
+        ? await groupApi.getRootGroups()
+        : await groupApi.getChildGroups(parentId);
+
       if (response.success && response.data) {
         setGroups(response.data);
       } else {
@@ -78,6 +86,34 @@ const ImageGroupsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 브레드크럼 로드
+  const loadBreadcrumb = async (groupId: number) => {
+    try {
+      const response = await groupApi.getBreadcrumbPath(groupId);
+      if (response.success && response.data) {
+        setBreadcrumb(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading breadcrumb:', error);
+    }
+  };
+
+  // 그룹 네비게이션
+  const navigateToGroup = async (groupId: number | null) => {
+    setCurrentParentId(groupId);
+    if (groupId === null) {
+      setBreadcrumb([]);
+    } else {
+      await loadBreadcrumb(groupId);
+    }
+    await fetchGroups(groupId);
+  };
+
+  // 하위 그룹 열기
+  const openSubgroups = (group: GroupWithHierarchy) => {
+    navigateToGroup(group.id);
   };
 
   useEffect(() => {
@@ -365,6 +401,14 @@ const ImageGroupsPage: React.FC = () => {
         </Typography>
       </Box>
 
+      {/* 브레드크럼 네비게이션 */}
+      {(currentParentId !== null || breadcrumb.length > 0) && (
+        <GroupBreadcrumb
+          breadcrumb={breadcrumb}
+          onNavigate={navigateToGroup}
+        />
+      )}
+
       {groups.length === 0 ? (
         <Box textAlign="center" py={8}>
           <GroupIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
@@ -463,6 +507,19 @@ const ImageGroupsPage: React.FC = () => {
                         size="small"
                         color="primary"
                         variant="outlined"
+                      />
+                    ) : null}
+                    {group.has_children ? (
+                      <Chip
+                        label={t('imageGroups:hierarchy.childGroups', { count: group.child_count })}
+                        size="small"
+                        color="secondary"
+                        variant="outlined"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openSubgroups(group);
+                        }}
+                        sx={{ cursor: 'pointer' }}
                       />
                     ) : null}
                   </Box>
