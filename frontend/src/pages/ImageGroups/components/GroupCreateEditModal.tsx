@@ -14,7 +14,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { groupApi } from '../../../services/api';
-import type { GroupWithStats, GroupCreateData, GroupUpdateData, AutoCollectCondition, ComplexFilter } from '@comfyui-image-manager/shared';
+import type { GroupWithStats, GroupWithHierarchy, GroupCreateData, GroupUpdateData, AutoCollectCondition, ComplexFilter } from '@comfyui-image-manager/shared';
 import BasicInfoTab from './BasicInfoTab';
 import AutoCollectTab from './AutoCollectTab';
 
@@ -56,13 +56,33 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
     name: '',
     description: '',
     color: '#2196f3',
+    parent_id: null as number | null,
     auto_collect_enabled: false,
   });
   const [conditions, setConditions] = useState<ComplexFilter>({});
+  const [availableParents, setAvailableParents] = useState<GroupWithHierarchy[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isEditMode = !!group;
+
+  // Load available parent groups
+  useEffect(() => {
+    if (open) {
+      loadAvailableParents();
+    }
+  }, [open]);
+
+  const loadAvailableParents = async () => {
+    try {
+      const response = await groupApi.getAllGroupsWithHierarchy();
+      if (response.success && response.data) {
+        setAvailableParents(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load parent groups:', error);
+    }
+  };
 
   // 폼 초기화
   useEffect(() => {
@@ -71,6 +91,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
         name: group.name,
         description: group.description || '',
         color: group.color || '#2196f3',
+        parent_id: group.parent_id || null,
         auto_collect_enabled: group.auto_collect_enabled,
       });
 
@@ -99,6 +120,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
         name: '',
         description: '',
         color: '#2196f3',
+        parent_id: null,
         auto_collect_enabled: false,
       });
       setConditions({});
@@ -164,6 +186,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
         name: formData.name.trim(),
         description: formData.description.trim() || undefined,
         color: formData.color,
+        parent_id: formData.parent_id,
         auto_collect_enabled: formData.auto_collect_enabled,
         auto_collect_conditions: formData.auto_collect_enabled && hasConditions
           ? conditions
@@ -219,6 +242,9 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
           <BasicInfoTab
             formData={formData}
             onFormChange={handleFormChange}
+            availableParents={availableParents}
+            currentGroupId={group?.id}
+            isEditMode={isEditMode}
           />
         </TabPanel>
 
