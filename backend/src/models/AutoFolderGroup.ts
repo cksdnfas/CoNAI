@@ -196,17 +196,28 @@ export class AutoFolderGroupImageModel {
   ): Promise<ImageMetadataRecord[]> {
     const offset = (page - 1) * pageSize;
 
-    const query = `
-      SELECT m.*
-      FROM auto_folder_group_images afgi
-      INNER JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
-      WHERE afgi.group_id = ?
-      ORDER BY m.first_seen_date DESC
-      LIMIT ? OFFSET ?
-    `;
+    try {
+      const query = `
+        SELECT m.*
+        FROM auto_folder_group_images afgi
+        INNER JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
+        WHERE afgi.group_id = ?
+        ORDER BY m.first_seen_date DESC
+        LIMIT ? OFFSET ?
+      `;
 
-    const rows = db.prepare(query).all(groupId, pageSize, offset) as ImageMetadataRecord[];
-    return rows || [];
+      const rows = db.prepare(query).all(groupId, pageSize, offset) as ImageMetadataRecord[];
+      return rows || [];
+    } catch (error) {
+      console.error('[AutoFolderGroup] Error in findImagesByGroup:', {
+        groupId,
+        page,
+        pageSize,
+        offset,
+        error: error instanceof Error ? error.message : error
+      });
+      throw error;
+    }
   }
 
   /**

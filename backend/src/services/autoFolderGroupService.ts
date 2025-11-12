@@ -138,16 +138,30 @@ export class AutoFolderGroupService {
    * 그룹의 이미지 조회 (페이징)
    */
   static async getGroupImages(groupId: number, page: number = 1, pageSize: number = 50) {
-    const images = await AutoFolderGroupImageModel.findImagesByGroup(groupId, page, pageSize);
-    const total = await AutoFolderGroupImageModel.getImageCount(groupId);
+    try {
+      console.log('[AutoFolderGroupService] getGroupImages called:', { groupId, page, pageSize });
 
-    return {
-      images,
-      total,
-      page,
-      pageSize,
-      totalPages: Math.ceil(total / pageSize)
-    };
+      const images = await AutoFolderGroupImageModel.findImagesByGroup(groupId, page, pageSize);
+      const total = await AutoFolderGroupImageModel.getImageCount(groupId);
+
+      console.log('[AutoFolderGroupService] getGroupImages result:', {
+        imagesCount: images.length,
+        total,
+        page,
+        pageSize
+      });
+
+      return {
+        images,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize)
+      };
+    } catch (error) {
+      console.error('[AutoFolderGroupService] Error in getGroupImages:', error);
+      throw error;
+    }
   }
 
   /**
