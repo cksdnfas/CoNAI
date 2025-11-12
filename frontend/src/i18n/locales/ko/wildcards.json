@@ -12,7 +12,13 @@
     "add": "와일드카드 추가",
     "addItem": "항목 추가",
     "preview": "미리보기",
-    "confirmDelete": "정말로 '{{name}}' 와일드카드를 삭제하시겠습니까?"
+    "confirmDelete": "정말로 '{{name}}' 와일드카드를 삭제하시겠습니까?",
+    "copiedToClipboard": "클립보드에 복사되었습니다",
+    "copyFailed": "복사에 실패했습니다"
+  },
+  "buttons": {
+    "openScanDialog": "LORA 스캔",
+    "openLogDialog": "마지막 스캔 로그"
   },
   "card": {
     "items": "{{count}}개 항목",
@@ -43,7 +49,8 @@
   "errors": {
     "nameRequired": "와일드카드 이름은 필수입니다",
     "itemsRequired": "최소 1개 이상의 항목이 필요합니다",
-    "previewTextRequired": "테스트할 프롬프트를 입력하세요"
+    "previewTextRequired": "테스트할 프롬프트를 입력하세요",
+    "copyFailed": "복사에 실패했습니다"
   },
   "tabs": {
     "manual": "수동 생성",
@@ -52,7 +59,7 @@
   "autoCollect": {
     "title": "LORA 와일드카드 자동 생성",
     "description": "LORA 폴더를 스캔하여 와일드카드를 자동 생성합니다",
-    "folderPath": "LORA 폴더 경로",
+    "folderPath": "LORA 폴더 선택",
     "folderPathHelper": "ComfyUI loras 폴더 또는 LORA 파일이 포함된 하위 폴더를 지정하세요",
     "loraWeight": "기본 LORA 가중치",
     "loraWeightHelper": "생성되는 와일드카드의 기본 가중치 값 (예: 1.0)",
@@ -81,5 +88,17 @@
       "invalidWeight": "유효한 가중치 값을 입력하세요 (0.1 ~ 2.0)",
       "scanFailed": "스캔 실패: {{error}}"
     }
+  },
+  "scanDialog": {
+    "title": "LORA 와일드카드 자동 생성",
+    "infoMessage": "ComfyUI의 loras 폴더 또는 LORA 파일이 포함된 폴더를 선택해주세요.",
+    "scanButton": "LORA 수집",
+    "warningTitle": "스캔 안내:",
+    "warning1": ".safetensors 파일을 자동으로 수집합니다",
+    "warning2": "같은 폴더를 다시 수집하면 항목이 최신화됩니다",
+    "warning3": "자동 수집된 항목은 이 탭에서 확인할 수 있습니다"
+  },
+  "logDialog": {
+    "title": "마지막 LORA 스캔 로그"
   }
 }

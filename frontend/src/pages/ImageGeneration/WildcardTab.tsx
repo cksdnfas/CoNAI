@@ -29,6 +29,7 @@ import {
   PlayArrow as PreviewIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import { useSnackbar } from 'notistack';
 import { wildcardApi, type WildcardWithItems, type WildcardCreateData, type WildcardUpdateData, type ToolItems } from '../../services/api/wildcardApi';
 import AutoCollectedWildcardsTab from './AutoCollectedWildcardsTab';
 
@@ -50,6 +51,7 @@ function TabPanel(props: TabPanelProps) {
 // 수동 생성 탭 컴포넌트
 function ManualWildcardsTab() {
   const { t } = useTranslation(['wildcards', 'common']);
+  const { enqueueSnackbar } = useSnackbar();
   const [wildcards, setWildcards] = useState<WildcardWithItems[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +87,9 @@ function ManualWildcardsTab() {
     try {
       setLoading(true);
       const response = await wildcardApi.getAllWildcards(true);
-      setWildcards(response.data || []);
+      // 자동 수집된 와일드카드는 수동 생성 탭에서 제외
+      const manualWildcards = (response.data || []).filter((wc: any) => wc.is_auto_collected !== 1);
+      setWildcards(manualWildcards);
       setError(null);
     } catch (err: any) {
       setError(err.response?.data?.error || err.message);
@@ -192,12 +196,13 @@ function ManualWildcardsTab() {
     }
   };
 
-  const handleDuplicate = (wildcard: WildcardWithItems) => {
-    handleOpenDialog({
-      ...wildcard,
-      id: 0,
-      name: `${wildcard.name}_copy`
-    });
+  const handleCopyName = async (wildcardName: string) => {
+    try {
+      await navigator.clipboard.writeText(`++${wildcardName}++`);
+      enqueueSnackbar(t('wildcards:actions.copiedToClipboard'), { variant: 'success' });
+    } catch (err) {
+      enqueueSnackbar(t('wildcards:errors.copyFailed'), { variant: 'error' });
+    }
   };
 
   const handleAddItem = (tool: 'comfyui' | 'nai') => {
@@ -297,7 +302,18 @@ function ManualWildcardsTab() {
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                 <Box>
-                  <Typography variant="h6" component="div">
+                  <Typography
+                    variant="h6"
+                    component="div"
+                    onClick={() => handleCopyName(wildcard.name)}
+                    sx={{
+                      cursor: 'pointer',
+                      '&:hover': {
+                        color: 'primary.main',
+                        textDecoration: 'underline'
+                      }
+                    }}
+                  >
                     ++{wildcard.name}++
                   </Typography>
                   {wildcard.description && (
@@ -307,7 +323,7 @@ function ManualWildcardsTab() {
                   )}
                 </Box>
                 <Box sx={{ display: 'flex', gap: 1 }}>
-                  <IconButton size="small" onClick={() => handleDuplicate(wildcard)}>
+                  <IconButton size="small" onClick={() => handleCopyName(wildcard.name)}>
                     <CopyIcon fontSize="small" />
                   </IconButton>
                   <IconButton size="small" onClick={() => handleOpenDialog(wildcard)}>

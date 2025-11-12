@@ -21,15 +21,17 @@ import {
   List,
   ListItem,
   ListItemText,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import {
   FolderOpen as FolderIcon,
   Refresh as RefreshIcon,
   Delete as DeleteIcon,
-  ExpandMore as ExpandMoreIcon
+  History as HistoryIcon,
+  Upload as UploadIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import {
@@ -56,6 +58,10 @@ export default function AutoCollectedWildcardsTab() {
 
   // Last scan log
   const [lastScanLog, setLastScanLog] = useState<LoraScanLog | null>(null);
+
+  // Modal states
+  const [openScanDialog, setOpenScanDialog] = useState(false);
+  const [openLogDialog, setOpenLogDialog] = useState(false);
 
   useEffect(() => {
     loadAutoWildcards();
@@ -157,6 +163,10 @@ export default function AutoCollectedWildcardsTab() {
       await loadAutoWildcards();
       await loadLastScanLog();
 
+      // Close dialog and reset
+      setOpenScanDialog(false);
+      setSelectedFiles([]);
+
       alert(`${t('common:success')}! ${response.data.created} ${t('wildcards:autoCollect.scanLog.totalWildcards')}`);
     } catch (err: any) {
       setScanError(
@@ -167,6 +177,28 @@ export default function AutoCollectedWildcardsTab() {
     } finally {
       setScanning(false);
     }
+  };
+
+  const handleOpenScanDialog = () => {
+    setScanError(null);
+    setSelectedFiles([]);
+    setOpenScanDialog(true);
+  };
+
+  const handleCloseScanDialog = () => {
+    if (!scanning) {
+      setOpenScanDialog(false);
+      setScanError(null);
+      setSelectedFiles([]);
+    }
+  };
+
+  const handleOpenLogDialog = () => {
+    setOpenLogDialog(true);
+  };
+
+  const handleCloseLogDialog = () => {
+    setOpenLogDialog(false);
   };
 
   const handleDelete = async (id: number) => {
@@ -193,141 +225,29 @@ export default function AutoCollectedWildcardsTab() {
 
   return (
     <Box>
-      {/* Scan Form */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          {t('wildcards:autoCollect.title')}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          {t('wildcards:autoCollect.description')}
-        </Typography>
-
-        <Stack spacing={3}>
-          {/* Folder Selection */}
-          <Box>
-            <input
-              type="file"
-              id="lora-folder-input"
-              style={{ display: 'none' }}
-              // @ts-ignore - webkitdirectory is not in TypeScript definitions
-              webkitdirectory=""
-              directory=""
-              multiple
-              onChange={handleFileSelect}
-            />
-            <label htmlFor="lora-folder-input">
-              <Button
-                variant="outlined"
-                component="span"
-                fullWidth
-                startIcon={<FolderIcon />}
-                sx={{ py: 1.5 }}
-              >
-                {selectedFiles.length > 0
-                  ? `${selectedFiles.length} ${t('wildcards:autoCollect.folderPath')} 선택됨`
-                  : t('wildcards:autoCollect.folderPath')}
-              </Button>
-            </label>
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-              {t('wildcards:autoCollect.folderPathHelper')}
-            </Typography>
-          </Box>
-
-          {/* LORA Weight */}
-          <TextField
-            fullWidth
-            type="number"
-            label={t('wildcards:autoCollect.loraWeight')}
-            value={loraWeight}
-            onChange={(e) => setLoraWeight(parseFloat(e.target.value))}
-            helperText={t('wildcards:autoCollect.loraWeightHelper')}
-            inputProps={{ min: 0.1, max: 2.0, step: 0.1 }}
-          />
-
-          {/* Duplicate Handling */}
-          <FormControl component="fieldset">
-            <FormLabel component="legend">{t('wildcards:autoCollect.duplicateHandling')}</FormLabel>
-            <RadioGroup
-              value={duplicateHandling}
-              onChange={(e) => setDuplicateHandling(e.target.value as 'number' | 'parent')}
-            >
-              <FormControlLabel
-                value="number"
-                control={<Radio />}
-                label={t('wildcards:autoCollect.duplicateNumber')}
-              />
-              <FormControlLabel
-                value="parent"
-                control={<Radio />}
-                label={t('wildcards:autoCollect.duplicateParent')}
-              />
-            </RadioGroup>
-          </FormControl>
-
-          {/* Error Alert */}
-          {scanError && (
-            <Alert severity="error" onClose={() => setScanError(null)}>
-              {scanError}
-            </Alert>
-          )}
-
-          {/* Scan Button */}
+      {/* Header with Action Buttons */}
+      <Box sx={{ display: 'flex', gap: 1, mb: 3 }}>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<UploadIcon />}
+          onClick={handleOpenScanDialog}
+          color="primary"
+        >
+          {t('wildcards:buttons.openScanDialog')}
+        </Button>
+        {lastScanLog && (
           <Button
-            variant="contained"
-            size="large"
-            onClick={handleScan}
-            disabled={scanning}
-            startIcon={scanning ? <CircularProgress size={20} /> : <RefreshIcon />}
+            variant="outlined"
+            size="small"
+            startIcon={<HistoryIcon />}
+            onClick={handleOpenLogDialog}
+            color="secondary"
           >
-            {scanning ? t('wildcards:autoCollect.scanning') : t('wildcards:autoCollect.scanButton')}
+            {t('wildcards:buttons.openLogDialog')}
           </Button>
-        </Stack>
-      </Paper>
-
-      {/* Last Scan Log */}
-      {lastScanLog && (
-        <Accordion sx={{ mb: 3 }}>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography variant="h6">{t('wildcards:autoCollect.scanLog.title')}</Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <Stack spacing={2}>
-              <Box>
-                <Typography variant="subtitle2" color="text.secondary">
-                  {t('wildcards:autoCollect.scanLog.timestamp')}
-                </Typography>
-                <Typography>{new Date(lastScanLog.timestamp).toLocaleString()}</Typography>
-              </Box>
-              <Stack direction="row" spacing={4}>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    {t('wildcards:autoCollect.scanLog.totalWildcards')}
-                  </Typography>
-                  <Typography variant="h6">{lastScanLog.totalWildcards}</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    {t('wildcards:autoCollect.scanLog.totalItems')}
-                  </Typography>
-                  <Typography variant="h6">{lastScanLog.totalItems}</Typography>
-                </Box>
-              </Stack>
-              <Divider />
-              <Typography variant="subtitle2">{t('wildcards:autoCollect.scanLog.details')}</Typography>
-              <List dense>
-                {lastScanLog.wildcards.map((wc) => (
-                  <ListItem key={wc.id}>
-                    <ListItemText
-                      primary={`++${wc.name}++`}
-                      secondary={`${wc.folderName} (${wc.itemCount} ${t('wildcards:autoCollect.scanLog.itemCount')})`}
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </Stack>
-          </AccordionDetails>
-        </Accordion>
-      )}
+        )}
+      </Box>
 
       {/* Auto-Collected Wildcards List */}
       <Typography variant="h6" gutterBottom>
@@ -408,6 +328,174 @@ export default function AutoCollectedWildcardsTab() {
           ))}
         </Stack>
       )}
+
+      {/* LORA Scan Dialog */}
+      <Dialog
+        open={openScanDialog}
+        onClose={handleCloseScanDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>{t('wildcards:scanDialog.title')}</DialogTitle>
+        <DialogContent>
+          {scanError && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setScanError(null)}>
+              {scanError}
+            </Alert>
+          )}
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            <Alert severity="info">{t('wildcards:scanDialog.infoMessage')}</Alert>
+
+            {/* Folder Selection */}
+            <input
+              type="file"
+              id="lora-folder-input-dialog"
+              style={{ display: 'none' }}
+              // @ts-ignore - webkitdirectory is not in TypeScript definitions
+              webkitdirectory=""
+              directory=""
+              multiple
+              onChange={handleFileSelect}
+            />
+            <label htmlFor="lora-folder-input-dialog">
+              <Button
+                variant="contained"
+                component="span"
+                fullWidth
+                size="large"
+                startIcon={<FolderIcon />}
+              >
+                {selectedFiles.length > 0
+                  ? `${selectedFiles.length}개 LORA 파일 선택됨`
+                  : t('wildcards:autoCollect.folderPath')}
+              </Button>
+            </label>
+
+            {/* Preview Selected Files */}
+            {selectedFiles.length > 0 && (
+              <Alert severity="success">
+                <strong>{selectedFiles.length}개 LORA 파일</strong>을 발견했습니다:
+                <Box component="ul" sx={{ mt: 1, mb: 0 }}>
+                  {selectedFiles.slice(0, 5).map((file, idx) => (
+                    <li key={idx}>
+                      <strong>{file.loraName}</strong>
+                      {file.promptLines.length > 0 && ` (${file.promptLines.length}개 프롬프트)`}
+                    </li>
+                  ))}
+                  {selectedFiles.length > 5 && (
+                    <li>...외 {selectedFiles.length - 5}개 파일</li>
+                  )}
+                </Box>
+              </Alert>
+            )}
+
+            {/* LORA Weight */}
+            <TextField
+              fullWidth
+              type="number"
+              label={t('wildcards:autoCollect.loraWeight')}
+              value={loraWeight}
+              onChange={(e) => setLoraWeight(parseFloat(e.target.value))}
+              helperText={t('wildcards:autoCollect.loraWeightHelper')}
+              inputProps={{ min: 0.1, max: 2.0, step: 0.1 }}
+            />
+
+            {/* Duplicate Handling */}
+            <FormControl component="fieldset">
+              <FormLabel component="legend">{t('wildcards:autoCollect.duplicateHandling')}</FormLabel>
+              <RadioGroup
+                value={duplicateHandling}
+                onChange={(e) => setDuplicateHandling(e.target.value as 'number' | 'parent')}
+              >
+                <FormControlLabel
+                  value="number"
+                  control={<Radio />}
+                  label={t('wildcards:autoCollect.duplicateNumber')}
+                />
+                <FormControlLabel
+                  value="parent"
+                  control={<Radio />}
+                  label={t('wildcards:autoCollect.duplicateParent')}
+                />
+              </RadioGroup>
+            </FormControl>
+
+            <Alert severity="warning">
+              <strong>{t('wildcards:scanDialog.warningTitle')}</strong>
+              <Box component="ul" sx={{ mt: 1, mb: 0 }}>
+                <li>{t('wildcards:scanDialog.warning1')}</li>
+                <li>{t('wildcards:scanDialog.warning2')}</li>
+                <li>{t('wildcards:scanDialog.warning3')}</li>
+              </Box>
+            </Alert>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseScanDialog} disabled={scanning}>
+            {t('common:cancel')}
+          </Button>
+          <Button
+            onClick={handleScan}
+            variant="contained"
+            disabled={selectedFiles.length === 0 || scanning}
+            startIcon={scanning ? <CircularProgress size={16} /> : <UploadIcon />}
+          >
+            {scanning ? t('wildcards:autoCollect.scanning') : t('wildcards:scanDialog.scanButton')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Scan Log Dialog */}
+      <Dialog
+        open={openLogDialog}
+        onClose={handleCloseLogDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{t('wildcards:logDialog.title')}</DialogTitle>
+        <DialogContent>
+          {lastScanLog && (
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary">
+                  {t('wildcards:autoCollect.scanLog.timestamp')}
+                </Typography>
+                <Typography>{new Date(lastScanLog.timestamp).toLocaleString()}</Typography>
+              </Box>
+              <Stack direction="row" spacing={4}>
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    {t('wildcards:autoCollect.scanLog.totalWildcards')}
+                  </Typography>
+                  <Typography variant="h6">{lastScanLog.totalWildcards}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    {t('wildcards:autoCollect.scanLog.totalItems')}
+                  </Typography>
+                  <Typography variant="h6">{lastScanLog.totalItems}</Typography>
+                </Box>
+              </Stack>
+              <Divider />
+              <Typography variant="subtitle2">{t('wildcards:autoCollect.scanLog.details')}</Typography>
+              <List dense>
+                {lastScanLog.wildcards.map((wc) => (
+                  <ListItem key={wc.id}>
+                    <ListItemText
+                      primary={`++${wc.name}++`}
+                      secondary={`${wc.folderName} (${wc.itemCount} ${t('wildcards:autoCollect.scanLog.itemCount')})`}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseLogDialog}>{t('common:close')}</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

@@ -1,5 +1,5 @@
 import { Database } from 'better-sqlite3';
-import { getDb } from '../database';
+import { db } from '../database/init';
 
 /**
  * 그룹 계층 구조 관리 서비스
@@ -28,7 +28,7 @@ export class GroupHierarchyService {
   private db: Database;
 
   constructor() {
-    this.db = getDb();
+    this.db = db;
   }
 
   /**
