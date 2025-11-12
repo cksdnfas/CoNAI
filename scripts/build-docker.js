@@ -117,7 +117,9 @@ const productionPackageJson = {
     "sharp": "^0.33.0",
     "better-sqlite3": "^9.4.0",
     "argon2": "^0.44.0",
-    "blake2": "^5.0.0"
+    "blake2": "^5.0.0",
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0"
   },
   engines: {
     "node": ">=20.0.0"

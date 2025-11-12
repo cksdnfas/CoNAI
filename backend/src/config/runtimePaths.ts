@@ -26,7 +26,15 @@ const basePath = (() => {
 // Helper function to resolve individual paths with environment variable support
 function resolvePath(envVar: string | undefined, defaultPath: string): string {
   if (envVar && envVar.trim().length > 0) {
-    return path.resolve(envVar.trim());
+    // Remove inline comments (anything after #) to prevent malformed paths
+    // This handles cases like: RUNTIME_UPLOADS_DIR=E:/img/Images # comment
+    const cleaned = envVar.trim().split('#')[0].trim();
+
+    if (cleaned.length > 0) {
+      const resolved = path.resolve(cleaned);
+      console.log(`✅ Using custom path: ${resolved}`);
+      return resolved;
+    }
   }
   return defaultPath;
 }

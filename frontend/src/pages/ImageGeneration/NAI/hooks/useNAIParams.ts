@@ -2,12 +2,7 @@ import { useState, useEffect } from 'react';
 import { DEFAULT_PARAMS, PARAMS_STORAGE_KEY } from '../constants/nai.constants';
 import type { NAIParams } from '../types/nai.types';
 
-interface UseNAIParamsOptions {
-  externalPrompt?: string;
-  onPromptChange?: (prompt: string) => void;
-}
-
-export function useNAIParams({ externalPrompt, onPromptChange }: UseNAIParamsOptions = {}) {
+export function useNAIParams() {
   const [params, setParams] = useState<NAIParams>(getInitialParams);
 
   // LocalStorage에서 저장된 파라미터 불러오기
@@ -32,21 +27,6 @@ export function useNAIParams({ externalPrompt, onPromptChange }: UseNAIParamsOpt
     // 기본값
     return { ...DEFAULT_PARAMS };
   }
-
-  // 외부 프롬프트와 동기화
-  useEffect(() => {
-    if (externalPrompt !== undefined && externalPrompt !== params.prompt) {
-      setParams((prev) => ({ ...prev, prompt: externalPrompt }));
-    }
-  }, [externalPrompt]);
-
-  // 프롬프트 변경 시 외부로 전달
-  useEffect(() => {
-    if (onPromptChange && params.prompt !== externalPrompt) {
-      onPromptChange(params.prompt);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.prompt, onPromptChange]);
 
   // 파라미터 변경 시 LocalStorage에 저장 (프롬프트 제외)
   useEffect(() => {

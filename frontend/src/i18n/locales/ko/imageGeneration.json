@@ -12,8 +12,7 @@
   "nai": {
     "subtabs": {
       "generate": "이미지 생성",
-      "history": "히스토리",
-      "helper": "프롬프트 도우미"
+      "history": "히스토리"
     },
     "login": {
       "title": "NovelAI 로그인",
@@ -34,8 +33,7 @@
     },
     "tabs": {
       "basic": "기본 설정",
-      "advanced": "고급 설정",
-      "helper": "프롬프트 도우미"
+      "advanced": "고급 설정"
     },
     "sections": {
       "preset": "품질 프리셋",
@@ -101,17 +99,6 @@
         "name": "디테일",
         "description": "최고 디테일 (50 steps, DPM++ SDE, SMEA DYN)"
       }
-    },
-    "promptHelper": {
-      "title": "프롬프트 도우미",
-      "examples": "예제 프롬프트",
-      "characters": "캐릭터",
-      "styles": "스타일",
-      "environments": "환경",
-      "lighting": "조명",
-      "copy": "복사",
-      "use": "사용",
-      "backToGenerate": "생성 화면으로 돌아가기"
     },
     "gallery": {
       "images": "이미지",

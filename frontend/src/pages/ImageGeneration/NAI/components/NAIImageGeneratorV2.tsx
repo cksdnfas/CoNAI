@@ -21,20 +21,16 @@ import { RESOLUTIONS } from '../constants/nai.constants';
 interface NAIImageGeneratorV2Props {
   token: string;
   onLogout: () => void;
-  externalPrompt?: string;
-  onPromptChange?: (prompt: string) => void;
 }
 
 export default function NAIImageGeneratorV2({
   token,
-  onLogout,
-  externalPrompt,
-  onPromptChange
+  onLogout
 }: NAIImageGeneratorV2Props) {
   const { t } = useTranslation(['imageGeneration']);
 
   // Custom hooks
-  const { params, setParams } = useNAIParams({ externalPrompt, onPromptChange });
+  const { params, setParams } = useNAIParams();
   const {
     selectedGroupId,
     selectedGroup,

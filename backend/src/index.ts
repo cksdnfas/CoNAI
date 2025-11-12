@@ -1,3 +1,7 @@
+// Load environment variables from .env file FIRST
+// This must be done before any other imports that depend on process.env
+import 'dotenv/config';
+
 // Configure NODE_PATH for native modules in SEA (Single Executable Application)
 // This must be done before any imports that depend on native modules
 if (process.env.NODE_ENV === 'production' || process.execPath.includes('comfyui-image-manager')) {

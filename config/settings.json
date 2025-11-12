@@ -1,15 +1,21 @@
 {
   "general": {
-    "language": "ko"
+    "language": "ko",
+    "deleteProtection": {
+      "enabled": true,
+      "recycleBinPath": "RecycleBin"
+    },
+    "enableGallery": true,
+    "autoCleanupCanvasOnShutdown": false
   },
   "tagger": {
     "enabled": false,
+    "autoTagOnUpload": false,
     "model": "vit",
     "device": "auto",
     "generalThreshold": 0.35,
     "characterThreshold": 0.75,
     "pythonPath": "python",
-    "autoTagOnUpload": false,
     "keepModelLoaded": false,
     "autoUnloadMinutes": 5
   },

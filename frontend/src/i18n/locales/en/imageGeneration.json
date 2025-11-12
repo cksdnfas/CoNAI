@@ -12,8 +12,7 @@
   "nai": {
     "subtabs": {
       "generate": "Generate",
-      "history": "History",
-      "helper": "Prompt Helper"
+      "history": "History"
     },
     "login": {
       "title": "NovelAI Login",
@@ -34,8 +33,7 @@
     },
     "tabs": {
       "basic": "Basic Settings",
-      "advanced": "Advanced Settings",
-      "helper": "Prompt Helper"
+      "advanced": "Advanced Settings"
     },
     "sections": {
       "preset": "Quality Presets",
@@ -104,17 +102,6 @@
         "name": "Detail",
         "description": "Maximum detail (50 steps, DPM++ SDE, SMEA DYN)"
       }
-    },
-    "promptHelper": {
-      "title": "Prompt Helper",
-      "examples": "Example Prompts",
-      "characters": "Characters",
-      "styles": "Styles",
-      "environments": "Environments",
-      "lighting": "Lighting",
-      "copy": "Copy",
-      "use": "Use",
-      "backToGenerate": "Back to Generate"
     },
     "gallery": {
       "images": "Images",
