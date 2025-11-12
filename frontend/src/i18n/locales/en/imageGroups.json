@@ -1,9 +1,11 @@
 {
   "page": {
-    "title": "Image Groups",
-    "description": "Manage images by groups and configure auto-collection rules.",
+    "title": "Media Groups",
+    "description": "",
     "emptyTitle": "No groups created yet",
-    "emptyDescription": "Create a new group to systematically manage your images."
+    "emptyDescription": "Create a new group to systematically manage your images.",
+    "customGroupsTab": "Custom Groups",
+    "autoFolderGroupsTab": "Auto Folder Groups"
   },
   "groupCard": {
     "imageCount": "{{count}} images",

@@ -15,6 +15,8 @@ import {
   Snackbar,
   CircularProgress,
   Container,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -36,6 +38,7 @@ import { GroupBreadcrumb } from './components/GroupBreadcrumb';
 
 const ImageGroupsPage: React.FC = () => {
   const { t } = useTranslation(['imageGroups', 'common']);
+  const [tabValue, setTabValue] = useState(0);
   const [groups, setGroups] = useState<GroupWithHierarchy[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedGroup, setSelectedGroup] = useState<GroupWithHierarchy | null>(null);
@@ -396,11 +399,16 @@ const ImageGroupsPage: React.FC = () => {
         <Typography variant="h4" component="h1" gutterBottom>
           {t('imageGroups:page.title')}
         </Typography>
-        <Typography variant="body1" color="text.secondary">
-          {t('imageGroups:page.description')}
-        </Typography>
+
+        {/* 탭 네비게이션 */}
+        <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mt: 2, borderBottom: 1, borderColor: 'divider' }}>
+          <Tab label={t('imageGroups:page.customGroupsTab')} />
+          <Tab label={t('imageGroups:page.autoFolderGroupsTab')} />
+        </Tabs>
       </Box>
 
+      {/* 커스텀 그룹 탭 */}
+      {tabValue === 0 && (<>
       {/* 브레드크럼 네비게이션 */}
       {(currentParentId !== null || breadcrumb.length > 0) && (
         <GroupBreadcrumb
@@ -627,6 +635,16 @@ const ImageGroupsPage: React.FC = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+      </>)}
+
+      {/* 자동폴더 그룹 탭 */}
+      {tabValue === 1 && (
+        <Box sx={{ p: 3, textAlign: 'center' }}>
+          <Typography variant="h6" color="text.secondary">
+            자동폴더 그룹 기능 준비 중...
+          </Typography>
+        </Box>
+      )}
     </Container>
   );
 };

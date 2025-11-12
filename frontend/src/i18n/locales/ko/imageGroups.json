@@ -1,9 +1,11 @@
 {
   "page": {
-    "title": "이미지 그룹",
-    "description": "이미지를 그룹별로 관리하고 자동 수집 규칙을 설정할 수 있습니다.",
+    "title": "미디어 그룹",
+    "description": "",
     "emptyTitle": "아직 생성된 그룹이 없습니다",
-    "emptyDescription": "새 그룹을 만들어서 이미지를 체계적으로 관리해보세요."
+    "emptyDescription": "새 그룹을 만들어서 이미지를 체계적으로 관리해보세요.",
+    "customGroupsTab": "커스텀 그룹",
+    "autoFolderGroupsTab": "자동폴더 그룹"
   },
   "groupCard": {
     "imageCount": "{{count}}개 이미지",
