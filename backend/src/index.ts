@@ -31,6 +31,7 @@ import promptCollectionRoutes from './routes/promptCollection';
 import promptGroupRoutes from './routes/promptGroups';
 import negativePromptGroupRoutes from './routes/negativePromptGroups';
 import { groupRoutes } from './routes/groups';
+import autoFolderGroupRoutes from './routes/autoFolderGroups';
 import { settingsRoutes } from './routes/settings';
 import { workflowRoutes } from './routes/workflows';
 import { comfyuiServerRoutes } from './routes/comfyuiServers';
@@ -229,6 +230,7 @@ async function registerRoutes() {
   app.use('/api/prompt-groups', readOnlyLimiter, optionalAuth, promptGroupRoutes);
   app.use('/api/negative-prompt-groups', readOnlyLimiter, optionalAuth, negativePromptGroupRoutes);
   app.use('/api/groups', readOnlyLimiter, optionalAuth, groupRoutes);
+  app.use('/api/auto-folder-groups', readOnlyLimiter, optionalAuth, autoFolderGroupRoutes);
   app.use('/api/settings', optionalAuth, settingsRoutes);
   app.use('/api/workflows', readOnlyLimiter, optionalAuth, workflowRoutes);
   app.use('/api/comfyui-servers', optionalAuth, comfyuiServerRoutes);
