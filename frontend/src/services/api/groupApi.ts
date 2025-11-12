@@ -14,9 +14,13 @@ import type {
   GroupRecord,
   GroupResponse,
   GroupWithStats,
+  GroupWithHierarchy,
   GroupCreateData,
   GroupUpdateData,
   AutoCollectResult,
+  BreadcrumbItem,
+  HierarchyValidation,
+  GroupMoveRequest,
 } from '@comfyui-image-manager/shared';
 
 export const groupApi = {
@@ -234,6 +238,79 @@ export const groupApi = {
     error?: string;
   }> => {
     const response = await apiClient.get(`/api/groups/${id}/file-counts`);
+    return response.data;
+  },
+
+  // ===== Hierarchy-related methods =====
+
+  /**
+   * Get root groups (groups with no parent)
+   */
+  getRootGroups: async (): Promise<{
+    success: boolean;
+    data?: GroupWithHierarchy[];
+    error?: string;
+  }> => {
+    const response = await apiClient.get('/api/groups/hierarchy/roots');
+    return response.data;
+  },
+
+  /**
+   * Get child groups of a specific parent
+   */
+  getChildGroups: async (parentId: number): Promise<{
+    success: boolean;
+    data?: GroupWithHierarchy[];
+    error?: string;
+  }> => {
+    const response = await apiClient.get(`/api/groups/${parentId}/children`);
+    return response.data;
+  },
+
+  /**
+   * Get breadcrumb path for a group (from root to current)
+   */
+  getBreadcrumbPath: async (groupId: number): Promise<{
+    success: boolean;
+    data?: BreadcrumbItem[];
+    error?: string;
+  }> => {
+    const response = await apiClient.get(`/api/groups/${groupId}/breadcrumb`);
+    return response.data;
+  },
+
+  /**
+   * Move group to a new parent
+   */
+  moveGroup: async (groupId: number, newParentId: number | null): Promise<GroupResponse> => {
+    const requestData: GroupMoveRequest = { parent_id: newParentId };
+    const response = await apiClient.post(`/api/groups/${groupId}/move`, requestData);
+    return response.data;
+  },
+
+  /**
+   * Validate hierarchy before moving/updating
+   */
+  validateHierarchy: async (groupId: number, newParentId: number | null): Promise<{
+    success: boolean;
+    data?: HierarchyValidation;
+    error?: string;
+  }> => {
+    const response = await apiClient.post(`/api/groups/${groupId}/validate-hierarchy`, {
+      parent_id: newParentId,
+    });
+    return response.data;
+  },
+
+  /**
+   * Get all groups with hierarchy information
+   */
+  getAllGroupsWithHierarchy: async (): Promise<{
+    success: boolean;
+    data?: GroupWithHierarchy[];
+    error?: string;
+  }> => {
+    const response = await apiClient.get('/api/groups/hierarchy/all');
     return response.data;
   },
 };
