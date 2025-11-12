@@ -1,0 +1,85 @@
+{
+  "page": {
+    "title": "萬用字元管理",
+    "noWildcards": "沒有註冊的萬用字元",
+    "noWildcardsDesc": "新增萬用字元以自動化提示詞生成"
+  },
+  "filters": {
+    "all": "全部",
+    "both": "通用"
+  },
+  "actions": {
+    "add": "新增萬用字元",
+    "addItem": "新增項目",
+    "preview": "預覽",
+    "confirmDelete": "確定要刪除'{{name}}'萬用字元嗎?"
+  },
+  "card": {
+    "items": "{{count}}個項目",
+    "itemsCount": "個",
+    "moreItems": "和其他{{count}}個"
+  },
+  "dialog": {
+    "createTitle": "建立萬用字元",
+    "editTitle": "編輯萬用字元"
+  },
+  "form": {
+    "name": "名稱",
+    "nameHelper": "請輸入不帶++的名稱 (例如: 花, 顏色)",
+    "description": "描述 (選填)",
+    "comfyuiItems": "ComfyUI提示詞項目",
+    "naiItems": "NovelAI提示詞項目",
+    "itemsHelper": "每個項目可以包含逗號分隔的詞語。您可以使用++名稱++格式嵌套其他萬用字元。",
+    "itemPlaceholder": "例如: 玫瑰, 紅色, 刺 或 枯萎, ++花++"
+  },
+  "preview": {
+    "title": "萬用字元預覽",
+    "inputLabel": "測試提示詞",
+    "inputPlaceholder": "例如: 盛開著++花++的花園, ++顏色++的天空",
+    "generate": "生成結果",
+    "results": "解析結果 (隨機5次)",
+    "result": "結果 {{number}}"
+  },
+  "errors": {
+    "nameRequired": "萬用字元名稱為必填項",
+    "itemsRequired": "至少需要一個項目",
+    "previewTextRequired": "請輸入要測試的提示詞"
+  },
+  "tabs": {
+    "manual": "手動建立",
+    "autoCollected": "自動收集 (LORA)"
+  },
+  "autoCollect": {
+    "title": "LORA萬用字元自動生成",
+    "description": "掃描LORA資料夾以自動生成萬用字元",
+    "folderPath": "LORA資料夾路徑",
+    "folderPathHelper": "指定ComfyUI loras資料夾或包含LORA檔案的子資料夾",
+    "loraWeight": "預設LORA權重",
+    "loraWeightHelper": "生成萬用字元的預設權重值 (例如: 1.0)",
+    "duplicateHandling": "重複名稱處理方式",
+    "duplicateNumber": "數字後綴 (style, style_2)",
+    "duplicateParent": "包含父資料夾 (anime_style, realistic_style)",
+    "scanButton": "掃描LORA資料夾",
+    "scanning": "掃描中...",
+    "lastScan": "最後掃描",
+    "noScanYet": "尚未執行掃描",
+    "scanLog": {
+      "title": "掃描記錄",
+      "timestamp": "掃描時間",
+      "folderPath": "掃描路徑",
+      "totalWildcards": "生成的萬用字元",
+      "totalItems": "總項目數",
+      "details": "詳細資訊",
+      "wildcardName": "萬用字元名稱",
+      "itemCount": "項目數"
+    },
+    "noAutoWildcards": "沒有自動收集的萬用字元",
+    "noAutoWildcardsDesc": "掃描LORA資料夾以生成萬用字元",
+    "autoCollectedBadge": "自動",
+    "errors": {
+      "folderPathRequired": "LORA資料夾路徑為必填項",
+      "invalidWeight": "請輸入有效的權重值 (0.1 ~ 2.0)",
+      "scanFailed": "掃描失敗: {{error}}"
+    }
+  }
+}

@@ -44,5 +44,42 @@
     "nameRequired": "Wildcard name is required",
     "itemsRequired": "At least one item is required",
     "previewTextRequired": "Please enter a prompt to test"
+  },
+  "tabs": {
+    "manual": "Manual Creation",
+    "autoCollected": "Auto-Collected (LORA)"
+  },
+  "autoCollect": {
+    "title": "LORA Wildcard Auto-Generation",
+    "description": "Scan LORA folders to automatically generate wildcards",
+    "folderPath": "LORA Folder Path",
+    "folderPathHelper": "Specify ComfyUI loras folder or subfolder containing LORA files",
+    "loraWeight": "Default LORA Weight",
+    "loraWeightHelper": "Default weight value for generated wildcards (e.g., 1.0)",
+    "duplicateHandling": "Duplicate Name Handling",
+    "duplicateNumber": "Number suffix (style, style_2)",
+    "duplicateParent": "Include parent folder (anime_style, realistic_style)",
+    "scanButton": "Scan LORA Folder",
+    "scanning": "Scanning...",
+    "lastScan": "Last Scan",
+    "noScanYet": "No scan has been performed yet",
+    "scanLog": {
+      "title": "Scan Log",
+      "timestamp": "Scan Time",
+      "folderPath": "Scan Path",
+      "totalWildcards": "Generated Wildcards",
+      "totalItems": "Total Items",
+      "details": "Details",
+      "wildcardName": "Wildcard Name",
+      "itemCount": "Item Count"
+    },
+    "noAutoWildcards": "No auto-collected wildcards",
+    "noAutoWildcardsDesc": "Scan a LORA folder to generate wildcards",
+    "autoCollectedBadge": "Auto",
+    "errors": {
+      "folderPathRequired": "LORA folder path is required",
+      "invalidWeight": "Please enter a valid weight value (0.1 ~ 2.0)",
+      "scanFailed": "Scan failed: {{error}}"
+    }
   }
 }

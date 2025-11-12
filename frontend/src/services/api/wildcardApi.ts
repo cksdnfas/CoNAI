@@ -72,6 +72,32 @@ export interface CircularCheckResponse {
   circularPath: string[];
 }
 
+export interface LoraScanRequest {
+  folderPath: string;
+  loraWeight: number;
+  duplicateHandling: 'number' | 'parent';
+}
+
+export interface LoraScanLog {
+  timestamp: string;
+  folderPath: string;
+  loraWeight: number;
+  duplicateHandling: 'number' | 'parent';
+  totalWildcards: number;
+  totalItems: number;
+  wildcards: Array<{
+    id: number;
+    name: string;
+    itemCount: number;
+    folderName: string;
+  }>;
+}
+
+export interface LoraScanResponse {
+  created: number;
+  log: LoraScanLog;
+}
+
 export const wildcardApi = {
   /**
    * 모든 와일드카드 조회
@@ -161,6 +187,27 @@ export const wildcardApi = {
   checkCircularReference: async (id: number) => {
     const response = await api.get<{ success: boolean; data: CircularCheckResponse }>(
       `/wildcards/${id}/circular-check`
+    );
+    return response.data;
+  },
+
+  /**
+   * LORA 폴더 스캔하여 와일드카드 자동 생성
+   */
+  scanLoraFolder: async (scanRequest: LoraScanRequest) => {
+    const response = await api.post<{ success: boolean; data: LoraScanResponse }>(
+      '/wildcards/scan-lora-folder',
+      scanRequest
+    );
+    return response.data;
+  },
+
+  /**
+   * 마지막 LORA 스캔 로그 조회
+   */
+  getLastScanLog: async () => {
+    const response = await api.get<{ success: boolean; data: LoraScanLog | null }>(
+      '/wildcards/last-scan-log'
     );
     return response.data;
   }

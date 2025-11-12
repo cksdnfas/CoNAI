@@ -166,14 +166,12 @@ function createTables(): void {
     CREATE TABLE IF NOT EXISTS wildcards (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
-      category TEXT DEFAULT 'uncategorized',
-      content TEXT NOT NULL,
       description TEXT,
-      tags TEXT,
-      is_active BOOLEAN DEFAULT 1,
-      usage_count INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      is_auto_collected INTEGER DEFAULT 0,
+      source_path TEXT,
+      lora_weight REAL DEFAULT 1.0,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -182,9 +180,10 @@ function createTables(): void {
     CREATE TABLE IF NOT EXISTS wildcard_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       wildcard_id INTEGER NOT NULL,
-      item_text TEXT NOT NULL,
-      weight REAL DEFAULT 1.0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      tool TEXT NOT NULL CHECK(tool IN ('comfyui', 'nai')),
+      content TEXT NOT NULL,
+      order_index INTEGER NOT NULL DEFAULT 0,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (wildcard_id) REFERENCES wildcards(id) ON DELETE CASCADE
     )
   `);
@@ -245,10 +244,9 @@ function createTables(): void {
     'CREATE INDEX IF NOT EXISTS idx_workflow_servers_server ON workflow_servers(server_id)',
     'CREATE INDEX IF NOT EXISTS idx_user_preferences_key ON user_preferences(key)',
     'CREATE INDEX IF NOT EXISTS idx_wildcards_name ON wildcards(name)',
-    'CREATE INDEX IF NOT EXISTS idx_wildcards_category ON wildcards(category)',
-    'CREATE INDEX IF NOT EXISTS idx_wildcards_is_active ON wildcards(is_active)',
-    'CREATE INDEX IF NOT EXISTS idx_wildcards_usage_count ON wildcards(usage_count)',
+    'CREATE INDEX IF NOT EXISTS idx_wildcards_is_auto_collected ON wildcards(is_auto_collected)',
     'CREATE INDEX IF NOT EXISTS idx_wildcard_items_wildcard_id ON wildcard_items(wildcard_id)',
+    'CREATE INDEX IF NOT EXISTS idx_wildcard_items_tool ON wildcard_items(tool)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_name ON custom_dropdown_lists(name)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_created_date ON custom_dropdown_lists(created_date)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_is_auto_collected ON custom_dropdown_lists(is_auto_collected)',
@@ -262,6 +260,81 @@ function createTables(): void {
     .run('language', 'ko');
 
   console.log('  ✅ User settings tables created (9 tables + indexes)');
+
+  // Run migrations for existing tables
+  migrateExistingTables();
+}
+
+/**
+ * Migrate existing tables to new schema
+ * Adds missing columns if they don't exist
+ */
+function migrateExistingTables(): void {
+  console.log('🔄 Checking for schema updates...');
+
+  try {
+    // Helper function to check if column exists
+    const hasColumn = (tableName: string, columnName: string): boolean => {
+      const pragma = userSettingsDb.prepare(`PRAGMA table_info(${tableName})`).all() as any[];
+      return pragma.some((col: any) => col.name === columnName);
+    };
+
+    // Migrate wildcards table
+    if (!hasColumn('wildcards', 'is_auto_collected')) {
+      console.log('  Adding is_auto_collected column to wildcards table...');
+      userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN is_auto_collected INTEGER DEFAULT 0');
+    }
+
+    if (!hasColumn('wildcards', 'source_path')) {
+      console.log('  Adding source_path column to wildcards table...');
+      userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN source_path TEXT');
+    }
+
+    if (!hasColumn('wildcards', 'lora_weight')) {
+      console.log('  Adding lora_weight column to wildcards table...');
+      userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN lora_weight REAL DEFAULT 1.0');
+    }
+
+    // Migrate wildcard_items table - check if old schema exists
+    if (hasColumn('wildcard_items', 'item_text')) {
+      console.log('  Migrating wildcard_items table to new schema...');
+
+      // Create temporary table with new schema
+      userSettingsDb.exec(`
+        CREATE TABLE IF NOT EXISTS wildcard_items_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          wildcard_id INTEGER NOT NULL,
+          tool TEXT NOT NULL CHECK(tool IN ('comfyui', 'nai')) DEFAULT 'comfyui',
+          content TEXT NOT NULL,
+          order_index INTEGER NOT NULL DEFAULT 0,
+          created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (wildcard_id) REFERENCES wildcards(id) ON DELETE CASCADE
+        )
+      `);
+
+      // Copy data from old table to new (assuming all items are comfyui by default)
+      userSettingsDb.exec(`
+        INSERT INTO wildcard_items_new (id, wildcard_id, tool, content, order_index, created_date)
+        SELECT id, wildcard_id, 'comfyui', item_text, 0, created_at
+        FROM wildcard_items
+      `);
+
+      // Drop old table and rename new one
+      userSettingsDb.exec('DROP TABLE wildcard_items');
+      userSettingsDb.exec('ALTER TABLE wildcard_items_new RENAME TO wildcard_items');
+
+      // Recreate index
+      userSettingsDb.exec('CREATE INDEX IF NOT EXISTS idx_wildcard_items_wildcard_id ON wildcard_items(wildcard_id)');
+      userSettingsDb.exec('CREATE INDEX IF NOT EXISTS idx_wildcard_items_tool ON wildcard_items(tool)');
+
+      console.log('  ✅ wildcard_items table migrated successfully');
+    }
+
+    console.log('  ✅ Schema updates complete');
+  } catch (error) {
+    console.error('  ⚠️ Error during schema migration:', error);
+    // Don't throw - let the app continue with existing schema
+  }
 }
 
 /**

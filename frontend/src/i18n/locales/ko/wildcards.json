@@ -44,5 +44,42 @@
     "nameRequired": "와일드카드 이름은 필수입니다",
     "itemsRequired": "최소 1개 이상의 항목이 필요합니다",
     "previewTextRequired": "테스트할 프롬프트를 입력하세요"
+  },
+  "tabs": {
+    "manual": "수동 생성",
+    "autoCollected": "자동 수집 (LORA)"
+  },
+  "autoCollect": {
+    "title": "LORA 와일드카드 자동 생성",
+    "description": "LORA 폴더를 스캔하여 와일드카드를 자동 생성합니다",
+    "folderPath": "LORA 폴더 경로",
+    "folderPathHelper": "ComfyUI loras 폴더 또는 LORA 파일이 포함된 하위 폴더를 지정하세요",
+    "loraWeight": "기본 LORA 가중치",
+    "loraWeightHelper": "생성되는 와일드카드의 기본 가중치 값 (예: 1.0)",
+    "duplicateHandling": "중복 이름 처리 방식",
+    "duplicateNumber": "숫자 접미사 (style, style_2)",
+    "duplicateParent": "상위 폴더 포함 (anime_style, realistic_style)",
+    "scanButton": "LORA 폴더 스캔",
+    "scanning": "스캔 중...",
+    "lastScan": "마지막 스캔",
+    "noScanYet": "아직 스캔이 실행되지 않았습니다",
+    "scanLog": {
+      "title": "스캔 로그",
+      "timestamp": "스캔 시각",
+      "folderPath": "스캔 경로",
+      "totalWildcards": "생성된 와일드카드",
+      "totalItems": "총 항목 수",
+      "details": "상세 정보",
+      "wildcardName": "와일드카드 이름",
+      "itemCount": "항목 수"
+    },
+    "noAutoWildcards": "자동 수집된 와일드카드가 없습니다",
+    "noAutoWildcardsDesc": "LORA 폴더를 스캔하여 와일드카드를 생성하세요",
+    "autoCollectedBadge": "자동",
+    "errors": {
+      "folderPathRequired": "LORA 폴더 경로는 필수입니다",
+      "invalidWeight": "유효한 가중치 값을 입력하세요 (0.1 ~ 2.0)",
+      "scanFailed": "스캔 실패: {{error}}"
+    }
   }
 }

@@ -30,6 +30,7 @@ import {
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { wildcardApi, type WildcardWithItems, type WildcardCreateData, type WildcardUpdateData, type ToolItems } from '../../services/api/wildcardApi';
+import AutoCollectedWildcardsTab from './AutoCollectedWildcardsTab';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -46,7 +47,8 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-export default function WildcardTab() {
+// 수동 생성 탭 컴포넌트
+function ManualWildcardsTab() {
   const { t } = useTranslation(['wildcards', 'common']);
   const [wildcards, setWildcards] = useState<WildcardWithItems[]>([]);
   const [loading, setLoading] = useState(true);
@@ -524,6 +526,33 @@ export default function WildcardTab() {
           <Button onClick={() => setOpenPreview(false)}>{t('common:close')}</Button>
         </DialogActions>
       </Dialog>
+    </Box>
+  );
+}
+
+// 메인 WildcardTab 컴포넌트 (2탭 구조)
+export default function WildcardTab() {
+  const { t } = useTranslation(['wildcards', 'common']);
+  const [mainTabValue, setMainTabValue] = useState(0);
+
+  const handleMainTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setMainTabValue(newValue);
+  };
+
+  return (
+    <Box>
+      <Tabs value={mainTabValue} onChange={handleMainTabChange} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Tab label={t('wildcards:tabs.manual')} />
+        <Tab label={t('wildcards:tabs.autoCollected')} />
+      </Tabs>
+
+      <TabPanel value={mainTabValue} index={0}>
+        <ManualWildcardsTab />
+      </TabPanel>
+
+      <TabPanel value={mainTabValue} index={1}>
+        <AutoCollectedWildcardsTab />
+      </TabPanel>
     </Box>
   );
 }

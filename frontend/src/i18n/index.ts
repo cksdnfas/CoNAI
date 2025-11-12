@@ -19,6 +19,7 @@ import koGenerationHistory from './locales/ko/generationHistory.json';
 import koServers from './locales/ko/servers.json';
 import koErrors from './locales/ko/errors.json';
 import koValidation from './locales/ko/validation.json';
+import koWildcards from './locales/ko/wildcards.json';
 
 // English
 import enCommon from './locales/en/common.json';
@@ -36,6 +37,7 @@ import enGenerationHistory from './locales/en/generationHistory.json';
 import enServers from './locales/en/servers.json';
 import enErrors from './locales/en/errors.json';
 import enValidation from './locales/en/validation.json';
+import enWildcards from './locales/en/wildcards.json';
 
 // Japanese
 import jaCommon from './locales/ja/common.json';
@@ -53,6 +55,7 @@ import jaGenerationHistory from './locales/ja/generationHistory.json';
 import jaServers from './locales/ja/servers.json';
 import jaErrors from './locales/ja/errors.json';
 import jaValidation from './locales/ja/validation.json';
+import jaWildcards from './locales/ja/wildcards.json';
 
 // Simplified Chinese
 import zhCNCommon from './locales/zh-CN/common.json';
@@ -70,6 +73,7 @@ import zhCNGenerationHistory from './locales/zh-CN/generationHistory.json';
 import zhCNServers from './locales/zh-CN/servers.json';
 import zhCNErrors from './locales/zh-CN/errors.json';
 import zhCNValidation from './locales/zh-CN/validation.json';
+import zhCNWildcards from './locales/zh-CN/wildcards.json';
 
 // Traditional Chinese
 import zhTWCommon from './locales/zh-TW/common.json';
@@ -87,6 +91,7 @@ import zhTWGenerationHistory from './locales/zh-TW/generationHistory.json';
 import zhTWServers from './locales/zh-TW/servers.json';
 import zhTWErrors from './locales/zh-TW/errors.json';
 import zhTWValidation from './locales/zh-TW/validation.json';
+import zhTWWildcards from './locales/zh-TW/wildcards.json';
 
 // Translation resources
 const resources = {
@@ -106,6 +111,7 @@ const resources = {
     servers: koServers,
     errors: koErrors,
     validation: koValidation,
+    wildcards: koWildcards,
   },
   en: {
     common: enCommon,
@@ -123,6 +129,7 @@ const resources = {
     servers: enServers,
     errors: enErrors,
     validation: enValidation,
+    wildcards: enWildcards,
   },
   ja: {
     common: jaCommon,
@@ -140,6 +147,7 @@ const resources = {
     servers: jaServers,
     errors: jaErrors,
     validation: jaValidation,
+    wildcards: jaWildcards,
   },
   'zh-CN': {
     common: zhCNCommon,
@@ -157,6 +165,7 @@ const resources = {
     servers: zhCNServers,
     errors: zhCNErrors,
     validation: zhCNValidation,
+    wildcards: zhCNWildcards,
   },
   'zh-TW': {
     common: zhTWCommon,
@@ -174,6 +183,7 @@ const resources = {
     servers: zhTWServers,
     errors: zhTWErrors,
     validation: zhTWValidation,
+    wildcards: zhTWWildcards,
   },
 };
 
@@ -201,6 +211,7 @@ i18n
       'servers',
       'errors',
       'validation',
+      'wildcards',
     ], // Available namespaces
 
     detection: {

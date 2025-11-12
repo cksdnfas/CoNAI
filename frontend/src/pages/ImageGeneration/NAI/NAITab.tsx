@@ -1,12 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Box } from '@mui/material';
-import { useTranslation } from 'react-i18next';
 import NAILoginForm from './components/NAILoginForm';
 import NAIImageGeneratorV2 from './components/NAIImageGeneratorV2';
 
 export default function NAITab() {
-  const { t } = useTranslation(['imageGeneration']);
-
   const [token, setToken] = useState<string | null>(null);
   const [isTokenValid, setIsTokenValid] = useState(false);
 

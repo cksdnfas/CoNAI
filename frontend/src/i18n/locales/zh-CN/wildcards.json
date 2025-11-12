@@ -1,0 +1,85 @@
+{
+  "page": {
+    "title": "通配符管理",
+    "noWildcards": "没有注册的通配符",
+    "noWildcardsDesc": "添加新的通配符以自动化提示词生成"
+  },
+  "filters": {
+    "all": "全部",
+    "both": "通用"
+  },
+  "actions": {
+    "add": "添加通配符",
+    "addItem": "添加项目",
+    "preview": "预览",
+    "confirmDelete": "确定要删除'{{name}}'通配符吗?"
+  },
+  "card": {
+    "items": "{{count}}个项目",
+    "itemsCount": "个",
+    "moreItems": "和其他{{count}}个"
+  },
+  "dialog": {
+    "createTitle": "创建通配符",
+    "editTitle": "编辑通配符"
+  },
+  "form": {
+    "name": "名称",
+    "nameHelper": "请输入不带++的名称 (例如: 花, 颜色)",
+    "description": "描述 (可选)",
+    "comfyuiItems": "ComfyUI提示词项目",
+    "naiItems": "NovelAI提示词项目",
+    "itemsHelper": "每个项目可以包含逗号分隔的词语。您可以使用++名称++格式嵌套其他通配符。",
+    "itemPlaceholder": "例如: 玫瑰, 红色, 刺 或 枯萎, ++花++"
+  },
+  "preview": {
+    "title": "通配符预览",
+    "inputLabel": "测试提示词",
+    "inputPlaceholder": "例如: 盛开着++花++的花园, ++颜色++的天空",
+    "generate": "生成结果",
+    "results": "解析结果 (随机5次)",
+    "result": "结果 {{number}}"
+  },
+  "errors": {
+    "nameRequired": "通配符名称为必填项",
+    "itemsRequired": "至少需要一个项目",
+    "previewTextRequired": "请输入要测试的提示词"
+  },
+  "tabs": {
+    "manual": "手动创建",
+    "autoCollected": "自动收集 (LORA)"
+  },
+  "autoCollect": {
+    "title": "LORA通配符自动生成",
+    "description": "扫描LORA文件夹以自动生成通配符",
+    "folderPath": "LORA文件夹路径",
+    "folderPathHelper": "指定ComfyUI loras文件夹或包含LORA文件的子文件夹",
+    "loraWeight": "默认LORA权重",
+    "loraWeightHelper": "生成通配符的默认权重值 (例如: 1.0)",
+    "duplicateHandling": "重复名称处理方式",
+    "duplicateNumber": "数字后缀 (style, style_2)",
+    "duplicateParent": "包含父文件夹 (anime_style, realistic_style)",
+    "scanButton": "扫描LORA文件夹",
+    "scanning": "扫描中...",
+    "lastScan": "最后扫描",
+    "noScanYet": "尚未执行扫描",
+    "scanLog": {
+      "title": "扫描日志",
+      "timestamp": "扫描时间",
+      "folderPath": "扫描路径",
+      "totalWildcards": "生成的通配符",
+      "totalItems": "总项目数",
+      "details": "详细信息",
+      "wildcardName": "通配符名称",
+      "itemCount": "项目数"
+    },
+    "noAutoWildcards": "没有自动收集的通配符",
+    "noAutoWildcardsDesc": "扫描LORA文件夹以生成通配符",
+    "autoCollectedBadge": "自动",
+    "errors": {
+      "folderPathRequired": "LORA文件夹路径为必填项",
+      "invalidWeight": "请输入有效的权重值 (0.1 ~ 2.0)",
+      "scanFailed": "扫描失败: {{error}}"
+    }
+  }
+}
