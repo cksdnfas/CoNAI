@@ -380,23 +380,27 @@ router.get('/last-scan-log', asyncHandler(async (req: Request, res: Response) =>
 }));
 
 /**
- * LORA 폴더 스캔하여 와일드카드 자동 생성
+ * LORA 파일 정보로 와일드카드 자동 생성 (프론트엔드 기반)
  * POST /api/wildcards/scan-lora-folder
  * Body: {
- *   folderPath: string,
+ *   loraFiles: Array<{
+ *     folderName: string,
+ *     loraName: string,
+ *     promptLines: string[]
+ *   }>,
  *   loraWeight: number,
  *   duplicateHandling: 'number' | 'parent'
  * }
  */
 router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { folderPath, loraWeight = 1.0, duplicateHandling = 'number' } = req.body;
+    const { loraFiles, loraWeight = 1.0, duplicateHandling = 'number' } = req.body;
 
     // 유효성 검증
-    if (!folderPath || typeof folderPath !== 'string') {
+    if (!Array.isArray(loraFiles) || loraFiles.length === 0) {
       return res.status(400).json({
         success: false,
-        error: 'Folder path is required'
+        error: 'LORA files array is required'
       });
     }
 
@@ -414,89 +418,43 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
       });
     }
 
-    // 폴더 존재 확인
-    if (!fs.existsSync(folderPath)) {
-      return res.status(404).json({
-        success: false,
-        error: 'Folder path does not exist'
-      });
-    }
-
-    if (!fs.statSync(folderPath).isDirectory()) {
-      return res.status(400).json({
-        success: false,
-        error: 'Path is not a directory'
-      });
-    }
-
-    // 기존 자동 수집 와일드카드 삭제 (동일 source_path)
+    // 기존 자동 수집 와일드카드 모두 삭제 (프론트엔드 기반이므로 source_path 없음)
     const db = (await import('../database/userSettingsDb')).getUserSettingsDb();
-    db.prepare('DELETE FROM wildcards WHERE is_auto_collected = 1 AND source_path = ?').run(folderPath);
+    db.prepare('DELETE FROM wildcards WHERE is_auto_collected = 1').run();
 
-    // LORA 파일 스캔
-    interface LoraFile {
+    // 폴더별로 LORA 파일 그룹화
+    interface LoraFileData {
       folderName: string;
       loraName: string;
-      loraPath: string;
-      promptPath: string | null;
+      promptLines: string[];
     }
 
-    interface FolderData {
+    interface FolderGroup {
       folderName: string;
       displayName: string;
-      loras: LoraFile[];
+      loras: LoraFileData[];
     }
 
-    const scanResults: FolderData[] = [];
+    const folderMap = new Map<string, LoraFileData[]>();
 
-    // 재귀적으로 폴더 스캔
-    function scanFolder(currentPath: string, relativePath: string): void {
-      const entries = fs.readdirSync(currentPath, { withFileTypes: true });
-
-      // 현재 폴더의 LORA 파일 찾기
-      const loraFiles: LoraFile[] = [];
-
-      for (const entry of entries) {
-        if (entry.isFile() && path.extname(entry.name).toLowerCase() === '.safetensors') {
-          const loraName = path.basename(entry.name, '.safetensors');
-          const loraPath = path.join(currentPath, entry.name);
-          const promptPath = path.join(currentPath, `${loraName}.txt`);
-
-          loraFiles.push({
-            folderName: relativePath || path.basename(currentPath),
-            loraName,
-            loraPath,
-            promptPath: fs.existsSync(promptPath) ? promptPath : null
-          });
-        }
+    for (const file of loraFiles as LoraFileData[]) {
+      if (!folderMap.has(file.folderName)) {
+        folderMap.set(file.folderName, []);
       }
-
-      // 현재 폴더에 LORA 파일이 있으면 결과에 추가
-      if (loraFiles.length > 0) {
-        scanResults.push({
-          folderName: relativePath || path.basename(currentPath),
-          displayName: path.basename(currentPath),
-          loras: loraFiles
-        });
-      }
-
-      // 하위 폴더 재귀 탐색
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const subPath = path.join(currentPath, entry.name);
-          const newRelativePath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
-          scanFolder(subPath, newRelativePath);
-        }
-      }
+      folderMap.get(file.folderName)!.push(file);
     }
 
-    scanFolder(folderPath, '');
+    const folderGroups: FolderGroup[] = Array.from(folderMap.entries()).map(([folderName, loras]) => ({
+      folderName,
+      displayName: folderName.split('/').pop() || folderName,
+      loras
+    }));
 
     // 와일드카드 생성
     const createdWildcards: any[] = [];
     const usedNames = new Set<string>();
 
-    for (const folder of scanResults) {
+    for (const folder of folderGroups) {
       let wildcardName = folder.displayName;
 
       // 중복 이름 처리
@@ -534,25 +492,15 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
       for (const lora of folder.loras) {
         const loraTag = `<lora:${lora.loraName}:${loraWeight}>`;
 
-        if (lora.promptPath) {
-          // 텍스트 파일 읽기
-          const promptContent = fs.readFileSync(lora.promptPath, 'utf-8');
-          const lines = promptContent
-            .split('\n')
-            .map(line => line.trim())
-            .filter(line => line.length > 0);
-
-          if (lines.length > 0) {
-            // 각 줄마다 별도 항목 생성
-            for (const line of lines) {
-              items.push(`${loraTag}, ${line}`);
+        if (lora.promptLines && lora.promptLines.length > 0) {
+          // 각 줄마다 별도 항목 생성
+          for (const line of lora.promptLines) {
+            if (line.trim()) {
+              items.push(`${loraTag}, ${line.trim()}`);
             }
-          } else {
-            // 빈 파일이면 LORA 태그만
-            items.push(loraTag);
           }
         } else {
-          // 텍스트 파일 없으면 LORA 태그만
+          // 프롬프트 라인이 없으면 LORA 태그만
           items.push(loraTag);
         }
       }
@@ -570,12 +518,12 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
 
         const wildcard = WildcardModel.create(wildcardData);
 
-        // is_auto_collected, source_path, lora_weight 설정
+        // is_auto_collected, lora_weight 설정 (source_path는 null)
         db.prepare(`
           UPDATE wildcards
-          SET is_auto_collected = 1, source_path = ?, lora_weight = ?
+          SET is_auto_collected = 1, source_path = NULL, lora_weight = ?
           WHERE id = ?
-        `).run(folderPath, loraWeight, wildcard.id);
+        `).run(loraWeight, wildcard.id);
 
         createdWildcards.push({
           id: wildcard.id,
@@ -591,7 +539,6 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
 
     const scanLog = {
       timestamp: new Date().toISOString(),
-      folderPath,
       loraWeight,
       duplicateHandling,
       totalWildcards: createdWildcards.length,

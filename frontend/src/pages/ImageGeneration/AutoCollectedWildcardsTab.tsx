@@ -36,18 +36,19 @@ import {
   wildcardApi,
   type WildcardWithItems,
   type LoraScanRequest,
-  type LoraScanLog
+  type LoraScanLog,
+  type LoraFileData
 } from '../../services/api/wildcardApi';
 
 export default function AutoCollectedWildcardsTab() {
   const { t } = useTranslation(['wildcards', 'common']);
 
   // Scan form states
-  const [folderPath, setFolderPath] = useState('');
   const [loraWeight, setLoraWeight] = useState(1.0);
   const [duplicateHandling, setDuplicateHandling] = useState<'number' | 'parent'>('number');
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<LoraFileData[]>([]);
 
   // Auto-collected wildcards
   const [autoWildcards, setAutoWildcards] = useState<WildcardWithItems[]>([]);
@@ -84,8 +85,53 @@ export default function AutoCollectedWildcardsTab() {
     }
   };
 
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setScanError(null);
+    const loraFiles: LoraFileData[] = [];
+
+    // 파일 처리
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const pathParts = file.webkitRelativePath.split('/');
+
+      // .safetensors 파일만 처리
+      if (file.name.endsWith('.safetensors')) {
+        const loraName = file.name.replace('.safetensors', '');
+        const folderName = pathParts.slice(1, -1).join('/') || pathParts[0];
+
+        // 매칭되는 txt 파일 찾기
+        const txtFileName = loraName + '.txt';
+        let promptLines: string[] = [];
+
+        for (let j = 0; j < files.length; j++) {
+          const txtFile = files[j];
+          if (txtFile.webkitRelativePath === file.webkitRelativePath.replace(file.name, txtFileName)) {
+            try {
+              const text = await txtFile.text();
+              promptLines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            } catch (err) {
+              console.error('Error reading txt file:', err);
+            }
+            break;
+          }
+        }
+
+        loraFiles.push({
+          folderName,
+          loraName,
+          promptLines
+        });
+      }
+    }
+
+    setSelectedFiles(loraFiles);
+  };
+
   const handleScan = async () => {
-    if (!folderPath.trim()) {
+    if (selectedFiles.length === 0) {
       setScanError(t('wildcards:autoCollect.errors.folderPathRequired'));
       return;
     }
@@ -100,7 +146,7 @@ export default function AutoCollectedWildcardsTab() {
       setScanError(null);
 
       const scanRequest: LoraScanRequest = {
-        folderPath,
+        loraFiles: selectedFiles,
         loraWeight,
         duplicateHandling
       };
@@ -157,18 +203,35 @@ export default function AutoCollectedWildcardsTab() {
         </Typography>
 
         <Stack spacing={3}>
-          {/* Folder Path */}
-          <TextField
-            fullWidth
-            label={t('wildcards:autoCollect.folderPath')}
-            value={folderPath}
-            onChange={(e) => setFolderPath(e.target.value)}
-            helperText={t('wildcards:autoCollect.folderPathHelper')}
-            placeholder="D:\\ComfyUI\\models\\loras"
-            InputProps={{
-              startAdornment: <FolderIcon sx={{ mr: 1, color: 'text.secondary' }} />
-            }}
-          />
+          {/* Folder Selection */}
+          <Box>
+            <input
+              type="file"
+              id="lora-folder-input"
+              style={{ display: 'none' }}
+              // @ts-ignore - webkitdirectory is not in TypeScript definitions
+              webkitdirectory=""
+              directory=""
+              multiple
+              onChange={handleFileSelect}
+            />
+            <label htmlFor="lora-folder-input">
+              <Button
+                variant="outlined"
+                component="span"
+                fullWidth
+                startIcon={<FolderIcon />}
+                sx={{ py: 1.5 }}
+              >
+                {selectedFiles.length > 0
+                  ? `${selectedFiles.length} ${t('wildcards:autoCollect.folderPath')} 선택됨`
+                  : t('wildcards:autoCollect.folderPath')}
+              </Button>
+            </label>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+              {t('wildcards:autoCollect.folderPathHelper')}
+            </Typography>
+          </Box>
 
           {/* LORA Weight */}
           <TextField
@@ -234,12 +297,6 @@ export default function AutoCollectedWildcardsTab() {
                   {t('wildcards:autoCollect.scanLog.timestamp')}
                 </Typography>
                 <Typography>{new Date(lastScanLog.timestamp).toLocaleString()}</Typography>
-              </Box>
-              <Box>
-                <Typography variant="subtitle2" color="text.secondary">
-                  {t('wildcards:autoCollect.scanLog.folderPath')}
-                </Typography>
-                <Typography sx={{ wordBreak: 'break-all' }}>{lastScanLog.folderPath}</Typography>
               </Box>
               <Stack direction="row" spacing={4}>
                 <Box>

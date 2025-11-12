@@ -72,15 +72,20 @@ export interface CircularCheckResponse {
   circularPath: string[];
 }
 
+export interface LoraFileData {
+  folderName: string;
+  loraName: string;
+  promptLines: string[];
+}
+
 export interface LoraScanRequest {
-  folderPath: string;
+  loraFiles: LoraFileData[];
   loraWeight: number;
   duplicateHandling: 'number' | 'parent';
 }
 
 export interface LoraScanLog {
   timestamp: string;
-  folderPath: string;
   loraWeight: number;
   duplicateHandling: 'number' | 'parent';
   totalWildcards: number;
