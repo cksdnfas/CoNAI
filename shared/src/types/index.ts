@@ -4,6 +4,7 @@
  */
 
 export * from './group';
+export * from './autoFolderGroup';
 export * from './promptCollection';
 export * from './image';
 export * from './rating';
