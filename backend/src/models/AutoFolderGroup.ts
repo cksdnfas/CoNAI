@@ -194,9 +194,18 @@ export class AutoFolderGroupImageModel {
     page: number = 1,
     pageSize: number = 50
   ): Promise<ImageMetadataRecord[]> {
-    const offset = (page - 1) * pageSize;
+    const offset = Math.floor((page - 1) * pageSize);
 
     try {
+      console.log('[AutoFolderGroup] findImagesByGroup params:', {
+        groupId,
+        groupIdType: typeof groupId,
+        page,
+        pageSize,
+        offset,
+        offsetType: typeof offset
+      });
+
       const query = `
         SELECT m.*
         FROM auto_folder_group_images afgi
@@ -207,13 +216,16 @@ export class AutoFolderGroupImageModel {
       `;
 
       const rows = db.prepare(query).all(groupId, pageSize, offset) as ImageMetadataRecord[];
+      console.log('[AutoFolderGroup] findImagesByGroup result:', { rowCount: rows.length });
       return rows || [];
     } catch (error) {
       console.error('[AutoFolderGroup] Error in findImagesByGroup:', {
         groupId,
+        groupIdType: typeof groupId,
         page,
         pageSize,
         offset,
+        offsetType: typeof offset,
         error: error instanceof Error ? error.message : error
       });
       throw error;
