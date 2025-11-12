@@ -96,3 +96,40 @@ export interface AutoCollectResult {
   images_removed: number;
   execution_time: number;
 }
+
+// ===== Hierarchy-related types =====
+
+/**
+ * Group with hierarchy information
+ */
+export interface GroupWithHierarchy extends GroupWithStats {
+  child_count: number;
+  has_children: boolean;
+  depth?: number;
+}
+
+/**
+ * Breadcrumb item for navigation
+ */
+export interface BreadcrumbItem {
+  id: number;
+  name: string;
+  color?: string | null;
+}
+
+/**
+ * Hierarchy validation result
+ */
+export interface HierarchyValidation {
+  valid: boolean;
+  error?: string;
+  current_depth?: number;
+  max_depth?: number;
+}
+
+/**
+ * Group move request
+ */
+export interface GroupMoveRequest {
+  parent_id: number | null;
+}
