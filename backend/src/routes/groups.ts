@@ -3,10 +3,12 @@ import { GroupModel, ImageGroupModel } from '../models/Group';
 import { AutoCollectionService } from '../services/autoCollectionService';
 import { ComplexFilterService } from '../services/complexFilterService';
 import { GroupDownloadService, DownloadType } from '../services/groupDownloadService';
+import { getGroupHierarchyService } from '../services/groupHierarchyService';
 import {
   GroupResponse,
   GroupCreateData,
   GroupUpdateData,
+  GroupMoveRequest,
   validateId,
   successResponse,
   errorResponse,
@@ -145,6 +147,18 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     return res.status(400).json(errorResponse('Group name is required'));
   }
 
+  // 계층 구조 유효성 검사
+  if (parent_id !== undefined && parent_id !== null) {
+    const hierarchyService = getGroupHierarchyService();
+    const parentDepth = hierarchyService.calculateDepth(parent_id);
+
+    if (parentDepth >= 4) {
+      return res.status(400).json(
+        errorResponse('Maximum hierarchy depth (5 levels) would be exceeded')
+      );
+    }
+  }
+
   // 자동수집 조건 유효성 검사 (ComplexFilter 지원)
   if (auto_collect_enabled && auto_collect_conditions) {
     const validation = validateAutoCollectConditions(auto_collect_conditions);
@@ -199,6 +213,16 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(req.params.id, 'Group ID');
     const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions } = req.body;
+
+    // 계층 구조 유효성 검사 (parent_id가 변경되는 경우)
+    if (parent_id !== undefined) {
+      const hierarchyService = getGroupHierarchyService();
+      const validation = hierarchyService.validateHierarchy(id, parent_id);
+
+      if (!validation.valid) {
+        return res.status(400).json(errorResponse(validation.error || 'Invalid hierarchy'));
+      }
+    }
 
     // 자동수집 조건 유효성 검사 (ComplexFilter 지원)
     if (auto_collect_enabled && auto_collect_conditions) {
@@ -633,6 +657,124 @@ router.get('/:id/file-counts', asyncHandler(async (req: Request, res: Response) 
     const errorMessage = error instanceof Error ? error.message : 'Failed to get file counts';
     const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
     return res.status(statusCode).json(errorResponse(errorMessage));
+  }
+}));
+
+// ===== 계층 구조 관련 API =====
+
+/**
+ * 루트 그룹들 조회 (parent_id가 NULL인 그룹들)
+ * GET /api/groups/hierarchy/roots
+ */
+router.get('/hierarchy/roots', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const groups = await GroupModel.findChildrenWithHierarchy(null);
+    return res.json(successResponse(groups));
+  } catch (error) {
+    console.error('Error getting root groups:', error);
+    return res.status(500).json(errorResponse('Failed to get root groups'));
+  }
+}));
+
+/**
+ * 특정 부모의 자식 그룹들 조회
+ * GET /api/groups/:id/children
+ */
+router.get('/:id/children', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const id = validateId(req.params.id, 'Group ID');
+    const groups = await GroupModel.findChildrenWithHierarchy(id);
+    return res.json(successResponse(groups));
+  } catch (error) {
+    console.error('Error getting child groups:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get child groups';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
+  }
+}));
+
+/**
+ * 브레드크럼 경로 조회 (현재 그룹에서 루트까지)
+ * GET /api/groups/:id/breadcrumb
+ */
+router.get('/:id/breadcrumb', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const id = validateId(req.params.id, 'Group ID');
+    const breadcrumb = await GroupModel.getBreadcrumbPath(id);
+    return res.json(successResponse(breadcrumb));
+  } catch (error) {
+    console.error('Error getting breadcrumb path:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get breadcrumb path';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
+  }
+}));
+
+/**
+ * 그룹 이동 (부모 변경)
+ * POST /api/groups/:id/move
+ */
+router.post('/:id/move', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const id = validateId(req.params.id, 'Group ID');
+    const { parent_id } = req.body as GroupMoveRequest;
+
+    // 계층 구조 유효성 검사
+    const hierarchyService = getGroupHierarchyService();
+    const validation = hierarchyService.validateHierarchy(id, parent_id);
+
+    if (!validation.valid) {
+      return res.status(400).json(errorResponse(validation.error || 'Invalid hierarchy'));
+    }
+
+    // 그룹 업데이트
+    const updated = await GroupModel.update(id, { parent_id });
+
+    if (!updated) {
+      return res.status(404).json(errorResponse('Group not found'));
+    }
+
+    return res.json(successResponse({ message: 'Group moved successfully' }));
+  } catch (error) {
+    console.error('Error moving group:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to move group';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
+  }
+}));
+
+/**
+ * 계층 검증 (프론트엔드에서 부모 선택 시 사용)
+ * POST /api/groups/:id/validate-hierarchy
+ */
+router.post('/:id/validate-hierarchy', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const id = validateId(req.params.id, 'Group ID');
+    const { parent_id } = req.body;
+
+    const hierarchyService = getGroupHierarchyService();
+    const validation = hierarchyService.validateHierarchy(id, parent_id);
+
+    return res.json(successResponse(validation));
+  } catch (error) {
+    console.error('Error validating hierarchy:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to validate hierarchy';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
+  }
+}));
+
+/**
+ * 모든 그룹 조회 (계층 정보 포함)
+ * GET /api/groups/hierarchy/all
+ */
+router.get('/hierarchy/all', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const groups = await GroupModel.findAllWithHierarchy();
+    return res.json(successResponse(groups));
+  } catch (error) {
+    console.error('Error getting all groups with hierarchy:', error);
+    return res.status(500).json(errorResponse('Failed to get groups with hierarchy'));
   }
 }));
 
