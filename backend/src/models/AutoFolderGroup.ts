@@ -201,7 +201,7 @@ export class AutoFolderGroupImageModel {
       FROM auto_folder_group_images afgi
       INNER JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
       WHERE afgi.group_id = ?
-      ORDER BY m.created_date DESC
+      ORDER BY m.first_seen_date DESC
       LIMIT ? OFFSET ?
     `;
 
