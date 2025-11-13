@@ -37,8 +37,10 @@ export function GroupCard({ group, onClick }: GroupCardProps) {
     [group.id]
   );
 
-  // 이미지 회전 훅 사용
+  // 이미지 회전 훅 사용 (React Query 캐싱 포함)
   const { currentImage, images, isLoading } = useImageRotation(fetchImages, {
+    groupId: group.id, // 캐시 키로 사용
+    groupType: 'group',
     interval: 3000, // 3초마다 회전
     preloadCount: 8, // 8개 이미지 미리 로드
     includeChildren: true, // 자식 그룹 검색 허용

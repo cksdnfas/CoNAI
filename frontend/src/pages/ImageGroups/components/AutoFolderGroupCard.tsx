@@ -37,8 +37,10 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
     [group.id]
   );
 
-  // 이미지 회전 훅 사용
+  // 이미지 회전 훅 사용 (React Query 캐싱 포함)
   const { currentImage, images, isLoading } = useImageRotation(fetchImages, {
+    groupId: group.id, // 캐시 키로 사용
+    groupType: 'auto-folder',
     interval: 3000,
     preloadCount: 8,
     includeChildren: true,
