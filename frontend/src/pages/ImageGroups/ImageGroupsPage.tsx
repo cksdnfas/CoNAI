@@ -473,102 +473,188 @@ const ImageGroupsPage: React.FC = () => {
                 sx={{
                   cursor: 'pointer',
                   transition: 'all 0.2s',
+                  aspectRatio: '5 / 7',
+                  position: 'relative',
+                  overflow: 'hidden',
                   '&:hover': {
                     transform: 'translateY(-4px)',
                     boxShadow: 4,
+                    '& .hover-info': {
+                      opacity: 1,
+                    },
+                    '& .hover-overlay': {
+                      opacity: 1,
+                    },
                   },
                   opacity: group.image_count > 0 ? 1 : 0.7,
                 }}
                 onClick={() => handleGroupClick(group)}
               >
+                {/* 배경 이미지 */}
                 <CardMedia
                   component="img"
-                  height="160"
                   image={getRepresentativeImageUrl(group)}
                   alt={group.name}
                   sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
                     objectFit: 'cover',
                   }}
                   onError={(e) => {
-                    // 이미지 로드 실패 시 플레이스홀더로 대체
                     const target = e.target as HTMLImageElement;
                     if (target.src !== getRepresentativeImageUrl({...group, image_count: 0})) {
                       target.src = getRepresentativeImageUrl({...group, image_count: 0});
                     }
                   }}
                 />
-                <CardContent sx={{ position: 'relative' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
-                    <FolderIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h6" component="div" sx={{ flex: 1, wordBreak: 'break-word', pr: 1 }}>
+
+                {/* 기본 정보 (항상 표시) */}
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 70%, transparent 100%)',
+                    p: 1.5,
+                    pb: 1,
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <FolderIcon sx={{ color: 'primary.light', fontSize: '1.2rem' }} />
+                    <Typography
+                      variant="subtitle1"
+                      component="div"
+                      sx={{
+                        flex: 1,
+                        color: 'white',
+                        fontWeight: 500,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       {group.name}
                     </Typography>
+                  </Box>
+                </Box>
+
+                {/* 호버 시 표시되는 상세 정보 */}
+                <Box
+                  className="hover-overlay"
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    bgcolor: 'rgba(0, 0, 0, 0.6)',
+                    opacity: 0,
+                    transition: 'opacity 0.2s',
+                  }}
+                />
+                <Box
+                  className="hover-info"
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    p: 2,
+                    opacity: 0,
+                    transition: 'opacity 0.2s',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  {/* 상단: 메뉴 버튼 */}
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <IconButton
                       size="small"
                       onClick={(e) => {
-                        e.stopPropagation(); // 카드 클릭 이벤트 방지
+                        e.stopPropagation();
                         handleMenuOpen(e, group.id);
                       }}
-                      sx={{ ml: 1 }}
+                      sx={{
+                        bgcolor: 'rgba(255, 255, 255, 0.2)',
+                        '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.3)' },
+                      }}
                     >
-                      <MoreVertIcon />
+                      <MoreVertIcon sx={{ color: 'white' }} />
                     </IconButton>
                   </Box>
 
-                  {group.description ? (
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{
-                        mb: 1,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      {group.description}
-                    </Typography>
-                  ) : null}
-
-                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                    <Chip
-                      label={t('imageGroups:groupCard.imageCount', { count: group.image_count })}
-                      size="small"
-                      color={group.image_count > 0 ? 'primary' : 'default'}
-                    />
-                    {group.auto_collect_enabled ? (
-                      <Chip
-                        icon={<AutoIcon />}
-                        label={t('imageGroups:groupCard.autoCollect')}
-                        size="small"
-                        color="primary"
-                        variant="outlined"
-                      />
-                    ) : null}
-                    {group.has_children ? (
-                      <Chip
-                        label={t('imageGroups:hierarchy.childGroups', { count: group.child_count })}
-                        size="small"
-                        color="secondary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openSubgroups(group);
+                  {/* 중간: 설명 */}
+                  <Box sx={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+                    {group.description && (
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: 'white',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
                         }}
-                        sx={{ cursor: 'pointer' }}
-                      />
-                    ) : null}
+                      >
+                        {group.description}
+                      </Typography>
+                    )}
                   </Box>
 
-                  {group.auto_collect_enabled && group.image_count > 0 ? (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                      {t('imageGroups:groupCard.stats', {
-                        auto: group.auto_collected_count || 0,
-                        manual: group.manual_added_count || 0
-                      })}
-                    </Typography>
-                  ) : null}
-                </CardContent>
+                  {/* 하단: Chip 정보 */}
+                  <Box>
+                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1 }}>
+                      <Chip
+                        label={t('imageGroups:groupCard.imageCount', { count: group.image_count })}
+                        size="small"
+                        sx={{
+                          bgcolor: group.image_count > 0 ? 'primary.main' : 'rgba(255, 255, 255, 0.3)',
+                          color: 'white',
+                        }}
+                      />
+                      {group.auto_collect_enabled && (
+                        <Chip
+                          icon={<AutoIcon sx={{ color: 'white !important' }} />}
+                          label={t('imageGroups:groupCard.autoCollect')}
+                          size="small"
+                          sx={{
+                            bgcolor: 'primary.main',
+                            color: 'white',
+                          }}
+                        />
+                      )}
+                      {group.has_children && (
+                        <Chip
+                          label={t('imageGroups:hierarchy.childGroups', { count: group.child_count })}
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openSubgroups(group);
+                          }}
+                          sx={{
+                            bgcolor: 'secondary.main',
+                            color: 'white',
+                            cursor: 'pointer',
+                          }}
+                        />
+                      )}
+                    </Box>
+                    {group.auto_collect_enabled && group.image_count > 0 && (
+                      <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                        {t('imageGroups:groupCard.stats', {
+                          auto: group.auto_collected_count || 0,
+                          manual: group.manual_added_count || 0
+                        })}
+                      </Typography>
+                    )}
+                  </Box>
+                </Box>
               </Card>
             </Grid>
           ))}

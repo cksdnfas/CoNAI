@@ -314,9 +314,18 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
                 sx={{
                   cursor: 'pointer',
                   transition: 'all 0.2s',
+                  aspectRatio: '5 / 7',
+                  position: 'relative',
+                  overflow: 'hidden',
                   '&:hover': {
                     transform: 'translateY(-4px)',
                     boxShadow: 4,
+                    '& .hover-info': {
+                      opacity: 1,
+                    },
+                    '& .hover-overlay': {
+                      opacity: 1,
+                    },
                   },
                   opacity: group.has_images ? 1 : 0.7,
                 }}
@@ -330,43 +339,123 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
                   }
                 }}
               >
+                {/* 배경 이미지 */}
                 <CardMedia
                   component="img"
-                  height="160"
                   image={getRepresentativeImageUrl(group)}
                   alt={group.display_name}
-                  sx={{ objectFit: 'cover' }}
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
                 />
-                <CardContent sx={{ position: 'relative' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
-                    <FolderIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h6" component="div" sx={{ flex: 1, wordBreak: 'break-word' }}>
+
+                {/* 기본 정보 (항상 표시) */}
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 70%, transparent 100%)',
+                    p: 1.5,
+                    pb: 1,
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <FolderIcon sx={{ color: 'primary.light', fontSize: '1.2rem' }} />
+                    <Typography
+                      variant="subtitle1"
+                      component="div"
+                      sx={{
+                        flex: 1,
+                        color: 'white',
+                        fontWeight: 500,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       {group.display_name}
                     </Typography>
+                  </Box>
+                </Box>
+
+                {/* 호버 시 표시되는 상세 정보 */}
+                <Box
+                  className="hover-overlay"
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    bgcolor: 'rgba(0, 0, 0, 0.6)',
+                    opacity: 0,
+                    transition: 'opacity 0.2s',
+                  }}
+                />
+                <Box
+                  className="hover-info"
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    p: 2,
+                    opacity: 0,
+                    transition: 'opacity 0.2s',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  {/* 상단: 메뉴 버튼 */}
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <IconButton
                       size="small"
                       onClick={(e) => handleMenuOpen(e, group.id)}
-                      sx={{ ml: 1 }}
+                      sx={{
+                        bgcolor: 'rgba(255, 255, 255, 0.2)',
+                        '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.3)' },
+                      }}
                     >
-                      <MoreVertIcon />
+                      <MoreVertIcon sx={{ color: 'white' }} />
                     </IconButton>
                   </Box>
 
-                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                    <Chip
-                      label={t('imageGroups:groupCard.imageCount', { count: group.image_count })}
-                      size="small"
-                      color={group.image_count > 0 ? 'primary' : 'default'}
-                    />
-                    {group.child_count > 0 && (
+                  {/* 중간: 빈 공간 */}
+                  <Box sx={{ flex: 1 }} />
+
+                  {/* 하단: Chip 정보 */}
+                  <Box>
+                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                       <Chip
-                        label={t('imageGroups:hierarchy.childGroups', { count: group.child_count })}
+                        label={t('imageGroups:groupCard.imageCount', { count: group.image_count })}
                         size="small"
-                        color="secondary"
+                        sx={{
+                          bgcolor: group.image_count > 0 ? 'primary.main' : 'rgba(255, 255, 255, 0.3)',
+                          color: 'white',
+                        }}
                       />
-                    )}
+                      {group.child_count > 0 && (
+                        <Chip
+                          label={t('imageGroups:hierarchy.childGroups', { count: group.child_count })}
+                          size="small"
+                          sx={{
+                            bgcolor: 'secondary.main',
+                            color: 'white',
+                          }}
+                        />
+                      )}
+                    </Box>
                   </Box>
-                </CardContent>
+                </Box>
               </Card>
             </Grid>
           ))}
