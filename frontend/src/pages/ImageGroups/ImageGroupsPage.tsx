@@ -106,7 +106,7 @@ const ImageGroupsPage: React.FC = () => {
   };
 
   // 그룹 네비게이션 (하위 그룹이 1개만 있으면 자동 진입)
-  const navigateToGroup = async (groupId: number | null) => {
+  const navigateToGroup = async (groupId: number | null, autoNavigate: boolean = true) => {
     setCurrentParentId(groupId);
     if (groupId === null) {
       setBreadcrumb([]);
@@ -123,13 +123,13 @@ const ImageGroupsPage: React.FC = () => {
       const fetchedGroups = response.data;
       setGroups(fetchedGroups);
 
-      // 자동 진입 조건: 하위 그룹이 정확히 1개이고, 이미지가 없으면 계속 진입
-      if (fetchedGroups.length === 1) {
+      // 자동 진입 조건: autoNavigate가 true이고, 하위 그룹이 정확히 1개이고, 이미지가 없으면 계속 진입
+      if (autoNavigate && fetchedGroups.length === 1) {
         const singleGroup = fetchedGroups[0];
 
         if (singleGroup.image_count === 0 && singleGroup.child_count === 1) {
           // 재귀적으로 하위 그룹으로 진입
-          await navigateToGroup(singleGroup.id);
+          await navigateToGroup(singleGroup.id, true);
           return;
         }
       }
@@ -141,6 +141,11 @@ const ImageGroupsPage: React.FC = () => {
   // 하위 그룹 열기
   const openSubgroups = (group: GroupWithHierarchy) => {
     navigateToGroup(group.id);
+  };
+
+  // 브레드크럼 클릭 핸들러 (자동 진입 비활성화)
+  const handleBreadcrumbNavigate = (groupId: number | null) => {
+    navigateToGroup(groupId, false);
   };
 
   useEffect(() => {
@@ -446,7 +451,7 @@ const ImageGroupsPage: React.FC = () => {
       {(currentParentId !== null || breadcrumb.length > 0) && (
         <GroupBreadcrumb
           breadcrumb={breadcrumb}
-          onNavigate={navigateToGroup}
+          onNavigate={handleBreadcrumbNavigate}
         />
       )}
 

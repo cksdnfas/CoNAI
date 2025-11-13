@@ -366,10 +366,6 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
                       />
                     )}
                   </Box>
-
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                    {group.folder_path}
-                  </Typography>
                 </CardContent>
               </Card>
             </Grid>
