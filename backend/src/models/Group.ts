@@ -283,21 +283,21 @@ export class ImageGroupModel {
     const total = countRow.total;
 
     // 메타데이터 조회 (composite_hash 기반, 해시 생성 완료된 이미지만)
-    // ✅ image_files 테이블 JOIN 추가하여 id 필드 포함
+    // ✅ 해시당 1개 항목만 반환 (중복 제거)
     const query = `
       SELECT
         im.*,
-        if.id,
-        if.original_file_path,
-        if.file_status,
-        if.file_type,
-        if.file_size,
-        if.mime_type,
+        (SELECT id FROM image_files WHERE composite_hash = im.composite_hash AND file_status = 'active' LIMIT 1) as id,
+        (SELECT original_file_path FROM image_files WHERE composite_hash = im.composite_hash AND file_status = 'active' LIMIT 1) as original_file_path,
+        (SELECT file_status FROM image_files WHERE composite_hash = im.composite_hash AND file_status = 'active' LIMIT 1) as file_status,
+        (SELECT file_type FROM image_files WHERE composite_hash = im.composite_hash AND file_status = 'active' LIMIT 1) as file_type,
+        (SELECT file_size FROM image_files WHERE composite_hash = im.composite_hash AND file_status = 'active' LIMIT 1) as file_size,
+        (SELECT mime_type FROM image_files WHERE composite_hash = im.composite_hash AND file_status = 'active' LIMIT 1) as mime_type,
         ig.collection_type
       FROM image_groups ig
       INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       ${whereClause}
+      GROUP BY ig.composite_hash
       ORDER BY ig.order_index ASC, ig.added_date DESC
       LIMIT ? OFFSET ?
     `;
