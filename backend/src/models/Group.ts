@@ -284,18 +284,38 @@ export class ImageGroupModel {
 
     // 메타데이터 조회 (composite_hash 기반, 해시 생성 완료된 이미지만)
     // ✅ 해시당 1개 항목만 반환 (중복 제거)
+    // ✅ LEFT JOIN으로 비디오 파일도 포함 (메타데이터 없어도 조회 가능)
     const query = `
       SELECT
-        im.*,
-        (SELECT id FROM image_files WHERE composite_hash = im.composite_hash AND file_status = 'active' LIMIT 1) as id,
-        (SELECT original_file_path FROM image_files WHERE composite_hash = im.composite_hash AND file_status = 'active' LIMIT 1) as original_file_path,
-        (SELECT file_status FROM image_files WHERE composite_hash = im.composite_hash AND file_status = 'active' LIMIT 1) as file_status,
-        (SELECT file_type FROM image_files WHERE composite_hash = im.composite_hash AND file_status = 'active' LIMIT 1) as file_type,
-        (SELECT file_size FROM image_files WHERE composite_hash = im.composite_hash AND file_status = 'active' LIMIT 1) as file_size,
-        (SELECT mime_type FROM image_files WHERE composite_hash = im.composite_hash AND file_status = 'active' LIMIT 1) as mime_type,
+        COALESCE(im.composite_hash, ig.composite_hash) as composite_hash,
+        im.width,
+        im.height,
+        im.format,
+        im.thumbnail_path,
+        im.prompt,
+        im.negative_prompt,
+        im.seed,
+        im.steps,
+        im.cfg_scale,
+        im.sampler,
+        im.model,
+        im.upscaler,
+        im.upscale_factor,
+        im.denoising_strength,
+        im.hires_upscaler,
+        im.created_date,
+        im.positive_tags,
+        im.negative_tags,
+        im.caption,
+        (SELECT id FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as id,
+        (SELECT original_file_path FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as original_file_path,
+        (SELECT file_status FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as file_status,
+        (SELECT file_type FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as file_type,
+        (SELECT file_size FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as file_size,
+        (SELECT mime_type FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as mime_type,
         ig.collection_type
       FROM image_groups ig
-      INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
+      LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
       ${whereClause}
       GROUP BY ig.composite_hash
       ORDER BY ig.order_index ASC, ig.added_date DESC
@@ -407,10 +427,31 @@ export class ImageGroupModel {
    * 그룹의 랜덤 이미지 조회 (썸네일용)
    */
   static async findRandomImageForGroup(groupId: number): Promise<ImageMetadataRecord | null> {
+    // ✅ LEFT JOIN으로 비디오 파일도 포함
     const query = `
-      SELECT im.*
+      SELECT
+        COALESCE(im.composite_hash, ig.composite_hash) as composite_hash,
+        im.width,
+        im.height,
+        im.format,
+        im.thumbnail_path,
+        im.prompt,
+        im.negative_prompt,
+        im.seed,
+        im.steps,
+        im.cfg_scale,
+        im.sampler,
+        im.model,
+        im.upscaler,
+        im.upscale_factor,
+        im.denoising_strength,
+        im.hires_upscaler,
+        im.created_date,
+        im.positive_tags,
+        im.negative_tags,
+        im.caption
       FROM image_groups ig
-      INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
+      LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
       WHERE ig.group_id = ?
       ORDER BY RANDOM()
       LIMIT 1
@@ -430,10 +471,31 @@ export class ImageGroupModel {
     includeChildren: boolean = true
   ): Promise<ImageMetadataRecord[]> {
     // 1. 현재 그룹에서 랜덤 이미지 조회
+    // ✅ LEFT JOIN으로 비디오 파일도 포함
     const query = `
-      SELECT DISTINCT im.*
+      SELECT DISTINCT
+        COALESCE(im.composite_hash, ig.composite_hash) as composite_hash,
+        im.width,
+        im.height,
+        im.format,
+        im.thumbnail_path,
+        im.prompt,
+        im.negative_prompt,
+        im.seed,
+        im.steps,
+        im.cfg_scale,
+        im.sampler,
+        im.model,
+        im.upscaler,
+        im.upscale_factor,
+        im.denoising_strength,
+        im.hires_upscaler,
+        im.created_date,
+        im.positive_tags,
+        im.negative_tags,
+        im.caption
       FROM image_groups ig
-      INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
+      LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
       WHERE ig.group_id = ?
       ORDER BY RANDOM()
       LIMIT ?

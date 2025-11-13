@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   Card,
   CardMedia,
@@ -7,9 +7,10 @@ import {
   Chip,
 } from '@mui/material';
 import FolderIcon from '@mui/icons-material/Folder';
-import { GroupWithStats } from '@comfyui-image-manager/shared';
+import type { GroupWithStats } from '@comfyui-image-manager/shared';
 import { groupApi } from '../../../services/api/groupApi';
 import { useImageRotation } from '../../../hooks/useImageRotation';
+import type { ImageRecord } from '../../../types/image';
 
 interface GroupCardProps {
   group: GroupWithStats & { child_count?: number; has_children?: boolean };
@@ -25,7 +26,7 @@ interface GroupCardProps {
 export function GroupCard({ group, onClick }: GroupCardProps) {
   // 이미지 가져오기 함수 (useCallback으로 메모이제이션)
   const fetchImages = useCallback(
-    async (count: number, includeChildren: boolean) => {
+    async (count: number, includeChildren: boolean): Promise<ImageRecord[]> => {
       try {
         const response = await groupApi.getPreviewImages(group.id, count, includeChildren);
         return response.data || [];
@@ -47,8 +48,11 @@ export function GroupCard({ group, onClick }: GroupCardProps) {
     enabled: true,
   });
 
-  // 대표 이미지 URL 결정
-  const imageUrl = useMemo(() => {
+  // 비디오 여부 확인
+  const isVideo = useMemo(() => currentImage?.file_type === 'video', [currentImage]);
+
+  // 대표 이미지/비디오 URL 결정
+  const mediaUrl = useMemo(() => {
     if (currentImage?.thumbnail_url) {
       return currentImage.thumbnail_url;
     }
@@ -83,21 +87,41 @@ export function GroupCard({ group, onClick }: GroupCardProps) {
       }}
       onClick={onClick}
     >
-      {/* 배경 이미지 (회전) */}
-      <CardMedia
-        component="img"
-        image={imageUrl}
-        alt={group.name}
-        sx={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          transition: 'opacity 0.6s ease-in-out', // 부드러운 페이드 효과
-        }}
-      />
+      {/* 배경 미디어 (회전) - 비디오 또는 이미지 */}
+      {isVideo ? (
+        <Box
+          component="video"
+          src={mediaUrl}
+          muted
+          loop
+          autoPlay
+          playsInline
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            transition: 'opacity 0.6s ease-in-out',
+          }}
+        />
+      ) : (
+        <CardMedia
+          component="img"
+          image={mediaUrl}
+          alt={group.name}
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            transition: 'opacity 0.6s ease-in-out',
+          }}
+        />
+      )}
 
       {/* 기본 정보 (항상 표시) */}
       <Box
