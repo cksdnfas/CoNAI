@@ -111,6 +111,33 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
 }));
 
 /**
+ * 특정 그룹의 미리보기 이미지들 조회 (회전 표시용)
+ * GET /api/auto-folder-groups/:id/preview-images?count=8&includeChildren=true
+ */
+router.get('/:id/preview-images', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const id = validateId(req.params.id, 'Group ID');
+    const count = parseInt(req.query.count as string) || 8;
+    const includeChildren = req.query.includeChildren !== 'false'; // 기본값 true
+
+    // count 범위 제한 (1~20)
+    const limitedCount = Math.min(Math.max(count, 1), 20);
+
+    const images = await AutoFolderGroupImageModel.findPreviewImages(id, limitedCount, includeChildren);
+
+    // 이미지 경로 보강 (enrichImageRecord 사용)
+    const enrichedImages = images.map(img => enrichImageRecord(img));
+
+    return res.json(successResponse(enrichedImages));
+  } catch (error) {
+    console.error('Error getting preview images:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get preview images';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
+  }
+}));
+
+/**
  * 특정 그룹 조회
  * GET /api/auto-folder-groups/:id
  */
@@ -142,8 +169,8 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
     const id = validateId(req.params.id, 'Group ID');
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const pageSize = Math.min(
-      Math.max(1, parseInt(req.query.pageSize as string) || PAGINATION.DEFAULT_PAGE_SIZE),
-      PAGINATION.MAX_PAGE_SIZE
+      Math.max(1, parseInt(req.query.pageSize as string) || PAGINATION.DEFAULT_LIMIT),
+      PAGINATION.MAX_LIMIT
     );
 
     const result = await AutoFolderGroupService.getGroupImages(id, page, pageSize);

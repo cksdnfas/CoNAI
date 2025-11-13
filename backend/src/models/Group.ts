@@ -421,6 +421,52 @@ export class ImageGroupModel {
   }
 
   /**
+   * 그룹의 미리보기 이미지들 조회 (회전 표시용, 최대 N개)
+   * 현재 그룹에 이미지가 없으면 자식 그룹에서 검색 (재귀)
+   */
+  static async findPreviewImages(
+    groupId: number,
+    count: number = 8,
+    includeChildren: boolean = true
+  ): Promise<ImageMetadataRecord[]> {
+    // 1. 현재 그룹에서 랜덤 이미지 조회
+    const query = `
+      SELECT DISTINCT im.*
+      FROM image_groups ig
+      INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
+      WHERE ig.group_id = ?
+      ORDER BY RANDOM()
+      LIMIT ?
+    `;
+
+    const rows = db.prepare(query).all(groupId, count) as ImageMetadataRecord[];
+
+    // 이미지가 충분히 있거나, 자식 검색을 안 하면 바로 반환
+    if (rows.length > 0 || !includeChildren) {
+      return rows;
+    }
+
+    // 2. 이미지가 없으면 자식 그룹에서 검색 (재귀)
+    const children = await GroupModel.findChildren(groupId);
+
+    // 자식이 없으면 빈 배열 반환
+    if (children.length === 0) {
+      return [];
+    }
+
+    // 첫 번째 이미지를 가진 자식 그룹 찾기
+    for (const child of children) {
+      const childImages = await this.findPreviewImages(child.id, count, true);
+      if (childImages.length > 0) {
+        return childImages;
+      }
+    }
+
+    // 모든 자식 그룹에도 이미지가 없음
+    return [];
+  }
+
+  /**
    * 그룹에 속한 모든 composite_hash 조회
    */
   static async getCompositeHashesForGroup(groupId: number): Promise<string[]> {
