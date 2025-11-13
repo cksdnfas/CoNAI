@@ -241,12 +241,21 @@ const ImageGroupsPage: React.FC = () => {
     showSnackbar(t('imageGroups:messages.updateSuccess'), 'success');
   };
 
-  // 그룹 카드 클릭 핸들러 (이미지 보기)
+  // 그룹 카드 클릭 핸들러 (하위 그룹 우선, 없으면 이미지 보기)
   const handleGroupClick = (group: GroupWithStats) => {
-    setSelectedGroupForImages(group);
-    setGroupImagesModalOpen(true);
-    setGroupImagesPage(1); // 페이지 초기화
-    fetchGroupImages(group.id, 1, groupImagesPageSize);
+    // 하위 그룹이 있으면 하위 그룹 목록으로 이동
+    if (group.child_count && group.child_count > 0) {
+      navigateToGroup(group.id);
+    } else if (group.image_count > 0) {
+      // 하위 그룹 없고 이미지가 있으면 모달 열기
+      setSelectedGroupForImages(group);
+      setGroupImagesModalOpen(true);
+      setGroupImagesPage(1); // 페이지 초기화
+      fetchGroupImages(group.id, 1, groupImagesPageSize);
+    } else {
+      // 둘 다 없으면 빈 그룹 메시지 표시
+      showSnackbar(t('imageGroups:messages.emptyGroup'), 'info');
+    }
   };
 
   // 그룹 이미지 모달 닫기
