@@ -27,6 +27,7 @@ import type { AutoFolderGroupWithStats } from '@comfyui-image-manager/shared';
 import type { ImageRecord } from '../../../types/image';
 import { GroupBreadcrumb } from './GroupBreadcrumb';
 import GroupImageGridModal from './GroupImageGridModal';
+import { AutoFolderGroupCard } from './AutoFolderGroupCard';
 
 interface AutoFolderGroupsContentProps {
   onShowSnackbar: (message: string, severity: 'success' | 'error' | 'info' | 'warning') => void;
@@ -310,6 +311,19 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
         <Grid container spacing={2}>
           {groups.map((group) => (
             <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2, xl: 1.5 }} key={group.id}>
+              <AutoFolderGroupCard
+                group={group}
+                onClick={() => {
+                  if (group.child_count && group.child_count > 0) {
+                    navigateToGroup(group);
+                  } else if (group.image_count > 0) {
+                    setSelectedGroupForImages(group);
+                    setGroupImagesModalOpen(true);
+                    loadGroupImages(group.id, 1);
+                  }
+                }}
+              />
+              {/* Legacy Card - keeping for reference
               <Card
                 sx={{
                   cursor: 'pointer',
@@ -457,6 +471,7 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
                   </Box>
                 </Box>
               </Card>
+              */}
             </Grid>
           ))}
         </Grid>

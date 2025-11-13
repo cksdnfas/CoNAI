@@ -37,6 +37,7 @@ import GroupCreateEditModal from './components/GroupCreateEditModal';
 import GroupImageGridModal from './components/GroupImageGridModal';
 import { GroupBreadcrumb } from './components/GroupBreadcrumb';
 import AutoFolderGroupsContent from './components/AutoFolderGroupsContent';
+import { GroupCard } from './components/GroupCard';
 
 const ImageGroupsPage: React.FC = () => {
   const { t } = useTranslation(['imageGroups', 'common']);
@@ -469,6 +470,8 @@ const ImageGroupsPage: React.FC = () => {
         <Grid container spacing={3}>
           {groups.map((group) => (
             <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2, xl: 1.5 }} key={group.id}>
+              <GroupCard group={group} onClick={() => handleGroupClick(group)} />
+              {/* Legacy Card with menu - keeping for now
               <Card
                 sx={{
                   cursor: 'pointer',
@@ -656,6 +659,7 @@ const ImageGroupsPage: React.FC = () => {
                   </Box>
                 </Box>
               </Card>
+              */}
             </Grid>
           ))}
         </Grid>

@@ -112,6 +112,27 @@ export const autoFolderGroupsApi = {
   },
 
   /**
+   * Get preview images for folder group (for rotation display)
+   * @param id Group ID
+   * @param count Number of images to fetch (1-20, default 8)
+   * @param includeChildren Search child groups if parent has no images (default true)
+   */
+  getPreviewImages: async (
+    id: number,
+    count: number = 8,
+    includeChildren: boolean = true
+  ): Promise<{
+    success: boolean;
+    data?: ImageRecord[];
+    error?: string;
+  }> => {
+    const response = await apiClient.get(
+      `/api/auto-folder-groups/${id}/preview-images?count=${count}&includeChildren=${includeChildren}`
+    );
+    return response.data;
+  },
+
+  /**
    * Rebuild all folder groups
    */
   rebuild: async (): Promise<{
