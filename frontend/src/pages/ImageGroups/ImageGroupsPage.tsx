@@ -468,7 +468,7 @@ const ImageGroupsPage: React.FC = () => {
       ) : (
         <Grid container spacing={3}>
           {groups.map((group) => (
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={group.id}>
+            <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2, xl: 1.5 }} key={group.id}>
               <Card
                 sx={{
                   cursor: 'pointer',
