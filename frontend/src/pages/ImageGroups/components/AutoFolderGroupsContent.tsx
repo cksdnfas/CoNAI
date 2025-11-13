@@ -309,7 +309,7 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
       ) : (
         <Grid container spacing={2}>
           {groups.map((group) => (
-            <Grid item xs={12} sm={6} md={4} lg={3} key={group.id}>
+            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={group.id}>
               <Card
                 sx={{
                   cursor: 'pointer',
