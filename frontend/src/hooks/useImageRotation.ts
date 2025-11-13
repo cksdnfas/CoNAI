@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ImageMetadataRecord } from '@comfyui-image-manager/shared';
+import { ImageRecord } from '@comfyui-image-manager/shared';
 
 interface UseImageRotationOptions {
   /** 그룹 ID (캐시 키로 사용) */
@@ -19,9 +19,9 @@ interface UseImageRotationOptions {
 
 interface UseImageRotationResult {
   /** 현재 표시할 이미지 */
-  currentImage: ImageMetadataRecord | null;
+  currentImage: ImageRecord | null;
   /** 로드된 모든 이미지 배열 */
-  images: ImageMetadataRecord[];
+  images: ImageRecord[];
   /** 현재 인덱스 */
   currentIndex: number;
   /** 로딩 상태 */
@@ -46,7 +46,7 @@ interface UseImageRotationResult {
  * @returns 현재 이미지, 제어 함수, 상태
  */
 export function useImageRotation(
-  fetchImages: (count: number, includeChildren: boolean) => Promise<ImageMetadataRecord[]>,
+  fetchImages: (count: number, includeChildren: boolean) => Promise<ImageRecord[]>,
   options: UseImageRotationOptions
 ): UseImageRotationResult {
   const {
