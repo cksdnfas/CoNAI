@@ -105,7 +105,7 @@ const ImageGroupsPage: React.FC = () => {
     }
   };
 
-  // 그룹 네비게이션
+  // 그룹 네비게이션 (하위 그룹이 1개만 있으면 자동 진입)
   const navigateToGroup = async (groupId: number | null) => {
     setCurrentParentId(groupId);
     if (groupId === null) {
@@ -113,7 +113,29 @@ const ImageGroupsPage: React.FC = () => {
     } else {
       await loadBreadcrumb(groupId);
     }
-    await fetchGroups(groupId);
+
+    // 그룹 목록 조회
+    const response = groupId === null
+      ? await groupApi.getRootGroups()
+      : await groupApi.getChildGroups(groupId);
+
+    if (response.success && response.data) {
+      const fetchedGroups = response.data;
+      setGroups(fetchedGroups);
+
+      // 자동 진입 조건: 하위 그룹이 정확히 1개이고, 이미지가 없으면 계속 진입
+      if (fetchedGroups.length === 1) {
+        const singleGroup = fetchedGroups[0];
+
+        if (singleGroup.image_count === 0 && singleGroup.child_count === 1) {
+          // 재귀적으로 하위 그룹으로 진입
+          await navigateToGroup(singleGroup.id);
+          return;
+        }
+      }
+    } else {
+      showSnackbar(t('imageGroups:messages.loadFailed'), 'error');
+    }
   };
 
   // 하위 그룹 열기

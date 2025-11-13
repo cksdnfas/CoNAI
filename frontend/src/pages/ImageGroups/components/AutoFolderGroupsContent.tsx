@@ -118,21 +118,61 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
     }
   };
 
-  // 그룹 네비게이션
-  const navigateToGroup = (group: AutoFolderGroupWithStats) => {
+  // 그룹 네비게이션 (하위 그룹이 1개만 있으면 자동 진입)
+  const navigateToGroup = async (group: AutoFolderGroupWithStats) => {
     setCurrentParentId(group.id);
-    setBreadcrumb([...breadcrumb, { id: group.id, name: group.display_name }]);
+    await loadBreadcrumb(group.id);
+
+    // 그룹 목록 조회
+    const response = await autoFolderGroupsApi.getChildGroups(group.id);
+
+    if (response.success && response.data) {
+      const fetchedGroups = response.data;
+      setGroups(fetchedGroups);
+
+      // 자동 진입 조건: 하위 그룹이 정확히 1개이고, 이미지가 없으면 계속 진입
+      if (fetchedGroups.length === 1) {
+        const singleGroup = fetchedGroups[0];
+
+        if (singleGroup.image_count === 0 && singleGroup.child_count === 1) {
+          // 재귀적으로 하위 그룹으로 진입
+          await navigateToGroup(singleGroup);
+          return;
+        }
+      }
+    } else {
+      onShowSnackbar(t('imageGroups:messages.loadFailed'), 'error');
+    }
   };
 
-  const handleBreadcrumbClick = (index: number) => {
-    if (index === -1) {
-      // 루트로
-      setCurrentParentId(null);
+  const handleBreadcrumbClick = async (groupId: number | null) => {
+    setCurrentParentId(groupId);
+    if (groupId === null) {
       setBreadcrumb([]);
+      await fetchGroups(null);
     } else {
-      const targetGroup = breadcrumb[index];
-      setCurrentParentId(targetGroup.id);
-      setBreadcrumb(breadcrumb.slice(0, index + 1));
+      await loadBreadcrumb(groupId);
+
+      // 그룹 목록 조회
+      const response = await autoFolderGroupsApi.getChildGroups(groupId);
+
+      if (response.success && response.data) {
+        const fetchedGroups = response.data;
+        setGroups(fetchedGroups);
+
+        // 자동 진입 조건: 하위 그룹이 정확히 1개이고, 이미지가 없으면 계속 진입
+        if (fetchedGroups.length === 1) {
+          const singleGroup = fetchedGroups[0];
+
+          if (singleGroup.image_count === 0 && singleGroup.child_count === 1) {
+            // 재귀적으로 하위 그룹으로 진입
+            await navigateToGroup(singleGroup);
+            return;
+          }
+        }
+      } else {
+        onShowSnackbar(t('imageGroups:messages.loadFailed'), 'error');
+      }
     }
   };
 
@@ -318,7 +358,7 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
                       size="small"
                       color={group.image_count > 0 ? 'primary' : 'default'}
                     />
-                    {group.child_count && group.child_count > 0 && (
+                    {group.child_count > 0 && (
                       <Chip
                         label={t('imageGroups:hierarchy.childGroups', { count: group.child_count })}
                         size="small"
