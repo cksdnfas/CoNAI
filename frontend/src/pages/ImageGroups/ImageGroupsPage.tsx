@@ -26,6 +26,7 @@ import {
   PlayArrow as PlayIcon,
   Collections as GroupIcon,
   AutoAwesome as AutoIcon,
+  Folder as FolderIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 
@@ -443,26 +444,23 @@ const ImageGroupsPage: React.FC = () => {
             <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={group.id}>
               <Card
                 sx={{
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
                   cursor: 'pointer',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  transition: 'all 0.2s',
                   '&:hover': {
                     transform: 'translateY(-4px)',
-                    boxShadow: (theme) => theme.shadows[8],
+                    boxShadow: 4,
                   },
+                  opacity: group.image_count > 0 ? 1 : 0.7,
                 }}
                 onClick={() => handleGroupClick(group)}
               >
                 <CardMedia
                   component="img"
-                  height="200"
+                  height="160"
                   image={getRepresentativeImageUrl(group)}
                   alt={group.name}
                   sx={{
                     objectFit: 'cover',
-                    backgroundColor: 'grey.100',
                   }}
                   onError={(e) => {
                     // 이미지 로드 실패 시 플레이스홀더로 대체
@@ -472,35 +470,30 @@ const ImageGroupsPage: React.FC = () => {
                     }
                   }}
                 />
-                <CardContent sx={{ flexGrow: 1, position: 'relative' }}>
-                  <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
+                <CardContent sx={{ position: 'relative' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
+                    <FolderIcon sx={{ mr: 1, color: 'primary.main' }} />
+                    <Typography variant="h6" component="div" sx={{ flex: 1, wordBreak: 'break-word', pr: 1 }}>
+                      {group.name}
+                    </Typography>
                     <IconButton
                       size="small"
                       onClick={(e) => {
                         e.stopPropagation(); // 카드 클릭 이벤트 방지
                         handleMenuOpen(e, group.id);
                       }}
+                      sx={{ ml: 1 }}
                     >
                       <MoreVertIcon />
                     </IconButton>
                   </Box>
-
-                  <Typography
-                    variant="h6"
-                    component="h2"
-                    gutterBottom
-                    noWrap
-                    sx={{ pr: 5 }}
-                  >
-                    {group.name}
-                  </Typography>
 
                   {group.description ? (
                     <Typography
                       variant="body2"
                       color="text.secondary"
                       sx={{
-                        mb: 2,
+                        mb: 1,
                         display: '-webkit-box',
                         WebkitLineClamp: 2,
                         WebkitBoxOrient: 'vertical',
@@ -511,12 +504,11 @@ const ImageGroupsPage: React.FC = () => {
                     </Typography>
                   ) : null}
 
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                     <Chip
-                      icon={<GroupIcon />}
                       label={t('imageGroups:groupCard.imageCount', { count: group.image_count })}
                       size="small"
-                      variant="outlined"
+                      color={group.image_count > 0 ? 'primary' : 'default'}
                     />
                     {group.auto_collect_enabled ? (
                       <Chip
@@ -532,7 +524,6 @@ const ImageGroupsPage: React.FC = () => {
                         label={t('imageGroups:hierarchy.childGroups', { count: group.child_count })}
                         size="small"
                         color="secondary"
-                        variant="outlined"
                         onClick={(e) => {
                           e.stopPropagation();
                           openSubgroups(group);
@@ -543,7 +534,7 @@ const ImageGroupsPage: React.FC = () => {
                   </Box>
 
                   {group.auto_collect_enabled && group.image_count > 0 ? (
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
                       {t('imageGroups:groupCard.stats', {
                         auto: group.auto_collected_count || 0,
                         manual: group.manual_added_count || 0
