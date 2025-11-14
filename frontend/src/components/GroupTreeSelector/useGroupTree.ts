@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { GroupWithHierarchy } from '@comfyui-image-manager/shared';
+import type { GroupWithHierarchy } from '@comfyui-image-manager/shared';
 
 interface TreeNode {
   group: GroupWithHierarchy;
