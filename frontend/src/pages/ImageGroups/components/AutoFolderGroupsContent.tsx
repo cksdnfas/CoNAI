@@ -28,6 +28,7 @@ import type { ImageRecord } from '../../../types/image';
 import { GroupBreadcrumb } from './GroupBreadcrumb';
 import GroupImageGridModal from './GroupImageGridModal';
 import { AutoFolderGroupCard } from './AutoFolderGroupCard';
+import { AutoFolderImageViewCard } from './AutoFolderImageViewCard';
 
 interface AutoFolderGroupsContentProps {
   onShowSnackbar: (message: string, severity: 'success' | 'error' | 'info' | 'warning') => void;
@@ -42,7 +43,10 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
   const [menuGroupId, setMenuGroupId] = useState<number | null>(null);
 
   // 계층 네비게이션 상태
+  const [isGroupListView, setIsGroupListView] = useState(true); // true = 그룹 목록 뷰
+  const [selectedRootGroupId, setSelectedRootGroupId] = useState<number | null>(null); // 선택된 루트 그룹
   const [currentParentId, setCurrentParentId] = useState<number | null>(null);
+  const [currentGroupInfo, setCurrentGroupInfo] = useState<AutoFolderGroupWithStats | null>(null); // 현재 폴더 그룹 정보
   const [breadcrumb, setBreadcrumb] = useState<Array<{ id: number; name: string }>>([]);
 
   // 이미지 모달 상태
@@ -122,6 +126,7 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
   // 그룹 네비게이션 (하위 그룹이 1개만 있으면 자동 진입)
   const navigateToGroup = async (group: AutoFolderGroupWithStats) => {
     setCurrentParentId(group.id);
+    setCurrentGroupInfo(group); // 현재 그룹 정보 저장
     await loadBreadcrumb(group.id);
 
     // 그룹 목록 조회
@@ -147,12 +152,27 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
   };
 
   const handleBreadcrumbClick = async (groupId: number | null) => {
-    setCurrentParentId(groupId);
     if (groupId === null) {
+      // 그룹 목록으로 돌아가기
+      setIsGroupListView(true);
+      setSelectedRootGroupId(null);
+      setCurrentParentId(null);
+      setCurrentGroupInfo(null);
       setBreadcrumb([]);
       await fetchGroups(null);
     } else {
+      setCurrentParentId(groupId);
       await loadBreadcrumb(groupId);
+
+      // 현재 그룹 정보 로드
+      try {
+        const groupResponse = await autoFolderGroupsApi.getGroup(groupId);
+        if (groupResponse.success && groupResponse.data) {
+          setCurrentGroupInfo(groupResponse.data);
+        }
+      } catch (error) {
+        console.error('Error loading current group info:', error);
+      }
 
       // 그룹 목록 조회
       const response = await autoFolderGroupsApi.getChildGroups(groupId);
@@ -288,11 +308,12 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
         </Button>
       </Box>
 
-      {/* 브레드크럼 */}
-      {(currentParentId !== null || breadcrumb.length > 0) && (
+      {/* 브레드크럼 (그룹 내부에서만 표시) */}
+      {!isGroupListView && (
         <GroupBreadcrumb
           breadcrumb={breadcrumb}
           onNavigate={handleBreadcrumbClick}
+          showGroupListRoot={true}
         />
       )}
 
@@ -301,19 +322,45 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
         <Box sx={{ textAlign: 'center', py: 8 }}>
           <FolderOpenIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            {t('imageGroups:page.emptyTitle')}
+            {isGroupListView ? '자동 폴더 그룹이 없습니다' : '하위 폴더가 없습니다'}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            새로고침 버튼을 눌러 폴더 구조를 생성하세요.
+            {isGroupListView
+              ? '새로고침 버튼을 눌러 폴더 구조를 생성하세요'
+              : '현재 폴더에는 하위 폴더가 없습니다'}
           </Typography>
         </Box>
       ) : (
         <Grid container spacing={2}>
+          {/* 폴더 내부 뷰: 현재 폴더의 이미지 보기 카드 추가 */}
+          {!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0 && (
+            <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2, xl: 1.5 }} key={`image-view-${currentParentId}`}>
+              <AutoFolderImageViewCard
+                group={currentGroupInfo}
+                onClick={() => {
+                  setSelectedGroupForImages(currentGroupInfo);
+                  setGroupImagesModalOpen(true);
+                  loadGroupImages(currentGroupInfo.id, 1);
+                }}
+              />
+            </Grid>
+          )}
+
+          {/* 하위 폴더 카드들 */}
           {groups.map((group) => (
             <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2, xl: 1.5 }} key={group.id}>
               <AutoFolderGroupCard
                 group={group}
                 onClick={() => {
+                  // 그룹 목록 뷰에서는 루트 그룹을 선택하여 해당 그룹의 루트로 진입
+                  if (isGroupListView) {
+                    setIsGroupListView(false);
+                    setSelectedRootGroupId(group.id);
+                    navigateToGroup(group);
+                    return;
+                  }
+
+                  // 그룹 내부에서는 기존 로직 유지
                   if (group.child_count && group.child_count > 0) {
                     navigateToGroup(group);
                   } else if (group.image_count > 0) {
@@ -345,7 +392,7 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
         onClose={handleGroupImagesModalClose}
         images={groupImages}
         loading={groupImagesLoading}
-        currentGroup={selectedGroupForImages}
+        currentGroup={selectedGroupForImages as any}
         allGroups={[]}
         pageSize={groupImagesPageSize}
         onPageSizeChange={handleGroupImagesPageSizeChange}
