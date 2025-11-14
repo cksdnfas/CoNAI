@@ -1,6 +1,6 @@
 import React from 'react';
 import { Breadcrumbs, Link, Typography, Box } from '@mui/material';
-import { NavigateNext, Home } from '@mui/icons-material';
+import { NavigateNext, Home, FolderOpen } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { BreadcrumbItem } from '@comfyui-image-manager/shared';
 
@@ -8,6 +8,7 @@ interface GroupBreadcrumbProps {
   breadcrumb: BreadcrumbItem[];
   currentGroupName?: string;
   onNavigate: (groupId: number | null) => void;
+  showGroupListRoot?: boolean; // true면 "그룹 목록"으로 표시
 }
 
 /**
@@ -18,6 +19,7 @@ export const GroupBreadcrumb: React.FC<GroupBreadcrumbProps> = ({
   breadcrumb,
   currentGroupName,
   onNavigate,
+  showGroupListRoot = false,
 }) => {
   const { t } = useTranslation();
 
@@ -27,7 +29,7 @@ export const GroupBreadcrumb: React.FC<GroupBreadcrumbProps> = ({
         separator={<NavigateNext fontSize="small" />}
         aria-label="group navigation"
       >
-        {/* Root level */}
+        {/* Root level - "그룹 목록" 또는 "Home" */}
         <Link
           component="button"
           variant="body1"
@@ -44,8 +46,8 @@ export const GroupBreadcrumb: React.FC<GroupBreadcrumbProps> = ({
             },
           }}
         >
-          <Home fontSize="small" />
-          {t('imageGroups.hierarchy.root')}
+          {showGroupListRoot ? <FolderOpen fontSize="small" /> : <Home fontSize="small" />}
+          {showGroupListRoot ? '그룹 목록' : t('imageGroups:hierarchy.root')}
         </Link>
 
         {/* Ancestor groups */}
