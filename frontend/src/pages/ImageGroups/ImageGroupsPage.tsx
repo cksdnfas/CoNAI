@@ -38,6 +38,7 @@ import GroupImageGridModal from './components/GroupImageGridModal';
 import { GroupBreadcrumb } from './components/GroupBreadcrumb';
 import AutoFolderGroupsContent from './components/AutoFolderGroupsContent';
 import { GroupCard } from './components/GroupCard';
+import { ImageViewCard } from './components/ImageViewCard';
 
 const ImageGroupsPage: React.FC = () => {
   const { t } = useTranslation(['imageGroups', 'common']);
@@ -60,7 +61,10 @@ const ImageGroupsPage: React.FC = () => {
   });
 
   // 계층 네비게이션 상태
+  const [isGroupListView, setIsGroupListView] = useState(true); // true = 그룹 목록 뷰
+  const [selectedRootGroupId, setSelectedRootGroupId] = useState<number | null>(null); // 선택된 루트 그룹
   const [currentParentId, setCurrentParentId] = useState<number | null>(null);
+  const [currentGroupInfo, setCurrentGroupInfo] = useState<GroupWithStats | null>(null); // 현재 부모 그룹 정보
   const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>([]);
 
   // 그룹 이미지 모달 관련 상태
@@ -111,8 +115,18 @@ const ImageGroupsPage: React.FC = () => {
     setCurrentParentId(groupId);
     if (groupId === null) {
       setBreadcrumb([]);
+      setCurrentGroupInfo(null);
     } else {
       await loadBreadcrumb(groupId);
+      // 현재 그룹 정보 로드
+      try {
+        const groupResponse = await groupApi.getGroup(groupId);
+        if (groupResponse.success && groupResponse.data) {
+          setCurrentGroupInfo(groupResponse.data);
+        }
+      } catch (error) {
+        console.error('Error loading current group info:', error);
+      }
     }
 
     // 그룹 목록 조회
@@ -146,7 +160,17 @@ const ImageGroupsPage: React.FC = () => {
 
   // 브레드크럼 클릭 핸들러 (자동 진입 비활성화)
   const handleBreadcrumbNavigate = (groupId: number | null) => {
-    navigateToGroup(groupId, false);
+    if (groupId === null) {
+      // 그룹 목록으로 돌아가기
+      setIsGroupListView(true);
+      setSelectedRootGroupId(null);
+      setCurrentParentId(null);
+      setCurrentGroupInfo(null);
+      setBreadcrumb([]);
+      fetchGroups(null);
+    } else {
+      navigateToGroup(groupId, false);
+    }
   };
 
   useEffect(() => {
@@ -270,10 +294,20 @@ const ImageGroupsPage: React.FC = () => {
     showSnackbar(t('imageGroups:messages.updateSuccess'), 'success');
   };
 
-  // 그룹 카드 클릭 핸들러 (하위 그룹 우선, 없으면 이미지 보기)
+  // 그룹 카드 클릭 핸들러
   const handleGroupClick = (group: GroupWithStats) => {
+    // 그룹 목록 뷰에서는 루트 그룹을 선택하여 해당 그룹의 루트로 진입
+    if (isGroupListView) {
+      setIsGroupListView(false);
+      setSelectedRootGroupId(group.id);
+      setCurrentParentId(group.id);
+      navigateToGroup(group.id);
+      return;
+    }
+
+    // 그룹 내부에서는 기존 로직 유지
     // 하위 그룹이 있으면 하위 그룹 목록으로 이동
-    if (group.child_count && group.child_count > 0) {
+    if ((group as any).child_count && (group as any).child_count > 0) {
       navigateToGroup(group.id);
     } else if (group.image_count > 0) {
       // 하위 그룹 없고 이미지가 있으면 모달 열기
@@ -448,11 +482,12 @@ const ImageGroupsPage: React.FC = () => {
 
       {/* 커스텀 그룹 탭 */}
       {tabValue === 0 && (<>
-      {/* 브레드크럼 네비게이션 */}
-      {(currentParentId !== null || breadcrumb.length > 0) && (
+      {/* 브레드크럼 네비게이션 (그룹 내부에서만 표시) */}
+      {!isGroupListView && (
         <GroupBreadcrumb
           breadcrumb={breadcrumb}
           onNavigate={handleBreadcrumbNavigate}
+          showGroupListRoot={true}
         />
       )}
 
@@ -460,14 +495,32 @@ const ImageGroupsPage: React.FC = () => {
         <Box textAlign="center" py={8}>
           <GroupIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            {t('imageGroups:page.emptyTitle')}
+            {isGroupListView ? '생성된 그룹이 없습니다' : '하위 그룹이 없습니다'}
           </Typography>
           <Typography variant="body2" color="text.secondary" mb={3}>
-            {t('imageGroups:page.emptyDescription')}
+            {isGroupListView
+              ? '+ 버튼을 눌러 새 그룹을 생성하세요'
+              : '현재 그룹에는 하위 그룹이 없습니다'}
           </Typography>
         </Box>
       ) : (
         <Grid container spacing={3}>
+          {/* 그룹 내부 뷰: 현재 그룹의 이미지 보기 카드 추가 */}
+          {!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0 && (
+            <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2, xl: 1.5 }} key={`image-view-${currentParentId}`}>
+              <ImageViewCard
+                group={currentGroupInfo}
+                onClick={() => {
+                  setSelectedGroupForImages(currentGroupInfo);
+                  setGroupImagesModalOpen(true);
+                  setGroupImagesPage(1);
+                  fetchGroupImages(currentGroupInfo.id, 1, groupImagesPageSize);
+                }}
+              />
+            </Grid>
+          )}
+
+          {/* 하위 그룹 카드들 */}
           {groups.map((group) => (
             <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2, xl: 1.5 }} key={group.id}>
               <GroupCard group={group} onClick={() => handleGroupClick(group)} />
