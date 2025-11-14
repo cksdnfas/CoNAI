@@ -14,7 +14,7 @@ import {
   FolderOpen,
   AutoAwesome,
 } from '@mui/icons-material';
-import { GroupWithHierarchy } from '@shared/types/group';
+import { GroupWithHierarchy } from '@comfyui-image-manager/shared';
 
 interface GroupTreeItemProps {
   group: GroupWithHierarchy;

@@ -9,7 +9,7 @@ import {
   useTheme,
 } from '@mui/material';
 import { ExpandMore, Clear } from '@mui/icons-material';
-import { GroupWithHierarchy } from '@shared/types/group';
+import { GroupWithHierarchy } from '@comfyui-image-manager/shared';
 import { useGroupTree } from './useGroupTree';
 import { GroupTreeItem } from './GroupTreeItem';
 
