@@ -82,6 +82,9 @@ export interface LoraScanRequest {
   loraFiles: LoraFileData[];
   loraWeight: number;
   duplicateHandling: 'number' | 'parent';
+  matchingMode: 'filename' | 'common';
+  commonTextFilename: string;
+  matchingPriority: 'filename' | 'common';
 }
 
 export interface LoraScanLog {

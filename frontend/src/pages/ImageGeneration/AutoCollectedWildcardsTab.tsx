@@ -48,6 +48,9 @@ export default function AutoCollectedWildcardsTab() {
   // Scan form states
   const [loraWeight, setLoraWeight] = useState(1.0);
   const [duplicateHandling, setDuplicateHandling] = useState<'number' | 'parent'>('number');
+  const [matchingMode, setMatchingMode] = useState<'filename' | 'common'>('filename');
+  const [commonTextFilename, setCommonTextFilename] = useState('add.txt');
+  const [matchingPriority, setMatchingPriority] = useState<'filename' | 'common'>('filename');
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<LoraFileData[]>([]);
@@ -98,6 +101,27 @@ export default function AutoCollectedWildcardsTab() {
     setScanError(null);
     const loraFiles: LoraFileData[] = [];
 
+    // 폴더별 공용 텍스트 파일 캐시
+    const commonTextCache = new Map<string, string[]>();
+
+    // 공용 텍스트 파일 먼저 스캔 (matchingMode가 'common'일 때)
+    if (matchingMode === 'common') {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.name === commonTextFilename) {
+          const pathParts = file.webkitRelativePath.split('/');
+          const folderPath = pathParts.slice(0, -1).join('/');
+          try {
+            const text = await file.text();
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            commonTextCache.set(folderPath, lines);
+          } catch (err) {
+            console.error('Error reading common text file:', err);
+          }
+        }
+      }
+    }
+
     // 파일 처리
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -107,21 +131,69 @@ export default function AutoCollectedWildcardsTab() {
       if (file.name.endsWith('.safetensors')) {
         const loraName = file.name.replace('.safetensors', '');
         const folderName = pathParts.slice(1, -1).join('/') || pathParts[0];
+        const folderPath = pathParts.slice(0, -1).join('/');
 
-        // 매칭되는 txt 파일 찾기
-        const txtFileName = loraName + '.txt';
         let promptLines: string[] = [];
 
-        for (let j = 0; j < files.length; j++) {
-          const txtFile = files[j];
-          if (txtFile.webkitRelativePath === file.webkitRelativePath.replace(file.name, txtFileName)) {
-            try {
-              const text = await txtFile.text();
-              promptLines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-            } catch (err) {
-              console.error('Error reading txt file:', err);
+        // 매칭 우선순위에 따라 처리
+        if (matchingMode === 'filename') {
+          // 파일명 매칭 모드: 파일명 매칭만 사용
+          const txtFileName = loraName + '.txt';
+          for (let j = 0; j < files.length; j++) {
+            const txtFile = files[j];
+            if (txtFile.webkitRelativePath === file.webkitRelativePath.replace(file.name, txtFileName)) {
+              try {
+                const text = await txtFile.text();
+                promptLines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+              } catch (err) {
+                console.error('Error reading txt file:', err);
+              }
+              break;
             }
-            break;
+          }
+        } else {
+          // 공용 텍스트 모드
+          if (matchingPriority === 'common') {
+            // 공용 텍스트 우선
+            if (commonTextCache.has(folderPath)) {
+              promptLines = commonTextCache.get(folderPath)!;
+            } else {
+              // 공용 텍스트 없으면 파일명 매칭 시도
+              const txtFileName = loraName + '.txt';
+              for (let j = 0; j < files.length; j++) {
+                const txtFile = files[j];
+                if (txtFile.webkitRelativePath === file.webkitRelativePath.replace(file.name, txtFileName)) {
+                  try {
+                    const text = await txtFile.text();
+                    promptLines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                  } catch (err) {
+                    console.error('Error reading txt file:', err);
+                  }
+                  break;
+                }
+              }
+            }
+          } else {
+            // 파일명 매칭 우선
+            const txtFileName = loraName + '.txt';
+            let found = false;
+            for (let j = 0; j < files.length; j++) {
+              const txtFile = files[j];
+              if (txtFile.webkitRelativePath === file.webkitRelativePath.replace(file.name, txtFileName)) {
+                try {
+                  const text = await txtFile.text();
+                  promptLines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                  found = true;
+                } catch (err) {
+                  console.error('Error reading txt file:', err);
+                }
+                break;
+              }
+            }
+            // 파일명 매칭 실패시 공용 텍스트 사용
+            if (!found && commonTextCache.has(folderPath)) {
+              promptLines = commonTextCache.get(folderPath)!;
+            }
           }
         }
 
@@ -154,7 +226,10 @@ export default function AutoCollectedWildcardsTab() {
       const scanRequest: LoraScanRequest = {
         loraFiles: selectedFiles,
         loraWeight,
-        duplicateHandling
+        duplicateHandling,
+        matchingMode,
+        commonTextFilename,
+        matchingPriority
       };
 
       const response = await wildcardApi.scanLoraFolder(scanRequest);
@@ -225,34 +300,34 @@ export default function AutoCollectedWildcardsTab() {
 
   return (
     <Box>
-      {/* Header with Action Buttons */}
-      <Box sx={{ display: 'flex', gap: 1, mb: 3 }}>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<UploadIcon />}
-          onClick={handleOpenScanDialog}
-          color="primary"
-        >
-          {t('wildcards:buttons.openScanDialog')}
-        </Button>
-        {lastScanLog && (
+      {/* Header with Title and Action Buttons */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h6">
+          {t('wildcards:tabs.autoCollected')}
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {lastScanLog && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<HistoryIcon />}
+              onClick={handleOpenLogDialog}
+              color="secondary"
+            >
+              {t('wildcards:buttons.openLogDialog')}
+            </Button>
+          )}
           <Button
             variant="outlined"
             size="small"
-            startIcon={<HistoryIcon />}
-            onClick={handleOpenLogDialog}
-            color="secondary"
+            startIcon={<UploadIcon />}
+            onClick={handleOpenScanDialog}
+            color="primary"
           >
-            {t('wildcards:buttons.openLogDialog')}
+            {t('wildcards:buttons.openScanDialog')}
           </Button>
-        )}
+        </Box>
       </Box>
-
-      {/* Auto-Collected Wildcards List */}
-      <Typography variant="h6" gutterBottom>
-        {t('wildcards:tabs.autoCollected')}
-      </Typography>
 
       {autoWildcards.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
@@ -420,6 +495,59 @@ export default function AutoCollectedWildcardsTab() {
                 />
               </RadioGroup>
             </FormControl>
+
+            {/* Matching Mode */}
+            <FormControl component="fieldset">
+              <FormLabel component="legend">{t('wildcards:autoCollect.matchingMode')}</FormLabel>
+              <RadioGroup
+                value={matchingMode}
+                onChange={(e) => setMatchingMode(e.target.value as 'filename' | 'common')}
+              >
+                <FormControlLabel
+                  value="filename"
+                  control={<Radio />}
+                  label={t('wildcards:autoCollect.matchingModeFilename')}
+                />
+                <FormControlLabel
+                  value="common"
+                  control={<Radio />}
+                  label={t('wildcards:autoCollect.matchingModeCommon')}
+                />
+              </RadioGroup>
+            </FormControl>
+
+            {/* Common Text Filename (shown only when matchingMode is 'common') */}
+            {matchingMode === 'common' && (
+              <>
+                <TextField
+                  fullWidth
+                  label={t('wildcards:autoCollect.commonTextFilename')}
+                  value={commonTextFilename}
+                  onChange={(e) => setCommonTextFilename(e.target.value)}
+                  helperText={t('wildcards:autoCollect.commonTextFilenameHelper')}
+                />
+
+                {/* Matching Priority */}
+                <FormControl component="fieldset">
+                  <FormLabel component="legend">{t('wildcards:autoCollect.matchingPriority')}</FormLabel>
+                  <RadioGroup
+                    value={matchingPriority}
+                    onChange={(e) => setMatchingPriority(e.target.value as 'filename' | 'common')}
+                  >
+                    <FormControlLabel
+                      value="filename"
+                      control={<Radio />}
+                      label={t('wildcards:autoCollect.priorityFilename')}
+                    />
+                    <FormControlLabel
+                      value="common"
+                      control={<Radio />}
+                      label={t('wildcards:autoCollect.priorityCommon')}
+                    />
+                  </RadioGroup>
+                </FormControl>
+              </>
+            )}
 
             <Alert severity="warning">
               <strong>{t('wildcards:scanDialog.warningTitle')}</strong>
