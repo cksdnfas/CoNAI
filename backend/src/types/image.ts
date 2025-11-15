@@ -94,9 +94,13 @@ export interface ImageFileRecord {
  */
 export interface ImageWithFileView extends ImageMetadataRecord {
   // 파일 정보 추가 (LEFT JOIN으로 null 가능)
+  id: number | null;              // 파일 ID (일부 쿼리에서 id로 alias됨)
   file_id: number | null;
   original_file_path: string | null;
   file_status: string | null;
+  file_type: FileType | null;     // 파일 타입 ('image' | 'video' | 'animated')
+  mime_type: string | null;       // MIME 타입 (예: 'image/png', 'video/mp4')
+  file_size: number | null;       // 파일 크기 (바이트)
   folder_id: number | null;
   folder_name: string | null;
 }
