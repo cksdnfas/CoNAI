@@ -155,6 +155,7 @@ const createEnvFileIfNotExists = () => {
 };
 
 const uploadsDir = runtimePaths.uploadsDir;
+const tempDir = runtimePaths.tempDir;
 
 // Initialize session middleware early (will be configured in initializeSessionMiddleware)
 async function initializeSessionMiddleware() {
@@ -216,6 +217,24 @@ app.use('/uploads', optionalAuth, express.static(uploadsDir, {
   maxAge: '1y'
 }));
 
+// temp 폴더 정적 파일 서빙 (썸네일, 임시 편집 이미지 등)
+app.use('/temp', optionalAuth, express.static(tempDir, {
+  setHeaders: (res, filePath) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+    // 이미지 파일에 대한 캐시 설정 (썸네일은 immutable)
+    if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  },
+  etag: true,
+  lastModified: true,
+  maxAge: '1y'
+}));
+
 // Routes configuration (must be called after session middleware is initialized)
 async function registerRoutes() {
   console.log('📋 Registering API routes...');
@@ -246,6 +265,35 @@ async function registerRoutes() {
 
   console.log('✅ All API routes registered successfully');
 
+  // Frontend static file serving (must come AFTER API routes but BEFORE error handlers)
+  const frontendDistPath = process.env.FRONTEND_DIST_PATH
+    ? path.resolve(process.env.FRONTEND_DIST_PATH)
+    : path.join(__dirname, 'frontend');  // SEA integrated build uses dist/frontend
+
+  if (fs.existsSync(frontendDistPath)) {
+    console.log(`🎨 Serving frontend from: ${frontendDistPath}`);
+    app.use(express.static(frontendDistPath));
+
+    // SPA fallback - serve index.html for all non-API routes
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/temp')) {
+        next();
+        return;
+      }
+
+      const indexPath = path.join(frontendDistPath, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        next();
+      }
+    });
+  } else {
+    console.warn('⚠️  Frontend dist not found. API-only mode.');
+    console.warn(`   Expected location: ${frontendDistPath}`);
+    console.warn('   Run "npm run build:integrated" to build with frontend.\n');
+  }
+
   // Error handling (must be registered AFTER all routes)
   app.use(errorHandler);
 
@@ -253,35 +301,6 @@ async function registerRoutes() {
   app.use('*', (req, res) => {
     res.status(404).json({ error: 'Not Found' });
   });
-}
-
-// Frontend static file serving
-const frontendDistPath = process.env.FRONTEND_DIST_PATH
-  ? path.resolve(process.env.FRONTEND_DIST_PATH)
-  : path.join(__dirname, 'frontend');  // SEA integrated build uses dist/frontend
-
-if (fs.existsSync(frontendDistPath)) {
-  console.log(`🎨 Serving frontend from: ${frontendDistPath}`);
-  app.use(express.static(frontendDistPath));
-
-  // SPA fallback - serve index.html for all non-API routes
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
-      next();
-      return;
-    }
-
-    const indexPath = path.join(frontendDistPath, 'index.html');
-    if (fs.existsSync(indexPath)) {
-      res.sendFile(indexPath);
-    } else {
-      res.status(404).json({ error: 'Frontend not found. Please build the frontend first.' });
-    }
-  });
-} else {
-  console.warn('⚠️  Frontend dist not found. API-only mode.');
-  console.warn(`   Expected location: ${frontendDistPath}`);
-  console.warn('   Run "npm run build:integrated" to build with frontend.\n');
 }
 
 // Health check

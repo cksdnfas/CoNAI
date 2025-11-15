@@ -469,39 +469,58 @@ export class ImageGroupModel {
     groupId: number,
     count: number = 8,
     includeChildren: boolean = true
-  ): Promise<ImageMetadataRecord[]> {
+  ): Promise<ImageWithFileView[]> {
     // 1. 현재 그룹에서 랜덤 이미지 조회
-    // ✅ LEFT JOIN으로 비디오 파일도 포함
+    // ✅ image_files 테이블과 JOIN하여 파일 정보 포함
     const query = `
       SELECT DISTINCT
         COALESCE(im.composite_hash, ig.composite_hash) as composite_hash,
+        im.perceptual_hash,
+        im.dhash,
+        im.ahash,
+        im.color_histogram,
         im.width,
         im.height,
-        im.format,
         im.thumbnail_path,
-        im.prompt,
-        im.negative_prompt,
-        im.seed,
+        im.ai_tool,
+        im.model_name,
+        im.lora_models,
         im.steps,
         im.cfg_scale,
         im.sampler,
-        im.model,
-        im.upscaler,
-        im.upscale_factor,
-        im.denoising_strength,
-        im.hires_upscaler,
-        im.created_date,
-        im.positive_tags,
-        im.negative_tags,
-        im.caption
+        im.seed,
+        im.scheduler,
+        im.prompt,
+        im.negative_prompt,
+        im.denoise_strength,
+        im.generation_time,
+        im.batch_size,
+        im.batch_index,
+        im.auto_tags,
+        im.duration,
+        im.fps,
+        im.video_codec,
+        im.audio_codec,
+        im.bitrate,
+        im.rating_score,
+        im.first_seen_date,
+        im.metadata_updated_date,
+        if.id as file_id,
+        if.original_file_path,
+        if.file_status,
+        if.folder_id,
+        f.folder_name
       FROM image_groups ig
       LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
+      LEFT JOIN image_files if ON ig.composite_hash = if.composite_hash
+        AND if.file_status = 'active'
+      LEFT JOIN watched_folders f ON if.folder_id = f.id
       WHERE ig.group_id = ?
       ORDER BY RANDOM()
       LIMIT ?
     `;
 
-    const rows = db.prepare(query).all(groupId, count) as ImageMetadataRecord[];
+    const rows = db.prepare(query).all(groupId, count) as ImageWithFileView[];
 
     // 이미지가 충분히 있거나, 자식 검색을 안 하면 바로 반환
     if (rows.length > 0 || !includeChildren) {

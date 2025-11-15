@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import { runtimePaths } from '../../config/runtimePaths';
 
 /**
  * 통합 마이그레이션: 모든 필수 테이블 생성
@@ -352,36 +353,20 @@ export const up = async (db: Database.Database): Promise<void> => {
 
   folderIndexes.forEach(sql => db.exec(sql));
 
-  // 기본 업로드 폴더 등록 (상대 경로)
-  // 모든 폴더를 동일하게 취급 - auto_scan 및 watcher_enabled 활성화
+  // 기본 업로드 폴더 등록
+  // RUNTIME_UPLOADS_DIR 환경변수로 설정된 루트 업로드 폴더 하나만 등록
   //
-  // 주의: 상대 경로로 저장되며, 런타임에 resolveFolderPath()가 환경변수를 고려하여 절대 경로로 변환
-  // - RUNTIME_BASE_PATH 또는 RUNTIME_UPLOADS_DIR 설정 시 해당 경로 기준으로 해석됨
-  // - ensureRuntimeDirectories()가 실제 폴더를 생성함
-  const defaultUploadPath = path.join('uploads', 'images');
+  // 절대 경로로 저장하여 RUNTIME_UPLOADS_DIR 설정이 바로 적용되도록 함
+  // - RUNTIME_UPLOADS_DIR 설정 시: 해당 경로 사용 (예: E:/img/Images)
+  // - 미설정 시: {basePath}/uploads 사용
+  const defaultUploadPath = runtimePaths.uploadsDir;
   db.prepare(`
     INSERT OR IGNORE INTO watched_folders
     (folder_path, folder_name, auto_scan, scan_interval, recursive, is_active, watcher_enabled)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(defaultUploadPath, '직접 업로드', 1, 60, 1, 1, 1);
+  `).run(defaultUploadPath, 'Upload', 1, 60, 1, 1, 1);
 
-  // API 생성 이미지 폴더 등록
-  const apiUploadPath = path.join('uploads', 'API', 'images');
-  db.prepare(`
-    INSERT OR IGNORE INTO watched_folders
-    (folder_path, folder_name, auto_scan, scan_interval, recursive, is_active, watcher_enabled)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(apiUploadPath, 'API 생성 이미지', 1, 60, 1, 1, 1);
-
-  // 비디오 업로드 폴더 등록
-  const videoUploadPath = path.join('uploads', 'videos');
-  db.prepare(`
-    INSERT OR IGNORE INTO watched_folders
-    (folder_path, folder_name, auto_scan, scan_interval, recursive, is_active, watcher_enabled)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(videoUploadPath, '비디오 업로드', 1, 60, 1, 1, 1);
-
-  console.log('  ✅ 폴더 테이블 3개 + 인덱스 + 기본 폴더 3개 생성 완료\n');
+  console.log('  ✅ 폴더 테이블 3개 + 인덱스 + 기본 폴더 1개 생성 완료\n');
 
   // ============================================
   // 6. 시스템 설정

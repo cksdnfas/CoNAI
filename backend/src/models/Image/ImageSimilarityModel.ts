@@ -290,9 +290,10 @@ export class ImageSimilarityModel {
    * 전체 중복 이미지 그룹 검색 (composite_hash 기반)
    *
    * 처리 과정:
-   * 1. media_metadata에서 유사 이미지 그룹 찾기 (Hamming distance 기반)
-   * 2. 각 그룹의 composite_hash로 image_files 테이블에서 실제 중복 파일 조회
-   * 3. 유사 이미지 + 중복 파일을 모두 포함한 그룹 반환
+   * 1. image_files에서 실제 존재하는 파일의 composite_hash만 조회
+   * 2. 해당 composite_hash의 media_metadata 조회 (고아 데이터 제외)
+   * 3. 유사 이미지 그룹 찾기 (Hamming distance 기반)
+   * 4. 각 그룹의 composite_hash로 image_files에서 실제 중복 파일 조회
    */
   static async findAllDuplicateGroups(
     options: DuplicateSearchOptions = {}
@@ -302,12 +303,14 @@ export class ImageSimilarityModel {
       minGroupSize = 2
     } = options;
 
-    // STEP 1: media_metadata에서 고유한 이미지 메타데이터만 조회 (중복 제거된 상태)
+    // STEP 1: image_files에 실제 존재하는 파일의 메타데이터만 조회 (고아 데이터 제외)
     const allMetadata = db.prepare(`
-      SELECT *
-      FROM media_metadata
-      WHERE perceptual_hash IS NOT NULL
-      ORDER BY composite_hash
+      SELECT DISTINCT m.*
+      FROM media_metadata m
+      INNER JOIN image_files f ON m.composite_hash = f.composite_hash
+      WHERE f.file_status = 'active'
+        AND m.perceptual_hash IS NOT NULL
+      ORDER BY m.composite_hash
     `).all() as ImageMetadataRecord[];
 
     if (allMetadata.length === 0) {
@@ -381,6 +384,11 @@ export class ImageSimilarityModel {
           AND if.file_status = 'active'
         ORDER BY if.composite_hash, if.id
       `).all(...compositeHashes) as any[];
+
+      // 실제 파일이 없는 경우 그룹에서 제외 (고아 메타데이터 필터링)
+      if (fileRecords.length === 0) {
+        continue;
+      }
 
       // 최소 그룹 크기 체크 (유사 이미지 개수 OR 실제 파일 개수)
       // 예: 유사 이미지는 1개지만 중복 파일이 3개인 경우도 그룹으로 포함

@@ -92,7 +92,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
         description: group.description || '',
         color: group.color || '#2196f3',
         parent_id: group.parent_id || null,
-        auto_collect_enabled: group.auto_collect_enabled,
+        auto_collect_enabled: Boolean(group.auto_collect_enabled),
       });
 
       // 자동수집 조건 파싱 (ComplexFilter or legacy format)
@@ -186,7 +186,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
         name: formData.name.trim(),
         description: formData.description.trim() || undefined,
         color: formData.color,
-        parent_id: formData.parent_id,
+        parent_id: formData.parent_id || undefined,
         auto_collect_enabled: formData.auto_collect_enabled,
         auto_collect_conditions: formData.auto_collect_enabled && hasConditions
           ? conditions

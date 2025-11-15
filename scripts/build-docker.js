@@ -214,9 +214,7 @@ console.log('✅ Dockerfile created\n');
 
 // Step 6: Create docker-compose.yml
 console.log('Step 6: Creating docker-compose.yml...');
-const dockerCompose = `version: '3.8'
-
-services:
+const dockerCompose = `services:
   comfyui-manager:
     build:
       context: .

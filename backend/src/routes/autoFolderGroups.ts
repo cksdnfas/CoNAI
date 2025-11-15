@@ -12,7 +12,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { enrichImageRecord } from './images/utils';
 import path from 'path';
 import fs from 'fs';
-import { resolveUploadsPath } from '../config/runtimePaths';
+import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
 
 const router = Router();
 
@@ -70,7 +70,8 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
       return res.status(404).json(errorResponse('Thumbnail not found for image'));
     }
 
-    const fullPath = resolveUploadsPath(randomImage.thumbnail_path);
+    // 썸네일은 temp 폴더에 저장됨
+    const fullPath = path.join(runtimePaths.tempDir, randomImage.thumbnail_path);
 
     // 파일 존재 여부 확인
     if (!fs.existsSync(fullPath)) {
@@ -260,17 +261,17 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
     }
 
     // ZIP 파일 생성
-    const zipPath = await GroupDownloadService.createGroupZip(
-      group.display_name,
-      hashesToDownload,
-      type
-    );
+    const result = await GroupDownloadService.createGroupZip({
+      groupId: id,
+      downloadType: type,
+      compositeHashes: selectedHashes
+    });
 
     // ZIP 파일 전송
-    res.download(zipPath, `${group.display_name}.zip`, (err) => {
+    res.download(result.zipPath, result.fileName, (err) => {
       // 다운로드 완료 또는 실패 시 임시 파일 삭제
-      if (fs.existsSync(zipPath)) {
-        fs.unlinkSync(zipPath);
+      if (fs.existsSync(result.zipPath)) {
+        fs.unlinkSync(result.zipPath);
       }
 
       if (err) {
@@ -294,15 +295,8 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
 router.get('/:id/file-counts', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(req.params.id, 'Group ID');
-    const hashesParam = req.query.hashes as string | undefined;
 
-    const selectedHashes = hashesParam ? hashesParam.split(',') : undefined;
-
-    // 해시 목록 가져오기
-    const allHashes = await AutoFolderGroupService.getGroupHashes(id);
-    const hashesToCheck = selectedHashes || allHashes;
-
-    const fileCounts = await GroupDownloadService.getFileTypeCounts(hashesToCheck);
+    const fileCounts = await GroupDownloadService.getFileCountByType(id);
 
     return res.json(successResponse(fileCounts));
   } catch (error) {

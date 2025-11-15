@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   Card,
   CardMedia,
@@ -7,9 +7,10 @@ import {
   Chip,
 } from '@mui/material';
 import FolderIcon from '@mui/icons-material/Folder';
-import { AutoFolderGroupWithStats } from '@comfyui-image-manager/shared';
+import type { AutoFolderGroupWithStats } from '@comfyui-image-manager/shared';
 import { autoFolderGroupsApi } from '../../../services/api/autoFolderGroupsApi';
 import { useImageRotation } from '../../../hooks/useImageRotation';
+import type { ImageRecord } from '../../../types/image';
 
 interface AutoFolderGroupCardProps {
   group: AutoFolderGroupWithStats;
@@ -25,7 +26,7 @@ interface AutoFolderGroupCardProps {
 export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps) {
   // 이미지 가져오기 함수
   const fetchImages = useCallback(
-    async (count: number, includeChildren: boolean) => {
+    async (count: number, includeChildren: boolean): Promise<ImageRecord[]> => {
       try {
         const response = await autoFolderGroupsApi.getPreviewImages(group.id, count, includeChildren);
         return response.data || [];

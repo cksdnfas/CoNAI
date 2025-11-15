@@ -72,6 +72,7 @@ const publicBaseUrl = (() => {
 })();
 
 const uploadsPublicBase = `${publicBaseUrl}/uploads`;
+const tempPublicBase = `${publicBaseUrl}/temp`;
 
 export const runtimePaths = {
   basePath,
@@ -86,7 +87,8 @@ export const runtimePaths = {
 
 export const publicUrls = {
   baseUrl: publicBaseUrl,
-  uploadsBaseUrl: uploadsPublicBase
+  uploadsBaseUrl: uploadsPublicBase,
+  tempBaseUrl: tempPublicBase
 };
 
 export function ensureRuntimeDirectories(): void {
@@ -143,5 +145,11 @@ export function toUploadsUrl(relativePath: string | null | undefined): string | 
   }
 
   const normalized = normalizeUploadSegment(relativePath);
+
+  // 썸네일 경로는 temp 폴더에 저장되므로 /temp URL 사용
+  if (normalized.startsWith('thumbnails/')) {
+    return `${tempPublicBase}/${normalized}`;
+  }
+
   return `${uploadsPublicBase}/${normalized}`;
 }

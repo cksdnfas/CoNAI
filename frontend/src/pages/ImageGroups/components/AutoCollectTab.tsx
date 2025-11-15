@@ -115,10 +115,12 @@ const AutoCollectTab: React.FC<AutoCollectTabProps> = ({
     window.open('/help?page=filters#/help', '_blank');
   };
 
-  const filterCount =
-    (conditions.exclude_group?.length || 0) +
-    (conditions.or_group?.length || 0) +
-    (conditions.and_group?.length || 0);
+  // enabled 체크 전에 filterCount 계산
+  const filterCount = enabled
+    ? (conditions.exclude_group?.length || 0) +
+      (conditions.or_group?.length || 0) +
+      (conditions.and_group?.length || 0)
+    : 0;
 
   return (
     <Box>

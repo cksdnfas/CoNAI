@@ -316,16 +316,16 @@ export class BackgroundProcessorService {
   ): Promise<string> {
     // Create date-based directory structure
     const dateStr = new Date().toISOString().split('T')[0];
-    // 절대 경로로 디렉토리 생성 (uploads 폴더 내부)
-    const tempDir = path.join(runtimePaths.uploadsDir, 'temp', 'images', dateStr, 'thumbnails');
+    // 절대 경로로 디렉토리 생성 (루트 temp 폴더 사용)
+    const tempDir = path.join(runtimePaths.tempDir, 'thumbnails', dateStr);
 
     // Ensure directory exists
     await fs.promises.mkdir(tempDir, { recursive: true });
 
-    // DB 저장용 상대 경로 (uploads 제외)
-    const thumbnailPath = path.join('temp', 'images', dateStr, 'thumbnails', `${compositeHash}.webp`);
+    // DB 저장용 상대 경로 (temp 폴더 기준)
+    const thumbnailPath = path.join('thumbnails', dateStr, `${compositeHash}.webp`);
     // 파일 시스템용 절대 경로
-    const absoluteThumbnailPath = path.join(runtimePaths.uploadsDir, thumbnailPath);
+    const absoluteThumbnailPath = path.join(runtimePaths.tempDir, thumbnailPath);
 
     // Skip if thumbnail already exists
     if (fs.existsSync(absoluteThumbnailPath)) {

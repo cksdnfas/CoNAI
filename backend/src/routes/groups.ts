@@ -17,10 +17,10 @@ import {
   AutoCollectCondition
 } from '@comfyui-image-manager/shared';
 import { asyncHandler } from '../middleware/errorHandler';
-import { enrichImageRecord } from './images/utils';
+import { enrichImageRecord, enrichImageWithFileView } from './images/utils';
 import path from 'path';
 import fs from 'fs';
-import { resolveUploadsPath } from '../config/runtimePaths';
+import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
 
 const router = Router();
 
@@ -73,7 +73,8 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
       return res.status(404).json(errorResponse('Thumbnail not found for image'));
     }
 
-    const fullPath = resolveUploadsPath(randomImage.thumbnail_path);
+    // 썸네일은 temp 폴더에 저장됨
+    const fullPath = path.join(runtimePaths.tempDir, randomImage.thumbnail_path);
 
     // 파일 존재 여부 확인
     if (!fs.existsSync(fullPath)) {
@@ -128,8 +129,8 @@ router.get('/:id/preview-images', asyncHandler(async (req: Request, res: Respons
 
     const images = await ImageGroupModel.findPreviewImages(id, limitedCount, includeChildren);
 
-    // 이미지 경로 보강 (enrichImageRecord 사용)
-    const enrichedImages = images.map(img => enrichImageRecord(img));
+    // 이미지 경로 보강 (enrichImageWithFileView 사용)
+    const enrichedImages = images.map(img => enrichImageWithFileView(img));
 
     return res.json(successResponse(enrichedImages));
   } catch (error) {

@@ -9,7 +9,7 @@
     "autoCleanupCanvasOnShutdown": false
   },
   "tagger": {
-    "enabled": false,
+    "enabled": true,
     "autoTagOnUpload": false,
     "model": "vit",
     "device": "auto",
