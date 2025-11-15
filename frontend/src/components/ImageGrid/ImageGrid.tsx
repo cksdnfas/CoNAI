@@ -290,9 +290,9 @@ const ImageGrid: React.FC<ImageGridProps> = ({
       </Box>
 
       {/* 이미지 그리드 */}
-      <Grid container spacing={2}>
+      <Grid container spacing={3}>
         {safeImages.map((image, index) => (
-          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3, xl: 2 }} key={image.id ? `id-${image.id}` : `hash-${image.composite_hash || 'processing'}-${index}`}>
+          <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2, xl: 1.5 }} key={image.id ? `id-${image.id}` : `hash-${image.composite_hash || 'processing'}-${index}`}>
             <ImageCard
               image={image}
               selected={image.id ? selectedIds.includes(image.id) : false}

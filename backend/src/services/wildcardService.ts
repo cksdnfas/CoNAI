@@ -118,7 +118,7 @@ export class WildcardService {
       const wildcard = wildcardMap.get(name);
       if (!wildcard || !wildcard.items || wildcard.items.length === 0) {
         console.warn(`Wildcard not found or empty: ${name}`);
-        return match; // 원본 그대로 반환
+        return ''; // 빈 문자열 반환
       }
 
       // 해당 도구의 항목만 필터링
@@ -126,7 +126,7 @@ export class WildcardService {
 
       if (toolItems.length === 0) {
         console.warn(`No items found for wildcard '${name}' with tool '${tool}'`);
-        return match; // 원본 그대로 반환
+        return ''; // 빈 문자열 반환
       }
 
       // 랜덤 항목 선택

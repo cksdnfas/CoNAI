@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -7,11 +7,14 @@ import {
   Button,
   Alert,
   Divider,
-  CircularProgress
+  CircularProgress,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
 } from '@mui/material';
-import { Security, VpnKey } from '@mui/icons-material';
+import { Security, VpnKey, Help, ExpandMore } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { authApi } from '../../../../services/authApi';
+import { authApi, type DatabaseInfoResponse } from '../../../../services/authApi';
 import { useAuth } from '../../../../contexts/AuthContext';
 
 export const AuthSettings: React.FC = () => {
@@ -20,6 +23,7 @@ export const AuthSettings: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [dbInfo, setDbInfo] = useState<DatabaseInfoResponse | null>(null);
 
   // Setup form state
   const [setupUsername, setSetupUsername] = useState('');
@@ -49,6 +53,19 @@ export const AuthSettings: React.FC = () => {
     setNewPassword('');
     setConfirmNewPassword('');
   };
+
+  // Load database info on mount
+  useEffect(() => {
+    const loadDbInfo = async () => {
+      try {
+        const info = await authApi.getDatabaseInfo();
+        setDbInfo(info);
+      } catch (err) {
+        console.error('Failed to load database info:', err);
+      }
+    };
+    loadDbInfo();
+  }, []);
 
   const handleSetup = async () => {
     clearMessages();
@@ -234,6 +251,61 @@ export const AuthSettings: React.FC = () => {
           >
             {isLoading ? <CircularProgress size={24} /> : t('auth.update.button')}
           </Button>
+
+          {/* Account Recovery Section */}
+          <Box sx={{ mt: 3 }}>
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Help sx={{ mr: 1, color: 'warning.main' }} />
+                  <Typography>계정을 잊어버렸나요?</Typography>
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2" sx={{ mb: 2 }}>
+                    비밀번호를 잊어버린 경우, 아래 방법으로 계정을 복구할 수 있습니다.
+                  </Typography>
+                  <Typography variant="body2" component="div" sx={{ mb: 1 }}>
+                    <strong>복구 방법:</strong>
+                  </Typography>
+                  <Typography variant="body2" component="ol" sx={{ pl: 2, mb: 2 }}>
+                    <li>서버를 중지합니다</li>
+                    <li>아래 파일을 삭제합니다</li>
+                    <li>서버를 다시 시작합니다</li>
+                    <li>새로운 계정을 설정합니다</li>
+                  </Typography>
+                  {dbInfo && (
+                    <Box sx={{ bgcolor: 'background.default', p: 2, borderRadius: 1, mt: 2 }}>
+                      <Typography variant="caption" sx={{ display: 'block', mb: 1 }}>
+                        <strong>삭제할 파일:</strong>
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontFamily: 'monospace',
+                          fontSize: '0.85rem',
+                          wordBreak: 'break-all',
+                          bgcolor: 'grey.900',
+                          color: 'success.light',
+                          p: 1,
+                          borderRadius: 1
+                        }}
+                      >
+                        {dbInfo.authDbPath}
+                      </Typography>
+                    </Box>
+                  )}
+                  <Alert severity="warning" sx={{ mt: 2 }}>
+                    <Typography variant="caption">
+                      ⚠️ 주의: 이 파일을 삭제하면 모든 세션이 무효화되며, 다시 로그인해야 합니다.
+                      워크플로우, 설정 등 다른 데이터는 영향을 받지 않습니다.
+                    </Typography>
+                  </Alert>
+                </Alert>
+              </AccordionDetails>
+            </Accordion>
+          </Box>
         </Paper>
       )}
     </Box>

@@ -41,7 +41,8 @@ export class SettingsService {
           recycleBinPath: 'RecycleBin'
         },
         enableGallery: true,  // 기본값: 갤러리 활성화
-        autoCleanupCanvasOnShutdown: false  // 기본값: Canvas 폴더 유지 (삭제하지 않음)
+        autoCleanupCanvasOnShutdown: false,  // 기본값: Canvas 폴더 유지 (삭제하지 않음)
+        showRatingBadges: true  // 기본값: Rating 배지 표시
       },
       tagger: {
         enabled: process.env.TAGGER_ENABLED === 'true',
@@ -66,8 +67,8 @@ export class SettingsService {
         skipStealthForWebUI: false,           // 기본값: WebUI 검사
       },
       thumbnail: {
-        size: 'original',  // 기본값: 원본 크기 유지
-        quality: 100,      // 기본값: 100% 품질
+        size: '1080',      // 기본값: 1080px
+        quality: 80,       // 기본값: 80% 품질
       },
     };
   }

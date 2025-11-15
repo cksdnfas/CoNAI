@@ -62,6 +62,7 @@ export interface ImageRecord {
 
   // Auto-tagging (WD v3 Tagger)
   auto_tags: AutoTagsData | null;      // Auto-generated tags (parsed JSON)
+  rating_score: number | null;         // Calculated rating score from auto_tags
 
   // Image similarity search
   perceptual_hash: string | null;      // pHash for perceptual similarity

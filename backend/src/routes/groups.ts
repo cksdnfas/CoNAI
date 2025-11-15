@@ -353,7 +353,7 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
 
     // URL과 구조화된 메타데이터 추가, groups 배열에 현재 그룹 정보 포함
     const enrichedImages = result.images.map(image => {
-      const enriched = enrichImageRecord(image);
+      const enriched = enrichImageWithFileView(image);
       // groups 배열에 현재 그룹의 collection_type 정보 추가
       enriched.groups = [{
         id: group!.id,
@@ -363,6 +363,17 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
       }];
       return enriched;
     });
+
+    // 🔍 DEBUG: Check first image data
+    if (enrichedImages.length > 0) {
+      console.log('[DEBUG] First enriched image:', {
+        composite_hash: enrichedImages[0].composite_hash,
+        id: enrichedImages[0].id,
+        file_type: enrichedImages[0].file_type,
+        mime_type: enrichedImages[0].mime_type,
+        file_size: enrichedImages[0].file_size
+      });
+    }
 
     return res.json(
       successResponse({

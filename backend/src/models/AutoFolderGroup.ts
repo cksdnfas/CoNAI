@@ -4,7 +4,7 @@ import {
   CreateAutoFolderGroupData,
   AutoFolderGroupWithStats
 } from '@comfyui-image-manager/shared';
-import { ImageMetadataRecord } from '../types/image';
+import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
 
 /**
  * 자동 폴더 그룹 모델
@@ -207,7 +207,12 @@ export class AutoFolderGroupImageModel {
       });
 
       const query = `
-        SELECT m.*
+        SELECT m.*,
+        (SELECT id FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as id,
+        (SELECT file_type FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as file_type,
+        (SELECT mime_type FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as mime_type,
+        (SELECT file_size FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as file_size,
+        (SELECT original_file_path FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as original_file_path
         FROM auto_folder_group_images afgi
         INNER JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
         WHERE afgi.group_id = ?
@@ -270,18 +275,59 @@ export class AutoFolderGroupImageModel {
     groupId: number,
     count: number = 8,
     includeChildren: boolean = true
-  ): Promise<ImageMetadataRecord[]> {
+  ): Promise<ImageWithFileView[]> {
     // 1. 현재 그룹에서 랜덤 이미지 조회
     const query = `
-      SELECT DISTINCT m.*
+      SELECT DISTINCT
+        COALESCE(m.composite_hash, afgi.composite_hash) as composite_hash,
+        m.perceptual_hash,
+        m.dhash,
+        m.ahash,
+        m.color_histogram,
+        m.width,
+        m.height,
+        m.thumbnail_path,
+        m.ai_tool,
+        m.model_name,
+        m.lora_models,
+        m.steps,
+        m.cfg_scale,
+        m.sampler,
+        m.seed,
+        m.scheduler,
+        m.prompt,
+        m.negative_prompt,
+        m.denoise_strength,
+        m.generation_time,
+        m.batch_size,
+        m.batch_index,
+        m.auto_tags,
+        m.duration,
+        m.fps,
+        m.video_codec,
+        m.audio_codec,
+        m.bitrate,
+        m.rating_score,
+        m.first_seen_date,
+        m.metadata_updated_date,
+        if.id as file_id,
+        if.original_file_path,
+        if.file_status,
+        if.file_type,
+        if.mime_type,
+        if.folder_id,
+        f.folder_name
       FROM auto_folder_group_images afgi
-      INNER JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
+      LEFT JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
+      LEFT JOIN image_files if ON afgi.composite_hash = if.composite_hash
+        AND if.file_status = 'active'
+      LEFT JOIN watched_folders f ON if.folder_id = f.id
       WHERE afgi.group_id = ?
       ORDER BY RANDOM()
       LIMIT ?
     `;
 
-    const rows = db.prepare(query).all(groupId, count) as ImageMetadataRecord[];
+    const rows = db.prepare(query).all(groupId, count) as ImageWithFileView[];
 
     // 이미지가 충분히 있거나, 자식 검색을 안 하면 바로 반환
     if (rows.length > 0 || !includeChildren) {

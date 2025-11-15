@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { AuthCredentials } from '../models/AuthCredentials';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { getAuthDbPath } from '../database/authDb';
+import fs from 'fs';
 
 const router = Router();
 
@@ -27,6 +29,25 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
     hasCredentials,
     authenticated: isAuthenticated,
     username: req.session?.username || null
+  });
+}));
+
+/**
+ * Get authentication database information
+ * GET /api/auth/database-info
+ * No authentication required (for account recovery purposes)
+ */
+router.get('/database-info', asyncHandler(async (req: Request, res: Response) => {
+  const authDbPath = getAuthDbPath();
+  const exists = fs.existsSync(authDbPath);
+
+  res.json({
+    authDbPath,
+    exists,
+    recoveryInstructions: {
+      ko: '계정을 복구하려면: 1) 서버 중지, 2) auth.db 파일 삭제, 3) 서버 재시작',
+      en: 'To recover account: 1) Stop server, 2) Delete auth.db file, 3) Restart server'
+    }
   });
 }));
 

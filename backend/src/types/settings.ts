@@ -10,6 +10,7 @@ export interface GeneralSettings {
   deleteProtection: DeleteProtectionSettings;
   enableGallery?: boolean;
   autoCleanupCanvasOnShutdown?: boolean;
+  showRatingBadges?: boolean;
 }
 
 export type StealthScanMode = 'full' | 'fast' | 'skip';

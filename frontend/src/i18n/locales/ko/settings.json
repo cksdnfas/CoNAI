@@ -31,6 +31,10 @@
       "label": "종료 시 Canvas 폴더 자동 정리",
       "tooltip": "서버 종료 시 Canvas 폴더의 편집된 이미지를 자동으로 삭제합니다. 비활성화하면 편집된 이미지가 보존됩니다."
     },
+    "ratingBadges": {
+      "label": "Rating 배지 표시",
+      "tooltip": "이미지 카드에 Rating 점수 배지를 표시합니다. 등급 구간 설정에 따라 색상과 이름이 표시됩니다."
+    },
     "deleteProtection": {
       "label": "삭제된 파일을 RecycleBin에 보관",
       "tooltip": "활성화 시 삭제된 파일이 완전히 제거되지 않고 RecycleBin 폴더에 백업됩니다. RecycleBin 폴더는 프로젝트 루트에 생성되며, 삭제된 파일은 타임스탬프와 함께 저장됩니다."

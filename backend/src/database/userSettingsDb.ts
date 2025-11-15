@@ -36,7 +36,8 @@ const MIGRATIONS_PATH = getMigrationsPath();
  * User Settings Database Instance
  * Uses better-sqlite3 for synchronous operations
  * Separated from main images.db for user settings management
- * Tables: workflows, comfyui_servers, workflow_servers, user_preferences
+ * Tables: workflows, comfyui_servers, workflow_servers, user_preferences, wildcards, wildcard_items, custom_dropdown_lists
+ * Note: Authentication tables (auth_credentials, sessions) moved to auth.db
  */
 export let userSettingsDb: Database.Database;
 
@@ -202,26 +203,6 @@ function createTables(): void {
     )
   `);
 
-  // 8. Authentication credentials table (single user)
-  userSettingsDb.exec(`
-    CREATE TABLE IF NOT EXISTS auth_credentials (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
-      username TEXT NOT NULL,
-      password_hash TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // 9. Sessions table (express-session storage)
-  userSettingsDb.exec(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      sid TEXT PRIMARY KEY,
-      sess TEXT NOT NULL,
-      expire INTEGER NOT NULL
-    )
-  `);
-
   // Migrate existing custom_dropdown_lists table if needed
   // Check if is_auto_collected column exists
   const tableInfo = userSettingsDb.prepare(`PRAGMA table_info(custom_dropdown_lists)`).all() as any[];
@@ -249,8 +230,7 @@ function createTables(): void {
     'CREATE INDEX IF NOT EXISTS idx_wildcard_items_tool ON wildcard_items(tool)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_name ON custom_dropdown_lists(name)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_created_date ON custom_dropdown_lists(created_date)',
-    'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_is_auto_collected ON custom_dropdown_lists(is_auto_collected)',
-    'CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire)'
+    'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_is_auto_collected ON custom_dropdown_lists(is_auto_collected)'
   ];
 
   indexes.forEach(sql => userSettingsDb.exec(sql));
@@ -259,7 +239,7 @@ function createTables(): void {
   userSettingsDb.prepare(`INSERT OR IGNORE INTO user_preferences (key, value) VALUES (?, ?)`)
     .run('language', 'ko');
 
-  console.log('  ✅ User settings tables created (9 tables + indexes)');
+  console.log('  ✅ User settings tables created (7 tables + indexes)');
 
   // Run migrations for existing tables
   migrateExistingTables();

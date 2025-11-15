@@ -7,6 +7,8 @@ import {
 } from '@mui/icons-material';
 import type { ImageRecord } from '../../types/image';
 import { getBackendOrigin } from '../../utils/backend';
+import RatingBadge from '../RatingBadge/RatingBadge';
+import { useRatingTiers } from '../../hooks/useRatingTiers';
 
 // ✅ composite_hash 기반으로 변경
 interface MasonryImageCardProps {
@@ -29,6 +31,12 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
   const [isHovered, setIsHovered] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const backendOrigin = getBackendOrigin();
+  const { getTierByScore } = useRatingTiers();
+
+  // Get rating tier for this image
+  const ratingTier = useMemo(() => {
+    return getTierByScore(image.rating_score);
+  }, [image.rating_score, getTierByScore]);
   // ✅ composite_hash 사용 - API 엔드포인트를 통해 썸네일 제공 (외부 네트워크 접근 보장)
   // GIF는 애니메이션 보존을 위해 원본 사용 (file_type='animated')
   const isGif = image.file_type === 'animated';
@@ -195,7 +203,7 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
           // 동영상/GIF는 자연 높이 사용, 이미지는 padding-top으로 aspect ratio 유지
           ...(isVideo || isGif ? {} : { paddingTop: `${(1 / aspectRatio) * 100}%` }),
           overflow: 'hidden',
-          bgcolor: 'grey.200',
+          bgcolor: 'transparent',
         }}
       >
         {/* Skeleton 로딩 표시 */}
@@ -317,6 +325,13 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
               },
             }}
           />
+        </Box>
+      )}
+
+      {/* Rating 배지 (오른쪽 하단) */}
+      {ratingTier && image.rating_score !== null && image.rating_score !== undefined && (
+        <Box sx={{ position: 'absolute', bottom: 8, right: 8, zIndex: 1 }}>
+          <RatingBadge tier={ratingTier} score={image.rating_score} />
         </Box>
       )}
     </Card>

@@ -16,7 +16,6 @@ function calculateAnlasCost(params: {
   n_samples: number;
   uncond_scale: number;
   strength?: number;
-  is_opus?: boolean;
 }): number {
   const {
     width,
@@ -24,8 +23,7 @@ function calculateAnlasCost(params: {
     steps,
     n_samples,
     uncond_scale,
-    strength = 1.0,
-    is_opus = false
+    strength = 1.0
   } = params;
 
   // 해상도 계산
@@ -56,13 +54,8 @@ function calculateAnlasCost(params: {
     perSample = Math.ceil(perSample * 1.3);
   }
 
-  // Opus 무료 생성 (조건: steps≤28, 일반 해상도 이하)
-  const opusDiscount =
-    is_opus &&
-    steps <= 28 &&
-    resolution <= NORMAL_SQUARE ? 1 : 0;
-
-  return perSample * (n_samples - opusDiscount);
+  // 실제 Anlas 비용 계산 (Opus 무료 생성 로직 제거)
+  return perSample * n_samples;
 }
 
 interface UseNAIGenerationOptions {

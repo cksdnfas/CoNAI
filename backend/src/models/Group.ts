@@ -266,7 +266,7 @@ export class ImageGroupModel {
     page: number = 1,
     limit: number = 20,
     collectionType?: 'manual' | 'auto'
-  ): Promise<{ images: ImageMetadataRecord[], total: number }> {
+  ): Promise<{ images: ImageWithFileView[], total: number }> {
     const offset = (page - 1) * limit;
     let whereClause = 'WHERE ig.group_id = ? AND ig.composite_hash IS NOT NULL';
     let queryParams: (number | string)[] = [groupId];
@@ -315,7 +315,18 @@ export class ImageGroupModel {
       LIMIT ? OFFSET ?
     `;
 
-    const rows = db.prepare(query).all(...queryParams, limit, offset) as ImageMetadataRecord[];
+    const rows = db.prepare(query).all(...queryParams, limit, offset) as ImageWithFileView[];
+
+    // 🔍 DEBUG: Check first row from database
+    if (rows.length > 0) {
+      console.log('[DEBUG Group.ts:findImagesByGroup] First row from DB:', {
+        composite_hash: rows[0].composite_hash,
+        id: rows[0].id,
+        file_type: rows[0].file_type,
+        mime_type: rows[0].mime_type,
+        file_size: rows[0].file_size
+      });
+    }
 
     return { images: rows, total };
   }
@@ -501,6 +512,8 @@ export class ImageGroupModel {
         if.id as file_id,
         if.original_file_path,
         if.file_status,
+        if.file_type,
+        if.mime_type,
         if.folder_id,
         f.folder_name
       FROM image_groups ig

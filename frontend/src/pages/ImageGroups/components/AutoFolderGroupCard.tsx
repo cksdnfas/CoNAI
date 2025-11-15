@@ -11,6 +11,7 @@ import type { AutoFolderGroupWithStats } from '@comfyui-image-manager/shared';
 import { autoFolderGroupsApi } from '../../../services/api/autoFolderGroupsApi';
 import { useImageRotation } from '../../../hooks/useImageRotation';
 import type { ImageRecord } from '../../../types/image';
+import { getBackendOrigin } from '../../../utils/backend';
 
 interface AutoFolderGroupCardProps {
   group: AutoFolderGroupWithStats;
@@ -24,6 +25,8 @@ interface AutoFolderGroupCardProps {
  * - 이미지 없으면 폴더 아이콘 표시
  */
 export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps) {
+  const backendOrigin = getBackendOrigin();
+
   // 이미지 가져오기 함수
   const fetchImages = useCallback(
     async (count: number, includeChildren: boolean): Promise<ImageRecord[]> => {
@@ -48,6 +51,15 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
     enabled: true,
   });
 
+  // 비디오/GIF 여부 확인
+  const isCurrentVideo = useMemo(() => currentImage?.file_type === 'video', [currentImage]);
+  const isCurrentGif = useMemo(() => currentImage?.file_type === 'animated', [currentImage]);
+  const isCurrentProcessing = useMemo(() => currentImage?.is_processing || !currentImage?.composite_hash, [currentImage]);
+
+  const isNextVideo = useMemo(() => nextImage?.file_type === 'video', [nextImage]);
+  const isNextGif = useMemo(() => nextImage?.file_type === 'animated', [nextImage]);
+  const isNextProcessing = useMemo(() => nextImage?.is_processing || !nextImage?.composite_hash, [nextImage]);
+
   // 폴더 아이콘 SVG
   const folderIconSvg = useMemo(() =>
     `data:image/svg+xml,${encodeURIComponent(
@@ -58,14 +70,49 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
     )}`, []
   );
 
-  // 대표 이미지 URL 결정
+  // 랜덤 플레이스홀더 이미지 선택 (컴포넌트 마운트 시 한 번만)
+  const randomPlaceholder = useMemo(() => {
+    const PLACEHOLDER_COUNT = 12; // config.json의 count와 일치
+    const randomIndex = Math.floor(Math.random() * PLACEHOLDER_COUNT) + 1;
+    return `/placeholders/folder-overlay-${randomIndex}.webp`;
+  }, [group.id]); // group.id를 의존성으로 추가하여 각 그룹마다 다른 이미지
+
+  // 대표 이미지/비디오 URL 결정 (MasonryImageCard와 동일한 로직)
   const currentImageUrl = useMemo(() => {
-    return currentImage?.thumbnail_url || folderIconSvg;
-  }, [currentImage, folderIconSvg]);
+    if (!currentImage) return folderIconSvg;
+
+    // 처리 중인 이미지는 경로 기반 URL 사용
+    if (isCurrentProcessing) {
+      return `${backendOrigin}/api/images/by-path/${encodeURIComponent(currentImage.original_file_path || '')}`;
+    }
+
+    // 비디오와 GIF는 원본 파일 사용 (애니메이션/재생 보존)
+    if (isCurrentVideo || isCurrentGif) {
+      return `${backendOrigin}/api/images/${currentImage.composite_hash}/file`;
+    }
+
+    // 일반 이미지는 썸네일 사용
+    const cacheBuster = currentImage.thumbnail_path ? `?v=${Date.parse(currentImage.first_seen_date)}` : '';
+    return `${backendOrigin}/api/images/${currentImage.composite_hash}/thumbnail${cacheBuster}`;
+  }, [currentImage, isCurrentVideo, isCurrentGif, isCurrentProcessing, backendOrigin, folderIconSvg]);
 
   const nextImageUrl = useMemo(() => {
-    return nextImage?.thumbnail_url || folderIconSvg;
-  }, [nextImage, folderIconSvg]);
+    if (!nextImage) return folderIconSvg;
+
+    // 처리 중인 이미지는 경로 기반 URL 사용
+    if (isNextProcessing) {
+      return `${backendOrigin}/api/images/by-path/${encodeURIComponent(nextImage.original_file_path || '')}`;
+    }
+
+    // 비디오와 GIF는 원본 파일 사용 (애니메이션/재생 보존)
+    if (isNextVideo || isNextGif) {
+      return `${backendOrigin}/api/images/${nextImage.composite_hash}/file`;
+    }
+
+    // 일반 이미지는 썸네일 사용
+    const cacheBuster = nextImage.thumbnail_path ? `?v=${Date.parse(nextImage.first_seen_date)}` : '';
+    return `${backendOrigin}/api/images/${nextImage.composite_hash}/thumbnail${cacheBuster}`;
+  }, [nextImage, isNextVideo, isNextGif, isNextProcessing, backendOrigin, folderIconSvg]);
 
   return (
     <Card
@@ -75,6 +122,7 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
         aspectRatio: '5 / 7',
         position: 'relative',
         overflow: 'hidden',
+        borderRadius: 1,
         '&:hover': {
           transform: 'translateY(-4px)',
           boxShadow: 4,
@@ -93,28 +141,75 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
       <Box sx={{ width: '100%', paddingTop: '140%' /* 7/5 = 140% */ }} />
 
       {/* 현재 이미지 레이어 */}
-      <CardMedia
-        component="img"
-        image={currentImageUrl}
-        alt={group.display_name}
-        sx={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          zIndex: 1,
-          transform: `translateX(${offset}%)`,
-          transition: isTransitioning ? 'transform 0.6s ease-in-out' : 'none',
-        }}
-      />
-
-      {/* 다음 이미지 레이어 (슬라이드 대기) */}
-      {images.length > 1 && (
+      {!currentImage ? (
+        // 이미지가 없을 때: 폴더 배경 + 플레이스홀더 오버레이
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 1,
+          }}
+        >
+          {/* 배경: 폴더 아이콘 */}
+          <CardMedia
+            component="img"
+            image={folderIconSvg}
+            alt="Empty folder"
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              opacity: 0.4,
+            }}
+          />
+          {/* 오버레이: 랜덤 플레이스홀더 이미지 */}
+          <Box
+            component="img"
+            src={randomPlaceholder}
+            alt="Placeholder"
+            sx={{
+              position: 'absolute',
+              top: '58%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '70%',
+              height: 'auto',
+              maxWidth: '200px',
+              opacity: 0.8,
+              objectFit: 'contain',
+            }}
+          />
+        </Box>
+      ) : isCurrentVideo ? (
+        <Box
+          component="video"
+          src={currentImageUrl}
+          muted
+          loop
+          autoPlay
+          playsInline
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            zIndex: 1,
+            transform: `translateX(${offset}%)`,
+            transition: isTransitioning ? 'transform 0.6s ease-in-out' : 'none',
+          }}
+        />
+      ) : (
         <CardMedia
           component="img"
-          image={nextImageUrl}
+          image={currentImageUrl}
           alt={group.display_name}
           sx={{
             position: 'absolute',
@@ -123,11 +218,53 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            zIndex: 0,
-            transform: `translateX(${offset + 100}%)`,
+            zIndex: 1,
+            transform: `translateX(${offset}%)`,
             transition: isTransitioning ? 'transform 0.6s ease-in-out' : 'none',
           }}
         />
+      )}
+
+      {/* 다음 이미지 레이어 (슬라이드 대기) */}
+      {images.length > 1 && (
+        isNextVideo ? (
+          <Box
+            component="video"
+            src={nextImageUrl}
+            muted
+            loop
+            autoPlay
+            playsInline
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              zIndex: 0,
+              transform: `translateX(${offset + 100}%)`,
+              transition: isTransitioning ? 'transform 0.6s ease-in-out' : 'none',
+            }}
+          />
+        ) : (
+          <CardMedia
+            component="img"
+            image={nextImageUrl}
+            alt={group.display_name}
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              zIndex: 0,
+              transform: `translateX(${offset + 100}%)`,
+              transition: isTransitioning ? 'transform 0.6s ease-in-out' : 'none',
+            }}
+          />
+        )
       )}
 
       {/* 기본 정보 (항상 표시) */}

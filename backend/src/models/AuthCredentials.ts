@@ -1,4 +1,4 @@
-import { getUserSettingsDb } from '../database/userSettingsDb';
+import { getAuthDb } from '../database/authDb';
 import { AuthService } from '../services/authService';
 
 export interface AuthCredential {
@@ -11,7 +11,7 @@ export interface AuthCredential {
 
 /**
  * AuthCredentials Model
- * Manages single user authentication credentials in user-settings.db
+ * Manages single user authentication credentials in auth.db
  */
 export class AuthCredentials {
   /**
@@ -19,7 +19,7 @@ export class AuthCredentials {
    * @returns True if credentials are configured
    */
   static exists(): boolean {
-    const db = getUserSettingsDb();
+    const db = getAuthDb();
     const result = db.prepare('SELECT COUNT(*) as count FROM auth_credentials').get() as { count: number };
     return result.count > 0;
   }
@@ -29,7 +29,7 @@ export class AuthCredentials {
    * @returns Auth credential or null if not configured
    */
   static get(): AuthCredential | null {
-    const db = getUserSettingsDb();
+    const db = getAuthDb();
     const result = db.prepare('SELECT * FROM auth_credentials WHERE id = 1').get() as AuthCredential | undefined;
     return result || null;
   }
@@ -50,7 +50,7 @@ export class AuthCredentials {
     const passwordHash = await AuthService.hashPassword(password);
 
     // Insert credentials
-    const db = getUserSettingsDb();
+    const db = getAuthDb();
     const stmt = db.prepare(`
       INSERT INTO auth_credentials (id, username, password_hash, created_at, updated_at)
       VALUES (1, ?, ?, datetime('now'), datetime('now'))
@@ -78,7 +78,7 @@ export class AuthCredentials {
     const passwordHash = await AuthService.hashPassword(password);
 
     // Update credentials
-    const db = getUserSettingsDb();
+    const db = getAuthDb();
     const stmt = db.prepare(`
       UPDATE auth_credentials
       SET username = ?, password_hash = ?, updated_at = datetime('now')
@@ -126,7 +126,7 @@ export class AuthCredentials {
    * Delete authentication credentials
    */
   static delete(): void {
-    const db = getUserSettingsDb();
+    const db = getAuthDb();
     db.prepare('DELETE FROM auth_credentials WHERE id = 1').run();
   }
 }

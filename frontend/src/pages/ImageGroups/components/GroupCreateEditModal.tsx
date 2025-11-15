@@ -17,6 +17,7 @@ import { groupApi } from '../../../services/api';
 import type { GroupWithStats, GroupWithHierarchy, GroupCreateData, GroupUpdateData, AutoCollectCondition, ComplexFilter } from '@comfyui-image-manager/shared';
 import BasicInfoTab from './BasicInfoTab';
 import AutoCollectTab from './AutoCollectTab';
+import { useCreateGroup, useUpdateGroup, useAllGroupsWithHierarchy } from '../../../hooks/useGroups';
 
 interface GroupCreateEditModalProps {
   open: boolean;
@@ -60,29 +61,14 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
     auto_collect_enabled: false,
   });
   const [conditions, setConditions] = useState<ComplexFilter>({});
-  const [availableParents, setAvailableParents] = useState<GroupWithHierarchy[]>([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isEditMode = !!group;
 
-  // Load available parent groups
-  useEffect(() => {
-    if (open) {
-      loadAvailableParents();
-    }
-  }, [open]);
-
-  const loadAvailableParents = async () => {
-    try {
-      const response = await groupApi.getAllGroupsWithHierarchy();
-      if (response.success && response.data) {
-        setAvailableParents(response.data);
-      }
-    } catch (error) {
-      console.error('Failed to load parent groups:', error);
-    }
-  };
+  // React Query hooks
+  const { data: availableParents = [] } = useAllGroupsWithHierarchy();
+  const createGroupMutation = useCreateGroup();
+  const updateGroupMutation = useUpdateGroup();
 
   // 폼 초기화
   useEffect(() => {
@@ -172,7 +158,6 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -193,23 +178,16 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
           : undefined,
       };
 
-      let response;
       if (isEditMode) {
-        response = await groupApi.updateGroup(group.id, requestData);
+        await updateGroupMutation.mutateAsync({ id: group.id, data: requestData });
       } else {
-        response = await groupApi.createGroup(requestData as GroupCreateData);
+        await createGroupMutation.mutateAsync(requestData as GroupCreateData);
       }
 
-      if (response.success) {
-        onSuccess();
-      } else {
-        setError(response.error || t(`imageGroups:messages.${isEditMode ? 'updateFailed' : 'createFailed'}`));
-      }
+      onSuccess();
     } catch (error) {
       console.error('Error saving group:', error);
       setError(t(`imageGroups:messages.${isEditMode ? 'updateFailed' : 'createFailed'}`));
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -260,14 +238,14 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={onClose} disabled={loading}>
+        <Button onClick={onClose} disabled={createGroupMutation.isPending || updateGroupMutation.isPending}>
           {t('imageGroups:modal.buttonCancel')}
         </Button>
         <Button
           onClick={handleSubmit}
           variant="contained"
-          disabled={loading}
-          startIcon={loading ? <CircularProgress size={20} /> : null}
+          disabled={createGroupMutation.isPending || updateGroupMutation.isPending}
+          startIcon={(createGroupMutation.isPending || updateGroupMutation.isPending) ? <CircularProgress size={20} /> : null}
         >
           {isEditMode ? t('imageGroups:modal.buttonUpdate') : t('imageGroups:modal.buttonCreate')}
         </Button>

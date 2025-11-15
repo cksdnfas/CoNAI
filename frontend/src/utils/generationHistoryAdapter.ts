@@ -166,6 +166,7 @@ export const convertHistoryToImageRecord = (
     batch_size: null,
     batch_index: null,
     auto_tags: parsedAutoTags,
+    rating_score: null,  // Generation history doesn't have rating scores
 
     // 이미지 유사도 검색 필드
     perceptual_hash: null,

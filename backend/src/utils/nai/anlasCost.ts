@@ -9,7 +9,6 @@ interface CostCalculationParams {
   n_samples?: number;
   uncond_scale?: number;
   strength?: number;
-  is_opus?: boolean;
 }
 
 /**
@@ -22,8 +21,7 @@ export function calculateAnlasCost(params: CostCalculationParams): number {
     steps = 28,
     n_samples = 1,
     uncond_scale = 1.0,
-    strength = 1.0,
-    is_opus = false
+    strength = 1.0
   } = params;
 
   // 해상도 계산
@@ -54,13 +52,8 @@ export function calculateAnlasCost(params: CostCalculationParams): number {
     perSample = Math.ceil(perSample * 1.3);
   }
 
-  // Opus 무료 생성 (조건: steps≤28, 일반 해상도 이하)
-  const opusDiscount =
-    is_opus &&
-    steps <= 28 &&
-    resolution <= NORMAL_SQUARE ? 1 : 0;
-
-  return perSample * (n_samples - opusDiscount);
+  // 실제 Anlas 비용 계산 (Opus 무료 생성 로직 제거)
+  return perSample * n_samples;
 }
 
 /**
@@ -71,19 +64,11 @@ export function getMaxSamples(
   anlasBalance: number,
   subscriptionTier: number
 ): number {
-  const isOpus = subscriptionTier === 3;
-
-  // 샘플당 비용 계산
+  // 샘플당 비용 계산 (Opus 로직 제거)
   const costPerSample = calculateAnlasCost({
     ...params,
-    n_samples: 1,
-    is_opus: isOpus
+    n_samples: 1
   });
-
-  if (costPerSample === 0) {
-    // Opus 무료 생성 가능한 경우
-    return getMaxSamplesByResolution(params.width, params.height);
-  }
 
   // 잔액으로 생성 가능한 최대 수
   const maxByBalance = Math.floor(anlasBalance / costPerSample);

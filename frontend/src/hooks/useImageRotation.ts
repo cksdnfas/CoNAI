@@ -74,7 +74,7 @@ export function useImageRotation(
   const { data: rawImages = [], isLoading, error: queryError } = useQuery<ImageRecord[]>({
     queryKey: ['groupPreviewImages', groupType, groupId, preloadCount, includeChildren],
     queryFn: () => fetchImages(preloadCount, includeChildren),
-    staleTime: 5 * 60 * 1000, // 5분 동안 fresh 상태 유지
+    staleTime: 30000, // 30 seconds - matches group data cache TTL
     gcTime: 10 * 60 * 1000, // 10분 동안 캐시 보관 (cacheTime은 v5에서 gcTime으로 변경)
     enabled: enabled,
     retry: 1, // 실패 시 1번만 재시도

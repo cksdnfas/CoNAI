@@ -38,6 +38,7 @@ export interface WildcardCreateData {
   name: string;
   description?: string;
   items: ToolItems; // 도구별 항목 배열
+  customId?: number; // 자동 LORA용 커스텀 ID (선택적)
 }
 
 /**
@@ -93,13 +94,24 @@ export class WildcardModel {
 
     // 트랜잭션으로 와일드카드와 항목 동시 생성
     const result = db.transaction(() => {
-      // 와일드카드 생성
-      const wildcardResult = db.prepare(`
-        INSERT INTO wildcards (name, description)
-        VALUES (?, ?)
-      `).run(data.name, data.description || null);
+      // 와일드카드 생성 (커스텀 ID 지원)
+      let wildcardId: number;
 
-      const wildcardId = wildcardResult.lastInsertRowid as number;
+      if (data.customId) {
+        // 커스텀 ID로 생성 (자동 LORA용)
+        db.prepare(`
+          INSERT INTO wildcards (id, name, description)
+          VALUES (?, ?, ?)
+        `).run(data.customId, data.name, data.description || null);
+        wildcardId = data.customId;
+      } else {
+        // 기본 자동 증가 ID
+        const wildcardResult = db.prepare(`
+          INSERT INTO wildcards (name, description)
+          VALUES (?, ?)
+        `).run(data.name, data.description || null);
+        wildcardId = wildcardResult.lastInsertRowid as number;
+      }
 
       // ComfyUI 항목 생성
       if (data.items.comfyui && data.items.comfyui.length > 0) {

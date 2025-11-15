@@ -73,6 +73,7 @@ export function AutoFolderImageViewCard({ group, onClick }: AutoFolderImageViewC
         aspectRatio: '5 / 7',
         position: 'relative',
         overflow: 'hidden',
+        borderRadius: 1,
         border: '2px solid',
         borderColor: 'primary.main',
         '&:hover': {

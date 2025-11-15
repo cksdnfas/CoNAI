@@ -12,9 +12,8 @@ import {
 } from '@mui/material';
 import { Alert } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { groupApi } from '../../services/api';
-import type { GroupWithHierarchy } from '@comfyui-image-manager/shared';
 import { GroupTreeSelector } from '../GroupTreeSelector';
+import { useAllGroupsWithHierarchy } from '../../hooks/useGroups';
 
 interface GroupAssignModalProps {
   open: boolean;
@@ -32,38 +31,18 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
   currentGroupId,
 }) => {
   const { t } = useTranslation(['common', 'imageGroups']);
-  const [groups, setGroups] = useState<GroupWithHierarchy[]>([]);
-  const [loading, setLoading] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  // 그룹 목록 로드
+  // React Query hook for fetching groups
+  const { data: groups = [], isLoading: loading, error: queryError } = useAllGroupsWithHierarchy();
+  const error = queryError ? t('imageGroups:assignModal.loadError') : null;
+
+  // Reset selection when modal opens
   useEffect(() => {
     if (open) {
-      loadGroups();
       setSelectedGroupId(null);
-      setError(null);
     }
   }, [open]);
-
-  const loadGroups = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await groupApi.getAllGroupsWithHierarchy();
-
-      if (response.success && response.data) {
-        setGroups(response.data);
-      } else {
-        setError(t('imageGroups:assignModal.loadError'));
-      }
-    } catch (error) {
-      console.error('Failed to load groups:', error);
-      setError(t('imageGroups:assignModal.loadError'));
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSelectionChange = (selectedIds: number[]) => {
     setSelectedGroupId(selectedIds[0] || null);

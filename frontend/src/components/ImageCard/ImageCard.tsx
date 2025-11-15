@@ -19,6 +19,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../types/image';
 import { getBackendOrigin } from '../../utils/backend';
+import RatingBadge from '../RatingBadge/RatingBadge';
+import { useRatingTiers } from '../../hooks/useRatingTiers';
 
 // ✅ composite_hash 기반으로 변경
 interface ImageCardProps {
@@ -46,6 +48,22 @@ const ImageCard: React.FC<ImageCardProps> = ({
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const backendOrigin = getBackendOrigin();
+  const { getTierByScore } = useRatingTiers();
+
+  // Get rating tier for this image
+  const ratingTier = useMemo(() => {
+    const tier = getTierByScore(image.rating_score);
+    // Debug: Log first image only to avoid spam
+    if (image.composite_hash && Math.random() < 0.1) {
+      console.log('[ImageCard] Rating debug:', {
+        has_rating_score: image.rating_score !== null,
+        rating_score: image.rating_score,
+        tier_found: !!tier,
+        tier_name: tier?.tier_name
+      });
+    }
+    return tier;
+  }, [image.rating_score, getTierByScore, image.composite_hash]);
 
   // 현재 그룹의 collection_type 찾기
   const currentGroupInfo = currentGroupId
@@ -123,7 +141,8 @@ const ImageCard: React.FC<ImageCardProps> = ({
         ? `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path)}`
         : `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`;
     }
-    return `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
+    // 일반 이미지도 /file 엔드포인트 사용 (download/original은 attachment 헤더로 인해 표시 불가)
+    return `${backendOrigin}/api/images/${image.composite_hash}/file`;
   }, [isProcessing, isGif, isVideo, backendOrigin, image.composite_hash, image.original_file_path]);
 
   return (
@@ -136,9 +155,8 @@ const ImageCard: React.FC<ImageCardProps> = ({
         onMouseLeave={() => setIsHovered(false)}
         sx={{
           position: 'relative',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
+          aspectRatio: '5 / 7',
+          overflow: 'hidden',
           border: selected ? 3 : (showCollectionType && isAutoCollected ? 3 : 1),
           borderColor: selected
             ? 'primary.main'
@@ -159,6 +177,9 @@ const ImageCard: React.FC<ImageCardProps> = ({
           },
         }}
       >
+        {/* 높이 제공용 spacer (aspect ratio 유지) */}
+        <Box sx={{ width: '100%', paddingTop: '140%' /* 7/5 = 140% */ }} />
+
         {/* 선택 체크박스/아이콘 - selectable일 때 항상 표시 */}
         {selectable && (
           <Box
@@ -290,6 +311,13 @@ const ImageCard: React.FC<ImageCardProps> = ({
           </Box>
         )}
 
+        {/* Rating 배지 (오른쪽 하단) */}
+        {ratingTier && image.rating_score !== null && image.rating_score !== undefined && (
+          <Box sx={{ position: 'absolute', bottom: 8, right: 8, zIndex: 1 }}>
+            <RatingBadge tier={ratingTier} score={image.rating_score} />
+          </Box>
+        )}
+
         <Box className="image-card-actions" sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
           <Box sx={{ display: 'flex', gap: 0.5 }}>
             <Tooltip title={t('common:imageCard.tooltips.download')}>
@@ -349,9 +377,12 @@ const ImageCard: React.FC<ImageCardProps> = ({
               setImageError(true);
             }}
             sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
               width: '100%',
-              height: 'auto', // 자연 높이 사용 (원본 비율 유지)
-              objectFit: 'contain',
+              height: '100%',
+              objectFit: 'cover',
               cursor: 'pointer',
             }}
             onClick={onImageClick}
@@ -367,9 +398,12 @@ const ImageCard: React.FC<ImageCardProps> = ({
               setImageError(true);
             }}
             sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
               width: '100%',
-              height: 'auto', // 자연 높이 사용 (원본 비율 유지)
-              objectFit: 'contain',
+              height: '100%',
+              objectFit: 'cover',
               cursor: 'pointer',
             }}
             onClick={onImageClick}
@@ -377,7 +411,6 @@ const ImageCard: React.FC<ImageCardProps> = ({
         ) : (
           <CardMedia
             component="img"
-            height="250"
             image={imageError ? fallbackUrl : thumbnailUrl}
             alt={image.original_file_path ?? ''}
             draggable={false}
@@ -386,6 +419,11 @@ const ImageCard: React.FC<ImageCardProps> = ({
               setImageError(true);
             }}
             sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
               objectFit: 'cover',
               cursor: 'pointer',
             }}
@@ -394,8 +432,14 @@ const ImageCard: React.FC<ImageCardProps> = ({
         )}
 
         <CardContent sx={{
-          flexGrow: 1,
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          borderRadius: 2,
           p: { xs: 1, sm: 1.5 },
+          bgcolor: 'rgba(0, 0, 0, 0.7)',
+          backdropFilter: 'blur(4px)',
           '&:last-child': {
             paddingBottom: { xs: '6px', sm: '8px' }
           }

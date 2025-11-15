@@ -71,12 +71,13 @@ router.get('/data', async (req: Request, res: Response) => {
 
       // 구독 정보 추출
       const subscription = userData.subscription || {};
+      const tierValue = subscription.tier ?? 0;
 
       res.json({
         subscription: {
-          tier: subscription.tier ?? 0,
+          tier: tierValue,
           active: subscription.active ?? false,
-          tierName: getTierName(subscription.tier ?? 0),
+          tierName: getTierName(tierValue),
         },
         anlasBalance,
       });

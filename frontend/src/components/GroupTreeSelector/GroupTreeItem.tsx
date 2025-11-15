@@ -59,7 +59,12 @@ export const GroupTreeItem: React.FC<GroupTreeItemProps> = ({
             : alpha(theme.palette.action.hover, 0.08),
         },
       }}
-      onClick={onSelect}
+      onClick={() => {
+        onSelect();
+        if (hasChildren) {
+          onToggleExpand();
+        }
+      }}
     >
       {/* Expand/Collapse Button */}
       <Box sx={{ width: 24, height: 24, flexShrink: 0 }}>

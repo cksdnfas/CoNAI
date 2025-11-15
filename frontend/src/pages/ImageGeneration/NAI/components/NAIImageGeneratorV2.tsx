@@ -64,34 +64,25 @@ export default function NAIImageGeneratorV2({
 
   // 비용 계산
   const costInfo = useMemo(() => {
-    console.log('[NAI Cost] Calculating cost...', { userData, params });
-
     if (!userData) {
-      console.log('[NAI Cost] No userData, returning default');
       return { cost: 0, balance: 0, canGenerate: false, buttonText: '이미지생성' };
     }
 
     const resolution = RESOLUTIONS[params.resolution as keyof typeof RESOLUTIONS];
-    console.log('[NAI Cost] Resolution:', resolution);
 
     const cost = calculateCost({
       width: resolution.width,
       height: resolution.height,
       steps: params.steps,
       n_samples: params.n_samples,
-      uncond_scale: params.uncond_scale,
-      is_opus: userData.subscription.tier === 3
+      uncond_scale: params.uncond_scale
     });
-
-    console.log('[NAI Cost] Calculated cost:', cost);
 
     const balance = userData.anlasBalance;
     const canGenerate = balance >= cost;
     const buttonText = canGenerate
       ? `이미지생성 (비용: ${cost} / 잔액: ${balance.toLocaleString()})`
       : `이미지생성 (잔액 부족)`;
-
-    console.log('[NAI Cost] Final result:', { cost, balance, canGenerate, buttonText });
 
     return { cost, balance, canGenerate, buttonText };
   }, [userData, params.resolution, params.steps, params.n_samples, params.uncond_scale, calculateCost]);

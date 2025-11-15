@@ -31,7 +31,11 @@ import {
   Refresh as RefreshIcon,
   Delete as DeleteIcon,
   History as HistoryIcon,
-  Upload as UploadIcon
+  Upload as UploadIcon,
+  Search as SearchIcon,
+  Clear as ClearIcon,
+  Add as AddIcon,
+  Remove as RemoveIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import {
@@ -58,6 +62,10 @@ export default function AutoCollectedWildcardsTab() {
   // Auto-collected wildcards
   const [autoWildcards, setAutoWildcards] = useState<WildcardWithItems[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Filter states
+  const [tierFilter, setTierFilter] = useState(0); // 0 = show all tiers
+  const [searchText, setSearchText] = useState('');
 
   // Last scan log
   const [lastScanLog, setLastScanLog] = useState<LoraScanLog | null>(null);
@@ -93,6 +101,42 @@ export default function AutoCollectedWildcardsTab() {
       console.error('Error loading last scan log:', err);
     }
   };
+
+  // Filter logic
+  const getWildcardTier = (id: number): number => {
+    return Math.floor(id / 100000);
+  };
+
+  const filteredWildcards = autoWildcards.filter((wildcard) => {
+    // Tier filter
+    const wildcardTier = getWildcardTier(wildcard.id);
+    if (tierFilter !== 0 && wildcardTier !== tierFilter) {
+      return false;
+    }
+
+    // Text search (case-insensitive)
+    if (searchText.trim() !== '') {
+      const search = searchText.toLowerCase();
+      return wildcard.name.toLowerCase().includes(search);
+    }
+
+    return true;
+  });
+
+  const handleTierIncrement = () => {
+    setTierFilter((prev) => Math.min(prev + 1, 9));
+  };
+
+  const handleTierDecrement = () => {
+    setTierFilter((prev) => Math.max(prev - 1, 0));
+  };
+
+  const handleClearFilters = () => {
+    setTierFilter(0);
+    setSearchText('');
+  };
+
+  const hasActiveFilters = tierFilter !== 0 || searchText.trim() !== '';
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -329,6 +373,96 @@ export default function AutoCollectedWildcardsTab() {
         </Box>
       </Box>
 
+      {/* Filter Controls */}
+      {autoWildcards.length > 0 && (
+        <Paper sx={{ p: 2, mb: 3 }}>
+          <Stack spacing={2}>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              {/* Tier Filter */}
+              <Box sx={{ minWidth: 200 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  계층 필터
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <IconButton
+                    size="small"
+                    onClick={handleTierDecrement}
+                    disabled={tierFilter === 0}
+                    sx={{ border: '1px solid', borderColor: 'divider' }}
+                  >
+                    <RemoveIcon fontSize="small" />
+                  </IconButton>
+                  <TextField
+                    value={tierFilter}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 0;
+                      setTierFilter(Math.max(0, Math.min(9, val)));
+                    }}
+                    type="number"
+                    size="small"
+                    sx={{ width: 80 }}
+                    inputProps={{ min: 0, max: 9, style: { textAlign: 'center' } }}
+                  />
+                  <IconButton
+                    size="small"
+                    onClick={handleTierIncrement}
+                    disabled={tierFilter === 9}
+                    sx={{ border: '1px solid', borderColor: 'divider' }}
+                  >
+                    <AddIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+              </Box>
+
+              {/* Text Search */}
+              <Box sx={{ flex: 1, minWidth: 150 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  와일드카드 검색
+                </Typography>
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="검색..."
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  InputProps={{
+                    startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />
+                  }}
+                />
+              </Box>
+
+              {/* Clear Filters Button */}
+              {hasActiveFilters && (
+                <Box sx={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<ClearIcon />}
+                    onClick={handleClearFilters}
+                    sx={{ height: 40 }}
+                  >
+                    필터 초기화
+                  </Button>
+                </Box>
+              )}
+            </Box>
+
+            {/* Filter Stats */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                총 <strong>{autoWildcards.length}</strong>개 와일드카드
+                {hasActiveFilters && (
+                  <span>
+                    {' '}
+                    (필터링: <strong>{filteredWildcards.length}</strong>개)
+                  </span>
+                )}
+              </Typography>
+            </Box>
+          </Stack>
+        </Paper>
+      )}
+
       {autoWildcards.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
@@ -338,9 +472,18 @@ export default function AutoCollectedWildcardsTab() {
             {t('wildcards:autoCollect.noAutoWildcardsDesc')}
           </Typography>
         </Paper>
+      ) : filteredWildcards.length === 0 ? (
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            검색 결과가 없습니다
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            다른 검색어나 필터를 시도해보세요
+          </Typography>
+        </Paper>
       ) : (
         <Stack spacing={2}>
-          {autoWildcards.map((wildcard) => (
+          {filteredWildcards.map((wildcard) => (
             <Card key={wildcard.id} variant="outlined">
               <CardContent>
                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
@@ -351,6 +494,12 @@ export default function AutoCollectedWildcardsTab() {
                         label={t('wildcards:autoCollect.autoCollectedBadge')}
                         size="small"
                         color="primary"
+                        variant="outlined"
+                      />
+                      <Chip
+                        label={`계층 ${getWildcardTier(wildcard.id)}`}
+                        size="small"
+                        color="secondary"
                         variant="outlined"
                       />
                     </Stack>

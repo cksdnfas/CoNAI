@@ -45,6 +45,18 @@ export interface UpdateCredentialsResponse {
 }
 
 /**
+ * Database info response
+ */
+export interface DatabaseInfoResponse {
+  authDbPath: string;
+  exists: boolean;
+  recoveryInstructions: {
+    ko: string;
+    en: string;
+  };
+}
+
+/**
  * Authentication API service
  */
 export const authApi = {
@@ -106,6 +118,17 @@ export const authApi = {
       `${API_BASE_URL}/api/auth/credentials`,
       { currentPassword, newUsername, newPassword },
       { withCredentials: true }
+    );
+    return response.data;
+  },
+
+  /**
+   * Get authentication database information
+   * Used for account recovery
+   */
+  async getDatabaseInfo(): Promise<DatabaseInfoResponse> {
+    const response = await axios.get<DatabaseInfoResponse>(
+      `${API_BASE_URL}/api/auth/database-info`
     );
     return response.data;
   }

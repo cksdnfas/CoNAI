@@ -47,7 +47,8 @@ import { authRoutes } from './routes/auth.routes';
 import fileVerificationRoutes from './routes/fileVerification';
 import { thumbnailRoutes } from './routes/thumbnails';
 import { initializeDatabase } from './database/init';
-import { initializeUserSettingsDb, getUserSettingsDb } from './database/userSettingsDb';
+import { initializeUserSettingsDb } from './database/userSettingsDb';
+import { initializeAuthDb, getAuthDb } from './database/authDb';
 import { initializeApiGenerationDb } from './database/apiGenerationDb';
 import { errorHandler } from './middleware/errorHandler';
 import { optionalAuth } from './middleware/authMiddleware';
@@ -160,6 +161,10 @@ const tempDir = runtimePaths.tempDir;
 
 // Initialize session middleware early (will be configured in initializeSessionMiddleware)
 async function initializeSessionMiddleware() {
+  console.log('🔐 Auth DB 초기화 중...');
+  initializeAuthDb(); // Synchronous call (better-sqlite3)
+  console.log('✅ Auth DB initialized successfully');
+
   console.log('🗄️  User Settings DB 초기화 중...');
   initializeUserSettingsDb(); // Synchronous call (better-sqlite3)
   console.log('✅ User Settings DB initialized successfully');
@@ -175,7 +180,7 @@ async function initializeSessionMiddleware() {
 
   const sessionMiddleware = session({
     store: new SqliteStore({
-      client: getUserSettingsDb(),
+      client: getAuthDb(), // Changed from getUserSettingsDb() to getAuthDb()
       expired: {
         clear: true,
         intervalMs: 900000 // 15분마다 만료 세션 정리

@@ -433,8 +433,11 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
       folderName: string;
       displayName: string;
       loras: LoraFileData[];
+      level: number; // 계층 레벨 (1 = 리프 노드, 2+ = 부모)
+      pathParts: string[]; // 전체 경로 파츠
     }
 
+    // 1. LORA 파일이 있는 폴더 그룹화 (리프 노드 = 레벨 1)
     const folderMap = new Map<string, LoraFileData[]>();
 
     for (const file of loraFiles as LoraFileData[]) {
@@ -444,17 +447,53 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
       folderMap.get(file.folderName)!.push(file);
     }
 
-    const folderGroups: FolderGroup[] = Array.from(folderMap.entries()).map(([folderName, loras]) => ({
+    // 리프 노드 폴더들
+    const leafFolders: FolderGroup[] = Array.from(folderMap.entries()).map(([folderName, loras]) => ({
       folderName,
       displayName: folderName.split('/').pop() || folderName,
-      loras
+      loras,
+      level: 1,
+      pathParts: folderName.split('/')
     }));
 
-    // 와일드카드 생성
+    // 2. 부모 폴더 추출 (계층 구조 구축)
+    const parentFoldersSet = new Set<string>();
+    const maxDepth = Math.max(...leafFolders.map(f => f.pathParts.length));
+
+    for (const folder of leafFolders) {
+      const parts = folder.pathParts;
+
+      // 상위 경로들을 모두 추출 (리프 노드 제외)
+      for (let i = parts.length - 1; i > 0; i--) {
+        const parentPath = parts.slice(0, i).join('/');
+        parentFoldersSet.add(parentPath);
+      }
+    }
+
+    // 부모 폴더를 FolderGroup 형태로 변환 및 레벨 계산
+    const parentFolders: FolderGroup[] = Array.from(parentFoldersSet).map(parentPath => {
+      const parts = parentPath.split('/');
+      const level = maxDepth - parts.length + 1;
+
+      return {
+        folderName: parentPath,
+        displayName: parts[parts.length - 1],
+        loras: [],
+        level,
+        pathParts: parts
+      };
+    });
+
+    // 3. 레벨별로 정렬 (레벨 1부터 생성)
+    const allFolders = [...leafFolders, ...parentFolders].sort((a, b) => a.level - b.level);
+
+    // 4. 와일드카드 생성 (레벨별로, bottom-up)
     const createdWildcards: any[] = [];
     const usedNames = new Set<string>();
+    const pathToWildcardName = new Map<string, string>(); // 경로 -> 와일드카드 이름 매핑
+    const levelCounters = new Map<number, number>(); // 레벨별 카운터
 
-    for (const folder of folderGroups) {
+    for (const folder of allFolders) {
       let wildcardName = folder.displayName;
 
       // 중복 이름 처리
@@ -468,7 +507,7 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
           wildcardName = `${wildcardName}_${counter}`;
         } else {
           // 상위 폴더 포함
-          const parts = folder.folderName.split('/');
+          const parts = folder.pathParts;
           if (parts.length > 1) {
             wildcardName = parts[parts.length - 2] + '_' + wildcardName;
           }
@@ -485,27 +524,51 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
       }
 
       usedNames.add(wildcardName);
+      pathToWildcardName.set(folder.folderName, wildcardName);
+
+      // ID 생성: 레벨별 카운터
+      const currentCounter = (levelCounters.get(folder.level) || 0) + 1;
+      levelCounters.set(folder.level, currentCounter);
+      const customId = folder.level * 100000 + currentCounter;
 
       // 와일드카드 항목 생성
       const items: string[] = [];
 
-      for (const lora of folder.loras) {
-        const loraTag = `<lora:${lora.loraName}:${loraWeight}>`;
+      if (folder.level === 1) {
+        // 레벨 1: LORA 파일 직접 포함
+        for (const lora of folder.loras) {
+          const loraTag = `<lora:${lora.loraName}:${loraWeight}>`;
 
-        if (lora.promptLines && lora.promptLines.length > 0) {
-          // 각 줄마다 별도 항목 생성
-          for (const line of lora.promptLines) {
-            if (line.trim()) {
-              items.push(`${loraTag}, ${line.trim()}`);
+          if (lora.promptLines && lora.promptLines.length > 0) {
+            // 각 줄마다 별도 항목 생성
+            for (const line of lora.promptLines) {
+              if (line.trim()) {
+                items.push(`${loraTag}, ${line.trim()}`);
+              }
             }
+          } else {
+            // 프롬프트 라인이 없으면 LORA 태그만
+            items.push(loraTag);
           }
-        } else {
-          // 프롬프트 라인이 없으면 LORA 태그만
-          items.push(loraTag);
+        }
+      } else {
+        // 레벨 2+: 자식 와일드카드 참조
+        // 현재 폴더의 직접 자식 폴더들 찾기
+        const childFolders = allFolders.filter(f => {
+          // 자식 조건: pathParts 길이가 현재 + 1이고, 경로가 현재로 시작
+          return f.pathParts.length === folder.pathParts.length + 1 &&
+                 f.folderName.startsWith(folder.folderName + '/');
+        });
+
+        for (const child of childFolders) {
+          const childWildcardName = pathToWildcardName.get(child.folderName);
+          if (childWildcardName) {
+            items.push(`++${childWildcardName}++`);
+          }
         }
       }
 
-      // 와일드카드 생성
+      // 와일드카드 생성 (항목이 있을 때만)
       if (items.length > 0) {
         const wildcardData: WildcardCreateData = {
           name: wildcardName,
@@ -513,7 +576,8 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
           items: {
             comfyui: items,
             nai: []
-          }
+          },
+          customId
         };
 
         const wildcard = WildcardModel.create(wildcardData);
@@ -529,7 +593,8 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
           id: wildcard.id,
           name: wildcardName,
           itemCount: items.length,
-          folderName: folder.folderName
+          folderName: folder.folderName,
+          level: folder.level
         });
       }
     }

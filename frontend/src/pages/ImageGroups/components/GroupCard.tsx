@@ -13,6 +13,7 @@ import type { GroupWithStats } from '@comfyui-image-manager/shared';
 import { groupApi } from '../../../services/api/groupApi';
 import { useImageRotation } from '../../../hooks/useImageRotation';
 import type { ImageRecord } from '../../../types/image';
+import { getBackendOrigin } from '../../../utils/backend';
 
 interface GroupCardProps {
   group: GroupWithStats & { child_count?: number; has_children?: boolean };
@@ -27,6 +28,8 @@ interface GroupCardProps {
  * - 이미지 없으면 폴더 아이콘 표시
  */
 export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
+  const backendOrigin = getBackendOrigin();
+
   // 설정 버튼 클릭 핸들러
   const handleSettingsClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation(); // 카드 클릭 이벤트 방지
@@ -56,9 +59,14 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
     enabled: true,
   });
 
-  // 비디오 여부 확인
+  // 비디오/GIF 여부 확인
   const isCurrentVideo = useMemo(() => currentImage?.file_type === 'video', [currentImage]);
+  const isCurrentGif = useMemo(() => currentImage?.file_type === 'animated', [currentImage]);
+  const isCurrentProcessing = useMemo(() => currentImage?.is_processing || !currentImage?.composite_hash, [currentImage]);
+
   const isNextVideo = useMemo(() => nextImage?.file_type === 'video', [nextImage]);
+  const isNextGif = useMemo(() => nextImage?.file_type === 'animated', [nextImage]);
+  const isNextProcessing = useMemo(() => nextImage?.is_processing || !nextImage?.composite_hash, [nextImage]);
 
   // 폴더 아이콘 SVG
   const folderIconSvg = useMemo(() =>
@@ -70,14 +78,49 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
     )}`, []
   );
 
-  // 대표 이미지/비디오 URL 결정
+  // 랜덤 플레이스홀더 이미지 선택 (컴포넌트 마운트 시 한 번만)
+  const randomPlaceholder = useMemo(() => {
+    const PLACEHOLDER_COUNT = 12; // config.json의 count와 일치
+    const randomIndex = Math.floor(Math.random() * PLACEHOLDER_COUNT) + 1;
+    return `/placeholders/folder-overlay-${randomIndex}.webp`;
+  }, [group.id]); // group.id를 의존성으로 추가하여 각 그룹마다 다른 이미지
+
+  // 대표 이미지/비디오 URL 결정 (MasonryImageCard와 동일한 로직)
   const currentMediaUrl = useMemo(() => {
-    return currentImage?.thumbnail_url || folderIconSvg;
-  }, [currentImage, folderIconSvg]);
+    if (!currentImage) return folderIconSvg;
+
+    // 처리 중인 이미지는 경로 기반 URL 사용
+    if (isCurrentProcessing) {
+      return `${backendOrigin}/api/images/by-path/${encodeURIComponent(currentImage.original_file_path || '')}`;
+    }
+
+    // 비디오와 GIF는 원본 파일 사용 (애니메이션/재생 보존)
+    if (isCurrentVideo || isCurrentGif) {
+      return `${backendOrigin}/api/images/${currentImage.composite_hash}/file`;
+    }
+
+    // 일반 이미지는 썸네일 사용
+    const cacheBuster = currentImage.thumbnail_path ? `?v=${Date.parse(currentImage.first_seen_date)}` : '';
+    return `${backendOrigin}/api/images/${currentImage.composite_hash}/thumbnail${cacheBuster}`;
+  }, [currentImage, isCurrentVideo, isCurrentGif, isCurrentProcessing, backendOrigin, folderIconSvg]);
 
   const nextMediaUrl = useMemo(() => {
-    return nextImage?.thumbnail_url || folderIconSvg;
-  }, [nextImage, folderIconSvg]);
+    if (!nextImage) return folderIconSvg;
+
+    // 처리 중인 이미지는 경로 기반 URL 사용
+    if (isNextProcessing) {
+      return `${backendOrigin}/api/images/by-path/${encodeURIComponent(nextImage.original_file_path || '')}`;
+    }
+
+    // 비디오와 GIF는 원본 파일 사용 (애니메이션/재생 보존)
+    if (isNextVideo || isNextGif) {
+      return `${backendOrigin}/api/images/${nextImage.composite_hash}/file`;
+    }
+
+    // 일반 이미지는 썸네일 사용
+    const cacheBuster = nextImage.thumbnail_path ? `?v=${Date.parse(nextImage.first_seen_date)}` : '';
+    return `${backendOrigin}/api/images/${nextImage.composite_hash}/thumbnail${cacheBuster}`;
+  }, [nextImage, isNextVideo, isNextGif, isNextProcessing, backendOrigin, folderIconSvg]);
 
   return (
     <Card
@@ -87,6 +130,7 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
         aspectRatio: '5 / 7',
         position: 'relative',
         overflow: 'hidden',
+        borderRadius: 1,
         '&:hover': {
           transform: 'translateY(-4px)',
           boxShadow: 4,
@@ -105,7 +149,52 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
       <Box sx={{ width: '100%', paddingTop: '140%' /* 7/5 = 140% */ }} />
 
       {/* 현재 이미지 레이어 */}
-      {isCurrentVideo ? (
+      {!currentImage ? (
+        // 이미지가 없을 때: 폴더 배경 + 플레이스홀더 오버레이
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 1,
+          }}
+        >
+          {/* 배경: 폴더 아이콘 */}
+          <CardMedia
+            component="img"
+            image={folderIconSvg}
+            alt="Empty folder"
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              opacity: 0.4,
+            }}
+          />
+          {/* 오버레이: 랜덤 플레이스홀더 이미지 */}
+          <Box
+            component="img"
+            src={randomPlaceholder}
+            alt="Placeholder"
+            sx={{
+              position: 'absolute',
+              top: '58%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '70%',
+              height: 'auto',
+              maxWidth: '200px',
+              opacity: 0.8,
+              objectFit: 'contain',
+            }}
+          />
+        </Box>
+      ) : isCurrentVideo ? (
         <Box
           component="video"
           src={currentMediaUrl}
@@ -186,14 +275,14 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
         )
       )}
 
-      {/* 설정 버튼 (좌측 하단) */}
+      {/* 설정 버튼 (우측 하단) */}
       {onSettingsClick && (
         <IconButton
           onClick={handleSettingsClick}
           sx={{
             position: 'absolute',
             bottom: 8,
-            left: 8,
+            right: 8,
             zIndex: 4,
             bgcolor: 'rgba(0, 0, 0, 0.6)',
             color: 'white',
@@ -222,12 +311,12 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
             'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 70%, transparent 100%)',
           p: 1.5,
           pb: 1,
-          pl: onSettingsClick ? 6 : 1.5, // 설정 버튼이 있으면 왼쪽 패딩 증가
+          pr: onSettingsClick ? 6 : 1.5, // 설정 버튼이 있으면 오른쪽 패딩 증가
           zIndex: 2,
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <FolderIcon sx={{ color: 'primary.light', fontSize: '1.2rem' }} />
+          <FolderIcon sx={{ color: group.color || 'primary.light', fontSize: '1.2rem' }} />
           <Typography
             variant="subtitle1"
             component="div"

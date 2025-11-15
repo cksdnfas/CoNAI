@@ -43,6 +43,7 @@ export interface ImageRecord {
   batch_size: number | null;           // Batch size
   batch_index: number | null;          // Batch index
   auto_tags: string | null;            // WD v3 auto tags (JSON)
+  rating_score: number | null;         // Calculated rating score from auto_tags
 
   // Image similarity search fields
   perceptual_hash: string | null;      // pHash algorithm based image hash

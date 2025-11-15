@@ -29,7 +29,6 @@ import {
   Folder as FolderIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { useQueryClient } from '@tanstack/react-query';
 
 import { groupApi } from '../../services/api';
 import type { GroupWithStats, GroupWithHierarchy, BreadcrumbItem } from '@comfyui-image-manager/shared';
@@ -40,13 +39,11 @@ import { GroupBreadcrumb } from './components/GroupBreadcrumb';
 import AutoFolderGroupsContent from './components/AutoFolderGroupsContent';
 import { GroupCard } from './components/GroupCard';
 import { ImageViewCard } from './components/ImageViewCard';
+import { useRootGroups, useChildGroups, useDeleteGroup, useRunAutoCollection } from '../../hooks/useGroups';
 
 const ImageGroupsPage: React.FC = () => {
   const { t } = useTranslation(['imageGroups', 'common']);
-  const queryClient = useQueryClient();
   const [tabValue, setTabValue] = useState(0);
-  const [groups, setGroups] = useState<GroupWithHierarchy[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedGroup, setSelectedGroup] = useState<GroupWithHierarchy | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -69,6 +66,16 @@ const ImageGroupsPage: React.FC = () => {
   const [currentGroupInfo, setCurrentGroupInfo] = useState<GroupWithStats | null>(null); // 현재 부모 그룹 정보
   const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>([]);
 
+  // React Query hooks for data fetching
+  const { data: rootGroupsData, isLoading: rootGroupsLoading } = useRootGroups(currentParentId);
+  const { data: childGroupsData, isLoading: childGroupsLoading } = useChildGroups(currentParentId);
+  const deleteGroupMutation = useDeleteGroup();
+  const runAutoCollectionMutation = useRunAutoCollection();
+
+  // Use appropriate data based on current navigation state
+  const groups = (currentParentId === null ? rootGroupsData : childGroupsData) || [];
+  const loading = currentParentId === null ? rootGroupsLoading : childGroupsLoading;
+
   // 그룹 이미지 모달 관련 상태
   const [groupImagesModalOpen, setGroupImagesModalOpen] = useState(false);
   const [selectedGroupForImages, setSelectedGroupForImages] = useState<GroupWithStats | null>(null);
@@ -78,27 +85,6 @@ const ImageGroupsPage: React.FC = () => {
   const [groupImagesTotalPages, setGroupImagesTotalPages] = useState(1);
   const [groupImagesTotal, setGroupImagesTotal] = useState(0);
   const [groupImagesPageSize, setGroupImagesPageSize] = useState<PageSize>(25);
-
-  // 그룹 목록 조회 (계층 기반)
-  const fetchGroups = async (parentId: number | null = null) => {
-    try {
-      setLoading(true);
-      const response = parentId === null
-        ? await groupApi.getRootGroups()
-        : await groupApi.getChildGroups(parentId);
-
-      if (response.success && response.data) {
-        setGroups(response.data);
-      } else {
-        showSnackbar(t('imageGroups:messages.loadFailed'), 'error');
-      }
-    } catch (error) {
-      console.error('Error fetching groups:', error);
-      showSnackbar(t('imageGroups:messages.loadFailed'), 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // 브레드크럼 로드
   const loadBreadcrumb = async (groupId: number) => {
@@ -135,32 +121,8 @@ const ImageGroupsPage: React.FC = () => {
       }
     }
 
-    // 그룹 목록 조회
-    const response = groupId === null
-      ? await groupApi.getRootGroups()
-      : await groupApi.getChildGroups(groupId);
-
-    if (response.success && response.data) {
-      const fetchedGroups = response.data;
-      setGroups(fetchedGroups);
-
-      // 자동 진입 조건: autoNavigate가 true이고, 하위 그룹이 정확히 1개이고, 이미지가 없으면 계속 진입
-      if (autoNavigate && fetchedGroups.length === 1) {
-        const singleGroup = fetchedGroups[0];
-
-        if (singleGroup.image_count === 0 && singleGroup.child_count === 1) {
-          // 자동 이동 알림 표시
-          const currentGroupName = currentGroupInfo?.name || '그룹';
-          showSnackbar(`하위 그룹으로 자동 이동: ${currentGroupName} → ${singleGroup.name}`, 'info');
-
-          // 재귀적으로 하위 그룹으로 진입
-          await navigateToGroup(singleGroup.id, true);
-          return;
-        }
-      }
-    } else {
-      showSnackbar(t('imageGroups:messages.loadFailed'), 'error');
-    }
+    // React Query will automatically fetch the groups based on currentParentId
+    // Auto-navigation logic will be handled by useEffect watching groups data
   };
 
   // 하위 그룹 열기
@@ -177,15 +139,22 @@ const ImageGroupsPage: React.FC = () => {
       setCurrentParentId(null);
       setCurrentGroupInfo(null);
       setBreadcrumb([]);
-      fetchGroups(null);
     } else {
       navigateToGroup(groupId, false);
     }
   };
 
+  // Auto-navigation effect
   useEffect(() => {
-    fetchGroups();
-  }, []);
+    if (groups.length === 1 && currentParentId !== null) {
+      const singleGroup = groups[0];
+      if (singleGroup.image_count === 0 && singleGroup.child_count === 1) {
+        const currentGroupName = currentGroupInfo?.name || '그룹';
+        showSnackbar(`하위 그룹으로 자동 이동: ${currentGroupName} → ${singleGroup.name}`, 'info');
+        navigateToGroup(singleGroup.id, true);
+      }
+    }
+  }, [groups, currentParentId]);
 
   // 그룹 이미지 조회
   const fetchGroupImages = async (groupId: number, page: number = 1, pageSize?: PageSize) => {
@@ -258,20 +227,8 @@ const ImageGroupsPage: React.FC = () => {
     if (!menuGroupId) return;
 
     try {
-      const response = await groupApi.deleteGroup(menuGroupId);
-      if (response.success) {
-        showSnackbar(t('imageGroups:messages.deleteSuccess'), 'success');
-
-        // React Query 캐시 무효화
-        await queryClient.invalidateQueries({
-          queryKey: ['groupPreviewImages', 'group'],
-          refetchType: 'all'
-        });
-
-        await fetchGroups(currentParentId);
-      } else {
-        showSnackbar(response.error || t('imageGroups:messages.deleteFailed'), 'error');
-      }
+      await deleteGroupMutation.mutateAsync(menuGroupId);
+      showSnackbar(t('imageGroups:messages.deleteSuccess'), 'success');
     } catch (error) {
       console.error('Error deleting group:', error);
       showSnackbar(t('imageGroups:messages.deleteFailed'), 'error');
@@ -284,27 +241,14 @@ const ImageGroupsPage: React.FC = () => {
     if (!menuGroupId) return;
 
     try {
-      const response = await groupApi.runAutoCollection(menuGroupId);
-      if (response.success && response.data) {
-        const result = response.data;
-        showSnackbar(
-          t('imageGroups:messages.autoCollectSuccess', {
-            added: result.images_added,
-            removed: result.images_removed
-          }),
-          'success'
-        );
-
-        // React Query 캐시 무효화
-        await queryClient.invalidateQueries({
-          queryKey: ['groupPreviewImages', 'group'],
-          refetchType: 'all'
-        });
-
-        await fetchGroups(currentParentId);
-      } else {
-        showSnackbar(response.error || t('imageGroups:messages.autoCollectFailed'), 'error');
-      }
+      const result = await runAutoCollectionMutation.mutateAsync(menuGroupId);
+      showSnackbar(
+        t('imageGroups:messages.autoCollectSuccess', {
+          added: result.images_added,
+          removed: result.images_removed
+        }),
+        'success'
+      );
     } catch (error) {
       console.error('Error running auto collection:', error);
       showSnackbar(t('imageGroups:messages.autoCollectFailed'), 'error');
@@ -313,32 +257,18 @@ const ImageGroupsPage: React.FC = () => {
   };
 
   // 그룹 생성 성공 핸들러
-  const handleGroupCreated = async () => {
+  const handleGroupCreated = () => {
     setIsCreateModalOpen(false);
-
-    // React Query 캐시 무효화 - 모든 custom group 관련 캐시 제거
-    await queryClient.invalidateQueries({
-      queryKey: ['groupPreviewImages', 'group'],
-      refetchType: 'all'
-    });
-
-    await fetchGroups(currentParentId);
-    showSnackbar(t('imageGroups:messages.createSuccess'), 'success');
+    showSnackbar('그룹이 생성되었습니다. 브라우저를 새로고침해주세요.', 'info');
+    // Cache will be automatically invalidated by the mutation hook
   };
 
   // 그룹 수정 성공 핸들러
-  const handleGroupUpdated = async () => {
+  const handleGroupUpdated = () => {
     setIsEditModalOpen(false);
     setSelectedGroup(null);
-
-    // React Query 캐시 무효화
-    await queryClient.invalidateQueries({
-      queryKey: ['groupPreviewImages', 'group'],
-      refetchType: 'all'
-    });
-
-    await fetchGroups(currentParentId);
-    showSnackbar(t('imageGroups:messages.updateSuccess'), 'success');
+    showSnackbar('그룹이 수정되었습니다. 브라우저를 새로고침해주세요.', 'info');
+    // Cache will be automatically invalidated by the mutation hook
   };
 
   // 그룹 카드 클릭 핸들러
@@ -442,8 +372,7 @@ const ImageGroupsPage: React.FC = () => {
         fetchGroupImages(selectedGroupForImages.id, groupImagesPage, groupImagesPageSize);
       }
 
-      // 그룹 목록 새로고침
-      fetchGroups();
+      // Cache will be automatically invalidated by the mutation hook
     } catch (error) {
       console.error('Error removing images:', error);
       showSnackbar(t('imageGroups:messages.removeError'), 'error');
@@ -469,8 +398,7 @@ const ImageGroupsPage: React.FC = () => {
         showSnackbar(response.error || t('imageGroups:messages.assignFailed'), 'error');
       }
 
-      // 그룹 목록 새로고침
-      fetchGroups();
+      // Cache will be automatically invalidated by the mutation hook
     } catch (error) {
       console.error('Error assigning images:', error);
       showSnackbar(t('imageGroups:messages.assignError'), 'error');
@@ -528,7 +456,7 @@ const ImageGroupsPage: React.FC = () => {
       </Box>
 
       {/* 커스텀 그룹 탭 */}
-      {tabValue === 0 && (<>
+      <Box sx={{ display: tabValue === 0 ? 'block' : 'none' }}>
       {/* 브레드크럼 네비게이션 (그룹 내부에서만 표시) */}
       {!isGroupListView && (
         <GroupBreadcrumb
@@ -660,12 +588,12 @@ const ImageGroupsPage: React.FC = () => {
         onImagesRemoved={handleImagesRemoved}
         onImagesAssigned={handleImagesAssigned}
       />
-      </>)}
+      </Box>
 
       {/* 자동폴더 그룹 탭 */}
-      {tabValue === 1 && (
+      <Box sx={{ display: tabValue === 1 ? 'block' : 'none' }}>
         <AutoFolderGroupsContent onShowSnackbar={showSnackbar} />
-      )}
+      </Box>
 
       {/* 스낵바 */}
       <Snackbar

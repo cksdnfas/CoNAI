@@ -13,6 +13,7 @@ export interface GeneralSettings {
   deleteProtection: DeleteProtectionSettings;
   enableGallery?: boolean;
   autoCleanupCanvasOnShutdown?: boolean;
+  showRatingBadges?: boolean;
 }
 
 export interface TaggerModel {

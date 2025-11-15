@@ -21,7 +21,6 @@ import {
   FolderOpen as FolderOpenIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { useQueryClient } from '@tanstack/react-query';
 
 import { autoFolderGroupsApi } from '../../../services/api';
 import type { AutoFolderGroupWithStats } from '@comfyui-image-manager/shared';
@@ -30,6 +29,7 @@ import { GroupBreadcrumb } from './GroupBreadcrumb';
 import GroupImageGridModal from './GroupImageGridModal';
 import { AutoFolderGroupCard } from './AutoFolderGroupCard';
 import { AutoFolderImageViewCard } from './AutoFolderImageViewCard';
+import { useAutoFolderRootGroups, useAutoFolderChildGroups, useRebuildAutoFolderGroups } from '../../../hooks/useAutoFolderGroups';
 
 interface AutoFolderGroupsContentProps {
   onShowSnackbar: (message: string, severity: 'success' | 'error' | 'info' | 'warning') => void;
@@ -37,10 +37,6 @@ interface AutoFolderGroupsContentProps {
 
 const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onShowSnackbar }) => {
   const { t } = useTranslation(['imageGroups', 'common']);
-  const queryClient = useQueryClient();
-  const [groups, setGroups] = useState<AutoFolderGroupWithStats[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [rebuilding, setRebuilding] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [menuGroupId, setMenuGroupId] = useState<number | null>(null);
 
@@ -51,6 +47,29 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
   const [currentGroupInfo, setCurrentGroupInfo] = useState<AutoFolderGroupWithStats | null>(null); // 현재 폴더 그룹 정보
   const [breadcrumb, setBreadcrumb] = useState<Array<{ id: number; name: string }>>([]);
 
+  // React Query hooks for data fetching
+  const { data: rootGroupsData, isLoading: rootGroupsLoading, error: rootError } = useAutoFolderRootGroups();
+  const { data: childGroupsData, isLoading: childGroupsLoading, error: childError } = useAutoFolderChildGroups(currentParentId);
+  const rebuildMutation = useRebuildAutoFolderGroups();
+
+  // Use appropriate data based on current navigation state
+  const groups = (currentParentId === null ? rootGroupsData : childGroupsData) || [];
+  const loading = currentParentId === null ? rootGroupsLoading : childGroupsLoading;
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[AutoFolderGroupsContent] State:', {
+      currentParentId,
+      isGroupListView,
+      rootGroupsData,
+      childGroupsData,
+      groups: groups.length,
+      loading,
+      rootError,
+      childError
+    });
+  }, [currentParentId, isGroupListView, rootGroupsData, childGroupsData, loading]);
+
   // 이미지 모달 상태
   const [groupImagesModalOpen, setGroupImagesModalOpen] = useState(false);
   const [selectedGroupForImages, setSelectedGroupForImages] = useState<AutoFolderGroupWithStats | null>(null);
@@ -60,27 +79,6 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
   const [groupImagesTotalPages, setGroupImagesTotalPages] = useState(1);
   const [groupImagesTotal, setGroupImagesTotal] = useState(0);
   const [groupImagesPageSize, setGroupImagesPageSize] = useState<25 | 50 | 100>(25);
-
-  // 그룹 목록 조회
-  const fetchGroups = async (parentId: number | null = null) => {
-    try {
-      setLoading(true);
-      const response = parentId === null
-        ? await autoFolderGroupsApi.getRootGroups()
-        : await autoFolderGroupsApi.getChildGroups(parentId);
-
-      if (response.success && response.data) {
-        setGroups(response.data);
-      } else {
-        onShowSnackbar(t('imageGroups:messages.loadFailed'), 'error');
-      }
-    } catch (error) {
-      console.error('Error fetching auto folder groups:', error);
-      onShowSnackbar(t('imageGroups:messages.loadFailed'), 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // 브레드크럼 로드
   const loadBreadcrumb = async (groupId: number) => {
@@ -94,9 +92,8 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
     }
   };
 
-  // 초기 로드
+  // 브레드크럼 로드 효과
   useEffect(() => {
-    fetchGroups(currentParentId);
     if (currentParentId !== null) {
       loadBreadcrumb(currentParentId);
     }
@@ -105,70 +102,47 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
   // 재구축
   const handleRebuild = async () => {
     try {
-      setRebuilding(true);
-      const response = await autoFolderGroupsApi.rebuild();
+      const data = await rebuildMutation.mutateAsync();
+      onShowSnackbar(
+        `재구축 완료: ${data.groups_created}개 그룹, ${data.images_assigned}개 이미지 (${data.duration_ms}ms)`,
+        'success'
+      );
 
-      if (response.success && response.data) {
-        onShowSnackbar(
-          `재구축 완료: ${response.data.groups_created}개 그룹, ${response.data.images_assigned}개 이미지 (${response.data.duration_ms}ms)`,
-          'success'
-        );
+      // 재구축 후 항상 루트 레벨로 리셋
+      setCurrentParentId(null);
+      setCurrentGroupInfo(null);
+      setBreadcrumb([]);
+      setIsGroupListView(true);
 
-        // React Query 캐시 무효화 - 모든 auto-folder 관련 캐시 제거
-        await queryClient.invalidateQueries({
-          queryKey: ['groupPreviewImages', 'auto-folder'],
-          refetchType: 'all'
-        });
-
-        // 재구축 후 항상 루트 레벨로 리셋
-        // (재구축 시 모든 그룹이 삭제/재생성되므로 기존 ID로 유지 불가)
-        await fetchGroups(null);
-        setCurrentParentId(null);
-        setCurrentGroupInfo(null);
-        setBreadcrumb([]);
-        setIsGroupListView(true);
-      } else {
-        onShowSnackbar(response.error || '재구축 실패', 'error');
-      }
+      // 페이지 새로고침으로 모든 상태 초기화
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000); // 스낵바 메시지를 보여준 후 새로고침
     } catch (error) {
       console.error('Error rebuilding:', error);
       onShowSnackbar('재구축 중 오류 발생', 'error');
-    } finally {
-      setRebuilding(false);
     }
   };
 
-  // 그룹 네비게이션 (하위 그룹이 1개만 있으면 자동 진입)
+  // 그룹 네비게이션
   const navigateToGroup = async (group: AutoFolderGroupWithStats) => {
+    // Change state - React Query hook will automatically fetch or use cached data
     setCurrentParentId(group.id);
     setCurrentGroupInfo(group); // 현재 그룹 정보 저장
     await loadBreadcrumb(group.id);
-
-    // 그룹 목록 조회
-    const response = await autoFolderGroupsApi.getChildGroups(group.id);
-
-    if (response.success && response.data) {
-      const fetchedGroups = response.data;
-      setGroups(fetchedGroups);
-
-      // 자동 진입 조건: 하위 그룹이 정확히 1개이고, 이미지가 없으면 계속 진입
-      if (fetchedGroups.length === 1) {
-        const singleGroup = fetchedGroups[0];
-
-        if (singleGroup.image_count === 0 && singleGroup.child_count === 1) {
-          // 자동 이동 알림 표시
-          const currentGroupName = group.display_name || '폴더';
-          onShowSnackbar(`하위 그룹으로 자동 이동: ${currentGroupName} → ${singleGroup.display_name}`, 'info');
-
-          // 재귀적으로 하위 그룹으로 진입
-          await navigateToGroup(singleGroup);
-          return;
-        }
-      }
-    } else {
-      onShowSnackbar(t('imageGroups:messages.loadFailed'), 'error');
-    }
   };
+
+  // Auto-navigation effect for single child groups
+  useEffect(() => {
+    if (groups.length === 1 && currentParentId !== null) {
+      const singleGroup = groups[0];
+      if (singleGroup.image_count === 0 && singleGroup.child_count === 1) {
+        const currentGroupName = currentGroupInfo?.display_name || '폴더';
+        onShowSnackbar(`하위 그룹으로 자동 이동: ${currentGroupName} → ${singleGroup.display_name}`, 'info');
+        navigateToGroup(singleGroup);
+      }
+    }
+  }, [groups, currentParentId]);
 
   const handleBreadcrumbClick = async (groupId: number | null) => {
     if (groupId === null) {
@@ -178,8 +152,8 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
       setCurrentParentId(null);
       setCurrentGroupInfo(null);
       setBreadcrumb([]);
-      await fetchGroups(null);
     } else {
+      // Change state - React Query hook will automatically fetch or use cached data
       setCurrentParentId(groupId);
       await loadBreadcrumb(groupId);
 
@@ -191,31 +165,6 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
         }
       } catch (error) {
         console.error('Error loading current group info:', error);
-      }
-
-      // 그룹 목록 조회
-      const response = await autoFolderGroupsApi.getChildGroups(groupId);
-
-      if (response.success && response.data) {
-        const fetchedGroups = response.data;
-        setGroups(fetchedGroups);
-
-        // 자동 진입 조건: 하위 그룹이 정확히 1개이고, 이미지가 없으면 계속 진입
-        if (fetchedGroups.length === 1) {
-          const singleGroup = fetchedGroups[0];
-
-          if (singleGroup.image_count === 0 && singleGroup.child_count === 1) {
-            // 자동 이동 알림 표시
-            const currentGroupName = currentGroupInfo?.display_name || '폴더';
-            onShowSnackbar(`하위 그룹으로 자동 이동: ${currentGroupName} → ${singleGroup.display_name}`, 'info');
-
-            // 재귀적으로 하위 그룹으로 진입
-            await navigateToGroup(singleGroup);
-            return;
-          }
-        }
-      } else {
-        onShowSnackbar(t('imageGroups:messages.loadFailed'), 'error');
       }
     }
   };
@@ -323,11 +272,11 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
         </Alert>
         <Button
           variant="contained"
-          startIcon={rebuilding ? <CircularProgress size={20} /> : <RefreshIcon />}
+          startIcon={rebuildMutation.isPending ? <CircularProgress size={20} /> : <RefreshIcon />}
           onClick={handleRebuild}
-          disabled={rebuilding}
+          disabled={rebuildMutation.isPending}
         >
-          {rebuilding ? '재구축 중...' : '새로고침'}
+          {rebuildMutation.isPending ? '재구축 중...' : '새로고침'}
         </Button>
       </Box>
 
@@ -341,7 +290,11 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
       )}
 
       {/* 그룹 그리드 */}
-      {groups.length === 0 ? (
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
+          <CircularProgress />
+        </Box>
+      ) : groups.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 8 }}>
           <FolderOpenIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
           <Typography variant="h6" color="text.secondary" gutterBottom>
