@@ -35,8 +35,22 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
 
   // Get rating tier for this image
   const ratingTier = useMemo(() => {
-    return getTierByScore(image.rating_score);
-  }, [image.rating_score, getTierByScore]);
+    const tier = getTierByScore(image.rating_score);
+
+    // Debug logging for rating_score
+    if (Math.random() < 0.05) {  // Log 5% of images to avoid spam
+      console.log('[MasonryImageCard] Rating debug:', {
+        composite_hash: image.composite_hash,
+        rating_score: image.rating_score,
+        rating_score_type: typeof image.rating_score,
+        has_auto_tags: !!image.auto_tags,
+        tier_found: !!tier,
+        tier_name: tier?.tier_name,
+        will_show_badge: !!(tier && image.rating_score !== null && image.rating_score !== undefined),
+      });
+    }
+    return tier;
+  }, [image.rating_score, image.composite_hash, image.auto_tags, getTierByScore]);
   // ✅ composite_hash 사용 - API 엔드포인트를 통해 썸네일 제공 (외부 네트워크 접근 보장)
   // GIF는 애니메이션 보존을 위해 원본 사용 (file_type='animated')
   const isGif = image.file_type === 'animated';

@@ -51,6 +51,15 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     // URL 추가
     const enrichedImages = result.items.map(enrichImageWithFileView);
 
+    // Debug: Log first image's rating_score
+    if (enrichedImages.length > 0) {
+      console.log('[QueryRoutes] Sample image rating_score:', {
+        composite_hash: enrichedImages[0].composite_hash,
+        rating_score: enrichedImages[0].rating_score,
+        has_rating_score: 'rating_score' in enrichedImages[0],
+      });
+    }
+
     const response: ImageListResponse = {
       success: true,
       data: {
