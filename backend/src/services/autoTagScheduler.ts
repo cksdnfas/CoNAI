@@ -3,6 +3,7 @@ import { taggerDaemon } from './taggerDaemon';
 import { settingsService } from './settingsService';
 import { imageTaggerService, ImageTaggerService } from './imageTaggerService';
 import { SystemSettingsService } from './systemSettingsService';
+import { RatingScoreService } from './ratingScoreService';
 import path from 'path';
 
 /**
@@ -196,12 +197,23 @@ export class AutoTagScheduler {
       thresholds: result.thresholds
     });
 
+    // Calculate rating_score if rating data is available
+    let ratingScore = 0;
+    if (result.rating) {
+      try {
+        const scoreResult = await RatingScoreService.calculateScore(result.rating as any);
+        ratingScore = scoreResult.score;
+      } catch (error) {
+        console.error('[AutoTagScheduler] Failed to calculate rating_score:', error);
+      }
+    }
+
     // media_metadata 테이블 업데이트
     db.prepare(`
       UPDATE media_metadata
-      SET auto_tags = ?
+      SET auto_tags = ?, rating_score = ?
       WHERE composite_hash = ?
-    `).run(autoTags, compositeHash);
+    `).run(autoTags, ratingScore, compositeHash);
 
     console.log(`[AutoTagScheduler] ✅ Tagged (${mediaType}): ${path.basename(filePath)}`);
   }

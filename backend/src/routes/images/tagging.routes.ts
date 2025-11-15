@@ -13,6 +13,7 @@ import { runtimePaths, resolveUploadsPath } from '../../config/runtimePaths';
 import { AutoTagSearchService } from '../../services/autoTagSearchService';
 import { AutoTagSearchParams } from '../../types/autoTag';
 import { enrichImageRecord } from './utils';
+import { RatingScoreService } from '../../services/ratingScoreService';
 
 const router = Router();
 
@@ -116,7 +117,22 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
     console.log('[ImageTag] Formatted JSON length:', autoTagsJson?.length || 0);
     console.log('[ImageTag] Formatted JSON preview:', autoTagsJson?.substring(0, 100));
 
-    MediaMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
+    // Calculate rating_score if rating data is available
+    let ratingScore = 0;
+    if (taggerResult.rating) {
+      try {
+        const scoreResult = await RatingScoreService.calculateScore(taggerResult.rating as any);
+        ratingScore = scoreResult.score;
+        console.log('[ImageTag] Calculated rating_score:', ratingScore);
+      } catch (error) {
+        console.error('[ImageTag] Failed to calculate rating_score:', error);
+      }
+    }
+
+    MediaMetadataModel.update(compositeHash, {
+      auto_tags: autoTagsJson,
+      rating_score: ratingScore
+    });
 
     console.log(`[ImageTag] Successfully tagged ${compositeHash}`);
 
@@ -226,7 +242,22 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
 
         // 데이터베이스에 저장
         const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-        MediaMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
+
+        // Calculate rating_score if rating data is available
+        let ratingScore = 0;
+        if (taggerResult.rating) {
+          try {
+            const scoreResult = await RatingScoreService.calculateScore(taggerResult.rating as any);
+            ratingScore = scoreResult.score;
+          } catch (error) {
+            console.error('[BatchTag] Failed to calculate rating_score:', error);
+          }
+        }
+
+        MediaMetadataModel.update(compositeHash, {
+          auto_tags: autoTagsJson,
+          rating_score: ratingScore
+        });
 
         results.push({
           composite_hash: compositeHash,
@@ -347,7 +378,22 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
         }
 
         const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-        MediaMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
+
+        // Calculate rating_score if rating data is available
+        let ratingScore = 0;
+        if (taggerResult.rating) {
+          try {
+            const scoreResult = await RatingScoreService.calculateScore(taggerResult.rating as any);
+            ratingScore = scoreResult.score;
+          } catch (error) {
+            console.error('[BatchTagUnprocessed] Failed to calculate rating_score:', error);
+          }
+        }
+
+        MediaMetadataModel.update(compositeHash, {
+          auto_tags: autoTagsJson,
+          rating_score: ratingScore
+        });
 
         results.push({
           composite_hash: compositeHash,
@@ -497,7 +543,22 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
         }
 
         const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-        MediaMetadataModel.update(compositeHash, { auto_tags: autoTagsJson });
+
+        // Calculate rating_score if rating data is available
+        let ratingScore = 0;
+        if (taggerResult.rating) {
+          try {
+            const scoreResult = await RatingScoreService.calculateScore(taggerResult.rating as any);
+            ratingScore = scoreResult.score;
+          } catch (error) {
+            console.error('[BatchTagAll] Failed to calculate rating_score:', error);
+          }
+        }
+
+        MediaMetadataModel.update(compositeHash, {
+          auto_tags: autoTagsJson,
+          rating_score: ratingScore
+        });
 
         results.push({
           composite_hash: compositeHash,
@@ -675,6 +736,98 @@ router.get('/autotag-stats', asyncHandler(async (req: Request, res: Response) =>
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get auto tag statistics'
+    });
+    return;
+  }
+}));
+
+/**
+ * 모든 media_metadata의 rating_score 재계산
+ * POST /api/images/recalculate-rating-scores
+ */
+router.post('/recalculate-rating-scores', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    console.log('[RecalculateRatingScores] Starting rating score recalculation for all images');
+
+    // Get all media_metadata with auto_tags
+    const imagesWithTags = db.prepare(`
+      SELECT composite_hash, auto_tags
+      FROM media_metadata
+      WHERE auto_tags IS NOT NULL
+    `).all() as Array<{ composite_hash: string; auto_tags: string }>;
+
+    console.log(`[RecalculateRatingScores] Found ${imagesWithTags.length} images with auto_tags`);
+
+    let successCount = 0;
+    let failCount = 0;
+    const results = [];
+
+    for (const image of imagesWithTags) {
+      try {
+        const autoTagsData = JSON.parse(image.auto_tags);
+
+        if (autoTagsData.rating) {
+          // Calculate rating score
+          const scoreResult = await RatingScoreService.calculateScore(autoTagsData.rating);
+
+          // Update only rating_score
+          db.prepare(`
+            UPDATE media_metadata
+            SET rating_score = ?
+            WHERE composite_hash = ?
+          `).run(scoreResult.score, image.composite_hash);
+
+          successCount++;
+          results.push({
+            composite_hash: image.composite_hash,
+            success: true,
+            rating_score: scoreResult.score
+          });
+        } else {
+          // No rating data, set to 0
+          db.prepare(`
+            UPDATE media_metadata
+            SET rating_score = 0
+            WHERE composite_hash = ?
+          `).run(image.composite_hash);
+
+          successCount++;
+          results.push({
+            composite_hash: image.composite_hash,
+            success: true,
+            rating_score: 0,
+            note: 'No rating data available'
+          });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`[RecalculateRatingScores] Failed for ${image.composite_hash}:`, message);
+        failCount++;
+        results.push({
+          composite_hash: image.composite_hash,
+          success: false,
+          error: message
+        });
+      }
+    }
+
+    console.log(`[RecalculateRatingScores] Completed: ${successCount} success, ${failCount} failed`);
+
+    res.json({
+      success: true,
+      data: {
+        total: imagesWithTags.length,
+        success_count: successCount,
+        fail_count: failCount,
+        results
+      }
+    });
+    return;
+  } catch (error) {
+    console.error('[RecalculateRatingScores] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to recalculate rating scores'
     });
     return;
   }

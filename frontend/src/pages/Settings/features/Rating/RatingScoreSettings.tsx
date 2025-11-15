@@ -16,6 +16,7 @@ import { WeightConfiguration } from './components/WeightConfiguration';
 import { TierManagement } from './components/TierManagement';
 import { TierDialog } from './components/TierDialog';
 import { ScoreCalculator } from './components/ScoreCalculator';
+import { RatingScoreRecalculation } from './components/RatingScoreRecalculation';
 
 const RatingScoreSettings: React.FC = () => {
   const { t } = useTranslation('settings');
@@ -167,6 +168,9 @@ const RatingScoreSettings: React.FC = () => {
         onUpdateTestRating={setTestRating}
         onCalculateTest={onCalculateTest}
       />
+
+      {/* Section 4: Recalculate All Rating Scores */}
+      <RatingScoreRecalculation />
 
       {/* Tier Edit/Create Dialog */}
       <TierDialog
