@@ -209,7 +209,7 @@ export function AutoFolderImageViewCard({ group, onClick }: AutoFolderImageViewC
           />
         </Box>
 
-        {images.length > 1 && (
+        {/* {images.length > 1 && (
           <Typography
             variant="caption"
             sx={{
@@ -219,7 +219,7 @@ export function AutoFolderImageViewCard({ group, onClick }: AutoFolderImageViewC
           >
             {images.length}개 이미지 회전 중
           </Typography>
-        )}
+        )} */}
       </Box>
     </Card>
   );

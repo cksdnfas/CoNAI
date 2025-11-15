@@ -39,7 +39,7 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
   );
 
   // 이미지 회전 훅 사용 (React Query 캐싱 포함)
-  const { currentImage, images, isLoading } = useImageRotation(fetchImages, {
+  const { currentImage, nextImage, images, isTransitioning, offset, isLoading } = useImageRotation(fetchImages, {
     groupId: group.id, // 캐시 키로 사용
     groupType: 'auto-folder',
     interval: 3000,
@@ -48,19 +48,24 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
     enabled: true,
   });
 
-  // 대표 이미지 URL 결정
-  const imageUrl = useMemo(() => {
-    if (currentImage?.thumbnail_url) {
-      return currentImage.thumbnail_url;
-    }
-    // 이미지 없으면 폴더 아이콘 SVG
-    return `data:image/svg+xml,${encodeURIComponent(
+  // 폴더 아이콘 SVG
+  const folderIconSvg = useMemo(() =>
+    `data:image/svg+xml,${encodeURIComponent(
       `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24">
         <rect width="24" height="24" fill="#1a1a1a"/>
         <path fill="#666" d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
       </svg>`
-    )}`;
-  }, [currentImage]);
+    )}`, []
+  );
+
+  // 대표 이미지 URL 결정
+  const currentImageUrl = useMemo(() => {
+    return currentImage?.thumbnail_url || folderIconSvg;
+  }, [currentImage, folderIconSvg]);
+
+  const nextImageUrl = useMemo(() => {
+    return nextImage?.thumbnail_url || folderIconSvg;
+  }, [nextImage, folderIconSvg]);
 
   return (
     <Card
@@ -84,10 +89,13 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
       }}
       onClick={onClick}
     >
-      {/* 배경 이미지 (회전) */}
+      {/* 높이 제공용 spacer (aspect ratio 유지) */}
+      <Box sx={{ width: '100%', paddingTop: '140%' /* 7/5 = 140% */ }} />
+
+      {/* 현재 이미지 레이어 */}
       <CardMedia
         component="img"
-        image={imageUrl}
+        image={currentImageUrl}
         alt={group.display_name}
         sx={{
           position: 'absolute',
@@ -96,9 +104,31 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          transition: 'opacity 0.6s ease-in-out',
+          zIndex: 1,
+          transform: `translateX(${offset}%)`,
+          transition: isTransitioning ? 'transform 0.6s ease-in-out' : 'none',
         }}
       />
+
+      {/* 다음 이미지 레이어 (슬라이드 대기) */}
+      {images.length > 1 && (
+        <CardMedia
+          component="img"
+          image={nextImageUrl}
+          alt={group.display_name}
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            zIndex: 0,
+            transform: `translateX(${offset + 100}%)`,
+            transition: isTransitioning ? 'transform 0.6s ease-in-out' : 'none',
+          }}
+        />
+      )}
 
       {/* 기본 정보 (항상 표시) */}
       <Box
@@ -111,6 +141,7 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
             'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 70%, transparent 100%)',
           p: 1.5,
           pb: 1,
+          zIndex: 2,
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -144,6 +175,7 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
           bgcolor: 'rgba(0, 0, 0, 0.6)',
           opacity: 0,
           transition: 'opacity 0.2s',
+          zIndex: 2,
         }}
       />
       <Box
@@ -160,6 +192,7 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
           display: 'flex',
           flexDirection: 'column',
           gap: 1.5,
+          zIndex: 3,
         }}
       >
         <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
@@ -193,7 +226,7 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
           )}
         </Box>
 
-        {images.length > 1 && (
+        {/* {images.length > 1 && (
           <Typography
             variant="caption"
             sx={{
@@ -203,7 +236,7 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
           >
             {images.length}개 이미지 회전 중
           </Typography>
-        )}
+        )} */}
       </Box>
     </Card>
   );

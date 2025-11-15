@@ -84,10 +84,10 @@ export function enrichImageWithFileView(image: any) {
     // Phase 1 상태 플래그
     is_processing: isProcessing,
 
-    // 썸네일: composite_hash가 있으면 썸네일 사용, 없으면 원본 사용
+    // 썸네일: composite_hash가 있으면 썸네일 API 엔드포인트 사용
     thumbnail_url: isProcessing
       ? `/api/images/by-path/${encodeURIComponent(image.original_file_path)}`
-      : (toUploadsUrl(image.thumbnail_path as string) || `/api/images/${image.composite_hash}/thumbnail`),
+      : `/api/images/${image.composite_hash}/thumbnail`,
 
     // 원본 이미지
     image_url: isProcessing

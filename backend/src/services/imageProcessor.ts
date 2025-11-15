@@ -23,10 +23,6 @@ export class ImageProcessor {
     return path.relative(basePath, targetPath).replace(/\\/g, '/');
   }
 
-  private static readonly THUMBNAIL_SIZE = 1080;
-  private static readonly THUMBNAIL_QUALITY = 70; // Reduced from 90 to 70 for better performance
-  private static readonly OPTIMIZED_QUALITY = 95;
-
   /**
    * 날짜 기반 폴더 경로 생성
    */
@@ -103,15 +99,37 @@ export class ImageProcessor {
   static async generateThumbnail(
     inputPath: string,
     outputPath: string,
-    size: number = this.THUMBNAIL_SIZE
+    customSize?: number
   ): Promise<void> {
-    await sharp(inputPath)
-      .resize(size, size, {
+    // Load settings
+    const settings = settingsService.loadSettings();
+    const { size: sizeOption, quality } = settings.thumbnail;
+
+    // Determine thumbnail size
+    let targetSize: number | undefined;
+    if (customSize !== undefined) {
+      targetSize = customSize;
+    } else if (sizeOption === 'original') {
+      // For 'original', don't resize - use original dimensions
+      targetSize = undefined;
+    } else {
+      targetSize = parseInt(sizeOption, 10);
+    }
+
+    const pipeline = sharp(inputPath);
+
+    // Only resize if targetSize is specified
+    if (targetSize !== undefined) {
+      pipeline.resize(targetSize, targetSize, {
         fit: 'inside',
         withoutEnlargement: true
-      })
+      });
+    }
+
+    // Convert to WebP with configured quality
+    await pipeline
       .webp({
-        quality: this.THUMBNAIL_QUALITY,
+        quality: quality,
         effort: 4
       })
       .toFile(outputPath);

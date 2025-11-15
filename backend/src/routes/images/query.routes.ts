@@ -671,7 +671,10 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
 
     // 이미지인 경우 썸네일 제공
     // thumbnail_path가 없거나 파일이 존재하지 않으면 원본 이미지 사용
-    const thumbnailPath = metadata.thumbnail_path ? resolveUploadsPath(metadata.thumbnail_path) : null;
+    // 썸네일은 tempDir에 저장됨 (thumbnails/{date}/{hash}.webp)
+    const thumbnailPath = metadata.thumbnail_path
+      ? path.join(runtimePaths.tempDir, metadata.thumbnail_path)
+      : null;
 
     if (!thumbnailPath || !fs.existsSync(thumbnailPath)) {
       // 썸네일이 없으면 원본 이미지로 폴백

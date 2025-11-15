@@ -16,6 +16,8 @@ import {
   Switch,
   Divider,
   Tooltip,
+  Button,
+  Slider,
 } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useTranslation } from 'react-i18next';
@@ -23,21 +25,27 @@ import type {
   GeneralSettings as GeneralSettingsType,
   SupportedLanguage,
   MetadataExtractionSettings,
-  StealthScanMode
+  StealthScanMode,
+  ThumbnailSettings,
+  ThumbnailSize,
 } from '../../../services/settingsApi';
 import { SUPPORTED_LANGUAGES } from '@comfyui-image-manager/shared';
+import ThumbnailRegenerationModal from './ThumbnailRegenerationModal';
 
 interface GeneralSettingsProps {
   settings: GeneralSettingsType;
   metadataSettings: MetadataExtractionSettings;
+  thumbnailSettings: ThumbnailSettings;
   onUpdate: (settings: Partial<GeneralSettingsType>) => Promise<void>;
   onMetadataUpdate: (settings: Partial<MetadataExtractionSettings>) => Promise<void>;
+  onThumbnailUpdate: (settings: Partial<ThumbnailSettings>) => Promise<void>;
 }
 
-const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSettings, onUpdate, onMetadataUpdate }) => {
+const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSettings, thumbnailSettings, onUpdate, onMetadataUpdate, onThumbnailUpdate }) => {
   const { t, i18n } = useTranslation('settings');
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isRegenerationModalOpen, setIsRegenerationModalOpen] = useState(false);
 
   const handleLanguageChange = async (event: any) => {
     const newLanguage = event.target.value as SupportedLanguage;
@@ -93,6 +101,30 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
 
   const handleMetadataToggle = (field: keyof MetadataExtractionSettings) => (event: React.ChangeEvent<HTMLInputElement>) => {
     handleMetadataUpdate({ [field]: event.target.checked });
+  };
+
+  const handleThumbnailUpdate = async (updates: Partial<ThumbnailSettings>) => {
+    setUpdating(true);
+    setError(null);
+
+    try {
+      await onThumbnailUpdate(updates);
+    } catch (err) {
+      console.error('Failed to update thumbnail settings:', err);
+      setError('썸네일 설정 저장에 실패했습니다');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleThumbnailSizeChange = (event: any) => {
+    handleThumbnailUpdate({ size: event.target.value as ThumbnailSize });
+  };
+
+  const handleThumbnailQualityChange = (_event: Event, value: number | number[]) => {
+    if (typeof value === 'number') {
+      handleThumbnailUpdate({ quality: value });
+    }
   };
 
   return (
@@ -382,7 +414,82 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
             }
           />
         </Box>
+
+        <Divider sx={{ my: 4 }} />
+
+        {/* Thumbnail Settings */}
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h6">
+            썸네일 설정
+          </Typography>
+          <Tooltip title="썸네일 생성 시 사용되는 크기와 품질을 설정합니다" arrow>
+            <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
+          </Tooltip>
+        </Box>
+
+        {/* Thumbnail Size */}
+        <FormControl fullWidth disabled={updating} sx={{ mb: 3 }}>
+          <InputLabel id="thumbnail-size-label">썸네일 크기</InputLabel>
+          <Select
+            labelId="thumbnail-size-label"
+            value={thumbnailSettings.size}
+            label="썸네일 크기"
+            onChange={handleThumbnailSizeChange}
+          >
+            <MenuItem value="original">원본 크기와 동일</MenuItem>
+            <MenuItem value="2048">2048px</MenuItem>
+            <MenuItem value="1080">1080px (기본값)</MenuItem>
+            <MenuItem value="720">720px</MenuItem>
+            <MenuItem value="512">512px</MenuItem>
+          </Select>
+        </FormControl>
+
+        {/* Thumbnail Quality */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            썸네일 품질: {thumbnailSettings.quality}%
+          </Typography>
+          <Slider
+            value={thumbnailSettings.quality}
+            onChange={handleThumbnailQualityChange}
+            min={60}
+            max={100}
+            step={5}
+            marks={[
+              { value: 60, label: '60%' },
+              { value: 80, label: '80%' },
+              { value: 100, label: '100%' },
+            ]}
+            valueLabelDisplay="auto"
+            disabled={updating}
+          />
+          <Typography variant="body2" color="text.secondary">
+            품질이 높을수록 파일 크기가 커집니다 (60-100%)
+          </Typography>
+        </Box>
+
+        {/* Thumbnail Regeneration Button */}
+        <Box sx={{ mb: 3 }}>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => setIsRegenerationModalOpen(true)}
+            disabled={updating}
+            fullWidth
+          >
+            썸네일 재생성
+          </Button>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            모든 이미지의 썸네일을 현재 설정으로 다시 생성합니다
+          </Typography>
+        </Box>
       </Paper>
+
+      {/* Thumbnail Regeneration Modal */}
+      <ThumbnailRegenerationModal
+        open={isRegenerationModalOpen}
+        onClose={() => setIsRegenerationModalOpen(false)}
+      />
     </Box>
   );
 };

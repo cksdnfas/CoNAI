@@ -126,36 +126,24 @@ export function ImageViewCard({ group, onClick }: ImageViewCardProps) {
         />
       )}
 
-      {/* 기본 정보 (항상 표시) */}
+      {/* 상단 중앙 배지 (현재 그룹 이미지 라벨) */}
       <Box
         sx={{
           position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          background:
-            'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 70%, transparent 100%)',
-          p: 1.5,
-          pb: 1,
+          top: 5,
+          left: 5,
+          backgroundColor: 'primary.main',
+          color: 'white',
+          px: 1,
+          py: 0.75,
+          borderRadius: 2,
+          boxShadow: 2,
+          display: 'flex',
+          gap: 0.75,
+          zIndex: 2,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ImageIcon sx={{ color: 'primary.light', fontSize: '1.2rem' }} />
-          <Typography
-            variant="subtitle1"
-            component="div"
-            sx={{
-              flex: 1,
-              color: 'white',
-              fontWeight: 500,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            이미지 보기
-          </Typography>
-        </Box>
+        <ImageIcon sx={{ fontSize: '1.1rem' }} />
       </Box>
 
       {/* 호버 시 표시되는 상세 정보 */}
@@ -176,7 +164,7 @@ export function ImageViewCard({ group, onClick }: ImageViewCardProps) {
         className="hover-info"
         sx={{
           position: 'absolute',
-          top: 0,
+          top: 20,
           left: 0,
           right: 0,
           bottom: 0,
@@ -209,7 +197,7 @@ export function ImageViewCard({ group, onClick }: ImageViewCardProps) {
           />
         </Box>
 
-        {images.length > 1 && (
+        {/* {images.length > 1 && (
           <Typography
             variant="caption"
             sx={{
@@ -219,7 +207,7 @@ export function ImageViewCard({ group, onClick }: ImageViewCardProps) {
           >
             {images.length}개 이미지 회전 중
           </Typography>
-        )}
+        )} */}
       </Box>
     </Card>
   );

@@ -35,6 +35,35 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
+ * 마지막 LORA 스캔 로그 조회
+ * GET /api/wildcards/last-scan-log
+ */
+router.get('/last-scan-log', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const db = (await import('../database/userSettingsDb')).getUserSettingsDb();
+    const result = db.prepare('SELECT value FROM user_preferences WHERE key = ?').get('last_lora_scan_log') as any;
+
+    if (!result) {
+      return res.json({
+        success: true,
+        data: null
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: JSON.parse(result.value)
+    });
+  } catch (error) {
+    console.error('Error getting last scan log:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get last scan log'
+    });
+  }
+}));
+
+/**
  * 특정 와일드카드 조회
  * GET /api/wildcards/:id
  */
@@ -346,35 +375,6 @@ router.get('/:id/circular-check', asyncHandler(async (req: Request, res: Respons
     return res.status(500).json({
       success: false,
       error: 'Failed to check circular reference'
-    });
-  }
-}));
-
-/**
- * 마지막 LORA 스캔 로그 조회
- * GET /api/wildcards/last-scan-log
- */
-router.get('/last-scan-log', asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const db = (await import('../database/userSettingsDb')).getUserSettingsDb();
-    const result = db.prepare('SELECT value FROM user_preferences WHERE key = ?').get('last_lora_scan_log') as any;
-
-    if (!result) {
-      return res.json({
-        success: true,
-        data: null
-      });
-    }
-
-    return res.json({
-      success: true,
-      data: JSON.parse(result.value)
-    });
-  } catch (error) {
-    console.error('Error getting last scan log:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get last scan log'
     });
   }
 }));

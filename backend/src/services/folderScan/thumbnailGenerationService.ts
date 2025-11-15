@@ -1,11 +1,10 @@
 import sharp from 'sharp';
+import { settingsService } from '../settingsService';
 
 /**
  * 썸네일 생성 서비스
  */
 export class ThumbnailGenerationService {
-  private static readonly THUMBNAIL_SIZE = 1080;
-
   /**
    * 썸네일 생성
    */
@@ -19,13 +18,35 @@ export class ThumbnailGenerationService {
       return;
     }
 
-    // 이미지 파일만 Sharp로 썸네일 생성
-    await sharp(inputPath)
-      .resize(this.THUMBNAIL_SIZE, this.THUMBNAIL_SIZE, {
+    // Load settings
+    const settings = settingsService.loadSettings();
+    const { size: sizeOption, quality } = settings.thumbnail;
+
+    // Determine thumbnail size
+    let targetSize: number | undefined;
+    if (sizeOption === 'original') {
+      // For 'original', don't resize - use original dimensions
+      targetSize = undefined;
+    } else {
+      targetSize = parseInt(sizeOption, 10);
+    }
+
+    const pipeline = sharp(inputPath);
+
+    // Only resize if targetSize is specified
+    if (targetSize !== undefined) {
+      pipeline.resize(targetSize, targetSize, {
         fit: 'inside',
         withoutEnlargement: true
+      });
+    }
+
+    // Convert to WebP with configured quality
+    await pipeline
+      .webp({
+        quality: quality,
+        effort: 4
       })
-      .webp({ quality: 90 })
       .toFile(outputPath);
   }
 }

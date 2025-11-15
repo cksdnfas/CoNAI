@@ -18,7 +18,7 @@ import SimilaritySettings from './features/Similarity/SimilaritySettings';
 import FolderSettings from './features/Folder/FolderSettings';
 import { AuthSettings } from './features/Auth/AuthSettings';
 import PromptList from '../PromptManagement/components/PromptList';
-import { settingsApi, type AppSettings, type GeneralSettings as GeneralSettingsType, type TaggerSettings as TaggerSettingsType, type MetadataExtractionSettings } from '../../services/settingsApi';
+import { settingsApi, type AppSettings, type GeneralSettings as GeneralSettingsType, type TaggerSettings as TaggerSettingsType, type MetadataExtractionSettings, type ThumbnailSettings } from '../../services/settingsApi';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -118,6 +118,25 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleUpdateThumbnailSettings = async (thumbnailSettings: Partial<ThumbnailSettings>) => {
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const updatedSettings = await settingsApi.updateThumbnailSettings(thumbnailSettings);
+      setSettings(updatedSettings);
+      setSuccessMessage(t('messages.saveSuccess'));
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 3000);
+    } catch (err) {
+      setError(t('messages.saveFailed'));
+      console.error('Failed to update settings:', err);
+      throw err;
+    }
+  };
+
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
@@ -188,8 +207,10 @@ const SettingsPage: React.FC = () => {
           <GeneralSettings
             settings={settings.general}
             metadataSettings={settings.metadataExtraction}
+            thumbnailSettings={settings.thumbnail}
             onUpdate={handleUpdateGeneralSettings}
             onMetadataUpdate={handleUpdateMetadataSettings}
+            onThumbnailUpdate={handleUpdateThumbnailSettings}
           />
         </TabPanel>
 

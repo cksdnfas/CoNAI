@@ -143,7 +143,8 @@
     "removeError": "移除圖像時發生錯誤。",
     "assignSuccess": "新增{{added}}，轉換{{converted}}，跳過{{skipped}}",
     "assignFailed": "指派圖像失敗。",
-    "assignError": "指派圖像時發生錯誤。"
+    "assignError": "指派圖像時發生錯誤。",
+    "emptyGroup": "此群組為空"
   },
   "imageModal": {
     "title": "{{name}}（{{count}}張圖像）",

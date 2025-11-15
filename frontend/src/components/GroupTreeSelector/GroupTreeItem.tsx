@@ -132,7 +132,7 @@ export const GroupTreeItem: React.FC<GroupTreeItemProps> = ({
       </Typography>
 
       {/* Image Count */}
-      {group.image_count !== undefined && group.image_count > 0 && (
+      {(group.image_count ?? 0) > 0 && (
         <Chip
           label={group.image_count}
           size="small"
@@ -147,7 +147,7 @@ export const GroupTreeItem: React.FC<GroupTreeItemProps> = ({
       )}
 
       {/* Auto-collect Badge */}
-      {group.auto_collect_enabled && (
+      {Boolean(group.auto_collect_enabled) && (
         <Chip
           icon={<AutoAwesome sx={{ fontSize: '0.8rem' }} />}
           label="Auto"

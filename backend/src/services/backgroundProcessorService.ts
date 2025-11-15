@@ -7,9 +7,8 @@ import { db } from '../database/init';
 import { ImageSimilarityService } from './imageSimilarity';
 import { BackgroundQueueService } from './backgroundQueue';
 import { generateFileHash } from '../utils/fileHash';
-import { isVideoExtension } from '../constants/supportedExtensions';
-import { runtimePaths } from '../config/runtimePaths';
 import { VideoProcessor } from './videoProcessor';
+import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 
 interface UnhashedFile {
   id: number;
@@ -314,34 +313,7 @@ export class BackgroundProcessorService {
     inputPath: string,
     compositeHash: string
   ): Promise<string> {
-    // Create date-based directory structure
-    const dateStr = new Date().toISOString().split('T')[0];
-    // 절대 경로로 디렉토리 생성 (루트 temp 폴더 사용)
-    const tempDir = path.join(runtimePaths.tempDir, 'thumbnails', dateStr);
-
-    // Ensure directory exists
-    await fs.promises.mkdir(tempDir, { recursive: true });
-
-    // DB 저장용 상대 경로 (temp 폴더 기준)
-    const thumbnailPath = path.join('thumbnails', dateStr, `${compositeHash}.webp`);
-    // 파일 시스템용 절대 경로
-    const absoluteThumbnailPath = path.join(runtimePaths.tempDir, thumbnailPath);
-
-    // Skip if thumbnail already exists
-    if (fs.existsSync(absoluteThumbnailPath)) {
-      return thumbnailPath;
-    }
-
-    // Generate thumbnail with Sharp
-    await sharp(inputPath)
-      .resize(1080, 1080, {
-        fit: 'inside',
-        withoutEnlargement: true,
-      })
-      .webp({ quality: 90 })
-      .toFile(absoluteThumbnailPath);
-
-    return thumbnailPath;
+    return ThumbnailGenerator.generateThumbnail(inputPath, compositeHash);
   }
 
   /**

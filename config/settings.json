@@ -29,5 +29,9 @@
     "stealthMaxResolutionMP": 5,
     "skipStealthForComfyUI": true,
     "skipStealthForWebUI": false
+  },
+  "thumbnail": {
+    "size": "1080",
+    "quality": 85
   }
 }

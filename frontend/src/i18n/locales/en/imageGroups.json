@@ -161,7 +161,8 @@
     "removeError": "An error occurred while removing images.",
     "assignSuccess": "{{added}} added, {{converted}} converted, {{skipped}} skipped",
     "assignFailed": "Failed to assign images.",
-    "assignError": "An error occurred while assigning images."
+    "assignError": "An error occurred while assigning images.",
+    "emptyGroup": "This group is empty"
   },
   "imageModal": {
     "title": "{{name}} ({{count}} images)",

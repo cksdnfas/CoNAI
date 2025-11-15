@@ -161,7 +161,8 @@
     "removeError": "이미지 제거 중 오류가 발생했습니다.",
     "assignSuccess": "{{added}}개 추가, {{converted}}개 변환, {{skipped}}개 스킵",
     "assignFailed": "이미지 할당에 실패했습니다.",
-    "assignError": "이미지 할당 중 오류가 발생했습니다."
+    "assignError": "이미지 할당 중 오류가 발생했습니다.",
+    "emptyGroup": "이 그룹은 비어있습니다"
   },
   "imageModal": {
     "title": "{{name}} ({{count}}개 이미지)",

@@ -42,11 +42,19 @@ export interface SimilaritySettings {
   autoGenerateHashOnUpload: boolean;  // 업로드 시 자동 해시 생성 여부
 }
 
+export type ThumbnailSize = 'original' | '2048' | '1080' | '720' | '512';
+
+export interface ThumbnailSettings {
+  size: ThumbnailSize;   // 썸네일 크기 (original = 원본 크기 유지)
+  quality: number;       // 썸네일 품질 (60-100)
+}
+
 export interface AppSettings {
   general: GeneralSettings;
   tagger: TaggerSettings;
   similarity: SimilaritySettings;
   metadataExtraction: MetadataExtractionSettings;
+  thumbnail: ThumbnailSettings;
 }
 
 export interface TaggerModelInfo {

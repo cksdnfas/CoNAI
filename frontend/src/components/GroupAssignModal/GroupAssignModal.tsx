@@ -50,20 +50,16 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
     setLoading(true);
     setError(null);
     try {
-      console.log('🔍 그룹 로딩 시작...');
       const response = await groupApi.getAllGroupsWithHierarchy();
-      console.log('📦 API 응답:', response);
 
       if (response.success && response.data) {
-        console.log('✅ 그룹 데이터:', response.data, '개수:', response.data.length);
         setGroups(response.data);
       } else {
-        console.error('❌ API 응답 실패:', response);
         setError(t('imageGroups:assignModal.loadError'));
       }
     } catch (error) {
-      console.error('❌ 그룹 로딩 에러:', error);
-      setError(t('imageGroups:assignModal.loadingError'));
+      console.error('Failed to load groups:', error);
+      setError(t('imageGroups:assignModal.loadError'));
     } finally {
       setLoading(false);
     }
@@ -74,7 +70,7 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
   };
 
   const handleAssign = async () => {
-    if (selectedGroupId) {
+    if (selectedGroupId && selectedGroupId !== currentGroupId) {
       await onAssign(selectedGroupId);
       onClose();
     }

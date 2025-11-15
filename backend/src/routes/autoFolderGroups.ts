@@ -9,7 +9,7 @@ import {
   PAGINATION
 } from '@comfyui-image-manager/shared';
 import { asyncHandler } from '../middleware/errorHandler';
-import { enrichImageRecord } from './images/utils';
+import { enrichImageWithFileView } from './images/utils';
 import path from 'path';
 import fs from 'fs';
 import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
@@ -126,8 +126,8 @@ router.get('/:id/preview-images', asyncHandler(async (req: Request, res: Respons
 
     const images = await AutoFolderGroupImageModel.findPreviewImages(id, limitedCount, includeChildren);
 
-    // 이미지 경로 보강 (enrichImageRecord 사용)
-    const enrichedImages = images.map(img => enrichImageRecord(img));
+    // 이미지 경로 보강 (enrichImageWithFileView 사용)
+    const enrichedImages = images.map(img => enrichImageWithFileView(img));
 
     return res.json(successResponse(enrichedImages));
   } catch (error) {
@@ -177,7 +177,7 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
     const result = await AutoFolderGroupService.getGroupImages(id, page, pageSize);
 
     // 이미지 메타데이터 보강 (URL 추가)
-    const enrichedImages = result.images.map(img => enrichImageRecord(img));
+    const enrichedImages = result.images.map(img => enrichImageWithFileView(img));
 
     return res.json(successResponse({
       items: enrichedImages,

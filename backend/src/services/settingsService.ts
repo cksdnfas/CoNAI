@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
-import { AppSettings, GeneralSettings, TaggerSettings, SimilaritySettings, MetadataExtractionSettings, TaggerModel, TaggerModelInfo, TaggerDevice, SupportedLanguage } from '../types/settings';
+import { AppSettings, GeneralSettings, TaggerSettings, SimilaritySettings, MetadataExtractionSettings, ThumbnailSettings, TaggerModel, TaggerModelInfo, TaggerDevice, SupportedLanguage } from '../types/settings';
 
 const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
 
@@ -65,6 +65,10 @@ export class SettingsService {
         skipStealthForComfyUI: true,          // 기본값: ComfyUI 스킵
         skipStealthForWebUI: false,           // 기본값: WebUI 검사
       },
+      thumbnail: {
+        size: 'original',  // 기본값: 원본 크기 유지
+        quality: 100,      // 기본값: 100% 품질
+      },
     };
   }
 
@@ -110,6 +114,10 @@ export class SettingsService {
           metadataExtraction: {
             ...defaults.metadataExtraction,
             ...loadedSettings.metadataExtraction,
+          },
+          thumbnail: {
+            ...defaults.thumbnail,
+            ...loadedSettings.thumbnail,
           },
         };
 
@@ -172,6 +180,14 @@ export class SettingsService {
     for (const key of Object.keys(defaults.metadataExtraction)) {
       if (!(key in (loaded.metadataExtraction || {}))) {
         console.log(`[SettingsService] Missing field: metadataExtraction.${key}`);
+        return true;
+      }
+    }
+
+    // Check thumbnail fields
+    for (const key of Object.keys(defaults.thumbnail)) {
+      if (!(key in (loaded.thumbnail || {}))) {
+        console.log(`[SettingsService] Missing field: thumbnail.${key}`);
         return true;
       }
     }
@@ -255,6 +271,22 @@ export class SettingsService {
       metadataExtraction: {
         ...currentSettings.metadataExtraction,
         ...metadataSettings,
+      },
+    };
+    this.saveSettings(updatedSettings);
+    return updatedSettings;
+  }
+
+  /**
+   * Update thumbnail settings
+   */
+  updateThumbnailSettings(thumbnailSettings: Partial<ThumbnailSettings>): AppSettings {
+    const currentSettings = this.loadSettings();
+    const updatedSettings: AppSettings = {
+      ...currentSettings,
+      thumbnail: {
+        ...currentSettings.thumbnail,
+        ...thumbnailSettings,
       },
     };
     this.saveSettings(updatedSettings);

@@ -26,6 +26,70 @@ export class WildcardService {
   }
 
   /**
+   * 가중치 문법 파싱 - 리스트 방식
+   * 예: (태그, 1.0, 1.1, 1.2) -> (태그:1.1) 중 랜덤
+   *
+   * @param text 파싱할 텍스트
+   * @returns 파싱된 텍스트
+   */
+  private static parseWeightListSyntax(text: string): string {
+    const pattern = /\(([^,)]+),\s*([\d.,\s-]+)\)/g;
+
+    return text.replace(pattern, (match, tag, weights) => {
+      // 가중치 값들을 배열로 분리
+      const weightValues = weights.split(',')
+        .map((w: string) => w.trim())
+        .filter((w: string) => w.length > 0 && !isNaN(parseFloat(w)));
+
+      if (weightValues.length === 0) {
+        // 유효한 가중치가 없으면 원본 반환
+        return match;
+      }
+
+      // 랜덤 가중치 선택
+      const randomWeight = weightValues[Math.floor(Math.random() * weightValues.length)];
+      return `(${tag.trim()}:${randomWeight})`;
+    });
+  }
+
+  /**
+   * 가중치 문법 파싱 - 범위 방식
+   * 예: (태그, -1.0~1.0, 0.1) -> (태그:-0.3) 범위 내 랜덤
+   *
+   * @param text 파싱할 텍스트
+   * @returns 파싱된 텍스트
+   */
+  private static parseWeightRangeSyntax(text: string): string {
+    const pattern = /\(([^,)]+),\s*([-\d.]+)~([-\d.]+),\s*([\d.]+)\)/g;
+
+    return text.replace(pattern, (match, tag, minStr, maxStr, stepStr) => {
+      const min = parseFloat(minStr);
+      const max = parseFloat(maxStr);
+      const step = parseFloat(stepStr);
+
+      // 유효성 검사
+      if (isNaN(min) || isNaN(max) || isNaN(step) || step <= 0 || min >= max) {
+        console.warn(`[Weight] Invalid range syntax: ${match}`);
+        return match;
+      }
+
+      // 범위 내 가능한 값 생성
+      const values: number[] = [];
+      for (let v = min; v <= max; v = parseFloat((v + step).toFixed(10))) {
+        values.push(parseFloat(v.toFixed(2))); // 소수점 2자리로 반올림
+      }
+
+      if (values.length === 0) {
+        return match;
+      }
+
+      // 랜덤 값 선택
+      const randomValue = values[Math.floor(Math.random() * values.length)];
+      return `(${tag.trim()}:${randomValue})`;
+    });
+  }
+
+  /**
    * 재귀적 파싱 (중첩 지원)
    *
    * @param text 파싱할 텍스트
@@ -43,7 +107,7 @@ export class WildcardService {
     // ++name++ 패턴 매칭 (ComfyUI의 __name__과 구분)
     const pattern = /\+\+([^+]+)\+\+/g;
 
-    return text.replace(pattern, (match, name) => {
+    let result = text.replace(pattern, (match, name) => {
       // 순환 참조 체크
       if (visited.has(name)) {
         console.warn(`Circular reference detected for wildcard: ${name}`);
@@ -73,13 +137,19 @@ export class WildcardService {
       visited.add(name);
 
       // 재귀 파싱 (중첩된 와일드카드 처리)
-      const result = this.parseRecursive(selectedItem.content, wildcardMap, tool, visited);
+      const recursiveResult = this.parseRecursive(selectedItem.content, wildcardMap, tool, visited);
 
       // 방문 해제 (다른 경로에서 사용 가능하도록)
       visited.delete(name);
 
-      return result;
+      return recursiveResult;
     });
+
+    // 와일드카드 치환 후 가중치 문법 파싱
+    result = this.parseWeightRangeSyntax(result); // 범위 방식 먼저 (더 구체적인 패턴)
+    result = this.parseWeightListSyntax(result);  // 리스트 방식
+
+    return result;
   }
 
   /**

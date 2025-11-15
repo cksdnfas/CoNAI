@@ -59,11 +59,19 @@ export interface MetadataExtractionSettings {
   skipStealthForWebUI: boolean;
 }
 
+export type ThumbnailSize = 'original' | '2048' | '1080' | '720' | '512';
+
+export interface ThumbnailSettings {
+  size: ThumbnailSize;   // 썸네일 크기 (original = 원본 크기 유지)
+  quality: number;       // 썸네일 품질 (60-100)
+}
+
 export interface AppSettings {
   general: GeneralSettings;
   tagger: TaggerSettings;
   similarity: SimilaritySettings;
   metadataExtraction: MetadataExtractionSettings;
+  thumbnail: ThumbnailSettings;
 }
 
 export interface DependencyCheckResult {
@@ -194,6 +202,17 @@ export const settingsApi = {
     );
     return response.data.data;
   },
+
+  /**
+   * Update thumbnail settings
+   */
+  updateThumbnailSettings: async (settings: Partial<ThumbnailSettings>): Promise<AppSettings> => {
+    const response = await api.put<{ success: boolean; data: AppSettings; message: string }>(
+      '/thumbnail',
+      settings
+    );
+    return response.data.data;
+  },
 };
 
 const imageApi = axios.create({
@@ -257,5 +276,54 @@ export const taggerBatchApi = {
       '/untagged-count'
     );
     return response.data.data.count;
+  },
+};
+
+const thumbnailApiClient = axios.create({
+  baseURL: `${API_BASE_URL}/api/thumbnails`,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  withCredentials: true,
+});
+
+export interface ThumbnailRegenerationProgress {
+  totalFiles: number;
+  processedFiles: number;
+  deletedThumbnails: number;
+  generatedThumbnails: number;
+  currentPhase: 'verification' | 'deletion' | 'generation' | 'completed' | 'idle';
+  startTime: number;
+  isRunning: boolean;
+}
+
+export interface ThumbnailStats {
+  totalFiles: number;
+  withThumbnails: number;
+  withoutThumbnails: number;
+}
+
+export const thumbnailApi = {
+  /**
+   * Start thumbnail regeneration
+   */
+  regenerate: async (): Promise<void> => {
+    await thumbnailApiClient.post('/regenerate');
+  },
+
+  /**
+   * Get regeneration progress
+   */
+  getProgress: async (): Promise<ThumbnailRegenerationProgress> => {
+    const response = await thumbnailApiClient.get<{ success: boolean; data: ThumbnailRegenerationProgress }>('/progress');
+    return response.data.data;
+  },
+
+  /**
+   * Get thumbnail statistics
+   */
+  getStats: async (): Promise<ThumbnailStats> => {
+    const response = await thumbnailApiClient.get<{ success: boolean; data: ThumbnailStats }>('/stats');
+    return response.data.data;
   },
 };

@@ -21,6 +21,7 @@ import {
   FolderOpen as FolderOpenIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { autoFolderGroupsApi } from '../../../services/api';
 import type { AutoFolderGroupWithStats } from '@comfyui-image-manager/shared';
@@ -36,6 +37,7 @@ interface AutoFolderGroupsContentProps {
 
 const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onShowSnackbar }) => {
   const { t } = useTranslation(['imageGroups', 'common']);
+  const queryClient = useQueryClient();
   const [groups, setGroups] = useState<AutoFolderGroupWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [rebuilding, setRebuilding] = useState(false);
@@ -111,7 +113,20 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
           `재구축 완료: ${response.data.groups_created}개 그룹, ${response.data.images_assigned}개 이미지 (${response.data.duration_ms}ms)`,
           'success'
         );
-        fetchGroups(currentParentId);
+
+        // React Query 캐시 무효화 - 모든 auto-folder 관련 캐시 제거
+        await queryClient.invalidateQueries({
+          queryKey: ['groupPreviewImages', 'auto-folder'],
+          refetchType: 'all'
+        });
+
+        // 재구축 후 항상 루트 레벨로 리셋
+        // (재구축 시 모든 그룹이 삭제/재생성되므로 기존 ID로 유지 불가)
+        await fetchGroups(null);
+        setCurrentParentId(null);
+        setCurrentGroupInfo(null);
+        setBreadcrumb([]);
+        setIsGroupListView(true);
       } else {
         onShowSnackbar(response.error || '재구축 실패', 'error');
       }
@@ -141,6 +156,10 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
         const singleGroup = fetchedGroups[0];
 
         if (singleGroup.image_count === 0 && singleGroup.child_count === 1) {
+          // 자동 이동 알림 표시
+          const currentGroupName = group.display_name || '폴더';
+          onShowSnackbar(`하위 그룹으로 자동 이동: ${currentGroupName} → ${singleGroup.display_name}`, 'info');
+
           // 재귀적으로 하위 그룹으로 진입
           await navigateToGroup(singleGroup);
           return;
@@ -186,6 +205,10 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
           const singleGroup = fetchedGroups[0];
 
           if (singleGroup.image_count === 0 && singleGroup.child_count === 1) {
+            // 자동 이동 알림 표시
+            const currentGroupName = currentGroupInfo?.display_name || '폴더';
+            onShowSnackbar(`하위 그룹으로 자동 이동: ${currentGroupName} → ${singleGroup.display_name}`, 'info');
+
             // 재귀적으로 하위 그룹으로 진입
             await navigateToGroup(singleGroup);
             return;
@@ -296,7 +319,7 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
       {/* 상단 액션 바 */}
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Alert severity="info" sx={{ flex: 1, mr: 2 }}>
-          읽기 전용 그룹입니다. 원본 파일 위치를 변경하면 자동으로 반영됩니다.
+          읽기 전용 그룹입니다. 원본 파일 위치를 변경해야 반영됩니다.
         </Alert>
         <Button
           variant="contained"

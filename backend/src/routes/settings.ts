@@ -5,7 +5,7 @@ import { imageTaggerService } from '../services/imageTaggerService';
 import { RatingScoreService } from '../services/ratingScoreService';
 import { SystemSettingsService } from '../services/systemSettingsService';
 import { AutoScanScheduler } from '../services/autoScanScheduler';
-import { GeneralSettings, TaggerSettings, SimilaritySettings, MetadataExtractionSettings, SupportedLanguage } from '../types/settings';
+import { GeneralSettings, TaggerSettings, SimilaritySettings, MetadataExtractionSettings, ThumbnailSettings, SupportedLanguage } from '../types/settings';
 import { RatingWeightsUpdate, RatingTierInput, RatingData } from '../types/rating';
 
 const router = Router();
@@ -334,6 +334,52 @@ router.put(
       success: true,
       data: updatedSettings,
       message: 'Metadata extraction settings updated successfully',
+    });
+    return;
+  })
+);
+
+// ==================== Thumbnail Settings Routes ====================
+
+/**
+ * PUT /api/settings/thumbnail
+ * Update thumbnail settings
+ */
+router.put(
+  '/thumbnail',
+  asyncHandler(async (req: Request, res: Response) => {
+    const thumbnailSettings: Partial<ThumbnailSettings> = req.body;
+
+    // Validate size if provided
+    if (thumbnailSettings.size !== undefined) {
+      const validSizes = ['original', '2048', '1080', '720', '512'];
+      if (!validSizes.includes(thumbnailSettings.size)) {
+        res.status(400).json({
+          success: false,
+          error: `Invalid size. Must be one of: ${validSizes.join(', ')}`,
+        });
+        return;
+      }
+    }
+
+    // Validate quality if provided
+    if (thumbnailSettings.quality !== undefined) {
+      if (thumbnailSettings.quality < 60 || thumbnailSettings.quality > 100) {
+        res.status(400).json({
+          success: false,
+          error: 'Quality must be between 60 and 100',
+        });
+        return;
+      }
+    }
+
+    // Update settings
+    const updatedSettings = settingsService.updateThumbnailSettings(thumbnailSettings);
+
+    res.json({
+      success: true,
+      data: updatedSettings,
+      message: 'Thumbnail settings updated successfully',
     });
     return;
   })

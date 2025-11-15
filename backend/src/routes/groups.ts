@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { GroupModel, ImageGroupModel } from '../models/Group';
+import { db } from '../database/init';
 import { AutoCollectionService } from '../services/autoCollectionService';
 import { ComplexFilterService } from '../services/complexFilterService';
 import { GroupDownloadService, DownloadType } from '../services/groupDownloadService';
@@ -149,7 +150,20 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(req.params.id, 'Group ID');
 
-    const group = await GroupModel.findById(id);
+    // 통계 정보를 포함한 그룹 조회
+    const query = `
+      SELECT
+        g.*,
+        COUNT(ig.id) as image_count,
+        COUNT(CASE WHEN ig.collection_type = 'auto' THEN 1 END) as auto_collected_count,
+        COUNT(CASE WHEN ig.collection_type = 'manual' THEN 1 END) as manual_added_count
+      FROM groups g
+      LEFT JOIN image_groups ig ON g.id = ig.group_id
+      WHERE g.id = ?
+      GROUP BY g.id
+    `;
+
+    const group = db.prepare(query).get(id);
 
     if (!group) {
       return res.status(404).json(errorResponse('Group not found'));
