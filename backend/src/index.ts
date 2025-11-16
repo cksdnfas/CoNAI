@@ -193,8 +193,10 @@ async function initializeSessionMiddleware() {
     cookie: {
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30일
       httpOnly: true,
-      secure: isSecureContext, // HTTPS에서만 true
-      sameSite: isDevelopment ? 'none' : 'lax' // 개발: cross-origin 허용, 프로덕션: lax
+      // 개발 환경: sameSite='lax'로 동일 사이트 정책 완화, secure=false
+      // 프로덕션: sameSite='lax', secure는 HTTPS 여부에 따라
+      secure: isSecureContext && !isDevelopment, // 개발에서는 false
+      sameSite: 'lax' // 개발/프로덕션 모두 lax (localhost는 동일 사이트로 간주)
     },
     name: 'comfyui.sid' // Custom session cookie name
   });
