@@ -177,31 +177,52 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   };
 
   // ✅ Event handlers (composite_hash)
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!image) return;
-    const link = document.createElement('a');
 
-    // 히스토리 컨텍스트일 때는 업로드 경로 직접 사용
-    if (isHistoryContext && image.image_url) {
-      link.href = image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
-    } else if (image.image_url) {
-      // 백엔드가 제공한 image_url 우선 사용
-      link.href = image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
+    let downloadUrl = '';
+
+    // URL 결정 로직 (빈 문자열 체크 추가)
+    if (isHistoryContext && image.image_url && image.image_url.trim().length > 0) {
+      downloadUrl = image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
+    } else if (image.image_url && image.image_url.trim().length > 0) {
+      downloadUrl = image.image_url.startsWith('http') ? image.image_url : `${backendOrigin}${image.image_url}`;
     } else if (image.original_file_path) {
-      // by-path 사용
-      link.href = `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path)}`;
+      downloadUrl = `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path)}`;
     } else if (image.composite_hash) {
-      // composite_hash 사용 (모든 파일 타입)
-      link.href = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
+      downloadUrl = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
     } else {
       console.error('Cannot download: no valid identifier found');
       return;
     }
 
-    link.download = image.original_file_path || `image_${image.composite_hash?.substring(0, 8) || 'unknown'}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Blob 다운로드로 변경 (브라우저에서 파일 바로 다운로드)
+    try {
+      const response = await fetch(downloadUrl, { credentials: 'include' });
+      if (!response.ok) {
+        throw new Error(`Failed to download: ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = image.original_file_path || `image_${image.composite_hash?.substring(0, 8) || 'unknown'}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download failed:', error);
+      // 폴백: 직접 링크 방식 (구버전 브라우저 호환)
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = image.original_file_path || `image_${image.composite_hash?.substring(0, 8) || 'unknown'}.png`;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   const handleGoToDetail = () => {

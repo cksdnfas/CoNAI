@@ -184,9 +184,10 @@ export const convertHistoryToImageRecord = (
     // URL 필드
     // ✅ 간단한 로직: 메타데이터 있으면 API 라우트, 없으면 히스토리 원본 경로
     // composite_hash가 null이면 항상 original_path 사용 (잘못된 API 요청 방지)
+    // buildUploadsUrl은 null을 반환할 수 있으므로 || null로 명시적 처리
     thumbnail_url: (hasMetadata && composite_hash)
       ? `/api/images/${composite_hash}/thumbnail`
-      : buildUploadsUrl(history.original_path),
+      : (buildUploadsUrl(history.original_path) || null),
     image_url: (hasMetadata && composite_hash)
       ? `/api/images/${composite_hash}/file`
       : (buildUploadsUrl(history.original_path) || null),

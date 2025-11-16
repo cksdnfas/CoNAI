@@ -62,9 +62,9 @@ const normalizeUploadPath = (value: string): string => {
   return withoutPrefix.replace(/\\/g, '/');
 };
 
-export const buildUploadsUrl = (relativePath?: string | null): string => {
+export const buildUploadsUrl = (relativePath?: string | null): string | null => {
   if (!relativePath || relativePath.trim().length === 0) {
-    return '';
+    return null;
   }
 
   if (isAbsoluteUrl(relativePath)) {

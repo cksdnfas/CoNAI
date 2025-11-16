@@ -36,6 +36,7 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const backendOrigin = getBackendOrigin();
 
@@ -48,23 +49,36 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
   const hasValidHash = image.composite_hash && !image.composite_hash.startsWith('history_');
 
   // URL이 이미 절대 경로(http:// 또는 https://)인지 확인
-  const isAbsoluteUrl = (url: string) => url.startsWith('http://') || url.startsWith('https://');
+  const isAbsoluteUrl = (url: string | null) => url && (url.startsWith('http://') || url.startsWith('https://'));
+
+  // 폴백 URL 생성 (썸네일 실패 시 원본 사용)
+  const getFallbackUrl = () => {
+    if (image.image_url && image.image_url !== image.thumbnail_url) {
+      return isAbsoluteUrl(image.image_url) ? image.image_url : `${backendOrigin}${image.image_url}`;
+    }
+    if (hasValidHash) {
+      return `${backendOrigin}/api/images/${image.composite_hash}/file`;
+    }
+    return null;
+  };
 
   // 이미지 URL 결정 로직 (null 체크 강화)
-  // 1. image_url 또는 thumbnail_url이 있으면 우선 사용
-  // 2. composite_hash가 유효하면 API 엔드포인트 사용
-  // 3. 둘 다 없으면 빈 문자열
-  const imageUrl = (isGif || isVideo)
-    ? (image.image_url
-        ? (isAbsoluteUrl(image.image_url) ? image.image_url : `${backendOrigin}${image.image_url}`)
-        : hasValidHash
-          ? `${backendOrigin}/api/images/${image.composite_hash}/file`
-          : '')
-    : (image.thumbnail_url
-        ? (isAbsoluteUrl(image.thumbnail_url) ? image.thumbnail_url : `${backendOrigin}${image.thumbnail_url}`)
-        : hasValidHash
-          ? `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`
-          : (image.image_url ? (isAbsoluteUrl(image.image_url) ? image.image_url : `${backendOrigin}${image.image_url}`) : ''));
+  // 1. 에러 발생 시 폴백 URL 사용
+  // 2. GIF/비디오는 원본 파일 사용
+  // 3. 일반 이미지는 썸네일 우선, 없으면 원본
+  const imageUrl = imageError
+    ? getFallbackUrl()
+    : (isGif || isVideo)
+      ? (image.image_url
+          ? (isAbsoluteUrl(image.image_url) ? image.image_url : `${backendOrigin}${image.image_url}`)
+          : hasValidHash
+            ? `${backendOrigin}/api/images/${image.composite_hash}/file`
+            : null)
+      : (image.thumbnail_url
+          ? (isAbsoluteUrl(image.thumbnail_url) ? image.thumbnail_url : `${backendOrigin}${image.thumbnail_url}`)
+          : hasValidHash
+            ? `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`
+            : getFallbackUrl());
 
   const handleSelectionChange = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -262,6 +276,10 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
               autoPlay
               playsInline
               onLoadedData={handleImageLoad}
+              onError={() => {
+                console.error(`Failed to load video: ${imageUrl}`);
+                setImageError(true);
+              }}
               sx={{
                 // 동영상은 자연 높이 사용 (원본 비율 유지)
                 width: '100%',
@@ -280,6 +298,10 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
               decoding="async"
               draggable={false}
               onLoad={handleImageLoad}
+              onError={() => {
+                console.error(`Failed to load GIF: ${imageUrl}`);
+                setImageError(true);
+              }}
               sx={{
                 // GIF는 자연 높이 사용 (원본 비율 유지)
                 width: '100%',
@@ -298,6 +320,10 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
               decoding="async"
               draggable={false}
               onLoad={handleImageLoad}
+              onError={() => {
+                console.error(`Failed to load image: ${imageUrl}`);
+                setImageError(true);
+              }}
               sx={{
                 // 일반 이미지는 absolute positioning으로 aspect ratio 컨테이너 채우기
                 position: 'absolute',
