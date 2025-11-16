@@ -35,12 +35,8 @@ export interface GenerationHistoryRecord {
 
   // Image Paths
   original_path?: string;
-  thumbnail_path?: string;
   file_size?: number;
   composite_hash?: string;          // 48-character composite hash (perceptual + color)
-
-  // Link to main images DB
-  linked_image_id?: number;
 
   // Group Assignment
   assigned_group_id?: number;       // User-selected group for automatic assignment
@@ -77,9 +73,8 @@ export class GenerationHistoryModel {
         comfyui_workflow, comfyui_prompt_id, workflow_id, workflow_name,
         nai_model, nai_sampler, nai_seed, nai_steps, nai_scale, nai_parameters,
         positive_prompt, negative_prompt, width, height,
-        original_path, thumbnail_path, file_size,
-        linked_image_id, assigned_group_id, error_message, metadata
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        original_path, file_size, assigned_group_id, error_message, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const info = stmt.run(
@@ -100,9 +95,7 @@ export class GenerationHistoryModel {
       data.width,
       data.height,
       data.original_path,
-      data.thumbnail_path,
       data.file_size,
-      data.linked_image_id,
       data.assigned_group_id,
       data.error_message,
       data.metadata
@@ -167,7 +160,7 @@ export class GenerationHistoryModel {
    */
   static update(id: number, data: Partial<GenerationHistoryRecord>): void {
     // JOIN으로 계산된 필드 필터링 (actual_* 필드는 테이블에 없음)
-    const computedFields = ['actual_composite_hash', 'actual_thumbnail_path', 'actual_width', 'actual_height'];
+    const computedFields = ['actual_composite_hash', 'actual_width', 'actual_height'];
 
     // id와 computed fields 제거
     const cleanData = Object.fromEntries(
@@ -205,7 +198,6 @@ export class GenerationHistoryModel {
     id: number,
     paths: {
       original: string;
-      thumbnail: string;
       fileSize: number;
       compositeHash?: string;
     }
@@ -213,20 +205,11 @@ export class GenerationHistoryModel {
     const stmt = apiGenDb.prepare(`
       UPDATE api_generation_history
       SET original_path = ?,
-          thumbnail_path = ?,
           file_size = ?,
           composite_hash = ?
       WHERE id = ?
     `);
-    stmt.run(paths.original, paths.thumbnail, paths.fileSize, paths.compositeHash || null, id);
-  }
-
-  /**
-   * Link to main images DB record
-   */
-  static linkToImage(historyId: number, imageId: number): void {
-    const stmt = apiGenDb.prepare('UPDATE api_generation_history SET linked_image_id = ? WHERE id = ?');
-    stmt.run(imageId, historyId);
+    stmt.run(paths.original, paths.fileSize, paths.compositeHash || null, id);
   }
 
   /**
@@ -325,7 +308,6 @@ export class GenerationHistoryModel {
    */
   static findByIdWithMetadata(id: number): (GenerationHistoryRecord & {
     actual_composite_hash?: string | null;
-    actual_thumbnail_path?: string | null;
     actual_width?: number | null;
     actual_height?: number | null;
   }) | null {
@@ -333,7 +315,6 @@ export class GenerationHistoryModel {
       SELECT
         gh.*,
         if.composite_hash as actual_composite_hash,
-        im.thumbnail_path as actual_thumbnail_path,
         im.width as actual_width,
         im.height as actual_height
       FROM api_generation_history gh
@@ -355,7 +336,6 @@ export class GenerationHistoryModel {
    */
   static findAllWithMetadata(filters: FilterOptions = {}): (GenerationHistoryRecord & {
     actual_composite_hash?: string | null;
-    actual_thumbnail_path?: string | null;
     actual_width?: number | null;
     actual_height?: number | null;
     actual_auto_tags?: string | null;
@@ -364,7 +344,6 @@ export class GenerationHistoryModel {
       SELECT
         gh.*,
         if.composite_hash as actual_composite_hash,
-        im.thumbnail_path as actual_thumbnail_path,
         im.width as actual_width,
         im.height as actual_height,
         im.auto_tags as actual_auto_tags

@@ -1,12 +1,12 @@
 import type { GenerationHistoryRecord } from '@comfyui-image-manager/shared';
 import type { ImageRecord } from '../types/image';
+import { buildUploadsUrl } from './backend';
 
 /**
  * Extended GenerationHistoryRecord with media metadata JOIN fields
  */
 export interface GenerationHistoryRecordWithMetadata extends GenerationHistoryRecord {
   actual_composite_hash?: string | null;
-  actual_thumbnail_path?: string | null;
   actual_width?: number | null;
   actual_height?: number | null;
   actual_auto_tags?: string | null;
@@ -45,7 +45,7 @@ export const convertHistoryToImageRecord = (
   const model_name = isComfyUI ? parsedMetadata.model : history.nai_model;
 
   // 히스토리 이미지는 항상 히스토리 폴더(uploads/API/images/)의 이미지를 사용
-  // linked_image_id는 메타데이터로만 보관 (향후 참조용)
+  // linked_composite_hash는 메타데이터로만 보관 (향후 참조용)
 
   // ✅ actual_composite_hash로 메타데이터 등록 여부 판단
   // actual_composite_hash가 null이면 null 유지 (fallback ID 사용 안 함)
@@ -148,7 +148,7 @@ export const convertHistoryToImageRecord = (
     // Media metadata - 메타데이터 있으면 실제 이미지 크기 사용, 없으면 히스토리 DB 크기 사용
     width: hasMetadata ? (history.actual_width ?? history.width ?? 0) : (history.width ?? 0),
     height: hasMetadata ? (history.actual_height ?? history.height ?? 0) : (history.height ?? 0),
-    thumbnail_path: hasMetadata ? (history.actual_thumbnail_path ?? '') : '',
+    thumbnail_path: '', // Thumbnails are served via API route using composite_hash
 
     // AI 메타데이터 - 서비스별 매핑
     ai_tool: isComfyUI ? 'ComfyUI' : 'NovelAI',
@@ -186,10 +186,10 @@ export const convertHistoryToImageRecord = (
     // composite_hash가 null이면 항상 original_path 사용 (잘못된 API 요청 방지)
     thumbnail_url: (hasMetadata && composite_hash)
       ? `/api/images/${composite_hash}/thumbnail`
-      : (history.original_path ? `/uploads/${history.original_path}` : ''),
+      : buildUploadsUrl(history.original_path),
     image_url: (hasMetadata && composite_hash)
       ? `/api/images/${composite_hash}/file`
-      : (history.original_path ? `/uploads/${history.original_path}` : null),
+      : (buildUploadsUrl(history.original_path) || null),
 
     // 그룹 정보 없음
     groups: [],

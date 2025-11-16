@@ -1,6 +1,7 @@
 import { GenerationHistoryModel, GenerationHistoryRecord, GenerationStatus } from '../models/GenerationHistory';
 import fs from 'fs';
 import path from 'path';
+import { runtimePaths } from '../config/runtimePaths';
 
 export interface CleanupDetail {
   id: number;
@@ -35,7 +36,7 @@ export interface CleanupReport {
  * 4. Completed records without composite_hash (data corruption)
  */
 export class CleanupService {
-  private static uploadsDir = path.join(process.cwd(), 'uploads');
+  private static uploadsDir = runtimePaths.uploadsDir;
 
   /**
    * Check if file exists on disk
@@ -76,12 +77,11 @@ export class CleanupService {
     const orphaned: GenerationHistoryRecord[] = [];
 
     for (const record of allRecords) {
-      // Check if both original and thumbnail are missing
+      // Check if original file is missing
       const originalExists = await this.checkFileExists(record.original_path);
-      const thumbnailExists = await this.checkFileExists(record.thumbnail_path);
 
-      // If composite_hash exists but BOTH files are missing → orphaned
-      if (record.composite_hash && !originalExists && !thumbnailExists) {
+      // If composite_hash exists but original file is missing → orphaned
+      if (record.composite_hash && !originalExists) {
         orphaned.push(record);
       }
     }
@@ -162,7 +162,6 @@ export class CleanupService {
         created_at: record.created_at!,
         generation_status: record.generation_status,
         original_path: record.original_path,
-        thumbnail_path: record.thumbnail_path,
         composite_hash: record.composite_hash
       });
 

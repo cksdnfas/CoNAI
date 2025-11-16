@@ -6,11 +6,6 @@ import { ImageProcessor } from './imageProcessor';
 import { FileSaver } from '../utils/fileSaver';
 import { runtimePaths } from '../config/runtimePaths';
 
-/**
- * API Image Processor
- * Reuses existing ImageProcessor logic but stores images in uploads/API/images/
- * Used exclusively for API generation history (ComfyUI, NovelAI)
- */
 export class APIImageProcessor {
   private static readonly THUMBNAIL_SIZE = 1080;
   private static readonly THUMBNAIL_QUALITY = 80;
@@ -23,10 +18,6 @@ export class APIImageProcessor {
     return path.join(runtimePaths.uploadsDir, 'API');
   }
 
-  /**
-   * Create folder structure for API images
-   * Path: uploads/API/images/YYYY-MM-DD/
-   */
   static async createUploadFolders(): Promise<{
     dateFolder: string;
     originFolder: string;
@@ -99,7 +90,7 @@ export class APIImageProcessor {
    */
   static async deleteGeneratedImages(paths: {
     originalPath: string;
-    thumbnailPath: string;
+    thumbnailPath?: string;
   }): Promise<void> {
     // DeletionService로 위임
     const { DeletionService } = await import('./deletionService');

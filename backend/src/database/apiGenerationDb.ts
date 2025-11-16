@@ -55,6 +55,31 @@ export function initializeApiGenerationDb(): void {
     const dbDir = path.dirname(API_DB_PATH);
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true });
+      console.log('📁 Created database directory:', dbDir);
+    }
+
+    // Check existing database (information only, do not delete)
+    if (fs.existsSync(API_DB_PATH)) {
+      const stats = fs.statSync(API_DB_PATH);
+      console.log(`📊 Existing database found: ${stats.size} bytes`);
+
+      // Try to open and check if it has tables (for logging purposes only)
+      try {
+        const testDb = new Database(API_DB_PATH, { readonly: true });
+        const tables = testDb.prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        ).all() as any[];
+        testDb.close();
+
+        console.log(`📊 Existing database has ${tables.length} tables:`, tables.map((t: any) => t.name).join(', ') || 'NONE');
+
+        if (tables.length === 0 && stats.size > 0) {
+          console.warn('⚠️ Warning: Database exists but has no tables. Migrations will create them.');
+        }
+      } catch (e) {
+        console.warn('⚠️ Warning: Could not read database (may be locked or in use). Proceeding with normal initialization...', (e as Error).message);
+        // Do NOT delete - the database may just be temporarily locked
+      }
     }
 
     // Check if database is new
@@ -62,6 +87,11 @@ export function initializeApiGenerationDb(): void {
 
     // Create database connection
     apiGenDb = new Database(API_DB_PATH);
+
+    // Use DELETE mode for single-file database
+    apiGenDb.pragma('journal_mode = DELETE');
+    apiGenDb.pragma('synchronous = NORMAL');
+    console.log('📊 Database DELETE mode enabled (single-file)');
 
     if (isNewDatabase) {
       console.log('✅ New API generation database created');
@@ -74,8 +104,18 @@ export function initializeApiGenerationDb(): void {
 
     // Run migrations
     runMigrations();
+
+    // Verify tables were created
+    const finalTables = apiGenDb.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    ).all() as any[];
+    console.log(`📊 Database initialized with ${finalTables.length} tables:`, finalTables.map((t: any) => t.name).join(', '));
+
+    if (finalTables.length === 0) {
+      throw new Error('❌ CRITICAL: Failed to create database tables! Database initialization failed.');
+    }
   } catch (error) {
-    console.error('Failed to initialize API generation database:', error);
+    console.error('❌ Failed to initialize API generation database:', error);
     throw error;
   }
 }
@@ -158,9 +198,7 @@ function createTables(): void {
       width INTEGER,
       height INTEGER,
       original_path TEXT,
-      thumbnail_path TEXT,
       file_size INTEGER,
-      linked_composite_hash TEXT,
       assigned_group_id INTEGER,
       composite_hash TEXT,
       error_message TEXT,
@@ -173,7 +211,6 @@ function createTables(): void {
     'CREATE INDEX IF NOT EXISTS idx_api_gen_service_type ON api_generation_history(service_type)',
     'CREATE INDEX IF NOT EXISTS idx_api_gen_status ON api_generation_history(generation_status)',
     'CREATE INDEX IF NOT EXISTS idx_api_gen_created_at ON api_generation_history(created_at DESC)',
-    'CREATE INDEX IF NOT EXISTS idx_api_gen_linked_composite_hash ON api_generation_history(linked_composite_hash)',
     'CREATE INDEX IF NOT EXISTS idx_api_gen_composite_hash ON api_generation_history(composite_hash)',
     'CREATE INDEX IF NOT EXISTS idx_api_gen_workflow_id ON api_generation_history(workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_api_gen_group_id ON api_generation_history(group_id)'

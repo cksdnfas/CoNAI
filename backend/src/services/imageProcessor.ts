@@ -34,10 +34,6 @@ export class ImageProcessor {
     return `${year}-${month}-${day}`;
   }
 
-  /**
-   * 업로드 폴더 구조 생성 (이미지 전용)
-   * 경로: uploads/images/YYYY-MM-DD/ (Origin 폴더 제거)
-   */
   static async createUploadFolders(baseUploadPath: string): Promise<{
     dateFolder: string;
     targetFolder: string;

@@ -79,6 +79,8 @@ export class TaggerDaemon {
    */
   private findScriptPath(): string {
     const possiblePaths = [
+      // Docker bundle: bundle.js at /app, python at /app/python
+      path.join(__dirname, 'python', 'wdv3_tagger_daemon.py'),
       // Development: backend/src/services -> backend/python
       path.join(__dirname, '..', '..', 'python', 'wdv3_tagger_daemon.py'),
       // Compiled: backend/dist/services -> backend/python

@@ -203,18 +203,38 @@ function createTables(): void {
     )
   `);
 
-  // Migrate existing custom_dropdown_lists table if needed
-  // Check if is_auto_collected column exists
-  const tableInfo = userSettingsDb.prepare(`PRAGMA table_info(custom_dropdown_lists)`).all() as any[];
-  const hasAutoCollectedColumn = tableInfo.some((col: any) => col.name === 'is_auto_collected');
+  // ===== MIGRATION: Add missing columns BEFORE creating indexes =====
+  // Helper function to check if column exists
+  const hasColumn = (tableName: string, columnName: string): boolean => {
+    const pragma = userSettingsDb.prepare(`PRAGMA table_info(${tableName})`).all() as any[];
+    return pragma.some((col: any) => col.name === columnName);
+  };
 
-  if (!hasAutoCollectedColumn) {
-    console.log('Migrating custom_dropdown_lists table: adding is_auto_collected and source_path columns');
-    userSettingsDb.exec(`ALTER TABLE custom_dropdown_lists ADD COLUMN is_auto_collected INTEGER DEFAULT 0`);
-    userSettingsDb.exec(`ALTER TABLE custom_dropdown_lists ADD COLUMN source_path TEXT`);
+  // Migrate wildcards table
+  if (!hasColumn('wildcards', 'is_auto_collected')) {
+    console.log('  Migrating wildcards: adding is_auto_collected column');
+    userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN is_auto_collected INTEGER DEFAULT 0');
+  }
+  if (!hasColumn('wildcards', 'source_path')) {
+    console.log('  Migrating wildcards: adding source_path column');
+    userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN source_path TEXT');
+  }
+  if (!hasColumn('wildcards', 'lora_weight')) {
+    console.log('  Migrating wildcards: adding lora_weight column');
+    userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN lora_weight REAL DEFAULT 1.0');
   }
 
-  // Create indexes
+  // Migrate custom_dropdown_lists table
+  if (!hasColumn('custom_dropdown_lists', 'is_auto_collected')) {
+    console.log('  Migrating custom_dropdown_lists: adding is_auto_collected column');
+    userSettingsDb.exec('ALTER TABLE custom_dropdown_lists ADD COLUMN is_auto_collected INTEGER DEFAULT 0');
+  }
+  if (!hasColumn('custom_dropdown_lists', 'source_path')) {
+    console.log('  Migrating custom_dropdown_lists: adding source_path column');
+    userSettingsDb.exec('ALTER TABLE custom_dropdown_lists ADD COLUMN source_path TEXT');
+  }
+
+  // Create indexes (now safe - all columns exist)
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows(name)',
     'CREATE INDEX IF NOT EXISTS idx_workflows_is_active ON workflows(is_active)',
@@ -247,10 +267,11 @@ function createTables(): void {
 
 /**
  * Migrate existing tables to new schema
- * Adds missing columns if they don't exist
+ * Handles complex schema migrations that require table recreation
+ * Note: Simple column additions are now handled in createTables() before index creation
  */
 function migrateExistingTables(): void {
-  console.log('🔄 Checking for schema updates...');
+  console.log('🔄 Checking for complex schema migrations...');
 
   try {
     // Helper function to check if column exists
@@ -258,22 +279,6 @@ function migrateExistingTables(): void {
       const pragma = userSettingsDb.prepare(`PRAGMA table_info(${tableName})`).all() as any[];
       return pragma.some((col: any) => col.name === columnName);
     };
-
-    // Migrate wildcards table
-    if (!hasColumn('wildcards', 'is_auto_collected')) {
-      console.log('  Adding is_auto_collected column to wildcards table...');
-      userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN is_auto_collected INTEGER DEFAULT 0');
-    }
-
-    if (!hasColumn('wildcards', 'source_path')) {
-      console.log('  Adding source_path column to wildcards table...');
-      userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN source_path TEXT');
-    }
-
-    if (!hasColumn('wildcards', 'lora_weight')) {
-      console.log('  Adding lora_weight column to wildcards table...');
-      userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN lora_weight REAL DEFAULT 1.0');
-    }
 
     // Migrate wildcard_items table - check if old schema exists
     if (hasColumn('wildcard_items', 'item_text')) {
@@ -308,9 +313,11 @@ function migrateExistingTables(): void {
       userSettingsDb.exec('CREATE INDEX IF NOT EXISTS idx_wildcard_items_tool ON wildcard_items(tool)');
 
       console.log('  ✅ wildcard_items table migrated successfully');
+    } else {
+      console.log('  ✓ No complex migrations needed');
     }
 
-    console.log('  ✅ Schema updates complete');
+    console.log('  ✅ Schema migration complete');
   } catch (error) {
     console.error('  ⚠️ Error during schema migration:', error);
     // Don't throw - let the app continue with existing schema

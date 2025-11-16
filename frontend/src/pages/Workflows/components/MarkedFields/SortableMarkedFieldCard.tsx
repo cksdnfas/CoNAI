@@ -11,6 +11,8 @@ interface SortableMarkedFieldCardProps {
   onUpdate: (index: number, updates: Partial<MarkedField>) => void;
   onDelete: (index: number) => void;
   fieldErrors?: FieldError[];
+  isExpanded: boolean;
+  onToggleExpand: () => void;
 }
 
 export const SortableMarkedFieldCard: React.FC<SortableMarkedFieldCardProps> = ({
@@ -19,6 +21,8 @@ export const SortableMarkedFieldCard: React.FC<SortableMarkedFieldCardProps> = (
   onUpdate,
   onDelete,
   fieldErrors,
+  isExpanded,
+  onToggleExpand,
 }) => {
   const {
     attributes,
@@ -44,6 +48,8 @@ export const SortableMarkedFieldCard: React.FC<SortableMarkedFieldCardProps> = (
         onDelete={onDelete}
         dragHandleProps={{ ...attributes, ...listeners }}
         fieldErrors={fieldErrors}
+        isExpanded={isExpanded}
+        onToggleExpand={onToggleExpand}
       />
     </div>
   );

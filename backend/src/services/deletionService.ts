@@ -244,13 +244,12 @@ export class DeletionService {
 
     console.log(`🗑️ Deleting generation history with files: ${historyId}`);
 
-    // 1. 연결된 이미지 ID가 있으면 이미지 삭제 로직 실행
-    if (history.linked_image_id) {
-      // linked_image_id는 composite_hash를 의미
+    // 1. 연결된 이미지 composite hash가 있으면 이미지 삭제 로직 실행
+    if (history.composite_hash) {
       try {
-        await this.deleteImage(history.linked_image_id.toString());
+        await this.deleteImage(history.composite_hash);
       } catch (error) {
-        console.warn(`⚠️ Failed to delete linked image: ${history.linked_image_id}`, error);
+        console.warn(`⚠️ Failed to delete linked image: ${history.composite_hash}`, error);
       }
     }
 
@@ -356,13 +355,15 @@ export class DeletionService {
   /**
    * API에서 생성된 이미지 삭제 (APIImageProcessor 대체)
    *
-   * @param paths - 삭제할 파일 경로 (originalPath, thumbnailPath)
+   * @param paths - 삭제할 파일 경로 (originalPath만 필수)
    */
   static async deleteGeneratedImages(paths: {
     originalPath: string;
-    thumbnailPath: string;
+    thumbnailPath?: string;
   }): Promise<void> {
     // 생성된 이미지는 RecycleBin 없이 즉시 삭제 (임시 파일 성격)
-    await this.deleteImageWithThumbnail(paths.originalPath, paths.thumbnailPath, false);
+    // thumbnailPath는 더이상 사용되지 않으므로 originalPath만 삭제
+    const fullPath = path.join(runtimePaths.uploadsDir, paths.originalPath);
+    await this.deletePhysicalFile(fullPath, false);
   }
 }

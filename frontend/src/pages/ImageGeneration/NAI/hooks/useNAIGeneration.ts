@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { naiApi } from '../../../../services/api';
+import { naiApi, generationHistoryApi } from '../../../../services/api';
 import api from '../../../../services/api';
 import { RESOLUTIONS } from '../constants/nai.constants';
 import type { NAIParams, NAIUserData, NAIGenerationResponse } from '../types/nai.types';
@@ -100,40 +100,93 @@ export function useNAIGeneration({ token, onLogout, onGenerationComplete }: UseN
 
     console.log(`[NAI] Starting upload completion polling for ${historyIds.length} images...`);
 
-    for (let i = 0; i < maxAttempts; i++) {
-      try {
-        const statuses = await Promise.all(
-          historyIds.map(async (id) => {
-            try {
-              const response = await api.get(`/api/generation-history/${id}`);
-              const status = response.data.record.generation_status;
-              return status === 'completed';
-            } catch (error) {
-              console.error(`[NAI] Failed to check history ${id}:`, error);
-              return false;
-            }
-          })
-        );
+    return new Promise<void>((resolve) => {
+      let attempts = 0;
+      let timeoutId: NodeJS.Timeout | null = null;
 
-        const completedCount = statuses.filter(s => s).length;
-        console.log(`[NAI] Polling ${i + 1}/${maxAttempts}: ${completedCount}/${statuses.length} completed`);
+      const checkStatus = async () => {
+        attempts++;
 
-        // All images saved
-        if (statuses.every(status => status)) {
-          console.log('[NAI] All images saved! Refreshing history...');
-          setHistoryRefreshKey(prev => prev + 1);
-          return;
+        try {
+          // 캐시 무효화를 위한 타임스탬프 추가
+          const statuses = await Promise.all(
+            historyIds.map(async (id) => {
+              try {
+                const response = await generationHistoryApi.getById(id, true);
+                console.log(`[NAI] History ${id} response:`, {
+                  success: response.success,
+                  hasRecord: !!response.record,
+                  status: response.record?.generation_status
+                });
+
+                if (!response || !response.record) {
+                  console.error(`[NAI] Invalid response for history ${id}:`, response);
+                  return false;
+                }
+
+                const status = response.record.generation_status;
+                const isCompleted = status === 'completed';
+                console.log(`[NAI] History ${id}: status="${status}", completed=${isCompleted}`);
+                return isCompleted;
+              } catch (error) {
+                console.error(`[NAI] Failed to check history ${id}:`, error);
+                return false;
+              }
+            })
+          );
+
+          const completedCount = statuses.filter(s => s).length;
+          console.log(`[NAI] Polling ${attempts}/${maxAttempts}: ${completedCount}/${statuses.length} completed`);
+
+          // All images saved
+          if (statuses.every(status => status)) {
+            console.log('[NAI] All images saved! Refreshing history...');
+            if (timeoutId) clearTimeout(timeoutId);
+
+            // refreshKey 업데이트 후 resolve
+            setHistoryRefreshKey(prev => {
+              const newKey = prev + 1;
+              console.log(`[NAI] historyRefreshKey: ${prev} → ${newKey}`);
+
+              // setState는 비동기이므로 다음 틱에 resolve
+              setTimeout(() => resolve(), 0);
+
+              return newKey;
+            });
+            return;
+          }
+
+          // Timeout check
+          if (attempts >= maxAttempts) {
+            console.warn(`[NAI] Polling timeout. Forcing refresh...`);
+            if (timeoutId) clearTimeout(timeoutId);
+
+            setHistoryRefreshKey(prev => {
+              const newKey = prev + 1;
+              setTimeout(() => resolve(), 0);
+              return newKey;
+            });
+            return;
+          }
+
+          // Continue polling
+          timeoutId = setTimeout(checkStatus, pollInterval);
+        } catch (error) {
+          console.error('[NAI] Completion check failed:', error);
+
+          if (attempts >= maxAttempts) {
+            if (timeoutId) clearTimeout(timeoutId);
+            setHistoryRefreshKey(prev => prev + 1);
+            resolve();
+            return;
+          }
+
+          timeoutId = setTimeout(checkStatus, pollInterval);
         }
-      } catch (error) {
-        console.error('[NAI] Completion check failed:', error);
-      }
+      };
 
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-    }
-
-    // Timeout - refresh anyway (background processing may still be ongoing)
-    console.warn(`[NAI] Polling timeout. Forcing refresh...`);
-    setHistoryRefreshKey(prev => prev + 1);
+      checkStatus();
+    });
   };
 
   const executeSingleGeneration = async (

@@ -62,6 +62,7 @@ import { QueryCacheService } from './services/QueryCacheService';
 
 const app = express();
 const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;
+const isDevelopment = process.env.NODE_ENV !== 'production';
 
 // Rate limiting for login endpoint (prevent brute-force attacks)
 const loginLimiter = rateLimit({
@@ -193,7 +194,7 @@ async function initializeSessionMiddleware() {
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30일
       httpOnly: true,
       secure: isSecureContext, // HTTPS에서만 true
-      sameSite: 'lax'
+      sameSite: isDevelopment ? 'none' : 'lax' // 개발: cross-origin 허용, 프로덕션: lax
     },
     name: 'comfyui.sid' // Custom session cookie name
   });

@@ -23,14 +23,17 @@ export const generationHistoryApi = {
   /**
    * Get all generation history with filters
    */
-  getAll: async (filters?: GenerationHistoryFilters): Promise<GenerationHistoryResponse> => {
+  getAll: async (filters?: GenerationHistoryFilters & { bustCache?: boolean }): Promise<GenerationHistoryResponse> => {
     const params = new URLSearchParams();
     if (filters?.service_type) params.append('service_type', filters.service_type);
     if (filters?.generation_status) params.append('generation_status', filters.generation_status);
     if (filters?.limit) params.append('limit', filters.limit.toString());
     if (filters?.offset) params.append('offset', filters.offset.toString());
+    if (filters?.bustCache) params.append('_t', Date.now().toString());
 
-    const response = await apiClient.get(`/api/generation-history?${params.toString()}`);
+    const response = await apiClient.get(`/api/generation-history?${params.toString()}`, {
+      headers: filters?.bustCache ? { 'Cache-Control': 'no-cache, no-store, must-revalidate' } : {}
+    });
     return response.data;
   },
 
@@ -59,9 +62,16 @@ export const generationHistoryApi = {
    * Get specific history by ID
    */
   getById: async (
-    id: number
+    id: number,
+    bustCache: boolean = false
   ): Promise<{ success: boolean; record: GenerationHistoryRecord }> => {
-    const response = await apiClient.get(`/api/generation-history/${id}`);
+    const url = bustCache
+      ? `/api/generation-history/${id}?_t=${Date.now()}`
+      : `/api/generation-history/${id}`;
+
+    const response = await apiClient.get(url, {
+      headers: bustCache ? { 'Cache-Control': 'no-cache, no-store, must-revalidate' } : {}
+    });
     return response.data;
   },
 
@@ -120,15 +130,19 @@ export const generationHistoryApi = {
    */
   getByWorkflow: async (
     workflowId: number,
-    filters?: Omit<GenerationHistoryFilters, 'workflow_id'>
+    filters?: Omit<GenerationHistoryFilters, 'workflow_id'> & { bustCache?: boolean }
   ): Promise<GenerationHistoryResponse> => {
     const params = new URLSearchParams();
     if (filters?.generation_status) params.append('generation_status', filters.generation_status);
     if (filters?.limit) params.append('limit', filters.limit.toString());
     if (filters?.offset) params.append('offset', filters.offset.toString());
+    if (filters?.bustCache) params.append('_t', Date.now().toString());
 
     const response = await apiClient.get(
-      `/api/generation-history/workflow/${workflowId}?${params.toString()}`
+      `/api/generation-history/workflow/${workflowId}?${params.toString()}`,
+      {
+        headers: filters?.bustCache ? { 'Cache-Control': 'no-cache, no-store, must-revalidate' } : {}
+      }
     );
     return response.data;
   },

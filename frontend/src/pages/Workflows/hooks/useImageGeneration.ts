@@ -108,16 +108,29 @@ export function useImageGeneration({
   const pollGenerationStatus = async (serverId: number, apiHistoryId: number): Promise<void> => {
     const maxAttempts = 150; // 5분 최대 대기 (2초 * 150)
     let attempts = 0;
+    let timeoutId: NodeJS.Timeout | null = null;
 
     return new Promise((resolve, reject) => {
       const checkStatus = async () => {
         attempts++;
 
         try {
-          const response = await generationHistoryApi.getById(apiHistoryId);
+          // 캐시 무효화를 위한 타임스탬프 추가
+          const response = await generationHistoryApi.getById(apiHistoryId, true);
           const data = response.record;
 
+          console.log(`[ComfyUI] Polling attempt ${attempts}/${maxAttempts} for history ${apiHistoryId}: status="${data.generation_status}"`);
+
           if (data.generation_status === 'completed' || data.generation_status === 'failed') {
+            console.log(`[ComfyUI] ✅ Generation ${apiHistoryId} finished with status: ${data.generation_status}`);
+
+            // 타이머 정리
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+              timeoutId = null;
+            }
+
+            // 상태 업데이트를 먼저 수행
             setGenerationStatus(prev => ({
               ...prev,
               [serverId]: {
@@ -128,10 +141,20 @@ export function useImageGeneration({
             }));
 
             if (data.generation_status === 'completed') {
-              console.log(`[ComfyUI] Generation ${apiHistoryId} completed`);
-              setHistoryRefreshKey(prev => prev + 1);
-              resolve();
+              console.log(`[ComfyUI] 🔄 Triggering history refresh (refreshKey increment)`);
+
+              // refreshKey 업데이트 후 resolve
+              setHistoryRefreshKey(prev => {
+                const newKey = prev + 1;
+                console.log(`[ComfyUI] historyRefreshKey: ${prev} → ${newKey}`);
+
+                // setState는 비동기이므로 다음 틱에 resolve
+                setTimeout(() => resolve(), 0);
+
+                return newKey;
+              });
             } else {
+              console.error(`[ComfyUI] ❌ Generation failed:`, data.error_message);
               reject(new Error(data.error_message || 'Generation failed'));
             }
             return;
@@ -140,23 +163,25 @@ export function useImageGeneration({
           // Timeout check
           if (attempts >= maxAttempts) {
             console.error(`[ComfyUI] Generation ${apiHistoryId} timeout after ${attempts} attempts`);
+            if (timeoutId) clearTimeout(timeoutId);
             reject(new Error('Generation timeout (5 minutes)'));
             return;
           }
 
           // Continue polling
-          setTimeout(checkStatus, 2000);
+          timeoutId = setTimeout(checkStatus, 2000);
         } catch (err) {
           console.error(`[ComfyUI] Failed to check status (attempt ${attempts}/${maxAttempts}):`, err);
 
           // Timeout even on errors
           if (attempts >= maxAttempts) {
+            if (timeoutId) clearTimeout(timeoutId);
             reject(new Error('Status check failed after timeout'));
             return;
           }
 
           // Retry
-          setTimeout(checkStatus, 2000);
+          timeoutId = setTimeout(checkStatus, 2000);
         }
       };
 

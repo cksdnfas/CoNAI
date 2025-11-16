@@ -3,7 +3,7 @@ import { WorkflowModel } from '../../models/Workflow';
 import { createComfyUIService } from '../../services/comfyuiService';
 import { WorkflowResponse, GenerationStatusResponse } from '../../types/workflow';
 import { asyncHandler } from '../../middleware/errorHandler';
-import { runtimePaths } from '../../config/runtimePaths';
+import { runtimePaths, publicUrls } from '../../config/runtimePaths';
 import path from 'path';
 import fs from 'fs';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
@@ -151,10 +151,6 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
           }
         }
 
-        // Simple file move: temp → uploads/API/images/YYYY-MM-DD/
-        // Main system will auto-detect and process (thumbnails, metadata, etc.)
-        console.log(`📁 Moving ${tempFilePaths.length} images to uploads/API/images/...`);
-
         for (const tempPath of tempFilePaths) {
           try {
             // Read temp file
@@ -192,7 +188,6 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
 
               GenerationHistoryModel.updateImagePaths(historyId, {
                 original: relativePath,
-                thumbnail: '',
                 fileSize: imageBuffer.length,
                 compositeHash: hashes.compositeHash
               });
@@ -334,16 +329,12 @@ router.get('/history/:historyId', asyncHandler(async (req: Request, res: Respons
 
     // 생성된 이미지 정보 조회
     let generatedImage = null;
-    // TODO: Migrate api_generation_history.linked_image_id from INT to TEXT (composite_hash)
-    // Currently broken: ImageModel.findById() throws error
-    // See: docs/development/IMAGE_MODEL_MIGRATION_STATUS.md
-    // DISABLED: Cannot query by linked_image_id until database migration completed
 
     const statusResponse: GenerationStatusResponse = {
       id: history.id!,
       status: history.generation_status,
       comfyui_prompt_id: history.comfyui_prompt_id,
-      generated_image_id: history.linked_image_id,
+      generated_image_id: history.composite_hash,
       generated_image: generatedImage,
       error_message: history.error_message,
       execution_time: undefined, // Not stored in api_generation_history
@@ -417,14 +408,15 @@ router.get('/:id/test-connection', asyncHandler(async (req: Request, res: Respon
  */
 router.get('/canvas-images', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const canvasPath = path.join(runtimePaths.uploadsDir, 'temp', 'canvas');
+    const canvasPath = path.join(runtimePaths.tempDir, 'canvas');
 
     // Ensure canvas directory exists
     if (!fs.existsSync(canvasPath)) {
       fs.mkdirSync(canvasPath, { recursive: true });
       return res.json({
         success: true,
-        data: []
+        data: [],
+        canvasPath: canvasPath  // Provide actual path for user guidance
       });
     }
 
@@ -441,7 +433,7 @@ router.get('/canvas-images', asyncHandler(async (req: Request, res: Response) =>
       const stats = fs.statSync(filePath);
       return {
         filename: file,
-        path: `/uploads/temp/canvas/${file}`,
+        path: `${publicUrls.tempBaseUrl}/canvas/${file}`,
         size: stats.size,
         created: stats.birthtime,
         modified: stats.mtime
@@ -450,7 +442,8 @@ router.get('/canvas-images', asyncHandler(async (req: Request, res: Response) =>
 
     return res.json({
       success: true,
-      data: images
+      data: images,
+      canvasPath: canvasPath  // Provide actual path for user guidance
     });
   } catch (error) {
     console.error('Error getting canvas images:', error);

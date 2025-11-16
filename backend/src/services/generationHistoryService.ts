@@ -106,8 +106,8 @@ export class GenerationHistoryService {
       // Update API history with image paths
       GenerationHistoryModel.updateImagePaths(historyId, {
         original: processedPaths.originalPath,
-        thumbnail: '', // NULL - background scan will create
-        fileSize: processedPaths.fileSize
+        fileSize: processedPaths.fileSize,
+        compositeHash: processedPaths.compositeHash
       });
 
       // Extract and update metadata
@@ -128,8 +128,6 @@ export class GenerationHistoryService {
         console.warn(`⚠️ Failed to extract metadata (non-critical):`, metadataError);
       }
 
-      // Link to already processed image (from workflow loop)
-      GenerationHistoryModel.linkToImage(historyId, linkedImageId);
 
       // Assign to group if groupId was specified (manual collection)
       const history = GenerationHistoryModel.findById(historyId);
@@ -195,7 +193,6 @@ export class GenerationHistoryService {
       // Step 3: Update API history with original file path and composite_hash
       GenerationHistoryModel.updateImagePaths(historyId, {
         original: processedPaths.originalPath,
-        thumbnail: '', // Main system will auto-generate
         fileSize: processedPaths.fileSize,
         compositeHash: processedPaths.compositeHash
       });
@@ -325,10 +322,9 @@ export class GenerationHistoryService {
     }
 
     // Delete image files if they exist
-    if (history.original_path && history.thumbnail_path) {
+    if (history.original_path) {
       await APIImageProcessor.deleteGeneratedImages({
-        originalPath: history.original_path,
-        thumbnailPath: history.thumbnail_path
+        originalPath: history.original_path
       });
     }
 

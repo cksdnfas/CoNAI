@@ -137,34 +137,42 @@ console.log('✅ Production package.json created\n');
 console.log('Step 5: Creating Dockerfile...');
 const dockerfile = `# Multi-stage build for ComfyUI Image Manager
 # Optimized for production deployment
+# Note: Using Debian base for PyTorch compatibility (Alpine not supported)
 
 # ============================================================================
 # Stage 1: Dependencies
 # ============================================================================
-FROM node:20-alpine AS deps
+FROM node:20-slim AS deps
 
 WORKDIR /app
 
 # Install build dependencies for native modules
-RUN apk add --no-cache python3 make g++
+RUN apt-get update && apt-get install -y --no-install-recommends \\
+    python3 \\
+    make \\
+    g++ \\
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy package.json
 COPY package.json ./
 
-# Install production dependencies and rebuild native modules for Alpine Linux
+# Install production dependencies and rebuild native modules
 RUN npm install --production --no-package-lock && \\
     npm rebuild sharp better-sqlite3 argon2 blake2
 
 # ============================================================================
 # Stage 2: Runtime
 # ============================================================================
-FROM node:20-alpine
+FROM node:20-slim
 
 # Install runtime dependencies
-RUN apk add --no-cache \\
+RUN apt-get update && apt-get install -y --no-install-recommends \\
     ffmpeg \\
     python3 \\
-    py3-pip
+    python3-pip \\
+    python3-venv \\
+    && ln -sf /usr/bin/python3 /usr/bin/python \\
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -177,12 +185,20 @@ COPY python ./python
 # Copy production dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 
+# Install Python dependencies (CPU-only PyTorch for smaller image size)
+RUN pip3 install --no-cache-dir --break-system-packages \\
+    --extra-index-url https://download.pytorch.org/whl/cpu \\
+    -r python/requirements.txt && \\
+    find /usr/local/lib/python3* -name '*.pyc' -delete && \\
+    find /usr/local/lib/python3* -name '__pycache__' -delete && \\
+    rm -rf /root/.cache/pip
+
 # Create data directories
 RUN mkdir -p /app/data/uploads /app/data/database /app/data/logs /app/data/temp /app/data/models /app/data/config
 
 # Create non-root user
-RUN addgroup -g 1001 appuser && \\
-    adduser -D -u 1001 -G appuser appuser && \\
+RUN groupadd -g 1001 appuser && \\
+    useradd -u 1001 -g appuser -s /bin/bash -m appuser && \\
     chown -R appuser:appuser /app
 
 USER appuser
@@ -192,7 +208,8 @@ ENV NODE_ENV=production \\
     PORT=1566 \\
     HOST=0.0.0.0 \\
     DOCKER=true \\
-    RUNTIME_BASE_PATH=/app/data
+    RUNTIME_BASE_PATH=/app/data \\
+    PYTHON_PATH=python3
 
 # Expose port
 EXPOSE 1566

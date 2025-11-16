@@ -75,10 +75,6 @@ export class VideoProcessor {
     return `${year}-${month}-${day}`;
   }
 
-  /**
-   * 업로드 폴더 구조 생성 (동영상 전용)
-   * 경로: uploads/videos/YYYY-MM-DD/Origin/
-   */
   static async createUploadFolders(
     baseUploadPath: string,
     videoFilename: string

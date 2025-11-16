@@ -40,7 +40,7 @@ export interface GenerationHistory {
   prompt_data: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   comfyui_prompt_id?: string;
-  generated_image_id?: number;
+  generated_image_id?: string;  // composite_hash of the generated image
   generated_image?: any;
   error_message?: string;
   execution_time?: number;

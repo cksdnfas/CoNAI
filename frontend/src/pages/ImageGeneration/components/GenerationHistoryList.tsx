@@ -56,6 +56,9 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
+  // 로컬 새로고침 트리거 (수동 새로고침 버튼용)
+  const [localRefreshKey, setLocalRefreshKey] = useState(0);
+
   const ITEMS_PER_PAGE = 50;
 
   // react-masonry-css breakpoint 설정
@@ -67,67 +70,116 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
     600: 2, // sm
   };
 
+  // Initial load and refresh when dependencies change
   useEffect(() => {
-    loadHistory(true);
-  }, [serviceType, workflowId, refreshKey]);
+    console.log('🔍 [GenerationHistory] useEffect triggered - refreshKey:', refreshKey, 'localRefreshKey:', localRefreshKey, 'serviceType:', serviceType, 'workflowId:', workflowId);
 
-  const loadHistory = async (reset: boolean = false) => {
-    try {
-      setLoading(true);
-      const currentPage = reset ? 1 : page;
-
-      // 워크플로우 ID가 있으면 워크플로우별 API 호출, 없으면 전체 조회
-      let response;
-      if (workflowId) {
-        response = await generationHistoryApi.getByWorkflow(workflowId, {
-          limit: ITEMS_PER_PAGE,
-          offset: (currentPage - 1) * ITEMS_PER_PAGE
-        });
-      } else {
-        // offset 기반 페이지네이션으로 변경 (무한 스크롤 지원)
-        response = await generationHistoryApi.getAll({
-          service_type: serviceType,
-          limit: ITEMS_PER_PAGE,
-          offset: (currentPage - 1) * ITEMS_PER_PAGE
-        });
-      }
-
-      // 더 이상 불러올 데이터가 없으면 hasMore를 false로 설정
-      const newRecords = response.records || [];
-      setHasMore(newRecords.length >= ITEMS_PER_PAGE);
-
-      // GenerationHistoryRecord를 ImageRecord로 변환
-      const convertedRecords = convertHistoriesToImageRecords(newRecords);
-
-      if (reset) {
-        // 초기 로드 또는 새로고침: 데이터 교체
-        setRecords(newRecords);
-        setImageRecords(convertedRecords);
+    const loadHistory = async () => {
+      try {
+        console.log('📡 [GenerationHistory] Loading history...');
+        setLoading(true);
         setPage(1);
-      } else {
-        // 무한 스크롤: 기존 데이터에 추가
+
+        // localRefreshKey 또는 refreshKey가 변경되었을 때 캐시 무효화
+        const bustCache = localRefreshKey > 0 || (refreshKey !== undefined && refreshKey > 0);
+
+        // 워크플로우 ID가 있으면 워크플로우별 API 호출, 없으면 전체 조회
+        let response;
+        if (workflowId) {
+          console.log('📡 [GenerationHistory] Fetching by workflow:', workflowId, 'bustCache:', bustCache);
+          response = await generationHistoryApi.getByWorkflow(workflowId, {
+            limit: ITEMS_PER_PAGE,
+            offset: 0,
+            bustCache
+          });
+        } else {
+          console.log('📡 [GenerationHistory] Fetching all for serviceType:', serviceType, 'bustCache:', bustCache);
+          response = await generationHistoryApi.getAll({
+            service_type: serviceType,
+            limit: ITEMS_PER_PAGE,
+            offset: 0,
+            bustCache
+          });
+        }
+
+        const newRecords = response.records || [];
+        console.log('✅ [GenerationHistory] Fetched', newRecords.length, 'records');
+        console.log('📋 [GenerationHistory] Record IDs:', newRecords.map(r => `${r.id}:${r.generation_status}`).join(', '));
+        setHasMore(newRecords.length >= ITEMS_PER_PAGE);
+
+        const convertedRecords = convertHistoriesToImageRecords(newRecords);
+
+        // Force state update by creating new arrays
+        setRecords([...newRecords]);
+        setImageRecords([...convertedRecords]);
+
+        console.log('✅ [GenerationHistory] State updated with new records');
+        console.log('📊 [GenerationHistory] Component should re-render now with', convertedRecords.length, 'items');
+      } catch (error) {
+        console.error('❌ [GenerationHistory] Failed to load generation history:', error);
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadHistory();
+  }, [serviceType, workflowId, refreshKey, localRefreshKey]);
+
+  // Load more when page changes (for infinite scroll)
+  useEffect(() => {
+    if (page <= 1) return;
+
+    const loadMore = async () => {
+      try {
+        setLoading(true);
+
+        let response;
+        if (workflowId) {
+          response = await generationHistoryApi.getByWorkflow(workflowId, {
+            limit: ITEMS_PER_PAGE,
+            offset: (page - 1) * ITEMS_PER_PAGE
+          });
+        } else {
+          response = await generationHistoryApi.getAll({
+            service_type: serviceType,
+            limit: ITEMS_PER_PAGE,
+            offset: (page - 1) * ITEMS_PER_PAGE
+          });
+        }
+
+        const newRecords = response.records || [];
+        setHasMore(newRecords.length >= ITEMS_PER_PAGE);
+
+        const convertedRecords = convertHistoriesToImageRecords(newRecords);
         setRecords(prev => [...prev, ...newRecords]);
         setImageRecords(prev => [...prev, ...convertedRecords]);
+      } catch (error) {
+        console.error('Failed to load more generation history:', error);
+        setHasMore(false);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Failed to load generation history:', error);
-      setHasMore(false);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    loadMore();
+  }, [page, workflowId, serviceType]);
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore) {
       setPage((prev) => prev + 1);
-      loadHistory(false);
     }
   }, [loading, hasMore]);
 
   const handleRefresh = () => {
-    setPage(1);
-    setHasMore(true);
-    loadHistory(true);
+    console.log('🔄 [GenerationHistory] MANUAL REFRESH CLICKED - Current localRefreshKey:', localRefreshKey);
+    setSelectedIds(new Set());
+    setLastSelectedIndex(null);
+    setLocalRefreshKey(prev => {
+      const newKey = prev + 1;
+      console.log('🔄 [GenerationHistory] Setting new localRefreshKey:', newKey);
+      return newKey;
+    });
   };
 
   const handleDelete = async (id: number) => {
@@ -363,7 +415,7 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
             const historyRecord = records[index];
             return (
               <HistoryMasonryCard
-                key={imageRecord.file_id ? `file-${imageRecord.file_id}` : `hash-${imageRecord.composite_hash}-${index}`}
+                key={imageRecord.file_id ? `file-${imageRecord.file_id}-${refreshKey || 0}-${localRefreshKey}` : `hash-${imageRecord.composite_hash}-${index}-${refreshKey || 0}-${localRefreshKey}`}
                 image={imageRecord}
                 onClick={() => handleImageClick(index)}
                 generationStatus={historyRecord.generation_status}

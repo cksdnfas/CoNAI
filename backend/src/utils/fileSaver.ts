@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import sharp from 'sharp';
 import { ImageSimilarityService } from '../services/imageSimilarity';
+import { runtimePaths } from '../config/runtimePaths';
 
 /**
  * API 생성 이미지 파일 저장 유틸리티
@@ -39,7 +40,7 @@ export class FileSaver {
    * 상대 경로 정규화 (uploads 디렉토리 기준)
    */
   private static normalizeRelativePath(fullPath: string): string {
-    const uploadsDir = path.join(process.cwd(), 'uploads');
+    const uploadsDir = runtimePaths.uploadsDir;
     return path.relative(uploadsDir, fullPath).replace(/\\/g, '/');
   }
 
@@ -63,7 +64,7 @@ export class FileSaver {
     try {
       // 1. 날짜 기반 폴더 생성
       const dateFolder = this.getDateFolder();
-      const dateFolderPath = path.join(process.cwd(), 'uploads', 'API', 'images', dateFolder);
+      const dateFolderPath = path.join(runtimePaths.uploadsDir, 'API', 'images', dateFolder);
 
       await fs.promises.mkdir(dateFolderPath, { recursive: true });
 

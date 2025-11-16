@@ -37,11 +37,8 @@ export interface GenerationHistoryRecord {
 
   // Image Paths
   original_path?: string;
-  thumbnail_path?: string;
   file_size?: number;
-
-  // Link to main images DB (composite_hash 기반)
-  linked_composite_hash?: string;
+  composite_hash?: string;
 
   // Error and Metadata
   error_message?: string;

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import {
@@ -37,6 +37,22 @@ export const MarkedFieldsList: React.FC<MarkedFieldsListProps> = ({
 
   // Setup validation
   const validation = useMarkedFieldValidation(fields);
+
+  // Manage expanded state for each field (indexed by field.id)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  // Toggle expand/collapse for a specific field
+  const handleToggleExpand = (fieldId: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(fieldId)) {
+        next.delete(fieldId);
+      } else {
+        next.add(fieldId);
+      }
+      return next;
+    });
+  };
 
   // Setup drag-and-drop sensors
   const sensors = useSensors(
@@ -79,6 +95,7 @@ export const MarkedFieldsList: React.FC<MarkedFieldsListProps> = ({
         <Box>
           {fields.map((field, index) => {
             const fieldErrors = validation.getFieldErrors(index);
+            const isExpanded = expandedIds.has(field.id);
             return (
               <SortableMarkedFieldCard
                 key={field.id}
@@ -87,6 +104,8 @@ export const MarkedFieldsList: React.FC<MarkedFieldsListProps> = ({
                 onUpdate={onUpdateField}
                 onDelete={onDeleteField}
                 fieldErrors={fieldErrors}
+                isExpanded={isExpanded}
+                onToggleExpand={() => handleToggleExpand(field.id)}
               />
             );
           })}

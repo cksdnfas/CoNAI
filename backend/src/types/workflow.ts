@@ -106,7 +106,7 @@ export interface GenerationStatusResponse {
   id: number;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   comfyui_prompt_id?: string;
-  generated_image_id?: number;
+  generated_image_id?: string; // composite_hash (48-character string)
   generated_image?: any; // enriched image record
   error_message?: string;
   execution_time?: number; // Deprecated, not used in api_generation_history

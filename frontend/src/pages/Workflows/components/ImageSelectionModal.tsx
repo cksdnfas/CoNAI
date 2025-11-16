@@ -62,6 +62,7 @@ export default function ImageSelectionModal({
   const [hashInput, setHashInput] = useState('');
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
   const [canvasImages, setCanvasImages] = useState<any[]>([]);
+  const [canvasPath, setCanvasPath] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,6 +77,7 @@ export default function ImageSelectionModal({
       setLoading(true);
       const response = await workflowApi.getCanvasImages();
       setCanvasImages(response.data || []);
+      setCanvasPath(response.canvasPath || '');
     } catch (err: any) {
       setError('Failed to load canvas images');
       console.error(err);
@@ -217,7 +219,7 @@ export default function ImageSelectionModal({
           </Box>
         </TabPanel>
 
-        {/* Tab 4: 전용 폴더 (uploads/temp/canvas) */}
+        {/* Tab 4: 전용 폴더 */}
         <TabPanel value={currentTab} index={4}>
           {loading ? (
             <Box sx={{ textAlign: 'center', py: 4 }}>
@@ -228,9 +230,11 @@ export default function ImageSelectionModal({
               <Typography variant="body1" color="text.secondary">
                 전용 폴더에 이미지가 없습니다.
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                uploads/temp/canvas 폴더에 이미지를 추가하세요.
-              </Typography>
+              {canvasPath && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  {canvasPath} 폴더에 이미지를 추가하세요.
+                </Typography>
+              )}
             </Box>
           ) : (
             <Grid container spacing={2}>

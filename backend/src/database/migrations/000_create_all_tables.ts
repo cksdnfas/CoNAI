@@ -284,6 +284,7 @@ export const up = async (db: Database.Database): Promise<void> => {
       watcher_error TEXT,
       watcher_last_event DATETIME,
       is_active INTEGER DEFAULT 1,
+      is_default INTEGER DEFAULT 0,
       last_scan_date DATETIME,
       last_scan_status TEXT,
       last_scan_found INTEGER DEFAULT 0,
@@ -354,17 +355,17 @@ export const up = async (db: Database.Database): Promise<void> => {
   folderIndexes.forEach(sql => db.exec(sql));
 
   // 기본 업로드 폴더 등록
-  // RUNTIME_UPLOADS_DIR 환경변수로 설정된 루트 업로드 폴더 하나만 등록
-  //
-  // 절대 경로로 저장하여 RUNTIME_UPLOADS_DIR 설정이 바로 적용되도록 함
-  // - RUNTIME_UPLOADS_DIR 설정 시: 해당 경로 사용 (예: E:/img/Images)
-  // - 미설정 시: {basePath}/uploads 사용
+  // runtimePaths에서 설정된 업로드 폴더 사용
+  // - RUNTIME_UPLOADS_DIR 환경변수 설정 시: 해당 경로 사용 (예: E:/img/Images)
+  // - RUNTIME_BASE_PATH 설정 시: {basePath}/uploads 사용
+  // - 미설정 시: {cwd}/uploads 사용
   const defaultUploadPath = runtimePaths.uploadsDir;
+
   db.prepare(`
     INSERT OR IGNORE INTO watched_folders
-    (folder_path, folder_name, auto_scan, scan_interval, recursive, is_active, watcher_enabled)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(defaultUploadPath, 'Upload', 1, 60, 1, 1, 1);
+    (folder_path, folder_name, auto_scan, scan_interval, recursive, is_active, watcher_enabled, is_default)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(defaultUploadPath, 'Upload', 1, 60, 1, 1, 1, 1);
 
   console.log('  ✅ 폴더 테이블 3개 + 인덱스 + 기본 폴더 1개 생성 완료\n');
 

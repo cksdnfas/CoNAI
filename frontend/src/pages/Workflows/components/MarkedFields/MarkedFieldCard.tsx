@@ -69,6 +69,8 @@ interface MarkedFieldCardProps {
   onDelete: (index: number) => void;
   dragHandleProps?: any;
   fieldErrors?: FieldError[];
+  isExpanded: boolean;
+  onToggleExpand: () => void;
 }
 
 export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
@@ -78,17 +80,14 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
   onDelete,
   dragHandleProps,
   fieldErrors = [],
+  isExpanded,
+  onToggleExpand,
 }) => {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
   const [listDialogOpen, setListDialogOpen] = useState(false);
   const [customLists, setCustomLists] = useState<CustomDropdownList[]>([]);
 
   const typeConfig = FIELD_TYPE_CONFIG[field.type];
-
-  const handleToggleExpand = () => {
-    setExpanded(!expanded);
-  };
 
   const handleOpenListDialog = async () => {
     try {
@@ -136,9 +135,9 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
         borderRadius: 2,
         overflow: 'hidden',
         transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-        bgcolor: expanded ? alpha(typeConfig.color, 0.02) : 'background.paper',
+        bgcolor: isExpanded ? alpha(typeConfig.color, 0.02) : 'background.paper',
         '&:hover': {
-          boxShadow: expanded ? 6 : 4,
+          boxShadow: isExpanded ? 6 : 4,
           transform: 'translateY(-2px)',
           borderLeftWidth: '6px',
         },
@@ -156,7 +155,7 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
             bgcolor: (theme) => alpha(theme.palette.action.hover, 0.04),
           },
         }}
-        onClick={handleToggleExpand}
+        onClick={onToggleExpand}
       >
         {/* Drag Handle */}
         <Box
@@ -249,7 +248,7 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
         <IconButton
           size="small"
           sx={{
-            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
             transition: 'transform 0.3s',
           }}
         >
@@ -258,7 +257,7 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
       </Box>
 
       {/* Expanded Content */}
-      <Collapse in={expanded} timeout={{ enter: 300, exit: 250 }} unmountOnExit>
+      <Collapse in={isExpanded} timeout={{ enter: 300, exit: 250 }} unmountOnExit>
         <CardContent
           sx={{
             pt: 2,

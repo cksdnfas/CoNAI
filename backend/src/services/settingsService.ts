@@ -107,6 +107,8 @@ export class SettingsService {
           tagger: {
             ...defaults.tagger,
             ...loadedSettings.tagger,
+            // Environment variable takes highest precedence (for Docker deployments)
+            ...(process.env.PYTHON_PATH && { pythonPath: process.env.PYTHON_PATH }),
           },
           similarity: {
             ...defaults.similarity,

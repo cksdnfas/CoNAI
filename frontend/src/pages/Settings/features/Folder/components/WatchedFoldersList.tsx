@@ -49,7 +49,7 @@ const WatchedFoldersList: React.FC = () => {
       setError(null);
       const data = await folderApi.getFolders();
       // 기본 업로드 폴더 제외 (별도 섹션에서 관리)
-      setFolders(data.filter(f => !f.folder_path.includes('uploads/images')));
+      setFolders(data.filter(f => !f.is_default));
     } catch (err) {
       console.error('Failed to load folders:', err);
       setError('폴더 목록을 불러오는데 실패했습니다');

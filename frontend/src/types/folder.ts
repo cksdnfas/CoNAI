@@ -26,6 +26,7 @@ export interface WatchedFolder {
   exclude_extensions: string | null;
   exclude_patterns: string | null;
   is_active: number;
+  is_default: number;
   last_scan_date: string | null;
   last_scan_status: ScanStatus;
   last_scan_found: number;

@@ -3,6 +3,7 @@ import fs from 'fs';
 import { spawn } from 'child_process';
 import { VideoProcessor } from './videoProcessor';
 import crypto from 'crypto';
+import { runtimePaths } from '../config/runtimePaths';
 
 /**
  * VideoFrameExtractor - Extract frames from videos for auto-tagging
@@ -10,13 +11,12 @@ import crypto from 'crypto';
  */
 export class VideoFrameExtractor {
   private static readonly FRAME_COUNT = 7;
-  private static readonly TEMP_FRAMES_DIR = 'uploads/temp/video_frames';
 
   /**
    * Ensure temp frames directory exists
    */
   private static async ensureTempDir(): Promise<string> {
-    const tempDir = path.resolve(this.TEMP_FRAMES_DIR);
+    const tempDir = path.join(runtimePaths.tempDir, 'video_frames');
     await fs.promises.mkdir(tempDir, { recursive: true });
     return tempDir;
   }

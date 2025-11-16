@@ -1,8 +1,5 @@
 ﻿const resolveDefaultBackendOrigin = (): string => {
-  // 런타임에 동적으로 평가 (빌드 타임 평가 방지)
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin;
-  }
+  // 백엔드 기본 포트 반환 (프론트엔드와 백엔드 포트가 다를 수 있음)
   // 문자열 분리로 빌드 타임 평가 완전 방지
   const protocol = 'http';
   const host = 'localhost';
