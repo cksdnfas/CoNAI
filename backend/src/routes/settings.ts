@@ -648,7 +648,7 @@ router.put(
     if (typeof interval !== 'number' || interval < 5 || interval > 300) {
       res.status(400).json({
         success: false,
-        error: 'Phase 2 간격은 5-300초 사이여야 합니다',
+        error: '백그라운드 간격은 5-300초 사이여야 합니다',
       });
       return;
     }
@@ -662,7 +662,7 @@ router.put(
     res.json({
       success: true,
       data: { interval },
-      message: `Phase 2 처리 간격이 ${interval}초로 업데이트되었습니다`,
+      message: `백그라운드 처리 간격이 ${interval}초로 업데이트되었습니다`,
     });
     return;
   })

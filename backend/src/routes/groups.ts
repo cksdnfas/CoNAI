@@ -314,13 +314,15 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * 그룹 삭제
- * DELETE /api/groups/:id
+ * DELETE /api/groups/:id?cascade=true/false
+ * @query cascade - true면 하위 그룹도 재귀적으로 삭제, false면 부모만 삭제 (기본값: false)
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(req.params.id, 'Group ID');
+    const cascade = req.query.cascade === 'true';
 
-    const deleted = await GroupModel.delete(id);
+    const deleted = await GroupModel.delete(id, cascade);
 
     if (!deleted) {
       return res.status(404).json(errorResponse('Group not found'));

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Skeleton } from '@mui/material';
 import type { ImageRecord } from '../../../types/image';
 import { getBackendOrigin } from '../../../utils/backend';
@@ -38,6 +38,8 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
   const [useFallback, setUseFallback] = useState(false);
   const [usePlaceholder, setUsePlaceholder] = useState(false);
   const backendOrigin = getBackendOrigin();
+  const imageRef = useRef<HTMLImageElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   // Reset error states when image or showOriginal changes
   useEffect(() => {
@@ -46,6 +48,36 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
     setUsePlaceholder(false);
     setImageLoading(true);
   }, [image.composite_hash, showOriginal]);
+
+  // Handle cached images and add 2-second timeout safety
+  useEffect(() => {
+    // Check if image/video is already loaded (cached)
+    const checkIfLoaded = () => {
+      if (image.file_type === 'video' && videoRef.current) {
+        // Video: readyState >= 3 means HAVE_FUTURE_DATA or HAVE_ENOUGH_DATA
+        if (videoRef.current.readyState >= 3) {
+          setImageLoading(false);
+        }
+      } else if (imageRef.current) {
+        // Image: complete property indicates the image is loaded
+        if (imageRef.current.complete && imageRef.current.naturalHeight > 0) {
+          setImageLoading(false);
+        }
+      }
+    };
+
+    // Check immediately in case image is cached
+    checkIfLoaded();
+
+    // Safety timeout: force loading state to false after 2 seconds
+    const timeoutId = setTimeout(() => {
+      setImageLoading(false);
+    }, 2000);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [image.composite_hash, showOriginal, useFallback, usePlaceholder, image.file_type]);
 
   // 이미지 URL 우선순위:
   // 새 정책: 기본적으로 썸네일 사용 (90% 품질, 1080px, 빠른 로딩)
@@ -161,6 +193,7 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
       {image.file_type === 'video' ? (
         <Box
           component="video"
+          ref={videoRef}
           key={`video-${image.composite_hash}-${useFallback}-${usePlaceholder}`}
           src={imageUrl}
           controls
@@ -185,6 +218,7 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
       ) : (
         <Box
           component="img"
+          ref={imageRef}
           key={`img-${image.composite_hash}-${useFallback}-${usePlaceholder}`}
           src={imageUrl}
           alt={image.original_file_path ?? ''}

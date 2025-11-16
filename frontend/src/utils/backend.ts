@@ -84,5 +84,5 @@ export const ensureAbsoluteUrl = (value?: string | null): string => {
     return value;
   }
 
-  return buildUploadsUrl(value);
+  return buildUploadsUrl(value) || '';
 };

@@ -88,14 +88,18 @@ export function normalizeWindowsDriveLetter(filePath: string): string {
  * 폴더 경로를 해석하여 절대 경로로 변환
  *
  * - 절대 경로: 그대로 반환
+ * - UNC 경로 (\\server\share 또는 //server/share): 절대 경로로 처리
  * - 상대 경로: basePath 기준으로 해석 (포터블 이동 시 자동 적용)
  *
- * @param folderPath 폴더 경로 (절대 또는 상대)
+ * @param folderPath 폴더 경로 (절대, UNC, 또는 상대)
  * @returns 절대 경로
  */
 export function resolveFolderPath(folderPath: string): string {
-  // 이미 절대 경로면 그대로 반환
-  if (path.isAbsolute(folderPath)) {
+  // Windows UNC 경로는 절대 경로로 처리 (\\server\share 또는 //server/share)
+  const isUNC = folderPath.startsWith('\\\\') || folderPath.startsWith('//');
+
+  // 이미 절대 경로이거나 UNC 경로면 그대로 반환
+  if (path.isAbsolute(folderPath) || isUNC) {
     return path.normalize(folderPath);
   }
 

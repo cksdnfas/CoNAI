@@ -1,6 +1,5 @@
 import Database from 'better-sqlite3';
 import path from 'path';
-import { runtimePaths } from '../../config/runtimePaths';
 
 /**
  * 통합 마이그레이션: 모든 필수 테이블 생성
@@ -355,17 +354,20 @@ export const up = async (db: Database.Database): Promise<void> => {
   folderIndexes.forEach(sql => db.exec(sql));
 
   // 기본 업로드 폴더 등록
-  // runtimePaths에서 설정된 업로드 폴더 사용
+  // 환경변수에서 직접 경로 계산 (runtimePaths 의존성 제거 for Docker bundling)
   // - RUNTIME_UPLOADS_DIR 환경변수 설정 시: 해당 경로 사용 (예: E:/img/Images)
   // - RUNTIME_BASE_PATH 설정 시: {basePath}/uploads 사용
   // - 미설정 시: {cwd}/uploads 사용
-  const defaultUploadPath = runtimePaths.uploadsDir;
+  const defaultUploadPath = process.env.RUNTIME_UPLOADS_DIR ||
+    (process.env.RUNTIME_BASE_PATH
+      ? path.join(process.env.RUNTIME_BASE_PATH, 'uploads')
+      : path.join(process.cwd(), 'uploads'));
 
   db.prepare(`
     INSERT OR IGNORE INTO watched_folders
     (folder_path, folder_name, auto_scan, scan_interval, recursive, is_active, watcher_enabled, is_default)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(defaultUploadPath, 'Upload', 1, 60, 1, 1, 1, 1);
+  `).run(defaultUploadPath, 'Upload', 1, 60, 1, 1, 1, 0);
 
   console.log('  ✅ 폴더 테이블 3개 + 인덱스 + 기본 폴더 1개 생성 완료\n');
 

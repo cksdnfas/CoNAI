@@ -111,8 +111,8 @@ export function useDeleteGroup() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: number) => {
-      const response = await groupApi.deleteGroup(id);
+    mutationFn: async ({ id, cascade = false }: { id: number; cascade?: boolean }) => {
+      const response = await groupApi.deleteGroup(id, cascade);
       if (!response.success) {
         throw new Error(response.error || 'Failed to delete group');
       }

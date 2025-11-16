@@ -9,6 +9,7 @@ import { BackgroundQueueService } from './backgroundQueue';
 import { generateFileHash } from '../utils/fileHash';
 import { VideoProcessor } from './videoProcessor';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
+import { AutoCollectionService } from './autoCollectionService';
 
 interface UnhashedFile {
   id: number;
@@ -217,6 +218,23 @@ export class BackgroundProcessorService {
       file.id
     );
 
+    // Run auto-collection immediately after hash generation (Option A)
+    try {
+      console.log(`  🔍 Running auto-collection (after hash generation)...`);
+      const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(
+        hashes.compositeHash
+      );
+      if (autoCollectResults.length > 0) {
+        console.log(`  ✅ Auto-assigned to ${autoCollectResults.length} group(s)`);
+      }
+    } catch (autoCollectError) {
+      // Non-critical error - continue processing
+      console.warn(
+        `  ⚠️  Auto-collection failed (non-critical) for ${fileName}:`,
+        autoCollectError instanceof Error ? autoCollectError.message : autoCollectError
+      );
+    }
+
     // Queue metadata extraction task (AI metadata, prompts, etc.)
     try {
       BackgroundQueueService.addMetadataExtractionTask(
@@ -301,6 +319,23 @@ export class BackgroundProcessorService {
       fileHash,
       file.id
     );
+
+    // Run auto-collection for video/animated files (Option A)
+    try {
+      console.log(`  🔍 Running auto-collection (after hash generation)...`);
+      const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(
+        fileHash
+      );
+      if (autoCollectResults.length > 0) {
+        console.log(`  ✅ Auto-assigned to ${autoCollectResults.length} group(s)`);
+      }
+    } catch (autoCollectError) {
+      // Non-critical error - continue processing
+      console.warn(
+        `  ⚠️  Auto-collection failed (non-critical) for ${fileName}:`,
+        autoCollectError instanceof Error ? autoCollectError.message : autoCollectError
+      );
+    }
 
     console.log(`  ✨ Processed video/animated: ${fileName} (${width}x${height})`);
   }

@@ -164,6 +164,28 @@
     "assignError": "An error occurred while assigning images.",
     "emptyGroup": "This group is empty"
   },
+  "deleteConfirm": {
+    "title": "Confirm Group Deletion",
+    "message": "Are you sure you want to delete the group '{{name}}'?",
+    "groupInfo": {
+      "imageCount": "Associated images: {{count}}",
+      "childCount": "Subgroups: {{count}}"
+    },
+    "warning": {
+      "imageAssociations": "⚠️ All associations between this group and images will be removed. The image files themselves will not be deleted."
+    },
+    "options": {
+      "title": "How to handle subgroups",
+      "orphan": {
+        "label": "Delete only this group (Recommended)",
+        "description": "Subgroups will be moved to root level."
+      },
+      "cascade": {
+        "label": "Delete this group and all subgroups",
+        "description": "{{count}} subgroups will be deleted. This action cannot be undone."
+      }
+    }
+  },
   "imageModal": {
     "title": "{{name}} ({{count}} images)",
     "selectedCount": "{{count}} selected",

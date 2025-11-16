@@ -66,9 +66,11 @@ export const groupApi = {
 
   /**
    * Delete group
+   * @param id Group ID to delete
+   * @param cascade If true, recursively delete all child groups. If false, only delete this group (children become root-level)
    */
-  deleteGroup: async (id: number): Promise<GroupResponse> => {
-    const response = await apiClient.delete(`/api/groups/${id}`);
+  deleteGroup: async (id: number, cascade: boolean = false): Promise<GroupResponse> => {
+    const response = await apiClient.delete(`/api/groups/${id}?cascade=${cascade}`);
     return response.data;
   },
 

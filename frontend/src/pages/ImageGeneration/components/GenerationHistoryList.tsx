@@ -14,6 +14,7 @@ import {
   Delete as DeleteIcon,
   SelectAll as SelectAllIcon,
   Deselect as DeselectIcon,
+  CleaningServices as CleaningServicesIcon,
 } from '@mui/icons-material';
 import Masonry from 'react-masonry-css';
 import InfiniteScroll from 'react-infinite-scroll-component';
@@ -55,6 +56,8 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
 
   // 로컬 새로고침 트리거 (수동 새로고침 버튼용)
   const [localRefreshKey, setLocalRefreshKey] = useState(0);
@@ -284,6 +287,41 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
     setDeleteDialogOpen(false);
   };
 
+  // 실패 항목 정리
+  const handleCleanupFailed = async () => {
+    setCleanupLoading(true);
+    try {
+      const result = await generationHistoryApi.cleanupFailed(false);
+
+      // 정리 후 목록 새로고침
+      setCleanupDialogOpen(false);
+      handleRefresh();
+
+      // 성공 메시지 표시
+      if (result.deleted > 0) {
+        alert(t('generationHistory:cleanupSuccess', { count: result.deleted }));
+      } else {
+        alert(t('generationHistory:noFailedRecords'));
+      }
+    } catch (error) {
+      console.error('Failed to cleanup failed records:', error);
+      alert(t('generationHistory:cleanupFailed'));
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
+  const handleCleanupDialogOpen = () => {
+    setCleanupDialogOpen(true);
+  };
+
+  const handleCleanupDialogClose = () => {
+    setCleanupDialogOpen(false);
+  };
+
+  // 실패 항목 개수 계산
+  const failedCount = records.filter(r => r.generation_status === 'failed').length;
+
   // 초기 로딩 중
   if (loading && imageRecords.length === 0) {
     return (
@@ -327,15 +365,29 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
         <Typography variant="h6" sx={{ fontWeight: 600 }}>
           {t('generationHistory:title')} ({imageRecords.length})
         </Typography>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<RefreshIcon />}
-          onClick={handleRefresh}
-          sx={{ textTransform: 'none' }}
-        >
-          {t('common:refresh')}
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {failedCount > 0 && (
+            <Button
+              variant="outlined"
+              size="small"
+              color="warning"
+              startIcon={<CleaningServicesIcon />}
+              onClick={handleCleanupDialogOpen}
+              sx={{ textTransform: 'none' }}
+            >
+              {t('generationHistory:cleanupFailed')} ({failedCount})
+            </Button>
+          )}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<RefreshIcon />}
+            onClick={handleRefresh}
+            sx={{ textTransform: 'none' }}
+          >
+            {t('common:refresh')}
+          </Button>
+        </Box>
       </Box>
 
       {/* 선택 툴바 - 선택된 항목이 있을 때만 표시 */}
@@ -463,6 +515,37 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
           </Button>
           <Button onClick={handleBulkDelete} color="error" variant="contained">
             삭제
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 실패 항목 정리 확인 다이얼로그 */}
+      <Dialog
+        open={cleanupDialogOpen}
+        onClose={handleCleanupDialogClose}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{t('generationHistory:cleanupFailedTitle')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {t('generationHistory:cleanupFailedConfirm', { count: failedCount })}
+            <br />
+            <br />
+            {t('generationHistory:cleanupFailedNote')}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCleanupDialogClose} disabled={cleanupLoading}>
+            {t('common:actions.cancel')}
+          </Button>
+          <Button
+            onClick={handleCleanupFailed}
+            color="warning"
+            variant="contained"
+            disabled={cleanupLoading}
+          >
+            {cleanupLoading ? t('generationHistory:cleaning') : t('generationHistory:cleanup')}
           </Button>
         </DialogActions>
       </Dialog>

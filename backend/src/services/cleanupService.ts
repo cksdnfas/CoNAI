@@ -244,6 +244,51 @@ export class CleanupService {
   }
 
   /**
+   * Cleanup only failed records (no age restriction)
+   * Used for manual cleanup of all failed items
+   */
+  static async cleanupFailedOnly(options: { dryRun?: boolean } = {}): Promise<CleanupReport> {
+    const { dryRun = false } = options;
+
+    const details: CleanupDetail[] = [];
+    const summary = {
+      failed_deleted: 0,
+      orphaned_deleted: 0,
+      no_hash_deleted: 0,
+      stale_updated: 0
+    };
+
+    console.log(`🧹 ${dryRun ? '[DRY RUN]' : ''} Cleaning up failed generation records...`);
+
+    // Get ALL failed records (no time restriction)
+    const failedRecords = this.findFailedRecords(0); // 0 hours = get all failed records
+    for (const record of failedRecords) {
+      details.push({
+        id: record.id!,
+        reason: 'failed',
+        service_type: record.service_type,
+        created_at: record.created_at!,
+        generation_status: record.generation_status,
+        error_message: record.error_message
+      });
+
+      if (!dryRun) {
+        GenerationHistoryModel.delete(record.id!);
+      }
+      summary.failed_deleted++;
+    }
+
+    console.log(`🧹 ${dryRun ? '[DRY RUN]' : ''} Failed cleanup complete: ${summary.failed_deleted} records deleted`);
+
+    return {
+      deleted: summary.failed_deleted,
+      updated: 0,
+      details,
+      summary
+    };
+  }
+
+  /**
    * Run periodic cleanup - scheduled job (every 6 hours)
    * Cleans old failed records, orphaned records, and stale records
    */

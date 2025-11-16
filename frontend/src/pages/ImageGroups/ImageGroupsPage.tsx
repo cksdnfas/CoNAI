@@ -227,7 +227,7 @@ const ImageGroupsPage: React.FC = () => {
     if (!menuGroupId) return;
 
     try {
-      await deleteGroupMutation.mutateAsync(menuGroupId);
+      await deleteGroupMutation.mutateAsync({ id: menuGroupId, cascade: false });
       showSnackbar(t('imageGroups:messages.deleteSuccess'), 'success');
     } catch (error) {
       console.error('Error deleting group:', error);

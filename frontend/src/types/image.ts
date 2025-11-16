@@ -78,7 +78,7 @@ export interface ImageRecord {
   bitrate: number | null;              // Bitrate in kbps
 
   // URLs (automatically added by backend enrichImageWithFileView)
-  thumbnail_url: string;               // Thumbnail URL
+  thumbnail_url: string | null;        // Thumbnail URL
   image_url: string | null;            // Original image URL
 
   // Group information (when joined)

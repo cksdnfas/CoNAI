@@ -166,4 +166,26 @@ export const generationHistoryApi = {
     );
     return response.data;
   },
+
+  /**
+   * Cleanup only failed generation records
+   */
+  cleanupFailed: async (dryRun: boolean = false): Promise<{
+    success: boolean;
+    message: string;
+    dry_run: boolean;
+    deleted: number;
+    summary: {
+      failed_deleted: number;
+      orphaned_deleted: number;
+      no_hash_deleted: number;
+      stale_updated: number;
+    };
+  }> => {
+    const params = new URLSearchParams();
+    if (dryRun) params.append('dry_run', 'true');
+
+    const response = await apiClient.post(`/api/generation-history/cleanup-failed?${params.toString()}`);
+    return response.data;
+  },
 };

@@ -4,6 +4,7 @@ import { settingsService } from './settingsService';
 import path from 'path';
 import { QueryCacheService } from './QueryCacheService';
 import { PromptCollectionService } from './promptCollectionService';
+import { AutoCollectionService } from './autoCollectionService';
 
 /**
  * 백그라운드 작업 타입
@@ -202,6 +203,24 @@ export class BackgroundQueueService {
     );
 
     console.log(`  ✅ 메타데이터 추출 완료: ${path.basename(task.filePath)}`);
+
+    // Run auto-collection after metadata extraction (Option B)
+    // This allows conditions based on AI metadata (prompts, model, sampler, etc.)
+    try {
+      console.log(`  🔍 Running auto-collection (after metadata extraction)...`);
+      const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(
+        task.compositeHash
+      );
+      if (autoCollectResults.length > 0) {
+        console.log(`  ✅ Auto-assigned to ${autoCollectResults.length} additional group(s) based on AI metadata`);
+      }
+    } catch (autoCollectError) {
+      // Non-critical error - continue processing
+      console.warn(
+        `  ⚠️  Auto-collection failed (non-critical) for ${path.basename(task.filePath)}:`,
+        autoCollectError instanceof Error ? autoCollectError.message : autoCollectError
+      );
+    }
 
     // 프롬프트가 있으면 프롬프트 수집 작업 추가
     if (aiInfo.prompt) {

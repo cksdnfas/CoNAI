@@ -65,7 +65,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     recursive,
     exclude_extensions,
     exclude_patterns,
-    watcher_enabled
+    watcher_enabled,
+    watcher_polling_interval
   } = req.body;
 
   if (!folder_path) {
@@ -81,7 +82,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       recursive,
       exclude_extensions,
       exclude_patterns,
-      watcher_enabled
+      watcher_enabled,
+      watcher_polling_interval
     });
 
     // watcher_enabled가 true면 FileWatcherService 시작
@@ -173,7 +175,8 @@ router.patch('/:id', asyncHandler(async (req: Request, res: Response) => {
     updates.recursive !== undefined ||
     updates.exclude_extensions !== undefined ||
     updates.exclude_patterns !== undefined ||
-    updates.watcher_enabled !== undefined
+    updates.watcher_enabled !== undefined ||
+    updates.watcher_polling_interval !== undefined
   );
 
   const success = await WatchedFolderService.updateFolder(id, updates);

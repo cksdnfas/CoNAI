@@ -35,6 +35,7 @@ interface WatcherEntry {
   lastEvent?: Date;
   eventCount: number;
   retryAttempts: number;
+  isRetrying?: boolean;  // 재시도 진행 중 플래그 (중복 재시도 방지)
 }
 
 /**
@@ -93,12 +94,67 @@ export class FileWatcherService {
         // watcher_enabled가 명시적으로 1인 폴더만 워처 시작
         if (folder.watcher_enabled === 1) {
           try {
+            // 경로 사전 검증 (접근 불가능한 경로는 워처 시작하지 않음)
+            const resolvedPath = resolveFolderPath(folder.folder_path);
+
+            // 경로 존재 여부 확인
+            if (!fs.existsSync(resolvedPath)) {
+              console.warn(`  ⏭️  워처 건너뜀 (경로 없음): ${folder.folder_name}`);
+              console.warn(`     경로: ${resolvedPath}`);
+
+              // DB에서 워처 비활성화
+              db.prepare(`
+                UPDATE watched_folders
+                SET watcher_enabled = 0,
+                    watcher_status = 'error',
+                    watcher_error = ?
+                WHERE id = ?
+              `).run('초기화 시 경로 접근 실패 - 경로가 존재하지 않음', folder.id);
+
+              errorCount++;
+              continue;
+            }
+
+            // 경로 읽기 권한 확인
+            try {
+              fs.accessSync(resolvedPath, fs.constants.R_OK);
+            } catch (accessError) {
+              console.warn(`  ⏭️  워처 건너뜀 (읽기 권한 없음): ${folder.folder_name}`);
+              console.warn(`     경로: ${resolvedPath}`);
+
+              // DB에서 워처 비활성화
+              db.prepare(`
+                UPDATE watched_folders
+                SET watcher_enabled = 0,
+                    watcher_status = 'error',
+                    watcher_error = ?
+                WHERE id = ?
+              `).run('초기화 시 경로 접근 실패 - 읽기 권한 없음', folder.id);
+
+              errorCount++;
+              continue;
+            }
+
             await this.startWatcher(folder.id);
             startedCount++;
             console.log(`  ✅ 워처 시작: ${folder.folder_name}`);
           } catch (error) {
             errorCount++;
             console.error(`  ❌ 워처 시작 실패: ${folder.folder_name}`, error);
+
+            // 워처 시작 실패 시에도 DB에서 비활성화
+            try {
+              const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
+              db.prepare(`
+                UPDATE watched_folders
+                SET watcher_enabled = 0,
+                    watcher_status = 'error',
+                    watcher_error = ?
+                WHERE id = ?
+              `).run(`초기화 실패: ${errorMessage}`, folder.id);
+            } catch (dbError) {
+              console.error(`  ❌ DB 업데이트 실패:`, dbError);
+            }
           }
         }
       }
@@ -190,9 +246,22 @@ export class FileWatcherService {
     const excludePatterns = folder.exclude_patterns ? JSON.parse(folder.exclude_patterns) : [];
 
     const isNetworkDrive = this.isNetworkDrive(resolvedPath);
-    if (isNetworkDrive) {
+
+    // 폴링 간격 결정: 사용자 설정 > 네트워크 드라이브 기본값 (1000ms) > undefined
+    let pollingInterval: number | undefined = undefined;
+    let usePolling = false;
+
+    if (folder.watcher_polling_interval !== null && folder.watcher_polling_interval !== undefined) {
+      // 사용자가 명시적으로 폴링 간격을 설정한 경우
+      pollingInterval = folder.watcher_polling_interval;
+      usePolling = true;
+      console.log(`  ⚙️  사용자 설정 폴링 간격: ${pollingInterval}ms`);
+    } else if (isNetworkDrive) {
+      // 네트워크 드라이브 자동 감지 (5초 간격으로 변경하여 부하 감소)
+      pollingInterval = 5000;
+      usePolling = true;
       console.warn(`  ⚠️  네트워크 드라이브 감지: ${folder.folder_name}`);
-      console.warn(`     폴링 모드 활성화 (성능 저하 가능)`);
+      console.warn(`     폴링 모드 활성화 (간격: ${pollingInterval}ms)`);
     }
 
     const chokidarOptions = {
@@ -204,8 +273,8 @@ export class FileWatcherService {
         pollInterval: 100
       },
       depth: folder.recursive === 1 ? undefined : 0,
-      usePolling: isNetworkDrive,
-      interval: isNetworkDrive ? 1000 : undefined,
+      usePolling,
+      interval: pollingInterval,
       alwaysStat: true
     };
 
@@ -511,24 +580,72 @@ export class FileWatcherService {
     const entry = this.watcherRegistry.get(folderId);
     if (!entry) return;
 
+    // 이미 재시도 진행 중이면 스킵 (중복 재시도 방지)
+    if (entry.isRetrying) {
+      console.log(`  ⏭️  재시도 이미 진행 중: ${entry.folderName}`);
+      return;
+    }
+
     entry.retryAttempts++;
 
     if (entry.retryAttempts >= this.MAX_RETRY_ATTEMPTS) {
       console.error(`  ❌ 최대 재시도 횟수 초과: ${entry.folderName}`);
       entry.state = 'error';
+
+      // DB에서 워처 비활성화 및 에러 상태 저장
+      try {
+        db.prepare(`
+          UPDATE watched_folders
+          SET watcher_enabled = 0,
+              watcher_status = 'error',
+              watcher_error = ?
+          WHERE id = ?
+        `).run('최대 재시도 횟수 초과 - 자동 비활성화됨', folderId);
+        console.error(`  🔒 워처 자동 비활성화됨: ${entry.folderName} (DB 업데이트 완료)`);
+      } catch (dbError) {
+        console.error(`  ❌ DB 업데이트 실패:`, dbError);
+      }
+
       return;
     }
 
-    const delay = this.RETRY_DELAY_MS * entry.retryAttempts;
+    // 지수 백오프 적용 (선형 → 지수)
+    const delay = this.RETRY_DELAY_MS * Math.pow(2, entry.retryAttempts - 1);
     console.log(`  🔄 워처 재시작 예약: ${entry.folderName} (${delay}ms 후, 시도 ${entry.retryAttempts}/${this.MAX_RETRY_ATTEMPTS})`);
+
+    entry.isRetrying = true;  // 재시도 플래그 설정
 
     setTimeout(async () => {
       try {
         await this.restartWatcher(folderId);
         entry.retryAttempts = 0;  // 성공 시 재시도 카운터 리셋
+        entry.isRetrying = false;  // 재시도 플래그 해제
+        console.log(`  ✅ 워처 재시작 성공: ${entry.folderName}`);
       } catch (error) {
         console.error(`  ❌ 워처 재시작 실패: ${entry.folderName}`, error);
-        await this.scheduleWatcherRestart(folderId);  // 재귀적 재시도
+        entry.isRetrying = false;  // 재시도 플래그 해제
+
+        // 재귀 호출 전에 재시도 가능 여부 확인 (무한 루프 방지)
+        if (entry.retryAttempts < this.MAX_RETRY_ATTEMPTS) {
+          await this.scheduleWatcherRestart(folderId);
+        } else {
+          console.error(`  ❌ 최대 재시도 횟수 도달, 워처 비활성화`);
+          entry.state = 'error';
+
+          // DB에서 워처 비활성화
+          try {
+            db.prepare(`
+              UPDATE watched_folders
+              SET watcher_enabled = 0,
+                  watcher_status = 'error',
+                  watcher_error = ?
+              WHERE id = ?
+            `).run('재시작 실패 - 자동 비활성화됨', folderId);
+            console.error(`  🔒 워처 자동 비활성화됨: ${entry.folderName}`);
+          } catch (dbError) {
+            console.error(`  ❌ DB 업데이트 실패:`, dbError);
+          }
+        }
       }
     }, delay);
   }
@@ -643,8 +760,8 @@ export class FileWatcherService {
    * 네트워크 드라이브 감지
    */
   private static isNetworkDrive(folderPath: string): boolean {
-    // Windows UNC 경로
-    if (folderPath.startsWith('\\\\')) return true;
+    // Windows UNC 경로 (\\server\share 또는 //server/share 형식)
+    if (folderPath.startsWith('\\\\') || folderPath.startsWith('//')) return true;
 
     // Unix 네트워크 마운트
     if (folderPath.includes('/mnt/') || folderPath.includes('/net/')) return true;

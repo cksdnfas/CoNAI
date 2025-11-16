@@ -32,6 +32,7 @@ export interface WatchedFolder {
   last_scan_found: number;
   last_scan_error: string | null;
   watcher_enabled: number;
+  watcher_polling_interval: number | null;
   watcher_status: WatcherStatus;
   watcher_error: string | null;
   watcher_last_event: string | null;
@@ -51,6 +52,7 @@ export interface WatchedFolderCreate {
   exclude_extensions?: string[];
   exclude_patterns?: string[];
   watcher_enabled?: boolean;
+  watcher_polling_interval?: number | null;
 }
 
 /**
@@ -65,6 +67,7 @@ export interface WatchedFolderUpdate {
   exclude_patterns?: string[];
   is_active?: boolean;
   watcher_enabled?: boolean;
+  watcher_polling_interval?: number | null;
 }
 
 /**

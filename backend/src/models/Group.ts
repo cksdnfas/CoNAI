@@ -97,12 +97,27 @@ export class GroupModel {
 
   /**
    * 그룹 삭제
+   * @param id 삭제할 그룹 ID
+   * @param cascade true면 하위 그룹도 재귀적으로 삭제, false면 부모만 삭제 (하위 그룹은 루트로 이동)
    */
-  static async delete(id: number): Promise<boolean> {
+  static async delete(id: number, cascade: boolean = false): Promise<boolean> {
+    if (cascade) {
+      // 캐스케이드 삭제: 모든 하위 그룹도 재귀적으로 삭제
+      const hierarchyService = getGroupHierarchyService();
+      const descendants = hierarchyService.getDescendants(id);
+
+      // 하위 그룹을 먼저 삭제 (깊이 역순)
+      const sortedDescendants = [...descendants].sort((a, b) => b.depth - a.depth);
+      for (const node of sortedDescendants) {
+        db.prepare('DELETE FROM image_groups WHERE group_id = ?').run(node.id);
+        db.prepare('DELETE FROM groups WHERE id = ?').run(node.id);
+      }
+    }
+
     // 먼저 관련된 image_groups 레코드 삭제
     db.prepare('DELETE FROM image_groups WHERE group_id = ?').run(id);
 
-    // 그룹 삭제
+    // 그룹 삭제 (cascade=false면 자식들의 parent_id는 ON DELETE SET NULL에 의해 자동으로 NULL이 됨)
     const info = db.prepare('DELETE FROM groups WHERE id = ?').run(id);
     return info.changes > 0;
   }

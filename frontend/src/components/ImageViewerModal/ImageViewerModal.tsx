@@ -571,7 +571,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           open={editorOpen}
           onClose={handleEditorClose}
           imageId={currentImage.file_id}
-          imageUrl={buildUploadsUrl(showOriginal ? (currentImage.original_file_path || currentImage.thumbnail_path) : currentImage.thumbnail_path)}
+          imageUrl={buildUploadsUrl(showOriginal ? (currentImage.original_file_path || currentImage.thumbnail_path) : currentImage.thumbnail_path) || ''}
           onSaved={async () => {
             // Reload image metadata after save
             if (currentImage.composite_hash) {

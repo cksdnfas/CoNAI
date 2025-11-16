@@ -11,6 +11,8 @@ export interface WatchedFolder {
   recursive: number;
   exclude_extensions: string | null;
   exclude_patterns: string | null;
+  watcher_enabled: number;
+  watcher_polling_interval: number | null;
   is_active: number;
   is_default: number;
   last_scan_date: string | null;
@@ -30,6 +32,7 @@ export interface WatchedFolderCreate {
   exclude_extensions?: string[];
   exclude_patterns?: string[];
   watcher_enabled?: boolean;
+  watcher_polling_interval?: number | null;
 }
 
 export interface WatchedFolderUpdate {
@@ -41,6 +44,7 @@ export interface WatchedFolderUpdate {
   exclude_patterns?: string[];
   is_active?: boolean;
   watcher_enabled?: number;  // 0 or 1
+  watcher_polling_interval?: number | null;
 }
 
 export class WatchedFolderService {
@@ -48,12 +52,22 @@ export class WatchedFolderService {
    * 폴더 등록
    */
   static async addFolder(folderData: WatchedFolderCreate): Promise<number> {
-    // 경로 정규화 (절대 경로로 변환)
-    const absolutePath = path.resolve(folderData.folder_path);
+    // 네트워크 경로 감지 (UNC 경로: \\server\share 또는 //server/share)
+    const isNetworkPath = folderData.folder_path.startsWith('\\\\') || folderData.folder_path.startsWith('//');
+
+    // 경로 정규화
+    // - 네트워크 경로(UNC): path.resolve() 사용하지 않음 (원본 유지, forward slash만 통일)
+    // - 로컬 경로: 절대 경로로 변환
+    const absolutePath = isNetworkPath
+      ? folderData.folder_path.replace(/\//g, '\\')  // UNC 경로는 백슬래시로 통일
+      : path.resolve(folderData.folder_path);
 
     // 폴더 존재 확인
     if (!fs.existsSync(absolutePath)) {
-      throw new Error(`폴더가 존재하지 않습니다: ${absolutePath}`);
+      const errorMsg = isNetworkPath
+        ? `네트워크 경로에 접근할 수 없습니다: ${absolutePath}\n경로, 권한 및 네트워크 연결을 확인해주세요.`
+        : `폴더가 존재하지 않습니다: ${absolutePath}`;
+      throw new Error(errorMsg);
     }
 
     // 폴더인지 확인
@@ -75,8 +89,8 @@ export class WatchedFolderService {
     const info = db.prepare(`
       INSERT INTO watched_folders (
         folder_path, folder_name, auto_scan, scan_interval,
-        recursive, exclude_extensions, exclude_patterns, watcher_enabled
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        recursive, exclude_extensions, exclude_patterns, watcher_enabled, watcher_polling_interval
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       absolutePath,
       folderData.folder_name || path.basename(absolutePath),
@@ -85,7 +99,8 @@ export class WatchedFolderService {
       folderData.recursive !== false ? 1 : 0,
       folderData.exclude_extensions ? JSON.stringify(folderData.exclude_extensions) : null,
       folderData.exclude_patterns ? JSON.stringify(folderData.exclude_patterns) : null,
-      folderData.watcher_enabled ? 1 : 0
+      folderData.watcher_enabled ? 1 : 0,
+      folderData.watcher_polling_interval ?? null
     );
 
     return info.lastInsertRowid as number;
@@ -164,6 +179,11 @@ export class WatchedFolderService {
       values.push(updates.watcher_enabled ? 1 : 0);
     }
 
+    if (updates.watcher_polling_interval !== undefined) {
+      fields.push('watcher_polling_interval = ?');
+      values.push(updates.watcher_polling_interval);
+    }
+
     if (fields.length === 0) {
       return false;
     }
@@ -229,26 +249,53 @@ export class WatchedFolderService {
   static async validateFolderPath(folderPath: string): Promise<{
     exists: boolean;
     isDirectory: boolean;
+    isNetworkPath?: boolean;
     error?: string;
   }> {
+    // 네트워크 경로 감지 (UNC 경로: \\server\share 또는 //server/share)
+    const isNetworkPath = folderPath.startsWith('\\\\') || folderPath.startsWith('//');
+
     try {
-      const absolutePath = path.resolve(folderPath);
+      // 경로 정규화
+      // - 네트워크 경로(UNC): path.resolve() 사용하지 않음 (원본 유지, forward slash만 통일)
+      // - 로컬 경로: 절대 경로로 변환
+      const absolutePath = isNetworkPath
+        ? folderPath.replace(/\//g, '\\')  // UNC 경로는 백슬래시로 통일
+        : path.resolve(folderPath);
 
       if (!fs.existsSync(absolutePath)) {
-        return { exists: false, isDirectory: false, error: '경로가 존재하지 않습니다' };
+        const errorMsg = isNetworkPath
+          ? '네트워크 경로에 접근할 수 없습니다. 경로, 권한 및 네트워크 연결을 확인해주세요.'
+          : '경로가 존재하지 않습니다';
+        return {
+          exists: false,
+          isDirectory: false,
+          isNetworkPath,
+          error: errorMsg
+        };
       }
 
       const stats = fs.statSync(absolutePath);
       if (!stats.isDirectory()) {
-        return { exists: true, isDirectory: false, error: '경로가 폴더가 아닙니다' };
+        return {
+          exists: true,
+          isDirectory: false,
+          isNetworkPath,
+          error: '경로가 폴더가 아닙니다'
+        };
       }
 
-      return { exists: true, isDirectory: true };
+      return { exists: true, isDirectory: true, isNetworkPath };
     } catch (error) {
+      const errorMsg = isNetworkPath
+        ? `네트워크 경로 접근 오류: ${error instanceof Error ? error.message : 'Unknown error'}`
+        : error instanceof Error ? error.message : 'Unknown error';
+
       return {
         exists: false,
         isDirectory: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        isNetworkPath,
+        error: errorMsg
       };
     }
   }

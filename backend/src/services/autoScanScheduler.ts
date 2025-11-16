@@ -56,11 +56,11 @@ export class AutoScanScheduler {
     const runPhase2 = async () => {
       const unprocessedCount = BackgroundProcessorService.getUnprocessedCount();
       if (unprocessedCount > 0) {
-        console.log(`🔨 Phase 2 처리 시작: ${unprocessedCount}개 대기 중`);
+        console.log(`🔨 백그라운드 처리 시작: ${unprocessedCount}개 대기 중`);
         try {
           await BackgroundProcessorService.processUnhashedImages();
         } catch (error) {
-          console.error('❌ Phase 2 처리 중 오류 발생:', error);
+          console.error('❌ 백그라운드 처리 중 오류 발생:', error);
         }
       }
     };

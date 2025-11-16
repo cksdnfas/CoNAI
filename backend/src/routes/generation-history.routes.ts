@@ -407,6 +407,39 @@ router.post(
 );
 
 /**
+ * POST /api/generation-history/cleanup-failed
+ * Cleanup only failed generation history records
+ *
+ * Query Parameters:
+ * - dry_run: boolean (default: false) - Preview cleanup without deleting
+ *
+ * Cleanup Rules:
+ * - All failed records (no age restriction) → Delete from database only
+ */
+router.post(
+  '/cleanup-failed',
+  asyncHandler(async (req: Request, res: Response) => {
+    const dryRun = req.query.dry_run === 'true';
+
+    // Import CleanupService dynamically
+    const { CleanupService } = await import('../services/cleanupService');
+
+    const report = await CleanupService.cleanupFailedOnly({ dryRun });
+
+    res.json({
+      success: true,
+      message: dryRun
+        ? `Found ${report.deleted} failed records (preview only, no changes made)`
+        : `Successfully deleted ${report.deleted} failed records`,
+      dry_run: dryRun,
+      deleted: report.deleted,
+      summary: report.summary,
+      details: report.details
+    });
+  })
+);
+
+/**
  * GET /api/generation-history/job/:jobId
  * Get job status and progress
  * Returns temporary job info before DB records are created

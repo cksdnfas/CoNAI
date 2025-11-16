@@ -38,9 +38,9 @@ import {
   type SimilarityStats,
 } from '../../../services/similarityApi';
 import { imageApi } from '../../../services/api';
-import { buildUploadsUrl } from '../../../utils/backend';
 import type { ImageRecord } from '../../../types/image';
 import { settingsApi } from '../../../services/settingsApi';
+import { getThumbnailUrl } from '../features/Similarity/utils/similarityHelpers';
 import { useTranslation } from 'react-i18next';
 
 const SimilaritySettings: React.FC = () => {
@@ -223,10 +223,6 @@ const SimilaritySettings: React.FC = () => {
     }
   };
 
-  const getThumbnailUrl = (image: ImageRecord): string => {
-    return buildUploadsUrl(image.thumbnail_url ?? image.original_file_path ?? '');
-  };
-
   const getMatchTypeColor = (matchType: string): 'error' | 'warning' | 'info' | 'success' => {
     switch (matchType) {
       case 'exact': return 'error';
@@ -393,7 +389,7 @@ const SimilaritySettings: React.FC = () => {
                 <Card variant="outlined" sx={{ maxWidth: 400, mx: 'auto' }}>
                   <Box
                     component="img"
-                    src={getThumbnailUrl(queryImage)}
+                    src={getThumbnailUrl(queryImage) || ''}
                     alt={queryImage.original_file_path ?? ''}
                     sx={{
                       width: '100%',
@@ -434,7 +430,7 @@ const SimilaritySettings: React.FC = () => {
                       <Card variant="outlined">
                         <Box
                           component="img"
-                          src={getThumbnailUrl(result.image)}
+                          src={getThumbnailUrl(result.image) || ''}
                           alt={result.image.original_file_path ?? ''}
                           sx={{
                             width: '100%',
@@ -529,7 +525,7 @@ const SimilaritySettings: React.FC = () => {
                           <Box key={image.file_id ? `file-${image.file_id}` : `hash-${image.composite_hash}-${index}`}>
                             <Box
                               component="img"
-                              src={getThumbnailUrl(image)}
+                              src={getThumbnailUrl(image) || ''}
                               alt={image.original_file_path ?? ''}
                               sx={{
                                 width: '100%',

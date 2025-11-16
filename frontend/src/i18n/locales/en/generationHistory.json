@@ -25,6 +25,16 @@
     "refresh": "Refresh",
     "confirmDelete": "Are you sure you want to delete this generation history?"
   },
+  "cleanupFailed": "Cleanup Failed Items",
+  "cleanupFailedTitle": "Cleanup Failed Items",
+  "cleanupFailedConfirm": "Are you sure you want to delete {{count}} failed generation histories?",
+  "cleanupFailedNote": "Only database records will be deleted, files will be kept.",
+  "cleanup": "Cleanup",
+  "cleaning": "Cleaning...",
+  "cleanupSuccess": "{{count}} failed items have been deleted",
+  "noFailedRecords": "No failed items to clean up",
+  "cleanupFailed": "Failed to cleanup",
+  "bulkDeleteFailed": "Failed to bulk delete",
   "detail": {
     "title": "Generation History Details",
     "status": "Status",

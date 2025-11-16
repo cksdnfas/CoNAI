@@ -12,18 +12,20 @@ import {
   Box,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import DeleteIcon from '@mui/icons-material/Delete';
 
 import { groupApi } from '../../../services/api';
 import type { GroupWithStats, GroupWithHierarchy, GroupCreateData, GroupUpdateData, AutoCollectCondition, ComplexFilter } from '@comfyui-image-manager/shared';
 import BasicInfoTab from './BasicInfoTab';
 import AutoCollectTab from './AutoCollectTab';
-import { useCreateGroup, useUpdateGroup, useAllGroupsWithHierarchy } from '../../../hooks/useGroups';
+import { GroupDeleteConfirmDialog } from './GroupDeleteConfirmDialog';
+import { useCreateGroup, useUpdateGroup, useDeleteGroup, useAllGroupsWithHierarchy } from '../../../hooks/useGroups';
 
 interface GroupCreateEditModalProps {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  group?: GroupWithStats;
+  group?: GroupWithHierarchy;
 }
 
 interface TabPanelProps {
@@ -62,6 +64,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   });
   const [conditions, setConditions] = useState<ComplexFilter>({});
   const [error, setError] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const isEditMode = !!group;
 
@@ -69,6 +72,10 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   const { data: availableParents = [] } = useAllGroupsWithHierarchy();
   const createGroupMutation = useCreateGroup();
   const updateGroupMutation = useUpdateGroup();
+  const deleteGroupMutation = useDeleteGroup();
+
+  // Calculate child count for delete confirmation
+  const childCount = group?.child_count || 0;
 
   // 폼 초기화
   useEffect(() => {
@@ -191,6 +198,25 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
     }
   };
 
+  // 그룹 삭제 핸들러
+  const handleDelete = () => {
+    setDeleteDialogOpen(true);
+  };
+
+  // 삭제 확인 핸들러
+  const handleDeleteConfirm = async (cascade: boolean) => {
+    if (!group) return;
+
+    try {
+      await deleteGroupMutation.mutateAsync({ id: group.id, cascade });
+      setDeleteDialogOpen(false);
+      onSuccess();
+    } catch (error) {
+      console.error('Error deleting group:', error);
+      setError(t('imageGroups:messages.deleteFailed'));
+    }
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
@@ -237,19 +263,46 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
         </TabPanel>
       </DialogContent>
 
-      <DialogActions>
-        <Button onClick={onClose} disabled={createGroupMutation.isPending || updateGroupMutation.isPending}>
-          {t('imageGroups:modal.buttonCancel')}
-        </Button>
-        <Button
-          onClick={handleSubmit}
-          variant="contained"
-          disabled={createGroupMutation.isPending || updateGroupMutation.isPending}
-          startIcon={(createGroupMutation.isPending || updateGroupMutation.isPending) ? <CircularProgress size={20} /> : null}
-        >
-          {isEditMode ? t('imageGroups:modal.buttonUpdate') : t('imageGroups:modal.buttonCreate')}
-        </Button>
+      <DialogActions sx={{ justifyContent: 'space-between' }}>
+        {/* 삭제 버튼 (편집 모드에서만 표시) */}
+        <Box>
+          {isEditMode && (
+            <Button
+              onClick={handleDelete}
+              color="error"
+              startIcon={<DeleteIcon />}
+              disabled={createGroupMutation.isPending || updateGroupMutation.isPending || deleteGroupMutation.isPending}
+            >
+              {t('common:delete')}
+            </Button>
+          )}
+        </Box>
+
+        {/* 취소/저장 버튼 */}
+        <Box>
+          <Button onClick={onClose} disabled={createGroupMutation.isPending || updateGroupMutation.isPending || deleteGroupMutation.isPending}>
+            {t('imageGroups:modal.buttonCancel')}
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            variant="contained"
+            disabled={createGroupMutation.isPending || updateGroupMutation.isPending || deleteGroupMutation.isPending}
+            startIcon={(createGroupMutation.isPending || updateGroupMutation.isPending) ? <CircularProgress size={20} /> : null}
+            sx={{ ml: 1 }}
+          >
+            {isEditMode ? t('imageGroups:modal.buttonUpdate') : t('imageGroups:modal.buttonCreate')}
+          </Button>
+        </Box>
       </DialogActions>
+
+      {/* 삭제 확인 다이얼로그 */}
+      <GroupDeleteConfirmDialog
+        open={deleteDialogOpen}
+        group={group || null}
+        childCount={childCount}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={handleDeleteConfirm}
+      />
     </Dialog>
   );
 };

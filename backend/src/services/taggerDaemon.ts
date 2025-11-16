@@ -139,7 +139,8 @@ export class TaggerDaemon {
             HF_HOME: runtimePaths.modelsDir,
             HUGGINGFACE_HUB_CACHE: runtimePaths.modelsDir,
             TRANSFORMERS_CACHE: runtimePaths.modelsDir,
-            PYTHONUNBUFFERED: '1' // Disable Python output buffering
+            PYTHONUNBUFFERED: '1', // Disable Python output buffering
+            PYTHONIOENCODING: 'utf-8' // Force UTF-8 encoding for stdin/stdout
           }
         });
 

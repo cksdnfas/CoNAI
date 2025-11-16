@@ -43,12 +43,6 @@ export const convertHistoryToImageRecord = (
   const seed = isComfyUI ? parsedMetadata.seed : (history.nai_seed ? Number(history.nai_seed) : null);
   const scheduler = isComfyUI ? parsedMetadata.scheduler : null;
   const model_name = isComfyUI ? parsedMetadata.model : history.nai_model;
-
-  // 히스토리 이미지는 항상 히스토리 폴더(uploads/API/images/)의 이미지를 사용
-  // linked_composite_hash는 메타데이터로만 보관 (향후 참조용)
-
-  // ✅ actual_composite_hash로 메타데이터 등록 여부 판단
-  // actual_composite_hash가 null이면 null 유지 (fallback ID 사용 안 함)
   const composite_hash = history.actual_composite_hash ?? null;
   const hasMetadata = !!composite_hash; // 메타데이터 DB에 등록되었는지 여부
 

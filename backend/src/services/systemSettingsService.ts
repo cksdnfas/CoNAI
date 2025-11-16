@@ -65,7 +65,7 @@ export class SystemSettingsService {
    */
   static updatePhase2Interval(seconds: number): void {
     if (seconds < 5 || seconds > 300) {
-      throw new Error('Phase 2 간격은 5-300초 사이여야 합니다');
+      throw new Error('간격은 5-300초 사이여야 합니다');
     }
     this.updateSetting('phase2_interval', seconds.toString());
   }

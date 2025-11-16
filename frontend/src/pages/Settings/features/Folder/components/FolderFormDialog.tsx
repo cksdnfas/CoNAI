@@ -45,7 +45,8 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
     recursive: true,
     exclude_extensions: [],
     exclude_patterns: [],
-    watcher_enabled: true
+    watcher_enabled: true,
+    watcher_polling_interval: null
   });
 
   const [newExtension, setNewExtension] = useState('');
@@ -64,7 +65,8 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
         recursive: folder.recursive === 1,
         exclude_extensions: folder.exclude_extensions ? JSON.parse(folder.exclude_extensions) : [],
         exclude_patterns: folder.exclude_patterns ? JSON.parse(folder.exclude_patterns) : [],
-        watcher_enabled: folder.watcher_enabled === 1
+        watcher_enabled: folder.watcher_enabled === 1,
+        watcher_polling_interval: folder.watcher_polling_interval
       });
     } else {
       // 초기화 - 제외 확장자는 빈 배열로 시작 (모든 지원 확장자 스캔)
@@ -76,7 +78,8 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
         recursive: true,
         exclude_extensions: [],
         exclude_patterns: [],
-        watcher_enabled: true
+        watcher_enabled: true,
+        watcher_polling_interval: null
       });
     }
     setError(null);
@@ -143,7 +146,8 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
           recursive: formData.recursive,
           exclude_extensions: formData.exclude_extensions,
           exclude_patterns: formData.exclude_patterns,
-          watcher_enabled: formData.watcher_enabled
+          watcher_enabled: formData.watcher_enabled,
+          watcher_polling_interval: formData.watcher_polling_interval
         };
         await folderApi.updateFolder(folder.id, updates);
       } else {
@@ -181,7 +185,11 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
             value={formData.folder_path}
             onChange={(e) => setFormData({ ...formData, folder_path: e.target.value })}
             disabled={isEdit}
-            helperText={isEdit ? '폴더 경로는 편집할 수 없습니다' : '절대 경로를 입력해주세요'}
+            helperText={
+              isEdit
+                ? '폴더 경로는 편집할 수 없습니다'
+                : '절대 경로를 입력해주세요 (예: D:\\Images 또는 \\\\192.168.1.100\\Share\\Images)'
+            }
           />
 
           {/* 폴더 이름 */}
@@ -214,6 +222,37 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
               </IconButton>
             </Tooltip>
           </Box>
+
+          {/* 폴링 간격 (네트워크 드라이브용) */}
+          {formData.watcher_enabled && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Typography variant="body2" color="text.secondary">
+                  폴링 간격 (네트워크 드라이브용)
+                </Typography>
+                <Tooltip
+                  title="네트워크 드라이브의 경우 폴링 방식으로 파일 변경을 감지합니다. 간격을 짧게 하면 더 빠르게 감지하지만 네트워크 부하가 증가합니다. 비워두면 자동으로 감지합니다 (기본: 1000ms)."
+                  arrow
+                >
+                  <HelpOutlineIcon fontSize="small" color="action" sx={{ cursor: 'help' }} />
+                </Tooltip>
+              </Box>
+              <TextField
+                size="small"
+                type="number"
+                label="폴링 간격 (밀리초)"
+                value={formData.watcher_polling_interval ?? ''}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  watcher_polling_interval: e.target.value === '' ? null : parseInt(e.target.value) || null
+                })}
+                placeholder="자동 감지 (네트워크 드라이브: 1000ms)"
+                helperText="비워두면 자동으로 설정됩니다. 권장: 500-3000ms"
+                sx={{ maxWidth: 300 }}
+                inputProps={{ min: 100, step: 100 }}
+              />
+            </Box>
+          )}
 
           {/* 자동 스캔 */}
           <FormControlLabel
