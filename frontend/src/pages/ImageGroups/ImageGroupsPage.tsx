@@ -587,6 +587,8 @@ const ImageGroupsPage: React.FC = () => {
         onPageChange={handleGroupImagesPageChange}
         onImagesRemoved={handleImagesRemoved}
         onImagesAssigned={handleImagesAssigned}
+        groupType="custom"
+        onShowSnackbar={showSnackbar}
       />
       </Box>
 

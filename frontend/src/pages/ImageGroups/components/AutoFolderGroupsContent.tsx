@@ -379,6 +379,8 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
         onImagesRemoved={() => {}}
         onImagesAssigned={() => {}}
         readOnly={true}
+        groupType="auto-folder"
+        onShowSnackbar={onShowSnackbar}
       />
     </>
   );

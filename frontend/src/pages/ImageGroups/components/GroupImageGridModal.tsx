@@ -33,6 +33,7 @@ import type { GroupWithStats } from '@comfyui-image-manager/shared';
 import ImageGrid from '../../../components/ImageGrid/ImageGrid';
 import GroupAssignModal from '../../../components/GroupAssignModal';
 import { groupApi } from '../../../services/api/groupApi';
+import { autoFolderGroupsApi } from '../../../services/api/autoFolderGroupsApi';
 
 interface GroupImageGridModalProps {
   open: boolean;
@@ -50,6 +51,8 @@ interface GroupImageGridModalProps {
   onImagesRemoved?: (selectedImageIds: string[]) => void;
   onImagesAssigned?: (targetGroupId: number, selectedImageIds: string[]) => void;
   readOnly?: boolean;
+  groupType?: 'custom' | 'auto-folder'; // 그룹 타입 추가
+  onShowSnackbar?: (message: string, severity: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
 const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
@@ -68,6 +71,8 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   readOnly = false,
   onImagesRemoved,
   onImagesAssigned,
+  groupType = 'custom', // 기본값은 custom
+  onShowSnackbar,
 }) => {
   const { t } = useTranslation(['imageGroups', 'common']);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);  // ✅ id 기반 (중복 이미지 개별 선택)
@@ -151,7 +156,12 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   useEffect(() => {
     if (open && currentGroup?.id) {
       setLoadingCounts(true);
-      groupApi.getFileCountsByType(currentGroup.id)
+
+      const fetchCounts = groupType === 'custom'
+        ? groupApi.getFileCountsByType(currentGroup.id)
+        : autoFolderGroupsApi.getFileCounts(currentGroup.id);
+
+      fetchCounts
         .then(response => {
           if (response.success && response.data) {
             setFileCounts(response.data);
@@ -160,7 +170,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
         .catch(err => console.error('Failed to fetch file counts:', err))
         .finally(() => setLoadingCounts(false));
     }
-  }, [open, currentGroup?.id]);
+  }, [open, currentGroup?.id, groupType]);
 
   // 다운로드 버튼 클릭
   const handleDownloadClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -178,8 +188,17 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
 
     if (!currentGroup?.id) return;
 
-    // 대용량 경고 확인 (100개 이상)
+    // 파일이 없는 경우 스낵바로 알림
     const count = scope === 'all' ? (fileCounts?.[type] || 0) : selectedIds.length;
+    if (count === 0) {
+      const typeLabel = type === 'thumbnail' ? '썸네일' : type === 'original' ? '원본' : '동영상';
+      if (onShowSnackbar) {
+        onShowSnackbar(`다운로드할 ${typeLabel} 파일이 없습니다.`, 'warning');
+      }
+      return;
+    }
+
+    // 대용량 경고 확인 (100개 이상)
     if (count >= 100) {
       setPendingDownloadType(type);
       setDownloadScope(scope);
@@ -202,8 +221,15 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
         .filter((hash): hash is string => hash !== null);
     }
 
-    // 다운로드 URL 생성
-    const downloadUrl = groupApi.getDownloadUrl(currentGroup.id, type, compositeHashes);
+    // 다운로드 URL 생성 (그룹 타입에 따라 다른 API 사용)
+    let downloadUrl: string;
+    if (groupType === 'custom') {
+      downloadUrl = groupApi.getDownloadUrl(currentGroup.id, type, compositeHashes);
+    } else {
+      // auto-folder 그룹의 경우
+      const hashesParam = compositeHashes ? compositeHashes.join(',') : undefined;
+      downloadUrl = `/api/auto-folder-groups/${currentGroup.id}/download?type=${type}${hashesParam ? `&hashes=${hashesParam}` : ''}`;
+    }
 
     // 다운로드 트리거 (새 창으로 열기)
     window.open(downloadUrl, '_blank');
@@ -403,7 +429,10 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
             {t('imageGroups:download.scopeAll')}
           </Typography>
         </MenuItem>
-        <MenuItem onClick={() => handleDownloadTypeSelect('thumbnail', 'all')}>
+        <MenuItem
+          onClick={() => handleDownloadTypeSelect('thumbnail', 'all')}
+          disabled={!fileCounts || fileCounts.thumbnail === 0}
+        >
           <ListItemIcon>
             <ImageIcon fontSize="small" />
           </ListItemIcon>
@@ -412,7 +441,10 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
             {fileCounts && ` (${fileCounts.thumbnail})`}
           </ListItemText>
         </MenuItem>
-        <MenuItem onClick={() => handleDownloadTypeSelect('original', 'all')}>
+        <MenuItem
+          onClick={() => handleDownloadTypeSelect('original', 'all')}
+          disabled={!fileCounts || fileCounts.original === 0}
+        >
           <ListItemIcon>
             <PhotoLibraryIcon fontSize="small" />
           </ListItemIcon>
@@ -421,7 +453,10 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
             {fileCounts && ` (${fileCounts.original})`}
           </ListItemText>
         </MenuItem>
-        <MenuItem onClick={() => handleDownloadTypeSelect('video', 'all')}>
+        <MenuItem
+          onClick={() => handleDownloadTypeSelect('video', 'all')}
+          disabled={!fileCounts || fileCounts.video === 0}
+        >
           <ListItemIcon>
             <VideocamIcon fontSize="small" />
           </ListItemIcon>

@@ -652,6 +652,7 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
     const result = await GroupDownloadService.createGroupZip({
       groupId,
       downloadType,
+      groupType: 'custom',
       compositeHashes
     });
 
@@ -704,7 +705,7 @@ router.get('/:id/file-counts', asyncHandler(async (req: Request, res: Response) 
   try {
     const id = validateId(req.params.id, 'Group ID');
 
-    const counts = await GroupDownloadService.getFileCountByType(id);
+    const counts = await GroupDownloadService.getFileCountByType(id, 'custom');
 
     return res.json(successResponse(counts));
   } catch (error) {

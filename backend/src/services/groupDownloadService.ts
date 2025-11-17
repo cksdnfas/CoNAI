@@ -1,4 +1,5 @@
 import { GroupModel, ImageGroupModel } from '../models/Group';
+import { AutoFolderGroupModel, AutoFolderGroupImageModel } from '../models/AutoFolderGroup';
 import { resolveUploadsPath } from '../config/runtimePaths';
 import AdmZip from 'adm-zip';
 import path from 'path';
@@ -7,10 +8,12 @@ import { tmpdir } from 'os';
 import { ImageWithFileView } from '../types/image';
 
 export type DownloadType = 'thumbnail' | 'original' | 'video';
+export type GroupType = 'custom' | 'auto-folder';
 
 interface DownloadOptions {
   groupId: number;
   downloadType: DownloadType;
+  groupType: GroupType; // 그룹 타입 추가
   compositeHashes?: string[]; // 선택된 이미지만 다운로드 (없으면 전체)
 }
 
@@ -25,16 +28,26 @@ export class GroupDownloadService {
    * 그룹 이미지를 ZIP 파일로 생성
    */
   static async createGroupZip(options: DownloadOptions): Promise<DownloadResult> {
-    const { groupId, downloadType, compositeHashes } = options;
+    const { groupId, downloadType, groupType, compositeHashes } = options;
 
     // 그룹 정보 조회
-    const group = await GroupModel.findById(groupId);
-    if (!group) {
-      throw new Error('Group not found');
+    let groupName: string;
+    if (groupType === 'custom') {
+      const group = await GroupModel.findById(groupId);
+      if (!group) {
+        throw new Error('Group not found');
+      }
+      groupName = group.name;
+    } else {
+      const group = await AutoFolderGroupModel.findById(groupId);
+      if (!group) {
+        throw new Error('Auto-folder group not found');
+      }
+      groupName = group.folder_path;
     }
 
     // 그룹에 속한 모든 이미지 조회 (파일 정보 포함)
-    const allImages = await this.getAllImagesWithFiles(groupId);
+    const allImages = await this.getAllImagesWithFiles(groupId, groupType);
 
     // 선택된 이미지만 필터링 (선택 옵션이 있는 경우)
     let images = allImages;
@@ -54,11 +67,11 @@ export class GroupDownloadService {
     }
 
     // ZIP 파일 생성
-    const zipPath = await this.createZipFile(filesToZip, group.name, downloadType);
+    const zipPath = await this.createZipFile(filesToZip, groupName, downloadType);
 
     return {
       zipPath,
-      fileName: this.generateZipFileName(group.name, downloadType),
+      fileName: this.generateZipFileName(groupName, downloadType),
       fileCount: filesToZip.length
     };
   }
@@ -67,18 +80,35 @@ export class GroupDownloadService {
    * 그룹의 모든 이미지와 파일 정보 조회 (페이지네이션 없이 전체)
    * composite_hash 기준으로 중복 제거 (해시당 1개만)
    */
-  private static async getAllImagesWithFiles(groupId: number): Promise<ImageWithFileView[]> {
+  private static async getAllImagesWithFiles(groupId: number, groupType: GroupType): Promise<ImageWithFileView[]> {
     const images: ImageWithFileView[] = [];
     let page = 1;
     const limit = 1000; // 한 번에 1000개씩 조회
     let hasMore = true;
 
-    while (hasMore) {
-      const result = await ImageGroupModel.findImagesByGroupWithFiles(groupId, page, limit);
-      images.push(...result.images);
+    if (groupType === 'custom') {
+      // 커스텀 그룹: image_groups 테이블 사용
+      while (hasMore) {
+        const result = await ImageGroupModel.findImagesByGroupWithFiles(groupId, page, limit);
+        images.push(...result.images);
 
-      hasMore = result.images.length === limit;
-      page++;
+        hasMore = result.images.length === limit;
+        page++;
+      }
+    } else {
+      // 자동 폴더 그룹: auto_folder_group_images 테이블 사용
+      while (hasMore) {
+        const pageImages = await AutoFolderGroupImageModel.findPreviewImages(groupId, limit, false);
+        images.push(...pageImages);
+
+        hasMore = pageImages.length === limit;
+        page++;
+
+        // 더 이상 데이터가 없으면 종료
+        if (pageImages.length < limit) {
+          hasMore = false;
+        }
+      }
     }
 
     // 중복 제거: composite_hash당 첫 번째 파일만 선택
@@ -268,12 +298,12 @@ export class GroupDownloadService {
   /**
    * 그룹의 파일 타입별 개수 조회
    */
-  static async getFileCountByType(groupId: number): Promise<{
+  static async getFileCountByType(groupId: number, groupType: GroupType): Promise<{
     thumbnail: number;
     original: number;
     video: number;
   }> {
-    const images = await this.getAllImagesWithFiles(groupId);
+    const images = await this.getAllImagesWithFiles(groupId, groupType);
 
     let thumbnailCount = 0;
     let originalCount = 0;

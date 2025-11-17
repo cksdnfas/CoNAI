@@ -153,9 +153,9 @@ export const autoFolderGroupsApi = {
   ): Promise<{
     success: boolean;
     data?: {
-      thumbnailCount: number;
-      originalCount: number;
-      videoCount: number;
+      thumbnail: number;
+      original: number;
+      video: number;
     };
     error?: string;
   }> => {
