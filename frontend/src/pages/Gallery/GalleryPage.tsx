@@ -193,10 +193,10 @@ const GalleryPage: React.FC = () => {
 
             {/* 정렬 순서 */}
             <FormControl size="small" sx={{ minWidth: 100 }}>
-              <InputLabel>{t('gallery:filters.order')}</InputLabel>
+              <InputLabel>{t('gallery:filters.sortOrder')}</InputLabel>
               <Select
                 value={sortOrder}
-                label={t('gallery:filters.order')}
+                label={t('gallery:filters.sortOrder')}
                 onChange={(e) => handleSortOrderChange(e.target.value as SortOrder)}
               >
                 <MenuItem value="DESC">{t('gallery:sorting.descending')}</MenuItem>

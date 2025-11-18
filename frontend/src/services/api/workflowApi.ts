@@ -27,7 +27,8 @@ export interface MarkedField {
   type: 'text' | 'number' | 'select' | 'textarea' | 'image';
   default_value?: any;
   placeholder?: string;
-  options?: string[];
+  dropdown_list_name?: string; // 커스텀 드롭다운 목록 이름 (참조)
+  options?: string[]; // select 타입인 경우 선택 옵션 (직접 입력 또는 폴백용)
   required?: boolean;
   min?: number;
   max?: number;

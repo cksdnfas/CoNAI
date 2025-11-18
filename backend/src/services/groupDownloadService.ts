@@ -1,6 +1,6 @@
 import { GroupModel, ImageGroupModel } from '../models/Group';
 import { AutoFolderGroupModel, AutoFolderGroupImageModel } from '../models/AutoFolderGroup';
-import { resolveUploadsPath } from '../config/runtimePaths';
+import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
 import AdmZip from 'adm-zip';
 import path from 'path';
 import fs from 'fs';
@@ -140,7 +140,7 @@ export class GroupDownloadService {
       if (downloadType === 'thumbnail') {
         // 썸네일 다운로드
         if (image.thumbnail_path) {
-          filePath = resolveUploadsPath(image.thumbnail_path);
+          filePath = path.join(runtimePaths.tempDir, image.thumbnail_path);
           fileExtension = path.extname(image.thumbnail_path) || '.jpg';
         }
       } else if (downloadType === 'original') {
@@ -312,7 +312,7 @@ export class GroupDownloadService {
     for (const image of images) {
       // 썸네일 개수
       if (image.thumbnail_path) {
-        const thumbPath = resolveUploadsPath(image.thumbnail_path);
+        const thumbPath = path.join(runtimePaths.tempDir, image.thumbnail_path);
         if (fs.existsSync(thumbPath)) {
           thumbnailCount++;
         }
@@ -334,7 +334,7 @@ export class GroupDownloadService {
         }
       } else if (image.thumbnail_path) {
         // 원본 없으면 썸네일로 카운트
-        const thumbPath = resolveUploadsPath(image.thumbnail_path);
+        const thumbPath = path.join(runtimePaths.tempDir, image.thumbnail_path);
         if (fs.existsSync(thumbPath)) {
           originalCount++;
         }

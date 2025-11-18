@@ -108,15 +108,28 @@ export class NovelAIParser {
         aiInfo.positive_prompt = naiData.v4_prompt.caption.base_caption;
         aiInfo.prompt = aiInfo.positive_prompt;
       } else if (naiData.prompt) {
-        aiInfo.positive_prompt = naiData.prompt;
-        aiInfo.prompt = naiData.prompt;
+        // Type guard: ensure prompt is a string
+        if (typeof naiData.prompt === 'string') {
+          aiInfo.positive_prompt = naiData.prompt;
+          aiInfo.prompt = naiData.prompt;
+        } else if (typeof naiData.prompt === 'object' && naiData.prompt?.caption?.base_caption) {
+          // Handle case where naiData.prompt is actually a v4_prompt structure
+          aiInfo.positive_prompt = naiData.prompt.caption.base_caption;
+          aiInfo.prompt = naiData.prompt.caption.base_caption;
+        }
       }
 
       // Negative prompt (v4_negative_prompt takes priority)
       if (naiData.v4_negative_prompt?.caption?.base_caption) {
         aiInfo.negative_prompt = naiData.v4_negative_prompt.caption.base_caption;
       } else if (naiData.uc) {
-        aiInfo.negative_prompt = naiData.uc;
+        // Type guard: ensure uc is a string
+        if (typeof naiData.uc === 'string') {
+          aiInfo.negative_prompt = naiData.uc;
+        } else if (typeof naiData.uc === 'object' && naiData.uc?.caption?.base_caption) {
+          // Handle case where naiData.uc is actually a v4_negative_prompt structure
+          aiInfo.negative_prompt = naiData.uc.caption.base_caption;
+        }
       }
 
       // Generation parameters

@@ -9,8 +9,7 @@ import {
   TextField,
   Accordion,
   AccordionSummary,
-  AccordionDetails,
-  Chip
+  AccordionDetails
 } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
@@ -159,7 +158,6 @@ export function MarkedFieldsPreview({ workflowJson, markedFields }: MarkedFields
             size="small"
             sx={{ mb: 2 }}
           >
-            <option value="">선택하세요</option>
             {field.options?.map((option: string) => (
               <option key={option} value={option}>
                 {option}
@@ -218,30 +216,53 @@ export function MarkedFieldsPreview({ workflowJson, markedFields }: MarkedFields
                   key={field.id}
                   sx={{
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
+                    flexDirection: 'column',
+                    gap: 0.5,
                     p: 1,
                     bgcolor: validation.valid ? 'success.50' : 'error.50',
                     borderRadius: 1
                   }}
                 >
-                  {validation.valid ? (
-                    <CheckCircleIcon color="success" fontSize="small" />
-                  ) : (
-                    <ErrorIcon color="error" fontSize="small" />
-                  )}
-                  <Typography variant="body2">
-                    <strong>{field.label}</strong> ({field.jsonPath})
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {validation.valid ? (
+                      <CheckCircleIcon color="success" fontSize="small" />
+                    ) : (
+                      <ErrorIcon color="error" fontSize="small" />
+                    )}
+                    <Typography variant="body2">
+                      <strong>{field.label}</strong> ({field.jsonPath})
+                    </Typography>
+                  </Box>
                   {validation.valid && validation.currentValue !== undefined && (
-                    <Chip
-                      label={`현재 값: ${JSON.stringify(validation.currentValue)}`}
-                      size="small"
-                      sx={{ ml: 'auto' }}
-                    />
+                    <Box
+                      sx={{
+                        ml: 4,
+                        p: 1,
+                        bgcolor: 'background.paper',
+                        borderRadius: 0.5,
+                        wordBreak: 'break-word',
+                        maxWidth: '100%'
+                      }}
+                    >
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                        현재 값:
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          mt: 0.5,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          fontFamily: 'monospace',
+                          fontSize: '0.8rem'
+                        }}
+                      >
+                        {JSON.stringify(validation.currentValue)}
+                      </Typography>
+                    </Box>
                   )}
                   {!validation.valid && (
-                    <Typography variant="caption" color="error" sx={{ ml: 'auto' }}>
+                    <Typography variant="caption" color="error" sx={{ ml: 4 }}>
                       ⚠️ {validation.error}
                     </Typography>
                   )}

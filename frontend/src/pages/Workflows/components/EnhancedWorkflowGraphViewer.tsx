@@ -28,6 +28,8 @@ interface ContextMenuState {
   x: number;
   y: number;
   nodeId: string;
+  nodeTitle: string;
+  classType: string;
   paramKey: string;
   paramValue: any;
   paramType: string;
@@ -35,7 +37,7 @@ interface ContextMenuState {
 
 interface EnhancedWorkflowGraphViewerProps {
   workflowJson: string | object;
-  onParameterRightClick?: (nodeId: string, paramKey: string, paramValue: any, paramType: string) => void;
+  onParameterRightClick?: (nodeId: string, paramKey: string, paramValue: any, paramType: string, nodeTitle: string, classType: string) => void;
 }
 
 interface GraphNode extends Node {
@@ -253,11 +255,18 @@ const EnhancedWorkflowGraphViewer: React.FC<EnhancedWorkflowGraphViewerProps> = 
     event.preventDefault();
     event.stopPropagation();
 
+    // Find the node to get title and classType
+    const node = parsedNodes.find((n) => n.id === nodeId);
+    const nodeTitle = node?.data.title || '';
+    const classType = node?.data.classType || '';
+
     setContextMenu({
       visible: true,
       x: event.clientX,
       y: event.clientY,
       nodeId,
+      nodeTitle,
+      classType,
       paramKey,
       paramValue,
       paramType,
@@ -276,7 +285,9 @@ const EnhancedWorkflowGraphViewer: React.FC<EnhancedWorkflowGraphViewerProps> = 
         contextMenu.nodeId,
         contextMenu.paramKey,
         contextMenu.paramValue,
-        contextMenu.paramType
+        contextMenu.paramType,
+        contextMenu.nodeTitle,
+        contextMenu.classType
       );
     }
     setContextMenu(null);

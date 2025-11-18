@@ -58,9 +58,15 @@ export const customDropdownListApi = {
     return response.data;
   },
 
-  // 특정 커스텀 드롭다운 목록 조회
+  // 특정 커스텀 드롭다운 목록 조회 (ID)
   getList: async (id: number) => {
     const response = await api.get(`/custom-dropdown-lists/${id}`);
+    return response.data;
+  },
+
+  // 특정 커스텀 드롭다운 목록 조회 (이름)
+  getListByName: async (name: string) => {
+    const response = await api.get(`/custom-dropdown-lists/by-name/${encodeURIComponent(name)}`);
     return response.data;
   },
 

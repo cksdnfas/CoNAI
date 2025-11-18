@@ -30,7 +30,7 @@ const RatingBadge: React.FC<RatingBadgeProps> = ({ tier, score }) => {
         size="small"
         sx={{
           fontSize: '0.7rem',
-          height: '22px',
+          height: '26px',
           fontWeight: 600,
           bgcolor: backgroundColor,
           color: '#ffffff',

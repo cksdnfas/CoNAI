@@ -9,6 +9,7 @@ import {
 } from '@mui/material';
 import FolderIcon from '@mui/icons-material/Folder';
 import SettingsIcon from '@mui/icons-material/Settings';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import type { GroupWithStats } from '@comfyui-image-manager/shared';
 import { groupApi } from '../../../services/api/groupApi';
 import { useImageRotation } from '../../../hooks/useImageRotation';
@@ -401,10 +402,16 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
           )}
           {Boolean(group.auto_collect_enabled) && (
             <Chip
-              label="자동수집"
+              icon={<AutoAwesomeIcon sx={{ fontSize: '0.9rem', color: 'white !important' }} />}
               size="small"
               color="primary"
-              sx={{ color: 'white' }}
+              sx={{
+                color: 'white',
+                '& .MuiChip-icon': {
+                  marginLeft: '4px',
+                  marginRight: '-4px',
+                }
+              }}
             />
           )}
         </Box>

@@ -35,7 +35,47 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
- * 특정 커스텀 드롭다운 목록 조회
+ * 특정 커스텀 드롭다운 목록 조회 (이름)
+ * GET /api/custom-dropdown-lists/by-name/:name
+ */
+router.get('/by-name/:name', asyncHandler(async (req: Request, res: Response) => {
+  const name = req.params.name;
+
+  if (!name) {
+    return res.status(400).json({
+      success: false,
+      error: 'List name is required'
+    } as ApiResponse);
+  }
+
+  try {
+    const list = await CustomDropdownListModel.findByName(name);
+
+    if (!list) {
+      return res.status(404).json({
+        success: false,
+        error: 'List not found'
+      } as ApiResponse);
+    }
+
+    const response: ApiResponse = {
+      success: true,
+      data: list
+    };
+
+    return res.json(response);
+  } catch (error) {
+    console.error('Error getting custom dropdown list by name:', error);
+    const response: ApiResponse = {
+      success: false,
+      error: 'Failed to get custom dropdown list'
+    };
+    return res.status(500).json(response);
+  }
+}));
+
+/**
+ * 특정 커스텀 드롭다운 목록 조회 (ID)
  * GET /api/custom-dropdown-lists/:id
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {

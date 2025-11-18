@@ -38,17 +38,18 @@ export const MarkedFieldsList: React.FC<MarkedFieldsListProps> = ({
   // Setup validation
   const validation = useMarkedFieldValidation(fields);
 
-  // Manage expanded state for each field (indexed by field.id)
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  // Manage expanded state for each field (indexed by array index, not field.id)
+  // This prevents collapse when field ID changes during editing
+  const [expandedIndices, setExpandedIndices] = useState<Set<number>>(new Set());
 
   // Toggle expand/collapse for a specific field
-  const handleToggleExpand = (fieldId: string) => {
-    setExpandedIds((prev) => {
+  const handleToggleExpand = (index: number) => {
+    setExpandedIndices((prev) => {
       const next = new Set(prev);
-      if (next.has(fieldId)) {
-        next.delete(fieldId);
+      if (next.has(index)) {
+        next.delete(index);
       } else {
-        next.add(fieldId);
+        next.add(index);
       }
       return next;
     });
@@ -95,7 +96,7 @@ export const MarkedFieldsList: React.FC<MarkedFieldsListProps> = ({
         <Box>
           {fields.map((field, index) => {
             const fieldErrors = validation.getFieldErrors(index);
-            const isExpanded = expandedIds.has(field.id);
+            const isExpanded = expandedIndices.has(index);
             return (
               <SortableMarkedFieldCard
                 key={field.id}
@@ -105,7 +106,7 @@ export const MarkedFieldsList: React.FC<MarkedFieldsListProps> = ({
                 onDelete={onDeleteField}
                 fieldErrors={fieldErrors}
                 isExpanded={isExpanded}
-                onToggleExpand={() => handleToggleExpand(field.id)}
+                onToggleExpand={() => handleToggleExpand(index)}
               />
             );
           })}

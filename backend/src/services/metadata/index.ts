@@ -43,8 +43,8 @@ export class MetadataExtractor {
 
       // 프롬프트 추출 실패 여부 확인 (빈 문자열과 공백만 있는 경우도 실패로 처리)
       const hasPrompt = Boolean(
-        (aiInfo.prompt && aiInfo.prompt.trim()) ||
-        (aiInfo.positive_prompt && aiInfo.positive_prompt.trim())
+        (aiInfo.prompt && typeof aiInfo.prompt === 'string' && aiInfo.prompt.trim()) ||
+        (aiInfo.positive_prompt && typeof aiInfo.positive_prompt === 'string' && aiInfo.positive_prompt.trim())
       );
 
       console.log(`🔍 [MetadataExtractor] Primary extraction result:`, {

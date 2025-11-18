@@ -60,7 +60,7 @@ export async function buildPromptData(
       }
 
       const lastKey = path[path.length - 1];
-      const value = formData[field.id];
+      let value = formData[field.id];
 
       // 타입에 따라 변환
       if (field.type === 'number') {
@@ -73,6 +73,17 @@ export async function buildPromptData(
           current[lastKey] = '';
         }
       } else {
+        // 경로 구분자 정규화: 원본 값의 구분자 형식 유지
+        // 원본 값이 백슬래시를 포함하는 경로라면, 새 값도 백슬래시로 변환
+        const originalValue = current[lastKey];
+        if (typeof originalValue === 'string' &&
+            typeof value === 'string' &&
+            originalValue.includes('\\') &&
+            value.includes('/')) {
+          // 원본이 Windows 경로 형식(백슬래시)이고, 새 값이 Unix 경로 형식(슬래시)이면
+          // 새 값의 슬래시를 백슬래시로 변환
+          value = value.replace(/\//g, '\\');
+        }
         current[lastKey] = value;
       }
     }

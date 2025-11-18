@@ -145,7 +145,10 @@ export default function WorkflowFormPage() {
   const handleParameterRightClick = (
     nodeId: string,
     paramKey: string,
-    paramValue: any
+    paramValue: any,
+    paramType: string,
+    nodeTitle: string,
+    classType: string
   ) => {
     const jsonPath = `${nodeId}.inputs.${paramKey}`;
 
@@ -165,10 +168,19 @@ export default function WorkflowFormPage() {
       fieldType = 'textarea';
     }
 
+    // Generate automatic label: #nodeId_nodeTitle(paramType)
+    // Clean node title: remove special characters, keep only alphanumeric and underscore
+    const cleanTitle = nodeTitle
+      .replace(/[^a-zA-Z0-9_]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '');
+
+    const autoLabel = `#${nodeId}_${cleanTitle}(${paramKey.toUpperCase()})`;
+
     // Create new marked field
     const newField: MarkedField = {
       id: `field_${Date.now()}`,
-      label: `${paramKey} (Node ${nodeId})`,
+      label: autoLabel,
       jsonPath,
       type: fieldType,
       required: false,

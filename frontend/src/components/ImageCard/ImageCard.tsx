@@ -243,30 +243,6 @@ const ImageCard: React.FC<ImageCardProps> = ({
           />
         )}
 
-        {/* 자동수집 배지 */}
-        {showCollectionType && isAutoCollected && (
-          <Box sx={{ position: 'absolute', top: selectable ? 54 : 8, left: 8, zIndex: 1 }}>
-            <Chip
-              icon={<AutoAwesomeIcon sx={{ fontSize: '0.9rem' }} />}
-              label={t('common:imageCard.badges.auto')}
-              size="small"
-              color="info"
-              sx={{
-                fontSize: '0.7rem',
-                height: '24px',
-                fontWeight: 600,
-                bgcolor: (theme) => theme.palette.mode === 'dark'
-                  ? 'rgba(33, 150, 243, 0.8)'
-                  : 'rgba(33, 150, 243, 0.9)',
-                color: 'white',
-                '& .MuiChip-icon': {
-                  color: 'white',
-                },
-              }}
-            />
-          </Box>
-        )}
-
         {/* Phase 1 처리 중 배지 */}
         {image.is_processing && (
           <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
@@ -311,10 +287,45 @@ const ImageCard: React.FC<ImageCardProps> = ({
           </Box>
         )}
 
-        {/* Rating 배지 (오른쪽 하단) */}
-        {ratingTier && image.rating_score !== null && image.rating_score !== undefined && (
-          <Box sx={{ position: 'absolute', bottom: 8, right: 8, zIndex: 1 }}>
-            <RatingBadge tier={ratingTier} score={image.rating_score} />
+        {/* Rating 배지 + 자동수집 배지 - 오른쪽 하단 flexbox로 정렬 */}
+        {(ratingTier || (showCollectionType && isAutoCollected)) && (
+          <Box sx={{
+            position: 'absolute',
+            bottom: 8,
+            right: 8,
+            display: 'flex',
+            gap: 0.5,
+            alignItems: 'center',
+            zIndex: 1,
+          }}>
+            {/* 자동수집 배지 - 왼쪽에 위치 */}
+            {showCollectionType && isAutoCollected && (
+              <Chip
+                icon={<AutoAwesomeIcon sx={{ fontSize: '0.85rem', color: 'white !important' }} />}
+                size="small"
+                sx={{
+                  height: '26px',
+                  minWidth: '26px',
+                  width: '26px',
+                  padding: 0,
+                  bgcolor: (theme) => theme.palette.mode === 'dark'
+                    ? 'rgba(33, 150, 243, 0.9)'
+                    : 'rgba(33, 150, 243, 0.95)',
+                  backdropFilter: 'blur(4px)',
+                  '& .MuiChip-icon': {
+                    margin: 0,
+                  },
+                  '& .MuiChip-label': {
+                    display: 'none',
+                  },
+                }}
+              />
+            )}
+
+            {/* Rating 배지 - 오른쪽에 위치 */}
+            {ratingTier && image.rating_score !== null && image.rating_score !== undefined && (
+              <RatingBadge tier={ratingTier} score={image.rating_score} />
+            )}
           </Box>
         )}
 
@@ -431,36 +442,23 @@ const ImageCard: React.FC<ImageCardProps> = ({
           />
         )}
 
-        <CardContent sx={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          borderRadius: 2,
-          p: { xs: 1, sm: 1.5 },
-          bgcolor: 'rgba(0, 0, 0, 0.7)',
-          backdropFilter: 'blur(4px)',
-          '&:last-child': {
-            paddingBottom: { xs: '6px', sm: '8px' }
-          }
-        }}>
-          {/* <Typography
-            variant="body2"
-            noWrap
-            title={image.original_name}
-            sx={{
-              fontWeight: 500,
-              fontSize: { xs: '0.8rem', sm: '0.875rem' },
-            }}
-          >
-            {image.original_name}
-          </Typography> */}
-
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+        {/* 그룹 정보와 AI 도구 정보 - 메인 갤러리에서만 표시 */}
+        {!showCollectionType && (
+          <Box sx={{
+            position: 'absolute',
+            bottom: 8,
+            left: 8,
+            right: 8,
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 0.5,
+            alignItems: 'center',
+            zIndex: 1,
+          }}>
             {/* 그룹 정보 */}
             {image.groups && image.groups.length > 0 && (
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                {image.groups.slice(0, 2).map((group) => (
+              <>
+                {image.groups.slice(0, 1).map((group) => (
                   <Chip
                     key={group.id}
                     label={group.name}
@@ -468,69 +466,56 @@ const ImageCard: React.FC<ImageCardProps> = ({
                     variant="filled"
                     sx={{
                       fontSize: { xs: '0.6rem', sm: '0.7rem' },
-                      height: { xs: '18px', sm: '20px' },
+                      height: { xs: '20px', sm: '22px' },
+                      maxWidth: '120px',
                       backgroundColor: group.color || (group.collection_type === 'auto' ? '#e3f2fd' : '#f3e5f5'),
                       color: group.color ? '#fff' : (group.collection_type === 'auto' ? '#1976d2' : '#7b1fa2'),
+                      backdropFilter: 'blur(4px)',
                       '& .MuiChip-label': {
                         px: 0.5,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
                       },
                     }}
                   />
                 ))}
-                {image.groups.length > 2 && (
+                {image.groups.length > 1 && (
                   <Chip
-                    label={`+${image.groups.length - 2}`}
+                    label={`+${image.groups.length - 1}`}
                     size="small"
                     variant="outlined"
                     sx={{
                       fontSize: { xs: '0.6rem', sm: '0.7rem' },
-                      height: { xs: '18px', sm: '20px' },
+                      height: { xs: '20px', sm: '22px' },
+                      bgcolor: 'rgba(0, 0, 0, 0.6)',
+                      color: 'white',
+                      borderColor: 'rgba(255, 255, 255, 0.3)',
+                      backdropFilter: 'blur(4px)',
                     }}
                   />
                 )}
-              </Box>
+              </>
             )}
 
-            {/* AI 도구 및 해상도 정보 */}
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-              {image.ai_tool && (
-                <Chip
-                  label={image.ai_tool}
-                  size="small"
-                  variant="outlined"
-                  color="primary"
-                  sx={{
-                    fontSize: { xs: '0.65rem', sm: '0.75rem' },
-                    height: { xs: '20px', sm: '24px' },
-                  }}
-                />
-              )}
-              {image.width && image.height && (
-                <Chip
-                  label={`${image.width}×${image.height}`}
-                  size="small"
-                  variant="outlined"
-                  sx={{
-                    fontSize: { xs: '0.65rem', sm: '0.75rem' },
-                    height: { xs: '20px', sm: '24px' },
-                  }}
-                />
-              )}
-            </Box>
+            {/* AI 도구 정보 */}
+            {image.ai_tool && (
+              <Chip
+                label={image.ai_tool}
+                size="small"
+                variant="outlined"
+                sx={{
+                  fontSize: { xs: '0.65rem', sm: '0.75rem' },
+                  height: { xs: '20px', sm: '22px' },
+                  bgcolor: 'rgba(25, 118, 210, 0.9)',
+                  color: 'white',
+                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                  backdropFilter: 'blur(4px)',
+                }}
+              />
+            )}
           </Box>
-
-          {/* <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{
-              mt: 1,
-              display: 'block',
-              fontSize: { xs: '0.7rem', sm: '0.75rem' },
-            }}
-          >
-            {formatFileSize(image.file_size)}
-          </Typography> */}
-        </CardContent>
+        )}
       </Card>
 
     </>

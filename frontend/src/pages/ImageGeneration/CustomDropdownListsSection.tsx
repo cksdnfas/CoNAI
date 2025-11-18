@@ -29,8 +29,12 @@ import {
   FolderOpen as FolderOpenIcon,
   Upload as UploadIcon,
   Person as PersonIcon,
-  Storage as StorageIcon
+  Storage as StorageIcon,
+  Visibility as VisibilityIcon
 } from '@mui/icons-material';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Checkbox from '@mui/material/Checkbox';
+import FormGroup from '@mui/material/FormGroup';
 import { customDropdownListApi, type CustomDropdownList, type ComfyUIModelFolder } from '../../services/api/customDropdownListApi';
 
 export default function CustomDropdownListsSection() {
@@ -40,9 +44,18 @@ export default function CustomDropdownListsSection() {
   const [currentTab, setCurrentTab] = useState(0); // 0: 자동 수집, 1: 수동 생성
   const [openDialog, setOpenDialog] = useState(false);
   const [editingList, setEditingList] = useState<CustomDropdownList | null>(null);
+  const [openViewDialog, setOpenViewDialog] = useState(false);
+  const [viewingList, setViewingList] = useState<CustomDropdownList | null>(null);
   const [openComfyUIDialog, setOpenComfyUIDialog] = useState(false);
   const [selectedModelFolders, setSelectedModelFolders] = useState<ComfyUIModelFolder[]>([]);
   const [scanLoading, setScanLoading] = useState(false);
+
+  // 모델 타입별 전체 경로 포함 여부
+  const [includeFullPath, setIncludeFullPath] = useState({
+    checkpoints: true,  // 기본값: 체크됨
+    unet: false,
+    upscale_models: false
+  });
 
   const [formData, setFormData] = useState({
     name: '',
@@ -93,6 +106,16 @@ export default function CustomDropdownListsSection() {
     setOpenDialog(false);
     setEditingList(null);
     setError(null);
+  };
+
+  const handleOpenViewDialog = (list: CustomDropdownList) => {
+    setViewingList(list);
+    setOpenViewDialog(true);
+  };
+
+  const handleCloseViewDialog = () => {
+    setOpenViewDialog(false);
+    setViewingList(null);
   };
 
   const handleSubmit = async () => {
@@ -186,7 +209,14 @@ export default function CustomDropdownListsSection() {
       if (!folderMap.has(displayName)) {
         folderMap.set(displayName, []);
       }
-      folderMap.get(displayName)!.push(file.name);
+
+      // 체크박스 설정에 따라 전체 경로 또는 파일명만 저장
+      const shouldIncludeFullPath = includeFullPath[baseFolderName as keyof typeof includeFullPath] ?? false;
+      const fileEntry = shouldIncludeFullPath && subPath
+        ? `${subPath}/${file.name}`  // 전체 경로 포함
+        : file.name;  // 파일명만
+
+      folderMap.get(displayName)!.push(fileEntry);
     }
 
     // Map을 ComfyUIModelFolder 배열로 변환
@@ -374,16 +404,14 @@ export default function CustomDropdownListsSection() {
                       </Stack>
                     </CardContent>
                     <CardActions sx={{ p: 1, pt: 0, justifyContent: 'flex-end' }}>
-                      <Tooltip title="자동 수집된 항목은 편집할 수 없습니다">
-                        <span>
-                          <IconButton
-                            size="small"
-                            disabled
-                            sx={{ p: 0.5 }}
-                          >
-                            <EditIcon sx={{ fontSize: '1rem' }} />
-                          </IconButton>
-                        </span>
+                      <Tooltip title="목록 보기">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleOpenViewDialog(list)}
+                          sx={{ p: 0.5 }}
+                        >
+                          <VisibilityIcon sx={{ fontSize: '1rem' }} />
+                        </IconButton>
                       </Tooltip>
                       <IconButton
                         size="small"
@@ -489,6 +517,74 @@ export default function CustomDropdownListsSection() {
         </>
       )}
 
+      {/* 읽기 전용 다이얼로그 */}
+      <Dialog
+        open={openViewDialog}
+        onClose={handleCloseViewDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          목록 보기 (읽기 전용)
+        </DialogTitle>
+        <DialogContent>
+          {viewingList && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+              <Alert severity="info" sx={{ fontSize: '0.85rem' }}>
+                자동 수집된 항목은 편집할 수 없습니다. 내용을 확인만 할 수 있습니다.
+              </Alert>
+              <TextField
+                label="목록 이름"
+                fullWidth
+                value={viewingList.name}
+                InputProps={{ readOnly: true }}
+              />
+              {viewingList.description && (
+                <TextField
+                  label="설명"
+                  fullWidth
+                  multiline
+                  rows={2}
+                  value={viewingList.description}
+                  InputProps={{ readOnly: true }}
+                />
+              )}
+              {viewingList.source_path && (
+                <TextField
+                  label="경로"
+                  fullWidth
+                  value={viewingList.source_path}
+                  InputProps={{ readOnly: true }}
+                />
+              )}
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                  항목 목록 ({viewingList.items.length}개)
+                </Typography>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={15}
+                  value={viewingList.items.join('\n')}
+                  InputProps={{ readOnly: true }}
+                  sx={{
+                    '& .MuiInputBase-input': {
+                      fontFamily: 'monospace',
+                      fontSize: '0.9rem'
+                    }
+                  }}
+                />
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseViewDialog} variant="contained">
+            닫기
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* 생성/수정 다이얼로그 */}
       <Dialog
         open={openDialog}
@@ -584,19 +680,88 @@ export default function CustomDropdownListsSection() {
               />
             </Button>
             {selectedModelFolders.length > 0 && (
-              <Alert severity="success" sx={{ fontSize: '0.85rem' }}>
-                <strong>{selectedModelFolders.length}개 폴더</strong>에서 모델 파일을 발견했습니다:
-                <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2 }}>
-                  {selectedModelFolders.slice(0, 5).map((folder, idx) => (
-                    <li key={idx}>
-                      <strong>{folder.displayName}</strong>: {folder.files.length}개 파일
-                    </li>
-                  ))}
-                  {selectedModelFolders.length > 5 && (
-                    <li>...외 {selectedModelFolders.length - 5}개 폴더</li>
-                  )}
+              <>
+                <Alert severity="success" sx={{ fontSize: '0.85rem' }}>
+                  <strong>{selectedModelFolders.length}개 폴더</strong>에서 모델 파일을 발견했습니다:
+                  <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2 }}>
+                    {selectedModelFolders.slice(0, 5).map((folder, idx) => (
+                      <li key={idx}>
+                        <strong>{folder.displayName}</strong>: {folder.files.length}개 파일
+                      </li>
+                    ))}
+                    {selectedModelFolders.length > 5 && (
+                      <li>...외 {selectedModelFolders.length - 5}개 폴더</li>
+                    )}
+                  </Box>
+                </Alert>
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                    경로 옵션:
+                  </Typography>
+                  <FormGroup>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={includeFullPath.checkpoints}
+                          onChange={(e) => setIncludeFullPath({ ...includeFullPath, checkpoints: e.target.checked })}
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            checkpoints - 전체 경로 포함
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {includeFullPath.checkpoints
+                              ? '예: Illustrious/ETC/model.safetensors'
+                              : '예: model.safetensors'}
+                          </Typography>
+                        </Box>
+                      }
+                    />
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={includeFullPath.unet}
+                          onChange={(e) => setIncludeFullPath({ ...includeFullPath, unet: e.target.checked })}
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            unet - 전체 경로 포함
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {includeFullPath.unet
+                              ? '예: subfolder/model.safetensors'
+                              : '예: model.safetensors'}
+                          </Typography>
+                        </Box>
+                      }
+                    />
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={includeFullPath.upscale_models}
+                          onChange={(e) => setIncludeFullPath({ ...includeFullPath, upscale_models: e.target.checked })}
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            upscale_models - 전체 경로 포함
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {includeFullPath.upscale_models
+                              ? '예: subfolder/model.pth'
+                              : '예: model.pth'}
+                          </Typography>
+                        </Box>
+                      }
+                    />
+                  </FormGroup>
                 </Box>
-              </Alert>
+              </>
             )}
             <Alert severity="warning" sx={{ fontSize: '0.85rem' }}>
               <strong>스캔 안내:</strong><br />

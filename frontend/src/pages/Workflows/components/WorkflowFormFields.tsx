@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   TextField,
@@ -17,6 +17,7 @@ import { ExpandMore as ExpandMoreIcon, Image as ImageIcon } from '@mui/icons-mat
 import { useTranslation } from 'react-i18next';
 import type { Workflow, MarkedField } from '../../../services/api/workflowApi';
 import ImageSelectionModal from './ImageSelectionModal';
+import { customDropdownListApi } from '../../../services/api/customDropdownListApi';
 
 interface WorkflowFormFieldsProps {
   workflow: Workflow;
@@ -39,6 +40,55 @@ export function WorkflowFormFields({
   const { t } = useTranslation(['workflows']);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [currentImageField, setCurrentImageField] = useState<MarkedField | null>(null);
+  const [dropdownOptions, setDropdownOptions] = useState<Record<string, string[]>>({});
+
+  // 워크플로우가 변경될 때마다 참조된 드롭다운 목록들의 최신 데이터 로드
+  useEffect(() => {
+    const loadDropdownLists = async () => {
+      if (!workflow.marked_fields) return;
+
+      const optionsMap: Record<string, string[]> = {};
+
+      for (const field of workflow.marked_fields) {
+        if (field.type === 'select' && field.dropdown_list_name) {
+          try {
+            const response = await customDropdownListApi.getListByName(field.dropdown_list_name);
+            if (response.success && response.data) {
+              optionsMap[field.id] = response.data.items;
+            } else {
+              // 목록을 찾지 못한 경우 폴백 옵션 사용
+              console.warn(`Dropdown list "${field.dropdown_list_name}" not found, using fallback options`);
+              optionsMap[field.id] = field.options || [];
+            }
+          } catch (error) {
+            // 에러 발생 시 폴백 옵션 사용
+            console.error(`Failed to load dropdown list "${field.dropdown_list_name}":`, error);
+            optionsMap[field.id] = field.options || [];
+          }
+        } else if (field.type === 'select') {
+          // 참조가 없는 경우 기존 options 사용
+          optionsMap[field.id] = field.options || [];
+        }
+      }
+
+      setDropdownOptions(optionsMap);
+
+      // 드롭다운 옵션이 로드된 후, 값이 없는 select 필드에 첫 번째 옵션 자동 설정
+      for (const field of workflow.marked_fields) {
+        if (field.type === 'select') {
+          const options = optionsMap[field.id] || field.options || [];
+          const currentValue = formData[field.id];
+
+          // 값이 없거나 빈 문자열인 경우, 첫 번째 옵션으로 자동 설정
+          if ((!currentValue || currentValue === '') && options.length > 0) {
+            onFieldChange(field.id, options[0]);
+          }
+        }
+      }
+    };
+
+    loadDropdownLists();
+  }, [workflow]);
 
   const handleOpenImageModal = (field: MarkedField) => {
     setCurrentImageField(field);
@@ -93,7 +143,10 @@ export function WorkflowFormFields({
           />
         );
 
-      case 'select':
+      case 'select': {
+        // dropdown_list_name이 있으면 최신 데이터 사용, 없으면 기존 options 사용
+        const options = dropdownOptions[field.id] || field.options || [];
+
         return (
           <TextField
             key={field.id}
@@ -105,15 +158,16 @@ export function WorkflowFormFields({
             required={field.required}
             SelectProps={{ native: true }}
             sx={{ mb: 2 }}
+            helperText={field.dropdown_list_name ? `📋 ${field.dropdown_list_name}` : undefined}
           >
-            <option value="">{t('workflows:generate.selectPlaceholder')}</option>
-            {field.options?.map((option: string) => (
+            {options.map((option: string) => (
               <option key={option} value={option}>
                 {option}
               </option>
             ))}
           </TextField>
         );
+      }
 
       case 'image':
         return (

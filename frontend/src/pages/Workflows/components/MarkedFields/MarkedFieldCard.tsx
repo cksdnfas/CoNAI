@@ -101,22 +101,25 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
 
   const handleSelectList = (list: CustomDropdownList) => {
     onUpdate(index, {
-      options: list.items
+      dropdown_list_name: list.name, // 커스텀 드롭다운 목록 이름 참조
+      options: list.items // 폴백/미리보기용
     });
     setListDialogOpen(false);
   };
 
-  // Auto-generate Field ID from label
+  // Handle label change - Field ID is auto-generated once and never changed
   const handleLabelChange = (newLabel: string) => {
     const updates: Partial<MarkedField> = { label: newLabel };
 
-    // Auto-generate ID if it's empty or looks auto-generated (starts with 'field_')
-    if (!field.id || field.id.startsWith('field_')) {
+    // Auto-generate ID ONLY if it's completely empty (on first creation)
+    // Once set, the ID remains stable even if the label changes
+    if (!field.id || field.id.trim() === '') {
       const generatedId = generateFieldId(newLabel);
       if (generatedId) {
         updates.id = generatedId;
       }
     }
+    // If field.id already exists, don't modify it - keep it stable
 
     onUpdate(index, updates);
   };
@@ -267,17 +270,8 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
             bgcolor: (theme) => alpha(theme.palette.background.default, 0.3),
           }}
         >
-          {/* Field ID and Label */}
+          {/* Label and Type (Field ID is auto-generated internally) */}
           <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-            <TextField
-              label={t('workflows:fieldForm.fieldId')}
-              value={field.id}
-              onChange={(e) => onUpdate(index, { id: e.target.value })}
-              size="small"
-              placeholder={t('workflows:fieldForm.fieldIdPlaceholder')}
-              helperText={t('workflows:fieldForm.fieldIdHelper')}
-              sx={{ flex: 1 }}
-            />
             <TextField
               label={t('workflows:fieldForm.label')}
               value={field.label}
@@ -285,7 +279,7 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
               size="small"
               placeholder={t('workflows:fieldForm.labelPlaceholder')}
               helperText={t('workflows:fieldForm.labelHelper')}
-              sx={{ flex: 1 }}
+              sx={{ flex: 2 }}
             />
             <TextField
               select
@@ -366,31 +360,50 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
 
           {/* Select Options */}
           {field.type === 'select' && (
-            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-              <TextField
-                fullWidth
-                label={t('workflows:fieldForm.selectOptions')}
-                value={field.options?.join(', ') || ''}
-                onChange={(e) =>
-                  onUpdate(index, {
-                    options: e.target.value
-                      .split(',')
-                      .map((s) => s.trim())
-                      .filter((s) => s),
-                  })
-                }
-                size="small"
-                placeholder={t('workflows:fieldForm.selectOptionsPlaceholder')}
-                helperText={t('workflows:fieldForm.selectOptionsHelper')}
-              />
-              <IconButton
-                size="small"
-                onClick={handleOpenListDialog}
-                title="커스텀 목록에서 불러오기"
-                sx={{ alignSelf: 'flex-start', mt: 0.5 }}
-              >
-                <PlaylistAddIcon />
-              </IconButton>
+            <Box sx={{ mb: 2 }}>
+              {/* 참조 중인 커스텀 드롭다운 목록 표시 */}
+              {field.dropdown_list_name && (
+                <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Chip
+                    label={`📋 ${field.dropdown_list_name}`}
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    onDelete={() => onUpdate(index, { dropdown_list_name: undefined })}
+                    sx={{ fontWeight: 500 }}
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    (자동 업데이트됨)
+                  </Typography>
+                </Box>
+              )}
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <TextField
+                  fullWidth
+                  label={t('workflows:fieldForm.selectOptions')}
+                  value={field.options?.join(', ') || ''}
+                  onChange={(e) =>
+                    onUpdate(index, {
+                      options: e.target.value
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter((s) => s),
+                    })
+                  }
+                  size="small"
+                  placeholder={t('workflows:fieldForm.selectOptionsPlaceholder')}
+                  helperText={field.dropdown_list_name ? '참조 목록의 미리보기 (읽기 전용)' : t('workflows:fieldForm.selectOptionsHelper')}
+                  disabled={!!field.dropdown_list_name}
+                />
+                <IconButton
+                  size="small"
+                  onClick={handleOpenListDialog}
+                  title="커스텀 목록에서 불러오기"
+                  sx={{ alignSelf: 'flex-start', mt: 0.5 }}
+                >
+                  <PlaylistAddIcon />
+                </IconButton>
+              </Box>
             </Box>
           )}
 
