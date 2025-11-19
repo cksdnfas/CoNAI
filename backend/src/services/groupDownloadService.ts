@@ -161,7 +161,7 @@ export class GroupDownloadService {
 
         // 원본 파일이 없으면 썸네일로 대체
         if (!filePath && image.thumbnail_path) {
-          filePath = resolveUploadsPath(image.thumbnail_path);
+          filePath = path.join(runtimePaths.tempDir, image.thumbnail_path);
           fileExtension = path.extname(image.thumbnail_path) || '.jpg';
         }
       } else if (downloadType === 'video') {
@@ -195,6 +195,14 @@ export class GroupDownloadService {
           filePath,
           originalName: finalName,
           compositeHash: image.composite_hash
+        });
+      } else {
+        // 디버깅: 파일을 찾지 못한 경우 로그
+        console.warn(`[GroupDownload] File not found for ${downloadType}:`, {
+          composite_hash: image.composite_hash,
+          filePath,
+          thumbnail_path: image.thumbnail_path,
+          original_file_path: image.original_file_path,
         });
       }
     }

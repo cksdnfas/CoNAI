@@ -8,6 +8,9 @@
   - 새 창이 열리면서 백엔드 JSON 응답이 표시되던 문제 해결
   - 다운로드 실패 시 사용자 친화적인 에러 메시지 표시
   - 전체 다운로드 및 선택 다운로드 모두 정상 동작 확인
+  - **백엔드 썸네일 경로 처리 수정**: 원본 다운로드 폴백 시 잘못된 경로 사용 문제 해결
+    - `resolveUploadsPath()` → `runtimePaths.tempDir` 사용으로 수정
+    - 썸네일 및 원본 이미지 다운로드 정상화
 - **중국어 번역 파일**: JSON 구문 오류 수정
   - `workflows.json:176` 중국어 따옴표 이스케이프 처리
 - **TypeScript 타입 오류**: 파일 검증 로그 모달 타입 수정
@@ -56,8 +59,9 @@
 **변경된 파일**:
 1. `frontend/src/services/api/groupApi.ts` - `downloadGroupBlob()` 함수 추가
 2. `frontend/src/pages/ImageGroups/components/GroupImageGridModal.tsx` - Blob 기반 다운로드로 변경
-3. `frontend/src/i18n/locales/zh-CN/workflows.json` - 중국어 따옴표 이스케이프
-4. `frontend/src/pages/Settings/features/Folder/components/FileVerificationLogModal.tsx` - 타입 수정
+3. `backend/src/services/groupDownloadService.ts` - 썸네일 경로 처리 수정 + 디버깅 로그 추가
+4. `frontend/src/i18n/locales/zh-CN/workflows.json` - 중국어 따옴표 이스케이프
+5. `frontend/src/pages/Settings/features/Folder/components/FileVerificationLogModal.tsx` - 타입 수정
 
 **다운로드 메커니즘 변경**:
 ```typescript

@@ -360,10 +360,42 @@ const startDownload = async (...) => {
 현재 다운로드 기능이 동작하지 않는 주요 원인은:
 1. **GroupImageGridModal에서 `window.open()` 사용** - 새 창에서 URL을 열어 에러 응답이 표시됨
 2. **자동폴더 그룹의 올바른 API를 사용하지 않음** - Blob 기반 API가 있지만 모달에서 미사용
+3. **백엔드 썸네일 경로 처리 오류** - 원본 다운로드 폴백 시 `resolveUploadsPath` 사용 (올바름: `runtimePaths.tempDir`)
 
 해결 방법:
 1. 커스텀 그룹에도 Blob 기반 다운로드 API 추가 (`downloadGroupBlob`)
 2. GroupImageGridModal에서 두 그룹 타입 모두 Blob 기반 API 사용
 3. 에러 처리 및 사용자 피드백 개선
+4. 백엔드 썸네일 경로 처리 수정 (line 164)
 
 이 수정으로 **새 창이 열리는 문제 해결** 및 **다운로드가 정상적으로 트리거**되어야 합니다.
+
+---
+
+## 추가 수정 (2025-11-19 14:30)
+
+### 발견된 추가 문제
+썸네일 및 원본 이미지 다운로드 시 파일을 찾지 못하는 문제 발견:
+- **위치**: `backend/src/services/groupDownloadService.ts:164`
+- **문제**: 원본 파일이 없을 때 썸네일로 폴백 시 `resolveUploadsPath()` 사용
+- **원인**: 썸네일은 `uploads` 디렉토리가 아닌 `temp` 디렉토리에 저장됨
+
+### 수정 내용
+```typescript
+// Before (잘못된 경로)
+if (!filePath && image.thumbnail_path) {
+  filePath = resolveUploadsPath(image.thumbnail_path);  // ❌ 잘못됨
+  fileExtension = path.extname(image.thumbnail_path) || '.jpg';
+}
+
+// After (올바른 경로)
+if (!filePath && image.thumbnail_path) {
+  filePath = path.join(runtimePaths.tempDir, image.thumbnail_path);  // ✅ 수정됨
+  fileExtension = path.extname(image.thumbnail_path) || '.jpg';
+}
+```
+
+### 추가 개선
+- 파일을 찾지 못한 경우 디버깅 로그 추가
+- `console.warn`으로 누락된 파일 경로 출력
+- 문제 진단 용이성 향상
