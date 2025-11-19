@@ -1,6 +1,6 @@
 {
   "name": "comfyui-image-manager",
-  "version": "2.0.1a",
+  "version": "2.0.2",
   "description": "React-based image viewer and manager for ComfyUI",
   "private": true,
   "workspaces": [

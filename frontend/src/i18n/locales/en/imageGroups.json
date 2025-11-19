@@ -9,8 +9,16 @@
   },
   "groupCard": {
     "imageCount": "{{count}} images",
+    "subgroupCount": "{{count}} subgroups",
+    "folderCount": "{{count}} subfolders",
     "autoCollect": "Auto-collect",
     "stats": "Auto: {{auto}} | Manual: {{manual}}"
+  },
+  "imageView": {
+    "viewImages": "View Images",
+    "title": "{{name}} - Images",
+    "description": "View direct images in this group",
+    "folderDescription": "View direct images in this folder"
   },
   "menu": {
     "edit": "Edit",
@@ -33,6 +41,10 @@
     "selectParent": "Select Parent Group",
     "autoCollectEnable": "Enable Auto-collection",
     "autoCollectDescription": "Automatically add images that match the configured conditions to this group.",
+    "autoCollectDisabledHelp": "When auto-collection is enabled, newly uploaded images will be automatically added to this group based on the configured conditions.",
+    "filterApplied": "{{count}} filters applied. Execution order: Exclude → OR → AND",
+    "addFiltersPrompt": "Add filters to configure auto-collection conditions",
+    "filterHelpTooltip": "Filter usage help",
     "orConditionInfo": "OR Condition: Multiple conditions will collect images that satisfy at least one condition.",
     "orConditionExample": "Example: \"Prompt contains 'anime'\" + \"Auto-tag has character\" → Collects if either is satisfied",
     "conditionsTitle": "Auto-collection Conditions",
@@ -46,6 +58,7 @@
   },
   "hierarchy": {
     "root": "Root",
+    "groupList": "Group List",
     "childGroups": "{{count}} subgroups",
     "openSubgroups": "Open Subgroups",
     "backToParent": "Back to Parent",

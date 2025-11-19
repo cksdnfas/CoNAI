@@ -36,6 +36,7 @@ const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
 
 const SettingsPage: React.FC = () => {
   const { t } = useTranslation('settings');
+  const { t: tPrompt } = useTranslation('promptManagement');
   const [tabValue, setTabValue] = useState(0);
   const [promptTabValue, setPromptTabValue] = useState(0);
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -54,7 +55,7 @@ const SettingsPage: React.FC = () => {
       const loadedSettings = await settingsApi.getSettings();
       setSettings(loadedSettings);
     } catch (err) {
-      setError('Failed to load settings');
+      setError(t('messages.loadFailed'));
       console.error('Failed to load settings:', err);
     } finally {
       setLoading(false);
@@ -155,7 +156,7 @@ const SettingsPage: React.FC = () => {
     return (
       <Container maxWidth="md">
         <Box sx={{ py: 4 }}>
-          <Alert severity="error">{error || 'Failed to load settings'}</Alert>
+          <Alert severity="error">{error || t('messages.loadFailed')}</Alert>
         </Box>
       </Container>
     );
@@ -233,8 +234,8 @@ const SettingsPage: React.FC = () => {
                 onChange={(_event, newValue) => setPromptTabValue(newValue)}
                 aria-label="prompt management tabs"
               >
-                <Tab label="Positive 프롬프트" />
-                <Tab label="Negative 프롬프트" />
+                <Tab label={tPrompt('tabs.positive')} />
+                <Tab label={tPrompt('tabs.negative')} />
               </Tabs>
             </Box>
 

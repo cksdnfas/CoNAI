@@ -15,6 +15,7 @@ import {
   CallSplit as OrIcon,
   MergeType as AndIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import type { FilterCondition, FilterGroupType } from '@comfyui-image-manager/shared';
 import FilterConditionCard from './FilterConditionCard';
 
@@ -26,26 +27,20 @@ interface FilterGroupCardProps {
   onRemoveCondition: (index: number) => void;
 }
 
-// 그룹 타입별 설정
+// Group type configuration (colors and icons only - labels and descriptions from i18n)
 const GROUP_CONFIG = {
   exclude: {
-    label: '제외 (NOT)',
     color: '#f44336',
     icon: BlockIcon,
-    description: '이 조건에 맞는 이미지를 제외합니다 (최우선 실행)'
   },
   or: {
-    label: 'OR 그룹',
     color: '#2196f3',
     icon: OrIcon,
-    description: '조건 중 하나라도 만족하면 포함됩니다'
   },
   and: {
-    label: 'AND 그룹',
     color: '#4caf50',
     icon: AndIcon,
-    description: '모든 조건을 만족해야 포함됩니다'
-  }
+  },
 };
 
 const FilterGroupCard: React.FC<FilterGroupCardProps> = ({
@@ -55,6 +50,7 @@ const FilterGroupCard: React.FC<FilterGroupCardProps> = ({
   onUpdateCondition,
   onRemoveCondition,
 }) => {
+  const { t } = useTranslation('common');
   const config = GROUP_CONFIG[type];
   const Icon = config.icon;
 
@@ -68,15 +64,15 @@ const FilterGroupCard: React.FC<FilterGroupCardProps> = ({
       }}
     >
       <CardContent>
-        {/* 그룹 헤더 */}
+        {/* Group header */}
         <Box sx={{ mb: 2 }}>
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
             <Icon sx={{ color: config.color }} />
             <Typography variant="h6" sx={{ fontWeight: 600, color: config.color }}>
-              {config.label}
+              {t(`filterBuilder.groupTypes.${type}.label`)}
             </Typography>
             <Chip
-              label={`${conditions.length}개 조건`}
+              label={t('filterBuilder.labels.conditionsCount', { count: conditions.length })}
               size="small"
               sx={{
                 backgroundColor: config.color,
@@ -86,13 +82,13 @@ const FilterGroupCard: React.FC<FilterGroupCardProps> = ({
             />
           </Stack>
           <Typography variant="body2" color="text.secondary">
-            {config.description}
+            {t(`filterBuilder.groupTypes.${type}.description`)}
           </Typography>
         </Box>
 
         <Divider sx={{ mb: 2 }} />
 
-        {/* 조건 리스트 */}
+        {/* Condition list */}
         {conditions.length > 0 ? (
           <Stack spacing={2} sx={{ mb: 2 }}>
             {conditions.map((condition, index) => (
@@ -118,12 +114,12 @@ const FilterGroupCard: React.FC<FilterGroupCardProps> = ({
             }}
           >
             <Typography variant="body2" color="text.secondary">
-              조건이 없습니다. 아래 버튼을 눌러 조건을 추가하세요.
+              {t('filterBuilder.messages.noConditions')}
             </Typography>
           </Box>
         )}
 
-        {/* 조건 추가 버튼 */}
+        {/* Add condition button */}
         <Button
           fullWidth
           variant="outlined"
@@ -138,7 +134,7 @@ const FilterGroupCard: React.FC<FilterGroupCardProps> = ({
             },
           }}
         >
-          조건 추가
+          {t('filterBuilder.buttons.addCondition')}
         </Button>
       </CardContent>
     </Card>

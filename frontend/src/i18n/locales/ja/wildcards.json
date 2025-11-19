@@ -80,6 +80,21 @@
       "folderPathRequired": "LORAフォルダパスは必須です",
       "invalidWeight": "有効な重み値を入力してください (0.1 ~ 2.0)",
       "scanFailed": "スキャンに失敗しました: {{error}}"
+    },
+    "tierLabel": "階層 {{tier}}",
+    "filesSelected": "{{count}}個のLORAファイルが選択されました",
+    "filesFound": "<strong>{{count}}個のLORAファイル</strong>が見つかりました:",
+    "promptsCount": "{{count}}個のプロンプト",
+    "moreFiles": "...他{{count}}個のファイル",
+    "filters": {
+      "tierFilter": "階層フィルター",
+      "wildcardSearch": "ワイルドカード検索",
+      "searchPlaceholder": "検索...",
+      "clearFilters": "フィルターをクリア",
+      "totalWildcards": "合計<strong>{{count}}</strong>個のワイルドカード",
+      "filteredCount": "(フィルター済み: <strong>{{count}}</strong>個)",
+      "noResults": "検索結果がありません",
+      "tryDifferentFilters": "別の検索キーワードまたはフィルターをお試しください"
     }
   }
 }

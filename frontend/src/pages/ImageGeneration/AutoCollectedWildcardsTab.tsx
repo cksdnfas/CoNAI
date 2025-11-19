@@ -381,7 +381,7 @@ export default function AutoCollectedWildcardsTab() {
               {/* Tier Filter */}
               <Box sx={{ minWidth: 200 }}>
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  계층 필터
+                  {t('wildcards:autoCollect.filters.tierFilter')}
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <IconButton
@@ -417,12 +417,12 @@ export default function AutoCollectedWildcardsTab() {
               {/* Text Search */}
               <Box sx={{ flex: 1, minWidth: 150 }}>
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  와일드카드 검색
+                  {t('wildcards:autoCollect.filters.wildcardSearch')}
                 </Typography>
                 <TextField
                   fullWidth
                   size="small"
-                  placeholder="검색..."
+                  placeholder={t('wildcards:autoCollect.filters.searchPlaceholder')}
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                   InputProps={{
@@ -441,7 +441,7 @@ export default function AutoCollectedWildcardsTab() {
                     onClick={handleClearFilters}
                     sx={{ height: 40 }}
                   >
-                    필터 초기화
+                    {t('wildcards:autoCollect.filters.clearFilters')}
                   </Button>
                 </Box>
               )}
@@ -450,11 +450,11 @@ export default function AutoCollectedWildcardsTab() {
             {/* Filter Stats */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Typography variant="body2" color="text.secondary">
-                총 <strong>{autoWildcards.length}</strong>개 와일드카드
+                {t('wildcards:autoCollect.filters.totalWildcards', { count: autoWildcards.length })}
                 {hasActiveFilters && (
                   <span>
                     {' '}
-                    (필터링: <strong>{filteredWildcards.length}</strong>개)
+                    {t('wildcards:autoCollect.filters.filteredCount', { count: filteredWildcards.length })}
                   </span>
                 )}
               </Typography>
@@ -475,10 +475,10 @@ export default function AutoCollectedWildcardsTab() {
       ) : filteredWildcards.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            검색 결과가 없습니다
+            {t('wildcards:autoCollect.filters.noResults')}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            다른 검색어나 필터를 시도해보세요
+            {t('wildcards:autoCollect.filters.tryDifferentFilters')}
           </Typography>
         </Paper>
       ) : (
@@ -497,7 +497,7 @@ export default function AutoCollectedWildcardsTab() {
                         variant="outlined"
                       />
                       <Chip
-                        label={`계층 ${getWildcardTier(wildcard.id)}`}
+                        label={t('wildcards:autoCollect.tierLabel', { tier: getWildcardTier(wildcard.id) })}
                         size="small"
                         color="secondary"
                         variant="outlined"
@@ -591,7 +591,7 @@ export default function AutoCollectedWildcardsTab() {
                 startIcon={<FolderIcon />}
               >
                 {selectedFiles.length > 0
-                  ? `${selectedFiles.length}개 LORA 파일 선택됨`
+                  ? t('wildcards:autoCollect.filesSelected', { count: selectedFiles.length })
                   : t('wildcards:autoCollect.folderPath')}
               </Button>
             </label>
@@ -599,16 +599,16 @@ export default function AutoCollectedWildcardsTab() {
             {/* Preview Selected Files */}
             {selectedFiles.length > 0 && (
               <Alert severity="success">
-                <strong>{selectedFiles.length}개 LORA 파일</strong>을 발견했습니다:
+                {t('wildcards:autoCollect.filesFound', { count: selectedFiles.length })}
                 <Box component="ul" sx={{ mt: 1, mb: 0 }}>
                   {selectedFiles.slice(0, 5).map((file, idx) => (
                     <li key={idx}>
                       <strong>{file.loraName}</strong>
-                      {file.promptLines.length > 0 && ` (${file.promptLines.length}개 프롬프트)`}
+                      {file.promptLines.length > 0 && ` (${t('wildcards:autoCollect.promptsCount', { count: file.promptLines.length })})`}
                     </li>
                   ))}
                   {selectedFiles.length > 5 && (
-                    <li>...외 {selectedFiles.length - 5}개 파일</li>
+                    <li>{t('wildcards:autoCollect.moreFiles', { count: selectedFiles.length - 5 })}</li>
                   )}
                 </Box>
               </Alert>

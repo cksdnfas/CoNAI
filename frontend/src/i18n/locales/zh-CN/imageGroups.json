@@ -7,8 +7,16 @@
   },
   "groupCard": {
     "imageCount": "{{count}}张图像",
+    "subgroupCount": "{{count}}个子组",
+    "folderCount": "{{count}}个子文件夹",
     "autoCollect": "自动收集",
     "stats": "自动：{{auto}} | 手动：{{manual}}"
+  },
+  "imageView": {
+    "viewImages": "查看图像",
+    "title": "{{name}} - 图像",
+    "description": "查看此组中的直接图像",
+    "folderDescription": "查看此文件夹中的直接图像"
   },
   "menu": {
     "edit": "编辑",
@@ -37,7 +45,11 @@
     "emptyConditions": "添加条件以配置自动收集规则。",
     "buttonCreate": "创建",
     "buttonUpdate": "更新",
-    "buttonCancel": "取消"
+    "buttonCancel": "取消",
+    "autoCollectDisabledHelp": "启用自动收集后,新上传的图片将根据配置的条件自动添加到此组。",
+    "filterApplied": "已应用{{count}}个过滤器。执行顺序: 排除 → OR → AND",
+    "addFiltersPrompt": "添加过滤器以配置自动收集条件",
+    "filterHelpTooltip": "过滤器使用帮助"
   },
   "conditions": {
     "conditionNumber": "条件{{number}}",
@@ -166,5 +178,8 @@
     "loadingError": "加载组时发生错误。",
     "buttonAssign": "分配",
     "buttonCancel": "取消"
+  },
+  "hierarchy": {
+    "groupList": "组列表"
   }
 }

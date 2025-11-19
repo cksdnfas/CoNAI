@@ -7,8 +7,16 @@
   },
   "groupCard": {
     "imageCount": "{{count}}張圖像",
+    "subgroupCount": "{{count}}個子群組",
+    "folderCount": "{{count}}個子資料夾",
     "autoCollect": "自動收集",
     "stats": "自動：{{auto}} | 手動：{{manual}}"
+  },
+  "imageView": {
+    "viewImages": "檢視圖像",
+    "title": "{{name}} - 圖像",
+    "description": "檢視此群組中的直接圖像",
+    "folderDescription": "檢視此資料夾中的直接圖像"
   },
   "menu": {
     "edit": "編輯",
@@ -37,7 +45,11 @@
     "emptyConditions": "新增條件以設定自動收集規則。",
     "buttonCreate": "建立",
     "buttonUpdate": "更新",
-    "buttonCancel": "取消"
+    "buttonCancel": "取消",
+    "autoCollectDisabledHelp": "啟用自動收集後,新上傳的圖片將根據配置的條件自動添加到此群組。",
+    "filterApplied": "已套用{{count}}個篩選器。執行順序: 排除 → OR → AND",
+    "addFiltersPrompt": "添加篩選器以配置自動收集條件",
+    "filterHelpTooltip": "篩選器使用說明"
   },
   "conditions": {
     "conditionNumber": "條件{{number}}",
@@ -166,5 +178,8 @@
     "loadingError": "載入群組時發生錯誤。",
     "buttonAssign": "指派",
     "buttonCancel": "取消"
+  },
+  "hierarchy": {
+    "groupList": "群組列表"
   }
 }

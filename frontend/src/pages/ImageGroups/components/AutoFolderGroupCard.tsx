@@ -12,6 +12,7 @@ import { autoFolderGroupsApi } from '../../../services/api/autoFolderGroupsApi';
 import { useImageRotation } from '../../../hooks/useImageRotation';
 import type { ImageRecord } from '../../../types/image';
 import { getBackendOrigin } from '../../../utils/backend';
+import { useTranslation } from 'react-i18next';
 
 interface AutoFolderGroupCardProps {
   group: AutoFolderGroupWithStats;
@@ -25,6 +26,7 @@ interface AutoFolderGroupCardProps {
  * - 이미지 없으면 폴더 아이콘 표시
  */
 export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps) {
+  const { t } = useTranslation('imageGroups');
   const backendOrigin = getBackendOrigin();
 
   // 이미지 가져오기 함수
@@ -350,13 +352,13 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
           <Chip
-            label={`${group.image_count || 0} 이미지`}
+            label={t('groupCard.imageCount', { count: group.image_count || 0 })}
             size="small"
             sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', color: 'white' }}
           />
           {group.child_count !== undefined && group.child_count > 0 && (
             <Chip
-              label={`${group.child_count} 하위폴더`}
+              label={t('groupCard.folderCount', { count: group.child_count })}
               size="small"
               sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', color: 'white' }}
             />

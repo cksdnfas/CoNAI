@@ -167,10 +167,10 @@ const AutoCollectTab: React.FC<AutoCollectTabProps> = ({
           >
             <Typography variant="body2" color="text.secondary">
               {filterCount > 0
-                ? `${filterCount}개의 필터가 적용됩니다. 실행 순서: 제외 → OR → AND`
-                : '필터를 추가하여 자동수집 조건을 설정하세요'}
+                ? t('imageGroups:modal.filterApplied', { count: filterCount })
+                : t('imageGroups:modal.addFiltersPrompt')}
             </Typography>
-            <Tooltip title="필터 사용법 도움말" arrow>
+            <Tooltip title={t('imageGroups:modal.filterHelpTooltip')} arrow>
               <IconButton onClick={handleHelpClick} size="small" color="primary">
                 <HelpOutlineIcon fontSize="small" />
               </IconButton>
@@ -200,7 +200,7 @@ const AutoCollectTab: React.FC<AutoCollectTabProps> = ({
           }}
         >
           <Typography variant="body2" color="text.secondary">
-            자동수집을 활성화하면 새로 업로드되는 이미지가 설정한 조건에 따라 자동으로 이 그룹에 추가됩니다.
+            {t('imageGroups:modal.autoCollectDisabledHelp')}
           </Typography>
         </Box>
       )}

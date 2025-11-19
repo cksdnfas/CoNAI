@@ -71,6 +71,91 @@
       "progress": "正在執行第{{current}}次",
       "progressWithTotal": "正在執行第{{current}}/{{total}}次",
       "stop": "停止"
+    },
+    "naiSettings": {
+      "basic": {
+        "title": "基本設定",
+        "model": "模型",
+        "resolution": "解析度",
+        "prompt": "提示詞",
+        "promptPlaceholder": "1girl, portrait, detailed face, masterpiece...",
+        "negativePrompt": "負面提示詞",
+        "negativePromptPlaceholder": "bad anatomy, low quality..."
+      },
+      "sampling": {
+        "title": "採樣設定",
+        "sampler": "採樣器",
+        "noiseSchedule": "Noise Schedule",
+        "steps": "Steps",
+        "guidance": "Guidance",
+        "cfgRescale": "CFG Rescale",
+        "uncondScale": "Uncond Scale",
+        "varietyPlus": "Variety+"
+      },
+      "output": {
+        "title": "輸出設定",
+        "samples": "樣本數"
+      }
+    }
+  },
+  "customDropdown": {
+    "title": "自訂下拉式選單",
+    "buttons": {
+      "addList": "新增清單",
+      "loadComfyUI": "載入ComfyUI模型",
+      "edit": "編輯",
+      "delete": "刪除",
+      "close": "關閉",
+      "cancel": "取消",
+      "create": "建立",
+      "collect": "收集模型",
+      "viewList": "檢視清單",
+      "selectFolder": "選擇models資料夾"
+    },
+    "tabs": {
+      "autoCollected": "自動收集",
+      "manual": "手動建立"
+    },
+    "labels": {
+      "auto": "自動",
+      "itemCount": "{{count}}項",
+      "listName": "清單名稱",
+      "listNameRequired": "清單名稱 *",
+      "description": "描述",
+      "path": "路徑",
+      "itemList": "項目清單（每行一項）*",
+      "itemListCount": "項目清單（{{count}}項）",
+      "pathOptions": "路徑選項：",
+      "checkpointsFullPath": "checkpoints - 包含完整路徑",
+      "unetFullPath": "unet - 包含完整路徑",
+      "upscaleModelsFullPath": "upscale_models - 包含完整路徑"
+    },
+    "dialog": {
+      "viewTitle": "檢視清單（唯讀）",
+      "createTitle": "新增自訂清單",
+      "editTitle": "編輯自訂清單",
+      "comfyUITitle": "載入ComfyUI模型"
+    },
+    "messages": {
+      "noAutoCollected": "沒有自動收集的清單。使用\"載入ComfyUI模型\"按鈕掃描模型。",
+      "noManual": "沒有手動建立的清單。使用\"新增清單\"按鈕建立清單。",
+      "minItemError": "請至少輸入1個項目。",
+      "deleteConfirm": "確定要刪除此清單嗎？",
+      "selectFolderError": "請選擇模型資料夾。",
+      "autoCollectedReadOnly": "自動收集的項目無法編輯。您只能檢視內容。",
+      "selectComfyUIFolder": "請選擇ComfyUI的models資料夾。\n選擇ComfyUI的models資料夾。",
+      "foldersDetected": "在{{count}}個資料夾中偵測到模型檔案：",
+      "fileCount": "{{count}}個檔案",
+      "moreCount": "...還有{{count}}個資料夾",
+      "collecting": "收集中...",
+      "pathExample": "例如：{{example}}",
+      "scanInfo": "掃描資訊：\n• 自動收集checkpoints、unet和upscale_models資料夾\n• 重新掃描相同資料夾將更新項目\n• 自動收集的項目可在\"自動收集\"標籤頁中檢視"
+    },
+    "placeholders": {
+      "itemList": "範例：\nSDXL 1.0\nSD 1.5\nRealistic Vision\nDreamShaper"
+    },
+    "helperText": {
+      "itemList": "每項用換行符號分隔"
     }
   }
 }

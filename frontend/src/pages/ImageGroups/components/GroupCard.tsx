@@ -15,6 +15,7 @@ import { groupApi } from '../../../services/api/groupApi';
 import { useImageRotation } from '../../../hooks/useImageRotation';
 import type { ImageRecord } from '../../../types/image';
 import { getBackendOrigin } from '../../../utils/backend';
+import { useTranslation } from 'react-i18next';
 
 interface GroupCardProps {
   group: GroupWithStats & { child_count?: number; has_children?: boolean };
@@ -29,6 +30,7 @@ interface GroupCardProps {
  * - 이미지 없으면 폴더 아이콘 표시
  */
 export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
+  const { t } = useTranslation('imageGroups');
   const backendOrigin = getBackendOrigin();
 
   // 설정 버튼 클릭 핸들러
@@ -389,13 +391,13 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
           <Chip
-            label={`${group.image_count || 0} 이미지`}
+            label={t('groupCard.imageCount', { count: group.image_count || 0 })}
             size="small"
             sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', color: 'white' }}
           />
           {group.child_count !== undefined && group.child_count > 0 && (
             <Chip
-              label={`${group.child_count} 하위그룹`}
+              label={t('groupCard.subgroupCount', { count: group.child_count })}
               size="small"
               sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', color: 'white' }}
             />

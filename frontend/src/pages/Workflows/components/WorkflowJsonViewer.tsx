@@ -9,12 +9,14 @@ import {
   Alert,
 } from '@mui/material';
 import { ContentCopy as CopyIcon } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 
 interface WorkflowJsonViewerProps {
   workflowJson: string | object;
 }
 
 const WorkflowJsonViewer: React.FC<WorkflowJsonViewerProps> = ({ workflowJson }) => {
+  const { t } = useTranslation(['workflows']);
   const [copySuccess, setCopySuccess] = useState(false);
 
   const jsonString = typeof workflowJson === 'string'
@@ -81,9 +83,9 @@ const WorkflowJsonViewer: React.FC<WorkflowJsonViewerProps> = ({ workflowJson })
         }}
       >
         <Typography variant="subtitle2" color="text.secondary">
-          Workflow JSON Structure
+          {t('workflows:jsonViewer.title')}
         </Typography>
-        <Tooltip title="Copy to clipboard">
+        <Tooltip title={t('workflows:jsonViewer.copyToClipboard')}>
           <IconButton size="small" onClick={handleCopy}>
             <CopyIcon fontSize="small" />
           </IconButton>
@@ -115,7 +117,7 @@ const WorkflowJsonViewer: React.FC<WorkflowJsonViewerProps> = ({ workflowJson })
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: '100%' }}>
-          Copied to clipboard!
+          {t('workflows:jsonViewer.copied')}
         </Alert>
       </Snackbar>
     </Box>

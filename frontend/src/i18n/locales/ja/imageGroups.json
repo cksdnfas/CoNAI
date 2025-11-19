@@ -7,8 +7,16 @@
   },
   "groupCard": {
     "imageCount": "{{count}}枚の画像",
+    "subgroupCount": "{{count}}個のサブグループ",
+    "folderCount": "{{count}}個のサブフォルダ",
     "autoCollect": "自動収集",
     "stats": "自動：{{auto}} | 手動：{{manual}}"
+  },
+  "imageView": {
+    "viewImages": "画像を表示",
+    "title": "{{name}} - 画像",
+    "description": "このグループの直接画像を確認します",
+    "folderDescription": "このフォルダの直接画像を確認します"
   },
   "menu": {
     "edit": "編集",
@@ -37,7 +45,11 @@
     "emptyConditions": "条件を追加して自動収集ルールを設定してください。",
     "buttonCreate": "作成",
     "buttonUpdate": "更新",
-    "buttonCancel": "キャンセル"
+    "buttonCancel": "キャンセル",
+    "autoCollectDisabledHelp": "自動収集を有効にすると、設定した条件に基づいて新しくアップロードされた画像が自動的にこのグループに追加されます。",
+    "filterApplied": "{{count}}個のフィルターが適用されます。実行順序: 除外 → OR → AND",
+    "addFiltersPrompt": "フィルターを追加して自動収集条件を設定してください",
+    "filterHelpTooltip": "フィルター使用方法ヘルプ"
   },
   "conditions": {
     "conditionNumber": "条件{{number}}",
@@ -166,5 +178,8 @@
     "loadingError": "グループの読み込み中にエラーが発生しました。",
     "buttonAssign": "割り当て",
     "buttonCancel": "キャンセル"
+  },
+  "hierarchy": {
+    "groupList": "グループリスト"
   }
 }

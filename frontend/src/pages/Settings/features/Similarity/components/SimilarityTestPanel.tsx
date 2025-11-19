@@ -54,6 +54,7 @@ export const SimilarityTestPanel: React.FC<SimilarityTestPanelProps> = ({
   const [statsLoading, setStatsLoading] = useState(false);
   const [rebuildLoading, setRebuildLoading] = useState(false);
   const [rebuildMessage, setRebuildMessage] = useState<string>('');
+  const [rebuildSuccess, setRebuildSuccess] = useState<boolean>(false);
 
   // Load stats on mount
   useEffect(() => {
@@ -75,13 +76,22 @@ export const SimilarityTestPanel: React.FC<SimilarityTestPanelProps> = ({
   const handleRebuildHashes = async () => {
     setRebuildLoading(true);
     setRebuildMessage('');
+    setRebuildSuccess(false);
     try {
       const result = await similarityApi.rebuildHashes(100);
-      setRebuildMessage(`✅ Processed: ${result.processed}, Failed: ${result.failed}, Remaining: ${result.remaining}`);
+      setRebuildMessage(t('similarity.test.rebuild.success', {
+        processed: result.processed,
+        failed: result.failed,
+        remaining: result.remaining
+      }));
+      setRebuildSuccess(true);
       // Reload stats after rebuild
       await loadStats();
     } catch (error: any) {
-      setRebuildMessage(`❌ Error: ${error.response?.data?.error || error.message}`);
+      setRebuildMessage(t('similarity.test.rebuild.error', {
+        error: error.response?.data?.error || error.message
+      }));
+      setRebuildSuccess(false);
     } finally {
       setRebuildLoading(false);
     }
@@ -106,7 +116,7 @@ export const SimilarityTestPanel: React.FC<SimilarityTestPanelProps> = ({
           <Box sx={{ mb: 2 }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
               <Typography variant="body2" color="text.secondary">
-                Hash Status:
+                {t('similarity.test.hashStatus')}:
               </Typography>
               <Chip
                 size="small"
@@ -131,11 +141,11 @@ export const SimilarityTestPanel: React.FC<SimilarityTestPanelProps> = ({
                 disabled={rebuildLoading}
                 sx={{ mt: 1 }}
               >
-                {rebuildLoading ? 'Rebuilding...' : `Rebuild ${stats.imagesWithoutHash} Missing Hashes`}
+                {rebuildLoading ? t('similarity.test.rebuild.rebuilding') : t('similarity.test.rebuild.button', { count: stats.imagesWithoutHash })}
               </Button>
             )}
             {rebuildMessage && (
-              <Alert severity={rebuildMessage.startsWith('✅') ? 'success' : 'error'} sx={{ mt: 1 }}>
+              <Alert severity={rebuildSuccess ? 'success' : 'error'} sx={{ mt: 1 }}>
                 {rebuildMessage}
               </Alert>
             )}

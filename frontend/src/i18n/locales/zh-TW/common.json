@@ -110,5 +110,140 @@
     "confirm": "確認",
     "retry": "重試",
     "refresh": "重新整理"
+  },
+  "filterModal": {
+    "title": {
+      "add": "新增篩選器",
+      "edit": "編輯篩選器"
+    },
+    "groupTypes": {
+      "label": "選擇群組",
+      "exclude": "排除",
+      "or": "OR",
+      "and": "AND"
+    },
+    "categories": {
+      "label": "類別",
+      "positive_prompt": "正向",
+      "negative_prompt": "負向",
+      "auto_tag": "自動標籤",
+      "basic": "基本"
+    },
+    "conditionSettings": {
+      "label": "條件設定",
+      "conditionType": "條件類型",
+      "value": "值",
+      "valuePlaceholder": "輸入要搜尋的值"
+    },
+    "conditionTypes": {
+      "prompt_contains": "包含",
+      "prompt_regex": "正規表示式",
+      "negative_prompt_contains": "包含",
+      "negative_prompt_regex": "正規表示式",
+      "auto_tag_exists": "自動標籤存在",
+      "auto_tag_has_character": "角色存在",
+      "auto_tag_rating": "Rating類型",
+      "auto_tag_rating_score": "Rating分數",
+      "auto_tag_general": "General標籤",
+      "auto_tag_character": "Character標籤",
+      "auto_tag_model": "模型",
+      "ai_tool": "AI工具",
+      "model_name": "模型名稱"
+    },
+    "fields": {
+      "exists": "存在",
+      "notExists": "不存在",
+      "ratingType": "Rating類型",
+      "scoreRange": "分數範圍: {{min}} ~ {{max}}",
+      "weightRange": "權重範圍: {{min}} ~ {{max}}",
+      "tagOrCharacter": "標籤/角色名",
+      "tagPlaceholder": "例如: 1girl, hatsune_miku"
+    },
+    "ratingTypes": {
+      "general": "General",
+      "sensitive": "Sensitive",
+      "questionable": "Questionable",
+      "explicit": "Explicit"
+    }
+  },
+  "filterBuilder": {
+    "groupTypes": {
+      "exclude": {
+        "label": "排除 (NOT)",
+        "labelShort": "排除",
+        "description": "排除符合這些條件的圖片（最高優先級）"
+      },
+      "or": {
+        "label": "OR群組",
+        "labelShort": "OR",
+        "description": "包含符合任一條件的圖片"
+      },
+      "and": {
+        "label": "AND群組",
+        "labelShort": "AND",
+        "description": "包含符合所有條件的圖片"
+      }
+    },
+    "categories": {
+      "positive_prompt": "正向提示詞",
+      "negative_prompt": "負向提示詞",
+      "auto_tag": "自動標籤",
+      "basic": "基本"
+    },
+    "conditionTypes": {
+      "prompt_contains": "包含",
+      "prompt_regex": "正規表示式",
+      "negative_prompt_contains": "包含",
+      "negative_prompt_regex": "正規表示式",
+      "auto_tag_exists": "自動標籤存在",
+      "auto_tag_has_character": "角色存在",
+      "auto_tag_rating": "分級類型",
+      "auto_tag_rating_score": "分級分數",
+      "auto_tag_general": "通用標籤",
+      "auto_tag_character": "角色標籤",
+      "auto_tag_model": "模型",
+      "ai_tool": "AI工具",
+      "model_name": "模型名稱"
+    },
+    "labels": {
+      "condition": "條件",
+      "conditionNumber": "條件 #{{number}}",
+      "editCondition": "編輯條件 #{{number}}",
+      "category": "分類",
+      "conditionType": "條件類型",
+      "value": "值",
+      "score": "分數",
+      "scoreRange": "分數範圍: {{min}} ~ {{max}}",
+      "weightRange": "權重範圍: {{min}} ~ {{max}}",
+      "ratingType": "分級類型",
+      "tagCharacterName": "標籤/角色名",
+      "conditionsCount": "{{count}}個條件"
+    },
+    "buttons": {
+      "addCondition": "新增條件"
+    },
+    "messages": {
+      "noConditions": "沒有條件。點擊下面的按鈕新增條件。"
+    },
+    "values": {
+      "exists": "存在",
+      "notExists": "不存在"
+    },
+    "ratingTypes": {
+      "general": "General",
+      "sensitive": "Sensitive",
+      "questionable": "Questionable",
+      "explicit": "Explicit"
+    }
+  },
+  "imageEditor": {
+    "title": "圖片編輯器",
+    "canvasInfo": "畫布資訊",
+    "canvasSize": "大小: {{width}} x {{height}} px",
+    "toolProperties": "工具屬性",
+    "brushSize": "筆刷大小: {{size}}px",
+    "brushColor": "筆刷顏色",
+    "eraserSize": "橡皮擦大小: {{size}}px",
+    "panHelp": "點擊並拖動以移動畫布。使用滑鼠滾輪放大/縮小。"
   }
 }

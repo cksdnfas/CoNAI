@@ -78,6 +78,21 @@
     "scanning": "스캔 중...",
     "lastScan": "마지막 스캔",
     "noScanYet": "아직 스캔이 실행되지 않았습니다",
+    "tierLabel": "계층 {{tier}}",
+    "filesSelected": "{{count}}개 LORA 파일 선택됨",
+    "filesFound": "<strong>{{count}}개 LORA 파일</strong>을 발견했습니다:",
+    "promptsCount": "{{count}}개 프롬프트",
+    "moreFiles": "...외 {{count}}개 파일",
+    "filters": {
+      "tierFilter": "계층 필터",
+      "wildcardSearch": "와일드카드 검색",
+      "searchPlaceholder": "검색...",
+      "clearFilters": "필터 초기화",
+      "totalWildcards": "총 <strong>{{count}}</strong>개 와일드카드",
+      "filteredCount": "(필터링: <strong>{{count}}</strong>개)",
+      "noResults": "검색 결과가 없습니다",
+      "tryDifferentFilters": "다른 검색어나 필터를 시도해보세요"
+    },
     "scanLog": {
       "title": "스캔 로그",
       "timestamp": "스캔 시각",

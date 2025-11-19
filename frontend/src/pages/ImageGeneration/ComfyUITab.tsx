@@ -296,7 +296,7 @@ export default function ComfyUITab() {
                   <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
                     {workflow.marked_fields && workflow.marked_fields.length > 0 && (
                       <Chip
-                        label={`${workflow.marked_fields.length}개 필드`}
+                        label={t('workflows:card.fieldsCount', { count: workflow.marked_fields.length })}
                         size="small"
                         variant="outlined"
                         sx={{ height: '18px', fontSize: '0.65rem' }}

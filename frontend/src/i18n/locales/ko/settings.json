@@ -308,6 +308,7 @@
   },
   "similarity": {
     "title": "이미지 유사도 검색 설정",
+    "autoGenerateHash": "업로드 시 자동 해시 생성",
     "description": "유사한 이미지 검색을 위한 해시를 자동으로 생성합니다",
     "systemStatus": {
       "title": "시스템 상태",
@@ -342,10 +343,17 @@
       },
       "searchButton": "검색 실행",
       "searching": "검색 중...",
+      "hashStatus": "Hash 상태",
       "queryImage": "검색 원본 이미지",
       "results": "검색 결과: {{count}}개",
       "noResults": "유사한 이미지가 없습니다.",
       "searchFailed": "검색 실패",
+      "rebuild": {
+        "button": "{{count}}개 미생성 해시 재생성",
+        "rebuilding": "재생성 중...",
+        "success": "처리 완료: {{processed}}개 완료, {{failed}}개 실패, {{remaining}}개 남음",
+        "error": "오류: {{error}}"
+      },
       "imageDetails": {
         "id": "ID:",
         "filename": "파일명:",
@@ -458,5 +466,217 @@
     "saveSuccess": "설정이 성공적으로 저장되었습니다",
     "saveFailed": "설정 저장에 실패했습니다",
     "loadFailed": "설정 불러오기에 실패했습니다"
+  },
+  "thumbnailRegeneration": {
+    "title": "썸네일 재생성",
+    "sections": {
+      "currentStatus": "현재 상태"
+    },
+    "stats": {
+      "totalFiles": "전체 파일:",
+      "withThumbnail": "썸네일 있음:",
+      "withoutThumbnail": "썸네일 없음:"
+    },
+    "phases": {
+      "verifying": "파일 검증 중...",
+      "deleting": "기존 썸네일 삭제 중...",
+      "generating": "썸네일 생성 중...",
+      "completed": "완료",
+      "waiting": "대기 중"
+    },
+    "time": {
+      "seconds": "{{elapsed}}초",
+      "minutesSeconds": "{{minutes}}분 {{seconds}}초"
+    },
+    "status": {
+      "completed": "완료",
+      "inProgress": "진행 중"
+    },
+    "progress": {
+      "deletedThumbnails": "삭제된 썸네일:",
+      "generatedThumbnails": "생성된 썸네일:",
+      "elapsedTime": "소요 시간:"
+    },
+    "messages": {
+      "success": "썸네일 재생성이 완료되었습니다!",
+      "loadStatsFailed": "통계를 불러오는데 실패했습니다",
+      "alreadyRunning": "썸네일 재생성이 이미 실행 중입니다",
+      "startFailed": "썸네일 재생성 시작에 실패했습니다"
+    },
+    "instructions": {
+      "title": "썸네일 재생성은 다음 순서로 진행됩니다:",
+      "step1": "1. 파일 검증 실행",
+      "step2": "2. 기존 썸네일 삭제",
+      "step3": "3. 새 썸네일 생성",
+      "warning": "주의:",
+      "warningText": "파일 수에 따라 시간이 오래 걸릴 수 있습니다."
+    },
+    "buttons": {
+      "close": "닫기",
+      "start": "재생성 시작",
+      "starting": "시작 중...",
+      "inProgress": "진행 중..."
+    }
+  },
+  "folderSettings": {
+    "title": "폴더 관리",
+    "subtitle": "감시 폴더를 설정하고, 백그라운드 작업 상태를 모니터링합니다.",
+    "scheduler": {
+      "title": "스케줄러 설정",
+      "backgroundHash": {
+        "title": "백그라운드 해시 감시 간격",
+        "tooltip": "업로드된 파일의 해시를 생성하는 백그라운드 작업(Phase 2) 실행 간격입니다. 간격이 짧을수록 빠르게 처리되지만 시스템 부하가 증가합니다.",
+        "intervalLabel": "간격 (초)",
+        "intervalTooltip": "미처리된 해시 작업을 확인하는 주기입니다. 5-300초 사이로 설정할 수 있습니다.",
+        "saveButton": "저장",
+        "savingButton": "저장 중...",
+        "errorRange": "간격은 5-300초 사이여야 합니다",
+        "errorSave": "설정 저장에 실패했습니다"
+      },
+      "autoTagger": {
+        "title": "자동 태깅 스케줄러",
+        "tooltip": "자동 태깅 스케줄러의 폴링 간격과 배치 크기를 설정합니다. 폴링 간격이 짧고 배치 크기가 클수록 빠르게 처리되지만 시스템 부하가 증가합니다.",
+        "pollingIntervalLabel": "폴링 간격 (초)",
+        "pollingIntervalTooltip": "미태깅 이미지를 확인하는 주기입니다. 5-300초 사이로 설정할 수 있습니다.",
+        "batchSizeLabel": "배치 크기 (개)",
+        "batchSizeTooltip": "한 번에 처리할 이미지 개수입니다. 1-100개 사이로 설정할 수 있습니다.",
+        "saveButton": "저장",
+        "savingButton": "저장 중...",
+        "errorPollingRange": "폴링 간격은 5-300초 사이여야 합니다",
+        "errorBatchRange": "배치 크기는 1-100 사이여야 합니다",
+        "errorSave": "설정 저장에 실패했습니다"
+      }
+    },
+    "watchedFolders": {
+      "title": "감시 폴더 목록",
+      "addFolder": "폴더 추가",
+      "refresh": "새로고침",
+      "viewAllLogs": "전체 로그",
+      "scanAll": "전체 스캔",
+      "scanning": "스캔 중...",
+      "noName": "이름 없음",
+      "active": "활성",
+      "inactive": "비활성",
+      "autoScanInterval": "{{interval}}분",
+      "scanStatus": "스캔",
+      "lastScan": "마지막 스캔: {{date}}",
+      "noScanHistory": "스캔 기록 없음",
+      "watcherStatus": {
+        "starting": "시작 중...",
+        "watching": "감시 중",
+        "error": "오류",
+        "stopped": "중지",
+        "inactive": "비활성"
+      },
+      "tooltips": {
+        "scan": "스캔",
+        "log": "로그",
+        "edit": "편집",
+        "delete": "삭제",
+        "watcherStart": "감시 시작",
+        "watcherStop": "감시 중지",
+        "processing": "처리 중..."
+      },
+      "messages": {
+        "loadFailed": "폴더 목록을 불러오는데 실패했습니다",
+        "deleteFailed": "폴더 삭제에 실패했습니다",
+        "deleteConfirm": "\"{{name}}\" 폴더를 삭제하시겠습니까?",
+        "scanFailed": "폴더 스캔에 실패했습니다",
+        "scanAllFailed": "전체 폴더 스캔에 실패했습니다",
+        "scanAllComplete": "전체 스캔 완료: {{totalFolders}}개 폴더, 신규 {{totalNew}}개, 기존 {{totalExisting}}개{{errors}}",
+        "scanAllErrors": ", 오류 {{totalErrors}}개",
+        "watcherStartFailed": "실시간 감시 시작에 실패했습니다",
+        "watcherStopFailed": "실시간 감시 중지에 실패했습니다"
+      }
+    },
+    "dialog": {
+      "addTitle": "폴더 추가",
+      "editTitle": "폴더 편집",
+      "folderPath": "폴더 경로 *",
+      "folderPathDisabled": "폴더 경로는 편집할 수 없습니다",
+      "folderPathHelper": "절대 경로를 입력해주세요 (예: D:\\Images 또는 \\\\192.168.1.100\\Share\\Images)",
+      "folderName": "폴더 이름",
+      "folderNameHelper": "미입력 시 폴더명이 자동으로 사용됩니다",
+      "watcherEnabled": "실시간 파일 감시 활성화",
+      "watcherTooltip": "실시간 감시는 폴더 내 파일 추가/수정/삭제를 즉시 감지하여 자동으로 처리합니다. 자동 스캔과 별개로 동작하며, 더 빠른 반응 속도를 제공합니다.",
+      "pollingInterval": "폴링 간격 (네트워크 드라이브용)",
+      "pollingIntervalTooltip": "네트워크 드라이브의 경우 폴링 방식으로 파일 변경을 감지합니다. 간격을 짧게 하면 더 빠르게 감지하지만 네트워크 부하가 증가합니다. 비워두면 자동으로 감지합니다 (기본: 1000ms).",
+      "pollingIntervalLabel": "폴링 간격 (밀리초)",
+      "pollingIntervalPlaceholder": "자동 감지 (네트워크 드라이브: 1000ms)",
+      "pollingIntervalHelper": "비워두면 자동으로 설정됩니다. 권장: 500-3000ms",
+      "autoScan": "자동 스캔 활성화",
+      "scanInterval": "스캔 간격 (분)",
+      "scanIntervalHelper": "자동 스캔 주기 (분 단위)",
+      "advancedOptions": "고급 옵션",
+      "recursive": "하위 폴더 포함 (재귀 스캔)",
+      "excludeExtensions": "제외할 확장자",
+      "excludeExtensionsTooltip": "기본적으로 모든 이미지 형식 (.jpg, .png, .webp, .gif, .bmp, .tiff)을 스캔합니다. 스캔하지 않을 확장자가 있다면 아래에 추가하세요.",
+      "excludeExtensionsPlaceholder": ".tmp",
+      "excludePatterns": "제외 패턴",
+      "excludePatternsTooltip": "특정 폴더나 파일 패턴을 스캔에서 제외할 수 있습니다. 예: node_modules, .git, temp",
+      "excludePatternsPlaceholder": "예: node_modules, .git",
+      "addButton": "추가",
+      "saveButton": "저장",
+      "savingButton": "저장 중...",
+      "cancelButton": "취소",
+      "errorPath": "폴더 경로를 입력해주세요",
+      "errorSave": "폴더 저장에 실패했습니다"
+    },
+    "scanLog": {
+      "title": "스캔 로그",
+      "titleSpecific": "스캔 로그 (특정 폴더)",
+      "titleAll": "스캔 로그 (전체)",
+      "noLogs": "스캔 로그가 없습니다",
+      "loadFailed": "스캔 로그를 불러오는데 실패했습니다",
+      "refresh": "새로고침",
+      "close": "닫기",
+      "columns": {
+        "scanTime": "스캔 시간",
+        "folder": "폴더",
+        "status": "상태",
+        "scanned": "스캔",
+        "new": "신규",
+        "existing": "기존",
+        "errors": "오류",
+        "duration": "소요시간",
+        "details": "상세"
+      },
+      "status": {
+        "success": "성공",
+        "error": "오류"
+      },
+      "errorDetails": "오류 상세 ({{count}}개)",
+      "durationSeconds": "{{seconds}}초"
+    },
+    "verificationLog": {
+      "title": "파일 검증 로그",
+      "noLogs": "검증 로그가 없습니다",
+      "loadFailed": "검증 로그를 불러오는데 실패했습니다",
+      "refresh": "새로고침",
+      "close": "닫기",
+      "columns": {
+        "verificationTime": "검증 시간",
+        "verificationType": "검증 타입",
+        "checked": "확인 파일",
+        "missingFound": "누락 발견",
+        "deletedRecords": "삭제 레코드",
+        "errors": "오류",
+        "duration": "소요 시간"
+      },
+      "verificationType": {
+        "auto": "자동 검증",
+        "manual": "수동 검증"
+      },
+      "errorDetails": "오류 상세 ({{count}}개)",
+      "errorItem": {
+        "fileId": "파일 ID: {{id}}",
+        "path": "경로: {{path}}",
+        "error": "오류: {{error}}"
+      },
+      "noErrors": "없음",
+      "countFormat": "{{count}}개",
+      "durationMs": "{{ms}}ms",
+      "durationSeconds": "{{seconds}}초"
+    }
   }
 }

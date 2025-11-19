@@ -9,6 +9,7 @@ import {
   Paper,
   Grid
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { MODELS, RESOLUTIONS } from '../constants/nai.constants';
 import type { NAIParams } from '../types/nai.types';
 
@@ -19,20 +20,22 @@ interface NAIBasicSettingsProps {
 }
 
 export default function NAIBasicSettings({ params, onChange, disabled = false }: NAIBasicSettingsProps) {
+  const { t } = useTranslation('imageGeneration');
+
   return (
     <Paper sx={{ p: 3 }}>
       <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-        기본 설정
+        {t('nai.naiSettings.basic.title')}
       </Typography>
       <Divider sx={{ mb: 2 }} />
       <Grid container spacing={2}>
         <Grid size={12}>
           <FormControl fullWidth disabled={disabled}>
-            <InputLabel>모델</InputLabel>
+            <InputLabel>{t('nai.naiSettings.basic.model')}</InputLabel>
             <Select
               value={params.model}
               onChange={(e) => onChange({ ...params, model: e.target.value })}
-              label="모델"
+              label={t('nai.naiSettings.basic.model')}
             >
               {MODELS.map(m => (
                 <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
@@ -43,11 +46,11 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
 
         <Grid size={12}>
           <FormControl fullWidth disabled={disabled}>
-            <InputLabel>해상도</InputLabel>
+            <InputLabel>{t('nai.naiSettings.basic.resolution')}</InputLabel>
             <Select
               value={params.resolution}
               onChange={(e) => onChange({ ...params, resolution: e.target.value })}
-              label="해상도"
+              label={t('nai.naiSettings.basic.resolution')}
             >
               {Object.keys(RESOLUTIONS).map(key => {
                 const res = RESOLUTIONS[key as keyof typeof RESOLUTIONS];
@@ -66,10 +69,10 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
             fullWidth
             multiline
             rows={4}
-            label="프롬프트"
+            label={t('nai.naiSettings.basic.prompt')}
             value={params.prompt}
             onChange={(e) => onChange({ ...params, prompt: e.target.value })}
-            placeholder="1girl, portrait, detailed face, masterpiece..."
+            placeholder={t('nai.naiSettings.basic.promptPlaceholder')}
             required
             disabled={disabled}
           />
@@ -80,10 +83,10 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
             fullWidth
             multiline
             rows={2}
-            label="네거티브 프롬프트"
+            label={t('nai.naiSettings.basic.negativePrompt')}
             value={params.negative_prompt}
             onChange={(e) => onChange({ ...params, negative_prompt: e.target.value })}
-            placeholder="bad anatomy, low quality..."
+            placeholder={t('nai.naiSettings.basic.negativePromptPlaceholder')}
             disabled={disabled}
           />
         </Grid>

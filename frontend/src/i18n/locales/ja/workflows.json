@@ -153,5 +153,77 @@
     "progress": "{{current}}回目実行中",
     "progressWithTotal": "{{current}}/{{total}}回目実行中",
     "stop": "停止"
+  },
+  "customDropdowns": {
+    "title": "カスタムドロップダウンリスト管理",
+    "buttons": {
+      "add": "新しいリストを追加",
+      "edit": "編集",
+      "delete": "削除",
+      "view": "表示",
+      "cancel": "キャンセル",
+      "create": "作成",
+      "save": "保存"
+    },
+    "labels": {
+      "name": "リスト名",
+      "description": "説明",
+      "items": "項目リスト（1行に1つずつ入力）",
+      "itemsHelper": "各項目を改行で区切って入力してください"
+    },
+    "empty": {
+      "title": "登録されたカスタムドロップダウンリストがありません",
+      "description": "「新しいリストを追加」をクリックしてカスタムドロップダウンリストを作成してください"
+    },
+    "dialog": {
+      "add": "新しいカスタムリストを追加",
+      "edit": "カスタムリストを編集",
+      "deleteConfirm": "本当にこのリストを削除しますか？"
+    },
+    "validation": {
+      "minItems": "最低1つの項目を入力してください"
+    },
+    "stats": {
+      "itemCount": "{{count}}個の項目",
+      "moreItems": "+{{count}}個",
+      "createdAt": "作成日: {{date}}"
+    }
+  },
+  "repeatExecution": {
+    "statusTitle": "繰り返し実行状況",
+    "overall": "全体: {{completed}}{{total}} 完了",
+    "withInfinite": " (無限繰り返しを含む)",
+    "serverProgress": "{{count}}回",
+    "serverProgressInfinite": "{{count}}回 (無限)"
+  },
+  "serverStatus": {
+    "generate": "生成",
+    "startRepeat": "繰り返し実行",
+    "stop": "停止",
+    "executingInfinite": "{{count}}回実行中 (無限)",
+    "executingProgress": "{{current}} / {{total}}回"
+  },
+  "groupAssignment": {
+    "title": "グループ割り当て",
+    "selectGroup": "グループを選択",
+    "autoAddDescription": "生成された画像は選択したグループに自動的に追加されます"
+  },
+  "graphToolbar": {
+    "searchPlaceholder": "ノードを検索...",
+    "filterTypes": "タイプフィルター",
+    "layoutSwitch": "{{layout}}レイアウトに切り替え",
+    "layoutTopBottom": "上下",
+    "layoutLeftRight": "左右",
+    "expandAll": "すべてのノードを展開",
+    "collapseAll": "すべてのノードを折りたたむ"
+  },
+  "jsonViewer": {
+    "title": "ワークフローJSON構造",
+    "copyToClipboard": "クリップボードにコピー",
+    "copied": "クリップボードにコピーされました！"
+  },
+  "workflowViewer": {
+    "graphView": "グラフビュー",
+    "jsonView": "JSONビュー"
   }
 }

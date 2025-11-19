@@ -11,6 +11,7 @@ import {
   FormControlLabel,
   Checkbox
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { SAMPLERS, NOISE_SCHEDULES } from '../constants/nai.constants';
 import type { NAIParams } from '../types/nai.types';
 
@@ -21,20 +22,22 @@ interface NAISamplingSettingsProps {
 }
 
 export default function NAISamplingSettings({ params, onChange, disabled = false }: NAISamplingSettingsProps) {
+  const { t } = useTranslation('imageGeneration');
+
   return (
     <Paper sx={{ p: 3 }}>
       <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-        샘플링 설정
+        {t('nai.naiSettings.sampling.title')}
       </Typography>
       <Divider sx={{ mb: 2 }} />
       <Grid container spacing={2}>
         <Grid size={12}>
           <FormControl fullWidth disabled={disabled}>
-            <InputLabel>샘플러</InputLabel>
+            <InputLabel>{t('nai.naiSettings.sampling.sampler')}</InputLabel>
             <Select
               value={params.sampler}
               onChange={(e) => onChange({ ...params, sampler: e.target.value })}
-              label="샘플러"
+              label={t('nai.naiSettings.sampling.sampler')}
             >
               {SAMPLERS.map(s => (
                 <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
@@ -45,11 +48,11 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
 
         <Grid size={12}>
           <FormControl fullWidth disabled={disabled}>
-            <InputLabel>Noise Schedule</InputLabel>
+            <InputLabel>{t('nai.naiSettings.sampling.noiseSchedule')}</InputLabel>
             <Select
               value={params.noise_schedule}
               onChange={(e) => onChange({ ...params, noise_schedule: e.target.value })}
-              label="Noise Schedule"
+              label={t('nai.naiSettings.sampling.noiseSchedule')}
             >
               {NOISE_SCHEDULES.map(n => (
                 <MenuItem key={n.value} value={n.value}>{n.label}</MenuItem>
@@ -59,7 +62,7 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
         </Grid>
 
         <Grid size={12}>
-          <Typography gutterBottom>Steps: {params.steps}</Typography>
+          <Typography gutterBottom>{t('nai.naiSettings.sampling.steps')}: {params.steps}</Typography>
           <Slider
             value={params.steps}
             onChange={(_, value) => onChange({ ...params, steps: value as number })}
@@ -75,7 +78,7 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
         </Grid>
 
         <Grid size={12}>
-          <Typography gutterBottom>Guidance: {params.scale}</Typography>
+          <Typography gutterBottom>{t('nai.naiSettings.sampling.guidance')}: {params.scale}</Typography>
           <Slider
             value={params.scale}
             onChange={(_, value) => onChange({ ...params, scale: value as number })}
@@ -92,7 +95,7 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
         </Grid>
 
         <Grid size={12}>
-          <Typography gutterBottom>CFG Rescale: {params.cfg_rescale}</Typography>
+          <Typography gutterBottom>{t('nai.naiSettings.sampling.cfgRescale')}: {params.cfg_rescale}</Typography>
           <Slider
             value={params.cfg_rescale}
             onChange={(_, value) => onChange({ ...params, cfg_rescale: value as number })}
@@ -109,7 +112,7 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
         </Grid>
 
         <Grid size={12}>
-          <Typography gutterBottom>Uncond Scale: {params.uncond_scale}</Typography>
+          <Typography gutterBottom>{t('nai.naiSettings.sampling.uncondScale')}: {params.uncond_scale}</Typography>
           <Slider
             value={params.uncond_scale}
             onChange={(_, value) => onChange({ ...params, uncond_scale: value as number })}
@@ -134,7 +137,7 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
                 disabled={disabled}
               />
             }
-            label="Variety+"
+            label={t('nai.naiSettings.sampling.varietyPlus')}
           />
         </Grid>
       </Grid>

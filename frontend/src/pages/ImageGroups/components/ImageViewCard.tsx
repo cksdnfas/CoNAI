@@ -11,6 +11,7 @@ import type { GroupWithStats } from '@comfyui-image-manager/shared';
 import { groupApi } from '../../../services/api/groupApi';
 import { useImageRotation } from '../../../hooks/useImageRotation';
 import type { ImageRecord } from '../../../types/image';
+import { useTranslation } from 'react-i18next';
 
 interface ImageViewCardProps {
   group: GroupWithStats;
@@ -24,6 +25,8 @@ interface ImageViewCardProps {
  * - 클릭 시 이미지 그리드 모달 열기
  */
 export function ImageViewCard({ group, onClick }: ImageViewCardProps) {
+  const { t } = useTranslation('imageGroups');
+
   // 이미지 가져오기 함수 (하위 그룹 제외)
   const fetchImages = useCallback(
     async (count: number): Promise<ImageRecord[]> => {
@@ -114,7 +117,7 @@ export function ImageViewCard({ group, onClick }: ImageViewCardProps) {
         <CardMedia
           component="img"
           image={mediaUrl}
-          alt="이미지 보기"
+          alt={t('imageView.viewImages')}
           sx={{
             position: 'absolute',
             top: 0,
@@ -178,7 +181,7 @@ export function ImageViewCard({ group, onClick }: ImageViewCardProps) {
         }}
       >
         <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
-          {group.name} - 이미지
+          {t('imageView.title', { name: group.name })}
         </Typography>
 
         <Typography
@@ -187,12 +190,12 @@ export function ImageViewCard({ group, onClick }: ImageViewCardProps) {
             color: 'rgba(255, 255, 255, 0.9)',
           }}
         >
-          이 그룹의 직접 이미지들을 확인합니다
+          {t('imageView.description')}
         </Typography>
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
           <Chip
-            label={`${group.image_count || 0} 이미지`}
+            label={t('groupCard.imageCount', { count: group.image_count || 0 })}
             size="small"
             sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', color: 'white' }}
           />

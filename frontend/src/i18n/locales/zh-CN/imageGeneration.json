@@ -71,6 +71,91 @@
       "progress": "正在执行第{{current}}次",
       "progressWithTotal": "正在执行第{{current}}/{{total}}次",
       "stop": "停止"
+    },
+    "naiSettings": {
+      "basic": {
+        "title": "基本设置",
+        "model": "模型",
+        "resolution": "分辨率",
+        "prompt": "提示词",
+        "promptPlaceholder": "1girl, portrait, detailed face, masterpiece...",
+        "negativePrompt": "负面提示词",
+        "negativePromptPlaceholder": "bad anatomy, low quality..."
+      },
+      "sampling": {
+        "title": "采样设置",
+        "sampler": "采样器",
+        "noiseSchedule": "Noise Schedule",
+        "steps": "Steps",
+        "guidance": "Guidance",
+        "cfgRescale": "CFG Rescale",
+        "uncondScale": "Uncond Scale",
+        "varietyPlus": "Variety+"
+      },
+      "output": {
+        "title": "输出设置",
+        "samples": "样本数"
+      }
+    }
+  },
+  "customDropdown": {
+    "title": "自定义下拉列表",
+    "buttons": {
+      "addList": "添加新列表",
+      "loadComfyUI": "加载ComfyUI模型",
+      "edit": "编辑",
+      "delete": "删除",
+      "close": "关闭",
+      "cancel": "取消",
+      "create": "创建",
+      "collect": "收集模型",
+      "viewList": "查看列表",
+      "selectFolder": "选择models文件夹"
+    },
+    "tabs": {
+      "autoCollected": "自动收集",
+      "manual": "手动创建"
+    },
+    "labels": {
+      "auto": "自动",
+      "itemCount": "{{count}}项",
+      "listName": "列表名称",
+      "listNameRequired": "列表名称 *",
+      "description": "描述",
+      "path": "路径",
+      "itemList": "项目列表（每行一项）*",
+      "itemListCount": "项目列表（{{count}}项）",
+      "pathOptions": "路径选项：",
+      "checkpointsFullPath": "checkpoints - 包含完整路径",
+      "unetFullPath": "unet - 包含完整路径",
+      "upscaleModelsFullPath": "upscale_models - 包含完整路径"
+    },
+    "dialog": {
+      "viewTitle": "查看列表（只读）",
+      "createTitle": "添加新自定义列表",
+      "editTitle": "编辑自定义列表",
+      "comfyUITitle": "加载ComfyUI模型"
+    },
+    "messages": {
+      "noAutoCollected": "没有自动收集的列表。使用\"加载ComfyUI模型\"按钮扫描模型。",
+      "noManual": "没有手动创建的列表。使用\"添加新列表\"按钮创建列表。",
+      "minItemError": "请至少输入1个项目。",
+      "deleteConfirm": "确定要删除此列表吗？",
+      "selectFolderError": "请选择模型文件夹。",
+      "autoCollectedReadOnly": "自动收集的项目无法编辑。您只能查看内容。",
+      "selectComfyUIFolder": "请选择ComfyUI的models文件夹。\n选择ComfyUI的models文件夹。",
+      "foldersDetected": "在{{count}}个文件夹中检测到模型文件：",
+      "fileCount": "{{count}}个文件",
+      "moreCount": "...还有{{count}}个文件夹",
+      "collecting": "收集中...",
+      "pathExample": "例如：{{example}}",
+      "scanInfo": "扫描信息：\n• 自动收集checkpoints、unet和upscale_models文件夹\n• 重新扫描相同文件夹将更新项目\n• 自动收集的项目可在\"自动收集\"标签页中查看"
+    },
+    "placeholders": {
+      "itemList": "示例：\nSDXL 1.0\nSD 1.5\nRealistic Vision\nDreamShaper"
+    },
+    "helperText": {
+      "itemList": "每项用换行符分隔"
     }
   }
 }

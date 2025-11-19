@@ -281,7 +281,14 @@
         "colorSimilar": "色彩相似"
       },
       "similarity": "{{percent}}%",
-      "colorSimilarity": "色彩: {{percent}}%"
+      "colorSimilarity": "色彩: {{percent}}%",
+      "hashStatus": "哈希状态",
+      "rebuild": {
+        "button": "重建{{count}}个缺失的哈希",
+        "rebuilding": "重建中...",
+        "success": "已处理: {{processed}}个、失败: {{failed}}个、剩余: {{remaining}}个",
+        "error": "错误: {{error}}"
+      }
     },
     "duplicateScan": {
       "title": "全局重复分析",
@@ -335,5 +342,217 @@
     "saveSuccess": "设置保存成功",
     "saveFailed": "设置保存失败",
     "loadFailed": "设置加载失败"
+  },
+  "thumbnailRegeneration": {
+    "title": "缩略图重新生成",
+    "sections": {
+      "currentStatus": "当前状态"
+    },
+    "stats": {
+      "totalFiles": "总文件:",
+      "withThumbnail": "有缩略图:",
+      "withoutThumbnail": "无缩略图:"
+    },
+    "phases": {
+      "verifying": "验证文件中...",
+      "deleting": "删除现有缩略图中...",
+      "generating": "生成缩略图中...",
+      "completed": "已完成",
+      "waiting": "等待中"
+    },
+    "time": {
+      "seconds": "{{elapsed}}秒",
+      "minutesSeconds": "{{minutes}}分{{seconds}}秒"
+    },
+    "status": {
+      "completed": "已完成",
+      "inProgress": "进行中"
+    },
+    "progress": {
+      "deletedThumbnails": "已删除缩略图:",
+      "generatedThumbnails": "已生成缩略图:",
+      "elapsedTime": "耗时:"
+    },
+    "messages": {
+      "success": "缩略图重新生成完成！",
+      "loadStatsFailed": "统计信息加载失败",
+      "alreadyRunning": "缩略图重新生成已在运行中",
+      "startFailed": "启动缩略图重新生成失败"
+    },
+    "instructions": {
+      "title": "缩略图重新生成将按以下顺序进行:",
+      "step1": "1. 验证文件",
+      "step2": "2. 删除现有缩略图",
+      "step3": "3. 生成新缩略图",
+      "warning": "警告:",
+      "warningText": "根据文件数量可能需要较长时间。"
+    },
+    "buttons": {
+      "close": "关闭",
+      "start": "开始重新生成",
+      "starting": "启动中...",
+      "inProgress": "进行中..."
+    }
+  },
+  "folderSettings": {
+    "title": "文件夹管理",
+    "subtitle": "配置监视文件夹并监控后台任务状态。",
+    "scheduler": {
+      "title": "调度器设置",
+      "backgroundHash": {
+        "title": "后台哈希监视间隔",
+        "tooltip": "为上传文件生成哈希的后台任务（Phase 2）执行间隔。间隔越短处理越快，但系统负载会增加。",
+        "intervalLabel": "间隔（秒）",
+        "intervalTooltip": "检查未处理哈希任务的周期。可设置为5-300秒之间。",
+        "saveButton": "保存",
+        "savingButton": "保存中...",
+        "errorRange": "间隔必须在5-300秒之间",
+        "errorSave": "设置保存失败"
+      },
+      "autoTagger": {
+        "title": "自动标记调度器",
+        "tooltip": "配置自动标记调度器的轮询间隔和批处理大小。轮询间隔越短、批处理大小越大处理越快，但系统负载会增加。",
+        "pollingIntervalLabel": "轮询间隔（秒）",
+        "pollingIntervalTooltip": "检查未标记图像的周期。可设置为5-300秒之间。",
+        "batchSizeLabel": "批处理大小（张）",
+        "batchSizeTooltip": "一次处理的图像数量。可设置为1-100张之间。",
+        "saveButton": "保存",
+        "savingButton": "保存中...",
+        "errorPollingRange": "轮询间隔必须在5-300秒之间",
+        "errorBatchRange": "批处理大小必须在1-100之间",
+        "errorSave": "设置保存失败"
+      }
+    },
+    "watchedFolders": {
+      "title": "监视文件夹列表",
+      "addFolder": "添加文件夹",
+      "refresh": "刷新",
+      "viewAllLogs": "全部日志",
+      "scanAll": "扫描全部",
+      "scanning": "扫描中...",
+      "noName": "未命名",
+      "active": "活动",
+      "inactive": "非活动",
+      "autoScanInterval": "{{interval}}分钟",
+      "scanStatus": "扫描",
+      "lastScan": "最后扫描: {{date}}",
+      "noScanHistory": "无扫描历史",
+      "watcherStatus": {
+        "starting": "启动中...",
+        "watching": "监视中",
+        "error": "错误",
+        "stopped": "已停止",
+        "inactive": "非活动"
+      },
+      "tooltips": {
+        "scan": "扫描",
+        "log": "日志",
+        "edit": "编辑",
+        "delete": "删除",
+        "watcherStart": "开始监视",
+        "watcherStop": "停止监视",
+        "processing": "处理中..."
+      },
+      "messages": {
+        "loadFailed": "加载文件夹列表失败",
+        "deleteFailed": "删除文件夹失败",
+        "deleteConfirm": "删除文件夹\"{{name}}\"？",
+        "scanFailed": "扫描文件夹失败",
+        "scanAllFailed": "扫描所有文件夹失败",
+        "scanAllComplete": "全面扫描完成: {{totalFolders}}个文件夹，{{totalNew}}个新增，{{totalExisting}}个现有{{errors}}",
+        "scanAllErrors": "，{{totalErrors}}个错误",
+        "watcherStartFailed": "启动实时监控失败",
+        "watcherStopFailed": "停止实时监控失败"
+      }
+    },
+    "dialog": {
+      "addTitle": "添加文件夹",
+      "editTitle": "编辑文件夹",
+      "folderPath": "文件夹路径 *",
+      "folderPathDisabled": "文件夹路径无法编辑",
+      "folderPathHelper": "输入绝对路径（例如: D:\\Images 或 \\\\192.168.1.100\\Share\\Images）",
+      "folderName": "文件夹名称",
+      "folderNameHelper": "如果留空，将自动使用文件夹名称",
+      "watcherEnabled": "启用实时文件监控",
+      "watcherTooltip": "实时监控会立即检测文件夹中的文件添加/修改/删除并自动处理。独立于自动扫描运行，提供更快的响应速度。",
+      "pollingInterval": "轮询间隔（用于网络驱动器）",
+      "pollingIntervalTooltip": "对于网络驱动器，使用轮询方式检测文件更改。间隔越短检测越快，但会增加网络负载。留空则自动检测（默认: 1000ms）。",
+      "pollingIntervalLabel": "轮询间隔（毫秒）",
+      "pollingIntervalPlaceholder": "自动检测（网络驱动器: 1000ms）",
+      "pollingIntervalHelper": "留空则自动配置。推荐: 500-3000ms",
+      "autoScan": "启用自动扫描",
+      "scanInterval": "扫描间隔（分钟）",
+      "scanIntervalHelper": "自动扫描周期（以分钟为单位）",
+      "advancedOptions": "高级选项",
+      "recursive": "包含子文件夹（递归扫描）",
+      "excludeExtensions": "排除扩展名",
+      "excludeExtensionsTooltip": "默认情况下扫描所有图像格式（.jpg, .png, .webp, .gif, .bmp, .tiff）。添加要从扫描中排除的扩展名。",
+      "excludeExtensionsPlaceholder": ".tmp",
+      "excludePatterns": "排除模式",
+      "excludePatternsTooltip": "从扫描中排除特定文件夹或文件模式。示例: node_modules, .git, temp",
+      "excludePatternsPlaceholder": "例如: node_modules, .git",
+      "addButton": "添加",
+      "saveButton": "保存",
+      "savingButton": "保存中...",
+      "cancelButton": "取消",
+      "errorPath": "请输入文件夹路径",
+      "errorSave": "保存文件夹失败"
+    },
+    "scanLog": {
+      "title": "扫描日志",
+      "titleSpecific": "扫描日志（特定文件夹）",
+      "titleAll": "扫描日志（全部）",
+      "noLogs": "无扫描日志",
+      "loadFailed": "加载扫描日志失败",
+      "refresh": "刷新",
+      "close": "关闭",
+      "columns": {
+        "scanTime": "扫描时间",
+        "folder": "文件夹",
+        "status": "状态",
+        "scanned": "已扫描",
+        "new": "新增",
+        "existing": "现有",
+        "errors": "错误",
+        "duration": "耗时",
+        "details": "详情"
+      },
+      "status": {
+        "success": "成功",
+        "error": "错误"
+      },
+      "errorDetails": "错误详情（{{count}}）",
+      "durationSeconds": "{{seconds}}秒"
+    },
+    "verificationLog": {
+      "title": "文件验证日志",
+      "noLogs": "无验证日志",
+      "loadFailed": "加载验证日志失败",
+      "refresh": "刷新",
+      "close": "关闭",
+      "columns": {
+        "verificationTime": "验证时间",
+        "verificationType": "验证类型",
+        "checked": "已检查文件",
+        "missingFound": "发现缺失",
+        "deletedRecords": "已删除记录",
+        "errors": "错误",
+        "duration": "耗时"
+      },
+      "verificationType": {
+        "auto": "自动验证",
+        "manual": "手动验证"
+      },
+      "errorDetails": "错误详情（{{count}}）",
+      "errorItem": {
+        "fileId": "文件ID: {{id}}",
+        "path": "路径: {{path}}",
+        "error": "错误: {{error}}"
+      },
+      "noErrors": "无",
+      "countFormat": "{{count}}",
+      "durationMs": "{{ms}}ms",
+      "durationSeconds": "{{seconds}}秒"
+    }
   }
 }

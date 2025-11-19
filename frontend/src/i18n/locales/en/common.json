@@ -110,5 +110,140 @@
     "confirm": "Confirm",
     "retry": "Retry",
     "refresh": "Refresh"
+  },
+  "filterModal": {
+    "title": {
+      "add": "Add Filter",
+      "edit": "Edit Filter"
+    },
+    "groupTypes": {
+      "label": "Select Group",
+      "exclude": "Exclude",
+      "or": "OR",
+      "and": "AND"
+    },
+    "categories": {
+      "label": "Category",
+      "positive_prompt": "Positive",
+      "negative_prompt": "Negative",
+      "auto_tag": "Auto Tag",
+      "basic": "Basic"
+    },
+    "conditionSettings": {
+      "label": "Condition Settings",
+      "conditionType": "Condition Type",
+      "value": "Value",
+      "valuePlaceholder": "Enter value to search"
+    },
+    "conditionTypes": {
+      "prompt_contains": "Contains",
+      "prompt_regex": "Regex",
+      "negative_prompt_contains": "Contains",
+      "negative_prompt_regex": "Regex",
+      "auto_tag_exists": "Auto Tag Exists",
+      "auto_tag_has_character": "Character Exists",
+      "auto_tag_rating": "Rating Type",
+      "auto_tag_rating_score": "Rating Score",
+      "auto_tag_general": "General Tag",
+      "auto_tag_character": "Character Tag",
+      "auto_tag_model": "Model",
+      "ai_tool": "AI Tool",
+      "model_name": "Model Name"
+    },
+    "fields": {
+      "exists": "Exists",
+      "notExists": "Not Exists",
+      "ratingType": "Rating Type",
+      "scoreRange": "Score Range: {{min}} ~ {{max}}",
+      "weightRange": "Weight Range: {{min}} ~ {{max}}",
+      "tagOrCharacter": "Tag/Character Name",
+      "tagPlaceholder": "e.g., 1girl, hatsune_miku"
+    },
+    "ratingTypes": {
+      "general": "General",
+      "sensitive": "Sensitive",
+      "questionable": "Questionable",
+      "explicit": "Explicit"
+    }
+  },
+  "filterBuilder": {
+    "groupTypes": {
+      "exclude": {
+        "label": "Exclude (NOT)",
+        "labelShort": "Exclude",
+        "description": "Exclude images matching these conditions (highest priority)"
+      },
+      "or": {
+        "label": "OR Group",
+        "labelShort": "OR",
+        "description": "Include images matching any of these conditions"
+      },
+      "and": {
+        "label": "AND Group",
+        "labelShort": "AND",
+        "description": "Include images matching all of these conditions"
+      }
+    },
+    "categories": {
+      "positive_prompt": "Positive Prompt",
+      "negative_prompt": "Negative Prompt",
+      "auto_tag": "Auto Tag",
+      "basic": "Basic"
+    },
+    "conditionTypes": {
+      "prompt_contains": "Contains",
+      "prompt_regex": "Regex",
+      "negative_prompt_contains": "Contains",
+      "negative_prompt_regex": "Regex",
+      "auto_tag_exists": "Auto Tag Exists",
+      "auto_tag_has_character": "Character Exists",
+      "auto_tag_rating": "Rating Type",
+      "auto_tag_rating_score": "Rating Score",
+      "auto_tag_general": "General Tag",
+      "auto_tag_character": "Character Tag",
+      "auto_tag_model": "Model",
+      "ai_tool": "AI Tool",
+      "model_name": "Model Name"
+    },
+    "labels": {
+      "condition": "Condition",
+      "conditionNumber": "Condition #{{number}}",
+      "editCondition": "Edit Condition #{{number}}",
+      "category": "Category",
+      "conditionType": "Condition Type",
+      "value": "Value",
+      "score": "Score",
+      "scoreRange": "Score Range: {{min}} ~ {{max}}",
+      "weightRange": "Weight Range: {{min}} ~ {{max}}",
+      "ratingType": "Rating Type",
+      "tagCharacterName": "Tag/Character Name",
+      "conditionsCount": "{{count}} conditions"
+    },
+    "buttons": {
+      "addCondition": "Add Condition"
+    },
+    "messages": {
+      "noConditions": "No conditions. Click the button below to add a condition."
+    },
+    "values": {
+      "exists": "Exists",
+      "notExists": "Not Exists"
+    },
+    "ratingTypes": {
+      "general": "General",
+      "sensitive": "Sensitive",
+      "questionable": "Questionable",
+      "explicit": "Explicit"
+    }
+  },
+  "imageEditor": {
+    "title": "Image Editor",
+    "canvasInfo": "Canvas Info",
+    "canvasSize": "Size: {{width}} x {{height}} px",
+    "toolProperties": "Tool Properties",
+    "brushSize": "Brush Size: {{size}}px",
+    "brushColor": "Brush Color",
+    "eraserSize": "Eraser Size: {{size}}px",
+    "panHelp": "Click and drag to move the canvas. Use mouse wheel to zoom in/out."
   }
 }

@@ -24,6 +24,7 @@ import {
   HelpOutline as HelpOutlineIcon,
   ExpandMore as ExpandMoreIcon
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { folderApi } from '../../../../../services/folderApi';
 import type { WatchedFolder, WatchedFolderCreate, WatchedFolderUpdate } from '../../../../../types/folder';
 
@@ -35,6 +36,7 @@ interface Props {
 }
 
 const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess }) => {
+  const { t } = useTranslation('settings');
   const isEdit = !!folder;
 
   const [formData, setFormData] = useState<WatchedFolderCreate>({
@@ -54,7 +56,6 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // 폴더 데이터 로드 (편집 모드)
   useEffect(() => {
     if (folder) {
       setFormData({
@@ -69,7 +70,6 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
         watcher_polling_interval: folder.watcher_polling_interval
       });
     } else {
-      // 초기화 - 제외 확장자는 빈 배열로 시작 (모든 지원 확장자 스캔)
       setFormData({
         folder_path: '',
         folder_name: '',
@@ -85,7 +85,6 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
     setError(null);
   }, [folder, open]);
 
-  // 제외 확장자 추가
   const handleAddExtension = () => {
     if (!newExtension.trim()) return;
     const ext = newExtension.trim().startsWith('.') ? newExtension.trim() : `.${newExtension.trim()}`;
@@ -98,7 +97,6 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
     setNewExtension('');
   };
 
-  // 제외 확장자 제거
   const handleRemoveExtension = (ext: string) => {
     setFormData({
       ...formData,
@@ -106,7 +104,6 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
     });
   };
 
-  // 제외 패턴 추가
   const handleAddPattern = () => {
     if (!newPattern.trim()) return;
     if (!formData.exclude_patterns?.includes(newPattern.trim())) {
@@ -118,7 +115,6 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
     setNewPattern('');
   };
 
-  // 제외 패턴 제거
   const handleRemovePattern = (pattern: string) => {
     setFormData({
       ...formData,
@@ -126,10 +122,9 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
     });
   };
 
-  // 저장
   const handleSave = async () => {
     if (!formData.folder_path.trim()) {
-      setError('폴더 경로를 입력해주세요');
+      setError(t('folderSettings.dialog.errorPath'));
       return;
     }
 
@@ -138,7 +133,6 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
       setError(null);
 
       if (isEdit && folder) {
-        // 편집 모드
         const updates: WatchedFolderUpdate = {
           folder_name: formData.folder_name,
           auto_scan: formData.auto_scan,
@@ -151,17 +145,15 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
         };
         await folderApi.updateFolder(folder.id, updates);
       } else {
-        // 추가 모드
         await folderApi.addFolder(formData);
       }
 
-      // 백엔드가 watcher 상태 업데이트할 시간 확보
       await new Promise(resolve => setTimeout(resolve, 500));
 
       onSuccess();
       onClose();
     } catch (err: any) {
-      setError(err.response?.data?.message || '폴더 저장에 실패했습니다');
+      setError(err.response?.data?.message || t('folderSettings.dialog.errorSave'));
     } finally {
       setSaving(false);
     }
@@ -169,7 +161,7 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>{isEdit ? '폴더 편집' : '폴더 추가'}</DialogTitle>
+      <DialogTitle>{isEdit ? t('folderSettings.dialog.editTitle') : t('folderSettings.dialog.addTitle')}</DialogTitle>
       <DialogContent>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
@@ -178,30 +170,27 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
         )}
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 0.5 }}>
-          {/* 폴더 경로 */}
           <TextField
             fullWidth
-            label="폴더 경로 *"
+            label={t('folderSettings.dialog.folderPath')}
             value={formData.folder_path}
             onChange={(e) => setFormData({ ...formData, folder_path: e.target.value })}
             disabled={isEdit}
             helperText={
               isEdit
-                ? '폴더 경로는 편집할 수 없습니다'
-                : '절대 경로를 입력해주세요 (예: D:\\Images 또는 \\\\192.168.1.100\\Share\\Images)'
+                ? t('folderSettings.dialog.folderPathDisabled')
+                : t('folderSettings.dialog.folderPathHelper')
             }
           />
 
-          {/* 폴더 이름 */}
           <TextField
             fullWidth
-            label="폴더 이름"
+            label={t('folderSettings.dialog.folderName')}
             value={formData.folder_name}
             onChange={(e) => setFormData({ ...formData, folder_name: e.target.value })}
-            helperText="미입력 시 폴더명이 자동으로 사용됩니다"
+            helperText={t('folderSettings.dialog.folderNameHelper')}
           />
 
-          {/* 실시간 감시 */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <FormControlLabel
               control={
@@ -210,10 +199,10 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
                   onChange={(e) => setFormData({ ...formData, watcher_enabled: e.target.checked })}
                 />
               }
-              label="실시간 파일 감시 활성화"
+              label={t('folderSettings.dialog.watcherEnabled')}
             />
             <Tooltip
-              title="실시간 감시는 폴더 내 파일 추가/수정/삭제를 즉시 감지하여 자동으로 처리합니다. 자동 스캔과 별개로 동작하며, 더 빠른 반응 속도를 제공합니다."
+              title={t('folderSettings.dialog.watcherTooltip')}
               arrow
               placement="right"
             >
@@ -223,15 +212,14 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
             </Tooltip>
           </Box>
 
-          {/* 폴링 간격 (네트워크 드라이브용) */}
           {formData.watcher_enabled && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <Typography variant="body2" color="text.secondary">
-                  폴링 간격 (네트워크 드라이브용)
+                  {t('folderSettings.dialog.pollingInterval')}
                 </Typography>
                 <Tooltip
-                  title="네트워크 드라이브의 경우 폴링 방식으로 파일 변경을 감지합니다. 간격을 짧게 하면 더 빠르게 감지하지만 네트워크 부하가 증가합니다. 비워두면 자동으로 감지합니다 (기본: 1000ms)."
+                  title={t('folderSettings.dialog.pollingIntervalTooltip')}
                   arrow
                 >
                   <HelpOutlineIcon fontSize="small" color="action" sx={{ cursor: 'help' }} />
@@ -240,21 +228,20 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
               <TextField
                 size="small"
                 type="number"
-                label="폴링 간격 (밀리초)"
+                label={t('folderSettings.dialog.pollingIntervalLabel')}
                 value={formData.watcher_polling_interval ?? ''}
                 onChange={(e) => setFormData({
                   ...formData,
                   watcher_polling_interval: e.target.value === '' ? null : parseInt(e.target.value) || null
                 })}
-                placeholder="자동 감지 (네트워크 드라이브: 1000ms)"
-                helperText="비워두면 자동으로 설정됩니다. 권장: 500-3000ms"
+                placeholder={t('folderSettings.dialog.pollingIntervalPlaceholder')}
+                helperText={t('folderSettings.dialog.pollingIntervalHelper')}
                 sx={{ maxWidth: 300 }}
                 inputProps={{ min: 100, step: 100 }}
               />
             </Box>
           )}
 
-          {/* 자동 스캔 */}
           <FormControlLabel
             control={
               <Switch
@@ -262,29 +249,26 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
                 onChange={(e) => setFormData({ ...formData, auto_scan: e.target.checked })}
               />
             }
-            label="자동 스캔 활성화"
+            label={t('folderSettings.dialog.autoScan')}
           />
 
-          {/* 스캔 간격 */}
           {formData.auto_scan && (
             <TextField
               fullWidth
               type="number"
-              label="스캔 간격 (분)"
+              label={t('folderSettings.dialog.scanInterval')}
               value={formData.scan_interval}
               onChange={(e) => setFormData({ ...formData, scan_interval: parseInt(e.target.value) || 60 })}
-              helperText="자동 스캔 주기 (분 단위)"
+              helperText={t('folderSettings.dialog.scanIntervalHelper')}
             />
           )}
 
-          {/* 고급 옵션 */}
           <Accordion sx={{ boxShadow: 'none', '&:before': { display: 'none' } }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, '& .MuiAccordionSummary-content': { my: 0.5 } }}>
-              <Typography variant="body2" color="text.secondary">고급 옵션</Typography>
+              <Typography variant="body2" color="text.secondary">{t('folderSettings.dialog.advancedOptions')}</Typography>
             </AccordionSummary>
             <AccordionDetails sx={{ pt: 0 }}>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                {/* 재귀 스캔 */}
                 <FormControlLabel
                   control={
                     <Switch
@@ -292,16 +276,15 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
                       onChange={(e) => setFormData({ ...formData, recursive: e.target.checked })}
                     />
                   }
-                  label="하위 폴더 포함 (재귀 스캔)"
+                  label={t('folderSettings.dialog.recursive')}
                 />
 
-                {/* 제외 확장자 */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
                   <Typography variant="body2" color="text.secondary">
-                    제외할 확장자
+                    {t('folderSettings.dialog.excludeExtensions')}
                   </Typography>
                   <Tooltip
-                    title="기본적으로 모든 이미지 형식 (.jpg, .png, .webp, .gif, .bmp, .tiff)을 스캔합니다. 스캔하지 않을 확장자가 있다면 아래에 추가하세요."
+                    title={t('folderSettings.dialog.excludeExtensionsTooltip')}
                     arrow
                   >
                     <HelpOutlineIcon fontSize="small" color="action" sx={{ cursor: 'help' }} />
@@ -313,11 +296,11 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
                     value={newExtension}
                     onChange={(e) => setNewExtension(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAddExtension()}
-                    placeholder=".tmp"
+                    placeholder={t('folderSettings.dialog.excludeExtensionsPlaceholder')}
                     sx={{ width: 200 }}
                   />
                   <Button onClick={handleAddExtension} startIcon={<AddIcon />} variant="outlined" size="small">
-                    추가
+                    {t('folderSettings.dialog.addButton')}
                   </Button>
                 </Box>
                 {formData.exclude_extensions && formData.exclude_extensions.length > 0 && (
@@ -335,13 +318,12 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
                   </Box>
                 )}
 
-                {/* 제외 패턴 */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
                   <Typography variant="body2" color="text.secondary">
-                    제외 패턴
+                    {t('folderSettings.dialog.excludePatterns')}
                   </Typography>
                   <Tooltip
-                    title="특정 폴더나 파일 패턴을 스캔에서 제외할 수 있습니다. 예: node_modules, .git, temp"
+                    title={t('folderSettings.dialog.excludePatternsTooltip')}
                     arrow
                   >
                     <HelpOutlineIcon fontSize="small" color="action" sx={{ cursor: 'help' }} />
@@ -353,11 +335,11 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
                     value={newPattern}
                     onChange={(e) => setNewPattern(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAddPattern()}
-                    placeholder="예: node_modules, .git"
+                    placeholder={t('folderSettings.dialog.excludePatternsPlaceholder')}
                     sx={{ width: 300 }}
                   />
                   <Button onClick={handleAddPattern} startIcon={<AddIcon />} variant="outlined" size="small">
-                    추가
+                    {t('folderSettings.dialog.addButton')}
                   </Button>
                 </Box>
                 {formData.exclude_patterns && formData.exclude_patterns.length > 0 && (
@@ -379,10 +361,10 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={saving}>
-          취소
+          {t('folderSettings.dialog.cancelButton')}
         </Button>
         <Button onClick={handleSave} variant="contained" disabled={saving}>
-          {saving ? '저장 중...' : '저장'}
+          {saving ? t('folderSettings.dialog.savingButton') : t('folderSettings.dialog.saveButton')}
         </Button>
       </DialogActions>
     </Dialog>

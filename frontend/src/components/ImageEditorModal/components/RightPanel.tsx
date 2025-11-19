@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Typography, Divider, Slider } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import type { Tool, CanvasSize } from '../types/EditorTypes';
 
 interface RightPanelProps {
@@ -34,6 +35,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   onBrushColorChange,
   onEraserSizeChange,
 }) => {
+  const { t } = useTranslation('common');
+
   return (
     <Box
       sx={{
@@ -46,21 +49,21 @@ export const RightPanel: React.FC<RightPanelProps> = ({
       }}
     >
       <Typography variant="subtitle2" gutterBottom>
-        Canvas Info
+        {t('imageEditor.canvasInfo')}
       </Typography>
       <Typography variant="body2" color="text.secondary" gutterBottom>
-        Size: {canvasSize.width} x {canvasSize.height} px
+        {t('imageEditor.canvasSize', { width: canvasSize.width, height: canvasSize.height })}
       </Typography>
       <Divider sx={{ my: 2 }} />
 
       <Typography variant="subtitle2" gutterBottom>
-        Tool Properties
+        {t('imageEditor.toolProperties')}
       </Typography>
 
       {tool === 'brush' && (
         <>
           <Typography variant="body2" gutterBottom sx={{ mt: 2 }}>
-            Brush Size: {brushSize}px
+            {t('imageEditor.brushSize', { size: brushSize })}
           </Typography>
           <Slider
             value={brushSize}
@@ -71,7 +74,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           />
 
           <Typography variant="body2" gutterBottom>
-            Brush Color
+            {t('imageEditor.brushColor')}
           </Typography>
           <Box
             sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}
@@ -108,7 +111,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
       {tool === 'eraser' && (
         <>
           <Typography variant="body2" gutterBottom sx={{ mt: 2 }}>
-            Eraser Size: {eraserSize}px
+            {t('imageEditor.eraserSize', { size: eraserSize })}
           </Typography>
           <Slider
             value={eraserSize}
@@ -122,7 +125,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
 
       {tool === 'pan' && (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          Click and drag to move the canvas. Use mouse wheel to zoom in/out.
+          {t('imageEditor.panHelp')}
         </Typography>
       )}
     </Box>

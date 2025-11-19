@@ -25,6 +25,7 @@ import {
   ExpandMore as ExpandMoreIcon,
   Error as ErrorIcon
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1566';
@@ -53,11 +54,11 @@ interface ScanLogModalProps {
 }
 
 const ScanLogModal: React.FC<ScanLogModalProps> = ({ open, onClose, folderId }) => {
+  const { t } = useTranslation('settings');
   const [logs, setLogs] = useState<ScanLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 로그 로드
   useEffect(() => {
     if (open) {
       loadLogs();
@@ -77,13 +78,12 @@ const ScanLogModal: React.FC<ScanLogModalProps> = ({ open, onClose, folderId }) 
       setLogs(response.data.data);
     } catch (err) {
       console.error('Failed to load scan logs:', err);
-      setError('스캔 로그를 불러오는데 실패했습니다');
+      setError(t('folderSettings.scanLog.loadFailed'));
     } finally {
       setLoading(false);
     }
   };
 
-  // 상태 칩 색상
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'success':
@@ -95,13 +95,12 @@ const ScanLogModal: React.FC<ScanLogModalProps> = ({ open, onClose, folderId }) 
     }
   };
 
-  // 상태 텍스트
   const getStatusText = (status: string) => {
     switch (status) {
       case 'success':
-        return '성공';
+        return t('folderSettings.scanLog.status.success');
       case 'error':
-        return '오류';
+        return t('folderSettings.scanLog.status.error');
       default:
         return status;
     }
@@ -110,7 +109,7 @@ const ScanLogModal: React.FC<ScanLogModalProps> = ({ open, onClose, folderId }) 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>
-        스캔 로그 {folderId ? '(특정 폴더)' : '(전체)'}
+        {folderId ? t('folderSettings.scanLog.titleSpecific') : t('folderSettings.scanLog.titleAll')}
       </DialogTitle>
 
       <DialogContent>
@@ -125,21 +124,21 @@ const ScanLogModal: React.FC<ScanLogModalProps> = ({ open, onClose, folderId }) 
             <CircularProgress />
           </Box>
         ) : logs.length === 0 ? (
-          <Alert severity="info">스캔 로그가 없습니다</Alert>
+          <Alert severity="info">{t('folderSettings.scanLog.noLogs')}</Alert>
         ) : (
           <TableContainer component={Paper} variant="outlined">
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>스캔 시간</TableCell>
-                  {!folderId && <TableCell>폴더</TableCell>}
-                  <TableCell align="center">상태</TableCell>
-                  <TableCell align="right">스캔</TableCell>
-                  <TableCell align="right">신규</TableCell>
-                  <TableCell align="right">기존</TableCell>
-                  <TableCell align="right">오류</TableCell>
-                  <TableCell align="right">소요시간</TableCell>
-                  <TableCell>상세</TableCell>
+                  <TableCell>{t('folderSettings.scanLog.columns.scanTime')}</TableCell>
+                  {!folderId && <TableCell>{t('folderSettings.scanLog.columns.folder')}</TableCell>}
+                  <TableCell align="center">{t('folderSettings.scanLog.columns.status')}</TableCell>
+                  <TableCell align="right">{t('folderSettings.scanLog.columns.scanned')}</TableCell>
+                  <TableCell align="right">{t('folderSettings.scanLog.columns.new')}</TableCell>
+                  <TableCell align="right">{t('folderSettings.scanLog.columns.existing')}</TableCell>
+                  <TableCell align="right">{t('folderSettings.scanLog.columns.errors')}</TableCell>
+                  <TableCell align="right">{t('folderSettings.scanLog.columns.duration')}</TableCell>
+                  <TableCell>{t('folderSettings.scanLog.columns.details')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -179,7 +178,7 @@ const ScanLogModal: React.FC<ScanLogModalProps> = ({ open, onClose, folderId }) 
                     </TableCell>
                     <TableCell align="right">
                       <Typography variant="caption">
-                        {(log.duration_ms / 1000).toFixed(2)}초
+                        {t('folderSettings.scanLog.durationSeconds', { seconds: (log.duration_ms / 1000).toFixed(2) })}
                       </Typography>
                     </TableCell>
                     <TableCell>
@@ -187,7 +186,7 @@ const ScanLogModal: React.FC<ScanLogModalProps> = ({ open, onClose, folderId }) 
                         <Accordion>
                           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                             <Typography variant="caption">
-                              오류 상세 ({log.error_details.length}개)
+                              {t('folderSettings.scanLog.errorDetails', { count: log.error_details.length })}
                             </Typography>
                           </AccordionSummary>
                           <AccordionDetails>
@@ -217,9 +216,9 @@ const ScanLogModal: React.FC<ScanLogModalProps> = ({ open, onClose, folderId }) 
 
       <DialogActions>
         <Button onClick={loadLogs} disabled={loading}>
-          새로고침
+          {t('folderSettings.scanLog.refresh')}
         </Button>
-        <Button onClick={onClose}>닫기</Button>
+        <Button onClick={onClose}>{t('folderSettings.scanLog.close')}</Button>
       </DialogActions>
     </Dialog>
   );

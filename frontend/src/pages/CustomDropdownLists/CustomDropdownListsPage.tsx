@@ -23,20 +23,22 @@ import {
   Delete as DeleteIcon,
   List as ListIcon
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { customDropdownListApi, type CustomDropdownList } from '../../services/api/customDropdownListApi';
 
 export default function CustomDropdownListsPage() {
+  const { t } = useTranslation('workflows');
   const [lists, setLists] = useState<CustomDropdownList[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingList, setEditingList] = useState<CustomDropdownList | null>(null);
 
-  // 폼 상태
+  // Form state
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    itemsText: '' // 줄바꿈으로 구분된 텍스트
+    itemsText: '' // newline-separated text
   });
 
   useEffect(() => {
@@ -82,14 +84,14 @@ export default function CustomDropdownListsPage() {
 
   const handleSubmit = async () => {
     try {
-      // 줄바꿈으로 구분된 텍스트를 배열로 변환 (빈 줄 제거)
+      // Convert newline-separated text to array (remove empty lines)
       const items = formData.itemsText
         .split('\n')
         .map(item => item.trim())
         .filter(item => item.length > 0);
 
       if (items.length === 0) {
-        setError('최소 1개 이상의 항목을 입력해주세요.');
+        setError(t('customDropdowns.validation.minItems'));
         return;
       }
 
@@ -112,7 +114,7 @@ export default function CustomDropdownListsPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('정말 이 목록을 삭제하시겠습니까?')) {
+    if (confirm(t('customDropdowns.dialog.deleteConfirm'))) {
       try {
         await customDropdownListApi.deleteList(id);
         loadLists();
@@ -135,14 +137,14 @@ export default function CustomDropdownListsPage() {
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h4">
           <ListIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-          커스텀 드롭다운 목록 관리
+          {t('customDropdowns.title')}
         </Typography>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => handleOpenDialog()}
         >
-          새 목록 추가
+          {t('customDropdowns.buttons.add')}
         </Button>
       </Box>
 
@@ -158,7 +160,7 @@ export default function CustomDropdownListsPage() {
             <Card>
               <CardContent>
                 <Typography variant="body1" color="text.secondary" align="center">
-                  등록된 커스텀 드롭다운 목록이 없습니다.
+                  {t('customDropdowns.empty.title')}
                 </Typography>
               </CardContent>
             </Card>
@@ -173,7 +175,7 @@ export default function CustomDropdownListsPage() {
                       {list.name}
                     </Typography>
                     <Chip
-                      label={`${list.items.length}개`}
+                      label={t('customDropdowns.stats.itemCount', { count: list.items.length })}
                       size="small"
                       color="primary"
                     />
@@ -194,14 +196,14 @@ export default function CustomDropdownListsPage() {
                     ))}
                     {list.items.length > 5 && (
                       <Chip
-                        label={`+${list.items.length - 5}`}
+                        label={t('customDropdowns.stats.moreItems', { count: list.items.length - 5 })}
                         size="small"
                         variant="outlined"
                       />
                     )}
                   </Box>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-                    생성일: {new Date(list.created_date).toLocaleDateString()}
+                    {t('customDropdowns.stats.createdAt', { date: new Date(list.created_date).toLocaleDateString() })}
                   </Typography>
                 </CardContent>
                 <CardActions>
@@ -226,7 +228,7 @@ export default function CustomDropdownListsPage() {
         )}
       </Grid>
 
-      {/* 생성/수정 다이얼로그 */}
+      {/* Create/Edit Dialog */}
       <Dialog
         open={openDialog}
         onClose={handleCloseDialog}
@@ -234,7 +236,7 @@ export default function CustomDropdownListsPage() {
         fullWidth
       >
         <DialogTitle>
-          {editingList ? '커스텀 목록 수정' : '새 커스텀 목록 추가'}
+          {editingList ? t('customDropdowns.dialog.edit') : t('customDropdowns.dialog.add')}
         </DialogTitle>
         <DialogContent>
           {error && (
@@ -245,7 +247,7 @@ export default function CustomDropdownListsPage() {
           <TextField
             autoFocus
             margin="dense"
-            label="목록 이름 *"
+            label={t('customDropdowns.labels.name')}
             fullWidth
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -253,7 +255,7 @@ export default function CustomDropdownListsPage() {
           />
           <TextField
             margin="dense"
-            label="설명"
+            label={t('customDropdowns.labels.description')}
             fullWidth
             multiline
             rows={2}
@@ -263,24 +265,24 @@ export default function CustomDropdownListsPage() {
           />
           <TextField
             margin="dense"
-            label="항목 목록 (한 줄에 하나씩 입력) *"
+            label={t('customDropdowns.labels.items')}
             fullWidth
             multiline
             rows={10}
             value={formData.itemsText}
             onChange={(e) => setFormData({ ...formData, itemsText: e.target.value })}
             placeholder="예시:&#10;SDXL 1.0&#10;SD 1.5&#10;Realistic Vision&#10;DreamShaper"
-            helperText="각 항목을 줄바꿈으로 구분하여 입력하세요"
+            helperText={t('customDropdowns.labels.itemsHelper')}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>취소</Button>
+          <Button onClick={handleCloseDialog}>{t('customDropdowns.buttons.cancel')}</Button>
           <Button
             onClick={handleSubmit}
             variant="contained"
             disabled={!formData.name.trim() || !formData.itemsText.trim()}
           >
-            {editingList ? '수정' : '생성'}
+            {editingList ? t('customDropdowns.buttons.save') : t('customDropdowns.buttons.create')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { DialogActions, Button, CircularProgress } from '@mui/material';
 import { Save } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 
 interface BottomActionsProps {
   saving: boolean;
@@ -15,10 +16,12 @@ export const BottomActions: React.FC<BottomActionsProps> = ({
   onSave,
   onCancel,
 }) => {
+  const { t } = useTranslation('common');
+
   return (
     <DialogActions sx={{ borderTop: 1, borderColor: 'divider', p: 2 }}>
       <Button onClick={onCancel} disabled={saving}>
-        Cancel
+        {t('buttons.cancel')}
       </Button>
       <Button
         onClick={onSave}
@@ -26,7 +29,7 @@ export const BottomActions: React.FC<BottomActionsProps> = ({
         startIcon={saving ? <CircularProgress size={16} /> : <Save />}
         disabled={saving || !imageLoaded}
       >
-        {saving ? 'Saving...' : 'Save'}
+        {saving ? t('messages.saving') : t('buttons.save')}
       </Button>
     </DialogActions>
   );

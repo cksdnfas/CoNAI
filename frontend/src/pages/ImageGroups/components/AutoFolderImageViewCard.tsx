@@ -11,6 +11,7 @@ import type { AutoFolderGroupWithStats } from '@comfyui-image-manager/shared';
 import { autoFolderGroupsApi } from '../../../services/api/autoFolderGroupsApi';
 import { useImageRotation } from '../../../hooks/useImageRotation';
 import type { ImageRecord } from '../../../types/image';
+import { useTranslation } from 'react-i18next';
 
 interface AutoFolderImageViewCardProps {
   group: AutoFolderGroupWithStats;
@@ -24,6 +25,8 @@ interface AutoFolderImageViewCardProps {
  * - 클릭 시 이미지 그리드 모달 열기
  */
 export function AutoFolderImageViewCard({ group, onClick }: AutoFolderImageViewCardProps) {
+  const { t } = useTranslation('imageGroups');
+
   // 이미지 가져오기 함수 (하위 폴더 제외)
   const fetchImages = useCallback(
     async (count: number): Promise<ImageRecord[]> => {
@@ -114,7 +117,7 @@ export function AutoFolderImageViewCard({ group, onClick }: AutoFolderImageViewC
         <CardMedia
           component="img"
           image={mediaUrl}
-          alt="이미지 보기"
+          alt={t('imageView.viewImages')}
           sx={{
             position: 'absolute',
             top: 0,
@@ -154,7 +157,7 @@ export function AutoFolderImageViewCard({ group, onClick }: AutoFolderImageViewC
               whiteSpace: 'nowrap',
             }}
           >
-            이미지 보기
+            {t('imageView.viewImages')}
           </Typography>
         </Box>
       </Box>
@@ -190,7 +193,7 @@ export function AutoFolderImageViewCard({ group, onClick }: AutoFolderImageViewC
         }}
       >
         <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
-          {group.display_name} - 이미지
+          {t('imageView.title', { name: group.display_name })}
         </Typography>
 
         <Typography
@@ -199,12 +202,12 @@ export function AutoFolderImageViewCard({ group, onClick }: AutoFolderImageViewC
             color: 'rgba(255, 255, 255, 0.9)',
           }}
         >
-          이 폴더의 직접 이미지들을 확인합니다
+          {t('imageView.folderDescription')}
         </Typography>
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
           <Chip
-            label={`${group.image_count || 0} 이미지`}
+            label={t('groupCard.imageCount', { count: group.image_count || 0 })}
             size="small"
             sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', color: 'white' }}
           />

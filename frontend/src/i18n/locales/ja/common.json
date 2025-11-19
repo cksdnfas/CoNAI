@@ -110,5 +110,140 @@
     "confirm": "確認",
     "retry": "再試行",
     "refresh": "更新"
+  },
+  "filterModal": {
+    "title": {
+      "add": "フィルター追加",
+      "edit": "フィルター編集"
+    },
+    "groupTypes": {
+      "label": "グループ選択",
+      "exclude": "除外",
+      "or": "OR",
+      "and": "AND"
+    },
+    "categories": {
+      "label": "カテゴリー",
+      "positive_prompt": "ポジティブ",
+      "negative_prompt": "ネガティブ",
+      "auto_tag": "自動タグ",
+      "basic": "基本"
+    },
+    "conditionSettings": {
+      "label": "条件設定",
+      "conditionType": "条件タイプ",
+      "value": "値",
+      "valuePlaceholder": "検索する値を入力してください"
+    },
+    "conditionTypes": {
+      "prompt_contains": "含む",
+      "prompt_regex": "正規表現",
+      "negative_prompt_contains": "含む",
+      "negative_prompt_regex": "正規表現",
+      "auto_tag_exists": "自動タグが存在",
+      "auto_tag_has_character": "キャラクターが存在",
+      "auto_tag_rating": "Ratingタイプ",
+      "auto_tag_rating_score": "Ratingスコア",
+      "auto_tag_general": "Generalタグ",
+      "auto_tag_character": "Characterタグ",
+      "auto_tag_model": "モデル",
+      "ai_tool": "AIツール",
+      "model_name": "モデル名"
+    },
+    "fields": {
+      "exists": "存在する",
+      "notExists": "存在しない",
+      "ratingType": "Ratingタイプ",
+      "scoreRange": "スコア範囲: {{min}} ~ {{max}}",
+      "weightRange": "重み範囲: {{min}} ~ {{max}}",
+      "tagOrCharacter": "タグ/キャラクター名",
+      "tagPlaceholder": "例: 1girl, hatsune_miku"
+    },
+    "ratingTypes": {
+      "general": "General",
+      "sensitive": "Sensitive",
+      "questionable": "Questionable",
+      "explicit": "Explicit"
+    }
+  },
+  "filterBuilder": {
+    "groupTypes": {
+      "exclude": {
+        "label": "除外 (NOT)",
+        "labelShort": "除外",
+        "description": "これらの条件に一致する画像を除外します（最優先実行）"
+      },
+      "or": {
+        "label": "ORグループ",
+        "labelShort": "OR",
+        "description": "いずれかの条件を満たす画像を含めます"
+      },
+      "and": {
+        "label": "ANDグループ",
+        "labelShort": "AND",
+        "description": "すべての条件を満たす画像を含めます"
+      }
+    },
+    "categories": {
+      "positive_prompt": "ポジティブプロンプト",
+      "negative_prompt": "ネガティブプロンプト",
+      "auto_tag": "自動タグ",
+      "basic": "基本"
+    },
+    "conditionTypes": {
+      "prompt_contains": "含む",
+      "prompt_regex": "正規表現",
+      "negative_prompt_contains": "含む",
+      "negative_prompt_regex": "正規表現",
+      "auto_tag_exists": "自動タグが存在",
+      "auto_tag_has_character": "キャラクターが存在",
+      "auto_tag_rating": "レーティングタイプ",
+      "auto_tag_rating_score": "レーティングスコア",
+      "auto_tag_general": "一般タグ",
+      "auto_tag_character": "キャラクタータグ",
+      "auto_tag_model": "モデル",
+      "ai_tool": "AIツール",
+      "model_name": "モデル名"
+    },
+    "labels": {
+      "condition": "条件",
+      "conditionNumber": "条件 #{{number}}",
+      "editCondition": "条件 #{{number}} を編集",
+      "category": "分類",
+      "conditionType": "条件タイプ",
+      "value": "値",
+      "score": "スコア",
+      "scoreRange": "スコア範囲: {{min}} ~ {{max}}",
+      "weightRange": "重み範囲: {{min}} ~ {{max}}",
+      "ratingType": "レーティングタイプ",
+      "tagCharacterName": "タグ/キャラクター名",
+      "conditionsCount": "{{count}}個の条件"
+    },
+    "buttons": {
+      "addCondition": "条件を追加"
+    },
+    "messages": {
+      "noConditions": "条件がありません。下のボタンをクリックして条件を追加してください。"
+    },
+    "values": {
+      "exists": "あり",
+      "notExists": "なし"
+    },
+    "ratingTypes": {
+      "general": "General",
+      "sensitive": "Sensitive",
+      "questionable": "Questionable",
+      "explicit": "Explicit"
+    }
+  },
+  "imageEditor": {
+    "title": "画像エディター",
+    "canvasInfo": "キャンバス情報",
+    "canvasSize": "サイズ: {{width}} x {{height}} px",
+    "toolProperties": "ツールプロパティ",
+    "brushSize": "ブラシサイズ: {{size}}px",
+    "brushColor": "ブラシカラー",
+    "eraserSize": "消しゴムサイズ: {{size}}px",
+    "panHelp": "クリック＆ドラッグでキャンバスを移動できます。マウスホイールで拡大/縮小できます。"
   }
 }

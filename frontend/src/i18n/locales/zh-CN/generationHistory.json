@@ -25,6 +25,12 @@
     "refresh": "刷新",
     "confirmDelete": "确定要删除这条生成历史吗？"
   },
+  "deleteSelected": "删除选定 ({{count}})",
+  "deleteDialog": {
+    "title": "删除选定项目",
+    "confirm": "确定要删除{{count}}个历史记录吗？",
+    "warning": "此操作无法撤消。"
+  },
   "detail": {
     "title": "生成历史详情",
     "status": "状态",

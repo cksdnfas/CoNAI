@@ -1,4 +1,5 @@
 import { Box, Typography, Paper, Divider, LinearProgress, Chip } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import type { ComfyUIServer } from '../../../services/api/comfyuiServerApi';
 import type { ServerRepeatState } from '../types/workflow.types';
 
@@ -16,6 +17,7 @@ export function RepeatExecutionStatus({
   servers,
   serverRepeatStates
 }: RepeatExecutionStatusProps) {
+  const { t } = useTranslation(['workflows']);
   if (Object.keys(serverRepeatStates).length === 0) {
     return null;
   }
@@ -37,15 +39,18 @@ export function RepeatExecutionStatus({
   return (
     <Paper sx={{ p: 3 }}>
       <Typography variant="h6" gutterBottom>
-        반복 실행 현황
+        {t('workflows:repeatExecution.statusTitle')}
       </Typography>
       <Divider sx={{ mb: 2 }} />
 
       {/* 전체 진행률 */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="body2" gutterBottom>
-          전체: {completedTotal}{plannedTotal > 0 ? ` / ${plannedTotal}` : ''} 완료
-          {hasInfinite && ' (무한 반복 포함)'}
+          {t('workflows:repeatExecution.overall', {
+            completed: completedTotal,
+            total: plannedTotal > 0 ? ` / ${plannedTotal}` : ''
+          })}
+          {hasInfinite && t('workflows:repeatExecution.withInfinite')}
         </Typography>
         {plannedTotal > 0 && (
           <LinearProgress variant="determinate" value={progress} sx={{ mt: 1 }} />
@@ -77,8 +82,8 @@ export function RepeatExecutionStatus({
               <Chip
                 label={
                   state.totalIterations === -1
-                    ? `${state.currentIteration}회 (무한)`
-                    : `${state.currentIteration} / ${state.totalIterations}회`
+                    ? t('workflows:repeatExecution.serverProgressInfinite', { count: state.currentIteration })
+                    : `${state.currentIteration} / ${t('workflows:repeatExecution.serverProgress', { count: state.totalIterations })}`
                 }
                 size="small"
                 color={state.isRunning ? 'primary' : 'default'}

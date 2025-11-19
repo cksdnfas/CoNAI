@@ -404,7 +404,7 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
           }}
         >
           <Typography variant="body2" sx={{ fontWeight: 600, mr: 1 }}>
-            {selectedIds.size}개 선택됨
+            {t('common:bulkActions.selectedCount', { count: selectedIds.size })}
           </Typography>
           <Button
             size="small"
@@ -412,14 +412,14 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
             onClick={handleSelectAll}
             disabled={selectedIds.size === records.length}
           >
-            전체 선택
+            {t('common:buttons.selectAll')}
           </Button>
           <Button
             size="small"
             startIcon={<DeselectIcon />}
             onClick={handleDeselectAll}
           >
-            선택 해제
+            {t('common:buttons.deselectAll')}
           </Button>
           <Box sx={{ flex: 1 }} />
           <Button
@@ -429,7 +429,7 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
             startIcon={<DeleteIcon />}
             onClick={handleDeleteDialogOpen}
           >
-            선택 삭제 ({selectedIds.size})
+            {t('generationHistory:deleteSelected', { count: selectedIds.size })}
           </Button>
         </Box>
       )}
@@ -501,12 +501,12 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>선택된 항목 삭제</DialogTitle>
+        <DialogTitle>{t('generationHistory:deleteDialog.title')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            선택된 {selectedIds.size}개의 히스토리를 삭제하시겠습니까?
+            {t('generationHistory:deleteDialog.confirm', { count: selectedIds.size })}
             <br />
-            이 작업은 되돌릴 수 없습니다.
+            {t('generationHistory:deleteDialog.warning')}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -514,7 +514,7 @@ export const GenerationHistoryList: React.FC<GenerationHistoryListProps> = ({
             {t('common:actions.cancel')}
           </Button>
           <Button onClick={handleBulkDelete} color="error" variant="contained">
-            삭제
+            {t('common:actions.delete')}
           </Button>
         </DialogActions>
       </Dialog>

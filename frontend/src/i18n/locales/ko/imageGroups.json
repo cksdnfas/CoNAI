@@ -9,8 +9,16 @@
   },
   "groupCard": {
     "imageCount": "{{count}}개 이미지",
+    "subgroupCount": "{{count}}개 하위그룹",
+    "folderCount": "{{count}}개 하위폴더",
     "autoCollect": "자동수집",
     "stats": "자동: {{auto}}개 | 수동: {{manual}}개"
+  },
+  "imageView": {
+    "viewImages": "이미지 보기",
+    "title": "{{name}} - 이미지",
+    "description": "이 그룹의 직접 이미지들을 확인합니다",
+    "folderDescription": "이 폴더의 직접 이미지들을 확인합니다"
   },
   "menu": {
     "edit": "편집",
@@ -33,6 +41,10 @@
     "selectParent": "상위 그룹 선택",
     "autoCollectEnable": "자동수집 활성화",
     "autoCollectDescription": "설정한 조건에 맞는 이미지를 자동으로 이 그룹에 추가합니다.",
+    "autoCollectDisabledHelp": "자동수집을 활성화하면 새로 업로드되는 이미지가 설정한 조건에 따라 자동으로 이 그룹에 추가됩니다.",
+    "filterApplied": "{{count}}개의 필터가 적용됩니다. 실행 순서: 제외 → OR → AND",
+    "addFiltersPrompt": "필터를 추가하여 자동수집 조건을 설정하세요",
+    "filterHelpTooltip": "필터 사용법 도움말",
     "orConditionInfo": "OR 조건: 여러 조건을 추가하면 하나라도 만족하는 이미지가 자동수집됩니다.",
     "orConditionExample": "예시: \"프롬프트에 'anime' 포함\" + \"자동태그 캐릭터 존재\" → 둘 중 하나만 만족해도 수집",
     "conditionsTitle": "자동수집 조건",
@@ -46,6 +58,7 @@
   },
   "hierarchy": {
     "root": "최상위",
+    "groupList": "그룹 목록",
     "childGroups": "하위 그룹 {{count}}개",
     "openSubgroups": "하위 그룹 열기",
     "backToParent": "상위 그룹으로",

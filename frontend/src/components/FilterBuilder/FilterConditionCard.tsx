@@ -21,6 +21,7 @@ import {
   Check as CheckIcon,
   Close as CloseIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import type { FilterCondition, FilterCategory } from '@comfyui-image-manager/shared';
 
 interface FilterConditionCardProps {
@@ -31,36 +32,20 @@ interface FilterConditionCardProps {
   onRemove: () => void;
 }
 
-// 카테고리별 타입 매핑
-const CONDITION_TYPES: Record<FilterCategory, Array<{ value: string; label: string }>> = {
-  positive_prompt: [
-    { value: 'prompt_contains', label: '포함' },
-    { value: 'prompt_regex', label: '정규식' },
-  ],
-  negative_prompt: [
-    { value: 'negative_prompt_contains', label: '포함' },
-    { value: 'negative_prompt_regex', label: '정규식' },
-  ],
+// Condition types mapping by category (values only - labels from i18n)
+const CONDITION_TYPE_VALUES: Record<FilterCategory, string[]> = {
+  positive_prompt: ['prompt_contains', 'prompt_regex'],
+  negative_prompt: ['negative_prompt_contains', 'negative_prompt_regex'],
   auto_tag: [
-    { value: 'auto_tag_exists', label: '자동태그 존재' },
-    { value: 'auto_tag_has_character', label: '캐릭터 존재' },
-    { value: 'auto_tag_rating', label: 'Rating 타입' },
-    { value: 'auto_tag_rating_score', label: 'Rating 점수' },
-    { value: 'auto_tag_general', label: 'General 태그' },
-    { value: 'auto_tag_character', label: 'Character 태그' },
-    { value: 'auto_tag_model', label: '모델' },
+    'auto_tag_exists',
+    'auto_tag_has_character',
+    'auto_tag_rating',
+    'auto_tag_rating_score',
+    'auto_tag_general',
+    'auto_tag_character',
+    'auto_tag_model',
   ],
-  basic: [
-    { value: 'ai_tool', label: 'AI 도구' },
-    { value: 'model_name', label: '모델명' },
-  ],
-};
-
-const CATEGORY_LABELS: Record<FilterCategory, string> = {
-  positive_prompt: '긍정 프롬프트',
-  negative_prompt: '네거티브 프롬프트',
-  auto_tag: '자동태그',
-  basic: '기본',
+  basic: ['ai_tool', 'model_name'],
 };
 
 // Get default value for condition type
@@ -101,12 +86,13 @@ const FilterConditionCard: React.FC<FilterConditionCardProps> = ({
   onUpdate,
   onRemove,
 }) => {
+  const { t } = useTranslation('common');
   const [isEditing, setIsEditing] = useState(false);
   const [editingCondition, setEditingCondition] = useState<FilterCondition>(condition);
 
   const handleCategoryChange = (newCategory: FilterCategory) => {
-    // 카테고리 변경 시 타입 초기화 및 적절한 기본값 설정
-    const firstType = CONDITION_TYPES[newCategory][0].value;
+    // Reset type and set appropriate default values when category changes
+    const firstType = CONDITION_TYPE_VALUES[newCategory][0];
     const newCondition: FilterCondition = {
       category: newCategory,
       type: firstType as any,
@@ -135,15 +121,15 @@ const FilterConditionCard: React.FC<FilterConditionCardProps> = ({
     setIsEditing(false);
   };
 
-  // 조건 요약 텍스트 생성
+  // Generate condition summary text
   const getSummaryText = () => {
-    const category = CATEGORY_LABELS[condition.category];
-    const typeObj = CONDITION_TYPES[condition.category].find((t) => t.value === condition.type);
-    const type = typeObj?.label || condition.type;
+    const category = t(`filterBuilder.categories.${condition.category}`);
+    const type = t(`filterBuilder.conditionTypes.${condition.type}`);
 
     let value = String(condition.value);
     if (condition.type === 'auto_tag_rating' && condition.rating_type) {
-      value = `${condition.rating_type} (${condition.min_score || 0} ~ ${condition.max_score || 1})`;
+      const ratingType = t(`filterBuilder.ratingTypes.${condition.rating_type}`);
+      value = `${ratingType} (${condition.min_score || 0} ~ ${condition.max_score || 1})`;
     } else if (condition.min_score !== undefined || condition.max_score !== undefined) {
       value = `${value} (${condition.min_score || 0} ~ ${condition.max_score || 1})`;
     }
@@ -152,7 +138,7 @@ const FilterConditionCard: React.FC<FilterConditionCardProps> = ({
   };
 
   if (!isEditing) {
-    // 읽기 모드
+    // Read-only mode
     return (
       <Card
         variant="outlined"
@@ -165,7 +151,7 @@ const FilterConditionCard: React.FC<FilterConditionCardProps> = ({
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box sx={{ flex: 1 }}>
               <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                조건 #{index + 1}
+                {t('filterBuilder.labels.conditionNumber', { number: index + 1 })}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                 {getSummaryText()}
@@ -185,7 +171,7 @@ const FilterConditionCard: React.FC<FilterConditionCardProps> = ({
     );
   }
 
-  // 편집 모드
+  // Edit mode
   return (
     <Card
       variant="outlined"
@@ -197,10 +183,10 @@ const FilterConditionCard: React.FC<FilterConditionCardProps> = ({
     >
       <CardContent>
         <Stack spacing={2}>
-          {/* 헤더 */}
+          {/* Header */}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="subtitle2" fontWeight={600}>
-              조건 #{index + 1} 편집
+              {t('filterBuilder.labels.editCondition', { number: index + 1 })}
             </Typography>
             <Box>
               <IconButton size="small" onClick={handleSave} color="success">
@@ -212,39 +198,39 @@ const FilterConditionCard: React.FC<FilterConditionCardProps> = ({
             </Box>
           </Box>
 
-          {/* 카테고리 선택 */}
+          {/* Category selection */}
           <FormControl fullWidth size="small">
-            <InputLabel>분류</InputLabel>
+            <InputLabel>{t('filterBuilder.labels.category')}</InputLabel>
             <Select
               value={editingCondition.category}
-              label="분류"
+              label={t('filterBuilder.labels.category')}
               onChange={(e) => handleCategoryChange(e.target.value as FilterCategory)}
             >
-              {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+              {Object.keys(CONDITION_TYPE_VALUES).map((key) => (
                 <MenuItem key={key} value={key}>
-                  {label}
+                  {t(`filterBuilder.categories.${key}`)}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
 
-          {/* 타입 선택 */}
+          {/* Type selection */}
           <FormControl fullWidth size="small">
-            <InputLabel>조건 타입</InputLabel>
+            <InputLabel>{t('filterBuilder.labels.conditionType')}</InputLabel>
             <Select
               value={editingCondition.type}
-              label="조건 타입"
+              label={t('filterBuilder.labels.conditionType')}
               onChange={(e) => handleTypeChange(e.target.value)}
             >
-              {CONDITION_TYPES[editingCondition.category].map((type) => (
-                <MenuItem key={type.value} value={type.value}>
-                  {type.label}
+              {CONDITION_TYPE_VALUES[editingCondition.category].map((typeValue) => (
+                <MenuItem key={typeValue} value={typeValue}>
+                  {t(`filterBuilder.conditionTypes.${typeValue}`)}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
 
-          {/* 값 입력 (조건 타입에 따라 다름) */}
+          {/* Value input (varies by condition type) */}
           {(editingCondition.type === 'auto_tag_exists' ||
             editingCondition.type === 'auto_tag_has_character') && (
             <FormControlLabel
@@ -256,30 +242,45 @@ const FilterConditionCard: React.FC<FilterConditionCardProps> = ({
                   }
                 />
               }
-              label={editingCondition.value ? '있음' : '없음'}
+              label={
+                editingCondition.value
+                  ? t('filterBuilder.values.exists')
+                  : t('filterBuilder.values.notExists')
+              }
             />
           )}
 
           {editingCondition.type === 'auto_tag_rating' && (
             <>
               <FormControl fullWidth size="small">
-                <InputLabel>Rating 타입</InputLabel>
+                <InputLabel>{t('filterBuilder.labels.ratingType')}</InputLabel>
                 <Select
                   value={editingCondition.rating_type || 'general'}
-                  label="Rating 타입"
+                  label={t('filterBuilder.labels.ratingType')}
                   onChange={(e) =>
                     setEditingCondition({ ...editingCondition, rating_type: e.target.value as any })
                   }
                 >
-                  <MenuItem value="general">General</MenuItem>
-                  <MenuItem value="sensitive">Sensitive</MenuItem>
-                  <MenuItem value="questionable">Questionable</MenuItem>
-                  <MenuItem value="explicit">Explicit</MenuItem>
+                  <MenuItem value="general">
+                    {t('filterBuilder.ratingTypes.general')}
+                  </MenuItem>
+                  <MenuItem value="sensitive">
+                    {t('filterBuilder.ratingTypes.sensitive')}
+                  </MenuItem>
+                  <MenuItem value="questionable">
+                    {t('filterBuilder.ratingTypes.questionable')}
+                  </MenuItem>
+                  <MenuItem value="explicit">
+                    {t('filterBuilder.ratingTypes.explicit')}
+                  </MenuItem>
                 </Select>
               </FormControl>
               <Box>
                 <Typography variant="caption" gutterBottom>
-                  점수 범위: {editingCondition.min_score || 0} ~ {editingCondition.max_score || 1}
+                  {t('filterBuilder.labels.scoreRange', {
+                    min: editingCondition.min_score || 0,
+                    max: editingCondition.max_score || 1,
+                  })}
                 </Typography>
                 <Slider
                   value={[editingCondition.min_score || 0, editingCondition.max_score || 1]}
@@ -307,7 +308,7 @@ const FilterConditionCard: React.FC<FilterConditionCardProps> = ({
               <TextField
                 fullWidth
                 size="small"
-                label="태그/캐릭터명"
+                label={t('filterBuilder.labels.tagCharacterName')}
                 value={editingCondition.value}
                 onChange={(e) =>
                   setEditingCondition({ ...editingCondition, value: e.target.value })
@@ -315,7 +316,10 @@ const FilterConditionCard: React.FC<FilterConditionCardProps> = ({
               />
               <Box>
                 <Typography variant="caption" gutterBottom>
-                  가중치 범위: {editingCondition.min_score || 0} ~ {editingCondition.max_score || 1}
+                  {t('filterBuilder.labels.weightRange', {
+                    min: editingCondition.min_score || 0,
+                    max: editingCondition.max_score || 1,
+                  })}
                 </Typography>
                 <Slider
                   value={[editingCondition.min_score || 0, editingCondition.max_score || 1]}
@@ -345,7 +349,7 @@ const FilterConditionCard: React.FC<FilterConditionCardProps> = ({
               <TextField
                 fullWidth
                 size="small"
-                label="값"
+                label={t('filterBuilder.labels.value')}
                 value={editingCondition.value}
                 onChange={(e) =>
                   setEditingCondition({ ...editingCondition, value: e.target.value })

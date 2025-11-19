@@ -153,5 +153,77 @@
     "progress": "{{current}}회 진행 중",
     "progressWithTotal": "{{current}}/{{total}}회 진행 중",
     "stop": "중지"
+  },
+  "customDropdowns": {
+    "title": "커스텀 드롭다운 목록 관리",
+    "buttons": {
+      "add": "새 목록 추가",
+      "edit": "수정",
+      "delete": "삭제",
+      "view": "보기",
+      "cancel": "취소",
+      "create": "생성",
+      "save": "저장"
+    },
+    "labels": {
+      "name": "목록 이름",
+      "description": "설명",
+      "items": "항목 목록 (한 줄에 하나씩 입력)",
+      "itemsHelper": "각 항목을 줄바꿈으로 구분하여 입력하세요"
+    },
+    "empty": {
+      "title": "등록된 커스텀 드롭다운 목록이 없습니다.",
+      "description": "'새 목록 추가'를 클릭하여 커스텀 드롭다운 목록을 생성하세요"
+    },
+    "dialog": {
+      "add": "새 커스텀 목록 추가",
+      "edit": "커스텀 목록 수정",
+      "deleteConfirm": "정말 이 목록을 삭제하시겠습니까?"
+    },
+    "validation": {
+      "minItems": "최소 1개 이상의 항목을 입력해주세요."
+    },
+    "stats": {
+      "itemCount": "{{count}}개",
+      "moreItems": "+{{count}}개",
+      "createdAt": "생성일: {{date}}"
+    }
+  },
+  "repeatExecution": {
+    "statusTitle": "반복 실행 현황",
+    "overall": "전체: {{completed}}{{total}} 완료",
+    "withInfinite": " (무한 반복 포함)",
+    "serverProgress": "{{count}}회",
+    "serverProgressInfinite": "{{count}}회 (무한)"
+  },
+  "serverStatus": {
+    "generate": "생성",
+    "startRepeat": "반복 실행",
+    "stop": "중지",
+    "executingInfinite": "{{count}}회 실행 중 (무한)",
+    "executingProgress": "{{current}} / {{total}}회"
+  },
+  "groupAssignment": {
+    "title": "그룹 할당",
+    "selectGroup": "그룹 선택",
+    "autoAddDescription": "생성된 이미지가 선택한 그룹에 자동으로 추가됩니다"
+  },
+  "graphToolbar": {
+    "searchPlaceholder": "노드 검색...",
+    "filterTypes": "타입 필터",
+    "layoutSwitch": "{{layout}} 레이아웃으로 전환",
+    "layoutTopBottom": "상하",
+    "layoutLeftRight": "좌우",
+    "expandAll": "모든 노드 펼치기",
+    "collapseAll": "모든 노드 접기"
+  },
+  "jsonViewer": {
+    "title": "워크플로우 JSON 구조",
+    "copyToClipboard": "클립보드에 복사",
+    "copied": "클립보드에 복사되었습니다!"
+  },
+  "workflowViewer": {
+    "graphView": "그래프 뷰",
+    "jsonView": "JSON 뷰"
   }
 }

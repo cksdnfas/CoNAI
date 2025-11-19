@@ -281,7 +281,14 @@
         "colorSimilar": "色彩相似"
       },
       "similarity": "{{percent}}%",
-      "colorSimilarity": "色彩: {{percent}}%"
+      "colorSimilarity": "色彩: {{percent}}%",
+      "hashStatus": "雜湊狀態",
+      "rebuild": {
+        "button": "重建{{count}}個缺失的雜湊",
+        "rebuilding": "重建中...",
+        "success": "已處理: {{processed}}個、失敗: {{failed}}個、剩餘: {{remaining}}個",
+        "error": "錯誤: {{error}}"
+      }
     },
     "duplicateScan": {
       "title": "全域重複分析",
@@ -335,5 +342,217 @@
     "saveSuccess": "設定儲存成功",
     "saveFailed": "設定儲存失敗",
     "loadFailed": "設定載入失敗"
+  },
+  "thumbnailRegeneration": {
+    "title": "縮圖重新產生",
+    "sections": {
+      "currentStatus": "目前狀態"
+    },
+    "stats": {
+      "totalFiles": "總檔案:",
+      "withThumbnail": "有縮圖:",
+      "withoutThumbnail": "無縮圖:"
+    },
+    "phases": {
+      "verifying": "驗證檔案中...",
+      "deleting": "刪除現有縮圖中...",
+      "generating": "產生縮圖中...",
+      "completed": "已完成",
+      "waiting": "等待中"
+    },
+    "time": {
+      "seconds": "{{elapsed}}秒",
+      "minutesSeconds": "{{minutes}}分{{seconds}}秒"
+    },
+    "status": {
+      "completed": "已完成",
+      "inProgress": "進行中"
+    },
+    "progress": {
+      "deletedThumbnails": "已刪除縮圖:",
+      "generatedThumbnails": "已產生縮圖:",
+      "elapsedTime": "耗時:"
+    },
+    "messages": {
+      "success": "縮圖重新產生完成！",
+      "loadStatsFailed": "統計資訊載入失敗",
+      "alreadyRunning": "縮圖重新產生已在執行中",
+      "startFailed": "啟動縮圖重新產生失敗"
+    },
+    "instructions": {
+      "title": "縮圖重新產生將按以下順序進行:",
+      "step1": "1. 驗證檔案",
+      "step2": "2. 刪除現有縮圖",
+      "step3": "3. 產生新縮圖",
+      "warning": "警告:",
+      "warningText": "根據檔案數量可能需要較長時間。"
+    },
+    "buttons": {
+      "close": "關閉",
+      "start": "開始重新產生",
+      "starting": "啟動中...",
+      "inProgress": "進行中..."
+    }
+  },
+  "folderSettings": {
+    "title": "資料夾管理",
+    "subtitle": "設定監視資料夾並監控後台任務狀態。",
+    "scheduler": {
+      "title": "排程器設定",
+      "backgroundHash": {
+        "title": "後台雜湊監視間隔",
+        "tooltip": "為上傳檔案產生雜湊的後台任務（Phase 2）執行間隔。間隔越短處理越快，但系統負載會增加。",
+        "intervalLabel": "間隔（秒）",
+        "intervalTooltip": "檢查未處理雜湊任務的週期。可設定為5-300秒之間。",
+        "saveButton": "儲存",
+        "savingButton": "儲存中...",
+        "errorRange": "間隔必須在5-300秒之間",
+        "errorSave": "設定儲存失敗"
+      },
+      "autoTagger": {
+        "title": "自動標記排程器",
+        "tooltip": "設定自動標記排程器的輪詢間隔和批次處理大小。輪詢間隔越短、批次處理大小越大處理越快，但系統負載會增加。",
+        "pollingIntervalLabel": "輪詢間隔（秒）",
+        "pollingIntervalTooltip": "檢查未標記圖像的週期。可設定為5-300秒之間。",
+        "batchSizeLabel": "批次處理大小（張）",
+        "batchSizeTooltip": "一次處理的圖像數量。可設定為1-100張之間。",
+        "saveButton": "儲存",
+        "savingButton": "儲存中...",
+        "errorPollingRange": "輪詢間隔必須在5-300秒之間",
+        "errorBatchRange": "批次處理大小必須在1-100之間",
+        "errorSave": "設定儲存失敗"
+      }
+    },
+    "watchedFolders": {
+      "title": "監視資料夾清單",
+      "addFolder": "新增資料夾",
+      "refresh": "重新整理",
+      "viewAllLogs": "全部日誌",
+      "scanAll": "掃描全部",
+      "scanning": "掃描中...",
+      "noName": "未命名",
+      "active": "活動",
+      "inactive": "非活動",
+      "autoScanInterval": "{{interval}}分鐘",
+      "scanStatus": "掃描",
+      "lastScan": "最後掃描: {{date}}",
+      "noScanHistory": "無掃描歷史",
+      "watcherStatus": {
+        "starting": "啟動中...",
+        "watching": "監視中",
+        "error": "錯誤",
+        "stopped": "已停止",
+        "inactive": "非活動"
+      },
+      "tooltips": {
+        "scan": "掃描",
+        "log": "日誌",
+        "edit": "編輯",
+        "delete": "刪除",
+        "watcherStart": "開始監視",
+        "watcherStop": "停止監視",
+        "processing": "處理中..."
+      },
+      "messages": {
+        "loadFailed": "載入資料夾清單失敗",
+        "deleteFailed": "刪除資料夾失敗",
+        "deleteConfirm": "刪除資料夾\"{{name}}\"？",
+        "scanFailed": "掃描資料夾失敗",
+        "scanAllFailed": "掃描所有資料夾失敗",
+        "scanAllComplete": "全面掃描完成: {{totalFolders}}個資料夾，{{totalNew}}個新增，{{totalExisting}}個現有{{errors}}",
+        "scanAllErrors": "，{{totalErrors}}個錯誤",
+        "watcherStartFailed": "啟動即時監控失敗",
+        "watcherStopFailed": "停止即時監控失敗"
+      }
+    },
+    "dialog": {
+      "addTitle": "新增資料夾",
+      "editTitle": "編輯資料夾",
+      "folderPath": "資料夾路徑 *",
+      "folderPathDisabled": "資料夾路徑無法編輯",
+      "folderPathHelper": "輸入絕對路徑（例如: D:\\Images 或 \\\\192.168.1.100\\Share\\Images）",
+      "folderName": "資料夾名稱",
+      "folderNameHelper": "如果留空，將自動使用資料夾名稱",
+      "watcherEnabled": "啟用即時檔案監控",
+      "watcherTooltip": "即時監控會立即偵測資料夾中的檔案新增/修改/刪除並自動處理。獨立於自動掃描運作，提供更快的回應速度。",
+      "pollingInterval": "輪詢間隔（用於網路磁碟機）",
+      "pollingIntervalTooltip": "對於網路磁碟機，使用輪詢方式偵測檔案變更。間隔越短偵測越快，但會增加網路負載。留空則自動偵測（預設: 1000ms）。",
+      "pollingIntervalLabel": "輪詢間隔（毫秒）",
+      "pollingIntervalPlaceholder": "自動偵測（網路磁碟機: 1000ms）",
+      "pollingIntervalHelper": "留空則自動設定。建議: 500-3000ms",
+      "autoScan": "啟用自動掃描",
+      "scanInterval": "掃描間隔（分鐘）",
+      "scanIntervalHelper": "自動掃描週期（以分鐘為單位）",
+      "advancedOptions": "進階選項",
+      "recursive": "包含子資料夾（遞迴掃描）",
+      "excludeExtensions": "排除副檔名",
+      "excludeExtensionsTooltip": "預設情況下掃描所有圖像格式（.jpg, .png, .webp, .gif, .bmp, .tiff）。新增要從掃描中排除的副檔名。",
+      "excludeExtensionsPlaceholder": ".tmp",
+      "excludePatterns": "排除模式",
+      "excludePatternsTooltip": "從掃描中排除特定資料夾或檔案模式。範例: node_modules, .git, temp",
+      "excludePatternsPlaceholder": "例如: node_modules, .git",
+      "addButton": "新增",
+      "saveButton": "儲存",
+      "savingButton": "儲存中...",
+      "cancelButton": "取消",
+      "errorPath": "請輸入資料夾路徑",
+      "errorSave": "儲存資料夾失敗"
+    },
+    "scanLog": {
+      "title": "掃描日誌",
+      "titleSpecific": "掃描日誌（特定資料夾）",
+      "titleAll": "掃描日誌（全部）",
+      "noLogs": "無掃描日誌",
+      "loadFailed": "載入掃描日誌失敗",
+      "refresh": "重新整理",
+      "close": "關閉",
+      "columns": {
+        "scanTime": "掃描時間",
+        "folder": "資料夾",
+        "status": "狀態",
+        "scanned": "已掃描",
+        "new": "新增",
+        "existing": "現有",
+        "errors": "錯誤",
+        "duration": "耗時",
+        "details": "詳情"
+      },
+      "status": {
+        "success": "成功",
+        "error": "錯誤"
+      },
+      "errorDetails": "錯誤詳情（{{count}}）",
+      "durationSeconds": "{{seconds}}秒"
+    },
+    "verificationLog": {
+      "title": "檔案驗證日誌",
+      "noLogs": "無驗證日誌",
+      "loadFailed": "載入驗證日誌失敗",
+      "refresh": "重新整理",
+      "close": "關閉",
+      "columns": {
+        "verificationTime": "驗證時間",
+        "verificationType": "驗證類型",
+        "checked": "已檢查檔案",
+        "missingFound": "發現缺失",
+        "deletedRecords": "已刪除記錄",
+        "errors": "錯誤",
+        "duration": "耗時"
+      },
+      "verificationType": {
+        "auto": "自動驗證",
+        "manual": "手動驗證"
+      },
+      "errorDetails": "錯誤詳情（{{count}}）",
+      "errorItem": {
+        "fileId": "檔案ID: {{id}}",
+        "path": "路徑: {{path}}",
+        "error": "錯誤: {{error}}"
+      },
+      "noErrors": "無",
+      "countFormat": "{{count}}",
+      "durationMs": "{{ms}}ms",
+      "durationSeconds": "{{seconds}}秒"
+    }
   }
 }

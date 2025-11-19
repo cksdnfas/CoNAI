@@ -281,7 +281,14 @@
         "colorSimilar": "色感類似"
       },
       "similarity": "{{percent}}%",
-      "colorSimilarity": "色感: {{percent}}%"
+      "colorSimilarity": "色感: {{percent}}%",
+      "hashStatus": "ハッシュステータス",
+      "rebuild": {
+        "button": "{{count}}個の未生成ハッシュを再構築",
+        "rebuilding": "再構築中...",
+        "success": "処理完了: {{processed}}個完了、{{failed}}個失敗、{{remaining}}個残り",
+        "error": "エラー: {{error}}"
+      }
     },
     "duplicateScan": {
       "title": "全体重複分析",
@@ -335,5 +342,217 @@
     "saveSuccess": "設定が正常に保存されました",
     "saveFailed": "設定の保存に失敗しました",
     "loadFailed": "設定の読み込みに失敗しました"
+  },
+  "thumbnailRegeneration": {
+    "title": "サムネイル再生成",
+    "sections": {
+      "currentStatus": "現在の状態"
+    },
+    "stats": {
+      "totalFiles": "全ファイル:",
+      "withThumbnail": "サムネイルあり:",
+      "withoutThumbnail": "サムネイルなし:"
+    },
+    "phases": {
+      "verifying": "ファイル検証中...",
+      "deleting": "既存サムネイル削除中...",
+      "generating": "サムネイル生成中...",
+      "completed": "完了",
+      "waiting": "待機中"
+    },
+    "time": {
+      "seconds": "{{elapsed}}秒",
+      "minutesSeconds": "{{minutes}}分{{seconds}}秒"
+    },
+    "status": {
+      "completed": "完了",
+      "inProgress": "進行中"
+    },
+    "progress": {
+      "deletedThumbnails": "削除されたサムネイル:",
+      "generatedThumbnails": "生成されたサムネイル:",
+      "elapsedTime": "所要時間:"
+    },
+    "messages": {
+      "success": "サムネイル再生成が完了しました！",
+      "loadStatsFailed": "統計の読み込みに失敗しました",
+      "alreadyRunning": "サムネイル再生成は既に実行中です",
+      "startFailed": "サムネイル再生成の開始に失敗しました"
+    },
+    "instructions": {
+      "title": "サムネイル再生成は次の順序で進行します:",
+      "step1": "1. ファイル検証実行",
+      "step2": "2. 既存サムネイル削除",
+      "step3": "3. 新しいサムネイル生成",
+      "warning": "注意:",
+      "warningText": "ファイル数によって時間がかかる場合があります。"
+    },
+    "buttons": {
+      "close": "閉じる",
+      "start": "再生成開始",
+      "starting": "開始中...",
+      "inProgress": "進行中..."
+    }
+  },
+  "folderSettings": {
+    "title": "フォルダ管理",
+    "subtitle": "監視フォルダを設定し、バックグラウンドタスクの状態を監視します。",
+    "scheduler": {
+      "title": "スケジューラ設定",
+      "backgroundHash": {
+        "title": "バックグラウンドハッシュ監視間隔",
+        "tooltip": "アップロードされたファイルのハッシュを生成するバックグラウンドタスク（Phase 2）の実行間隔です。間隔が短いほど高速処理されますがシステム負荷が増加します。",
+        "intervalLabel": "間隔（秒）",
+        "intervalTooltip": "未処理のハッシュタスクを確認する周期です。5-300秒の間で設定できます。",
+        "saveButton": "保存",
+        "savingButton": "保存中...",
+        "errorRange": "間隔は5-300秒の間である必要があります",
+        "errorSave": "設定の保存に失敗しました"
+      },
+      "autoTagger": {
+        "title": "自動タグ付けスケジューラ",
+        "tooltip": "自動タグ付けスケジューラのポーリング間隔とバッチサイズを設定します。ポーリング間隔が短くバッチサイズが大きいほど高速処理されますがシステム負荷が増加します。",
+        "pollingIntervalLabel": "ポーリング間隔（秒）",
+        "pollingIntervalTooltip": "未タグ付け画像を確認する周期です。5-300秒の間で設定できます。",
+        "batchSizeLabel": "バッチサイズ（枚）",
+        "batchSizeTooltip": "一度に処理する画像の枚数です。1-100枚の間で設定できます。",
+        "saveButton": "保存",
+        "savingButton": "保存中...",
+        "errorPollingRange": "ポーリング間隔は5-300秒の間である必要があります",
+        "errorBatchRange": "バッチサイズは1-100の間である必要があります",
+        "errorSave": "設定の保存に失敗しました"
+      }
+    },
+    "watchedFolders": {
+      "title": "監視フォルダリスト",
+      "addFolder": "フォルダ追加",
+      "refresh": "更新",
+      "viewAllLogs": "全ログ",
+      "scanAll": "全スキャン",
+      "scanning": "スキャン中...",
+      "noName": "名前なし",
+      "active": "アクティブ",
+      "inactive": "非アクティブ",
+      "autoScanInterval": "{{interval}}分",
+      "scanStatus": "スキャン",
+      "lastScan": "最終スキャン: {{date}}",
+      "noScanHistory": "スキャン履歴なし",
+      "watcherStatus": {
+        "starting": "開始中...",
+        "watching": "監視中",
+        "error": "エラー",
+        "stopped": "停止",
+        "inactive": "非アクティブ"
+      },
+      "tooltips": {
+        "scan": "スキャン",
+        "log": "ログ",
+        "edit": "編集",
+        "delete": "削除",
+        "watcherStart": "監視開始",
+        "watcherStop": "監視停止",
+        "processing": "処理中..."
+      },
+      "messages": {
+        "loadFailed": "フォルダリストの読み込みに失敗しました",
+        "deleteFailed": "フォルダ削除に失敗しました",
+        "deleteConfirm": "「{{name}}」フォルダを削除しますか？",
+        "scanFailed": "フォルダスキャンに失敗しました",
+        "scanAllFailed": "全フォルダスキャンに失敗しました",
+        "scanAllComplete": "全スキャン完了: {{totalFolders}}フォルダ、新規{{totalNew}}枚、既存{{totalExisting}}枚{{errors}}",
+        "scanAllErrors": "、エラー{{totalErrors}}枚",
+        "watcherStartFailed": "リアルタイム監視の開始に失敗しました",
+        "watcherStopFailed": "リアルタイム監視の停止に失敗しました"
+      }
+    },
+    "dialog": {
+      "addTitle": "フォルダ追加",
+      "editTitle": "フォルダ編集",
+      "folderPath": "フォルダパス *",
+      "folderPathDisabled": "フォルダパスは編集できません",
+      "folderPathHelper": "絶対パスを入力してください（例: D:\\Images または \\\\192.168.1.100\\Share\\Images）",
+      "folderName": "フォルダ名",
+      "folderNameHelper": "未入力の場合、フォルダ名が自動的に使用されます",
+      "watcherEnabled": "リアルタイムファイル監視を有効化",
+      "watcherTooltip": "リアルタイム監視はフォルダ内のファイル追加/変更/削除を即座に検出して自動処理します。自動スキャンとは別に動作し、より高速な応答を提供します。",
+      "pollingInterval": "ポーリング間隔（ネットワークドライブ用）",
+      "pollingIntervalTooltip": "ネットワークドライブの場合、ポーリング方式でファイル変更を検出します。間隔を短くするとより速く検出しますがネットワーク負荷が増加します。空欄の場合は自動検出します（デフォルト: 1000ms）。",
+      "pollingIntervalLabel": "ポーリング間隔（ミリ秒）",
+      "pollingIntervalPlaceholder": "自動検出（ネットワークドライブ: 1000ms）",
+      "pollingIntervalHelper": "空欄の場合は自動設定されます。推奨: 500-3000ms",
+      "autoScan": "自動スキャンを有効化",
+      "scanInterval": "スキャン間隔（分）",
+      "scanIntervalHelper": "自動スキャン周期（分単位）",
+      "advancedOptions": "詳細オプション",
+      "recursive": "サブフォルダを含む（再帰スキャン）",
+      "excludeExtensions": "除外する拡張子",
+      "excludeExtensionsTooltip": "デフォルトでは全ての画像形式（.jpg, .png, .webp, .gif, .bmp, .tiff）をスキャンします。スキャンしない拡張子があれば以下に追加してください。",
+      "excludeExtensionsPlaceholder": ".tmp",
+      "excludePatterns": "除外パターン",
+      "excludePatternsTooltip": "特定のフォルダやファイルパターンをスキャンから除外できます。例: node_modules, .git, temp",
+      "excludePatternsPlaceholder": "例: node_modules, .git",
+      "addButton": "追加",
+      "saveButton": "保存",
+      "savingButton": "保存中...",
+      "cancelButton": "キャンセル",
+      "errorPath": "フォルダパスを入力してください",
+      "errorSave": "フォルダの保存に失敗しました"
+    },
+    "scanLog": {
+      "title": "スキャンログ",
+      "titleSpecific": "スキャンログ（特定フォルダ）",
+      "titleAll": "スキャンログ（全体）",
+      "noLogs": "スキャンログがありません",
+      "loadFailed": "スキャンログの読み込みに失敗しました",
+      "refresh": "更新",
+      "close": "閉じる",
+      "columns": {
+        "scanTime": "スキャン時刻",
+        "folder": "フォルダ",
+        "status": "ステータス",
+        "scanned": "スキャン",
+        "new": "新規",
+        "existing": "既存",
+        "errors": "エラー",
+        "duration": "所要時間",
+        "details": "詳細"
+      },
+      "status": {
+        "success": "成功",
+        "error": "エラー"
+      },
+      "errorDetails": "エラー詳細（{{count}}件）",
+      "durationSeconds": "{{seconds}}秒"
+    },
+    "verificationLog": {
+      "title": "ファイル検証ログ",
+      "noLogs": "検証ログがありません",
+      "loadFailed": "検証ログの読み込みに失敗しました",
+      "refresh": "更新",
+      "close": "閉じる",
+      "columns": {
+        "verificationTime": "検証時刻",
+        "verificationType": "検証タイプ",
+        "checked": "確認ファイル",
+        "missingFound": "欠落発見",
+        "deletedRecords": "削除レコード",
+        "errors": "エラー",
+        "duration": "所要時間"
+      },
+      "verificationType": {
+        "auto": "自動検証",
+        "manual": "手動検証"
+      },
+      "errorDetails": "エラー詳細（{{count}}件）",
+      "errorItem": {
+        "fileId": "ファイルID: {{id}}",
+        "path": "パス: {{path}}",
+        "error": "エラー: {{error}}"
+      },
+      "noErrors": "なし",
+      "countFormat": "{{count}}件",
+      "durationMs": "{{ms}}ms",
+      "durationSeconds": "{{seconds}}秒"
+    }
   }
 }

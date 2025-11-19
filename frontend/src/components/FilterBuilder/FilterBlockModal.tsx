@@ -25,6 +25,7 @@ import {
   CallSplit as OrIcon,
   MergeType as AndIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import type { FilterCondition, FilterGroupType, FilterCategory } from '@comfyui-image-manager/shared';
 
 interface FilterBlockModalProps {
@@ -77,32 +78,25 @@ const GROUP_STYLES = {
   },
 };
 
-// 카테고리별 조건 타입
-const CONDITION_TYPES: Record<FilterCategory, Array<{ value: string; label: string }>> = {
-  positive_prompt: [
-    { value: 'prompt_contains', label: '포함' },
-    { value: 'prompt_regex', label: '정규식' },
-  ],
-  negative_prompt: [
-    { value: 'negative_prompt_contains', label: '포함' },
-    { value: 'negative_prompt_regex', label: '정규식' },
-  ],
+// 카테고리별 조건 타입 (값만 정의, 라벨은 i18n에서 가져옴)
+const CONDITION_TYPE_VALUES: Record<FilterCategory, string[]> = {
+  positive_prompt: ['prompt_contains', 'prompt_regex'],
+  negative_prompt: ['negative_prompt_contains', 'negative_prompt_regex'],
   auto_tag: [
-    { value: 'auto_tag_exists', label: '자동태그 존재' },
-    { value: 'auto_tag_has_character', label: '캐릭터 존재' },
-    { value: 'auto_tag_rating', label: 'Rating 타입' },
-    { value: 'auto_tag_rating_score', label: 'Rating 점수' },
-    { value: 'auto_tag_general', label: 'General 태그' },
-    { value: 'auto_tag_character', label: 'Character 태그' },
-    { value: 'auto_tag_model', label: '모델' },
+    'auto_tag_exists',
+    'auto_tag_has_character',
+    'auto_tag_rating',
+    'auto_tag_rating_score',
+    'auto_tag_general',
+    'auto_tag_character',
+    'auto_tag_model',
   ],
-  basic: [
-    { value: 'ai_tool', label: 'AI 도구' },
-    { value: 'model_name', label: '모델명' },
-  ],
+  basic: ['ai_tool', 'model_name'],
 };
 
 const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAdd, initialData }) => {
+  const { t } = useTranslation('common');
+
   // 상태 관리
   const [selectedGroup, setSelectedGroup] = useState<FilterGroupType | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<FilterCategory | null>(null);
@@ -128,7 +122,7 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
   // 카테고리 변경 시 조건 타입 초기화 (새 필터 추가 시에만)
   useEffect(() => {
     if (selectedCategory && !initialData) {
-      const firstType = CONDITION_TYPES[selectedCategory][0].value;
+      const firstType = CONDITION_TYPE_VALUES[selectedCategory][0];
       setConditionType(firstType);
 
       // 타입에 따라 기본값 설정
@@ -247,11 +241,15 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
       <Box>
         {/* 조건 타입 선택 */}
         <FormControl fullWidth sx={{ mb: 2 }}>
-          <InputLabel>조건 타입</InputLabel>
-          <Select value={conditionType} label="조건 타입" onChange={(e) => handleConditionTypeChange(e.target.value)}>
-            {CONDITION_TYPES[selectedCategory].map((type) => (
-              <MenuItem key={type.value} value={type.value}>
-                {type.label}
+          <InputLabel>{t('filterModal.conditionSettings.conditionType')}</InputLabel>
+          <Select
+            value={conditionType}
+            label={t('filterModal.conditionSettings.conditionType')}
+            onChange={(e) => handleConditionTypeChange(e.target.value)}
+          >
+            {CONDITION_TYPE_VALUES[selectedCategory].map((typeValue) => (
+              <MenuItem key={typeValue} value={typeValue}>
+                {t(`filterModal.conditionTypes.${typeValue}`)}
               </MenuItem>
             ))}
           </Select>
@@ -266,28 +264,28 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
                 onChange={(e) => setConditionValue(e.target.checked)}
               />
             }
-            label={conditionValue ? '있음' : '없음'}
+            label={conditionValue ? t('filterModal.fields.exists') : t('filterModal.fields.notExists')}
           />
         )}
 
         {conditionType === 'auto_tag_rating' && (
           <>
             <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Rating 타입</InputLabel>
+              <InputLabel>{t('filterModal.fields.ratingType')}</InputLabel>
               <Select
                 value={ratingType}
-                label="Rating 타입"
+                label={t('filterModal.fields.ratingType')}
                 onChange={(e) => setRatingType(e.target.value as any)}
               >
-                <MenuItem value="general">General</MenuItem>
-                <MenuItem value="sensitive">Sensitive</MenuItem>
-                <MenuItem value="questionable">Questionable</MenuItem>
-                <MenuItem value="explicit">Explicit</MenuItem>
+                <MenuItem value="general">{t('filterModal.ratingTypes.general')}</MenuItem>
+                <MenuItem value="sensitive">{t('filterModal.ratingTypes.sensitive')}</MenuItem>
+                <MenuItem value="questionable">{t('filterModal.ratingTypes.questionable')}</MenuItem>
+                <MenuItem value="explicit">{t('filterModal.ratingTypes.explicit')}</MenuItem>
               </Select>
             </FormControl>
             <Box>
               <Typography variant="body2" gutterBottom>
-                점수 범위: {minScore.toFixed(2)} ~ {maxScore.toFixed(2)}
+                {t('filterModal.fields.scoreRange', { min: minScore.toFixed(2), max: maxScore.toFixed(2) })}
               </Typography>
               <Slider
                 value={[minScore, maxScore]}
@@ -310,15 +308,15 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
           <>
             <TextField
               fullWidth
-              label="태그/캐릭터명"
+              label={t('filterModal.fields.tagOrCharacter')}
               value={conditionValue}
               onChange={(e) => setConditionValue(e.target.value)}
-              placeholder="예: 1girl, hatsune_miku"
+              placeholder={t('filterModal.fields.tagPlaceholder')}
               sx={{ mb: 2 }}
             />
             <Box>
               <Typography variant="body2" gutterBottom>
-                가중치 범위: {minScore.toFixed(2)} ~ {maxScore.toFixed(2)}
+                {t('filterModal.fields.weightRange', { min: minScore.toFixed(2), max: maxScore.toFixed(2) })}
               </Typography>
               <Slider
                 value={[minScore, maxScore]}
@@ -340,7 +338,7 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
         {conditionType === 'auto_tag_rating_score' && (
           <Box>
             <Typography variant="body2" gutterBottom>
-              점수 범위: {minScore.toFixed(2)} ~ {maxScore.toFixed(2)}
+              {t('filterModal.fields.scoreRange', { min: minScore.toFixed(2), max: maxScore.toFixed(2) })}
             </Typography>
             <Slider
               value={[minScore, maxScore]}
@@ -366,10 +364,10 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
           conditionType !== 'auto_tag_rating_score' && (
             <TextField
               fullWidth
-              label="값"
+              label={t('filterModal.conditionSettings.value')}
               value={conditionValue}
               onChange={(e) => setConditionValue(e.target.value)}
-              placeholder="검색할 값을 입력하세요"
+              placeholder={t('filterModal.conditionSettings.valuePlaceholder')}
             />
           )}
       </Box>
@@ -380,7 +378,7 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth disableRestoreFocus>
       <DialogTitle>
         <Typography variant="h6" fontWeight={600}>
-          {initialData ? '필터 편집' : '필터 추가'}
+          {initialData ? t('filterModal.title.edit') : t('filterModal.title.add')}
         </Typography>
       </DialogTitle>
 
@@ -388,7 +386,7 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
         {/* 그룹 선택 */}
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle2" gutterBottom fontWeight={500}>
-            그룹 선택
+            {t('filterModal.groupTypes.label')}
           </Typography>
           <ToggleButtonGroup
             value={selectedGroup}
@@ -399,15 +397,15 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
           >
             <ToggleButton value="exclude" sx={GROUP_STYLES.exclude}>
               <BlockIcon sx={{ mr: 0.5, fontSize: '1.2rem' }} />
-              제외
+              {t('filterModal.groupTypes.exclude')}
             </ToggleButton>
             <ToggleButton value="or" sx={GROUP_STYLES.or}>
               <OrIcon sx={{ mr: 0.5, fontSize: '1.2rem' }} />
-              OR
+              {t('filterModal.groupTypes.or')}
             </ToggleButton>
             <ToggleButton value="and" sx={GROUP_STYLES.and}>
               <AndIcon sx={{ mr: 0.5, fontSize: '1.2rem' }} />
-              AND
+              {t('filterModal.groupTypes.and')}
             </ToggleButton>
           </ToggleButtonGroup>
         </Box>
@@ -416,7 +414,7 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
         {selectedGroup && (
           <Box sx={{ mb: 3 }}>
             <Typography variant="subtitle2" gutterBottom fontWeight={500}>
-              카테고리
+              {t('filterModal.categories.label')}
             </Typography>
             <Grid container spacing={1} sx={{ mt: 1 }}>
               <Grid size={{ xs: 6, sm: 3 }}>
@@ -427,7 +425,7 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
                   fullWidth
                   sx={{ py: 1.5 }}
                 >
-                  긍정
+                  {t('filterModal.categories.positive_prompt')}
                 </ToggleButton>
               </Grid>
               <Grid size={{ xs: 6, sm: 3 }}>
@@ -438,7 +436,7 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
                   fullWidth
                   sx={{ py: 1.5 }}
                 >
-                  부정
+                  {t('filterModal.categories.negative_prompt')}
                 </ToggleButton>
               </Grid>
               <Grid size={{ xs: 6, sm: 3 }}>
@@ -449,7 +447,7 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
                   fullWidth
                   sx={{ py: 1.5 }}
                 >
-                  자동태그
+                  {t('filterModal.categories.auto_tag')}
                 </ToggleButton>
               </Grid>
               <Grid size={{ xs: 6, sm: 3 }}>
@@ -460,7 +458,7 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
                   fullWidth
                   sx={{ py: 1.5 }}
                 >
-                  기본
+                  {t('filterModal.categories.basic')}
                 </ToggleButton>
               </Grid>
             </Grid>
@@ -475,7 +473,7 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
             {/* 조건 설정 */}
             <Box>
               <Typography variant="subtitle2" gutterBottom fontWeight={500} sx={{ mb: 2 }}>
-                조건 설정
+                {t('filterModal.conditionSettings.label')}
               </Typography>
               {renderConditionFields()}
             </Box>
@@ -484,9 +482,9 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={handleClose}>취소</Button>
+        <Button onClick={handleClose}>{t('buttons.cancel')}</Button>
         <Button variant="contained" onClick={handleAdd} disabled={!canAdd()}>
-          {initialData ? '수정' : '추가'}
+          {initialData ? t('buttons.edit') : t('buttons.add')}
         </Button>
       </DialogActions>
     </Dialog>

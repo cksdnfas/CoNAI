@@ -153,5 +153,77 @@
     "progress": "Iteration {{current}} in progress",
     "progressWithTotal": "Iteration {{current}}/{{total}} in progress",
     "stop": "Stop"
+  },
+  "customDropdowns": {
+    "title": "Custom Dropdown Lists Management",
+    "buttons": {
+      "add": "Add New List",
+      "edit": "Edit",
+      "delete": "Delete",
+      "view": "View",
+      "cancel": "Cancel",
+      "create": "Create",
+      "save": "Save"
+    },
+    "labels": {
+      "name": "List Name",
+      "description": "Description",
+      "items": "Items (one per line)",
+      "itemsHelper": "Enter each item separated by newlines"
+    },
+    "empty": {
+      "title": "No custom dropdown lists registered",
+      "description": "Click 'Add New List' to create a custom dropdown list"
+    },
+    "dialog": {
+      "add": "Add New Custom List",
+      "edit": "Edit Custom List",
+      "deleteConfirm": "Are you sure you want to delete this list?"
+    },
+    "validation": {
+      "minItems": "Please enter at least 1 item"
+    },
+    "stats": {
+      "itemCount": "{{count}} items",
+      "moreItems": "+{{count}}",
+      "createdAt": "Created: {{date}}"
+    }
+  },
+  "repeatExecution": {
+    "statusTitle": "Repeat Execution Status",
+    "overall": "Overall: {{completed}}{{total}} completed",
+    "withInfinite": " (including infinite repeat)",
+    "serverProgress": "{{count}} times",
+    "serverProgressInfinite": "{{count}} times (infinite)"
+  },
+  "serverStatus": {
+    "generate": "Generate",
+    "startRepeat": "Start Repeat",
+    "stop": "Stop",
+    "executingInfinite": "{{count}} times executing (infinite)",
+    "executingProgress": "{{current}} / {{total}} times"
+  },
+  "groupAssignment": {
+    "title": "Group Assignment",
+    "selectGroup": "Select Group",
+    "autoAddDescription": "Generated images will be automatically added to the selected group"
+  },
+  "graphToolbar": {
+    "searchPlaceholder": "Search nodes...",
+    "filterTypes": "Filter Types",
+    "layoutSwitch": "Switch to {{layout}} layout",
+    "layoutTopBottom": "Top-Bottom",
+    "layoutLeftRight": "Left-Right",
+    "expandAll": "Expand all nodes",
+    "collapseAll": "Collapse all nodes"
+  },
+  "jsonViewer": {
+    "title": "Workflow JSON Structure",
+    "copyToClipboard": "Copy to clipboard",
+    "copied": "Copied to clipboard!"
+  },
+  "workflowViewer": {
+    "graphView": "Graph View",
+    "jsonView": "JSON View"
   }
 }

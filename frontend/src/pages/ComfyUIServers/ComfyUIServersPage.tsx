@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Button,
@@ -30,6 +31,7 @@ import {
 import { comfyuiServerApi, type ComfyUIServer } from '../../services/api/comfyuiServerApi';
 
 export default function ComfyUIServersPage() {
+  const { t } = useTranslation('servers');
   const [servers, setServers] = useState<ComfyUIServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +105,7 @@ export default function ComfyUIServersPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('정말 이 서버를 삭제하시겠습니까?')) {
+    if (confirm(t('actions.confirmDelete'))) {
       try {
         await comfyuiServerApi.deleteServer(id);
         loadServers();
@@ -144,14 +146,14 @@ export default function ComfyUIServersPage() {
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h4">
           <SettingsIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-          ComfyUI 서버 관리
+          {t('page.listTitle')}
         </Typography>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => handleOpenDialog()}
         >
-          서버 추가
+          {t('page.addButton')}
         </Button>
       </Box>
 
@@ -171,7 +173,7 @@ export default function ComfyUIServersPage() {
                     {server.name}
                   </Typography>
                   <Chip
-                    label={server.is_active ? '활성' : '비활성'}
+                    label={server.is_active ? t('card.active') : t('card.inactive')}
                     color={server.is_active ? 'success' : 'default'}
                     size="small"
                   />
@@ -193,14 +195,14 @@ export default function ComfyUIServersPage() {
                       <>
                         <CheckIcon color="success" sx={{ mr: 0.5, fontSize: 18 }} />
                         <Typography variant="caption" color="success.main">
-                          연결 성공
+                          {t('card.connectionSuccess')}
                         </Typography>
                       </>
                     ) : (
                       <>
                         <ErrorIcon color="error" sx={{ mr: 0.5, fontSize: 18 }} />
                         <Typography variant="caption" color="error.main">
-                          연결 실패
+                          {t('card.connectionFailed')}
                         </Typography>
                       </>
                     )}
@@ -213,7 +215,7 @@ export default function ComfyUIServersPage() {
                   onClick={() => handleTestConnection(server.id)}
                   disabled={testingServerId === server.id}
                 >
-                  {testingServerId === server.id ? <CircularProgress size={16} /> : '연결 테스트'}
+                  {testingServerId === server.id ? <CircularProgress size={16} /> : t('card.testConnection')}
                 </Button>
                 <Box>
                   <IconButton
@@ -239,10 +241,10 @@ export default function ComfyUIServersPage() {
       {servers.length === 0 && (
         <Box sx={{ textAlign: 'center', py: 8 }}>
           <Typography variant="h6" color="text.secondary">
-            등록된 서버가 없습니다
+            {t('page.noServers')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            "서버 추가" 버튼을 클릭하여 ComfyUI 서버를 추가하세요
+            {t('page.noServersDesc')}
           </Typography>
         </Box>
       )}
@@ -250,27 +252,27 @@ export default function ComfyUIServersPage() {
       {/* 서버 추가/수정 다이얼로그 */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {editingServer ? '서버 수정' : '서버 추가'}
+          {editingServer ? t('dialog.editTitle') : t('dialog.addTitle')}
         </DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <TextField
-              label="서버 이름"
+              label={t('dialog.serverName')}
               fullWidth
               required
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             />
             <TextField
-              label="엔드포인트 URL"
+              label={t('dialog.endpointUrl')}
               fullWidth
               required
-              placeholder="http://127.0.0.1:8188"
+              placeholder={t('dialog.endpointPlaceholder')}
               value={formData.endpoint}
               onChange={(e) => setFormData({ ...formData, endpoint: e.target.value })}
             />
             <TextField
-              label="설명"
+              label={t('dialog.description')}
               fullWidth
               multiline
               rows={2}
@@ -284,14 +286,14 @@ export default function ComfyUIServersPage() {
                   onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                 />
               }
-              label="활성화"
+              label={t('dialog.activate')}
             />
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>취소</Button>
+          <Button onClick={handleCloseDialog}>{t('dialog.cancel')}</Button>
           <Button onClick={handleSubmit} variant="contained" disabled={!formData.name || !formData.endpoint}>
-            {editingServer ? '수정' : '추가'}
+            {editingServer ? t('dialog.update') : t('dialog.add')}
           </Button>
         </DialogActions>
       </Dialog>

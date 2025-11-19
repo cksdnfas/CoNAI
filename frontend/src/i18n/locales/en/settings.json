@@ -152,6 +152,23 @@
     "title": "Image Similarity Search Settings",
     "autoGenerateHash": "Auto-generate Hash on Upload",
     "description": "Automatically generate hashes for similar image search",
+    "test": {
+      "title": "Test",
+      "description": "Test current settings with a specific image.",
+      "imageHash": "Image Hash",
+      "placeholderHash": "e.g., abc123def456...",
+      "button": "Run Test",
+      "processing": "Processing...",
+      "result": "Tagging Result:",
+      "failed": "Test failed",
+      "hashStatus": "Hash Status",
+      "rebuild": {
+        "button": "Rebuild {{count}} Missing Hashes",
+        "rebuilding": "Rebuilding...",
+        "success": "Processed: {{processed}}, Failed: {{failed}}, Remaining: {{remaining}}",
+        "error": "Error: {{error}}"
+      }
+    },
     "duplicateScan": {
       "title": "Full Duplicate Analysis",
       "description": "Find duplicate image groups across the entire database.",
@@ -214,5 +231,217 @@
     "saveSuccess": "Settings saved successfully",
     "saveFailed": "Failed to save settings",
     "loadFailed": "Failed to load settings"
+  },
+  "thumbnailRegeneration": {
+    "title": "Thumbnail Regeneration",
+    "sections": {
+      "currentStatus": "Current Status"
+    },
+    "stats": {
+      "totalFiles": "Total Files:",
+      "withThumbnail": "With Thumbnail:",
+      "withoutThumbnail": "Without Thumbnail:"
+    },
+    "phases": {
+      "verifying": "Verifying files...",
+      "deleting": "Deleting existing thumbnails...",
+      "generating": "Generating thumbnails...",
+      "completed": "Completed",
+      "waiting": "Waiting"
+    },
+    "time": {
+      "seconds": "{{elapsed}}s",
+      "minutesSeconds": "{{minutes}}m {{seconds}}s"
+    },
+    "status": {
+      "completed": "Completed",
+      "inProgress": "In Progress"
+    },
+    "progress": {
+      "deletedThumbnails": "Deleted Thumbnails:",
+      "generatedThumbnails": "Generated Thumbnails:",
+      "elapsedTime": "Elapsed Time:"
+    },
+    "messages": {
+      "success": "Thumbnail regeneration completed!",
+      "loadStatsFailed": "Failed to load statistics",
+      "alreadyRunning": "Thumbnail regeneration is already running",
+      "startFailed": "Failed to start thumbnail regeneration"
+    },
+    "instructions": {
+      "title": "Thumbnail regeneration will proceed in the following order:",
+      "step1": "1. Verify files",
+      "step2": "2. Delete existing thumbnails",
+      "step3": "3. Generate new thumbnails",
+      "warning": "Warning:",
+      "warningText": "This may take a long time depending on the number of files."
+    },
+    "buttons": {
+      "close": "Close",
+      "start": "Start Regeneration",
+      "starting": "Starting...",
+      "inProgress": "In Progress..."
+    }
+  },
+  "folderSettings": {
+    "title": "Folder Management",
+    "subtitle": "Configure watched folders and monitor background task status.",
+    "scheduler": {
+      "title": "Scheduler Settings",
+      "backgroundHash": {
+        "title": "Background Hash Monitoring Interval",
+        "tooltip": "Execution interval for background task (Phase 2) that generates hashes for uploaded files. Shorter intervals process faster but increase system load.",
+        "intervalLabel": "Interval (seconds)",
+        "intervalTooltip": "Period to check for unprocessed hash tasks. Can be set between 5-300 seconds.",
+        "saveButton": "Save",
+        "savingButton": "Saving...",
+        "errorRange": "Interval must be between 5-300 seconds",
+        "errorSave": "Failed to save settings"
+      },
+      "autoTagger": {
+        "title": "Auto-Tagging Scheduler",
+        "tooltip": "Configure polling interval and batch size for auto-tagging scheduler. Shorter polling intervals and larger batch sizes process faster but increase system load.",
+        "pollingIntervalLabel": "Polling Interval (seconds)",
+        "pollingIntervalTooltip": "Period to check for untagged images. Can be set between 5-300 seconds.",
+        "batchSizeLabel": "Batch Size (images)",
+        "batchSizeTooltip": "Number of images to process at once. Can be set between 1-100 images.",
+        "saveButton": "Save",
+        "savingButton": "Saving...",
+        "errorPollingRange": "Polling interval must be between 5-300 seconds",
+        "errorBatchRange": "Batch size must be between 1-100",
+        "errorSave": "Failed to save settings"
+      }
+    },
+    "watchedFolders": {
+      "title": "Watched Folders List",
+      "addFolder": "Add Folder",
+      "refresh": "Refresh",
+      "viewAllLogs": "All Logs",
+      "scanAll": "Scan All",
+      "scanning": "Scanning...",
+      "noName": "Unnamed",
+      "active": "Active",
+      "inactive": "Inactive",
+      "autoScanInterval": "{{interval}}min",
+      "scanStatus": "Scan",
+      "lastScan": "Last scan: {{date}}",
+      "noScanHistory": "No scan history",
+      "watcherStatus": {
+        "starting": "Starting...",
+        "watching": "Watching",
+        "error": "Error",
+        "stopped": "Stopped",
+        "inactive": "Inactive"
+      },
+      "tooltips": {
+        "scan": "Scan",
+        "log": "Log",
+        "edit": "Edit",
+        "delete": "Delete",
+        "watcherStart": "Start watching",
+        "watcherStop": "Stop watching",
+        "processing": "Processing..."
+      },
+      "messages": {
+        "loadFailed": "Failed to load folder list",
+        "deleteFailed": "Failed to delete folder",
+        "deleteConfirm": "Delete folder \"{{name}}\"?",
+        "scanFailed": "Failed to scan folder",
+        "scanAllFailed": "Failed to scan all folders",
+        "scanAllComplete": "Full scan complete: {{totalFolders}} folders, {{totalNew}} new, {{totalExisting}} existing{{errors}}",
+        "scanAllErrors": ", {{totalErrors}} errors",
+        "watcherStartFailed": "Failed to start real-time monitoring",
+        "watcherStopFailed": "Failed to stop real-time monitoring"
+      }
+    },
+    "dialog": {
+      "addTitle": "Add Folder",
+      "editTitle": "Edit Folder",
+      "folderPath": "Folder Path *",
+      "folderPathDisabled": "Folder path cannot be edited",
+      "folderPathHelper": "Enter absolute path (e.g., D:\\Images or \\\\192.168.1.100\\Share\\Images)",
+      "folderName": "Folder Name",
+      "folderNameHelper": "If left blank, folder name will be used automatically",
+      "watcherEnabled": "Enable Real-time File Monitoring",
+      "watcherTooltip": "Real-time monitoring immediately detects file additions/modifications/deletions in the folder and processes them automatically. Works independently of auto-scan and provides faster response.",
+      "pollingInterval": "Polling Interval (for Network Drives)",
+      "pollingIntervalTooltip": "For network drives, file changes are detected using polling method. Shorter intervals detect faster but increase network load. Leave blank for auto-detection (default: 1000ms).",
+      "pollingIntervalLabel": "Polling Interval (milliseconds)",
+      "pollingIntervalPlaceholder": "Auto-detect (Network drive: 1000ms)",
+      "pollingIntervalHelper": "Leave blank for automatic configuration. Recommended: 500-3000ms",
+      "autoScan": "Enable Auto-Scan",
+      "scanInterval": "Scan Interval (minutes)",
+      "scanIntervalHelper": "Auto-scan period (in minutes)",
+      "advancedOptions": "Advanced Options",
+      "recursive": "Include Subfolders (Recursive Scan)",
+      "excludeExtensions": "Exclude Extensions",
+      "excludeExtensionsTooltip": "By default, all image formats (.jpg, .png, .webp, .gif, .bmp, .tiff) are scanned. Add extensions to exclude from scanning.",
+      "excludeExtensionsPlaceholder": ".tmp",
+      "excludePatterns": "Exclude Patterns",
+      "excludePatternsTooltip": "Exclude specific folders or file patterns from scanning. Examples: node_modules, .git, temp",
+      "excludePatternsPlaceholder": "e.g., node_modules, .git",
+      "addButton": "Add",
+      "saveButton": "Save",
+      "savingButton": "Saving...",
+      "cancelButton": "Cancel",
+      "errorPath": "Please enter folder path",
+      "errorSave": "Failed to save folder"
+    },
+    "scanLog": {
+      "title": "Scan Log",
+      "titleSpecific": "Scan Log (Specific Folder)",
+      "titleAll": "Scan Log (All)",
+      "noLogs": "No scan logs",
+      "loadFailed": "Failed to load scan logs",
+      "refresh": "Refresh",
+      "close": "Close",
+      "columns": {
+        "scanTime": "Scan Time",
+        "folder": "Folder",
+        "status": "Status",
+        "scanned": "Scanned",
+        "new": "New",
+        "existing": "Existing",
+        "errors": "Errors",
+        "duration": "Duration",
+        "details": "Details"
+      },
+      "status": {
+        "success": "Success",
+        "error": "Error"
+      },
+      "errorDetails": "Error Details ({{count}})",
+      "durationSeconds": "{{seconds}}s"
+    },
+    "verificationLog": {
+      "title": "File Verification Log",
+      "noLogs": "No verification logs",
+      "loadFailed": "Failed to load verification logs",
+      "refresh": "Refresh",
+      "close": "Close",
+      "columns": {
+        "verificationTime": "Verification Time",
+        "verificationType": "Verification Type",
+        "checked": "Files Checked",
+        "missingFound": "Missing Found",
+        "deletedRecords": "Deleted Records",
+        "errors": "Errors",
+        "duration": "Duration"
+      },
+      "verificationType": {
+        "auto": "Auto Verification",
+        "manual": "Manual Verification"
+      },
+      "errorDetails": "Error Details ({{count}})",
+      "errorItem": {
+        "fileId": "File ID: {{id}}",
+        "path": "Path: {{path}}",
+        "error": "Error: {{error}}"
+      },
+      "noErrors": "None",
+      "countFormat": "{{count}}",
+      "durationMs": "{{ms}}ms",
+      "durationSeconds": "{{seconds}}s"
+    }
   }
 }

@@ -153,5 +153,77 @@
     "progress": "正在執行第{{current}}次",
     "progressWithTotal": "正在執行第{{current}}/{{total}}次",
     "stop": "停止"
+  },
+  "customDropdowns": {
+    "title": "自訂下拉清單管理",
+    "buttons": {
+      "add": "新增清單",
+      "edit": "編輯",
+      "delete": "刪除",
+      "view": "檢視",
+      "cancel": "取消",
+      "create": "建立",
+      "save": "儲存"
+    },
+    "labels": {
+      "name": "清單名稱",
+      "description": "描述",
+      "items": "項目清單（每行一個）",
+      "itemsHelper": "每個項目用換行符號分隔"
+    },
+    "empty": {
+      "title": "沒有註冊的自訂下拉清單",
+      "description": "點擊「新增清單」建立自訂下拉清單"
+    },
+    "dialog": {
+      "add": "新增自訂清單",
+      "edit": "編輯自訂清單",
+      "deleteConfirm": "確定要刪除此清單嗎？"
+    },
+    "validation": {
+      "minItems": "請至少輸入1個項目"
+    },
+    "stats": {
+      "itemCount": "{{count}}個項目",
+      "moreItems": "+{{count}}個",
+      "createdAt": "建立日期: {{date}}"
+    }
+  },
+  "repeatExecution": {
+    "statusTitle": "重複執行狀況",
+    "overall": "全體: {{completed}}{{total}} 完成",
+    "withInfinite": " (包含無限重複)",
+    "serverProgress": "{{count}}次",
+    "serverProgressInfinite": "{{count}}次 (無限)"
+  },
+  "serverStatus": {
+    "generate": "產生",
+    "startRepeat": "重複執行",
+    "stop": "停止",
+    "executingInfinite": "{{count}}次執行中 (無限)",
+    "executingProgress": "{{current}} / {{total}}次"
+  },
+  "groupAssignment": {
+    "title": "群組分配",
+    "selectGroup": "選擇群組",
+    "autoAddDescription": "產生的圖片將自動新增到所選群組"
+  },
+  "graphToolbar": {
+    "searchPlaceholder": "搜尋節點...",
+    "filterTypes": "類型篩選",
+    "layoutSwitch": "切換到{{layout}}配置",
+    "layoutTopBottom": "上下",
+    "layoutLeftRight": "左右",
+    "expandAll": "展開所有節點",
+    "collapseAll": "摺疊所有節點"
+  },
+  "jsonViewer": {
+    "title": "工作流程JSON結構",
+    "copyToClipboard": "複製到剪貼簿",
+    "copied": "已複製到剪貼簿！"
+  },
+  "workflowViewer": {
+    "graphView": "圖形檢視",
+    "jsonView": "JSON檢視"
   }
 }

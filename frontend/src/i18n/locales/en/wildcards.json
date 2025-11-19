@@ -78,6 +78,21 @@
     "scanning": "Scanning...",
     "lastScan": "Last Scan",
     "noScanYet": "No scan has been performed yet",
+    "tierLabel": "Tier {{tier}}",
+    "filesSelected": "{{count}} LORA files selected",
+    "filesFound": "Found <strong>{{count}} LORA files</strong>:",
+    "promptsCount": "{{count}} prompts",
+    "moreFiles": "...and {{count}} more files",
+    "filters": {
+      "tierFilter": "Tier Filter",
+      "wildcardSearch": "Wildcard Search",
+      "searchPlaceholder": "Search...",
+      "clearFilters": "Clear Filters",
+      "totalWildcards": "Total <strong>{{count}}</strong> wildcards",
+      "filteredCount": "(Filtered: <strong>{{count}}</strong>)",
+      "noResults": "No results found",
+      "tryDifferentFilters": "Try different search terms or filters"
+    },
     "scanLog": {
       "title": "Scan Log",
       "timestamp": "Scan Time",

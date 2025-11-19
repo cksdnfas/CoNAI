@@ -25,6 +25,12 @@
     "refresh": "更新",
     "confirmDelete": "この生成履歴を削除しますか？"
   },
+  "deleteSelected": "選択を削除 ({{count}})",
+  "deleteDialog": {
+    "title": "選択項目を削除",
+    "confirm": "{{count}}個の履歴を削除してもよろしいですか？",
+    "warning": "この操作は取り消すことはできません。"
+  },
   "detail": {
     "title": "生成履歴の詳細",
     "status": "ステータス",

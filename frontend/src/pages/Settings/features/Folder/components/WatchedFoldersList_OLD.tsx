@@ -26,14 +26,12 @@ import {
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon
 } from '@mui/icons-material';
-import { useTranslation } from 'react-i18next';
 import { folderApi } from '../../../../../services/folderApi';
 import FolderFormDialog from './FolderFormDialog';
 import ScanLogModal from './ScanLogModal';
 import type { WatchedFolder } from '../../../../../types/folder';
 
 const WatchedFoldersList: React.FC = () => {
-  const { t } = useTranslation('settings');
   const [folders, setFolders] = useState<WatchedFolder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +52,7 @@ const WatchedFoldersList: React.FC = () => {
       setFolders(data.filter(f => !f.is_default));
     } catch (err) {
       console.error('Failed to load folders:', err);
-      setError(t('folderSettings.watchedFolders.messages.loadFailed'));
+      setError('폴더 목록을 불러오는데 실패했습니다');
     } finally {
       setLoading(false);
     }
@@ -88,7 +86,7 @@ const WatchedFoldersList: React.FC = () => {
 
   // 폴더 삭제
   const handleDelete = async (folder: WatchedFolder) => {
-    if (!window.confirm(t('folderSettings.watchedFolders.messages.deleteConfirm', { name: folder.folder_name || folder.folder_path }))) {
+    if (!window.confirm(`"${folder.folder_name || folder.folder_path}" 폴더를 삭제하시겠습니까?`)) {
       return;
     }
 
@@ -97,7 +95,7 @@ const WatchedFoldersList: React.FC = () => {
       loadFolders();
     } catch (err) {
       console.error('Failed to delete folder:', err);
-      setError(t('folderSettings.watchedFolders.messages.deleteFailed'));
+      setError('폴더 삭제에 실패했습니다');
     }
   };
 
@@ -109,7 +107,7 @@ const WatchedFoldersList: React.FC = () => {
       loadFolders();
     } catch (err) {
       console.error('Failed to scan folder:', err);
-      setError(t('folderSettings.watchedFolders.messages.scanFailed'));
+      setError('폴더 스캔에 실패했습니다');
     } finally {
       setScanningFolderId(null);
     }
@@ -122,22 +120,16 @@ const WatchedFoldersList: React.FC = () => {
       setError(null);
       const summary = await folderApi.scanAllFolders();
 
-      const errorsPart = summary.totalErrors > 0
-        ? t('folderSettings.watchedFolders.messages.scanAllErrors', { totalErrors: summary.totalErrors })
-        : '';
+      const message = `전체 스캔 완료: ${summary.totalFolders}개 폴더, 신규 ${summary.totalNew}개, 기존 ${summary.totalExisting}개${
+        summary.totalErrors > 0 ? `, 오류 ${summary.totalErrors}개` : ''
+      }`;
 
-      const message = t('folderSettings.watchedFolders.messages.scanAllComplete', {
-        totalFolders: summary.totalFolders,
-        totalNew: summary.totalNew,
-        totalExisting: summary.totalExisting,
-        errors: errorsPart
-      });
-
+      // 성공 메시지를 Alert로 표시하기 위해 임시로 error state 활용 (추후 success state 추가 가능)
       alert(message);
       loadFolders();
     } catch (err) {
       console.error('Failed to scan all folders:', err);
-      setError(t('folderSettings.watchedFolders.messages.scanAllFailed'));
+      setError('전체 폴더 스캔에 실패했습니다');
     } finally {
       setScanningAll(false);
     }
@@ -151,7 +143,7 @@ const WatchedFoldersList: React.FC = () => {
       loadFolders();
     } catch (err) {
       console.error('Failed to start watcher:', err);
-      setError(t('folderSettings.watchedFolders.messages.watcherStartFailed'));
+      setError('실시간 감시 시작에 실패했습니다');
     } finally {
       setWatcherActioningId(null);
     }
@@ -165,7 +157,7 @@ const WatchedFoldersList: React.FC = () => {
       loadFolders();
     } catch (err) {
       console.error('Failed to stop watcher:', err);
-      setError(t('folderSettings.watchedFolders.messages.watcherStopFailed'));
+      setError('실시간 감시 중지에 실패했습니다');
     } finally {
       setWatcherActioningId(null);
     }
@@ -177,18 +169,18 @@ const WatchedFoldersList: React.FC = () => {
 
     // watcher_enabled가 1이고 status가 NULL이면 시작 중
     if (watcher_enabled === 1 && !watcher_status) {
-      return t('folderSettings.watchedFolders.watcherStatus.starting');
+      return '시작 중...';
     }
 
     switch (watcher_status) {
       case 'watching':
-        return t('folderSettings.watchedFolders.watcherStatus.watching');
+        return '감시 중';
       case 'error':
-        return t('folderSettings.watchedFolders.watcherStatus.error');
+        return '오류';
       case 'stopped':
-        return t('folderSettings.watchedFolders.watcherStatus.stopped');
+        return '중지';
       default:
-        return t('folderSettings.watchedFolders.watcherStatus.inactive');
+        return '비활성';
     }
   };
 
@@ -205,7 +197,7 @@ const WatchedFoldersList: React.FC = () => {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h6">{t('folderSettings.watchedFolders.title')}</Typography>
+        <Typography variant="h6">감시 폴더 목록</Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
             startIcon={<HistoryIcon />}
@@ -216,7 +208,7 @@ const WatchedFoldersList: React.FC = () => {
             size="small"
             variant="outlined"
           >
-            {t('folderSettings.watchedFolders.viewAllLogs')}
+            전체 로그
           </Button>
           <Button
             startIcon={scanningAll ? <CircularProgress size={16} /> : <PlayIcon />}
@@ -225,14 +217,14 @@ const WatchedFoldersList: React.FC = () => {
             variant="outlined"
             color="primary"
           >
-            {t('folderSettings.watchedFolders.scanAll')}
+            전체 스캔
           </Button>
           <Button
             startIcon={<RefreshIcon />}
             onClick={loadFolders}
             size="small"
           >
-            {t('folderSettings.watchedFolders.refresh')}
+            새로고침
           </Button>
         </Box>
       </Box>
@@ -276,13 +268,13 @@ const WatchedFoldersList: React.FC = () => {
                       mb: 0.5,
                     }}
                   >
-                    {folder.folder_name || t('folderSettings.watchedFolders.noName')}
+                    {folder.folder_name || '이름 없음'}
                   </Typography>
                 </Tooltip>
                 <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexWrap: 'wrap' }}>
                   {/* 활성 상태 */}
                   <Chip
-                    label={folder.is_active ? t('folderSettings.watchedFolders.active') : t('folderSettings.watchedFolders.inactive')}
+                    label={folder.is_active ? '활성' : '비활성'}
                     size="small"
                     color={folder.is_active ? 'success' : 'default'}
                     sx={{ height: 20, fontSize: '0.7rem' }}
@@ -292,7 +284,7 @@ const WatchedFoldersList: React.FC = () => {
                   {folder.auto_scan === 1 && (
                     <Chip
                       icon={<AutorenewIcon sx={{ fontSize: 14 }} />}
-                      label={t('folderSettings.watchedFolders.autoScanInterval', { interval: folder.scan_interval })}
+                      label={`${folder.scan_interval}분`}
                       size="small"
                       variant="outlined"
                       sx={{ height: 20, fontSize: '0.7rem' }}
@@ -302,7 +294,7 @@ const WatchedFoldersList: React.FC = () => {
                   {/* 스캔 상태 - 색상으로만 표시 */}
                   {folder.last_scan_status && (
                     <Chip
-                      label={t('folderSettings.watchedFolders.scanStatus')}
+                      label="스캔"
                       size="small"
                       sx={{
                         height: 20,
@@ -363,18 +355,16 @@ const WatchedFoldersList: React.FC = () => {
                   <Box>
                     {folder.last_scan_date ? (
                       <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.75rem' }}>
-                        {t('folderSettings.watchedFolders.lastScan', {
-                          date: new Date(folder.last_scan_date).toLocaleString('ko-KR', {
-                            month: 'numeric',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })
+                        마지막 스캔: {new Date(folder.last_scan_date).toLocaleString('ko-KR', {
+                          month: 'numeric',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
                         })}
                       </Typography>
                     ) : (
                       <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.75rem' }}>
-                        {t('folderSettings.watchedFolders.noScanHistory')}
+                        스캔 기록 없음
                       </Typography>
                     )}
                   </Box>
@@ -396,8 +386,8 @@ const WatchedFoldersList: React.FC = () => {
                   {folder.watcher_enabled === 1 && (
                     <Tooltip
                       title={
-                        watcherActioningId === folder.id ? t('folderSettings.watchedFolders.tooltips.processing') :
-                        folder.watcher_status === 'watching' ? t('folderSettings.watchedFolders.tooltips.watcherStop') : t('folderSettings.watchedFolders.tooltips.watcherStart')
+                        watcherActioningId === folder.id ? '처리 중...' :
+                        folder.watcher_status === 'watching' ? '감시 중지' : '감시 시작'
                       }
                       arrow
                     >
@@ -420,7 +410,7 @@ const WatchedFoldersList: React.FC = () => {
 
                 {/* 오른쪽: 액션 버튼 */}
                 <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                  <Tooltip title={t('folderSettings.watchedFolders.tooltips.scan')} arrow>
+                  <Tooltip title="스캔" arrow>
                     <span>
                       <IconButton
                         size="small"
@@ -432,7 +422,7 @@ const WatchedFoldersList: React.FC = () => {
                       </IconButton>
                     </span>
                   </Tooltip>
-                  <Tooltip title={t('folderSettings.watchedFolders.tooltips.log')} arrow>
+                  <Tooltip title="로그" arrow>
                     <IconButton
                       size="small"
                       onClick={() => {
@@ -443,7 +433,7 @@ const WatchedFoldersList: React.FC = () => {
                       <HistoryIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
-                  <Tooltip title={t('folderSettings.watchedFolders.tooltips.edit')} arrow>
+                  <Tooltip title="편집" arrow>
                     <IconButton
                       size="small"
                       onClick={() => handleOpenDialog(folder)}
@@ -451,7 +441,7 @@ const WatchedFoldersList: React.FC = () => {
                       <EditIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
-                  <Tooltip title={t('folderSettings.watchedFolders.tooltips.delete')} arrow>
+                  <Tooltip title="삭제" arrow>
                     <IconButton
                       size="small"
                       onClick={() => handleDelete(folder)}
@@ -510,7 +500,7 @@ const WatchedFoldersList: React.FC = () => {
                 <AddIcon sx={{ fontSize: 32, color: 'white' }} />
               </Box>
               <Typography variant="body2" color="text.secondary">
-                {t('folderSettings.watchedFolders.addFolder')}
+                폴더 추가
               </Typography>
             </Box>
           </Card>

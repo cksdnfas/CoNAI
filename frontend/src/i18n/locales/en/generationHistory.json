@@ -35,6 +35,12 @@
   "noFailedRecords": "No failed items to clean up",
   "cleanupFailed": "Failed to cleanup",
   "bulkDeleteFailed": "Failed to bulk delete",
+  "deleteSelected": "Delete Selected ({{count}})",
+  "deleteDialog": {
+    "title": "Delete Selected Items",
+    "confirm": "Are you sure you want to delete {{count}} history items?",
+    "warning": "This action cannot be undone."
+  },
   "detail": {
     "title": "Generation History Details",
     "status": "Status",

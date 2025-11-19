@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Button,
@@ -38,6 +39,7 @@ import FormGroup from '@mui/material/FormGroup';
 import { customDropdownListApi, type CustomDropdownList, type ComfyUIModelFolder } from '../../services/api/customDropdownListApi';
 
 export default function CustomDropdownListsSection() {
+  const { t } = useTranslation('imageGeneration');
   const [lists, setLists] = useState<CustomDropdownList[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +128,7 @@ export default function CustomDropdownListsSection() {
         .filter(item => item.length > 0);
 
       if (items.length === 0) {
-        setError('최소 1개 이상의 항목을 입력해주세요.');
+        setError(t('customDropdown.messages.minItemError'));
         return;
       }
 
@@ -149,7 +151,7 @@ export default function CustomDropdownListsSection() {
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('정말 이 목록을 삭제하시겠습니까?')) {
+    if (confirm(t('customDropdown.messages.deleteConfirm'))) {
       try {
         await customDropdownListApi.deleteList(id);
         loadLists();
@@ -234,7 +236,7 @@ export default function CustomDropdownListsSection() {
 
   const handleScanModels = async () => {
     if (selectedModelFolders.length === 0) {
-      setError('모델 폴더를 선택해주세요.');
+      setError(t('customDropdown.messages.selectFolderError'));
       return;
     }
 
@@ -264,7 +266,7 @@ export default function CustomDropdownListsSection() {
     <Box>
       <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ListIcon /> 커스텀 드롭다운 목록
+          <ListIcon /> {t('customDropdown.title')}
         </Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
@@ -274,7 +276,7 @@ export default function CustomDropdownListsSection() {
             onClick={handleOpenComfyUIDialog}
             color="secondary"
           >
-            ComfyUI 모델 불러오기
+            {t('customDropdown.buttons.loadComfyUI')}
           </Button>
           {currentTab === 1 && (
             <Button
@@ -283,7 +285,7 @@ export default function CustomDropdownListsSection() {
               startIcon={<AddIcon />}
               onClick={() => handleOpenDialog()}
             >
-              새 목록 추가
+              {t('customDropdown.buttons.addList')}
             </Button>
           )}
         </Box>
@@ -305,7 +307,7 @@ export default function CustomDropdownListsSection() {
           iconPosition="start"
           label={
             <Badge badgeContent={autoCollectedLists.length} color="primary" max={999}>
-              <Box sx={{ mr: 2 }}>자동 수집</Box>
+              <Box sx={{ mr: 2 }}>{t('customDropdown.tabs.autoCollected')}</Box>
             </Badge>
           }
         />
@@ -314,7 +316,7 @@ export default function CustomDropdownListsSection() {
           iconPosition="start"
           label={
             <Badge badgeContent={manualLists.length} color="secondary" max={999}>
-              <Box sx={{ mr: 2 }}>수동 생성</Box>
+              <Box sx={{ mr: 2 }}>{t('customDropdown.tabs.manual')}</Box>
             </Badge>
           }
         />
@@ -332,7 +334,7 @@ export default function CustomDropdownListsSection() {
               <Card>
                 <CardContent>
                   <Typography variant="body2" color="text.secondary" align="center">
-                    자동 수집된 목록이 없습니다. "ComfyUI 모델 불러오기" 버튼을 사용하여 모델을 스캔하세요.
+                    {t('customDropdown.messages.noAutoCollected')}
                   </Typography>
                 </CardContent>
               </Card>
@@ -359,13 +361,13 @@ export default function CustomDropdownListsSection() {
                           </Typography>
                           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
                             <Chip
-                              label="자동"
+                              label={t('customDropdown.labels.auto')}
                               size="small"
                               color="primary"
                               sx={{ height: '18px', fontSize: '0.65rem' }}
                             />
                             <Chip
-                              label={`${list.items.length}개`}
+                              label={t('customDropdown.labels.itemCount', { count: list.items.length })}
                               size="small"
                               color="default"
                               sx={{ height: '18px', fontSize: '0.65rem' }}
@@ -404,7 +406,7 @@ export default function CustomDropdownListsSection() {
                       </Stack>
                     </CardContent>
                     <CardActions sx={{ p: 1, pt: 0, justifyContent: 'flex-end' }}>
-                      <Tooltip title="목록 보기">
+                      <Tooltip title={t('customDropdown.buttons.viewList')}>
                         <IconButton
                           size="small"
                           onClick={() => handleOpenViewDialog(list)}
@@ -434,7 +436,7 @@ export default function CustomDropdownListsSection() {
               <Card>
                 <CardContent>
                   <Typography variant="body2" color="text.secondary" align="center">
-                    수동으로 생성한 목록이 없습니다. "새 목록 추가" 버튼을 사용하여 목록을 만드세요.
+                    {t('customDropdown.messages.noManual')}
                   </Typography>
                 </CardContent>
               </Card>
@@ -460,7 +462,7 @@ export default function CustomDropdownListsSection() {
                             {list.name}
                           </Typography>
                           <Chip
-                            label={`${list.items.length}개`}
+                            label={t('customDropdown.labels.itemCount', { count: list.items.length })}
                             size="small"
                             color="secondary"
                             sx={{ height: '18px', fontSize: '0.7rem' }}
@@ -525,23 +527,23 @@ export default function CustomDropdownListsSection() {
         fullWidth
       >
         <DialogTitle>
-          목록 보기 (읽기 전용)
+          {t('customDropdown.dialog.viewTitle')}
         </DialogTitle>
         <DialogContent>
           {viewingList && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
               <Alert severity="info" sx={{ fontSize: '0.85rem' }}>
-                자동 수집된 항목은 편집할 수 없습니다. 내용을 확인만 할 수 있습니다.
+                {t('customDropdown.messages.autoCollectedReadOnly')}
               </Alert>
               <TextField
-                label="목록 이름"
+                label={t('customDropdown.labels.listName')}
                 fullWidth
                 value={viewingList.name}
                 InputProps={{ readOnly: true }}
               />
               {viewingList.description && (
                 <TextField
-                  label="설명"
+                  label={t('customDropdown.labels.description')}
                   fullWidth
                   multiline
                   rows={2}
@@ -551,7 +553,7 @@ export default function CustomDropdownListsSection() {
               )}
               {viewingList.source_path && (
                 <TextField
-                  label="경로"
+                  label={t('customDropdown.labels.path')}
                   fullWidth
                   value={viewingList.source_path}
                   InputProps={{ readOnly: true }}
@@ -559,7 +561,7 @@ export default function CustomDropdownListsSection() {
               )}
               <Box>
                 <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-                  항목 목록 ({viewingList.items.length}개)
+                  {t('customDropdown.labels.itemListCount', { count: viewingList.items.length })}
                 </Typography>
                 <TextField
                   fullWidth
@@ -580,7 +582,7 @@ export default function CustomDropdownListsSection() {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseViewDialog} variant="contained">
-            닫기
+            {t('customDropdown.buttons.close')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -593,7 +595,7 @@ export default function CustomDropdownListsSection() {
         fullWidth
       >
         <DialogTitle>
-          {editingList ? '커스텀 목록 수정' : '새 커스텀 목록 추가'}
+          {editingList ? t('customDropdown.dialog.editTitle') : t('customDropdown.dialog.createTitle')}
         </DialogTitle>
         <DialogContent>
           {error && (
@@ -604,13 +606,13 @@ export default function CustomDropdownListsSection() {
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
             <TextField
               autoFocus
-              label="목록 이름 *"
+              label={t('customDropdown.labels.listNameRequired')}
               fullWidth
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             />
             <TextField
-              label="설명"
+              label={t('customDropdown.labels.description')}
               fullWidth
               multiline
               rows={2}
@@ -618,25 +620,25 @@ export default function CustomDropdownListsSection() {
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             />
             <TextField
-              label="항목 목록 (한 줄에 하나씩 입력) *"
+              label={t('customDropdown.labels.itemList')}
               fullWidth
               multiline
               rows={10}
               value={formData.itemsText}
               onChange={(e) => setFormData({ ...formData, itemsText: e.target.value })}
-              placeholder="예시:&#10;SDXL 1.0&#10;SD 1.5&#10;Realistic Vision&#10;DreamShaper"
-              helperText="각 항목을 줄바꿈으로 구분하여 입력하세요"
+              placeholder={t('customDropdown.placeholders.itemList')}
+              helperText={t('customDropdown.helperText.itemList')}
             />
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>취소</Button>
+          <Button onClick={handleCloseDialog}>{t('customDropdown.buttons.cancel')}</Button>
           <Button
             onClick={handleSubmit}
             variant="contained"
             disabled={!formData.name.trim() || !formData.itemsText.trim()}
           >
-            {editingList ? '수정' : '생성'}
+            {editingList ? t('customDropdown.buttons.edit') : t('customDropdown.buttons.create')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -649,7 +651,7 @@ export default function CustomDropdownListsSection() {
         fullWidth
       >
         <DialogTitle>
-          ComfyUI 모델 불러오기
+          {t('customDropdown.dialog.comfyUITitle')}
         </DialogTitle>
         <DialogContent>
           {error && (
@@ -659,8 +661,16 @@ export default function CustomDropdownListsSection() {
           )}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
             <Alert severity="info" sx={{ fontSize: '0.85rem' }}>
-              ComfyUI의 models 폴더를 선택해주세요.<br />
-              브라우저 파일 선택 창에서 ComfyUI의 <strong>models</strong> 폴더를 선택하세요.
+              {t('customDropdown.messages.selectComfyUIFolder').split('\n').map((line, i) => (
+                <span key={i}>
+                  {i > 0 && <br />}
+                  {line.includes('models') ? (
+                    <>
+                      {line.split('models')[0]}<strong>models</strong>{line.split('models')[1]}
+                    </>
+                  ) : line}
+                </span>
+              ))}
             </Alert>
             <Button
               variant="contained"
@@ -669,7 +679,7 @@ export default function CustomDropdownListsSection() {
               fullWidth
               size="large"
             >
-              models 폴더 선택
+              {t('customDropdown.buttons.selectFolder')}
               <input
                 type="file"
                 hidden
@@ -682,21 +692,21 @@ export default function CustomDropdownListsSection() {
             {selectedModelFolders.length > 0 && (
               <>
                 <Alert severity="success" sx={{ fontSize: '0.85rem' }}>
-                  <strong>{selectedModelFolders.length}개 폴더</strong>에서 모델 파일을 발견했습니다:
+                  {t('customDropdown.messages.foldersDetected', { count: selectedModelFolders.length })}
                   <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2 }}>
                     {selectedModelFolders.slice(0, 5).map((folder, idx) => (
                       <li key={idx}>
-                        <strong>{folder.displayName}</strong>: {folder.files.length}개 파일
+                        <strong>{folder.displayName}</strong>: {t('customDropdown.messages.fileCount', { count: folder.files.length })}
                       </li>
                     ))}
                     {selectedModelFolders.length > 5 && (
-                      <li>...외 {selectedModelFolders.length - 5}개 폴더</li>
+                      <li>{t('customDropdown.messages.moreCount', { count: selectedModelFolders.length - 5 })}</li>
                     )}
                   </Box>
                 </Alert>
                 <Box>
                   <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-                    경로 옵션:
+                    {t('customDropdown.labels.pathOptions')}
                   </Typography>
                   <FormGroup>
                     <FormControlLabel
@@ -709,12 +719,14 @@ export default function CustomDropdownListsSection() {
                       label={
                         <Box>
                           <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            checkpoints - 전체 경로 포함
+                            {t('customDropdown.labels.checkpointsFullPath')}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {includeFullPath.checkpoints
-                              ? '예: Illustrious/ETC/model.safetensors'
-                              : '예: model.safetensors'}
+                            {t('customDropdown.messages.pathExample', {
+                              example: includeFullPath.checkpoints
+                                ? 'Illustrious/ETC/model.safetensors'
+                                : 'model.safetensors'
+                            })}
                           </Typography>
                         </Box>
                       }
@@ -729,12 +741,14 @@ export default function CustomDropdownListsSection() {
                       label={
                         <Box>
                           <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            unet - 전체 경로 포함
+                            {t('customDropdown.labels.unetFullPath')}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {includeFullPath.unet
-                              ? '예: subfolder/model.safetensors'
-                              : '예: model.safetensors'}
+                            {t('customDropdown.messages.pathExample', {
+                              example: includeFullPath.unet
+                                ? 'subfolder/model.safetensors'
+                                : 'model.safetensors'
+                            })}
                           </Typography>
                         </Box>
                       }
@@ -749,12 +763,14 @@ export default function CustomDropdownListsSection() {
                       label={
                         <Box>
                           <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            upscale_models - 전체 경로 포함
+                            {t('customDropdown.labels.upscaleModelsFullPath')}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {includeFullPath.upscale_models
-                              ? '예: subfolder/model.pth'
-                              : '예: model.pth'}
+                            {t('customDropdown.messages.pathExample', {
+                              example: includeFullPath.upscale_models
+                                ? 'subfolder/model.pth'
+                                : 'model.pth'
+                            })}
                           </Typography>
                         </Box>
                       }
@@ -764,16 +780,26 @@ export default function CustomDropdownListsSection() {
               </>
             )}
             <Alert severity="warning" sx={{ fontSize: '0.85rem' }}>
-              <strong>스캔 안내:</strong><br />
-              • checkpoints, unet, upscale_models 폴더를 자동으로 수집합니다<br />
-              • 같은 폴더를 다시 수집하면 <strong>항목이 최신화</strong>됩니다<br />
-              • 자동 수집된 항목은 "자동 수집" 탭에서 확인할 수 있습니다
+              {t('customDropdown.messages.scanInfo').split('\n').map((line, i) => (
+                <span key={i}>
+                  {i > 0 && <><br /></>}
+                  {line.includes('항목이 최신화') ? (
+                    <>
+                      {line.split('항목이 최신화')[0]}<strong>{line.match(/항목이 최신화/)?.[0]}</strong>{line.split('항목이 최신화')[1]}
+                    </>
+                  ) : line.startsWith('스캔') ? (
+                    <strong>{line}</strong>
+                  ) : (
+                    line
+                  )}
+                </span>
+              ))}
             </Alert>
           </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseComfyUIDialog} disabled={scanLoading}>
-            취소
+            {t('customDropdown.buttons.cancel')}
           </Button>
           <Button
             onClick={handleScanModels}
@@ -781,7 +807,7 @@ export default function CustomDropdownListsSection() {
             disabled={selectedModelFolders.length === 0 || scanLoading}
             startIcon={scanLoading ? <CircularProgress size={16} /> : <UploadIcon />}
           >
-            {scanLoading ? '수집 중...' : '모델 수집'}
+            {scanLoading ? t('customDropdown.messages.collecting') : t('customDropdown.buttons.collect')}
           </Button>
         </DialogActions>
       </Dialog>

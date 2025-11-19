@@ -80,6 +80,21 @@
       "folderPathRequired": "LORA資料夾路徑為必填項",
       "invalidWeight": "請輸入有效的權重值 (0.1 ~ 2.0)",
       "scanFailed": "掃描失敗: {{error}}"
+    },
+    "tierLabel": "階層 {{tier}}",
+    "filesSelected": "已選擇{{count}}個LORA檔案",
+    "filesFound": "找到<strong>{{count}}個LORA檔案</strong>:",
+    "promptsCount": "{{count}}個提示詞",
+    "moreFiles": "...還有{{count}}個檔案",
+    "filters": {
+      "tierFilter": "階層篩選器",
+      "wildcardSearch": "萬用字元搜尋",
+      "searchPlaceholder": "搜尋...",
+      "clearFilters": "清除篩選器",
+      "totalWildcards": "共<strong>{{count}}</strong>個萬用字元",
+      "filteredCount": "(已篩選: <strong>{{count}}</strong>個)",
+      "noResults": "未找到結果",
+      "tryDifferentFilters": "請嘗試不同的搜尋詞或篩選器"
     }
   }
 }

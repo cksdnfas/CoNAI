@@ -21,7 +21,7 @@ export const GroupBreadcrumb: React.FC<GroupBreadcrumbProps> = ({
   onNavigate,
   showGroupListRoot = false,
 }) => {
-  const { t } = useTranslation();
+  const { t } = useTranslation(['imageGroups']);
 
   return (
     <Box sx={{ mb: 2, p: 1, bgcolor: 'background.paper', borderRadius: 1 }}>
@@ -47,7 +47,7 @@ export const GroupBreadcrumb: React.FC<GroupBreadcrumbProps> = ({
           }}
         >
           {showGroupListRoot ? <FolderOpen fontSize="small" /> : <Home fontSize="small" />}
-          {showGroupListRoot ? '그룹 목록' : t('imageGroups:hierarchy.root')}
+          {showGroupListRoot ? t('imageGroups:hierarchy.groupList') : t('imageGroups:hierarchy.root')}
         </Link>
 
         {/* Ancestor groups */}

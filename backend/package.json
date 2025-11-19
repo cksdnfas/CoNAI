@@ -1,6 +1,6 @@
 {
   "name": "comfyui-image-manager-backend",
-  "version": "2.0.1a",
+  "version": "2.0.2",
   "description": "Backend API server for ComfyUI Image Manager",
   "main": "dist/index.js",
   "scripts": {

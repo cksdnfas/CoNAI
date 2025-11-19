@@ -97,8 +97,11 @@ export function ServerStatusList({
                 <Chip
                   label={
                     repeatState.totalIterations === -1
-                      ? `${repeatState.currentIteration}회 실행 중 (무한)`
-                      : `${repeatState.currentIteration} / ${repeatState.totalIterations}회`
+                      ? t('workflows:serverStatus.executingInfinite', { count: repeatState.currentIteration })
+                      : t('workflows:serverStatus.executingProgress', {
+                          current: repeatState.currentIteration,
+                          total: repeatState.totalIterations
+                        })
                   }
                   color="primary"
                   size="small"
@@ -119,7 +122,7 @@ export function ServerStatusList({
                   !workflow.is_active
                 }
               >
-                생성
+                {t('workflows:serverStatus.generate')}
               </Button>
               {!repeatState?.isRunning ? (
                 <Button
@@ -133,7 +136,7 @@ export function ServerStatusList({
                     !workflow.is_active
                   }
                 >
-                  반복 실행
+                  {t('workflows:serverStatus.startRepeat')}
                 </Button>
               ) : (
                 <Button
@@ -142,7 +145,7 @@ export function ServerStatusList({
                   color="error"
                   onClick={() => onStopRepeat(server.id)}
                 >
-                  중지
+                  {t('workflows:serverStatus.stop')}
                 </Button>
               )}
             </Box>

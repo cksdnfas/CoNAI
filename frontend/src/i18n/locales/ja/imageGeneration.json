@@ -71,6 +71,91 @@
       "progress": "{{current}}回目実行中",
       "progressWithTotal": "{{current}}/{{total}}回目実行中",
       "stop": "停止"
+    },
+    "naiSettings": {
+      "basic": {
+        "title": "基本設定",
+        "model": "モデル",
+        "resolution": "解像度",
+        "prompt": "プロンプト",
+        "promptPlaceholder": "1girl, portrait, detailed face, masterpiece...",
+        "negativePrompt": "ネガティブプロンプト",
+        "negativePromptPlaceholder": "bad anatomy, low quality..."
+      },
+      "sampling": {
+        "title": "サンプリング設定",
+        "sampler": "サンプラー",
+        "noiseSchedule": "Noise Schedule",
+        "steps": "Steps",
+        "guidance": "Guidance",
+        "cfgRescale": "CFG Rescale",
+        "uncondScale": "Uncond Scale",
+        "varietyPlus": "Variety+"
+      },
+      "output": {
+        "title": "出力設定",
+        "samples": "サンプル数"
+      }
+    }
+  },
+  "customDropdown": {
+    "title": "カスタムドロップダウンリスト",
+    "buttons": {
+      "addList": "新しいリストを追加",
+      "loadComfyUI": "ComfyUIモデルを読み込む",
+      "edit": "編集",
+      "delete": "削除",
+      "close": "閉じる",
+      "cancel": "キャンセル",
+      "create": "作成",
+      "collect": "モデル収集",
+      "viewList": "リスト表示",
+      "selectFolder": "modelsフォルダを選択"
+    },
+    "tabs": {
+      "autoCollected": "自動収集",
+      "manual": "手動作成"
+    },
+    "labels": {
+      "auto": "自動",
+      "itemCount": "{{count}}項目",
+      "listName": "リスト名",
+      "listNameRequired": "リスト名 *",
+      "description": "説明",
+      "path": "パス",
+      "itemList": "項目リスト（1行に1つ）*",
+      "itemListCount": "項目リスト（{{count}}項目）",
+      "pathOptions": "パスオプション：",
+      "checkpointsFullPath": "checkpoints - フルパスを含める",
+      "unetFullPath": "unet - フルパスを含める",
+      "upscaleModelsFullPath": "upscale_models - フルパスを含める"
+    },
+    "dialog": {
+      "viewTitle": "リスト表示（読み取り専用）",
+      "createTitle": "新しいカスタムリストを追加",
+      "editTitle": "カスタムリストを編集",
+      "comfyUITitle": "ComfyUIモデルを読み込む"
+    },
+    "messages": {
+      "noAutoCollected": "自動収集されたリストはありません。「ComfyUIモデルを読み込む」ボタンを使用してモデルをスキャンしてください。",
+      "noManual": "手動で作成されたリストはありません。「新しいリストを追加」ボタンを使用してリストを作成してください。",
+      "minItemError": "最低1つ以上の項目を入力してください。",
+      "deleteConfirm": "本当にこのリストを削除しますか？",
+      "selectFolderError": "モデルフォルダを選択してください。",
+      "autoCollectedReadOnly": "自動収集された項目は編集できません。内容の確認のみ可能です。",
+      "selectComfyUIFolder": "ComfyUIのmodelsフォルダを選択してください。\nComfyUIのmodelsフォルダを選択してください。",
+      "foldersDetected": "{{count}}個のフォルダでモデルファイルが検出されました：",
+      "fileCount": "{{count}}ファイル",
+      "moreCount": "...他{{count}}個のフォルダ",
+      "collecting": "収集中...",
+      "pathExample": "例：{{example}}",
+      "scanInfo": "スキャン情報：\n• checkpoints、unet、upscale_modelsフォルダを自動的に収集します\n• 同じフォルダを再スキャンすると項目が更新されます\n• 自動収集された項目は「自動収集」タブで確認できます"
+    },
+    "placeholders": {
+      "itemList": "例：\nSDXL 1.0\nSD 1.5\nRealistic Vision\nDreamShaper"
+    },
+    "helperText": {
+      "itemList": "各項目を改行で区切って入力してください"
     }
   }
 }

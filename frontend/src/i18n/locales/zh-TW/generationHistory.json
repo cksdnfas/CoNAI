@@ -25,6 +25,12 @@
     "refresh": "刷新",
     "confirmDelete": "確定要刪除這條生成歷史嗎？"
   },
+  "deleteSelected": "刪除選定 ({{count}})",
+  "deleteDialog": {
+    "title": "刪除選定項目",
+    "confirm": "確定要刪除{{count}}個歷史記錄嗎？",
+    "warning": "此操作無法撤銷。"
+  },
   "detail": {
     "title": "生成歷史詳情",
     "status": "狀態",

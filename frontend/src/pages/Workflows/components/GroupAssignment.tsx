@@ -1,5 +1,6 @@
 import { Box, Typography, Paper, Button, Chip, Divider } from '@mui/material';
 import { FolderOpen as FolderIcon } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import type { GroupWithStats } from '@comfyui-image-manager/shared';
 
 interface GroupAssignmentProps {
@@ -18,10 +19,12 @@ export function GroupAssignment({
   onOpenModal,
   onRemove
 }: GroupAssignmentProps) {
+  const { t } = useTranslation(['workflows']);
+
   return (
     <Paper sx={{ p: 3 }}>
       <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-        그룹 할당
+        {t('workflows:groupAssignment.title')}
       </Typography>
       <Divider sx={{ mb: 2 }} />
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -42,11 +45,11 @@ export function GroupAssignment({
             onClick={onOpenModal}
             fullWidth
           >
-            그룹 선택
+            {t('workflows:groupAssignment.selectGroup')}
           </Button>
         )}
         <Typography variant="caption" color="text.secondary">
-          생성된 이미지가 선택한 그룹에 자동으로 추가됩니다
+          {t('workflows:groupAssignment.autoAddDescription')}
         </Typography>
       </Box>
     </Paper>

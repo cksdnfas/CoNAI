@@ -19,6 +19,7 @@ import {
   UnfoldMore as ExpandAllIcon,
   UnfoldLess as CollapseAllIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 
 interface GraphToolbarProps {
   onSearchChange: (search: string) => void;
@@ -39,6 +40,7 @@ const GraphToolbar: React.FC<GraphToolbarProps> = ({
   nodeTypes,
   layout,
 }) => {
+  const { t } = useTranslation(['workflows']);
   const [search, setSearch] = useState('');
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
 
@@ -117,7 +119,7 @@ const GraphToolbar: React.FC<GraphToolbarProps> = ({
       {/* Search */}
       <TextField
         size="small"
-        placeholder="Search nodes..."
+        placeholder={t('workflows:graphToolbar.searchPlaceholder')}
         value={search}
         onChange={handleSearchChange}
         InputProps={{
@@ -128,12 +130,12 @@ const GraphToolbar: React.FC<GraphToolbarProps> = ({
 
       {/* Filter by node type */}
       <FormControl size="small" sx={{ minWidth: 150 }}>
-        <InputLabel>Filter Types</InputLabel>
+        <InputLabel>{t('workflows:graphToolbar.filterTypes')}</InputLabel>
         <Select
           multiple
           value={selectedFilters}
           onChange={handleFilterChange}
-          label="Filter Types"
+          label={t('workflows:graphToolbar.filterTypes')}
           renderValue={(selected) => (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
               {selected.map((value) => (
@@ -180,7 +182,11 @@ const GraphToolbar: React.FC<GraphToolbarProps> = ({
       </FormControl>
 
       {/* Layout toggle */}
-      <Tooltip title={`Switch to ${layout === 'LR' ? 'Top-Bottom' : 'Left-Right'} layout`}>
+      <Tooltip title={t('workflows:graphToolbar.layoutSwitch', {
+        layout: layout === 'LR'
+          ? t('workflows:graphToolbar.layoutTopBottom')
+          : t('workflows:graphToolbar.layoutLeftRight')
+      })}>
         <IconButton size="small" onClick={handleLayoutToggle}>
           {layout === 'LR' ? <ViewListIcon /> : <ViewModuleIcon />}
         </IconButton>
@@ -188,7 +194,7 @@ const GraphToolbar: React.FC<GraphToolbarProps> = ({
 
       {/* Expand/Collapse all */}
       {onExpandAll && (
-        <Tooltip title="Expand all nodes">
+        <Tooltip title={t('workflows:graphToolbar.expandAll')}>
           <IconButton size="small" onClick={onExpandAll}>
             <ExpandAllIcon />
           </IconButton>
@@ -196,7 +202,7 @@ const GraphToolbar: React.FC<GraphToolbarProps> = ({
       )}
 
       {onCollapseAll && (
-        <Tooltip title="Collapse all nodes">
+        <Tooltip title={t('workflows:graphToolbar.collapseAll')}>
           <IconButton size="small" onClick={onCollapseAll}>
             <CollapseAllIcon />
           </IconButton>

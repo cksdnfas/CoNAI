@@ -80,6 +80,21 @@
       "folderPathRequired": "LORA文件夹路径为必填项",
       "invalidWeight": "请输入有效的权重值 (0.1 ~ 2.0)",
       "scanFailed": "扫描失败: {{error}}"
+    },
+    "tierLabel": "层级 {{tier}}",
+    "filesSelected": "已选择{{count}}个LORA文件",
+    "filesFound": "找到<strong>{{count}}个LORA文件</strong>:",
+    "promptsCount": "{{count}}个提示词",
+    "moreFiles": "...还有{{count}}个文件",
+    "filters": {
+      "tierFilter": "层级过滤器",
+      "wildcardSearch": "通配符搜索",
+      "searchPlaceholder": "搜索...",
+      "clearFilters": "清除过滤器",
+      "totalWildcards": "共<strong>{{count}}</strong>个通配符",
+      "filteredCount": "(已过滤: <strong>{{count}}</strong>个)",
+      "noResults": "未找到结果",
+      "tryDifferentFilters": "请尝试不同的搜索词或过滤器"
     }
   }
 }

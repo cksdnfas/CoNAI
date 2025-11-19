@@ -9,6 +9,7 @@ import {
   IconButton,
 } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import WorkflowGraphViewer from './WorkflowGraphViewer';
 import WorkflowJsonViewer from './WorkflowJsonViewer';
 
@@ -49,6 +50,7 @@ const WorkflowViewer: React.FC<WorkflowViewerProps> = ({
   workflowName,
   workflowJson,
 }) => {
+  const { t } = useTranslation(['workflows']);
   const [tabValue, setTabValue] = useState(0);
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
@@ -92,8 +94,8 @@ const WorkflowViewer: React.FC<WorkflowViewerProps> = ({
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
         <Tabs value={tabValue} onChange={handleTabChange} aria-label="workflow viewer tabs">
-          <Tab label="Graph View" id="workflow-tab-0" aria-controls="workflow-tabpanel-0" />
-          <Tab label="JSON View" id="workflow-tab-1" aria-controls="workflow-tabpanel-1" />
+          <Tab label={t('workflows:workflowViewer.graphView')} id="workflow-tab-0" aria-controls="workflow-tabpanel-0" />
+          <Tab label={t('workflows:workflowViewer.jsonView')} id="workflow-tab-1" aria-controls="workflow-tabpanel-1" />
         </Tabs>
       </Box>
 

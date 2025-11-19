@@ -15,6 +15,7 @@ import {
   CallSplit as OrIcon,
   MergeType as AndIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import type { FilterCondition, FilterGroupType } from '@comfyui-image-manager/shared';
 
 interface FilterBlockProps {
@@ -25,54 +26,26 @@ interface FilterBlockProps {
   onEdit: () => void;
 }
 
-// 그룹 타입별 설정
+// Group type configuration (colors and icons only - labels from i18n)
 const GROUP_CONFIG = {
   exclude: {
-    label: '제외',
     color: '#f44336',
     icon: BlockIcon,
     bgColor: '#ffebee',
     darkBgColor: '#5d1f1f',
   },
   or: {
-    label: 'OR',
     color: '#2196f3',
     icon: OrIcon,
     bgColor: '#e3f2fd',
     darkBgColor: '#1a3a52',
   },
   and: {
-    label: 'AND',
     color: '#4caf50',
     icon: AndIcon,
     bgColor: '#e8f5e9',
     darkBgColor: '#1e4620',
   },
-};
-
-// 카테고리 레이블
-const CATEGORY_LABELS: Record<string, string> = {
-  positive_prompt: '긍정 프롬프트',
-  negative_prompt: '네거티브 프롬프트',
-  auto_tag: '자동태그',
-  basic: '기본',
-};
-
-// 조건 타입 레이블
-const TYPE_LABELS: Record<string, string> = {
-  prompt_contains: '포함',
-  prompt_regex: '정규식',
-  negative_prompt_contains: '포함',
-  negative_prompt_regex: '정규식',
-  auto_tag_exists: '자동태그 존재',
-  auto_tag_has_character: '캐릭터 존재',
-  auto_tag_rating: 'Rating 타입',
-  auto_tag_rating_score: 'Rating 점수',
-  auto_tag_general: 'General 태그',
-  auto_tag_character: 'Character 태그',
-  auto_tag_model: '모델',
-  ai_tool: 'AI 도구',
-  model_name: '모델명',
 };
 
 const FilterBlock: React.FC<FilterBlockProps> = ({
@@ -81,27 +54,33 @@ const FilterBlock: React.FC<FilterBlockProps> = ({
   onRemove,
   onEdit,
 }) => {
+  const { t } = useTranslation('common');
   const config = GROUP_CONFIG[groupType];
   const Icon = config.icon;
 
-  // 조건 요약 텍스트 생성
+  // Get translated labels
+  const getGroupLabel = () => t(`filterBuilder.groupTypes.${groupType}.labelShort`);
+  const getCategoryLabel = () => t(`filterBuilder.categories.${condition.category}`);
+  const getTypeLabel = () => t(`filterBuilder.conditionTypes.${condition.type}`);
+
+  // Generate condition summary text
   const getSummaryText = () => {
-    const category = CATEGORY_LABELS[condition.category] || condition.category;
-    const type = TYPE_LABELS[condition.type] || condition.type;
+    const category = getCategoryLabel();
+    const type = getTypeLabel();
 
     let value = String(condition.value);
 
-    // Boolean 타입 처리
+    // Handle boolean type
     if (typeof condition.value === 'boolean') {
-      value = condition.value ? '있음' : '없음';
+      value = condition.value ? t('filterBuilder.values.exists') : t('filterBuilder.values.notExists');
     }
 
-    // Rating 타입 특별 처리
+    // Special handling for rating type
     if (condition.type === 'auto_tag_rating' && condition.rating_type) {
-      value = condition.rating_type;
+      value = t(`filterBuilder.ratingTypes.${condition.rating_type}`);
     }
 
-    // 점수 범위 표시
+    // Display score range
     let scoreRange = '';
     if (condition.min_score !== undefined || condition.max_score !== undefined) {
       const min = condition.min_score ?? 0;
@@ -131,11 +110,11 @@ const FilterBlock: React.FC<FilterBlockProps> = ({
     >
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
         <Stack spacing={1}>
-          {/* 헤더: 그룹 타입 + 편집/삭제 버튼 */}
+          {/* Header: Group type + Edit/Delete buttons */}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Chip
               icon={<Icon sx={{ fontSize: '0.875rem' }} />}
-              label={config.label}
+              label={getGroupLabel()}
               size="small"
               sx={{
                 bgcolor: config.color,
@@ -219,7 +198,7 @@ const FilterBlock: React.FC<FilterBlockProps> = ({
                 color="text.secondary"
                 sx={{ display: 'block', mt: 0.25, fontSize: '0.65rem' }}
               >
-                점수: {scoreRange}
+                {t('filterBuilder.labels.score')}: {scoreRange}
               </Typography>
             )}
           </Box>
