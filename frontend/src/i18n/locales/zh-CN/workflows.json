@@ -153,5 +153,77 @@
     "progress": "正在执行第{{current}}次",
     "progressWithTotal": "正在执行第{{current}}/{{total}}次",
     "stop": "停止"
+  },
+  "customDropdowns": {
+    "title": "自定义下拉列表管理",
+    "buttons": {
+      "add": "添加新列表",
+      "edit": "编辑",
+      "delete": "删除",
+      "view": "查看",
+      "cancel": "取消",
+      "create": "创建",
+      "save": "保存"
+    },
+    "labels": {
+      "name": "列表名称",
+      "description": "描述",
+      "items": "项目列表（每行一个）",
+      "itemsHelper": "每个项目用换行符分隔"
+    },
+    "empty": {
+      "title": "没有注册的自定义下拉列表",
+      "description": "点击\"添加新列表\"创建自定义下拉列表"
+    },
+    "dialog": {
+      "add": "添加新的自定义列表",
+      "edit": "编辑自定义列表",
+      "deleteConfirm": "确定要删除此列表吗？"
+    },
+    "validation": {
+      "minItems": "请至少输入1个项目"
+    },
+    "stats": {
+      "itemCount": "{{count}}个项目",
+      "moreItems": "+{{count}}个",
+      "createdAt": "创建日期: {{date}}"
+    }
+  },
+  "repeatExecution": {
+    "statusTitle": "重复执行状况",
+    "overall": "全体: {{completed}}{{total}} 完成",
+    "withInfinite": " (包含无限重复)",
+    "serverProgress": "{{count}}次",
+    "serverProgressInfinite": "{{count}}次 (无限)"
+  },
+  "serverStatus": {
+    "generate": "生成",
+    "startRepeat": "重复执行",
+    "stop": "停止",
+    "executingInfinite": "{{count}}次执行中 (无限)",
+    "executingProgress": "{{current}} / {{total}}次"
+  },
+  "groupAssignment": {
+    "title": "组分配",
+    "selectGroup": "选择组",
+    "autoAddDescription": "生成的图像将自动添加到所选组"
+  },
+  "graphToolbar": {
+    "searchPlaceholder": "搜索节点...",
+    "filterTypes": "类型过滤",
+    "layoutSwitch": "切换到{{layout}}布局",
+    "layoutTopBottom": "上下",
+    "layoutLeftRight": "左右",
+    "expandAll": "展开所有节点",
+    "collapseAll": "折叠所有节点"
+  },
+  "jsonViewer": {
+    "title": "工作流JSON结构",
+    "copyToClipboard": "复制到剪贴板",
+    "copied": "已复制到剪贴板！"
+  },
+  "workflowViewer": {
+    "graphView": "图形视图",
+    "jsonView": "JSON视图"
   }
 }

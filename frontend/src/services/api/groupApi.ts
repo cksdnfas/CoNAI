@@ -264,6 +264,49 @@ export const groupApi = {
     return response.data;
   },
 
+  /**
+   * Download group images as ZIP (Blob-based)
+   * @param id Group ID
+   * @param type Download type: 'thumbnail' | 'original' | 'video'
+   * @param compositeHashes Optional array of composite hashes for selected images
+   */
+  downloadGroupBlob: async (
+    id: number,
+    type: 'thumbnail' | 'original' | 'video',
+    compositeHashes?: string[]
+  ): Promise<void> => {
+    let url = `/api/groups/${id}/download?type=${type}`;
+    if (compositeHashes && compositeHashes.length > 0) {
+      url += `&hashes=${encodeURIComponent(JSON.stringify(compositeHashes))}`;
+    }
+
+    const response = await apiClient.get(url, {
+      responseType: 'blob',
+    });
+
+    // Create download link
+    const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = blobUrl;
+
+    // Extract filename from Content-Disposition header
+    const contentDisposition = response.headers['content-disposition'];
+    let filename = `group-${id}-${type}.zip`;
+    if (contentDisposition) {
+      // Handle both formats: filename="xxx" and filename*=UTF-8''xxx
+      const filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)|filename="?(.+?)"?(?:;|$)/);
+      if (filenameMatch) {
+        filename = decodeURIComponent(filenameMatch[1] || filenameMatch[2]);
+      }
+    }
+
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(blobUrl);
+  },
+
   // ===== Hierarchy-related methods =====
 
   /**

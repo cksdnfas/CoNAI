@@ -26,6 +26,7 @@ import {
   Error as ErrorIcon,
   CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { fileVerificationApi, type VerificationLog } from '../../../../../services/fileVerificationApi';
 
 interface FileVerificationLogModalProps {
@@ -34,11 +35,11 @@ interface FileVerificationLogModalProps {
 }
 
 const FileVerificationLogModal: React.FC<FileVerificationLogModalProps> = ({ open, onClose }) => {
+  const { t } = useTranslation('settings');
   const [logs, setLogs] = useState<VerificationLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 로그 로드
   useEffect(() => {
     if (open) {
       loadLogs();
@@ -54,13 +55,12 @@ const FileVerificationLogModal: React.FC<FileVerificationLogModalProps> = ({ ope
       setLogs(data);
     } catch (err) {
       console.error('Failed to load verification logs:', err);
-      setError('검증 로그를 불러오는데 실패했습니다');
+      setError(t('folderSettings.verificationLog.loadFailed'));
     } finally {
       setLoading(false);
     }
   };
 
-  // 날짜 포맷팅
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString('ko-KR', {
@@ -73,28 +73,25 @@ const FileVerificationLogModal: React.FC<FileVerificationLogModalProps> = ({ ope
     });
   };
 
-  // 소요 시간 포맷팅
   const formatDuration = (ms: number) => {
     if (ms < 1000) {
-      return `${ms}ms`;
+      return t('folderSettings.verificationLog.durationMs', { ms });
     }
     const seconds = (ms / 1000).toFixed(2);
-    return `${seconds}초`;
+    return t('folderSettings.verificationLog.durationSeconds', { seconds });
   };
 
-  // 검증 타입 텍스트
   const getVerificationTypeText = (type: string) => {
     switch (type) {
       case 'auto':
-        return '자동 검증';
+        return t('folderSettings.verificationLog.verificationType.auto');
       case 'manual':
-        return '수동 검증';
+        return t('folderSettings.verificationLog.verificationType.manual');
       default:
         return type;
     }
   };
 
-  // 에러 상세 파싱
   const parseErrorDetails = (errorDetails: string | null) => {
     if (!errorDetails) return [];
     try {
@@ -109,7 +106,7 @@ const FileVerificationLogModal: React.FC<FileVerificationLogModalProps> = ({ ope
       <DialogTitle>
         <Box display="flex" alignItems="center" gap={1}>
           <CheckCircleIcon color="primary" />
-          <Typography variant="h6">파일 검증 로그</Typography>
+          <Typography variant="h6">{t('folderSettings.verificationLog.title')}</Typography>
         </Box>
       </DialogTitle>
 
@@ -127,7 +124,7 @@ const FileVerificationLogModal: React.FC<FileVerificationLogModalProps> = ({ ope
         )}
 
         {!loading && !error && logs.length === 0 && (
-          <Alert severity="info">검증 로그가 없습니다</Alert>
+          <Alert severity="info">{t('folderSettings.verificationLog.noLogs')}</Alert>
         )}
 
         {!loading && !error && logs.length > 0 && (
@@ -135,13 +132,13 @@ const FileVerificationLogModal: React.FC<FileVerificationLogModalProps> = ({ ope
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>검증 시간</TableCell>
-                  <TableCell align="center">검증 타입</TableCell>
-                  <TableCell align="right">확인 파일</TableCell>
-                  <TableCell align="right">누락 발견</TableCell>
-                  <TableCell align="right">삭제 레코드</TableCell>
-                  <TableCell align="right">오류</TableCell>
-                  <TableCell align="right">소요 시간</TableCell>
+                  <TableCell>{t('folderSettings.verificationLog.columns.verificationTime')}</TableCell>
+                  <TableCell align="center">{t('folderSettings.verificationLog.columns.verificationType')}</TableCell>
+                  <TableCell align="right">{t('folderSettings.verificationLog.columns.checked')}</TableCell>
+                  <TableCell align="right">{t('folderSettings.verificationLog.columns.missingFound')}</TableCell>
+                  <TableCell align="right">{t('folderSettings.verificationLog.columns.deletedRecords')}</TableCell>
+                  <TableCell align="right">{t('folderSettings.verificationLog.columns.errors')}</TableCell>
+                  <TableCell align="right">{t('folderSettings.verificationLog.columns.duration')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -160,51 +157,50 @@ const FileVerificationLogModal: React.FC<FileVerificationLogModalProps> = ({ ope
                             color={log.verification_type === 'auto' ? 'default' : 'primary'}
                           />
                         </TableCell>
-                        <TableCell align="right">{log.total_checked.toLocaleString()}개</TableCell>
+                        <TableCell align="right">{log.total_checked.toLocaleString()}</TableCell>
                         <TableCell align="right">
                           {log.missing_found > 0 ? (
                             <Chip
-                              label={`${log.missing_found}개`}
+                              label={t('folderSettings.verificationLog.countFormat', { count: log.missing_found })}
                               size="small"
                               color="warning"
                             />
                           ) : (
                             <Typography variant="body2" color="text.secondary">
-                              0개
+                              {t('folderSettings.verificationLog.countFormat', { count: 0 })}
                             </Typography>
                           )}
                         </TableCell>
                         <TableCell align="right">
                           {log.deleted_records > 0 ? (
                             <Chip
-                              label={`${log.deleted_records}개`}
+                              label={t('folderSettings.verificationLog.countFormat', { count: log.deleted_records })}
                               size="small"
                               color="error"
                             />
                           ) : (
                             <Typography variant="body2" color="text.secondary">
-                              0개
+                              {t('folderSettings.verificationLog.countFormat', { count: 0 })}
                             </Typography>
                           )}
                         </TableCell>
                         <TableCell align="right">
                           {hasErrors ? (
                             <Chip
-                              label={`${log.error_count}개`}
+                              label={t('folderSettings.verificationLog.countFormat', { count: log.error_count })}
                               size="small"
                               color="error"
                               icon={<ErrorIcon />}
                             />
                           ) : (
                             <Typography variant="body2" color="text.secondary">
-                              없음
+                              {t('folderSettings.verificationLog.noErrors')}
                             </Typography>
                           )}
                         </TableCell>
                         <TableCell align="right">{formatDuration(log.duration_ms)}</TableCell>
                       </TableRow>
 
-                      {/* 에러 상세 정보 */}
                       {hasErrors && errors.length > 0 && (
                         <TableRow>
                           <TableCell colSpan={7} sx={{ py: 0 }}>
@@ -216,7 +212,7 @@ const FileVerificationLogModal: React.FC<FileVerificationLogModalProps> = ({ ope
                                 <Box display="flex" alignItems="center" gap={1}>
                                   <ErrorIcon color="error" fontSize="small" />
                                   <Typography variant="body2" color="error">
-                                    오류 상세 ({errors.length}개)
+                                    {t('folderSettings.verificationLog.errorDetails', { count: errors.length })}
                                   </Typography>
                                 </Box>
                               </AccordionSummary>
@@ -225,13 +221,13 @@ const FileVerificationLogModal: React.FC<FileVerificationLogModalProps> = ({ ope
                                   {errors.map((err: any, idx: number) => (
                                     <Box key={idx} sx={{ mb: 1, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
                                       <Typography variant="caption" display="block" color="error" fontWeight="bold">
-                                        파일 ID: {err.fileId}
+                                        {t('folderSettings.verificationLog.errorItem.fileId', { id: err.fileId })}
                                       </Typography>
                                       <Typography variant="caption" display="block" sx={{ wordBreak: 'break-all' }}>
-                                        경로: {err.filePath}
+                                        {t('folderSettings.verificationLog.errorItem.path', { path: err.filePath })}
                                       </Typography>
                                       <Typography variant="caption" display="block" color="text.secondary">
-                                        오류: {err.error}
+                                        {t('folderSettings.verificationLog.errorItem.error', { error: err.error })}
                                       </Typography>
                                     </Box>
                                   ))}
@@ -252,10 +248,10 @@ const FileVerificationLogModal: React.FC<FileVerificationLogModalProps> = ({ ope
 
       <DialogActions>
         <Button onClick={loadLogs} disabled={loading}>
-          새로고침
+          {t('folderSettings.verificationLog.refresh')}
         </Button>
         <Button onClick={onClose} variant="contained">
-          닫기
+          {t('folderSettings.verificationLog.close')}
         </Button>
       </DialogActions>
     </Dialog>

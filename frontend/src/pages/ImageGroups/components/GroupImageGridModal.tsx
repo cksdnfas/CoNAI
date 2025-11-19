@@ -210,29 +210,37 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   };
 
   // 다운로드 실행
-  const startDownload = (type: 'thumbnail' | 'original' | 'video', scope: 'all' | 'selected') => {
+  const startDownload = async (type: 'thumbnail' | 'original' | 'video', scope: 'all' | 'selected') => {
     if (!currentGroup?.id) return;
 
-    // 선택된 이미지의 composite_hash 추출
-    let compositeHashes: string[] | undefined;
-    if (scope === 'selected' && selectedIds.length > 0) {
-      compositeHashes = selectedImages
-        .map(img => img.composite_hash)
-        .filter((hash): hash is string => hash !== null);
-    }
+    try {
+      // 선택된 이미지의 composite_hash 추출
+      let compositeHashes: string[] | undefined;
+      if (scope === 'selected' && selectedIds.length > 0) {
+        compositeHashes = selectedImages
+          .map(img => img.composite_hash)
+          .filter((hash): hash is string => hash !== null);
+      }
 
-    // 다운로드 URL 생성 (그룹 타입에 따라 다른 API 사용)
-    let downloadUrl: string;
-    if (groupType === 'custom') {
-      downloadUrl = groupApi.getDownloadUrl(currentGroup.id, type, compositeHashes);
-    } else {
-      // auto-folder 그룹의 경우
-      const hashesParam = compositeHashes ? compositeHashes.join(',') : undefined;
-      downloadUrl = `/api/auto-folder-groups/${currentGroup.id}/download?type=${type}${hashesParam ? `&hashes=${hashesParam}` : ''}`;
-    }
+      // 그룹 타입에 따라 다른 API 사용 (Blob 기반)
+      if (groupType === 'custom') {
+        await groupApi.downloadGroupBlob(currentGroup.id, type, compositeHashes);
+      } else {
+        // auto-folder 그룹의 경우
+        await autoFolderGroupsApi.downloadGroup(currentGroup.id, type, compositeHashes);
+      }
 
-    // 다운로드 트리거 (새 창으로 열기)
-    window.open(downloadUrl, '_blank');
+      // 다운로드 성공 스낵바
+      if (onShowSnackbar) {
+        onShowSnackbar('다운로드가 시작되었습니다.', 'success');
+      }
+    } catch (error) {
+      console.error('Download failed:', error);
+      if (onShowSnackbar) {
+        const errorMessage = error instanceof Error ? error.message : '다운로드에 실패했습니다.';
+        onShowSnackbar(errorMessage, 'error');
+      }
+    }
   };
 
   // 다운로드 확인 다이얼로그 확인
