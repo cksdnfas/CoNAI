@@ -24,6 +24,7 @@ import {
   History as HistoryIcon,
   Folder as FolderIcon
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { workflowApi } from '../../../services/api/workflowApi';
 
 interface ImageSelectionModalProps {
@@ -58,6 +59,7 @@ export default function ImageSelectionModal({
   onSelect,
   fieldLabel
 }: ImageSelectionModalProps) {
+  const { t } = useTranslation(['workflows', 'common']);
   const [currentTab, setCurrentTab] = useState(0);
   const [hashInput, setHashInput] = useState('');
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
@@ -116,15 +118,15 @@ export default function ImageSelectionModal({
       maxWidth="md"
       fullWidth
     >
-      <DialogTitle>{fieldLabel} - 이미지 선택</DialogTitle>
+      <DialogTitle>{fieldLabel} - {t('workflows:imageSelection.title')}</DialogTitle>
       <DialogContent>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={currentTab} onChange={(_, newValue) => setCurrentTab(newValue)}>
-            <Tab icon={<SearchIcon />} label="DB 검색" iconPosition="start" disabled />
-            <Tab icon={<TagIcon />} label="해시" iconPosition="start" />
-            <Tab icon={<UploadIcon />} label="업로드" iconPosition="start" />
-            <Tab icon={<HistoryIcon />} label="히스토리" iconPosition="start" disabled />
-            <Tab icon={<FolderIcon />} label="전용 폴더" iconPosition="start" />
+            <Tab icon={<SearchIcon />} label={t('workflows:imageSelection.tabs.dbSearch')} iconPosition="start" disabled />
+            <Tab icon={<TagIcon />} label={t('workflows:imageSelection.tabs.hash')} iconPosition="start" />
+            <Tab icon={<UploadIcon />} label={t('workflows:imageSelection.tabs.upload')} iconPosition="start" />
+            <Tab icon={<HistoryIcon />} label={t('workflows:imageSelection.tabs.history')} iconPosition="start" disabled />
+            <Tab icon={<FolderIcon />} label={t('workflows:imageSelection.tabs.dedicatedFolder')} iconPosition="start" />
           </Tabs>
         </Box>
 
@@ -138,7 +140,7 @@ export default function ImageSelectionModal({
         <TabPanel value={currentTab} index={0}>
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <Typography variant="body1" color="text.secondary">
-              준비 중입니다
+              {t('workflows:imageSelection.inPreparation')}
             </Typography>
           </Box>
         </TabPanel>
@@ -147,16 +149,16 @@ export default function ImageSelectionModal({
         <TabPanel value={currentTab} index={1}>
           <TextField
             fullWidth
-            label="이미지 해시 입력"
+            label={t('workflows:imageSelection.hashInputLabel')}
             value={hashInput}
             onChange={(e) => setHashInput(e.target.value)}
-            placeholder="이미지 해시를 입력하세요"
+            placeholder={t('workflows:imageSelection.hashInputPlaceholder')}
             sx={{ mb: 2 }}
           />
           {hashInput && (
             <Box sx={{ textAlign: 'center', py: 2 }}>
               <Typography variant="body2" color="text.secondary">
-                해시 기반 이미지 로딩 기능은 향후 구현 예정입니다.
+                {t('workflows:imageSelection.hashComingSoon')}
               </Typography>
             </Box>
           )}
@@ -180,7 +182,7 @@ export default function ImageSelectionModal({
                 startIcon={<UploadIcon />}
                 sx={{ mb: 2 }}
               >
-                이미지 선택
+                {t('workflows:imageSelection.selectButton')}
               </Button>
             </label>
             {uploadPreview && (
@@ -199,10 +201,10 @@ export default function ImageSelectionModal({
                       }
                     }}
                   >
-                    그대로 사용
+                    {t('workflows:imageSelection.useAsIs')}
                   </Button>
                   <Button variant="outlined" disabled>
-                    편집 (준비 중)
+                    {t('workflows:imageSelection.editButton')}
                   </Button>
                 </Box>
               </Box>
@@ -214,7 +216,7 @@ export default function ImageSelectionModal({
         <TabPanel value={currentTab} index={3}>
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <Typography variant="body1" color="text.secondary">
-              준비 중입니다
+              {t('workflows:imageSelection.inPreparation')}
             </Typography>
           </Box>
         </TabPanel>
@@ -228,11 +230,11 @@ export default function ImageSelectionModal({
           ) : canvasImages.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <Typography variant="body1" color="text.secondary">
-                전용 폴더에 이미지가 없습니다.
+                {t('workflows:imageSelection.noImagesInFolder')}
               </Typography>
               {canvasPath && (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  {canvasPath} 폴더에 이미지를 추가하세요.
+                  {canvasPath} {t('workflows:imageSelection.addImagesPrompt')}
                 </Typography>
               )}
             </Box>
@@ -263,7 +265,7 @@ export default function ImageSelectionModal({
         </TabPanel>
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleClose}>취소</Button>
+        <Button onClick={handleClose}>{t('common:buttons.cancel')}</Button>
       </DialogActions>
     </Dialog>
   );

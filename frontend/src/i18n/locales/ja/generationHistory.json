@@ -46,5 +46,14 @@
     "error": "エラー",
     "createdAt": "作成日時",
     "completedAt": "完了日時"
-  }
+  },
+  "cleanupFailed": "[ja] Failed to cleanup",
+  "cleanupFailedTitle": "[ja] Cleanup Failed Items",
+  "cleanupFailedConfirm": "[ja] Are you sure you want to delete {{count}} failed generation histories?",
+  "cleanupFailedNote": "[ja] Only database records will be deleted, files will be kept.",
+  "cleanup": "[ja] Cleanup",
+  "cleaning": "[ja] Cleaning...",
+  "cleanupSuccess": "[ja] {{count}} failed items have been deleted",
+  "noFailedRecords": "[ja] No failed items to clean up",
+  "bulkDeleteFailed": "[ja] Failed to bulk delete"
 }

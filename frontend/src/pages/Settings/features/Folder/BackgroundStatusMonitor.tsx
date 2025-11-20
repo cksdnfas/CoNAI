@@ -30,8 +30,10 @@ import { backgroundQueueApi } from '../../../../services/backgroundQueueApi';
 import { fileVerificationApi } from '../../../../services/fileVerificationApi';
 import type { BackgroundQueueStatus } from '../../../../types/folder';
 import FileVerificationLogModal from './components/FileVerificationLogModal';
+import { useTranslation } from 'react-i18next';
 
 const BackgroundStatusMonitor: React.FC = () => {
+  const { t } = useTranslation('settings');
   const [status, setStatus] = useState<BackgroundQueueStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +79,7 @@ const BackgroundStatusMonitor: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to fetch background queue status:', err);
-      setError('백그라운드 작업 상태를 불러오는데 실패했습니다');
+      setError(t('background.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -85,7 +87,7 @@ const BackgroundStatusMonitor: React.FC = () => {
 
   // 큐 초기화
   const handleClearQueue = async () => {
-    if (!window.confirm('백그라운드 큐를 초기화하시겠습니까? 대기 중인 모든 작업이 취소됩니다.')) {
+    if (!window.confirm(t('background.confirmReset'))) {
       return;
     }
 
@@ -94,7 +96,7 @@ const BackgroundStatusMonitor: React.FC = () => {
       await fetchStatus();
     } catch (err) {
       console.error('Failed to clear queue:', err);
-      setError('큐 초기화에 실패했습니다');
+      setError(t('background.resetFailed'));
     }
   };
 
@@ -105,7 +107,7 @@ const BackgroundStatusMonitor: React.FC = () => {
       await fetchStatus();
     } catch (err) {
       console.error('Failed to trigger auto-tag:', err);
-      setError('자동 태깅 트리거에 실패했습니다');
+      setError(t('background.autoTagFailed'));
     }
   };
 
@@ -115,7 +117,7 @@ const BackgroundStatusMonitor: React.FC = () => {
       return;
     }
 
-    if (!window.confirm(`${hashStats.imagesWithoutHash}개의 이미지 해시를 생성하시겠습니까?`)) {
+    if (!window.confirm(t('background.confirmHashGen', { count: hashStats.imagesWithoutHash }))) {
       return;
     }
 
@@ -126,11 +128,11 @@ const BackgroundStatusMonitor: React.FC = () => {
       await fetchStatus();
 
       if (result.failed > 0) {
-        setError(`해시 생성 완료: 성공 ${result.processed}개, 실패 ${result.failed}개`);
+        setError(t('background.hashGenComplete', { processed: result.processed, failed: result.failed }));
       }
     } catch (err) {
       console.error('Failed to rebuild hashes:', err);
-      setError('해시 재생성에 실패했습니다');
+      setError(t('background.hashGenFailed'));
     } finally {
       setRebuildingHashes(false);
     }
@@ -140,8 +142,7 @@ const BackgroundStatusMonitor: React.FC = () => {
   const handleTriggerVerification = async () => {
     if (!verificationStats) return;
 
-    const confirmMsg = `총 ${verificationStats.totalFiles}개의 파일을 검증하시겠습니까?\n파일이 많을 경우 시간이 소요될 수 있습니다.`;
-    if (!window.confirm(confirmMsg)) {
+    if (!window.confirm(t('background.confirmVerify', { count: verificationStats.totalFiles }))) {
       return;
     }
 
@@ -152,7 +153,7 @@ const BackgroundStatusMonitor: React.FC = () => {
       await fetchStatus();
     } catch (err) {
       console.error('Failed to trigger verification:', err);
-      setError('파일 검증 실행에 실패했습니다');
+      setError(t('background.verifyFailed'));
     } finally {
       setVerifying(false);
     }
@@ -162,7 +163,7 @@ const BackgroundStatusMonitor: React.FC = () => {
   const handleSaveVerificationSettings = async () => {
     const interval = parseInt(tempInterval, 10);
     if (isNaN(interval) || interval < 300 || interval > 86400) {
-      setError('검증 간격은 300-86400초 사이여야 합니다');
+      setError(t('background.verifyIntervalError'));
       return;
     }
 
@@ -175,7 +176,7 @@ const BackgroundStatusMonitor: React.FC = () => {
       await fetchStatus();
     } catch (err) {
       console.error('Failed to update verification settings:', err);
-      setError('파일 검증 설정 저장에 실패했습니다');
+      setError(t('background.verifySaveFailed'));
     }
   };
 
@@ -197,7 +198,7 @@ const BackgroundStatusMonitor: React.FC = () => {
 
   // 날짜 포맷팅
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return '없음';
+    if (!dateString) return t('common.none');
     const date = new Date(dateString);
     return date.toLocaleString('ko-KR', {
       month: '2-digit',
@@ -225,16 +226,16 @@ const BackgroundStatusMonitor: React.FC = () => {
     <>
       <Paper sx={{ p: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h6">백그라운드 작업 모니터링</Typography>
+          <Typography variant="h6">{t('background.title')}</Typography>
           <Box>
-            <IconButton onClick={fetchStatus} size="small" title="새로고침">
+            <IconButton onClick={fetchStatus} size="small" title={t('common.refresh')}>
               <RefreshIcon />
             </IconButton>
             <IconButton
               onClick={handleClearQueue}
               size="small"
               color="error"
-              title="큐 초기화"
+              title={t('background.resetQueue')}
               disabled={status.queue.queueLength === 0}
             >
               <ClearIcon />
@@ -251,15 +252,15 @@ const BackgroundStatusMonitor: React.FC = () => {
         {/* 백그라운드 큐 상태 */}
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
-            백그라운드 큐
+            {t('background.queue.title')}
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
             <Chip
-              label={`대기 중: ${status.queue.queueLength}개`}
+              label={t('background.queue.pending', { count: status.queue.queueLength })}
               color={status.queue.queueLength > 0 ? 'primary' : 'default'}
             />
             <Chip
-              label={status.queue.processing ? '처리 중' : '대기'}
+              label={status.queue.processing ? t('background.queue.processing') : t('background.queue.waiting')}
               color={status.queue.processing ? 'success' : 'default'}
             />
           </Box>
@@ -269,8 +270,8 @@ const BackgroundStatusMonitor: React.FC = () => {
             <List dense>
               <ListItem>
                 <ListItemText
-                  primary="메타데이터 추출"
-                  secondary={`${status.queue.tasksByType.metadata_extraction}개 대기 중`}
+                  primary={t('background.tasks.metadata')}
+                  secondary={t('background.tasks.pendingCount', { count: status.queue.tasksByType.metadata_extraction })}
                 />
                 {status.queue.tasksByType.metadata_extraction > 0 && (
                   <CircularProgress size={20} />
@@ -278,8 +279,8 @@ const BackgroundStatusMonitor: React.FC = () => {
               </ListItem>
               <ListItem>
                 <ListItemText
-                  primary="프롬프트 수집"
-                  secondary={`${status.queue.tasksByType.prompt_collection}개 대기 중`}
+                  primary={t('background.tasks.promptCollection')}
+                  secondary={t('background.tasks.pendingCount', { count: status.queue.tasksByType.prompt_collection })}
                 />
                 {status.queue.tasksByType.prompt_collection > 0 && (
                   <CircularProgress size={20} />
@@ -296,7 +297,7 @@ const BackgroundStatusMonitor: React.FC = () => {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
               <LabelIcon fontSize="small" />
-              자동 태깅 스케줄러
+              {t('background.autoTag.title')}
             </Typography>
             <Button
               variant="outlined"
@@ -305,26 +306,26 @@ const BackgroundStatusMonitor: React.FC = () => {
               onClick={handleTriggerAutoTag}
               disabled={!status.autoTag.isRunning || status.autoTag.untaggedCount === 0}
             >
-              수동 실행
+              {t('background.autoTag.manualTrigger')}
             </Button>
           </Box>
 
           <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
             <Chip
-              label={status.autoTag.isRunning ? '실행 중' : '중지됨'}
+              label={status.autoTag.isRunning ? t('background.autoTag.running') : t('background.autoTag.stopped')}
               color={status.autoTag.isRunning ? 'success' : 'default'}
               icon={status.autoTag.isRunning ? <CircularProgress size={16} /> : undefined}
             />
             <Chip
-              label={`미태깅 이미지: ${status.autoTag.untaggedCount}개`}
+              label={t('background.autoTag.untaggedCount', { count: status.autoTag.untaggedCount })}
               color={status.autoTag.untaggedCount > 0 ? 'warning' : 'default'}
             />
             <Chip
-              label={`폴링 간격: ${status.autoTag.pollingIntervalSeconds}초`}
+              label={t('background.autoTag.pollingInterval', { seconds: status.autoTag.pollingIntervalSeconds })}
               variant="outlined"
             />
             <Chip
-              label={`배치 크기: ${status.autoTag.batchSize}개`}
+              label={t('background.autoTag.batchSize', { size: status.autoTag.batchSize })}
               variant="outlined"
             />
           </Box>
@@ -337,7 +338,7 @@ const BackgroundStatusMonitor: React.FC = () => {
           <Box sx={{ mb: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                미디어 해시 상태
+                {t('background.hash.title')}
               </Typography>
               <Button
                 variant="outlined"
@@ -346,25 +347,25 @@ const BackgroundStatusMonitor: React.FC = () => {
                 onClick={handleRebuildHashes}
                 disabled={rebuildingHashes || hashStats.imagesWithoutHash === 0}
               >
-                해시 생성
+                {t('background.hash.generate')}
               </Button>
             </Box>
 
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
               <Chip
-                label={`전체: ${hashStats.totalImages}개`}
+                label={t('background.hash.total', { count: hashStats.totalImages })}
                 variant="outlined"
               />
               <Chip
-                label={`해시 생성 완료: ${hashStats.imagesWithHash}개`}
+                label={t('background.hash.completed', { count: hashStats.imagesWithHash })}
                 color="success"
               />
               <Chip
-                label={`미생성: ${hashStats.imagesWithoutHash}개`}
+                label={t('background.hash.pending', { count: hashStats.imagesWithoutHash })}
                 color={hashStats.imagesWithoutHash > 0 ? 'warning' : 'default'}
               />
               <Chip
-                label={`완료율: ${hashStats.completionPercentage}%`}
+                label={t('background.hash.completion', { percent: hashStats.completionPercentage })}
                 color={hashStats.completionPercentage === 100 ? 'success' : 'default'}
               />
             </Box>
@@ -379,7 +380,7 @@ const BackgroundStatusMonitor: React.FC = () => {
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
                 <CheckCircleIcon fontSize="small" />
-                파일 검증 상태
+                {t('background.verify.title')}
               </Typography>
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Button
@@ -387,7 +388,7 @@ const BackgroundStatusMonitor: React.FC = () => {
                   size="small"
                   onClick={() => setVerificationLogOpen(true)}
                 >
-                  로그 보기
+                  {t('background.verify.viewLogs')}
                 </Button>
                 <Button
                   variant="outlined"
@@ -396,7 +397,7 @@ const BackgroundStatusMonitor: React.FC = () => {
                   onClick={handleTriggerVerification}
                   disabled={verifying || verificationProgress?.isRunning}
                 >
-                  검증 실행
+                  {t('background.verify.run')}
                 </Button>
               </Box>
             </Box>
@@ -404,24 +405,23 @@ const BackgroundStatusMonitor: React.FC = () => {
             {/* 검증 진행 중 */}
             {verificationProgress?.isRunning && (
               <Alert severity="info" sx={{ mb: 2 }}>
-                파일 검증 진행 중: {verificationProgress.checkedFiles}/{verificationProgress.totalFiles}
-                ({verificationProgress.progressPercentage}%)
-                {verificationProgress.missingFiles > 0 && ` - 누락: ${verificationProgress.missingFiles}개`}
+                {t('background.verify.progress', { checked: verificationProgress.checkedFiles, total: verificationProgress.totalFiles })}
+                {verificationProgress.missingFiles > 0 && ` - ${t('background.verify.missing', { count: verificationProgress.missingFiles })}`}
               </Alert>
             )}
 
             {/* 검증 통계 */}
             <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
               <Chip
-                label={`전체 파일: ${verificationStats.totalFiles}개`}
+                label={t('background.verify.totalFiles', { count: verificationStats.totalFiles })}
                 variant="outlined"
               />
               <Chip
-                label={`누락 파일: ${verificationStats.missingFiles}개`}
+                label={t('background.verify.missingFiles', { count: verificationStats.missingFiles })}
                 color={verificationStats.missingFiles > 0 ? 'warning' : 'default'}
               />
               <Chip
-                label={`마지막 검증: ${formatDate(verificationStats.lastVerificationDate)}`}
+                label={t('background.verify.lastVerification', { date: formatDate(verificationStats.lastVerificationDate) })}
                 variant="outlined"
               />
             </Box>
@@ -429,7 +429,7 @@ const BackgroundStatusMonitor: React.FC = () => {
             {/* 검증 설정 */}
             <Box sx={{ mt: 2, p: 2, borderRadius: 1 }}>
               <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
-                검증 스케줄러 설정
+                {t('background.verify.schedulerTitle')}
               </Typography>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
                 <Box sx={{ minWidth: { xs: '100%', sm: '150px' } }}>
@@ -440,12 +440,12 @@ const BackgroundStatusMonitor: React.FC = () => {
                         onChange={(e) => setTempEnabled(e.target.checked)}
                       />
                     }
-                    label={tempEnabled ? '활성화' : '비활성화'}
+                    label={tempEnabled ? t('common.enabled') : t('common.disabled')}
                   />
                 </Box>
                 <Box sx={{ flex: 1, minWidth: { xs: '100%', sm: '200px' } }}>
                   <TextField
-                    label="검증 간격 (초)"
+                    label={t('background.verify.intervalLabel')}
                     type="number"
                     size="small"
                     fullWidth
@@ -453,10 +453,10 @@ const BackgroundStatusMonitor: React.FC = () => {
                     onChange={(e) => setTempInterval(e.target.value)}
                     disabled={!tempEnabled}
                     inputProps={{ min: 300, max: 86400 }}
-                    helperText="300-86400초 (5분-24시간)"
+                    helperText={t('background.verify.intervalHelper')}
                     InputProps={{
                       endAdornment: (
-                        <Tooltip title="파일이 많을 경우 시간 소요 및 시스템 부하가 발생할 수 있습니다">
+                        <Tooltip title={t('background.verify.intervalTooltip')}>
                           <InfoIcon fontSize="small" color="action" />
                         </Tooltip>
                       ),
@@ -475,7 +475,7 @@ const BackgroundStatusMonitor: React.FC = () => {
                        tempInterval === verificationSettings.interval.toString())
                     }
                   >
-                    저장
+                    {t('common.save')}
                   </Button>
                 </Box>
               </Stack>
@@ -486,7 +486,7 @@ const BackgroundStatusMonitor: React.FC = () => {
         {/* 자동 새로고침 안내 */}
         <Box sx={{ mt: 2 }}>
           <Typography variant="caption" color="text.secondary">
-            {autoRefresh ? '5초마다 자동으로 업데이트됩니다.' : '자동 업데이트가 비활성화되었습니다.'}
+            {autoRefresh ? t('background.autoUpdate') : t('background.autoUpdateDisabled')}
           </Typography>
         </Box>
       </Paper>

@@ -42,5 +42,22 @@
     "multipleSuccess": "已成功上傳{{count}}張圖像。",
     "allFailed": "所有圖像上傳失敗。",
     "partialSuccess": "{{success}}個成功，{{failed}}個失敗。"
+  },
+  "promptPreview": {
+    "title": "[zh-TW] Prompt Preview",
+    "description": "[zh-TW] Select an image to instantly view AI metadata without uploading to server.",
+    "dragOrClick": "[zh-TW] Drag or click to select an image",
+    "dropHere": "[zh-TW] Drop file here",
+    "noUpload": "[zh-TW] Images are analyzed in browser only, not uploaded to server",
+    "imagePreview": "[zh-TW] Image Preview",
+    "aiTool": "[zh-TW] AI Tool",
+    "positivePrompt": "[zh-TW] Prompt",
+    "negativePrompt": "[zh-TW] Negative Prompt",
+    "terms": "[zh-TW] Extracted Terms",
+    "loraModels": "[zh-TW] LoRA Models",
+    "parameters": "[zh-TW] Generation Parameters",
+    "rawMetadata": "[zh-TW] Raw Metadata (EXIF/PNG Chunks)",
+    "invalidFileType": "[zh-TW] Only image files are allowed",
+    "extractionFailed": "[zh-TW] Failed to extract metadata"
   }
 }

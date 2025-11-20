@@ -182,7 +182,7 @@ export function WorkflowFormFields({
               fullWidth
               sx={{ mb: 1 }}
             >
-              이미지 선택
+              {t('workflows:form.selectImage')}
             </Button>
             {value && (
               <Card sx={{ mt: 1 }}>

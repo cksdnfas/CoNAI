@@ -191,7 +191,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
     // 파일이 없는 경우 스낵바로 알림
     const count = scope === 'all' ? (fileCounts?.[type] || 0) : selectedIds.length;
     if (count === 0) {
-      const typeLabel = type === 'thumbnail' ? '썸네일' : type === 'original' ? '원본' : '동영상';
+      const typeLabel = type === 'thumbnail' ? t('common:thumbnail') : type === 'original' ? t('common:original') : t('common:video');
       if (onShowSnackbar) {
         onShowSnackbar(`다운로드할 ${typeLabel} 파일이 없습니다.`, 'warning');
       }

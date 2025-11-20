@@ -300,20 +300,20 @@ export default function WorkflowFormPage() {
 
         <Box sx={{ mb: 2 }}>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            워크플로우 색상
+            {t('workflows:form.colorLabel')}
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             {[
-              { color: '#2196f3', label: '파란색 (기본)' },
-              { color: '#f44336', label: '빨간색' },
-              { color: '#4caf50', label: '초록색' },
-              { color: '#ff9800', label: '주황색' },
-              { color: '#9c27b0', label: '보라색' },
-              { color: '#00bcd4', label: '청록색' },
-              { color: '#ffeb3b', label: '노란색' },
-              { color: '#795548', label: '갈색' },
-              { color: '#607d8b', label: '회색' },
-              { color: '#e91e63', label: '핑크색' },
+              { color: '#2196f3', label: t('workflows:colors.blue') },
+              { color: '#f44336', label: t('workflows:colors.red') },
+              { color: '#4caf50', label: t('workflows:colors.green') },
+              { color: '#ff9800', label: t('workflows:colors.orange') },
+              { color: '#9c27b0', label: t('workflows:colors.purple') },
+              { color: '#00bcd4', label: t('workflows:colors.cyan') },
+              { color: '#ffeb3b', label: t('workflows:colors.yellow') },
+              { color: '#795548', label: t('workflows:colors.brown') },
+              { color: '#607d8b', label: t('workflows:colors.gray') },
+              { color: '#e91e63', label: t('workflows:colors.pink') },
             ].map((item) => (
               <Box
                 key={item.color}
@@ -345,7 +345,7 @@ export default function WorkflowFormPage() {
                 borderRadius: '4px',
                 cursor: 'pointer',
               }}
-              title="직접 색상 선택"
+              title={t('workflows:form.customColorTooltip')}
             />
           </Box>
         </Box>

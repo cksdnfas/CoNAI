@@ -245,5 +245,14 @@
     "brushColor": "ブラシカラー",
     "eraserSize": "消しゴムサイズ: {{size}}px",
     "panHelp": "クリック＆ドラッグでキャンバスを移動できます。マウスホイールで拡大/縮小できます。"
-  }
+  },
+  "clickToCopy": "クリックしてコピー",
+  "thumbnail": "サムネイル",
+  "original": "オリジナル",
+  "video": "動画",
+  "none": "なし",
+  "enabled": "有効",
+  "disabled": "無効",
+  "save": "保存",
+  "refresh": "更新"
 }

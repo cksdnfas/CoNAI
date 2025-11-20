@@ -234,7 +234,7 @@ const ImageGrid: React.FC<ImageGridProps> = ({
           {t('gallery:status.noImages')}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          {t('gallery:status.uploadPrompt', '이미지를 업로드하거나 검색 조건을 변경해보세요.')}
+          {t('gallery:emptyState.uploadOrSearch')}
         </Typography>
       </Box>
     );
@@ -263,17 +263,13 @@ const ImageGrid: React.FC<ImageGridProps> = ({
                   disabled={!selectable}
                 />
               }
-              label={t('gallery:selectAllLabel', {
+              label={t('gallery:selection.selectAllWithCount', {
                 selected: selectedIds.length,
-                total: safeImages.length,
-                defaultValue: `전체 선택 (${selectedIds.length}/${safeImages.length})`
+                total: safeImages.length
               })}
             />
             <Typography variant="body2" color="text.secondary">
-              {t('gallery:totalImages', {
-                count: total,
-                defaultValue: `총 ${total.toLocaleString()}개 이미지`
-              })}
+              {t('gallery:totalImages', { count: total })}
             </Typography>
           </Box>
 

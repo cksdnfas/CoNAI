@@ -350,7 +350,7 @@ const SimilaritySettings: React.FC = () => {
                 label={t('similarity.test.compositeHash')}
                 value={testCompositeHash}
                 onChange={(e) => setTestCompositeHash(e.target.value)}
-                placeholder="예: a1b2c3d4e5f6..."
+                placeholder={t('similarity.hashPlaceholder')}
                 fullWidth
                 helperText={t('similarity.test.hashHelperText')}
               />

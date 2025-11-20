@@ -17,6 +17,7 @@ import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { type MarkedField } from '../../services/api/workflowApi';
 
 interface MarkedFieldsPreviewProps {
@@ -25,6 +26,7 @@ interface MarkedFieldsPreviewProps {
 }
 
 export function MarkedFieldsPreview({ workflowJson, markedFields }: MarkedFieldsPreviewProps) {
+  const { t } = useTranslation(['workflows']);
   const [testData, setTestData] = useState<Record<string, any>>({});
   const [showSubstituted, setShowSubstituted] = useState(false);
 
@@ -37,13 +39,13 @@ export function MarkedFieldsPreview({ workflowJson, markedFields }: MarkedFields
       workflowObj = JSON.parse(workflowJson);
     }
   } catch (err) {
-    parseError = 'Workflow JSON을 파싱할 수 없습니다';
+    parseError = t('workflows:preview.parseError');
   }
 
   // 각 필드의 경로 검증
   const validatePath = (jsonPath: string): { valid: boolean; currentValue: any; error?: string } => {
     if (!workflowObj) {
-      return { valid: false, currentValue: null, error: 'Workflow JSON이 없습니다' };
+      return { valid: false, currentValue: null, error: t('workflows:preview.noJson') };
     }
 
     try {
@@ -54,13 +56,13 @@ export function MarkedFieldsPreview({ workflowJson, markedFields }: MarkedFields
         if (current && typeof current === 'object' && key in current) {
           current = current[key];
         } else {
-          return { valid: false, currentValue: null, error: `경로를 찾을 수 없습니다: ${jsonPath}` };
+          return { valid: false, currentValue: null, error: t('workflows:preview.pathNotFound', { path: jsonPath }) };
         }
       }
 
       return { valid: true, currentValue: current };
     } catch (err) {
-      return { valid: false, currentValue: null, error: '경로 검증 중 오류 발생' };
+      return { valid: false, currentValue: null, error: t('workflows:preview.validationError') };
     }
   };
 
@@ -101,7 +103,7 @@ export function MarkedFieldsPreview({ workflowJson, markedFields }: MarkedFields
 
       return JSON.stringify(cloned, null, 2);
     } catch (err) {
-      return '치환 중 오류 발생';
+      return t('workflows:preview.substitutionError');
     }
   };
 
@@ -191,7 +193,7 @@ export function MarkedFieldsPreview({ workflowJson, markedFields }: MarkedFields
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
         <VisibilityIcon color="primary" />
         <Typography variant="h6">
-          Marked Fields 미리보기
+          {t('workflows:preview.title')}
         </Typography>
       </Box>
       <Divider sx={{ mb: 3 }} />
@@ -206,7 +208,7 @@ export function MarkedFieldsPreview({ workflowJson, markedFields }: MarkedFields
       {workflowObj && (
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle1" gutterBottom>
-            경로 검증 결과
+            {t('workflows:preview.validationResults')}
           </Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {markedFields.map((field) => {
@@ -245,7 +247,7 @@ export function MarkedFieldsPreview({ workflowJson, markedFields }: MarkedFields
                       }}
                     >
                       <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                        현재 값:
+                        {t('workflows:preview.currentValue')}
                       </Typography>
                       <Typography
                         variant="body2"
@@ -276,12 +278,12 @@ export function MarkedFieldsPreview({ workflowJson, markedFields }: MarkedFields
       {/* 미리보기 폼 */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="subtitle1" gutterBottom>
-          이미지 생성 시 표시될 폼
+          {t('workflows:preview.formTitle')}
         </Typography>
         <Box sx={{ p: 2, border: '1px dashed', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.default' }}>
           {markedFields.map((field) => renderField(field))}
           <Button variant="contained" fullWidth disabled>
-            이미지 생성 (미리보기)
+            {t('workflows:preview.generateButton')}
           </Button>
         </Box>
       </Box>
@@ -293,14 +295,14 @@ export function MarkedFieldsPreview({ workflowJson, markedFields }: MarkedFields
           onClick={generateTestData}
           sx={{ mb: 2 }}
         >
-          테스트 데이터로 미리보기
+          {t('workflows:preview.testDataButton')}
         </Button>
 
         {showSubstituted && (
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography variant="body2">
-                치환된 Workflow JSON 보기
+                {t('workflows:preview.viewJsonTitle')}
               </Typography>
             </AccordionSummary>
             <AccordionDetails>

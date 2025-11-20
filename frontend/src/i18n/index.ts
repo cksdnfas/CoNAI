@@ -56,6 +56,7 @@ import jaServers from './locales/ja/servers.json';
 import jaErrors from './locales/ja/errors.json';
 import jaValidation from './locales/ja/validation.json';
 import jaWildcards from './locales/ja/wildcards.json';
+import jaAuth from './locales/ja/auth.json';
 
 // Simplified Chinese
 import zhCNCommon from './locales/zh-CN/common.json';
@@ -74,6 +75,7 @@ import zhCNServers from './locales/zh-CN/servers.json';
 import zhCNErrors from './locales/zh-CN/errors.json';
 import zhCNValidation from './locales/zh-CN/validation.json';
 import zhCNWildcards from './locales/zh-CN/wildcards.json';
+import zhCNAuth from './locales/zh-CN/auth.json';
 
 // Traditional Chinese
 import zhTWCommon from './locales/zh-TW/common.json';
@@ -92,6 +94,7 @@ import zhTWServers from './locales/zh-TW/servers.json';
 import zhTWErrors from './locales/zh-TW/errors.json';
 import zhTWValidation from './locales/zh-TW/validation.json';
 import zhTWWildcards from './locales/zh-TW/wildcards.json';
+import zhTWAuth from './locales/zh-TW/auth.json';
 
 // Translation resources
 const resources = {
@@ -148,6 +151,7 @@ const resources = {
     errors: jaErrors,
     validation: jaValidation,
     wildcards: jaWildcards,
+    auth: jaAuth,
   },
   'zh-CN': {
     common: zhCNCommon,
@@ -166,6 +170,7 @@ const resources = {
     errors: zhCNErrors,
     validation: zhCNValidation,
     wildcards: zhCNWildcards,
+    auth: zhCNAuth,
   },
   'zh-TW': {
     common: zhTWCommon,
@@ -184,6 +189,7 @@ const resources = {
     errors: zhTWErrors,
     validation: zhTWValidation,
     wildcards: zhTWWildcards,
+    auth: zhTWAuth,
   },
 };
 
@@ -193,7 +199,7 @@ i18n
   .use(initReactI18next) // Pass i18n instance to react-i18next
   .init({
     resources,
-    fallbackLng: 'ko', // Fallback language if user language not available
+    fallbackLng: 'en', // Fallback language if user language not available
     defaultNS: 'common', // Default namespace
     ns: [
       'common',

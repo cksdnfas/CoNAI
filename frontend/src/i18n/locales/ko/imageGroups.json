@@ -230,5 +230,26 @@
     "confirmTitle": "대용량 다운로드 확인",
     "confirmMessage": "{{count}}개의 파일을 다운로드합니다. 계속하시겠습니까?",
     "confirmButton": "다운로드"
+  },
+  "defaultGroupName": "그룹",
+  "autoNavigate": "하위 그룹으로 자동 이동: {{from}} → {{to}}",
+  "created": "그룹이 생성되었습니다. 브라우저를 새로고침해주세요.",
+  "updated": "그룹이 수정되었습니다. 브라우저를 새로고침해주세요.",
+  "emptyState": {
+    "noGroups": "생성된 그룹이 없습니다",
+    "noSubgroups": "하위 그룹이 없습니다",
+    "createPrompt": "+ 버튼을 눌러 새 그룹을 생성하세요",
+    "noSubgroupsHelp": "현재 그룹에는 하위 그룹이 없습니다"
+  },
+  "autoFolder": {
+    "readOnlyMessage": "읽기 전용 그룹입니다. 원본 파일 위치를 변경해야 반영됩니다.",
+    "rebuilding": "재구축 중...",
+    "refresh": "새로고침",
+    "emptyState": {
+      "noGroups": "자동 폴더 그룹이 없습니다",
+      "noSubfolders": "하위 폴더가 없습니다",
+      "refreshPrompt": "새로고침 버튼을 눌러 폴더 구조를 생성하세요",
+      "noSubfoldersHelp": "현재 폴더에는 하위 폴더가 없습니다"
+    }
   }
 }

@@ -34,7 +34,10 @@
     "invalidJson": "无效的JSON格式",
     "nameRequired": "请输入工作流名称",
     "jsonRequired": "请输入工作流JSON",
-    "validateJson": "请检查JSON格式"
+    "validateJson": "请检查JSON格式",
+    "colorLabel": "[zh-CN] Workflow Color",
+    "customColorTooltip": "[zh-CN] Select custom color",
+    "selectImage": "[zh-CN] Select Image"
   },
   "alerts": {
     "importantNote": "重要:",
@@ -84,7 +87,18 @@
     "example4Options": "选项: euler, euler_ancestral, dpm++ 2m, ddim",
     "tipTitle": "💡 提示:",
     "tipDesc": "JSON路径遵循工作流JSON的结构。例如，如果JSON是{\\\"3\\\": {\\\"inputs\\\": {\\\"seed\\\": 123}}}，则JSON路径为3.inputs.seed。",
-    "previewTitle": "标记字段预览"
+    "previewTitle": "标记字段预览",
+    "unnamedField": "[zh-CN] Unnamed Field",
+    "noJsonPath": "[zh-CN] No JSON Path",
+    "stepLabel": "[zh-CN] Step Unit",
+    "stepHelperText": "[zh-CN] Step value (e.g., 0.01)",
+    "stepPlaceholder": "[zh-CN] 0.01",
+    "autoUpdated": "[zh-CN] (Auto-updated)",
+    "listPreviewHelper": "[zh-CN] Preview of referenced list (read-only)",
+    "loadFromListTooltip": "[zh-CN] Load from custom list",
+    "loadFromListTitle": "[zh-CN] Load from Custom List",
+    "noCustomLists": "[zh-CN] No custom lists registered.",
+    "itemCount": "[zh-CN] {{count}} items - "
   },
   "fieldForm": {
     "fieldId": "字段ID",
@@ -225,5 +239,50 @@
   "workflowViewer": {
     "graphView": "图形视图",
     "jsonView": "JSON视图"
+  },
+  "colors": {
+    "blue": "[zh-CN] Blue (default)",
+    "red": "[zh-CN] Red",
+    "green": "[zh-CN] Green",
+    "orange": "[zh-CN] Orange",
+    "purple": "[zh-CN] Purple",
+    "cyan": "[zh-CN] Cyan",
+    "yellow": "[zh-CN] Yellow",
+    "brown": "[zh-CN] Brown",
+    "gray": "[zh-CN] Gray",
+    "pink": "[zh-CN] Pink"
+  },
+  "preview": {
+    "title": "[zh-CN] Marked Fields Preview",
+    "parseError": "[zh-CN] Cannot parse Workflow JSON",
+    "noJson": "[zh-CN] No Workflow JSON",
+    "pathNotFound": "[zh-CN] Path not found: {{path}}",
+    "validationError": "[zh-CN] Error during path validation",
+    "substitutionError": "[zh-CN] Error during substitution",
+    "validationResults": "[zh-CN] Path Validation Results",
+    "currentValue": "[zh-CN] Current value:",
+    "formTitle": "[zh-CN] Form to be displayed during image generation",
+    "generateButton": "[zh-CN] Generate Image (Preview)",
+    "testDataButton": "[zh-CN] Preview with test data",
+    "viewJsonTitle": "[zh-CN] View substituted Workflow JSON"
+  },
+  "imageSelection": {
+    "title": "[zh-CN] Select Image",
+    "tabs": {
+      "dbSearch": "[zh-CN] DB Search",
+      "hash": "[zh-CN] Hash",
+      "upload": "[zh-CN] Upload",
+      "history": "[zh-CN] History",
+      "dedicatedFolder": "[zh-CN] Dedicated Folder"
+    },
+    "inPreparation": "[zh-CN] In preparation",
+    "hashInputLabel": "[zh-CN] Enter image hash",
+    "hashInputPlaceholder": "[zh-CN] Enter image hash",
+    "hashComingSoon": "[zh-CN] Hash-based image loading will be implemented in the future.",
+    "selectButton": "[zh-CN] Select Image",
+    "useAsIs": "[zh-CN] Use as is",
+    "editButton": "[zh-CN] Edit (In preparation)",
+    "noImagesInFolder": "[zh-CN] No images in dedicated folder.",
+    "addImagesPrompt": "[zh-CN] Add images to folder."
   }
 }

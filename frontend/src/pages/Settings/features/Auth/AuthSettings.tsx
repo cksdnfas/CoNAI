@@ -258,27 +258,27 @@ export const AuthSettings: React.FC = () => {
               <AccordionSummary expandIcon={<ExpandMore />}>
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
                   <Help sx={{ mr: 1, color: 'warning.main' }} />
-                  <Typography>계정을 잊어버렸나요?</Typography>
+                  <Typography>{t('auth.forgotAccount.title')}</Typography>
                 </Box>
               </AccordionSummary>
               <AccordionDetails>
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <Typography variant="body2" sx={{ mb: 2 }}>
-                    비밀번호를 잊어버린 경우, 아래 방법으로 계정을 복구할 수 있습니다.
+                    {t('auth.forgotAccount.description')}
                   </Typography>
                   <Typography variant="body2" component="div" sx={{ mb: 1 }}>
-                    <strong>복구 방법:</strong>
+                    <strong>{t('auth.forgotAccount.methodTitle')}</strong>
                   </Typography>
                   <Typography variant="body2" component="ol" sx={{ pl: 2, mb: 2 }}>
-                    <li>서버를 중지합니다</li>
-                    <li>아래 파일을 삭제합니다</li>
-                    <li>서버를 다시 시작합니다</li>
-                    <li>새로운 계정을 설정합니다</li>
+                    <li>{t('auth.forgotAccount.step1')}</li>
+                    <li>{t('auth.forgotAccount.step2')}</li>
+                    <li>{t('auth.forgotAccount.step3')}</li>
+                    <li>{t('auth.forgotAccount.step4')}</li>
                   </Typography>
                   {dbInfo && (
                     <Box sx={{ bgcolor: 'background.default', p: 2, borderRadius: 1, mt: 2 }}>
                       <Typography variant="caption" sx={{ display: 'block', mb: 1 }}>
-                        <strong>삭제할 파일:</strong>
+                        <strong>{t('auth.forgotAccount.fileToDelete')}</strong>
                       </Typography>
                       <Typography
                         variant="body2"
@@ -298,8 +298,7 @@ export const AuthSettings: React.FC = () => {
                   )}
                   <Alert severity="warning" sx={{ mt: 2 }}>
                     <Typography variant="caption">
-                      ⚠️ 주의: 이 파일을 삭제하면 모든 세션이 무효화되며, 다시 로그인해야 합니다.
-                      워크플로우, 설정 등 다른 데이터는 영향을 받지 않습니다.
+                      {t('auth.forgotAccount.warning')} {t('auth.forgotAccount.warningNote')}
                     </Typography>
                   </Alert>
                 </Alert>

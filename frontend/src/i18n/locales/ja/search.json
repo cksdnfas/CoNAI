@@ -1,14 +1,12 @@
 {
   "title": "画像検索",
   "description": "プロンプト、AIツール、モデル名、自動タグなどで画像を検索できます。",
-
   "searchInput": {
     "placeholder": "プロンプトキーワードで検索...",
     "button": "検索",
     "clear": "すべてリセット",
     "execute": "検索実行"
   },
-
   "results": {
     "title": "検索結果",
     "searching": "検索中...",
@@ -20,7 +18,6 @@
     "reset": "検索をリセット",
     "refresh": "更新"
   },
-
   "filters": {
     "basic": {
       "aiTool": {
@@ -38,7 +35,6 @@
         "label": "終了日"
       }
     },
-
     "quickDate": {
       "today": "今日",
       "todayTooltip": "今日アップロードされた画像",
@@ -49,7 +45,6 @@
       "90days": "90日間",
       "90daysTooltip": "過去90日間"
     },
-
     "advanced": {
       "title": "高度なフィルター",
       "active": "有効",
@@ -58,18 +53,15 @@
         "placeholder": "除外するキーワードを入力 (例: ugly, blurry)"
       }
     },
-
     "autoTag": {
       "title": "自動タグフィルター",
       "subtitle": "(WD v3 Tagger)",
       "active": "有効",
-
       "tabs": {
         "rating": "レーティング",
         "character": "キャラクター",
         "generalTags": "一般タグ"
       },
-
       "rating": {
         "typeMode": "タイプ別フィルター",
         "scoreMode": "スコアベースフィルター",
@@ -86,7 +78,6 @@
         "confidenceRange": "信頼度範囲",
         "scoreRange": "スコア範囲"
       },
-
       "character": {
         "description": "キャラクタータグで画像をフィルタリング",
         "existence": {
@@ -101,7 +92,6 @@
         },
         "confidenceRange": "信頼度範囲"
       },
-
       "generalTags": {
         "description": "一般タグと信頼度範囲でフィルタリング",
         "tagName": {
@@ -113,8 +103,78 @@
       }
     }
   },
-
   "searchHistory": {
     "title": "最近の検索"
+  },
+  "filterBlock": {
+    "addButton": "[ja] Add Filter",
+    "emptyMessage": "[ja] Add filters to start searching",
+    "countInfo": "[ja] {{count}} filter(s) will be applied.",
+    "executionOrder": "[ja] Execution order: Exclude → OR → AND",
+    "modal": {
+      "title": "[ja] Add Filter",
+      "cancel": "[ja] Cancel",
+      "back": "[ja] Back",
+      "next": "[ja] Next",
+      "add": "[ja] Add Filter",
+      "steps": {
+        "selectGroup": "[ja] Select Filter Group",
+        "selectCategory": "[ja] Select Category",
+        "configureCondition": "[ja] Configure Condition"
+      },
+      "step1": {
+        "description": "[ja] Choose how to apply the filter"
+      },
+      "step2": {
+        "description": "[ja] Select what information to search by"
+      },
+      "step3": {
+        "description": "[ja] Configure the condition. Filters cannot be edited after creation, you must delete and recreate them."
+      }
+    },
+    "groupTypes": {
+      "exclude": {
+        "label": "[ja] Exclude (NOT)",
+        "description": "[ja] Exclude images matching this condition from results"
+      },
+      "or": {
+        "label": "[ja] OR Group",
+        "description": "[ja] Include images matching this condition in results"
+      },
+      "and": {
+        "label": "[ja] AND Group",
+        "description": "[ja] Only include images matching all conditions"
+      }
+    },
+    "categories": {
+      "positive_prompt": {
+        "label": "[ja] Positive Prompt",
+        "description": "[ja] Search positive prompts used in image generation"
+      },
+      "negative_prompt": {
+        "label": "[ja] Negative Prompt",
+        "description": "[ja] Search negative prompts used in image generation"
+      },
+      "auto_tag": {
+        "label": "[ja] Auto Tag (WD Tagger)",
+        "description": "[ja] Search auto-generated tags from WD v3 Tagger"
+      },
+      "basic": {
+        "label": "[ja] Basic Info",
+        "description": "[ja] Search basic metadata like AI tool and model name"
+      }
+    },
+    "conditionTypes": {
+      "conditionType": "[ja] Condition Type",
+      "value": "[ja] Value",
+      "placeholder": "[ja] Enter value to search",
+      "scoreRange": "[ja] Score Range",
+      "weightRange": "[ja] Weight Range",
+      "tagName": "[ja] Tag/Character Name",
+      "tagPlaceholder": "[ja] e.g., 1girl, hatsune_miku",
+      "ratingType": "[ja] Rating Type",
+      "exists": "[ja] Present",
+      "notExists": "[ja] Absent"
+    }
   }
 }

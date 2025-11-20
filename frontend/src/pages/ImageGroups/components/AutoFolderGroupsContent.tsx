@@ -137,8 +137,8 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
     if (groups.length === 1 && currentParentId !== null) {
       const singleGroup = groups[0];
       if (singleGroup.image_count === 0 && singleGroup.child_count === 1) {
-        const currentGroupName = currentGroupInfo?.display_name || '폴더';
-        onShowSnackbar(`하위 그룹으로 자동 이동: ${currentGroupName} → ${singleGroup.display_name}`, 'info');
+        const currentGroupName = currentGroupInfo?.display_name || t('imageGroups:defaultGroupName');
+        onShowSnackbar(t('imageGroups:autoNavigate', { from: currentGroupName, to: singleGroup.display_name }), 'info');
         navigateToGroup(singleGroup);
       }
     }
@@ -268,7 +268,7 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
       {/* 상단 액션 바 */}
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Alert severity="info" sx={{ flex: 1, mr: 2 }}>
-          읽기 전용 그룹입니다. 원본 파일 위치를 변경해야 반영됩니다.
+          {t('imageGroups:autoFolder.readOnlyMessage')}
         </Alert>
         <Button
           variant="contained"
@@ -276,7 +276,7 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
           onClick={handleRebuild}
           disabled={rebuildMutation.isPending}
         >
-          {rebuildMutation.isPending ? '재구축 중...' : '새로고침'}
+          {rebuildMutation.isPending ? t('imageGroups:autoFolder.rebuilding') : t('imageGroups:autoFolder.refresh')}
         </Button>
       </Box>
 
@@ -298,12 +298,12 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
         <Box sx={{ textAlign: 'center', py: 8 }}>
           <FolderOpenIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            {isGroupListView ? '자동 폴더 그룹이 없습니다' : '하위 폴더가 없습니다'}
+            {isGroupListView ? t('imageGroups:autoFolder.emptyState.noGroups') : t('imageGroups:autoFolder.emptyState.noSubfolders')}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             {isGroupListView
-              ? '새로고침 버튼을 눌러 폴더 구조를 생성하세요'
-              : '현재 폴더에는 하위 폴더가 없습니다'}
+              ? t('imageGroups:autoFolder.emptyState.refreshPrompt')
+              : t('imageGroups:autoFolder.emptyState.noSubfoldersHelp')}
           </Typography>
         </Box>
       ) : (
@@ -358,7 +358,7 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
         onClose={handleMenuClose}
       >
         <MenuItem onClick={handleViewImages}>
-          이미지 보기
+          {t('imageGroups:viewImages')}
         </MenuItem>
       </Menu>
 

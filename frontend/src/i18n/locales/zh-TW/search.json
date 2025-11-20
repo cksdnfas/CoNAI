@@ -1,14 +1,12 @@
 {
   "title": "圖像搜尋",
   "description": "可以透過提示詞、AI工具、模型名稱、自動標籤等搜尋圖像。",
-
   "searchInput": {
     "placeholder": "按提示詞關鍵字搜尋...",
     "button": "搜尋",
     "clear": "全部重設",
     "execute": "執行搜尋"
   },
-
   "results": {
     "title": "搜尋結果",
     "searching": "搜尋中...",
@@ -20,7 +18,6 @@
     "reset": "重設搜尋",
     "refresh": "重新整理"
   },
-
   "filters": {
     "basic": {
       "aiTool": {
@@ -38,7 +35,6 @@
         "label": "結束日期"
       }
     },
-
     "quickDate": {
       "today": "今天",
       "todayTooltip": "今天上傳的圖像",
@@ -49,7 +45,6 @@
       "90days": "90天",
       "90daysTooltip": "最近90天"
     },
-
     "advanced": {
       "title": "進階篩選",
       "active": "活動",
@@ -58,18 +53,15 @@
         "placeholder": "輸入要排除的關鍵詞 (例如: ugly, blurry)"
       }
     },
-
     "autoTag": {
       "title": "自動標籤篩選",
       "subtitle": "(WD v3 Tagger)",
       "active": "活動",
-
       "tabs": {
         "rating": "評級",
         "character": "角色",
         "generalTags": "通用標籤"
       },
-
       "rating": {
         "typeMode": "按類型篩選",
         "scoreMode": "按分數篩選",
@@ -86,7 +78,6 @@
         "confidenceRange": "置信度範圍",
         "scoreRange": "分數範圍"
       },
-
       "character": {
         "description": "按角色標籤篩選圖像",
         "existence": {
@@ -101,7 +92,6 @@
         },
         "confidenceRange": "置信度範圍"
       },
-
       "generalTags": {
         "description": "按通用標籤和置信度範圍篩選",
         "tagName": {
@@ -113,8 +103,78 @@
       }
     }
   },
-
   "searchHistory": {
     "title": "最近搜尋"
+  },
+  "filterBlock": {
+    "addButton": "[zh-TW] Add Filter",
+    "emptyMessage": "[zh-TW] Add filters to start searching",
+    "countInfo": "[zh-TW] {{count}} filter(s) will be applied.",
+    "executionOrder": "[zh-TW] Execution order: Exclude → OR → AND",
+    "modal": {
+      "title": "[zh-TW] Add Filter",
+      "cancel": "[zh-TW] Cancel",
+      "back": "[zh-TW] Back",
+      "next": "[zh-TW] Next",
+      "add": "[zh-TW] Add Filter",
+      "steps": {
+        "selectGroup": "[zh-TW] Select Filter Group",
+        "selectCategory": "[zh-TW] Select Category",
+        "configureCondition": "[zh-TW] Configure Condition"
+      },
+      "step1": {
+        "description": "[zh-TW] Choose how to apply the filter"
+      },
+      "step2": {
+        "description": "[zh-TW] Select what information to search by"
+      },
+      "step3": {
+        "description": "[zh-TW] Configure the condition. Filters cannot be edited after creation, you must delete and recreate them."
+      }
+    },
+    "groupTypes": {
+      "exclude": {
+        "label": "[zh-TW] Exclude (NOT)",
+        "description": "[zh-TW] Exclude images matching this condition from results"
+      },
+      "or": {
+        "label": "[zh-TW] OR Group",
+        "description": "[zh-TW] Include images matching this condition in results"
+      },
+      "and": {
+        "label": "[zh-TW] AND Group",
+        "description": "[zh-TW] Only include images matching all conditions"
+      }
+    },
+    "categories": {
+      "positive_prompt": {
+        "label": "[zh-TW] Positive Prompt",
+        "description": "[zh-TW] Search positive prompts used in image generation"
+      },
+      "negative_prompt": {
+        "label": "[zh-TW] Negative Prompt",
+        "description": "[zh-TW] Search negative prompts used in image generation"
+      },
+      "auto_tag": {
+        "label": "[zh-TW] Auto Tag (WD Tagger)",
+        "description": "[zh-TW] Search auto-generated tags from WD v3 Tagger"
+      },
+      "basic": {
+        "label": "[zh-TW] Basic Info",
+        "description": "[zh-TW] Search basic metadata like AI tool and model name"
+      }
+    },
+    "conditionTypes": {
+      "conditionType": "[zh-TW] Condition Type",
+      "value": "[zh-TW] Value",
+      "placeholder": "[zh-TW] Enter value to search",
+      "scoreRange": "[zh-TW] Score Range",
+      "weightRange": "[zh-TW] Weight Range",
+      "tagName": "[zh-TW] Tag/Character Name",
+      "tagPlaceholder": "[zh-TW] e.g., 1girl, hatsune_miku",
+      "ratingType": "[zh-TW] Rating Type",
+      "exists": "[zh-TW] Present",
+      "notExists": "[zh-TW] Absent"
+    }
   }
 }

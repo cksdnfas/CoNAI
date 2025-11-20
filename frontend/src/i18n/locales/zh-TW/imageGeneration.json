@@ -7,7 +7,9 @@
     "workflows": "工作流程管理",
     "servers": "伺服器管理",
     "novelai": "NovelAI",
-    "ariaLabel": "圖片產生分頁"
+    "ariaLabel": "圖片產生分頁",
+    "comfyui": "[zh-TW] ComfyUI",
+    "wildcards": "[zh-TW] Wildcards"
   },
   "nai": {
     "subtabs": {
@@ -96,6 +98,89 @@
         "title": "輸出設定",
         "samples": "樣本數"
       }
+    },
+    "tabs": {
+      "basic": "[zh-TW] Basic Settings",
+      "advanced": "[zh-TW] Advanced Settings"
+    },
+    "sections": {
+      "preset": "[zh-TW] Quality Presets",
+      "prompts": "[zh-TW] Prompts",
+      "output": "[zh-TW] Output Settings",
+      "advanced": "[zh-TW] Advanced Settings",
+      "sampling": "[zh-TW] Sampling Settings",
+      "quality": "[zh-TW] Quality Settings",
+      "model": "[zh-TW] Model Selection"
+    },
+    "anlas": {
+      "balance": "[zh-TW] Anlas Balance",
+      "refresh": "重新整理",
+      "subscription": "[zh-TW] Subscription",
+      "free": "[zh-TW] Free",
+      "tablet": "[zh-TW] Tablet",
+      "scroll": "[zh-TW] Scroll",
+      "opus": "[zh-TW] Opus"
+    },
+    "cost": {
+      "title": "[zh-TW] Cost Estimate",
+      "anlas": "[zh-TW] Anlas",
+      "balance": "[zh-TW] Balance",
+      "sufficient": "[zh-TW] Sufficient",
+      "insufficient": "[zh-TW] Insufficient",
+      "opusFree": "[zh-TW] Opus Free Generation",
+      "maxSamples": "[zh-TW] Max Samples"
+    },
+    "models": {
+      "label": "[zh-TW] Model Selection",
+      "v45curated": "[zh-TW] V4.5 Curated (Recommended)",
+      "v45full": "[zh-TW] V4.5 Full",
+      "v4curated": "[zh-TW] V4 Curated",
+      "v4full": "[zh-TW] V4 Full",
+      "v3": "[zh-TW] V3 (Legacy)",
+      "v3furry": "[zh-TW] V3 Furry"
+    },
+    "advanced": {
+      "cfgRescale": "[zh-TW] Prompt Guidance Rescale",
+      "noiseSchedule": "[zh-TW] Noise Schedule",
+      "uncondScale": "[zh-TW] Undesired Content Strength"
+    },
+    "settings": {
+      "qualityToggle": "[zh-TW] Auto-add quality tags"
+    },
+    "presets": {
+      "title": "[zh-TW] Quality Presets",
+      "label": "[zh-TW] Quality Presets",
+      "quality": {
+        "name": "[zh-TW] Quality",
+        "description": "[zh-TW] Balanced quality and speed (28 steps, Euler)"
+      },
+      "fast": {
+        "name": "[zh-TW] Fast",
+        "description": "[zh-TW] Quick generation (15 steps, Euler)"
+      },
+      "artistic": {
+        "name": "[zh-TW] Artistic",
+        "description": "[zh-TW] Creative results (35 steps, DPM++ 2S Ancestral, SMEA DYN)"
+      },
+      "realistic": {
+        "name": "[zh-TW] Realistic",
+        "description": "[zh-TW] Realistic images (40 steps, DPM++ 2M, SMEA)"
+      },
+      "detail": {
+        "name": "[zh-TW] Detail",
+        "description": "[zh-TW] Maximum detail (50 steps, DPM++ SDE, SMEA DYN)"
+      }
+    },
+    "gallery": {
+      "images": "[zh-TW] Images",
+      "showMetadata": "[zh-TW] Show Metadata",
+      "hideMetadata": "[zh-TW] Hide Metadata",
+      "downloadAll": "[zh-TW] Download All"
+    },
+    "history": {
+      "title": "[zh-TW] Generation History",
+      "comingSoon": "[zh-TW] This feature is coming soon.",
+      "description": "[zh-TW] View your previously generated images and settings."
     }
   },
   "customDropdown": {

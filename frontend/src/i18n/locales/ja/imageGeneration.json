@@ -7,7 +7,9 @@
     "workflows": "ワークフロー管理",
     "servers": "サーバー管理",
     "novelai": "NovelAI",
-    "ariaLabel": "画像生成タブ"
+    "ariaLabel": "画像生成タブ",
+    "comfyui": "[ja] ComfyUI",
+    "wildcards": "[ja] Wildcards"
   },
   "nai": {
     "subtabs": {
@@ -96,6 +98,89 @@
         "title": "出力設定",
         "samples": "サンプル数"
       }
+    },
+    "tabs": {
+      "basic": "[ja] Basic Settings",
+      "advanced": "[ja] Advanced Settings"
+    },
+    "sections": {
+      "preset": "[ja] Quality Presets",
+      "prompts": "[ja] Prompts",
+      "output": "[ja] Output Settings",
+      "advanced": "[ja] Advanced Settings",
+      "sampling": "[ja] Sampling Settings",
+      "quality": "[ja] Quality Settings",
+      "model": "[ja] Model Selection"
+    },
+    "anlas": {
+      "balance": "[ja] Anlas Balance",
+      "refresh": "更新",
+      "subscription": "[ja] Subscription",
+      "free": "[ja] Free",
+      "tablet": "[ja] Tablet",
+      "scroll": "[ja] Scroll",
+      "opus": "[ja] Opus"
+    },
+    "cost": {
+      "title": "[ja] Cost Estimate",
+      "anlas": "[ja] Anlas",
+      "balance": "[ja] Balance",
+      "sufficient": "[ja] Sufficient",
+      "insufficient": "[ja] Insufficient",
+      "opusFree": "[ja] Opus Free Generation",
+      "maxSamples": "[ja] Max Samples"
+    },
+    "models": {
+      "label": "[ja] Model Selection",
+      "v45curated": "[ja] V4.5 Curated (Recommended)",
+      "v45full": "[ja] V4.5 Full",
+      "v4curated": "[ja] V4 Curated",
+      "v4full": "[ja] V4 Full",
+      "v3": "[ja] V3 (Legacy)",
+      "v3furry": "[ja] V3 Furry"
+    },
+    "advanced": {
+      "cfgRescale": "[ja] Prompt Guidance Rescale",
+      "noiseSchedule": "[ja] Noise Schedule",
+      "uncondScale": "[ja] Undesired Content Strength"
+    },
+    "settings": {
+      "qualityToggle": "[ja] Auto-add quality tags"
+    },
+    "presets": {
+      "title": "[ja] Quality Presets",
+      "label": "[ja] Quality Presets",
+      "quality": {
+        "name": "[ja] Quality",
+        "description": "[ja] Balanced quality and speed (28 steps, Euler)"
+      },
+      "fast": {
+        "name": "[ja] Fast",
+        "description": "[ja] Quick generation (15 steps, Euler)"
+      },
+      "artistic": {
+        "name": "[ja] Artistic",
+        "description": "[ja] Creative results (35 steps, DPM++ 2S Ancestral, SMEA DYN)"
+      },
+      "realistic": {
+        "name": "[ja] Realistic",
+        "description": "[ja] Realistic images (40 steps, DPM++ 2M, SMEA)"
+      },
+      "detail": {
+        "name": "[ja] Detail",
+        "description": "[ja] Maximum detail (50 steps, DPM++ SDE, SMEA DYN)"
+      }
+    },
+    "gallery": {
+      "images": "[ja] Images",
+      "showMetadata": "[ja] Show Metadata",
+      "hideMetadata": "[ja] Hide Metadata",
+      "downloadAll": "[ja] Download All"
+    },
+    "history": {
+      "title": "[ja] Generation History",
+      "comingSoon": "[ja] This feature is coming soon.",
+      "description": "[ja] View your previously generated images and settings."
     }
   },
   "customDropdown": {

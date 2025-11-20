@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Box, Typography, IconButton, Tooltip } from '@mui/material';
 import { Refresh as RefreshIcon } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { ImageMasonry } from '../../components/ImageMasonry';
 import BulkActionBar from '../../components/BulkActionBar/BulkActionBar';
 import { useInfiniteImages } from '../../hooks/useInfiniteImages';
 
 const HomePage: React.FC = () => {
+  const { t } = useTranslation(['common']);
   const {
     images,
     loading,
@@ -79,7 +81,7 @@ const HomePage: React.FC = () => {
           </Typography> */}
         </Box>
 
-        <Tooltip title="새로고침">
+        <Tooltip title={t('common:refresh')}>
           <span>
             <IconButton onClick={refreshImages} disabled={loading}>
               <RefreshIcon />

@@ -16,11 +16,13 @@ import {
   Link
 } from '@mui/material';
 import { LockOutlined, Help } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { authApi, type DatabaseInfoResponse } from '../../services/authApi';
 
 export const LoginPage: React.FC = () => {
+  const { t } = useTranslation(['auth', 'common']);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -166,7 +168,7 @@ export const LoginPage: React.FC = () => {
                   }}
                 >
                   <Help fontSize="small" />
-                  계정 복구 방법
+                  {t('auth:recovery.link')}
                 </Link>
               </Box>
             </form>
@@ -180,25 +182,25 @@ export const LoginPage: React.FC = () => {
           maxWidth="sm"
           fullWidth
         >
-          <DialogTitle>계정 복구 방법</DialogTitle>
+          <DialogTitle>{t('auth:recovery.title')}</DialogTitle>
           <DialogContent>
             <Alert severity="info" sx={{ mb: 2 }}>
               <Typography variant="body2" sx={{ mb: 2 }}>
-                비밀번호를 잊어버린 경우, 아래 방법으로 계정을 복구할 수 있습니다.
+                {t('auth:recovery.description')}
               </Typography>
               <Typography variant="body2" component="div" sx={{ mb: 1 }}>
-                <strong>복구 절차:</strong>
+                <strong>{t('auth:recovery.procedureTitle')}</strong>
               </Typography>
               <Typography variant="body2" component="ol" sx={{ pl: 2, mb: 2 }}>
-                <li>서버를 중지합니다</li>
-                <li>아래 파일을 삭제합니다</li>
-                <li>서버를 다시 시작합니다</li>
-                <li>새로운 계정을 설정합니다</li>
+                <li>{t('auth:recovery.step1')}</li>
+                <li>{t('auth:recovery.step2')}</li>
+                <li>{t('auth:recovery.step3')}</li>
+                <li>{t('auth:recovery.step4')}</li>
               </Typography>
               {dbInfo && (
                 <Box sx={{ bgcolor: 'background.default', p: 2, borderRadius: 1, mt: 2 }}>
                   <Typography variant="caption" sx={{ display: 'block', mb: 1 }}>
-                    <strong>삭제할 파일:</strong>
+                    <strong>{t('auth:recovery.fileLabel')}</strong>
                   </Typography>
                   <Typography
                     variant="body2"
@@ -218,14 +220,13 @@ export const LoginPage: React.FC = () => {
               )}
               <Alert severity="warning" sx={{ mt: 2 }}>
                 <Typography variant="caption">
-                  ⚠️ 주의: 이 파일을 삭제하면 모든 세션이 무효화되며, 다시 로그인해야 합니다.
-                  워크플로우, 설정 등 다른 데이터는 영향을 받지 않습니다.
+                  {t('auth:recovery.warning')} {t('auth:recovery.warningNote')}
                 </Typography>
               </Alert>
             </Alert>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setShowRecoveryDialog(false)}>닫기</Button>
+            <Button onClick={() => setShowRecoveryDialog(false)}>{t('common:buttons.close')}</Button>
           </DialogActions>
         </Dialog>
       </Container>

@@ -34,7 +34,22 @@
     "invalidJson": "유효하지 않은 JSON 형식입니다",
     "nameRequired": "워크플로우 이름을 입력하세요",
     "jsonRequired": "Workflow JSON을 입력하세요",
-    "validateJson": "JSON 형식을 확인하세요"
+    "validateJson": "JSON 형식을 확인하세요",
+    "colorLabel": "워크플로우 색상",
+    "customColorTooltip": "직접 색상 선택",
+    "selectImage": "이미지 선택"
+  },
+  "colors": {
+    "blue": "파란색 (기본)",
+    "red": "빨간색",
+    "green": "초록색",
+    "orange": "주황색",
+    "purple": "보라색",
+    "cyan": "청록색",
+    "yellow": "노란색",
+    "brown": "갈색",
+    "gray": "회색",
+    "pink": "핑크색"
   },
   "alerts": {
     "importantNote": "중요:",
@@ -84,7 +99,18 @@
     "example4Options": "선택 옵션: euler, euler_ancestral, dpm++ 2m, ddim",
     "tipTitle": "💡 팁:",
     "tipDesc": "JSON Path는 Workflow JSON의 구조를 그대로 따릅니다. 예를 들어 JSON이 {\"3\": {\"inputs\": {\"seed\": 123}}} 형태라면 JSON Path는 3.inputs.seed가 됩니다.",
-    "previewTitle": "Marked Fields 미리보기"
+    "previewTitle": "Marked Fields 미리보기",
+    "unnamedField": "이름 없는 필드",
+    "noJsonPath": "JSON 경로 없음",
+    "stepLabel": "단위 (Step)",
+    "stepHelperText": "값 변화 단위 (예: 0.01)",
+    "stepPlaceholder": "0.01",
+    "autoUpdated": "(자동 업데이트됨)",
+    "listPreviewHelper": "참조 목록의 미리보기 (읽기 전용)",
+    "loadFromListTooltip": "커스텀 목록에서 불러오기",
+    "loadFromListTitle": "커스텀 목록에서 불러오기",
+    "noCustomLists": "등록된 커스텀 목록이 없습니다.",
+    "itemCount": "{{count}}개 항목 - "
   },
   "fieldForm": {
     "fieldId": "필드 ID",
@@ -225,5 +251,38 @@
   "workflowViewer": {
     "graphView": "그래프 뷰",
     "jsonView": "JSON 뷰"
+  },
+  "preview": {
+    "title": "Marked Fields 미리보기",
+    "parseError": "Workflow JSON을 파싱할 수 없습니다",
+    "noJson": "Workflow JSON이 없습니다",
+    "pathNotFound": "경로를 찾을 수 없습니다: {{path}}",
+    "validationError": "경로 검증 중 오류 발생",
+    "substitutionError": "치환 중 오류 발생",
+    "validationResults": "경로 검증 결과",
+    "currentValue": "현재 값:",
+    "formTitle": "이미지 생성 시 표시될 폼",
+    "generateButton": "이미지 생성 (미리보기)",
+    "testDataButton": "테스트 데이터로 미리보기",
+    "viewJsonTitle": "치환된 Workflow JSON 보기"
+  },
+  "imageSelection": {
+    "title": "이미지 선택",
+    "tabs": {
+      "dbSearch": "DB 검색",
+      "hash": "해시",
+      "upload": "업로드",
+      "history": "히스토리",
+      "dedicatedFolder": "전용 폴더"
+    },
+    "inPreparation": "준비 중입니다",
+    "hashInputLabel": "이미지 해시 입력",
+    "hashInputPlaceholder": "이미지 해시를 입력하세요",
+    "hashComingSoon": "해시 기반 이미지 로딩 기능은 향후 구현 예정입니다.",
+    "selectButton": "이미지 선택",
+    "useAsIs": "그대로 사용",
+    "editButton": "편집 (준비 중)",
+    "noImagesInFolder": "전용 폴더에 이미지가 없습니다.",
+    "addImagesPrompt": "폴더에 이미지를 추가하세요."
   }
 }

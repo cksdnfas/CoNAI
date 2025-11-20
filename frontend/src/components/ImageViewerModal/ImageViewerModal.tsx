@@ -338,7 +338,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const handleOriginalLoadError = () => {
     setSnackbar({
       open: true,
-      message: '원본 이미지를 찾을 수 없습니다. 썸네일을 표시합니다.',
+      message: t('imageDetail:originalNotFound'),
       severity: 'error'
     });
     // 원본 모드를 해제하여 썸네일로 전환

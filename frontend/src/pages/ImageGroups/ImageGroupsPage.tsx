@@ -149,8 +149,8 @@ const ImageGroupsPage: React.FC = () => {
     if (groups.length === 1 && currentParentId !== null) {
       const singleGroup = groups[0];
       if (singleGroup.image_count === 0 && singleGroup.child_count === 1) {
-        const currentGroupName = currentGroupInfo?.name || '그룹';
-        showSnackbar(`하위 그룹으로 자동 이동: ${currentGroupName} → ${singleGroup.name}`, 'info');
+        const currentGroupName = currentGroupInfo?.name || t('imageGroups:defaultGroupName');
+        showSnackbar(t('imageGroups:autoNavigate', { from: currentGroupName, to: singleGroup.name }), 'info');
         navigateToGroup(singleGroup.id, true);
       }
     }
@@ -259,7 +259,7 @@ const ImageGroupsPage: React.FC = () => {
   // 그룹 생성 성공 핸들러
   const handleGroupCreated = () => {
     setIsCreateModalOpen(false);
-    showSnackbar('그룹이 생성되었습니다. 브라우저를 새로고침해주세요.', 'info');
+    showSnackbar(t('imageGroups:created'), 'info');
     // Cache will be automatically invalidated by the mutation hook
   };
 
@@ -267,7 +267,7 @@ const ImageGroupsPage: React.FC = () => {
   const handleGroupUpdated = () => {
     setIsEditModalOpen(false);
     setSelectedGroup(null);
-    showSnackbar('그룹이 수정되었습니다. 브라우저를 새로고침해주세요.', 'info');
+    showSnackbar(t('imageGroups:updated'), 'info');
     // Cache will be automatically invalidated by the mutation hook
   };
 
@@ -505,12 +505,12 @@ const ImageGroupsPage: React.FC = () => {
         <Box textAlign="center" py={8}>
           <GroupIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            {isGroupListView ? '생성된 그룹이 없습니다' : '하위 그룹이 없습니다'}
+            {isGroupListView ? t('imageGroups:emptyState.noGroups') : t('imageGroups:emptyState.noSubgroups')}
           </Typography>
           <Typography variant="body2" color="text.secondary" mb={3}>
             {isGroupListView
-              ? '+ 버튼을 눌러 새 그룹을 생성하세요'
-              : '현재 그룹에는 하위 그룹이 없습니다'}
+              ? t('imageGroups:emptyState.createPrompt')
+              : t('imageGroups:emptyState.noSubgroupsHelp')}
           </Typography>
         </Box>
       )}

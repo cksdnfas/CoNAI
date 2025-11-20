@@ -245,5 +245,14 @@
     "brushColor": "筆刷顏色",
     "eraserSize": "橡皮擦大小: {{size}}px",
     "panHelp": "點擊並拖動以移動畫布。使用滑鼠滾輪放大/縮小。"
-  }
+  },
+  "clickToCopy": "點擊複製",
+  "thumbnail": "縮圖",
+  "original": "原圖",
+  "video": "影片",
+  "none": "無",
+  "enabled": "啟用",
+  "disabled": "停用",
+  "save": "儲存",
+  "refresh": "重新整理"
 }

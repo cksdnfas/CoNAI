@@ -147,7 +147,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
               }
             }}
             size="small"
-            title={showOriginal ? '썸네일 보기 (빠른 로딩)' : '원본 이미지 보기 (고화질)'}
+            title={showOriginal ? t('imageDetail:viewThumbnail') : t('imageDetail:viewOriginal')}
           >
             {showOriginal ? <ThumbnailIcon /> : <HighQualityIcon />}
           </IconButton>

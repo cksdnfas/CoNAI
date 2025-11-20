@@ -7,7 +7,11 @@
     "rating": "評分設定",
     "similarity": "圖像相似度搜尋",
     "prompts": "提示詞管理",
-    "advanced": "進階設定"
+    "advanced": "進階設定",
+    "metadata": "[zh-TW] Metadata Extraction",
+    "folders": "[zh-TW] Folder Management",
+    "account": "[zh-TW] Account",
+    "externalApi": "外部API認證"
   },
   "general": {
     "title": "一般設定",
@@ -27,6 +31,80 @@
     "canvasCleanup": {
       "label": "關閉時自動清理Canvas資料夾",
       "tooltip": "伺服器關閉時自動刪除Canvas資料夾中的已編輯圖像。停用後將保留已編輯圖像。"
+    },
+    "deleteProtection": {
+      "title": "[zh-TW] Delete File Protection",
+      "description": "[zh-TW] Store deleted files in RecycleBin folder for recovery",
+      "enabled": {
+        "label": "[zh-TW] Store deleted files in RecycleBin",
+        "description": "[zh-TW] When enabled, deleted files are backed up to RecycleBin folder instead of being permanently removed."
+      },
+      "info": "[zh-TW] RecycleBin folder is created in the project root. Deleted files are stored with timestamps. You can manually copy files from RecycleBin if recovery is needed."
+    },
+    "metadata": {
+      "title": "[zh-TW] Metadata Extraction Optimization",
+      "scanMode": {
+        "title": "[zh-TW] Stealth PNG Scan Mode",
+        "fast": {
+          "label": "[zh-TW] Fast (Recommended)",
+          "description": "[zh-TW] Quick signature scan - checks first 200 pixels then exits early"
+        },
+        "full": {
+          "label": "[zh-TW] Full",
+          "description": "[zh-TW] Full file scan - checks all pixels (slow)"
+        },
+        "skip": {
+          "label": "[zh-TW] Skip",
+          "description": "[zh-TW] Skip scanning - disables secondary extraction"
+        }
+      },
+      "limits": {
+        "title": "[zh-TW] File Size and Resolution Limits",
+        "fileSize": {
+          "label": "[zh-TW] Max File Size (MB)",
+          "helper": "[zh-TW] Files larger than this will skip Stealth PNG scanning"
+        },
+        "resolution": {
+          "label": "[zh-TW] Max Resolution (Megapixels)",
+          "helper": "[zh-TW] Images larger than this will skip Stealth PNG scanning"
+        }
+      },
+      "skipSettings": {
+        "title": "[zh-TW] AI Tool Skip Settings",
+        "description": "[zh-TW] Automatically skip Stealth PNG scanning for specific AI tool images.",
+        "comfyui": {
+          "label": "[zh-TW] Skip ComfyUI images (Recommended)",
+          "description": "[zh-TW] ComfyUI doesn't use Stealth PNG, scanning unnecessary"
+        },
+        "webui": {
+          "label": "[zh-TW] Skip WebUI images",
+          "description": "[zh-TW] WebUI may use Stealth PNG, enable only if needed"
+        }
+      },
+      "secondary": {
+        "label": "[zh-TW] Enable secondary extraction",
+        "description": "[zh-TW] Retry with Stealth PNG method if primary extraction fails."
+      },
+      "performanceNote": "[zh-TW] 💡 Tip: Default settings (Fast + ComfyUI skip) provide optimal performance for most cases. ComfyUI image processing time reduced from 2682ms → 4ms!"
+    },
+    "thumbnail": {
+      "title": "[zh-TW] Thumbnail Settings",
+      "description": "[zh-TW] Configure the size and quality used when generating thumbnails",
+      "saveFailed": "[zh-TW] Failed to save thumbnail settings",
+      "size": {
+        "label": "[zh-TW] Thumbnail Size",
+        "selectLabel": "[zh-TW] Thumbnail Size",
+        "original": "[zh-TW] Same as original",
+        "default": "[zh-TW] 1080px (default)"
+      },
+      "quality": {
+        "label": "[zh-TW] Thumbnail Quality",
+        "helperText": "[zh-TW] Higher quality increases file size (60-100%)"
+      },
+      "regenerate": {
+        "button": "[zh-TW] Regenerate Thumbnails",
+        "description": "[zh-TW] Regenerate thumbnails for all images with current settings"
+      }
     }
   },
   "tagger": {
@@ -141,8 +219,11 @@
       "processing": "處理中...",
       "result": "標記結果:",
       "failed": "測試失敗",
-      "invalidId": "請輸入有效的圖像ID"
-    }
+      "invalidId": "請輸入有效的圖像ID",
+      "imageHash": "[zh-TW] Image Hash",
+      "placeholderHash": "[zh-TW] e.g., abc123def456..."
+    },
+    "enableAutoTagging": "[zh-TW] Enable Auto-Tagging"
   },
   "rating": {
     "title": "評分設定",
@@ -288,7 +369,15 @@
         "rebuilding": "重建中...",
         "success": "已處理: {{processed}}個、失敗: {{failed}}個、剩餘: {{remaining}}個",
         "error": "錯誤: {{error}}"
-      }
+      },
+      "imageHash": "[zh-TW] Image Hash",
+      "placeholderHash": "[zh-TW] e.g., abc123def456...",
+      "compositeHash": "[zh-TW] Image Hash",
+      "hashHelperText": "[zh-TW] Enter the image's composite_hash",
+      "button": "[zh-TW] Run Test",
+      "processing": "[zh-TW] Processing...",
+      "result": "[zh-TW] Tagging Result:",
+      "failed": "[zh-TW] Test failed"
     },
     "duplicateScan": {
       "title": "全域重複分析",
@@ -300,7 +389,21 @@
       "similarityLabel": "{{percent}}%相似",
       "moreImages": "+{{count}}張更多",
       "noResults": "執行掃描後將顯示重複圖像組。",
-      "id": "ID: {{id}}"
+      "id": "ID: {{id}}",
+      "selectAll": "[zh-TW] Select All",
+      "deselectAll": "[zh-TW] Deselect All",
+      "keepOne": "[zh-TW] Keep 1",
+      "keepOneDelete": "[zh-TW] Keep first image and select rest for deletion",
+      "deleteSelected": "[zh-TW] Delete {{count}} Selected",
+      "deleteConfirmTitle": "[zh-TW] Confirm Image Deletion",
+      "deleteConfirmMessage": "[zh-TW] Are you sure you want to delete {{count}} selected images?",
+      "deleteWarning": "[zh-TW] Deleted images cannot be recovered!",
+      "cancel": "[zh-TW] Cancel",
+      "confirmDelete": "[zh-TW] Delete",
+      "deleting": "[zh-TW] Deleting...",
+      "deleteSuccess": "[zh-TW] {{count}} images deleted successfully.",
+      "deletePartialSuccess": "[zh-TW] {{success}} succeeded, {{failed}} failed",
+      "deleteFailed": "[zh-TW] Failed to delete images."
     },
     "thresholds": {
       "title": "閾值設定",
@@ -336,7 +439,9 @@
         }
       },
       "localStorageNote": "設定值僅本機儲存，搜尋時即時套用。"
-    }
+    },
+    "autoGenerateHash": "[zh-TW] Auto-generate Hash on Upload",
+    "hashPlaceholder": "[zh-TW] e.g., a1b2c3d4e5f6..."
   },
   "messages": {
     "saveSuccess": "設定儲存成功",
@@ -553,6 +658,169 @@
       "countFormat": "{{count}}",
       "durationMs": "{{ms}}ms",
       "durationSeconds": "{{seconds}}秒"
+    }
+  },
+  "thumbnail": {
+    "title": "[zh-TW] Thumbnail Settings",
+    "description": "[zh-TW] Configure size and quality used for thumbnail generation",
+    "saveFailed": "[zh-TW] Failed to save thumbnail settings",
+    "size": {
+      "label": "[zh-TW] Thumbnail Size",
+      "selectLabel": "[zh-TW] Thumbnail Size",
+      "original": "[zh-TW] Same as original size",
+      "default": "[zh-TW] 1080px (default)"
+    },
+    "quality": {
+      "label": "[zh-TW] Thumbnail Quality",
+      "helperText": "[zh-TW] Higher quality increases file size (60-100%)"
+    },
+    "regenerate": {
+      "button": "[zh-TW] Regenerate Thumbnails",
+      "description": "[zh-TW] Regenerate all image thumbnails with current settings"
+    }
+  },
+  "background": {
+    "title": "[zh-TW] Background Task Monitoring",
+    "loadFailed": "[zh-TW] Failed to load background task status",
+    "confirmReset": "[zh-TW] Reset background queue? All pending tasks will be cancelled.",
+    "resetFailed": "[zh-TW] Failed to reset queue",
+    "resetQueue": "[zh-TW] Reset Queue",
+    "autoTagFailed": "[zh-TW] Failed to trigger auto-tagging",
+    "confirmHashGen": "[zh-TW] Generate hash for {{count}} images?",
+    "hashGenComplete": "[zh-TW] Hash generation complete: {{processed}} succeeded, {{failed}} failed",
+    "hashGenFailed": "[zh-TW] Failed to regenerate hashes",
+    "confirmVerify": "[zh-TW] Verify {{count}} files?\\nThis may take time if there are many files.",
+    "verifyFailed": "[zh-TW] Failed to run file verification",
+    "verifyIntervalError": "[zh-TW] Verification interval must be between 300-86400 seconds",
+    "verifySaveFailed": "[zh-TW] Failed to save file verification settings",
+    "autoUpdate": "[zh-TW] Auto-updates every 5 seconds.",
+    "autoUpdateDisabled": "[zh-TW] Auto-update is disabled.",
+    "queue": {
+      "title": "[zh-TW] Background Queue",
+      "pending": "[zh-TW] Pending: {{count}}",
+      "processing": "[zh-TW] Processing",
+      "waiting": "[zh-TW] Waiting"
+    },
+    "tasks": {
+      "metadata": "[zh-TW] Metadata Extraction",
+      "promptCollection": "[zh-TW] Prompt Collection",
+      "pendingCount": "[zh-TW] {{count}} pending"
+    },
+    "autoTag": {
+      "title": "[zh-TW] Auto-Tagging Scheduler",
+      "manualTrigger": "[zh-TW] Manual Run",
+      "running": "[zh-TW] Running",
+      "stopped": "[zh-TW] Stopped",
+      "untaggedCount": "[zh-TW] Untagged images: {{count}}",
+      "pollingInterval": "[zh-TW] Polling interval: {{seconds}}s",
+      "batchSize": "[zh-TW] Batch size: {{size}}"
+    },
+    "hash": {
+      "title": "[zh-TW] Media Hash Status",
+      "generate": "[zh-TW] Generate Hash",
+      "total": "[zh-TW] Total: {{count}}",
+      "completed": "[zh-TW] Hash generated: {{count}}",
+      "pending": "[zh-TW] Not generated: {{count}}",
+      "completion": "[zh-TW] Completion: {{percent}}%"
+    },
+    "verify": {
+      "title": "[zh-TW] File Verification Status",
+      "viewLogs": "[zh-TW] View Logs",
+      "run": "[zh-TW] Run Verification",
+      "progress": "[zh-TW] File verification in progress: {{checked}}/{{total}}",
+      "missing": "[zh-TW] Missing: {{count}}",
+      "totalFiles": "[zh-TW] Total files: {{count}}",
+      "missingFiles": "[zh-TW] Missing files: {{count}}",
+      "lastVerification": "[zh-TW] Last verification: {{date}}",
+      "schedulerTitle": "[zh-TW] Verification Scheduler Settings",
+      "intervalLabel": "[zh-TW] Verification Interval (seconds)",
+      "intervalHelper": "[zh-TW] 300-86400 seconds (5 min - 24 hours)",
+      "intervalTooltip": "[zh-TW] May cause time consumption and system load if there are many files"
+    }
+  },
+  "auth": {
+    "forgotAccount": {
+      "title": "[zh-TW] Forgot your account?",
+      "description": "[zh-TW] If you forgot your password, you can recover your account using the following method.",
+      "methodTitle": "[zh-TW] Recovery Method:",
+      "step1": "[zh-TW] Stop the server",
+      "step2": "[zh-TW] Delete the file below",
+      "step3": "[zh-TW] Restart the server",
+      "step4": "[zh-TW] Set up a new account",
+      "fileToDelete": "[zh-TW] File to delete:",
+      "warning": "[zh-TW] ⚠️ Warning: Deleting this file will invalidate all sessions and require re-login.",
+      "warningNote": "[zh-TW] Other data such as workflows and settings will not be affected."
+    },
+    "setup": {
+      "title": "[zh-TW] Setup Authentication",
+      "description": "[zh-TW] Configure username and password to protect your image manager from unauthorized access. Once set, you will need to login to access the application.",
+      "username": "[zh-TW] Username",
+      "password": "[zh-TW] Password",
+      "confirmPassword": "[zh-TW] Confirm Password",
+      "button": "[zh-TW] Setup Authentication",
+      "success": "[zh-TW] Authentication configured successfully! You will need to login on your next visit.",
+      "errors": {
+        "required": "[zh-TW] Username and password are required",
+        "mismatch": "[zh-TW] Passwords do not match",
+        "failed": "[zh-TW] Failed to setup authentication"
+      }
+    },
+    "update": {
+      "title": "[zh-TW] Change Credentials",
+      "description": "[zh-TW] Changing your credentials will require you to login again with the new credentials.",
+      "currentPassword": "[zh-TW] Current Password",
+      "newUsername": "[zh-TW] New Username",
+      "newPassword": "[zh-TW] New Password",
+      "confirmNewPassword": "[zh-TW] Confirm New Password",
+      "button": "[zh-TW] Update Credentials",
+      "success": "[zh-TW] Credentials updated successfully!",
+      "errors": {
+        "required": "[zh-TW] All fields are required",
+        "mismatch": "[zh-TW] New passwords do not match",
+        "failed": "[zh-TW] Failed to update credentials"
+      }
+    }
+  },
+  "common": {
+    "save": "儲存",
+    "cancel": "取消",
+    "delete": "刪除",
+    "create": "建立",
+    "enabled": "已啟用",
+    "disabled": "已停用"
+  },
+  "externalApi": {
+    "title": "外部API認證",
+    "description": "管理Civitai等外部API服務的認證資訊。",
+    "currentApiKey": "目前API金鑰",
+    "currentApiKeyHelper": "基於安全考量僅顯示部分內容",
+    "newApiKey": "新API金鑰",
+    "newApiKeyPlaceholder": "請輸入新的API金鑰",
+    "baseUrl": "基礎URL",
+    "baseUrlHelper": "選填：API端點URL",
+    "testConnection": "測試連線",
+    "addProvider": "新增提供者",
+    "addProviderDescription": "新增外部API提供者。",
+    "providerName": "提供者名稱",
+    "providerNameHelper": "僅允許英數字、_、-（例如：openai、stability）",
+    "providerDisplayName": "顯示名稱",
+    "deleteConfirmTitle": "刪除提供者",
+    "deleteConfirmMessage": "確定要刪除{{provider}}嗎？",
+    "success": {
+      "saved": "API金鑰已儲存",
+      "deleted": "提供者已刪除",
+      "created": "提供者已建立",
+      "connectionTest": "連線測試成功",
+      "toggled": "已{{state}}"
+    },
+    "errors": {
+      "loadFailed": "載入提供者失敗",
+      "saveFailed": "儲存失敗",
+      "deleteFailed": "刪除失敗",
+      "createFailed": "建立失敗",
+      "connectionTestFailed": "連線測試失敗",
+      "nameRequired": "請輸入名稱和顯示名稱",
+      "toggleFailed": "切換狀態失敗"
     }
   }
 }

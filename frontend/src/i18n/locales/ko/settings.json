@@ -10,6 +10,7 @@
     "metadata": "메타데이터 추출",
     "folders": "폴더 관리",
     "account": "계정",
+    "externalApi": "외부 인증",
     "advanced": "고급 설정"
   },
   "general": {
@@ -84,6 +85,25 @@
         "description": "Primary extraction 실패 시 Stealth PNG 방식으로 재시도합니다."
       },
       "performanceNote": "💡 팁: 기본 설정(Fast + ComfyUI 스킵)으로 대부분의 경우 최적의 성능을 제공합니다. ComfyUI 이미지 처리 시간이 2682ms → 4ms로 단축됩니다!"
+    },
+    "thumbnail": {
+      "title": "썸네일 설정",
+      "description": "썸네일 생성 시 사용되는 크기와 품질을 설정합니다",
+      "saveFailed": "썸네일 설정 저장에 실패했습니다",
+      "size": {
+        "label": "썸네일 크기",
+        "selectLabel": "썸네일 크기",
+        "original": "원본 크기와 동일",
+        "default": "1080px (기본값)"
+      },
+      "quality": {
+        "label": "썸네일 품질",
+        "helperText": "품질이 높을수록 파일 크기가 커집니다 (60-100%)"
+      },
+      "regenerate": {
+        "button": "썸네일 재생성",
+        "description": "모든 이미지의 썸네일을 현재 설정으로 다시 생성합니다"
+      }
     }
   },
   "tagger": {
@@ -306,10 +326,89 @@
       }
     }
   },
+  "thumbnail": {
+    "title": "썸네일 설정",
+    "description": "썸네일 생성 시 사용되는 크기와 품질을 설정합니다",
+    "saveFailed": "썸네일 설정 저장에 실패했습니다",
+    "size": {
+      "label": "썸네일 크기",
+      "selectLabel": "썸네일 크기",
+      "original": "원본 크기와 동일",
+      "default": "1080px (기본값)"
+    },
+    "quality": {
+      "label": "썸네일 품질",
+      "helperText": "품질이 높을수록 파일 크기가 커집니다 (60-100%)"
+    },
+    "regenerate": {
+      "button": "썸네일 재생성",
+      "description": "모든 이미지의 썸네일을 현재 설정으로 다시 생성합니다"
+    }
+  },
+  "background": {
+    "title": "백그라운드 작업 모니터링",
+    "loadFailed": "백그라운드 작업 상태를 불러오는데 실패했습니다",
+    "confirmReset": "백그라운드 큐를 초기화하시겠습니까? 대기 중인 모든 작업이 취소됩니다.",
+    "resetFailed": "큐 초기화에 실패했습니다",
+    "resetQueue": "큐 초기화",
+    "autoTagFailed": "자동 태깅 트리거에 실패했습니다",
+    "confirmHashGen": "{{count}}개의 이미지 해시를 생성하시겠습니까?",
+    "hashGenComplete": "해시 생성 완료: 성공 {{processed}}개, 실패 {{failed}}개",
+    "hashGenFailed": "해시 재생성에 실패했습니다",
+    "confirmVerify": "총 {{count}}개의 파일을 검증하시겠습니까?\\n파일이 많을 경우 시간이 소요될 수 있습니다.",
+    "verifyFailed": "파일 검증 실행에 실패했습니다",
+    "verifyIntervalError": "검증 간격은 300-86400초 사이여야 합니다",
+    "verifySaveFailed": "파일 검증 설정 저장에 실패했습니다",
+    "autoUpdate": "5초마다 자동으로 업데이트됩니다.",
+    "autoUpdateDisabled": "자동 업데이트가 비활성화되었습니다.",
+    "queue": {
+      "title": "백그라운드 큐",
+      "pending": "대기 중: {{count}}개",
+      "processing": "처리 중",
+      "waiting": "대기"
+    },
+    "tasks": {
+      "metadata": "메타데이터 추출",
+      "promptCollection": "프롬프트 수집",
+      "pendingCount": "{{count}}개 대기 중"
+    },
+    "autoTag": {
+      "title": "자동 태깅 스케줄러",
+      "manualTrigger": "수동 실행",
+      "running": "실행 중",
+      "stopped": "중지됨",
+      "untaggedCount": "미태깅 이미지: {{count}}개",
+      "pollingInterval": "폴링 간격: {{seconds}}초",
+      "batchSize": "배치 크기: {{size}}개"
+    },
+    "hash": {
+      "title": "미디어 해시 상태",
+      "generate": "해시 생성",
+      "total": "전체: {{count}}개",
+      "completed": "해시 생성 완료: {{count}}개",
+      "pending": "미생성: {{count}}개",
+      "completion": "완료율: {{percent}}%"
+    },
+    "verify": {
+      "title": "파일 검증 상태",
+      "viewLogs": "로그 보기",
+      "run": "검증 실행",
+      "progress": "파일 검증 진행 중: {{checked}}/{{total}}",
+      "missing": "누락: {{count}}개",
+      "totalFiles": "전체 파일: {{count}}개",
+      "missingFiles": "누락 파일: {{count}}개",
+      "lastVerification": "마지막 검증: {{date}}",
+      "schedulerTitle": "검증 스케줄러 설정",
+      "intervalLabel": "검증 간격 (초)",
+      "intervalHelper": "300-86400초 (5분-24시간)",
+      "intervalTooltip": "파일이 많을 경우 시간 소요 및 시스템 부하가 발생할 수 있습니다"
+    }
+  },
   "similarity": {
     "title": "이미지 유사도 검색 설정",
     "autoGenerateHash": "업로드 시 자동 해시 생성",
     "description": "유사한 이미지 검색을 위한 해시를 자동으로 생성합니다",
+    "hashPlaceholder": "예: a1b2c3d4e5f6...",
     "systemStatus": {
       "title": "시스템 상태",
       "description": "이미지 유사도 검색 시스템의 현재 상태입니다.",
@@ -335,6 +434,8 @@
       "description": "특정 이미지로 유사도 검색을 테스트합니다.",
       "imageId": "이미지 ID",
       "placeholder": "예: 123",
+      "compositeHash": "이미지 해시",
+      "hashHelperText": "이미지의 composite_hash를 입력하세요",
       "searchType": "검색 타입",
       "types": {
         "duplicates": "중복 검색",
@@ -432,6 +533,18 @@
     }
   },
   "auth": {
+    "forgotAccount": {
+      "title": "계정을 잊어버렸나요?",
+      "description": "비밀번호를 잊어버린 경우, 아래 방법으로 계정을 복구할 수 있습니다.",
+      "methodTitle": "복구 방법:",
+      "step1": "서버를 중지합니다",
+      "step2": "아래 파일을 삭제합니다",
+      "step3": "서버를 다시 시작합니다",
+      "step4": "새로운 계정을 설정합니다",
+      "fileToDelete": "삭제할 파일:",
+      "warning": "⚠️ 주의: 이 파일을 삭제하면 모든 세션이 무효화되며, 다시 로그인해야 합니다.",
+      "warningNote": "워크플로우, 설정 등 다른 데이터는 영향을 받지 않습니다."
+    },
     "setup": {
       "title": "인증 설정",
       "description": "사용자 이름과 비밀번호를 설정하여 이미지 관리자를 무단 접근으로부터 보호합니다. 설정 후 애플리케이션에 접근하려면 로그인이 필요합니다.",
@@ -677,6 +790,48 @@
       "countFormat": "{{count}}개",
       "durationMs": "{{ms}}ms",
       "durationSeconds": "{{seconds}}초"
+    }
+  },
+  "common": {
+    "save": "저장",
+    "cancel": "취소",
+    "delete": "삭제",
+    "create": "생성",
+    "enabled": "활성화",
+    "disabled": "비활성화"
+  },
+  "externalApi": {
+    "title": "외부 API 인증",
+    "description": "Civitai 등 외부 API 서비스의 인증 정보를 관리합니다.",
+    "currentApiKey": "현재 API 키",
+    "currentApiKeyHelper": "보안을 위해 일부만 표시됩니다",
+    "newApiKey": "새 API 키",
+    "newApiKeyPlaceholder": "새 API 키를 입력하세요",
+    "baseUrl": "Base URL",
+    "baseUrlHelper": "선택 사항: API 엔드포인트 URL",
+    "testConnection": "연결 테스트",
+    "addProvider": "새 Provider 추가",
+    "addProviderDescription": "새로운 외부 API Provider를 추가합니다.",
+    "providerName": "Provider 이름",
+    "providerNameHelper": "영문, 숫자, _, - 만 사용 가능 (예: openai, stability)",
+    "providerDisplayName": "표시 이름",
+    "deleteConfirmTitle": "Provider 삭제",
+    "deleteConfirmMessage": "{{provider}}를 삭제하시겠습니까?",
+    "success": {
+      "saved": "API 키가 저장되었습니다",
+      "deleted": "Provider가 삭제되었습니다",
+      "created": "Provider가 생성되었습니다",
+      "connectionTest": "연결 테스트 성공",
+      "toggled": "{{state}} 되었습니다"
+    },
+    "errors": {
+      "loadFailed": "Provider 목록을 불러오는데 실패했습니다",
+      "saveFailed": "저장에 실패했습니다",
+      "deleteFailed": "삭제에 실패했습니다",
+      "createFailed": "생성에 실패했습니다",
+      "connectionTestFailed": "연결 테스트에 실패했습니다",
+      "nameRequired": "이름과 표시 이름을 모두 입력해주세요",
+      "toggleFailed": "활성화 상태 변경에 실패했습니다"
     }
   }
 }

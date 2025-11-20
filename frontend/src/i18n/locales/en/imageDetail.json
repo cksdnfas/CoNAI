@@ -5,6 +5,15 @@
     "errorLoading": "An error occurred while loading the image.",
     "noIdProvided": "No image ID provided."
   },
+  "info": {
+    "title": "Image Information"
+  },
+  "copyHash": "Copy hash",
+  "hashGenerating": "Waiting for hash generation...",
+  "hashCopied": "Hash copied",
+  "viewThumbnail": "View Thumbnail (Fast Loading)",
+  "viewOriginal": "View Original (High Quality)",
+  "originalNotFound": "Original image not found. Showing thumbnail.",
   "actions": {
     "download": "Download",
     "share": "Share",
@@ -86,5 +95,9 @@
       "random": "Random Image (Space)",
       "currentPosition": "{{current}} / {{total}}"
     }
+  },
+  "groupModal": {
+    "title": "Group: {{name}}",
+    "defaultTitle": "Group Images"
   }
 }

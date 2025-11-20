@@ -110,7 +110,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
       await onThumbnailUpdate(updates);
     } catch (err) {
       console.error('Failed to update thumbnail settings:', err);
-      setError('썸네일 설정 저장에 실패했습니다');
+      setError(t('thumbnail.saveFailed'));
     } finally {
       setUpdating(false);
     }
@@ -289,25 +289,25 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
         {/* Thumbnail Settings */}
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
           <Typography variant="h6">
-            썸네일 설정
+            {t('thumbnail.title')}
           </Typography>
-          <Tooltip title="썸네일 생성 시 사용되는 크기와 품질을 설정합니다" arrow>
+          <Tooltip title={t('thumbnail.description')} arrow>
             <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
           </Tooltip>
         </Box>
 
         {/* Thumbnail Size */}
         <FormControl fullWidth disabled={updating} sx={{ mb: 3 }}>
-          <InputLabel id="thumbnail-size-label">썸네일 크기</InputLabel>
+          <InputLabel id="thumbnail-size-label">{t('thumbnail.size.label')}</InputLabel>
           <Select
             labelId="thumbnail-size-label"
             value={thumbnailSettings.size}
-            label="썸네일 크기"
+            label={t('thumbnail.size.selectLabel')}
             onChange={handleThumbnailSizeChange}
           >
-            <MenuItem value="original">원본 크기와 동일</MenuItem>
+            <MenuItem value="original">{t('thumbnail.size.original')}</MenuItem>
             <MenuItem value="2048">2048px</MenuItem>
-            <MenuItem value="1080">1080px (기본값)</MenuItem>
+            <MenuItem value="1080">{t('thumbnail.size.default')}</MenuItem>
             <MenuItem value="720">720px</MenuItem>
             <MenuItem value="512">512px</MenuItem>
           </Select>
@@ -317,10 +317,10 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
         <TextField
           fullWidth
           type="number"
-          label="썸네일 품질"
+          label={t('thumbnail.quality.label')}
           value={thumbnailSettings.quality}
           onChange={handleThumbnailQualityChange}
-          helperText="품질이 높을수록 파일 크기가 커집니다 (60-100%)"
+          helperText={t('thumbnail.quality.helperText')}
           inputProps={{ min: 60, max: 100 }}
           disabled={updating}
           sx={{ mb: 3 }}
@@ -335,10 +335,10 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
             disabled={updating}
             fullWidth
           >
-            썸네일 재생성
+            {t('thumbnail.regenerate.button')}
           </Button>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            모든 이미지의 썸네일을 현재 설정으로 다시 생성합니다
+            {t('thumbnail.regenerate.description')}
           </Typography>
         </Box>
 

@@ -34,7 +34,10 @@
     "invalidJson": "無効なJSON形式です",
     "nameRequired": "ワークフロー名を入力してください",
     "jsonRequired": "ワークフローJSONを入力してください",
-    "validateJson": "JSON形式を確認してください"
+    "validateJson": "JSON形式を確認してください",
+    "colorLabel": "[ja] Workflow Color",
+    "customColorTooltip": "[ja] Select custom color",
+    "selectImage": "[ja] Select Image"
   },
   "alerts": {
     "importantNote": "重要:",
@@ -84,7 +87,18 @@
     "example4Options": "オプション: euler, euler_ancestral, dpm++ 2m, ddim",
     "tipTitle": "💡 ヒント:",
     "tipDesc": "JSONパスはワークフローJSONの構造に従います。例えば、JSONが{\"3\": {\"inputs\": {\"seed\": 123}}}の形式なら、JSONパスは3.inputs.seedになります。",
-    "previewTitle": "マークされたフィールドプレビュー"
+    "previewTitle": "マークされたフィールドプレビュー",
+    "unnamedField": "[ja] Unnamed Field",
+    "noJsonPath": "[ja] No JSON Path",
+    "stepLabel": "[ja] Step Unit",
+    "stepHelperText": "[ja] Step value (e.g., 0.01)",
+    "stepPlaceholder": "[ja] 0.01",
+    "autoUpdated": "[ja] (Auto-updated)",
+    "listPreviewHelper": "[ja] Preview of referenced list (read-only)",
+    "loadFromListTooltip": "[ja] Load from custom list",
+    "loadFromListTitle": "[ja] Load from Custom List",
+    "noCustomLists": "[ja] No custom lists registered.",
+    "itemCount": "[ja] {{count}} items - "
   },
   "fieldForm": {
     "fieldId": "フィールドID",
@@ -225,5 +239,50 @@
   "workflowViewer": {
     "graphView": "グラフビュー",
     "jsonView": "JSONビュー"
+  },
+  "colors": {
+    "blue": "[ja] Blue (default)",
+    "red": "[ja] Red",
+    "green": "[ja] Green",
+    "orange": "[ja] Orange",
+    "purple": "[ja] Purple",
+    "cyan": "[ja] Cyan",
+    "yellow": "[ja] Yellow",
+    "brown": "[ja] Brown",
+    "gray": "[ja] Gray",
+    "pink": "[ja] Pink"
+  },
+  "preview": {
+    "title": "[ja] Marked Fields Preview",
+    "parseError": "[ja] Cannot parse Workflow JSON",
+    "noJson": "[ja] No Workflow JSON",
+    "pathNotFound": "[ja] Path not found: {{path}}",
+    "validationError": "[ja] Error during path validation",
+    "substitutionError": "[ja] Error during substitution",
+    "validationResults": "[ja] Path Validation Results",
+    "currentValue": "[ja] Current value:",
+    "formTitle": "[ja] Form to be displayed during image generation",
+    "generateButton": "[ja] Generate Image (Preview)",
+    "testDataButton": "[ja] Preview with test data",
+    "viewJsonTitle": "[ja] View substituted Workflow JSON"
+  },
+  "imageSelection": {
+    "title": "[ja] Select Image",
+    "tabs": {
+      "dbSearch": "[ja] DB Search",
+      "hash": "[ja] Hash",
+      "upload": "[ja] Upload",
+      "history": "[ja] History",
+      "dedicatedFolder": "[ja] Dedicated Folder"
+    },
+    "inPreparation": "[ja] In preparation",
+    "hashInputLabel": "[ja] Enter image hash",
+    "hashInputPlaceholder": "[ja] Enter image hash",
+    "hashComingSoon": "[ja] Hash-based image loading will be implemented in the future.",
+    "selectButton": "[ja] Select Image",
+    "useAsIs": "[ja] Use as is",
+    "editButton": "[ja] Edit (In preparation)",
+    "noImagesInFolder": "[ja] No images in dedicated folder.",
+    "addImagesPrompt": "[ja] Add images to folder."
   }
 }

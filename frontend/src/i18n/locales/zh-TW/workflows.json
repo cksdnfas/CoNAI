@@ -34,7 +34,10 @@
     "invalidJson": "無效的JSON格式",
     "nameRequired": "請輸入工作流程名稱",
     "jsonRequired": "請輸入工作流程JSON",
-    "validateJson": "請檢查JSON格式"
+    "validateJson": "請檢查JSON格式",
+    "colorLabel": "[zh-TW] Workflow Color",
+    "customColorTooltip": "[zh-TW] Select custom color",
+    "selectImage": "[zh-TW] Select Image"
   },
   "alerts": {
     "importantNote": "重要:",
@@ -84,7 +87,18 @@
     "example4Options": "選項: euler, euler_ancestral, dpm++ 2m, ddim",
     "tipTitle": "💡 提示:",
     "tipDesc": "JSON路徑遵循工作流程JSON的結構。例如，如果JSON是{\"3\": {\"inputs\": {\"seed\": 123}}}，則JSON路徑為3.inputs.seed。",
-    "previewTitle": "標記欄位預覽"
+    "previewTitle": "標記欄位預覽",
+    "unnamedField": "[zh-TW] Unnamed Field",
+    "noJsonPath": "[zh-TW] No JSON Path",
+    "stepLabel": "[zh-TW] Step Unit",
+    "stepHelperText": "[zh-TW] Step value (e.g., 0.01)",
+    "stepPlaceholder": "[zh-TW] 0.01",
+    "autoUpdated": "[zh-TW] (Auto-updated)",
+    "listPreviewHelper": "[zh-TW] Preview of referenced list (read-only)",
+    "loadFromListTooltip": "[zh-TW] Load from custom list",
+    "loadFromListTitle": "[zh-TW] Load from Custom List",
+    "noCustomLists": "[zh-TW] No custom lists registered.",
+    "itemCount": "[zh-TW] {{count}} items - "
   },
   "fieldForm": {
     "fieldId": "欄位ID",
@@ -225,5 +239,50 @@
   "workflowViewer": {
     "graphView": "圖形檢視",
     "jsonView": "JSON檢視"
+  },
+  "colors": {
+    "blue": "[zh-TW] Blue (default)",
+    "red": "[zh-TW] Red",
+    "green": "[zh-TW] Green",
+    "orange": "[zh-TW] Orange",
+    "purple": "[zh-TW] Purple",
+    "cyan": "[zh-TW] Cyan",
+    "yellow": "[zh-TW] Yellow",
+    "brown": "[zh-TW] Brown",
+    "gray": "[zh-TW] Gray",
+    "pink": "[zh-TW] Pink"
+  },
+  "preview": {
+    "title": "[zh-TW] Marked Fields Preview",
+    "parseError": "[zh-TW] Cannot parse Workflow JSON",
+    "noJson": "[zh-TW] No Workflow JSON",
+    "pathNotFound": "[zh-TW] Path not found: {{path}}",
+    "validationError": "[zh-TW] Error during path validation",
+    "substitutionError": "[zh-TW] Error during substitution",
+    "validationResults": "[zh-TW] Path Validation Results",
+    "currentValue": "[zh-TW] Current value:",
+    "formTitle": "[zh-TW] Form to be displayed during image generation",
+    "generateButton": "[zh-TW] Generate Image (Preview)",
+    "testDataButton": "[zh-TW] Preview with test data",
+    "viewJsonTitle": "[zh-TW] View substituted Workflow JSON"
+  },
+  "imageSelection": {
+    "title": "[zh-TW] Select Image",
+    "tabs": {
+      "dbSearch": "[zh-TW] DB Search",
+      "hash": "[zh-TW] Hash",
+      "upload": "[zh-TW] Upload",
+      "history": "[zh-TW] History",
+      "dedicatedFolder": "[zh-TW] Dedicated Folder"
+    },
+    "inPreparation": "[zh-TW] In preparation",
+    "hashInputLabel": "[zh-TW] Enter image hash",
+    "hashInputPlaceholder": "[zh-TW] Enter image hash",
+    "hashComingSoon": "[zh-TW] Hash-based image loading will be implemented in the future.",
+    "selectButton": "[zh-TW] Select Image",
+    "useAsIs": "[zh-TW] Use as is",
+    "editButton": "[zh-TW] Edit (In preparation)",
+    "noImagesInFolder": "[zh-TW] No images in dedicated folder.",
+    "addImagesPrompt": "[zh-TW] Add images to folder."
   }
 }

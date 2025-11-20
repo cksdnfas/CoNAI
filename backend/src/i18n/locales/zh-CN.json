@@ -1,0 +1,36 @@
+{
+    "server": {
+        "starting": "ComfyUI Image Manager 后端启动中...",
+        "started": "ComfyUI Image Manager - 服务器运行中！",
+        "access_urls": "访问URL:",
+        "local": "本地",
+        "network": "网络",
+        "external": "外部（需要端口转发）",
+        "data_root": "数据根目录",
+        "uploads": "上传",
+        "tips": {
+            "local_access": "从此计算机访问",
+            "network_access": "从局域网访问：使用上面的任一网络URL",
+            "external_access": "外部访问：在路由器上配置端口转发",
+            "stop_server": "按Ctrl+C停止服务器"
+        }
+    },
+    "database": {
+        "initialized": "数据库初始化成功"
+    },
+    "errors": {
+        "port_in_use": "端口{port}已被占用",
+        "database_error": "数据库错误",
+        "frontend_not_found": "未找到前端。请先构建前端。",
+        "invalid_image": "无效的图像文件",
+        "group_not_found": "未找到组",
+        "image_not_found": "未找到图像"
+    },
+    "api": {
+        "image_uploaded": "图像上传成功",
+        "image_deleted": "图像已删除",
+        "group_created": "组已创建",
+        "group_updated": "组已更新",
+        "group_deleted": "组已删除"
+    }
+}

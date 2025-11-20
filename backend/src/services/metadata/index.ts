@@ -13,6 +13,8 @@ import { NovelAIParser } from './parsers/novelaiParser';
 import { WebUIParser } from './parsers/webuiParser';
 import { ComfyUIParser } from './parsers/comfyuiParser';
 import { WorkflowDetector } from './parsers/workflowDetector';
+import { MetadataExtractionError } from '../../types/errors';
+import { assertFileReadable } from '../../utils/fileAccess';
 
 export class MetadataExtractor {
   /**
@@ -26,14 +28,24 @@ export class MetadataExtractor {
     console.log(`⏱️ [MetadataExtractor] Starting extraction: ${fileName}`);
 
     try {
-      if (!fs.existsSync(filePath)) {
-        throw new Error(`File does not exist: ${filePath}`);
+      // 파일 접근 권한 체크 (존재 여부 + 읽기 권한)
+      try {
+        await assertFileReadable(filePath);
+      } catch (error) {
+        // 파일 접근 오류 - 재시도 가능한 오류로 throw
+        throw MetadataExtractionError.fromNodeError(filePath, error as NodeJS.ErrnoException);
       }
 
       const fileExt = path.extname(filePath).toLowerCase();
 
       const readStart = Date.now();
-      const buffer = await fs.promises.readFile(filePath);
+      let buffer: Buffer;
+      try {
+        buffer = await fs.promises.readFile(filePath);
+      } catch (error) {
+        // 파일 읽기 오류 - 권한 또는 접근 오류
+        throw MetadataExtractionError.fromNodeError(filePath, error as NodeJS.ErrnoException);
+      }
       console.log(`⏱️ [MetadataExtractor] File read (${(buffer.length / 1024).toFixed(1)}KB): ${Date.now() - readStart}ms`);
 
       // 1차 추출 (Primary extraction)
@@ -152,13 +164,26 @@ export class MetadataExtractor {
       };
     } catch (error) {
       console.error(`⏱️ [MetadataExtractor] ❌ Failed after ${Date.now() - startTime}ms:`, error);
+
+      // MetadataExtractionError인 경우 재throw (재시도 가능 오류)
+      if (error instanceof MetadataExtractionError) {
+        throw error;
+      }
+
+      // 기타 오류는 파싱 오류로 처리 (재시도 불필요)
+      const parsingError = MetadataExtractionError.parsingError(
+        filePath,
+        error as Error
+      );
+
+      // 파싱 오류는 재시도 불필요하므로 기본값 반환
       return {
         extractedAt: new Date().toISOString(),
         ai_info: {
           ai_tool: 'Unknown'
           // prompt는 설정하지 않음 (undefined)
         },
-        error: 'Failed to extract metadata'
+        error: parsingError.message
       };
     }
   }

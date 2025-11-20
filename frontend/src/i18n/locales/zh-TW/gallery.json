@@ -31,5 +31,34 @@
   },
   "chips": {
     "aiToolLabel": "AI 工具: {{tool}}"
-  }
+  },
+  "selectAllLabel": "[zh-TW] Select All ({{selected}}/{{total}})",
+  "totalImages": "[zh-TW] Total {{count}} images",
+  "imageGridModal": {
+    "title": "[zh-TW] Image Grid"
+  },
+  "selection": {
+    "toggleMode": "[zh-TW] Deactivate Selection Mode",
+    "activateMode": "[zh-TW] Activate Selection Mode",
+    "selectedImages": "[zh-TW] Selected Images:",
+    "selectAll": "[zh-TW] Select All",
+    "deselectAll": "[zh-TW] Deselect All",
+    "selectAllWithCount": "[zh-TW] Select All ({{selected}}/{{total}})",
+    "methods": {
+      "title": "[zh-TW] Selection Methods:",
+      "click": "[zh-TW] • Click: Select/deselect individual",
+      "drag": "[zh-TW] • Drag: Select multiple images",
+      "shiftClick": "[zh-TW] • Shift + Click: Range select",
+      "ctrlClick": "[zh-TW] • Ctrl/Cmd + Click: Toggle select",
+      "ctrlA": "[zh-TW] • Ctrl/Cmd + A: Select all",
+      "esc": "[zh-TW] • ESC: Deselect"
+    }
+  },
+  "emptyState": {
+    "noImages": "[zh-TW] No images",
+    "uploadPrompt": "[zh-TW] Try uploading images.",
+    "uploadOrSearch": "[zh-TW] Upload images or change search criteria."
+  },
+  "loading": "[zh-TW] Loading images...",
+  "allImagesLoaded": "[zh-TW] All images loaded"
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box, Typography, Skeleton } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import Masonry from 'react-masonry-css';
 import InfiniteScroll from 'react-infinite-scroll-component';
 import type { ImageRecord } from '../../types/image';
@@ -26,6 +27,7 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
   selectedIds = [],
   onSelectionChange,
 }) => {
+  const { t } = useTranslation(['gallery']);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [lastClickedIndex, setLastClickedIndex] = useState<number>(-1);
@@ -162,10 +164,10 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
     return (
       <Box sx={{ textAlign: 'center', py: 8 }}>
         <Typography variant="h6" color="text.secondary">
-          이미지가 없습니다
+          {t('gallery:emptyState.noImages')}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          이미지를 업로드해보세요.
+          {t('gallery:emptyState.uploadPrompt')}
         </Typography>
       </Box>
     );
@@ -184,7 +186,7 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
           <Box sx={{ mt: 2, width: '100%' }}>
             <Box sx={{ textAlign: 'center', py: 2 }}>
               <Typography variant="body2" color="text.secondary">
-                이미지를 불러오는 중...
+                {t('gallery:loading')}
               </Typography>
             </Box>
           </Box>
@@ -192,7 +194,7 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
         endMessage={
           <Box sx={{ textAlign: 'center', py: 4, mt: 2 }}>
             <Typography variant="body2" color="text.secondary">
-              모든 이미지를 불러왔습니다
+              {t('gallery:allImagesLoaded')}
             </Typography>
           </Box>
         }

@@ -245,5 +245,14 @@
     "brushColor": "Brush Color",
     "eraserSize": "Eraser Size: {{size}}px",
     "panHelp": "Click and drag to move the canvas. Use mouse wheel to zoom in/out."
-  }
+  },
+  "clickToCopy": "Click to copy",
+  "thumbnail": "Thumbnail",
+  "original": "Original",
+  "video": "Video",
+  "none": "None",
+  "enabled": "Enabled",
+  "disabled": "Disabled",
+  "save": "Save",
+  "refresh": "Refresh"
 }

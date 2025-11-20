@@ -245,5 +245,14 @@
     "brushColor": "画笔颜色",
     "eraserSize": "橡皮擦大小: {{size}}px",
     "panHelp": "点击并拖动以移动画布。使用鼠标滚轮放大/缩小。"
-  }
+  },
+  "clickToCopy": "点击复制",
+  "thumbnail": "缩略图",
+  "original": "原图",
+  "video": "视频",
+  "none": "无",
+  "enabled": "启用",
+  "disabled": "禁用",
+  "save": "保存",
+  "refresh": "刷新"
 }

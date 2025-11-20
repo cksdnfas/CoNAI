@@ -34,7 +34,22 @@
     "invalidJson": "Invalid JSON format",
     "nameRequired": "Please enter workflow name",
     "jsonRequired": "Please enter Workflow JSON",
-    "validateJson": "Please check JSON format"
+    "validateJson": "Please check JSON format",
+    "colorLabel": "Workflow Color",
+    "customColorTooltip": "Select custom color",
+    "selectImage": "Select Image"
+  },
+  "colors": {
+    "blue": "Blue (default)",
+    "red": "Red",
+    "green": "Green",
+    "orange": "Orange",
+    "purple": "Purple",
+    "cyan": "Cyan",
+    "yellow": "Yellow",
+    "brown": "Brown",
+    "gray": "Gray",
+    "pink": "Pink"
   },
   "alerts": {
     "importantNote": "Important:",
@@ -84,7 +99,18 @@
     "example4Options": "Options: euler, euler_ancestral, dpm++ 2m, ddim",
     "tipTitle": "💡 Tip:",
     "tipDesc": "JSON Path follows the structure of Workflow JSON. For example, if JSON is {\"3\": {\"inputs\": {\"seed\": 123}}}, the JSON Path would be 3.inputs.seed.",
-    "previewTitle": "Marked Fields Preview"
+    "previewTitle": "Marked Fields Preview",
+    "unnamedField": "Unnamed Field",
+    "noJsonPath": "No JSON Path",
+    "stepLabel": "Step Unit",
+    "stepHelperText": "Step value (e.g., 0.01)",
+    "stepPlaceholder": "0.01",
+    "autoUpdated": "(Auto-updated)",
+    "listPreviewHelper": "Preview of referenced list (read-only)",
+    "loadFromListTooltip": "Load from custom list",
+    "loadFromListTitle": "Load from Custom List",
+    "noCustomLists": "No custom lists registered.",
+    "itemCount": "{{count}} items - "
   },
   "fieldForm": {
     "fieldId": "Field ID",
@@ -225,5 +251,38 @@
   "workflowViewer": {
     "graphView": "Graph View",
     "jsonView": "JSON View"
+  },
+  "preview": {
+    "title": "Marked Fields Preview",
+    "parseError": "Cannot parse Workflow JSON",
+    "noJson": "No Workflow JSON",
+    "pathNotFound": "Path not found: {{path}}",
+    "validationError": "Error during path validation",
+    "substitutionError": "Error during substitution",
+    "validationResults": "Path Validation Results",
+    "currentValue": "Current value:",
+    "formTitle": "Form to be displayed during image generation",
+    "generateButton": "Generate Image (Preview)",
+    "testDataButton": "Preview with test data",
+    "viewJsonTitle": "View substituted Workflow JSON"
+  },
+  "imageSelection": {
+    "title": "Select Image",
+    "tabs": {
+      "dbSearch": "DB Search",
+      "hash": "Hash",
+      "upload": "Upload",
+      "history": "History",
+      "dedicatedFolder": "Dedicated Folder"
+    },
+    "inPreparation": "In preparation",
+    "hashInputLabel": "Enter image hash",
+    "hashInputPlaceholder": "Enter image hash",
+    "hashComingSoon": "Hash-based image loading will be implemented in the future.",
+    "selectButton": "Select Image",
+    "useAsIs": "Use as is",
+    "editButton": "Edit (In preparation)",
+    "noImagesInFolder": "No images in dedicated folder.",
+    "addImagesPrompt": "Add images to folder."
   }
 }

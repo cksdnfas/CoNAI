@@ -5,6 +5,15 @@
     "errorLoading": "이미지를 불러오는 중 오류가 발생했습니다.",
     "noIdProvided": "이미지 ID가 제공되지 않았습니다."
   },
+  "info": {
+    "title": "이미지 정보"
+  },
+  "copyHash": "해시 복사",
+  "hashGenerating": "해시 생성 대기 중...",
+  "hashCopied": "해시가 복사되었습니다",
+  "viewThumbnail": "썸네일 보기 (빠른 로딩)",
+  "viewOriginal": "원본 이미지 보기 (고화질)",
+  "originalNotFound": "원본 이미지를 찾을 수 없습니다. 썸네일을 표시합니다.",
   "actions": {
     "download": "다운로드",
     "share": "공유",
@@ -86,5 +95,9 @@
       "random": "랜덤 이미지 (Space)",
       "currentPosition": "{{current}} / {{total}}"
     }
+  },
+  "groupModal": {
+    "title": "그룹: {{name}}",
+    "defaultTitle": "그룹 이미지"
   }
 }

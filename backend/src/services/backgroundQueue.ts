@@ -5,6 +5,7 @@ import path from 'path';
 import { QueryCacheService } from './QueryCacheService';
 import { PromptCollectionService } from './promptCollectionService';
 import { AutoCollectionService } from './autoCollectionService';
+import { MetadataExtractionError } from '../types/errors';
 
 /**
  * 백그라운드 작업 타입
@@ -155,8 +156,17 @@ export class BackgroundQueueService {
           console.warn(`  ⚠️  알 수 없는 작업 타입: ${task.type}`);
       }
     } catch (error) {
-      console.error(`  ❌ 작업 처리 실패: ${task.id}`, error);
-      throw error;
+      // MetadataExtractionError인 경우 재시도 여부 판단
+      if (error instanceof MetadataExtractionError) {
+        if (!error.retryable) {
+          console.log(`  ⏭️  재시도 불필요한 오류: ${error.type} - ${error.message}`);
+          return; // 재시도하지 않음 (성공으로 간주)
+        }
+        console.error(`  ❌ 재시도 가능한 오류: ${error.type} - ${error.message}`);
+      } else {
+        console.error(`  ❌ 작업 처리 실패: ${task.id}`, error);
+      }
+      throw error; // 재시도를 위해 throw
     }
   }
 

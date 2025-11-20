@@ -1,0 +1,36 @@
+{
+    "server": {
+        "starting": "ComfyUI Image Manager 後端啟動中...",
+        "started": "ComfyUI Image Manager - 伺服器執行中！",
+        "access_urls": "存取URL:",
+        "local": "本機",
+        "network": "網路",
+        "external": "外部（需要連接埠轉送）",
+        "data_root": "資料根目錄",
+        "uploads": "上傳",
+        "tips": {
+            "local_access": "從此電腦存取",
+            "network_access": "從區域網路存取：使用上方的任一網路URL",
+            "external_access": "外部存取：在路由器上設定連接埠轉送",
+            "stop_server": "按Ctrl+C停止伺服器"
+        }
+    },
+    "database": {
+        "initialized": "資料庫初始化成功"
+    },
+    "errors": {
+        "port_in_use": "連接埠{port}已被使用",
+        "database_error": "資料庫錯誤",
+        "frontend_not_found": "找不到前端。請先建置前端。",
+        "invalid_image": "無效的圖像檔案",
+        "group_not_found": "找不到群組",
+        "image_not_found": "找不到圖像"
+    },
+    "api": {
+        "image_uploaded": "圖像上傳成功",
+        "image_deleted": "圖像已刪除",
+        "group_created": "群組已建立",
+        "group_updated": "群組已更新",
+        "group_deleted": "群組已刪除"
+    }
+}

@@ -1,0 +1,36 @@
+{
+    "server": {
+        "starting": "ComfyUI Image Manager バックエンドを起動中...",
+        "started": "ComfyUI Image Manager - サーバー実行中！",
+        "access_urls": "アクセスURL:",
+        "local": "ローカル",
+        "network": "ネットワーク",
+        "external": "外部 (ポートフォワーディングが必要)",
+        "data_root": "データルート",
+        "uploads": "アップロード",
+        "tips": {
+            "local_access": "このコンピュータからアクセス",
+            "network_access": "ローカルネットワークからアクセス: 上記のネットワークURLのいずれかを使用してください",
+            "external_access": "外部アクセス: ルーターでポートフォワーディングを設定してください",
+            "stop_server": "Ctrl+Cを押してサーバーを停止します"
+        }
+    },
+    "database": {
+        "initialized": "データベースの初期化に成功しました"
+    },
+    "errors": {
+        "port_in_use": "ポート{port}は既に使用されています",
+        "database_error": "データベースエラー",
+        "frontend_not_found": "フロントエンドが見つかりません。最初にフロントエンドをビルドしてください。",
+        "invalid_image": "無効な画像ファイルです",
+        "group_not_found": "グループが見つかりません",
+        "image_not_found": "画像が見つかりません"
+    },
+    "api": {
+        "image_uploaded": "画像のアップロードに成功しました",
+        "image_deleted": "画像を削除しました",
+        "group_created": "グループを作成しました",
+        "group_updated": "グループを更新しました",
+        "group_deleted": "グループを削除しました"
+    }
+}

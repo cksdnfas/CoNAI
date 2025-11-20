@@ -15,6 +15,7 @@ import {
   Deselect as DeselectIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 
 interface SelectionToolbarProps {
   selectionEnabled: boolean;
@@ -35,6 +36,8 @@ const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
   onDeselectAll,
   showHelp = true,
 }) => {
+  const { t } = useTranslation(['gallery']);
+
   return (
     <Paper
       elevation={1}
@@ -48,7 +51,7 @@ const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
       }}
     >
       {/* 선택 모드 토글 */}
-      <Tooltip title={selectionEnabled ? '선택 모드 비활성화' : '선택 모드 활성화'}>
+      <Tooltip title={selectionEnabled ? t('gallery:selection.toggleMode') : t('gallery:selection.activateMode')}>
         <IconButton
           onClick={onToggleSelection}
           color={selectionEnabled ? 'primary' : 'default'}
@@ -68,7 +71,7 @@ const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Typography variant="body1" sx={{ fontWeight: 500 }}>
-              선택된 이미지:
+              {t('gallery:selection.selectedImages')}
             </Typography>
             <Chip
               label={`${selectedCount} / ${totalCount}`}
@@ -83,7 +86,7 @@ const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
               <Divider orientation="vertical" flexItem />
 
               <Box sx={{ display: 'flex', gap: 1 }}>
-                <Tooltip title="전체 선택">
+                <Tooltip title={t('gallery:selection.selectAll')}>
                   <IconButton
                     size="small"
                     onClick={onSelectAll}
@@ -94,7 +97,7 @@ const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
                   </IconButton>
                 </Tooltip>
 
-                <Tooltip title="선택 해제">
+                <Tooltip title={t('gallery:selection.deselectAll')}>
                   <IconButton
                     size="small"
                     onClick={onDeselectAll}
@@ -117,25 +120,25 @@ const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
                 title={
                   <Box sx={{ p: 1 }}>
                     <Typography variant="caption" component="div" gutterBottom>
-                      <strong>선택 방법:</strong>
+                      <strong>{t('gallery:selection.methods.title')}</strong>
                     </Typography>
                     <Typography variant="caption" component="div">
-                      • 클릭: 개별 선택/해제
+                      {t('gallery:selection.methods.click')}
                     </Typography>
                     <Typography variant="caption" component="div">
-                      • 드래그: 여러 이미지 선택
+                      {t('gallery:selection.methods.drag')}
                     </Typography>
                     <Typography variant="caption" component="div">
-                      • Shift + 클릭: 범위 선택
+                      {t('gallery:selection.methods.shiftClick')}
                     </Typography>
                     <Typography variant="caption" component="div">
-                      • Ctrl/Cmd + 클릭: 토글 선택
+                      {t('gallery:selection.methods.ctrlClick')}
                     </Typography>
                     <Typography variant="caption" component="div">
-                      • Ctrl/Cmd + A: 전체 선택
+                      {t('gallery:selection.methods.ctrlA')}
                     </Typography>
                     <Typography variant="caption" component="div">
-                      • ESC: 선택 해제
+                      {t('gallery:selection.methods.esc')}
                     </Typography>
                   </Box>
                 }

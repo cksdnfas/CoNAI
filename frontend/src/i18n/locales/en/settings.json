@@ -10,6 +10,7 @@
     "metadata": "Metadata Extraction",
     "folders": "Folder Management",
     "account": "Account",
+    "externalApi": "External API",
     "advanced": "Advanced Settings"
   },
   "general": {
@@ -85,6 +86,25 @@
         "description": "Retry with Stealth PNG method if primary extraction fails."
       },
       "performanceNote": "💡 Tip: Default settings (Fast + ComfyUI skip) provide optimal performance for most cases. ComfyUI image processing time reduced from 2682ms → 4ms!"
+    },
+    "thumbnail": {
+      "title": "Thumbnail Settings",
+      "description": "Configure the size and quality used when generating thumbnails",
+      "saveFailed": "Failed to save thumbnail settings",
+      "size": {
+        "label": "Thumbnail Size",
+        "selectLabel": "Thumbnail Size",
+        "original": "Same as original",
+        "default": "1080px (default)"
+      },
+      "quality": {
+        "label": "Thumbnail Quality",
+        "helperText": "Higher quality increases file size (60-100%)"
+      },
+      "regenerate": {
+        "button": "Regenerate Thumbnails",
+        "description": "Regenerate thumbnails for all images with current settings"
+      }
     }
   },
   "tagger": {
@@ -148,15 +168,96 @@
     "title": "Rating Score Settings",
     "description": "Configure the image rating score system"
   },
+  "thumbnail": {
+    "title": "Thumbnail Settings",
+    "description": "Configure size and quality used for thumbnail generation",
+    "saveFailed": "Failed to save thumbnail settings",
+    "size": {
+      "label": "Thumbnail Size",
+      "selectLabel": "Thumbnail Size",
+      "original": "Same as original size",
+      "default": "1080px (default)"
+    },
+    "quality": {
+      "label": "Thumbnail Quality",
+      "helperText": "Higher quality increases file size (60-100%)"
+    },
+    "regenerate": {
+      "button": "Regenerate Thumbnails",
+      "description": "Regenerate all image thumbnails with current settings"
+    }
+  },
+  "background": {
+    "title": "Background Task Monitoring",
+    "loadFailed": "Failed to load background task status",
+    "confirmReset": "Reset background queue? All pending tasks will be cancelled.",
+    "resetFailed": "Failed to reset queue",
+    "resetQueue": "Reset Queue",
+    "autoTagFailed": "Failed to trigger auto-tagging",
+    "confirmHashGen": "Generate hash for {{count}} images?",
+    "hashGenComplete": "Hash generation complete: {{processed}} succeeded, {{failed}} failed",
+    "hashGenFailed": "Failed to regenerate hashes",
+    "confirmVerify": "Verify {{count}} files?\\nThis may take time if there are many files.",
+    "verifyFailed": "Failed to run file verification",
+    "verifyIntervalError": "Verification interval must be between 300-86400 seconds",
+    "verifySaveFailed": "Failed to save file verification settings",
+    "autoUpdate": "Auto-updates every 5 seconds.",
+    "autoUpdateDisabled": "Auto-update is disabled.",
+    "queue": {
+      "title": "Background Queue",
+      "pending": "Pending: {{count}}",
+      "processing": "Processing",
+      "waiting": "Waiting"
+    },
+    "tasks": {
+      "metadata": "Metadata Extraction",
+      "promptCollection": "Prompt Collection",
+      "pendingCount": "{{count}} pending"
+    },
+    "autoTag": {
+      "title": "Auto-Tagging Scheduler",
+      "manualTrigger": "Manual Run",
+      "running": "Running",
+      "stopped": "Stopped",
+      "untaggedCount": "Untagged images: {{count}}",
+      "pollingInterval": "Polling interval: {{seconds}}s",
+      "batchSize": "Batch size: {{size}}"
+    },
+    "hash": {
+      "title": "Media Hash Status",
+      "generate": "Generate Hash",
+      "total": "Total: {{count}}",
+      "completed": "Hash generated: {{count}}",
+      "pending": "Not generated: {{count}}",
+      "completion": "Completion: {{percent}}%"
+    },
+    "verify": {
+      "title": "File Verification Status",
+      "viewLogs": "View Logs",
+      "run": "Run Verification",
+      "progress": "File verification in progress: {{checked}}/{{total}}",
+      "missing": "Missing: {{count}}",
+      "totalFiles": "Total files: {{count}}",
+      "missingFiles": "Missing files: {{count}}",
+      "lastVerification": "Last verification: {{date}}",
+      "schedulerTitle": "Verification Scheduler Settings",
+      "intervalLabel": "Verification Interval (seconds)",
+      "intervalHelper": "300-86400 seconds (5 min - 24 hours)",
+      "intervalTooltip": "May cause time consumption and system load if there are many files"
+    }
+  },
   "similarity": {
     "title": "Image Similarity Search Settings",
     "autoGenerateHash": "Auto-generate Hash on Upload",
     "description": "Automatically generate hashes for similar image search",
+    "hashPlaceholder": "e.g., a1b2c3d4e5f6...",
     "test": {
       "title": "Test",
       "description": "Test current settings with a specific image.",
       "imageHash": "Image Hash",
       "placeholderHash": "e.g., abc123def456...",
+      "compositeHash": "Image Hash",
+      "hashHelperText": "Enter the image's composite_hash",
       "button": "Run Test",
       "processing": "Processing...",
       "result": "Tagging Result:",
@@ -197,6 +298,18 @@
     }
   },
   "auth": {
+    "forgotAccount": {
+      "title": "Forgot your account?",
+      "description": "If you forgot your password, you can recover your account using the following method.",
+      "methodTitle": "Recovery Method:",
+      "step1": "Stop the server",
+      "step2": "Delete the file below",
+      "step3": "Restart the server",
+      "step4": "Set up a new account",
+      "fileToDelete": "File to delete:",
+      "warning": "⚠️ Warning: Deleting this file will invalidate all sessions and require re-login.",
+      "warningNote": "Other data such as workflows and settings will not be affected."
+    },
     "setup": {
       "title": "Setup Authentication",
       "description": "Configure username and password to protect your image manager from unauthorized access. Once set, you will need to login to access the application.",
@@ -442,6 +555,48 @@
       "countFormat": "{{count}}",
       "durationMs": "{{ms}}ms",
       "durationSeconds": "{{seconds}}s"
+    }
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "create": "Create",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "externalApi": {
+    "title": "External API Authentication",
+    "description": "Manage authentication credentials for external API services like Civitai.",
+    "currentApiKey": "Current API Key",
+    "currentApiKeyHelper": "Only partially shown for security",
+    "newApiKey": "New API Key",
+    "newApiKeyPlaceholder": "Enter your new API key",
+    "baseUrl": "Base URL",
+    "baseUrlHelper": "Optional: API endpoint URL",
+    "testConnection": "Test Connection",
+    "addProvider": "Add New Provider",
+    "addProviderDescription": "Add a new external API provider.",
+    "providerName": "Provider Name",
+    "providerNameHelper": "Only letters, numbers, _, - allowed (e.g., openai, stability)",
+    "providerDisplayName": "Display Name",
+    "deleteConfirmTitle": "Delete Provider",
+    "deleteConfirmMessage": "Are you sure you want to delete {{provider}}?",
+    "success": {
+      "saved": "API key saved successfully",
+      "deleted": "Provider deleted successfully",
+      "created": "Provider created successfully",
+      "connectionTest": "Connection test successful",
+      "toggled": "{{state}} successfully"
+    },
+    "errors": {
+      "loadFailed": "Failed to load providers",
+      "saveFailed": "Failed to save",
+      "deleteFailed": "Failed to delete",
+      "createFailed": "Failed to create",
+      "connectionTestFailed": "Connection test failed",
+      "nameRequired": "Please enter both name and display name",
+      "toggleFailed": "Failed to toggle status"
     }
   }
 }

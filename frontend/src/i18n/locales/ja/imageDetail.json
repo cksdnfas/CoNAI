@@ -86,5 +86,18 @@
       "random": "ランダム画像 (Space)",
       "currentPosition": "{{current}} / {{total}}"
     }
+  },
+  "info": {
+    "title": "[ja] Image Information"
+  },
+  "copyHash": "[ja] Copy hash",
+  "hashGenerating": "[ja] Waiting for hash generation...",
+  "hashCopied": "[ja] Hash copied",
+  "viewThumbnail": "[ja] View Thumbnail (Fast Loading)",
+  "viewOriginal": "[ja] View Original (High Quality)",
+  "originalNotFound": "[ja] Original image not found. Showing thumbnail.",
+  "groupModal": {
+    "title": "[ja] Group: {{name}}",
+    "defaultTitle": "[ja] Group Images"
   }
 }

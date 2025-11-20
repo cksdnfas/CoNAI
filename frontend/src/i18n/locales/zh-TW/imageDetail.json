@@ -86,5 +86,18 @@
       "random": "隨機圖像 (Space)",
       "currentPosition": "{{current}} / {{total}}"
     }
+  },
+  "info": {
+    "title": "[zh-TW] Image Information"
+  },
+  "copyHash": "[zh-TW] Copy hash",
+  "hashGenerating": "[zh-TW] Waiting for hash generation...",
+  "hashCopied": "[zh-TW] Hash copied",
+  "viewThumbnail": "[zh-TW] View Thumbnail (Fast Loading)",
+  "viewOriginal": "[zh-TW] View Original (High Quality)",
+  "originalNotFound": "[zh-TW] Original image not found. Showing thumbnail.",
+  "groupModal": {
+    "title": "[zh-TW] Group: {{name}}",
+    "defaultTitle": "[zh-TW] Group Images"
   }
 }

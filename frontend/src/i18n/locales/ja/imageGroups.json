@@ -3,7 +3,9 @@
     "title": "画像グループ",
     "description": "画像をグループ別に管理し、自動収集ルールを設定できます。",
     "emptyTitle": "まだグループが作成されていません",
-    "emptyDescription": "新しいグループを作成して、画像を体系的に管理しましょう。"
+    "emptyDescription": "新しいグループを作成して、画像を体系的に管理しましょう。",
+    "customGroupsTab": "[ja] Custom Groups",
+    "autoFolderGroupsTab": "[ja] Auto Folder Groups"
   },
   "groupCard": {
     "imageCount": "{{count}}枚の画像",
@@ -49,7 +51,10 @@
     "autoCollectDisabledHelp": "自動収集を有効にすると、設定した条件に基づいて新しくアップロードされた画像が自動的にこのグループに追加されます。",
     "filterApplied": "{{count}}個のフィルターが適用されます。実行順序: 除外 → OR → AND",
     "addFiltersPrompt": "フィルターを追加して自動収集条件を設定してください",
-    "filterHelpTooltip": "フィルター使用方法ヘルプ"
+    "filterHelpTooltip": "フィルター使用方法ヘルプ",
+    "parentGroup": "[ja] Parent Group",
+    "noParent": "[ja] None (Root Level)",
+    "selectParent": "[ja] Select Parent Group"
   },
   "conditions": {
     "conditionNumber": "条件{{number}}",
@@ -180,6 +185,71 @@
     "buttonCancel": "キャンセル"
   },
   "hierarchy": {
-    "groupList": "グループリスト"
+    "groupList": "グループリスト",
+    "root": "[ja] Root",
+    "childGroups": "[ja] {{count}} subgroups",
+    "openSubgroups": "[ja] Open Subgroups",
+    "backToParent": "[ja] Back to Parent",
+    "moveGroup": "[ja] Move Group",
+    "moveToRoot": "[ja] Move to Root",
+    "cannotMoveToSelf": "[ja] Cannot move to itself",
+    "cannotMoveToDescendant": "[ja] Cannot move to descendant group",
+    "maxDepthExceeded": "[ja] Maximum depth (5 levels) exceeded",
+    "circularReference": "[ja] Circular reference detected",
+    "hierarchyInvalid": "[ja] Invalid hierarchy structure"
+  },
+  "deleteConfirm": {
+    "title": "[ja] Confirm Group Deletion",
+    "message": "[ja] Are you sure you want to delete the group '{{name}}'?",
+    "groupInfo": {
+      "imageCount": "[ja] Associated images: {{count}}",
+      "childCount": "[ja] Subgroups: {{count}}"
+    },
+    "warning": {
+      "imageAssociations": "[ja] ⚠️ All associations between this group and images will be removed. The image files themselves will not be deleted."
+    },
+    "options": {
+      "title": "[ja] How to handle subgroups",
+      "orphan": {
+        "label": "[ja] Delete only this group (Recommended)",
+        "description": "[ja] Subgroups will be moved to root level."
+      },
+      "cascade": {
+        "label": "[ja] Delete this group and all subgroups",
+        "description": "[ja] {{count}} subgroups will be deleted. This action cannot be undone."
+      }
+    }
+  },
+  "download": {
+    "menuTitle": "[ja] Download Options",
+    "scopeAll": "[ja] Download All",
+    "scopeSelected": "[ja] Selected {{count}} Only",
+    "typeThumbnail": "[ja] Images (Thumbnail)",
+    "typeOriginal": "[ja] Images (Original)",
+    "typeVideo": "[ja] Videos & Animations (Original)",
+    "confirmTitle": "[ja] Confirm Large Download",
+    "confirmMessage": "[ja] Download {{count}} files. Continue?",
+    "confirmButton": "[ja] Download"
+  },
+  "defaultGroupName": "[ja] Group",
+  "autoNavigate": "[ja] Auto-navigate to subgroup: {{from}} → {{to}}",
+  "created": "[ja] Group created. Please refresh your browser.",
+  "updated": "[ja] Group updated. Please refresh your browser.",
+  "emptyState": {
+    "noGroups": "[ja] No groups created",
+    "noSubgroups": "[ja] No subgroups",
+    "createPrompt": "[ja] Press the + button to create a new group",
+    "noSubgroupsHelp": "[ja] Current group has no subgroups"
+  },
+  "autoFolder": {
+    "readOnlyMessage": "[ja] This is a read-only group. Changes must be made to the original file location.",
+    "rebuilding": "[ja] Rebuilding...",
+    "refresh": "更新",
+    "emptyState": {
+      "noGroups": "[ja] No auto folder groups",
+      "noSubfolders": "[ja] No subfolders",
+      "refreshPrompt": "[ja] Press the refresh button to create folder structure",
+      "noSubfoldersHelp": "[ja] Current folder has no subfolders"
+    }
   }
 }

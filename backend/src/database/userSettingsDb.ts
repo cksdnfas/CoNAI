@@ -36,7 +36,7 @@ const MIGRATIONS_PATH = getMigrationsPath();
  * User Settings Database Instance
  * Uses better-sqlite3 for synchronous operations
  * Separated from main images.db for user settings management
- * Tables: workflows, comfyui_servers, workflow_servers, user_preferences, wildcards, wildcard_items, custom_dropdown_lists
+ * Tables: workflows, comfyui_servers, workflow_servers, user_preferences, wildcards, wildcard_items, custom_dropdown_lists, external_api_providers
  * Note: Authentication tables (auth_credentials, sessions) moved to auth.db
  */
 export let userSettingsDb: Database.Database;
@@ -203,6 +203,22 @@ function createTables(): void {
     )
   `);
 
+  // 8. External API providers table (for external API authentication)
+  userSettingsDb.exec(`
+    CREATE TABLE IF NOT EXISTS external_api_providers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      provider_name TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      api_key TEXT,
+      api_secret TEXT,
+      base_url TEXT,
+      additional_config TEXT,
+      is_enabled INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // ===== MIGRATION: Add missing columns BEFORE creating indexes =====
   // Helper function to check if column exists
   const hasColumn = (tableName: string, columnName: string): boolean => {
@@ -250,16 +266,24 @@ function createTables(): void {
     'CREATE INDEX IF NOT EXISTS idx_wildcard_items_tool ON wildcard_items(tool)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_name ON custom_dropdown_lists(name)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_created_date ON custom_dropdown_lists(created_date)',
-    'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_is_auto_collected ON custom_dropdown_lists(is_auto_collected)'
+    'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_is_auto_collected ON custom_dropdown_lists(is_auto_collected)',
+    'CREATE INDEX IF NOT EXISTS idx_external_api_providers_name ON external_api_providers(provider_name)',
+    'CREATE INDEX IF NOT EXISTS idx_external_api_providers_is_enabled ON external_api_providers(is_enabled)'
   ];
 
   indexes.forEach(sql => userSettingsDb.exec(sql));
 
   // Insert default language setting
   userSettingsDb.prepare(`INSERT OR IGNORE INTO user_preferences (key, value) VALUES (?, ?)`)
-    .run('language', 'ko');
+    .run('language', 'en');
 
-  console.log('  ✅ User settings tables created (7 tables + indexes)');
+  // Insert default Civitai provider
+  userSettingsDb.prepare(`
+    INSERT OR IGNORE INTO external_api_providers (provider_name, display_name, is_enabled)
+    VALUES (?, ?, ?)
+  `).run('civitai', 'Civitai', 1);
+
+  console.log('  ✅ User settings tables created (8 tables + indexes)');
 
   // Run migrations for existing tables
   migrateExistingTables();

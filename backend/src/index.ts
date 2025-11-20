@@ -25,6 +25,7 @@ import crypto from 'crypto';
 import { runtimePaths, ensureRuntimeDirectories } from './config/runtimePaths';
 import { prepareHttpsOptions } from './utils/httpsOptions';
 import { getNetworkInfo, formatNetworkInfo } from './utils/networkInfo';
+import { StartupCheck } from './utils/startupCheck';
 
 import { imageRoutes } from './routes/images/index';
 import promptCollectionRoutes from './routes/promptCollection';
@@ -46,6 +47,7 @@ import imageEditorRoutes from './routes/image-editor.routes';
 import { authRoutes } from './routes/auth.routes';
 import fileVerificationRoutes from './routes/fileVerification';
 import { thumbnailRoutes } from './routes/thumbnails';
+import externalApiRoutes from './routes/externalApi.routes';
 import { initializeDatabase } from './database/init';
 import { initializeUserSettingsDb } from './database/userSettingsDb';
 import { initializeAuthDb, getAuthDb } from './database/authDb';
@@ -253,6 +255,7 @@ async function registerRoutes() {
 
   // Protected routes (require authentication if configured)
   // Apply lenient rate limiting to read-heavy endpoints
+  app.use('/api/external-api', optionalAuth, externalApiRoutes);
   app.use('/api/images', readOnlyLimiter, optionalAuth, imageRoutes);
   app.use('/api/prompt-collection', readOnlyLimiter, optionalAuth, promptCollectionRoutes);
   app.use('/api/prompt-groups', readOnlyLimiter, optionalAuth, promptGroupRoutes);
@@ -327,9 +330,16 @@ async function startServer() {
   try {
     console.log('🚀 ComfyUI Image Manager Backend 시작 중...\n');
 
+    // 0. Initialize i18n (language settings)
+    const { initI18n } = await import('./i18n');
+    initI18n();
+
     // 1. 필요한 폴더들 자동 생성 (uploads, database, logs, temp, models, RecycleBin)
     console.log('📁 필요한 폴더들을 확인하고 생성 중...');
     ensureRuntimeDirectories();
+
+    // 1-1. 시스템 환경 체크 (권한, 도커 등)
+    await StartupCheck.runAllChecks();
 
     // 2. .env 파일 자동 생성
     console.log('⚙️  환경 설정을 확인하고 생성 중...');

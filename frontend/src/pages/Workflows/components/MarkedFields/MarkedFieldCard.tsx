@@ -345,13 +345,13 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
                 sx={{ flex: 1 }}
               />
               <TextField
-                label="단위 (Step)"
+                label={t('workflows:markedFields.stepLabel')}
                 type="number"
                 value={field.step ?? ''}
                 onChange={(e) => onUpdate(index, { step: e.target.value ? parseFloat(e.target.value) : undefined })}
                 size="small"
-                placeholder="0.01"
-                helperText="값 변화 단위 (예: 0.01)"
+                placeholder={t('workflows:markedFields.stepPlaceholder')}
+                helperText={t('workflows:markedFields.stepHelperText')}
                 inputProps={{ step: 'any', min: 0 }}
                 sx={{ flex: 1 }}
               />
@@ -373,7 +373,7 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
                     sx={{ fontWeight: 500 }}
                   />
                   <Typography variant="caption" color="text.secondary">
-                    (자동 업데이트됨)
+                    {t('workflows:markedFields.autoUpdated')}
                   </Typography>
                 </Box>
               )}
@@ -392,13 +392,13 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
                   }
                   size="small"
                   placeholder={t('workflows:fieldForm.selectOptionsPlaceholder')}
-                  helperText={field.dropdown_list_name ? '참조 목록의 미리보기 (읽기 전용)' : t('workflows:fieldForm.selectOptionsHelper')}
+                  helperText={field.dropdown_list_name ? t('workflows:markedFields.listPreviewHelper') : t('workflows:fieldForm.selectOptionsHelper')}
                   disabled={!!field.dropdown_list_name}
                 />
                 <IconButton
                   size="small"
                   onClick={handleOpenListDialog}
-                  title="커스텀 목록에서 불러오기"
+                  title={t('workflows:markedFields.loadFromListTooltip')}
                   sx={{ alignSelf: 'flex-start', mt: 0.5 }}
                 >
                   <PlaylistAddIcon />
@@ -433,11 +433,11 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>커스텀 목록에서 불러오기</DialogTitle>
+        <DialogTitle>{t('workflows:markedFields.loadFromListTitle')}</DialogTitle>
         <DialogContent>
           {customLists.length === 0 ? (
             <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 2 }}>
-              등록된 커스텀 목록이 없습니다.
+              {t('workflows:markedFields.noCustomLists')}
             </Typography>
           ) : (
             <List>
@@ -446,7 +446,7 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
                   <ListItemButton onClick={() => handleSelectList(list)}>
                     <ListItemText
                       primary={list.name}
-                      secondary={`${list.items.length}개 항목 - ${list.items.slice(0, 3).join(', ')}${list.items.length > 3 ? '...' : ''}`}
+                      secondary={`${t('workflows:markedFields.itemCount', { count: list.items.length })}${list.items.slice(0, 3).join(', ')}${list.items.length > 3 ? '...' : ''}`}
                     />
                   </ListItemButton>
                 </ListItem>
@@ -455,7 +455,7 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setListDialogOpen(false)}>취소</Button>
+          <Button onClick={() => setListDialogOpen(false)}>{t('common:buttons.cancel')}</Button>
         </DialogActions>
       </Dialog>
     </Card>

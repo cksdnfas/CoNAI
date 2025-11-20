@@ -12,7 +12,9 @@
     "add": "ワイルドカードを追加",
     "addItem": "項目を追加",
     "preview": "プレビュー",
-    "confirmDelete": "'{{name}}'ワイルドカードを削除してもよろしいですか?"
+    "confirmDelete": "'{{name}}'ワイルドカードを削除してもよろしいですか?",
+    "copiedToClipboard": "[ja] Copied to clipboard",
+    "copyFailed": "[ja] Failed to copy"
   },
   "card": {
     "items": "{{count}}個の項目",
@@ -43,7 +45,8 @@
   "errors": {
     "nameRequired": "ワイルドカード名は必須です",
     "itemsRequired": "最低1つの項目が必要です",
-    "previewTextRequired": "テストするプロンプトを入力してください"
+    "previewTextRequired": "テストするプロンプトを入力してください",
+    "copyFailed": "[ja] Failed to copy"
   },
   "tabs": {
     "manual": "手動作成",
@@ -95,6 +98,30 @@
       "filteredCount": "(フィルター済み: <strong>{{count}}</strong>個)",
       "noResults": "検索結果がありません",
       "tryDifferentFilters": "別の検索キーワードまたはフィルターをお試しください"
-    }
+    },
+    "matchingMode": "[ja] Text File Matching Mode",
+    "matchingModeFilename": "[ja] Filename Matching (lora.txt)",
+    "matchingModeCommon": "[ja] Use Common Text File",
+    "commonTextFilename": "[ja] Common Text Filename",
+    "commonTextFilenameHelper": "[ja] Common text filename to use within folders (e.g., add.txt, common.txt)",
+    "matchingPriority": "[ja] Matching Priority",
+    "priorityFilename": "[ja] Filename Matching First (fallback to common text)",
+    "priorityCommon": "[ja] Common Text First (fallback to filename matching)"
+  },
+  "buttons": {
+    "openScanDialog": "[ja] Scan LORA",
+    "openLogDialog": "[ja] Last Scan Log"
+  },
+  "scanDialog": {
+    "title": "[ja] LORA Wildcard Auto-Generation",
+    "infoMessage": "[ja] Please select ComfyUI's loras folder or a folder containing LORA files.",
+    "scanButton": "[ja] Collect LORA",
+    "warningTitle": "[ja] Scan Information:",
+    "warning1": "[ja] Automatically collects .safetensors files",
+    "warning2": "[ja] Re-scanning the same folder will update the items",
+    "warning3": "[ja] Auto-collected items can be found in this tab"
+  },
+  "logDialog": {
+    "title": "[ja] Last LORA Scan Log"
   }
 }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Typography, IconButton, Tooltip, Snackbar, Alert } from '@mui/material';
 import { ContentCopy as CopyIcon, HourglassEmpty as WaitingIcon } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../../types/image';
 import PromptDisplay from '../../PromptDisplay';
 import { FileInfoSection } from './FileInfoSection';
@@ -27,6 +28,7 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
   onAutoTagGenerated,
   isHistoryContext = false,
 }) => {
+  const { t } = useTranslation(['imageDetail', 'common']);
   const [copySnackbarOpen, setCopySnackbarOpen] = useState(false);
 
   // 프롬프트 표시 여부 결정
@@ -54,7 +56,7 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
       {/* Top info section - scrollable */}
       <Box sx={{ flexShrink: 0, overflowY: 'auto', mb: 2 }}>
         <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
-          이미지 정보
+          {t('imageDetail:info.title')}
         </Typography>
 
         {/* Hash display section */}
@@ -71,7 +73,7 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
         >
           {image.composite_hash ? (
             <>
-              <Tooltip title="클릭하여 복사">
+              <Tooltip title={t('common:clickToCopy')}>
                 <Box
                   onClick={handleCopyHash}
                   sx={{
@@ -91,7 +93,7 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
                   {image.composite_hash}
                 </Box>
               </Tooltip>
-              <Tooltip title="해시 복사">
+              <Tooltip title={t('imageDetail:copyHash')}>
                 <IconButton
                   size="small"
                   onClick={handleCopyHash}
@@ -109,7 +111,7 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
                 color="text.secondary"
                 sx={{ fontStyle: 'italic' }}
               >
-                해시 생성 대기 중...
+                {t('imageDetail:hashGenerating')}
               </Typography>
             </>
           )}
@@ -145,7 +147,7 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert onClose={() => setCopySnackbarOpen(false)} severity="success" variant="filled">
-          해시가 복사되었습니다
+          {t('imageDetail:hashCopied')}
         </Alert>
       </Snackbar>
     </Box>

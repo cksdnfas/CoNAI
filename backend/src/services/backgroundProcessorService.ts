@@ -10,6 +10,8 @@ import { generateFileHash } from '../utils/fileHash';
 import { VideoProcessor } from './videoProcessor';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 import { AutoCollectionService } from './autoCollectionService';
+import { checkFileAccess } from '../utils/fileAccess';
+import { MetadataExtractionError } from '../types/errors';
 
 interface UnhashedFile {
   id: number;
@@ -134,13 +136,29 @@ export class BackgroundProcessorService {
   private static async processFile(file: UnhashedFile & { file_type: string }): Promise<void> {
     const fileName = path.basename(file.original_file_path);
 
-    // Check if file still exists
-    if (!fs.existsSync(file.original_file_path)) {
+    // Check if file still exists and is readable
+    const access = await checkFileAccess(file.original_file_path);
+
+    if (!access.exists) {
       console.log(`  ⚠️  File not found, deleting DB record: ${fileName}`);
       db.prepare(
         `DELETE FROM image_files WHERE id = ?`
       ).run(file.id);
       return;
+    }
+
+    if (!access.readable) {
+      const errorMsg = access.errorCode === 'EACCES'
+        ? `Permission denied (read): ${fileName}`
+        : `Cannot read file: ${fileName}`;
+
+      console.error(`  ❌ ${errorMsg}`);
+
+      // 권한 오류는 재시도 가능하므로 throw (백그라운드 큐가 재시도)
+      throw MetadataExtractionError.fromNodeError(
+        file.original_file_path,
+        { code: access.errorCode, message: access.error } as NodeJS.ErrnoException
+      );
     }
 
     // 파일 타입에 따라 처리

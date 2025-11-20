@@ -12,7 +12,9 @@
     "add": "新增萬用字元",
     "addItem": "新增項目",
     "preview": "預覽",
-    "confirmDelete": "確定要刪除'{{name}}'萬用字元嗎?"
+    "confirmDelete": "確定要刪除'{{name}}'萬用字元嗎?",
+    "copiedToClipboard": "[zh-TW] Copied to clipboard",
+    "copyFailed": "[zh-TW] Failed to copy"
   },
   "card": {
     "items": "{{count}}個項目",
@@ -43,7 +45,8 @@
   "errors": {
     "nameRequired": "萬用字元名稱為必填項",
     "itemsRequired": "至少需要一個項目",
-    "previewTextRequired": "請輸入要測試的提示詞"
+    "previewTextRequired": "請輸入要測試的提示詞",
+    "copyFailed": "[zh-TW] Failed to copy"
   },
   "tabs": {
     "manual": "手動建立",
@@ -95,6 +98,30 @@
       "filteredCount": "(已篩選: <strong>{{count}}</strong>個)",
       "noResults": "未找到結果",
       "tryDifferentFilters": "請嘗試不同的搜尋詞或篩選器"
-    }
+    },
+    "matchingMode": "[zh-TW] Text File Matching Mode",
+    "matchingModeFilename": "[zh-TW] Filename Matching (lora.txt)",
+    "matchingModeCommon": "[zh-TW] Use Common Text File",
+    "commonTextFilename": "[zh-TW] Common Text Filename",
+    "commonTextFilenameHelper": "[zh-TW] Common text filename to use within folders (e.g., add.txt, common.txt)",
+    "matchingPriority": "[zh-TW] Matching Priority",
+    "priorityFilename": "[zh-TW] Filename Matching First (fallback to common text)",
+    "priorityCommon": "[zh-TW] Common Text First (fallback to filename matching)"
+  },
+  "buttons": {
+    "openScanDialog": "[zh-TW] Scan LORA",
+    "openLogDialog": "[zh-TW] Last Scan Log"
+  },
+  "scanDialog": {
+    "title": "[zh-TW] LORA Wildcard Auto-Generation",
+    "infoMessage": "[zh-TW] Please select ComfyUI's loras folder or a folder containing LORA files.",
+    "scanButton": "[zh-TW] Collect LORA",
+    "warningTitle": "[zh-TW] Scan Information:",
+    "warning1": "[zh-TW] Automatically collects .safetensors files",
+    "warning2": "[zh-TW] Re-scanning the same folder will update the items",
+    "warning3": "[zh-TW] Auto-collected items can be found in this tab"
+  },
+  "logDialog": {
+    "title": "[zh-TW] Last LORA Scan Log"
   }
 }

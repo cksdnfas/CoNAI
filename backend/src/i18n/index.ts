@@ -1,13 +1,17 @@
 import en from './locales/en.json';
 import ko from './locales/ko.json';
+import ja from './locales/ja.json';
+import zhCN from './locales/zh-CN.json';
+import zhTW from './locales/zh-TW.json';
 
-export type Locale = 'en' | 'ko' | 'ja' | 'zh';
+export type Locale = 'en' | 'ko' | 'ja' | 'zh-CN' | 'zh-TW';
 
 const translations: Record<Locale, Record<string, any>> = {
   en,
   ko,
-  ja: en, // Fallback to English for now
-  zh: en  // Fallback to English for now
+  ja,
+  'zh-CN': zhCN,
+  'zh-TW': zhTW
 };
 
 let currentLocale: Locale = 'en';
@@ -37,7 +41,7 @@ export function initI18n(): void {
  * Check if locale is supported
  */
 function isValidLocale(locale: string): boolean {
-  return ['en', 'ko', 'ja', 'zh'].includes(locale);
+  return ['en', 'ko', 'ja', 'zh-CN', 'zh-TW'].includes(locale);
 }
 
 /**
@@ -101,5 +105,5 @@ export function setLocale(locale: Locale): void {
  * Get all available locales
  */
 export function getAvailableLocales(): Locale[] {
-  return ['en', 'ko', 'ja', 'zh'];
+  return ['en', 'ko', 'ja', 'zh-CN', 'zh-TW'];
 }
