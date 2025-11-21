@@ -72,7 +72,7 @@ export const buildUploadsUrl = (relativePath?: string | null): string | null => 
   }
 
   const normalized = normalizeUploadPath(relativePath.trim());
-  return `${getBackendOrigin()}/uploads/${normalized}`;
+  return `${getBackendOrigin()}/${normalized}`;
 };
 
 export const ensureAbsoluteUrl = (value?: string | null): string => {

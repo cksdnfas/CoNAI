@@ -20,6 +20,7 @@ import {
   Download as DownloadIcon,
   InfoOutlined as InfoIcon,
   Delete as DeleteIcon,
+  CloudUpload as CloudUploadIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -37,6 +38,8 @@ import { ImageControls } from './components/ImageControls';
 import { ImageDisplay } from './components/ImageDisplay';
 import { ImageDetailSidebar } from './components/ImageDetailSidebar';
 import { ImageEditorModal } from '../ImageEditorModal';
+import { CivitaiUploadModal } from '../CivitaiUploadModal';
+import { civitaiApi } from '../../services/civitaiApi';
 
 // ✅ composite_hash 기반으로 변경
 interface ImageViewerModalProps {
@@ -83,6 +86,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [isRandomMode, setIsRandomMode] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false); // 원본 이미지 표시 여부 (기본: 썸네일)
   const [editorOpen, setEditorOpen] = useState(false); // 이미지 편집 모달
+  const [civitaiUploadOpen, setCivitaiUploadOpen] = useState(false); // Civitai 업로드 모달
+  const [isCivitaiEnabled, setIsCivitaiEnabled] = useState(false); // Civitai 활성화 여부
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',
@@ -111,15 +116,20 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   });
   const groupImages = useGroupImages();
 
-  // Load settings to check if tagger is enabled
+  // Load settings to check if tagger and civitai are enabled
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const settings = await settingsApi.getSettings();
+        const [settings, civitaiSettings] = await Promise.all([
+          settingsApi.getSettings(),
+          civitaiApi.getSettings()
+        ]);
         setIsTaggerEnabled(settings.tagger.enabled);
+        setIsCivitaiEnabled(civitaiSettings.enabled);
       } catch (err) {
         console.error('Failed to load settings:', err);
         setIsTaggerEnabled(false);
+        setIsCivitaiEnabled(false);
       }
     };
 
@@ -502,6 +512,13 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               <DownloadIcon />
             </IconButton>
           </Tooltip>
+          {!isHistoryContext && isCivitaiEnabled && currentImage?.composite_hash && (
+            <Tooltip title={t('imageDetail:actions.uploadToCivitai')}>
+              <IconButton size="small" onClick={() => setCivitaiUploadOpen(true)} color="primary">
+                <CloudUploadIcon />
+              </IconButton>
+            </Tooltip>
+          )}
           <Tooltip title={t('imageDetail:actions.delete')}>
             <IconButton size="small" onClick={handleDeleteClick} color="error">
               <DeleteIcon />
@@ -585,6 +602,17 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               }
             }
           }}
+        />
+      )}
+
+      {/* Civitai Upload Modal */}
+      {currentImage?.composite_hash && (
+        <CivitaiUploadModal
+          open={civitaiUploadOpen}
+          onClose={() => setCivitaiUploadOpen(false)}
+          compositeHash={currentImage.composite_hash}
+          imageName={currentImage.original_file_path?.split('/').pop() || currentImage.original_file_path?.split('\\').pop()}
+          imageUrl={currentImage.original_file_path || currentImage.thumbnail_path}
         />
       )}
     </Dialog>

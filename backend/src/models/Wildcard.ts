@@ -7,6 +7,7 @@ export interface Wildcard {
   id: number;
   name: string;
   description?: string;
+  parent_id: number | null;
   created_date: string;
   updated_date: string;
 }
@@ -39,6 +40,7 @@ export interface WildcardCreateData {
   description?: string;
   items: ToolItems; // 도구별 항목 배열
   customId?: number; // 자동 LORA용 커스텀 ID (선택적)
+  parent_id?: number | null; // 부모 와일드카드 ID
 }
 
 /**
@@ -48,6 +50,7 @@ export interface WildcardUpdateData {
   name?: string;
   description?: string;
   items?: ToolItems; // 도구별 항목 배열
+  parent_id?: number | null; // 부모 와일드카드 ID
 }
 
 /**
@@ -55,6 +58,14 @@ export interface WildcardUpdateData {
  */
 export interface WildcardWithItems extends Wildcard {
   items: WildcardItem[];
+}
+
+/**
+ * 계층 구조를 포함한 와일드카드
+ */
+export interface WildcardWithHierarchy extends WildcardWithItems {
+  children?: WildcardWithHierarchy[];
+  parent?: Wildcard;
 }
 
 /**
@@ -100,16 +111,16 @@ export class WildcardModel {
       if (data.customId) {
         // 커스텀 ID로 생성 (자동 LORA용)
         db.prepare(`
-          INSERT INTO wildcards (id, name, description)
-          VALUES (?, ?, ?)
-        `).run(data.customId, data.name, data.description || null);
+          INSERT INTO wildcards (id, name, description, parent_id)
+          VALUES (?, ?, ?, ?)
+        `).run(data.customId, data.name, data.description || null, data.parent_id ?? null);
         wildcardId = data.customId;
       } else {
         // 기본 자동 증가 ID
         const wildcardResult = db.prepare(`
-          INSERT INTO wildcards (name, description)
-          VALUES (?, ?)
-        `).run(data.name, data.description || null);
+          INSERT INTO wildcards (name, description, parent_id)
+          VALUES (?, ?, ?)
+        `).run(data.name, data.description || null, data.parent_id ?? null);
         wildcardId = wildcardResult.lastInsertRowid as number;
       }
 
@@ -165,6 +176,10 @@ export class WildcardModel {
       if (data.description !== undefined) {
         updates.push('description = ?');
         params.push(data.description);
+      }
+      if (data.parent_id !== undefined) {
+        updates.push('parent_id = ?');
+        params.push(data.parent_id);
       }
 
       updates.push('updated_date = CURRENT_TIMESTAMP');
@@ -247,6 +262,91 @@ export class WildcardModel {
       const items = WildcardItemModel.findByWildcardId(wildcard.id);
       return { ...wildcard, items };
     });
+  }
+
+  /**
+   * 루트 와일드카드만 조회 (parent_id가 NULL인 것들)
+   */
+  static findRoots(): Wildcard[] {
+    const db = getUserSettingsDb();
+    return db.prepare('SELECT * FROM wildcards WHERE parent_id IS NULL ORDER BY name').all() as Wildcard[];
+  }
+
+  /**
+   * 특정 부모의 자식 와일드카드 조회
+   */
+  static findByParentId(parentId: number): Wildcard[] {
+    const db = getUserSettingsDb();
+    return db.prepare('SELECT * FROM wildcards WHERE parent_id = ? ORDER BY name').all(parentId) as Wildcard[];
+  }
+
+  /**
+   * 계층 구조로 모든 와일드카드 조회 (재귀)
+   */
+  static findHierarchy(parentId: number | null = null): WildcardWithHierarchy[] {
+    const db = getUserSettingsDb();
+    const wildcards = parentId === null
+      ? db.prepare('SELECT * FROM wildcards WHERE parent_id IS NULL ORDER BY name').all() as Wildcard[]
+      : db.prepare('SELECT * FROM wildcards WHERE parent_id = ? ORDER BY name').all(parentId) as Wildcard[];
+
+    return wildcards.map(wildcard => {
+      const items = WildcardItemModel.findByWildcardId(wildcard.id);
+      const children = WildcardModel.findHierarchy(wildcard.id);
+      return { ...wildcard, items, children: children.length > 0 ? children : undefined };
+    });
+  }
+
+  /**
+   * 특정 와일드카드의 전체 경로 조회 (루트부터 현재까지)
+   */
+  static getFullPath(wildcardId: number): Wildcard[] {
+    const path: Wildcard[] = [];
+    let currentId: number | null = wildcardId;
+
+    while (currentId !== null) {
+      const wildcard = WildcardModel.findById(currentId);
+      if (!wildcard) break;
+      path.unshift(wildcard);
+      currentId = wildcard.parent_id;
+    }
+
+    return path;
+  }
+
+  /**
+   * 모든 자식 와일드카드 재귀 조회 (자기 자신 미포함)
+   */
+  static getAllDescendants(wildcardId: number): Wildcard[] {
+    const descendants: Wildcard[] = [];
+    const directChildren = WildcardModel.findByParentId(wildcardId);
+
+    for (const child of directChildren) {
+      descendants.push(child);
+      descendants.push(...WildcardModel.getAllDescendants(child.id));
+    }
+
+    return descendants;
+  }
+
+  /**
+   * 순환 참조 검사 (parent_id 설정 전 호출)
+   */
+  static checkCircularReference(wildcardId: number, targetParentId: number): boolean {
+    if (wildcardId === targetParentId) return true;
+
+    let currentId: number | null = targetParentId;
+    const visited = new Set<number>();
+
+    while (currentId !== null) {
+      if (visited.has(currentId) || currentId === wildcardId) {
+        return true; // 순환 참조 발견
+      }
+      visited.add(currentId);
+      const parent = WildcardModel.findById(currentId);
+      currentId = parent?.parent_id ?? null;
+    }
+
+    return false;
   }
 }
 

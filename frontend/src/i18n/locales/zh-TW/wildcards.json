@@ -52,6 +52,12 @@
     "manual": "手動建立",
     "autoCollected": "自動收集 (LORA)"
   },
+  "detail": {
+    "children": "子項目",
+    "items": "項目列表",
+    "selectItem": "請從左側選擇項目",
+    "moreItems": "更多"
+  },
   "autoCollect": {
     "title": "LORA萬用字元自動生成",
     "description": "掃描LORA資料夾以自動生成萬用字元",
@@ -79,6 +85,7 @@
     "noAutoWildcards": "沒有自動收集的萬用字元",
     "noAutoWildcardsDesc": "掃描LORA資料夾以生成萬用字元",
     "autoCollectedBadge": "自動",
+    "viewDetail": "[zh-TW] View Details",
     "errors": {
       "folderPathRequired": "LORA資料夾路徑為必填項",
       "invalidWeight": "請輸入有效的權重值 (0.1 ~ 2.0)",
@@ -123,5 +130,20 @@
   },
   "logDialog": {
     "title": "[zh-TW] Last LORA Scan Log"
+  },
+  "detailDialog": {
+    "title": "[zh-TW] View List (Read-Only)",
+    "readOnlyInfo": "[zh-TW] Auto-collected items cannot be edited. You can only view the contents.",
+    "name": "[zh-TW] List Name",
+    "description": "[zh-TW] Description",
+    "path": "[zh-TW] Path",
+    "itemList": "[zh-TW] Item List ({{count}} items)"
+  },
+  "autocomplete": {
+    "hint": "輸入 ++ 可顯示萬用字元列表",
+    "manualTab": "手動",
+    "autoTab": "自動 (LORA)",
+    "noResults": "無結果",
+    "selectTier": "請選擇層級"
   }
 }

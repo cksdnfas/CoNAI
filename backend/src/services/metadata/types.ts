@@ -18,6 +18,7 @@ export interface AIMetadata {
   lora_models?: string[];  // Array of LoRA names for compatibility with existing types
   lora_hashes?: string;
   model_hash?: string;
+  model_references?: ModelReference[];  // Structured model info for Civitai integration
   denoising_strength?: number;
   clip_skip?: number;
   version?: string;
@@ -60,6 +61,23 @@ export interface AIMetadata {
 export interface LoRAModel {
   name: string;
   weight: number;
+}
+
+/**
+ * Model reference for Civitai integration
+ */
+export interface ModelReference {
+  name: string;
+  hash: string;
+  type: 'checkpoint' | 'lora' | 'vae' | 'embedding';
+  weight?: number;
+}
+
+/**
+ * Extended LoRA info with hash
+ */
+export interface LoRAModelWithHash extends LoRAModel {
+  hash?: string;
 }
 
 export interface ImageMetadata {

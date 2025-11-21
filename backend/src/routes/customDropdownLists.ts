@@ -302,10 +302,12 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
  * POST /api/custom-dropdown-lists/scan-comfyui-models
  */
 router.post('/scan-comfyui-models', asyncHandler(async (req: Request, res: Response) => {
-  const { modelFolders, sourcePath } = req.body;
+  const { modelFolders, sourcePath, mergeSubfolders, createBoth } = req.body;
 
   // modelFolders: Array<{ folderName: string; displayName: string; files: string[] }>
   // sourcePath: string (optional, for tracking rescan)
+  // mergeSubfolders: boolean (하위폴더를 하나로 통합)
+  // createBoth: boolean (통합 리스트와 개별 리스트 모두 생성)
 
   if (!modelFolders || !Array.isArray(modelFolders)) {
     return res.status(400).json({
@@ -325,21 +327,86 @@ router.post('/scan-comfyui-models', asyncHandler(async (req: Request, res: Respo
       }
     }
 
-    // 스캔된 폴더별로 자동 수집 목록 생성
     let createdCount = 0;
-    for (const folder of modelFolders) {
-      if (folder.files && folder.files.length > 0) {
-        try {
-          await CustomDropdownListModel.create({
-            name: folder.displayName,
-            description: `ComfyUI ${folder.folderName} 모델 목록 (자동 수집)`,
-            items: folder.files,
-            is_auto_collected: 1,
-            source_path: sourcePath || 'client-selected'
-          });
-          createdCount++;
-        } catch (error) {
-          console.error(`Error creating list for ${folder.displayName}:`, error);
+
+    // 통합 옵션이 활성화된 경우 - 같은 루트 폴더끼리 병합
+    if (mergeSubfolders) {
+      // 루트 폴더별로 그룹화 (예: checkpoints, unet, upscale_models)
+      const rootFolderMap = new Map<string, string[]>();
+
+      for (const folder of modelFolders) {
+        const rootFolder = folder.folderName; // checkpoints, unet 등
+        if (!rootFolderMap.has(rootFolder)) {
+          rootFolderMap.set(rootFolder, []);
+        }
+
+        // 파일 경로에 하위폴더 정보 포함하여 통합
+        // displayName: "checkpoints/SD1.5" → subPath: "SD1.5"
+        const subPath = folder.displayName.includes('/')
+          ? folder.displayName.split('/').slice(1).join('/') + '/'
+          : '';
+
+        for (const file of folder.files) {
+          // 이미 상대경로가 포함된 경우 그대로 사용, 아니면 subPath 추가
+          const fullPath = file.includes('/') ? file : subPath + file;
+          rootFolderMap.get(rootFolder)!.push(fullPath);
+        }
+      }
+
+      // 통합 리스트 생성
+      for (const [rootFolder, files] of Array.from(rootFolderMap.entries())) {
+        if (files.length > 0) {
+          try {
+            await CustomDropdownListModel.create({
+              name: rootFolder,
+              description: `ComfyUI ${rootFolder} 통합 모델 목록 (자동 수집)`,
+              items: files.sort(),
+              is_auto_collected: 1,
+              source_path: sourcePath || 'client-selected'
+            });
+            createdCount++;
+          } catch (error) {
+            console.error(`Error creating merged list for ${rootFolder}:`, error);
+          }
+        }
+      }
+
+      // 둘 다 생성 옵션이면 개별 리스트도 추가 생성
+      if (createBoth) {
+        for (const folder of modelFolders) {
+          // 루트 폴더와 이름이 다른 경우만 (하위폴더가 있는 경우)
+          if (folder.displayName !== folder.folderName && folder.files && folder.files.length > 0) {
+            try {
+              await CustomDropdownListModel.create({
+                name: folder.displayName,
+                description: `ComfyUI ${folder.folderName} 모델 목록 (자동 수집)`,
+                items: folder.files,
+                is_auto_collected: 1,
+                source_path: sourcePath || 'client-selected'
+              });
+              createdCount++;
+            } catch (error) {
+              console.error(`Error creating list for ${folder.displayName}:`, error);
+            }
+          }
+        }
+      }
+    } else {
+      // 기존 동작: 폴더별로 개별 목록 생성
+      for (const folder of modelFolders) {
+        if (folder.files && folder.files.length > 0) {
+          try {
+            await CustomDropdownListModel.create({
+              name: folder.displayName,
+              description: `ComfyUI ${folder.folderName} 모델 목록 (자동 수집)`,
+              items: folder.files,
+              is_auto_collected: 1,
+              source_path: sourcePath || 'client-selected'
+            });
+            createdCount++;
+          } catch (error) {
+            console.error(`Error creating list for ${folder.displayName}:`, error);
+          }
         }
       }
     }
@@ -350,6 +417,7 @@ router.post('/scan-comfyui-models', asyncHandler(async (req: Request, res: Respo
         scannedFolders: modelFolders.length,
         createdLists: createdCount,
         isRescan: deletedCount > 0,
+        mergeSubfolders: !!mergeSubfolders,
         message: deletedCount > 0
           ? `${createdCount}개 목록이 업데이트되었습니다.`
           : `${createdCount}개 목록이 생성되었습니다.`

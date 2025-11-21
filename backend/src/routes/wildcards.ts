@@ -12,14 +12,25 @@ const router = Router();
  * GET /api/wildcards
  * Query params:
  *   - withItems: 'true' | 'false' (default: 'true')
+ *   - hierarchical: 'true' | 'false' (default: 'false') - 계층 구조로 반환
+ *   - rootsOnly: 'true' | 'false' (default: 'false') - 루트 와일드카드만
  */
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   try {
     const withItems = req.query.withItems !== 'false';
+    const hierarchical = req.query.hierarchical === 'true';
+    const rootsOnly = req.query.rootsOnly === 'true';
 
-    const wildcards = withItems
-      ? WildcardModel.findAllWithItems()
-      : WildcardModel.findAll();
+    let wildcards;
+    if (hierarchical) {
+      wildcards = WildcardModel.findHierarchy(null);
+    } else if (rootsOnly) {
+      wildcards = WildcardModel.findRoots();
+    } else if (withItems) {
+      wildcards = WildcardModel.findAllWithItems();
+    } else {
+      wildcards = WildcardModel.findAll();
+    }
 
     return res.json({
       success: true,
@@ -59,6 +70,64 @@ router.get('/last-scan-log', asyncHandler(async (req: Request, res: Response) =>
     return res.status(500).json({
       success: false,
       error: 'Failed to get last scan log'
+    });
+  }
+}));
+
+/**
+ * 특정 와일드카드의 자식 조회
+ * GET /api/wildcards/:id/children
+ */
+router.get('/:id/children', asyncHandler(async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+
+  if (isNaN(id)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid wildcard ID'
+    });
+  }
+
+  try {
+    const children = WildcardModel.findByParentId(id);
+    return res.json({
+      success: true,
+      data: children
+    });
+  } catch (error) {
+    console.error('Error getting wildcard children:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get wildcard children'
+    });
+  }
+}));
+
+/**
+ * 특정 와일드카드의 전체 경로 조회 (루트부터 현재까지)
+ * GET /api/wildcards/:id/path
+ */
+router.get('/:id/path', asyncHandler(async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+
+  if (isNaN(id)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid wildcard ID'
+    });
+  }
+
+  try {
+    const path = WildcardModel.getFullPath(id);
+    return res.json({
+      success: true,
+      data: path
+    });
+  } catch (error) {
+    console.error('Error getting wildcard path:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get wildcard path'
     });
   }
 }));
@@ -144,6 +213,17 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
+    // parent_id 유효성 검증
+    if (data.parent_id !== undefined && data.parent_id !== null) {
+      const parentWildcard = WildcardModel.findById(data.parent_id);
+      if (!parentWildcard) {
+        return res.status(400).json({
+          success: false,
+          error: 'Parent wildcard not found'
+        });
+      }
+    }
+
     // 생성
     const wildcard = WildcardModel.create(data);
     const wildcardWithItems = WildcardModel.findByIdWithItems(wildcard.id);
@@ -205,6 +285,24 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
         return res.status(409).json({
           success: false,
           error: 'Wildcard with this name already exists'
+        });
+      }
+    }
+
+    // parent_id 유효성 및 순환 참조 검증
+    if (data.parent_id !== undefined && data.parent_id !== null) {
+      const parentWildcard = WildcardModel.findById(data.parent_id);
+      if (!parentWildcard) {
+        return res.status(400).json({
+          success: false,
+          error: 'Parent wildcard not found'
+        });
+      }
+      // 순환 참조 검사
+      if (WildcardModel.checkCircularReference(id, data.parent_id)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Circular parent reference detected'
         });
       }
     }
@@ -491,6 +589,7 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
     const createdWildcards: any[] = [];
     const usedNames = new Set<string>();
     const pathToWildcardName = new Map<string, string>(); // 경로 -> 와일드카드 이름 매핑
+    const pathToWildcardId = new Map<string, number>(); // 경로 -> 와일드카드 ID 매핑 (parent_id 설정용)
     const levelCounters = new Map<number, number>(); // 레벨별 카운터
 
     for (const folder of allFolders) {
@@ -525,6 +624,11 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
 
       usedNames.add(wildcardName);
       pathToWildcardName.set(folder.folderName, wildcardName);
+
+      // 부모 경로 계산 (parent_id 설정용)
+      const parentPath = folder.pathParts.length > 1
+        ? folder.pathParts.slice(0, -1).join('/')
+        : null;
 
       // ID 생성: 레벨별 카운터
       const currentCounter = (levelCounters.get(folder.level) || 0) + 1;
@@ -577,10 +681,14 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
             comfyui: items,
             nai: []
           },
-          customId
+          customId,
+          parent_id: null // 초기에는 null로 생성
         };
 
         const wildcard = WildcardModel.create(wildcardData);
+
+        // 경로 -> ID 매핑 저장
+        pathToWildcardId.set(folder.folderName, wildcard.id);
 
         // is_auto_collected, lora_weight 설정 (source_path는 null)
         db.prepare(`
@@ -594,8 +702,19 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
           name: wildcardName,
           itemCount: items.length,
           folderName: folder.folderName,
-          level: folder.level
+          level: folder.level,
+          parentPath // 나중에 parent_id 업데이트용
         });
+      }
+    }
+
+    // 5. parent_id 설정 (모든 와일드카드 생성 후)
+    for (const created of createdWildcards) {
+      if (created.parentPath) {
+        const parentId = pathToWildcardId.get(created.parentPath);
+        if (parentId) {
+          db.prepare('UPDATE wildcards SET parent_id = ? WHERE id = ?').run(parentId, created.id);
+        }
       }
     }
 

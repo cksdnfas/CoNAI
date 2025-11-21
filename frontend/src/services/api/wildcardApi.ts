@@ -11,6 +11,7 @@ export interface Wildcard {
   id: number;
   name: string;
   description?: string;
+  parent_id: number | null;
   created_date: string;
   updated_date: string;
 }
@@ -37,12 +38,19 @@ export interface WildcardCreateData {
   name: string;
   description?: string;
   items: ToolItems;
+  parent_id?: number | null;
 }
 
 export interface WildcardUpdateData {
   name?: string;
   description?: string;
   items?: ToolItems;
+  parent_id?: number | null;
+}
+
+export interface WildcardWithHierarchy extends WildcardWithItems {
+  children?: WildcardWithHierarchy[];
+  parent?: Wildcard;
 }
 
 export interface ParseRequest {
@@ -114,6 +122,48 @@ export const wildcardApi = {
     const response = await api.get<{ success: boolean; data: WildcardWithItems[] }>(
       '/wildcards',
       { params: { withItems } }
+    );
+    return response.data;
+  },
+
+  /**
+   * 계층 구조로 와일드카드 조회
+   */
+  getWildcardsHierarchical: async () => {
+    const response = await api.get<{ success: boolean; data: WildcardWithHierarchy[] }>(
+      '/wildcards',
+      { params: { hierarchical: true } }
+    );
+    return response.data;
+  },
+
+  /**
+   * 루트 와일드카드만 조회
+   */
+  getRootWildcards: async () => {
+    const response = await api.get<{ success: boolean; data: Wildcard[] }>(
+      '/wildcards',
+      { params: { rootsOnly: true } }
+    );
+    return response.data;
+  },
+
+  /**
+   * 특정 와일드카드의 자식 조회
+   */
+  getWildcardChildren: async (parentId: number) => {
+    const response = await api.get<{ success: boolean; data: Wildcard[] }>(
+      `/wildcards/${parentId}/children`
+    );
+    return response.data;
+  },
+
+  /**
+   * 특정 와일드카드의 전체 경로 조회
+   */
+  getWildcardPath: async (id: number) => {
+    const response = await api.get<{ success: boolean; data: Wildcard[] }>(
+      `/wildcards/${id}/path`
     );
     return response.data;
   },

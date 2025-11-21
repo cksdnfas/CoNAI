@@ -52,6 +52,12 @@
     "manual": "手動作成",
     "autoCollected": "自動収集 (LORA)"
   },
+  "detail": {
+    "children": "サブ項目",
+    "items": "項目一覧",
+    "selectItem": "左側から項目を選択してください",
+    "moreItems": "もっと見る"
+  },
   "autoCollect": {
     "title": "LORAワイルドカード自動生成",
     "description": "LORAフォルダをスキャンして、ワイルドカードを自動生成します",
@@ -79,6 +85,7 @@
     "noAutoWildcards": "自動収集されたワイルドカードがありません",
     "noAutoWildcardsDesc": "LORAフォルダをスキャンしてワイルドカードを生成してください",
     "autoCollectedBadge": "自動",
+    "viewDetail": "[ja] View Details",
     "errors": {
       "folderPathRequired": "LORAフォルダパスは必須です",
       "invalidWeight": "有効な重み値を入力してください (0.1 ~ 2.0)",
@@ -123,5 +130,20 @@
   },
   "logDialog": {
     "title": "[ja] Last LORA Scan Log"
+  },
+  "detailDialog": {
+    "title": "[ja] View List (Read-Only)",
+    "readOnlyInfo": "[ja] Auto-collected items cannot be edited. You can only view the contents.",
+    "name": "[ja] List Name",
+    "description": "[ja] Description",
+    "path": "[ja] Path",
+    "itemList": "[ja] Item List ({{count}} items)"
+  },
+  "autocomplete": {
+    "hint": "++を入力するとワイルドカードリストが表示されます",
+    "manualTab": "手動",
+    "autoTab": "自動 (LORA)",
+    "noResults": "結果がありません",
+    "selectTier": "階層を選択してください"
   }
 }

@@ -56,6 +56,12 @@
     "manual": "Manual Creation",
     "autoCollected": "Auto-Collected (LORA)"
   },
+  "detail": {
+    "children": "Sub-items",
+    "items": "Item List",
+    "selectItem": "Select an item from the left",
+    "moreItems": "More"
+  },
   "autoCollect": {
     "title": "LORA Wildcard Auto-Generation",
     "description": "Scan LORA folders to automatically generate wildcards",
@@ -106,6 +112,7 @@
     "noAutoWildcards": "No auto-collected wildcards",
     "noAutoWildcardsDesc": "Scan a LORA folder to generate wildcards",
     "autoCollectedBadge": "Auto",
+    "viewDetail": "View Details",
     "errors": {
       "folderPathRequired": "LORA folder path is required",
       "invalidWeight": "Please enter a valid weight value (0.1 ~ 2.0)",
@@ -123,5 +130,20 @@
   },
   "logDialog": {
     "title": "Last LORA Scan Log"
+  },
+  "detailDialog": {
+    "title": "View List (Read-Only)",
+    "readOnlyInfo": "Auto-collected items cannot be edited. You can only view the contents.",
+    "name": "List Name",
+    "description": "Description",
+    "path": "Path",
+    "itemList": "Item List ({{count}} items)"
+  },
+  "autocomplete": {
+    "hint": "Type ++ to show wildcard list",
+    "manualTab": "Manual",
+    "autoTab": "Auto (LORA)",
+    "noResults": "No results",
+    "selectTier": "Select a tier"
   }
 }

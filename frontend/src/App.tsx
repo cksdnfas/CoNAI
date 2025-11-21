@@ -1,6 +1,7 @@
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import CssBaseline from '@mui/material/CssBaseline';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { SnackbarProvider } from 'notistack';
 
 // i18n
 import './i18n';
@@ -46,6 +47,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <CssBaseline />
+        <SnackbarProvider maxSnack={3} autoHideDuration={3000}>
         <Router>
           <AuthProvider>
             <Routes>
@@ -79,6 +81,7 @@ function App() {
             </Routes>
           </AuthProvider>
         </Router>
+        </SnackbarProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

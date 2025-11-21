@@ -56,6 +56,12 @@
     "manual": "수동 생성",
     "autoCollected": "자동 수집 (LORA)"
   },
+  "detail": {
+    "children": "하위 항목",
+    "items": "항목 목록",
+    "selectItem": "좌측에서 항목을 선택하세요",
+    "moreItems": "더 보기"
+  },
   "autoCollect": {
     "title": "LORA 와일드카드 자동 생성",
     "description": "LORA 폴더를 스캔하여 와일드카드를 자동 생성합니다",
@@ -106,6 +112,7 @@
     "noAutoWildcards": "자동 수집된 와일드카드가 없습니다",
     "noAutoWildcardsDesc": "LORA 폴더를 스캔하여 와일드카드를 생성하세요",
     "autoCollectedBadge": "자동",
+    "viewDetail": "상세 보기",
     "errors": {
       "folderPathRequired": "LORA 폴더 경로는 필수입니다",
       "invalidWeight": "유효한 가중치 값을 입력하세요 (0.1 ~ 2.0)",
@@ -123,5 +130,20 @@
   },
   "logDialog": {
     "title": "마지막 LORA 스캔 로그"
+  },
+  "detailDialog": {
+    "title": "목록 보기 (읽기 전용)",
+    "readOnlyInfo": "자동 수집된 항목은 편집할 수 없습니다. 내용을 확인만 할 수 있습니다.",
+    "name": "목록 이름",
+    "description": "설명",
+    "path": "경로",
+    "itemList": "항목 목록 ({{count}}개)"
+  },
+  "autocomplete": {
+    "hint": "++를 입력하면 와일드카드 목록이 표시됩니다",
+    "manualTab": "수동",
+    "autoTab": "자동 (LORA)",
+    "noResults": "결과가 없습니다",
+    "selectTier": "계층을 선택하세요"
   }
 }

@@ -4,7 +4,7 @@
  * Based on NAI-Tag-Viewer parsing logic
  */
 
-import { AIMetadata, LoRAModel } from '../types';
+import { AIMetadata, LoRAModel, ModelReference } from '../types';
 
 export class WebUIParser {
   /**
@@ -120,6 +120,9 @@ export class WebUIParser {
       }
     }
 
+    // Build model_references for Civitai integration
+    aiInfo.model_references = this.buildModelReferences(aiInfo);
+
     return aiInfo;
   }
 
@@ -227,5 +230,85 @@ export class WebUIParser {
     }
 
     return loras;
+  }
+
+  /**
+   * Extract LoRA info with weights from prompt
+   */
+  private static extractLoRAInfoWithWeights(prompt: string): Array<{ name: string; weight: number }> {
+    const loraRegex = /<lora:([^:]+):([\d.]+)>/g;
+    const loras: Array<{ name: string; weight: number }> = [];
+    let match;
+
+    while ((match = loraRegex.exec(prompt)) !== null) {
+      loras.push({
+        name: match[1],
+        weight: parseFloat(match[2])
+      });
+    }
+
+    return loras;
+  }
+
+  /**
+   * Parse lora_hashes string into a map
+   * Format: "name1: hash1, name2: hash2"
+   */
+  private static parseLoraHashes(loraHashesStr: string): Map<string, string> {
+    const hashMap = new Map<string, string>();
+    if (!loraHashesStr) return hashMap;
+
+    // Split by comma, then parse each pair
+    const pairs = loraHashesStr.split(',');
+    for (const pair of pairs) {
+      const trimmed = pair.trim();
+      const colonIndex = trimmed.indexOf(':');
+      if (colonIndex > 0) {
+        const name = trimmed.substring(0, colonIndex).trim();
+        const hash = trimmed.substring(colonIndex + 1).trim();
+        if (name && hash) {
+          hashMap.set(name, hash);
+        }
+      }
+    }
+
+    return hashMap;
+  }
+
+  /**
+   * Build model_references array for Civitai integration
+   */
+  private static buildModelReferences(aiInfo: AIMetadata): ModelReference[] {
+    const refs: ModelReference[] = [];
+
+    // 1. Add base model if hash exists
+    if (aiInfo.model_hash) {
+      refs.push({
+        name: aiInfo.model || 'Unknown Model',
+        hash: aiInfo.model_hash,
+        type: 'checkpoint'
+      });
+    }
+
+    // 2. Add LoRA models with hashes
+    const loraHashMap = this.parseLoraHashes(aiInfo.lora_hashes || '');
+
+    if (aiInfo.positive_prompt) {
+      const lorasWithWeights = this.extractLoRAInfoWithWeights(aiInfo.positive_prompt);
+
+      for (const lora of lorasWithWeights) {
+        const hash = loraHashMap.get(lora.name);
+        if (hash) {
+          refs.push({
+            name: lora.name,
+            hash: hash,
+            type: 'lora',
+            weight: lora.weight
+          });
+        }
+      }
+    }
+
+    return refs;
   }
 }

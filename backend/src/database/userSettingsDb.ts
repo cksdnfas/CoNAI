@@ -239,6 +239,10 @@ function createTables(): void {
     console.log('  Migrating wildcards: adding lora_weight column');
     userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN lora_weight REAL DEFAULT 1.0');
   }
+  if (!hasColumn('wildcards', 'parent_id')) {
+    console.log('  Migrating wildcards: adding parent_id column');
+    userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN parent_id INTEGER DEFAULT NULL');
+  }
 
   // Migrate custom_dropdown_lists table
   if (!hasColumn('custom_dropdown_lists', 'is_auto_collected')) {
@@ -262,6 +266,7 @@ function createTables(): void {
     'CREATE INDEX IF NOT EXISTS idx_user_preferences_key ON user_preferences(key)',
     'CREATE INDEX IF NOT EXISTS idx_wildcards_name ON wildcards(name)',
     'CREATE INDEX IF NOT EXISTS idx_wildcards_is_auto_collected ON wildcards(is_auto_collected)',
+    'CREATE INDEX IF NOT EXISTS idx_wildcards_parent_id ON wildcards(parent_id)',
     'CREATE INDEX IF NOT EXISTS idx_wildcard_items_wildcard_id ON wildcard_items(wildcard_id)',
     'CREATE INDEX IF NOT EXISTS idx_wildcard_items_tool ON wildcard_items(tool)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_name ON custom_dropdown_lists(name)',

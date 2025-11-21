@@ -18,6 +18,7 @@ import SimilaritySettings from './features/Similarity/SimilaritySettings';
 import FolderSettings from './features/Folder/FolderSettings';
 import { AuthSettings } from './features/Auth/AuthSettings';
 import { ExternalApiSettings } from './features/ExternalApi/ExternalApiSettings';
+import { CivitaiSettings } from './features/Civitai/CivitaiSettings';
 import PromptList from '../PromptManagement/components/PromptList';
 import { settingsApi, type AppSettings, type GeneralSettings as GeneralSettingsType, type TaggerSettings as TaggerSettingsType, type MetadataExtractionSettings, type ThumbnailSettings } from '../../services/settingsApi';
 
@@ -202,6 +203,7 @@ const SettingsPage: React.FC = () => {
             <Tab label={t('tabs.similarity')} />
             <Tab label={t('tabs.account')} />
             <Tab label={t('tabs.externalApi')} />
+            <Tab label="Civitai" />
           </Tabs>
         </Box>
 
@@ -262,6 +264,10 @@ const SettingsPage: React.FC = () => {
 
         <TabPanel value={tabValue} index={7}>
           <ExternalApiSettings />
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={8}>
+          <CivitaiSettings />
         </TabPanel>
       </Box>
     </Container>

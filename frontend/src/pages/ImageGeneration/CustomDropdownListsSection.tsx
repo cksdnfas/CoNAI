@@ -59,6 +59,12 @@ export default function CustomDropdownListsSection() {
     upscale_models: false
   });
 
+  // 통합 스캔 옵션
+  const [mergeOptions, setMergeOptions] = useState({
+    mergeSubfolders: false,  // 하위폴더를 하나로 통합
+    createBoth: false        // 통합 + 개별 둘 다 생성
+  });
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -246,7 +252,9 @@ export default function CustomDropdownListsSection() {
 
       const response = await customDropdownListApi.scanComfyUIModels({
         modelFolders: selectedModelFolders,
-        sourcePath: 'client-selected'
+        sourcePath: 'client-selected',
+        mergeSubfolders: mergeOptions.mergeSubfolders,
+        createBoth: mergeOptions.createBoth
       });
 
       if (response.success && response.data) {
@@ -704,6 +712,52 @@ export default function CustomDropdownListsSection() {
                     )}
                   </Box>
                 </Alert>
+                {/* 통합 스캔 옵션 */}
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                    {t('customDropdown.labels.mergeOptions', '통합 옵션')}
+                  </Typography>
+                  <FormGroup>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={mergeOptions.mergeSubfolders}
+                          onChange={(e) => setMergeOptions({ ...mergeOptions, mergeSubfolders: e.target.checked })}
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {t('customDropdown.labels.mergeSubfolders', '하위폴더를 하나의 리스트로 통합')}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {t('customDropdown.messages.mergeSubfoldersDesc', 'checkpoints/SD1.5, checkpoints/SDXL → checkpoints 통합 리스트')}
+                          </Typography>
+                        </Box>
+                      }
+                    />
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={mergeOptions.createBoth}
+                          onChange={(e) => setMergeOptions({ ...mergeOptions, createBoth: e.target.checked })}
+                          disabled={!mergeOptions.mergeSubfolders}
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 500, color: !mergeOptions.mergeSubfolders ? 'text.disabled' : 'inherit' }}>
+                            {t('customDropdown.labels.createBoth', '통합 리스트와 개별 리스트 모두 생성')}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {t('customDropdown.messages.createBothDesc', '통합 + 개별 하위폴더 리스트 모두 사용 가능')}
+                          </Typography>
+                        </Box>
+                      }
+                    />
+                  </FormGroup>
+                </Box>
+
                 <Box>
                   <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
                     {t('customDropdown.labels.pathOptions')}

@@ -19,6 +19,7 @@
     "share": "공유",
     "back": "뒤로",
     "goToDetail": "상세 페이지",
+    "uploadToCivitai": "Civitai에 업로드",
     "delete": "삭제",
     "deleteConfirm": "이미지를 삭제하시겠습니까?",
     "deleteSuccess": "이미지가 삭제되었습니다.",

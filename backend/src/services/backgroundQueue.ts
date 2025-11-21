@@ -6,13 +6,18 @@ import { QueryCacheService } from './QueryCacheService';
 import { PromptCollectionService } from './promptCollectionService';
 import { AutoCollectionService } from './autoCollectionService';
 import { MetadataExtractionError } from '../types/errors';
+import { CivitaiService } from './civitaiService';
+import { ImageModel, ModelRole } from '../models/ImageModel';
+import { CivitaiSettings } from '../models/CivitaiSettings';
+import type { ModelReference } from './metadata/types';
 
 /**
  * 백그라운드 작업 타입
  */
 export enum TaskType {
   METADATA_EXTRACTION = 'metadata_extraction',
-  PROMPT_COLLECTION = 'prompt_collection'
+  PROMPT_COLLECTION = 'prompt_collection',
+  CIVITAI_MODEL_LOOKUP = 'civitai_model_lookup'
 }
 
 /**
@@ -27,6 +32,7 @@ export interface BackgroundTask {
   retries: number;
   maxRetries: number;
   createdAt: Date;
+  modelReferences?: ModelReference[];  // For Civitai lookup
 }
 
 /**
@@ -85,6 +91,35 @@ export class BackgroundQueueService {
 
     this.queue.push(task);
     console.log(`  📋 백그라운드 작업 추가: 프롬프트 수집 - ${path.basename(filePath)}`);
+
+    // 큐 처리 시작
+    if (!this.processing) {
+      this.processQueue();
+    }
+  }
+
+  /**
+   * Civitai 모델 조회 작업 추가
+   */
+  static addCivitaiModelLookupTask(compositeHash: string, modelReferences: ModelReference[]): void {
+    // Skip if no references with hashes
+    const refsWithHash = modelReferences.filter(ref => ref.hash);
+    if (refsWithHash.length === 0) return;
+
+    const task: BackgroundTask = {
+      id: `${compositeHash}_civitai_${Date.now()}`,
+      type: TaskType.CIVITAI_MODEL_LOOKUP,
+      filePath: '',
+      compositeHash,
+      priority: 5, // 낮은 우선순위
+      retries: 0,
+      maxRetries: 1, // 1번만 시도
+      createdAt: new Date(),
+      modelReferences: refsWithHash
+    };
+
+    this.queue.push(task);
+    console.log(`  📋 백그라운드 작업 추가: Civitai 모델 조회 (${refsWithHash.length}개)`);
 
     // 큐 처리 시작
     if (!this.processing) {
@@ -152,6 +187,10 @@ export class BackgroundQueueService {
           await this.processPromptCollection(task);
           break;
 
+        case TaskType.CIVITAI_MODEL_LOOKUP:
+          await this.processCivitaiModelLookup(task);
+          break;
+
         default:
           console.warn(`  ⚠️  알 수 없는 작업 타입: ${task.type}`);
       }
@@ -177,6 +216,11 @@ export class BackgroundQueueService {
     const aiMetadata = await MetadataExtractor.extractMetadata(task.filePath);
     const aiInfo = aiMetadata.ai_info || {};
 
+    // model_references를 JSON으로 직렬화
+    const modelReferencesJson = aiInfo.model_references && aiInfo.model_references.length > 0
+      ? JSON.stringify(aiInfo.model_references)
+      : null;
+
     // media_metadata 업데이트
     db.prepare(`
       UPDATE media_metadata
@@ -193,7 +237,8 @@ export class BackgroundQueueService {
         denoise_strength = ?,
         generation_time = ?,
         batch_size = ?,
-        batch_index = ?
+        batch_index = ?,
+        model_references = ?
       WHERE composite_hash = ?
     `).run(
       aiInfo.ai_tool || null,
@@ -209,6 +254,7 @@ export class BackgroundQueueService {
       aiInfo.generation_time || null,
       aiInfo.batch_size || null,
       aiInfo.batch_index || null,
+      modelReferencesJson,
       task.compositeHash
     );
 
@@ -241,6 +287,15 @@ export class BackgroundQueueService {
       }
     }
 
+    // 모델 참조가 있으면 Civitai 조회 작업 추가
+    if (aiInfo.model_references && aiInfo.model_references.length > 0) {
+      try {
+        this.addCivitaiModelLookupTask(task.compositeHash, aiInfo.model_references);
+      } catch (error) {
+        console.warn(`  ⚠️  Civitai 조회 작업 추가 실패: ${path.basename(task.filePath)}`, error);
+      }
+    }
+
     // 새 이미지가 추가되었으므로 갤러리 캐시 무효화
     QueryCacheService.invalidateGalleryCache();
   }
@@ -270,6 +325,51 @@ export class BackgroundQueueService {
   }
 
   /**
+   * Civitai 모델 조회 처리
+   */
+  private static async processCivitaiModelLookup(task: BackgroundTask): Promise<void> {
+    const settings = CivitaiSettings.get();
+    if (!settings.enabled) {
+      console.log(`  ⏭️  Civitai 기능 비활성화`);
+      return;
+    }
+
+    if (!task.modelReferences || task.modelReferences.length === 0) {
+      return;
+    }
+
+    // 1. image_models 테이블에 레코드 저장
+    for (const ref of task.modelReferences) {
+      ImageModel.create({
+        composite_hash: task.compositeHash,
+        model_hash: ref.hash,
+        model_role: ref.type as ModelRole,
+        weight: ref.weight
+      });
+    }
+
+    // 2. 각 해시에 대해 Civitai API 조회
+    for (const ref of task.modelReferences) {
+      try {
+        // Rate limiting
+        await CivitaiService.waitForRateLimit();
+
+        // 조회 및 캐싱
+        const success = await CivitaiService.lookupAndCacheModel(ref.hash);
+
+        if (success) {
+          console.log(`  ✅ Civitai 모델 정보 캐싱: ${ref.name} (${ref.hash})`);
+        } else {
+          console.log(`  ⏭️  Civitai에서 모델 찾지 못함: ${ref.name} (${ref.hash})`);
+        }
+      } catch (error) {
+        console.error(`  ❌ Civitai 조회 실패: ${ref.hash}`, error);
+        // 개별 모델 실패는 전체 작업 실패로 처리하지 않음
+      }
+    }
+  }
+
+  /**
    * 큐 상태 조회
    */
   static getQueueStatus(): {
@@ -279,7 +379,8 @@ export class BackgroundQueueService {
   } {
     const tasksByType: Record<TaskType, number> = {
       [TaskType.METADATA_EXTRACTION]: 0,
-      [TaskType.PROMPT_COLLECTION]: 0
+      [TaskType.PROMPT_COLLECTION]: 0,
+      [TaskType.CIVITAI_MODEL_LOOKUP]: 0
     };
 
     this.queue.forEach(task => {

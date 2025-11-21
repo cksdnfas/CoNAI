@@ -48,6 +48,7 @@ import { authRoutes } from './routes/auth.routes';
 import fileVerificationRoutes from './routes/fileVerification';
 import { thumbnailRoutes } from './routes/thumbnails';
 import externalApiRoutes from './routes/externalApi.routes';
+import civitaiRoutes from './routes/civitai.routes';
 import { initializeDatabase } from './database/init';
 import { initializeUserSettingsDb } from './database/userSettingsDb';
 import { initializeAuthDb, getAuthDb } from './database/authDb';
@@ -256,6 +257,7 @@ async function registerRoutes() {
   // Protected routes (require authentication if configured)
   // Apply lenient rate limiting to read-heavy endpoints
   app.use('/api/external-api', optionalAuth, externalApiRoutes);
+  app.use('/api/civitai', readOnlyLimiter, optionalAuth, civitaiRoutes);
   app.use('/api/images', readOnlyLimiter, optionalAuth, imageRoutes);
   app.use('/api/prompt-collection', readOnlyLimiter, optionalAuth, promptCollectionRoutes);
   app.use('/api/prompt-groups', readOnlyLimiter, optionalAuth, promptGroupRoutes);

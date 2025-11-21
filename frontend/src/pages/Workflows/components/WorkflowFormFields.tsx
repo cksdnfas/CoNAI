@@ -17,6 +17,8 @@ import { ExpandMore as ExpandMoreIcon, Image as ImageIcon } from '@mui/icons-mat
 import { useTranslation } from 'react-i18next';
 import type { Workflow, MarkedField } from '../../../services/api/workflowApi';
 import ImageSelectionModal from './ImageSelectionModal';
+import { HierarchicalModelSelector } from './HierarchicalModelSelector';
+import { WildcardTextField } from './WildcardTextField';
 import { customDropdownListApi } from '../../../services/api/customDropdownListApi';
 
 interface WorkflowFormFieldsProps {
@@ -109,17 +111,15 @@ export function WorkflowFormFields({
     switch (field.type) {
       case 'textarea':
         return (
-          <TextField
+          <WildcardTextField
             key={field.id}
-            fullWidth
             multiline
             rows={4}
             label={field.label}
             value={value}
-            onChange={(e) => onFieldChange(field.id, e.target.value)}
+            onChange={(newValue) => onFieldChange(field.id, newValue)}
             required={field.required}
             placeholder={field.placeholder}
-            sx={{ mb: 2 }}
           />
         );
 
@@ -146,6 +146,22 @@ export function WorkflowFormFields({
       case 'select': {
         // dropdown_list_name이 있으면 최신 데이터 사용, 없으면 기존 options 사용
         const options = dropdownOptions[field.id] || field.options || [];
+        const hasSubfolders = options.some((opt: string) => opt.includes('/'));
+
+        // 하위폴더가 있는 경우 계층형 선택기 사용
+        if (hasSubfolders) {
+          return (
+            <Box key={field.id} sx={{ mb: 2 }}>
+              <HierarchicalModelSelector
+                options={options}
+                value={value}
+                onChange={(newValue) => onFieldChange(field.id, newValue)}
+                label={field.label}
+                helperText={field.dropdown_list_name ? `📋 ${field.dropdown_list_name}` : undefined}
+              />
+            </Box>
+          );
+        }
 
         return (
           <TextField
@@ -200,15 +216,13 @@ export function WorkflowFormFields({
 
       default: // text
         return (
-          <TextField
+          <WildcardTextField
             key={field.id}
-            fullWidth
             label={field.label}
             value={value}
-            onChange={(e) => onFieldChange(field.id, e.target.value)}
+            onChange={(newValue) => onFieldChange(field.id, newValue)}
             required={field.required}
             placeholder={field.placeholder}
-            sx={{ mb: 2 }}
           />
         );
     }

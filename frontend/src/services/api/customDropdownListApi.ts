@@ -39,6 +39,8 @@ export interface ComfyUIModelFolder {
 export interface ScanComfyUIModelsRequest {
   modelFolders: ComfyUIModelFolder[];
   sourcePath?: string;
+  mergeSubfolders?: boolean;  // 하위폴더를 하나로 통합
+  createBoth?: boolean;       // 통합 + 개별 둘 다 생성
 }
 
 export interface ScanComfyUIModelsResponse {

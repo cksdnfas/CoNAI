@@ -52,6 +52,12 @@
     "manual": "手动创建",
     "autoCollected": "自动收集 (LORA)"
   },
+  "detail": {
+    "children": "子项目",
+    "items": "项目列表",
+    "selectItem": "请从左侧选择项目",
+    "moreItems": "更多"
+  },
   "autoCollect": {
     "title": "LORA通配符自动生成",
     "description": "扫描LORA文件夹以自动生成通配符",
@@ -79,6 +85,7 @@
     "noAutoWildcards": "没有自动收集的通配符",
     "noAutoWildcardsDesc": "扫描LORA文件夹以生成通配符",
     "autoCollectedBadge": "自动",
+    "viewDetail": "[zh-CN] View Details",
     "errors": {
       "folderPathRequired": "LORA文件夹路径为必填项",
       "invalidWeight": "请输入有效的权重值 (0.1 ~ 2.0)",
@@ -123,5 +130,20 @@
   },
   "logDialog": {
     "title": "[zh-CN] Last LORA Scan Log"
+  },
+  "detailDialog": {
+    "title": "[zh-CN] View List (Read-Only)",
+    "readOnlyInfo": "[zh-CN] Auto-collected items cannot be edited. You can only view the contents.",
+    "name": "[zh-CN] List Name",
+    "description": "[zh-CN] Description",
+    "path": "[zh-CN] Path",
+    "itemList": "[zh-CN] Item List ({{count}} items)"
+  },
+  "autocomplete": {
+    "hint": "输入 ++ 可显示通配符列表",
+    "manualTab": "手动",
+    "autoTab": "自动 (LORA)",
+    "noResults": "无结果",
+    "selectTier": "请选择层级"
   }
 }

@@ -42,6 +42,10 @@ export interface ImageMetadataRecord {
   // 자동 태그
   auto_tags: string | null;
 
+  // Civitai 연동용 모델 정보 (JSON)
+  // [{"name":"model", "hash":"abc123", "type":"checkpoint"}, ...]
+  model_references: string | null;
+
   // 비디오 메타데이터
   duration: number | null;
   fps: number | null;

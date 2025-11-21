@@ -3,7 +3,7 @@
  * Parses ComfyUI workflow JSON to extract prompt and generation parameters
  */
 
-import { AIMetadata } from '../types';
+import { AIMetadata, ModelReference } from '../types';
 
 export class ComfyUIParser {
   /**
@@ -206,6 +206,22 @@ export class ComfyUIParser {
       }
     }
 
+    // Extract LoRA models from LoraLoader nodes
+    const loraLoaderLoras = this.extractLoRAFromNodes(workflow);
+    if (loraLoaderLoras.length > 0) {
+      // Merge with prompt-extracted loras (avoid duplicates)
+      const existingLoras = new Set(aiInfo.lora_models || []);
+      for (const lora of loraLoaderLoras) {
+        if (!existingLoras.has(lora)) {
+          aiInfo.lora_models = aiInfo.lora_models || [];
+          aiInfo.lora_models.push(lora);
+        }
+      }
+    }
+
+    // Build model_references for Civitai integration
+    aiInfo.model_references = this.buildModelReferences(aiInfo, workflow);
+
     return aiInfo;
   }
 
@@ -223,5 +239,134 @@ export class ComfyUIParser {
     }
 
     return loras;
+  }
+
+  /**
+   * Extract LoRA models from LoraLoader nodes in workflow
+   */
+  private static extractLoRAFromNodes(workflow: any): string[] {
+    const loras: string[] = [];
+
+    for (const nodeId in workflow) {
+      const node = workflow[nodeId];
+      if (!node || typeof node !== 'object') continue;
+
+      const classType = node.class_type;
+      const inputs = node.inputs;
+
+      // LoraLoader, LoraLoaderModelOnly, etc.
+      if (classType && classType.toLowerCase().includes('lora') && inputs?.lora_name) {
+        const loraName = Array.isArray(inputs.lora_name) ? inputs.lora_name[0] : inputs.lora_name;
+        if (loraName && typeof loraName === 'string') {
+          // Remove file extension if present
+          const cleanName = loraName.replace(/\.(safetensors|ckpt|pt)$/i, '');
+          loras.push(cleanName);
+        }
+      }
+    }
+
+    return loras;
+  }
+
+  /**
+   * Extract LoRA info with weights from prompt
+   */
+  private static extractLoRAInfoWithWeights(prompt: string): Array<{ name: string; weight: number }> {
+    const loraRegex = /<lora:([^:]+):([\d.]+)>/g;
+    const loras: Array<{ name: string; weight: number }> = [];
+    let match;
+
+    while ((match = loraRegex.exec(prompt)) !== null) {
+      loras.push({
+        name: match[1],
+        weight: parseFloat(match[2]) || 1.0
+      });
+    }
+
+    return loras;
+  }
+
+  /**
+   * Build model_references array for Civitai integration
+   * Note: ComfyUI doesn't typically include model hashes in metadata,
+   * so we extract what we can (model names) for potential future matching
+   */
+  private static buildModelReferences(aiInfo: AIMetadata, workflow: any): ModelReference[] {
+    const refs: ModelReference[] = [];
+
+    // 1. Add base checkpoint model if available
+    if (aiInfo.model) {
+      // Try to extract hash from model name if present (some workflows include it)
+      const hashMatch = aiInfo.model.match(/\[([a-fA-F0-9]{8,})\]/);
+      const hash = hashMatch ? hashMatch[1] : '';
+
+      if (hash) {
+        refs.push({
+          name: aiInfo.model.replace(/\[([a-fA-F0-9]{8,})\]/, '').trim(),
+          hash: hash,
+          type: 'checkpoint'
+        });
+      }
+    }
+
+    // 2. Extract hashes from workflow nodes if available
+    // Some ComfyUI setups store hash info in node metadata
+    for (const nodeId in workflow) {
+      const node = workflow[nodeId];
+      if (!node || typeof node !== 'object') continue;
+
+      const classType = node.class_type;
+      const inputs = node.inputs;
+
+      // Check for hash in checkpoint loader nodes
+      if (classType === 'CheckpointLoaderSimple' && inputs?.ckpt_name) {
+        const ckptName = Array.isArray(inputs.ckpt_name) ? inputs.ckpt_name[0] : inputs.ckpt_name;
+        const hashMatch = ckptName?.match(/\[([a-fA-F0-9]{8,})\]/);
+        if (hashMatch && !refs.some(r => r.hash === hashMatch[1])) {
+          refs.push({
+            name: ckptName.replace(/\[([a-fA-F0-9]{8,})\]/, '').replace(/\.(safetensors|ckpt)$/i, '').trim(),
+            hash: hashMatch[1],
+            type: 'checkpoint'
+          });
+        }
+      }
+
+      // Check for hash in LoRA loader nodes
+      if (classType && classType.toLowerCase().includes('lora') && inputs?.lora_name) {
+        const loraName = Array.isArray(inputs.lora_name) ? inputs.lora_name[0] : inputs.lora_name;
+        const hashMatch = loraName?.match(/\[([a-fA-F0-9]{8,})\]/);
+        if (hashMatch) {
+          const cleanName = loraName.replace(/\[([a-fA-F0-9]{8,})\]/, '').replace(/\.(safetensors|ckpt|pt)$/i, '').trim();
+          const strength = inputs.strength_model || inputs.strength || 1.0;
+
+          if (!refs.some(r => r.hash === hashMatch[1])) {
+            refs.push({
+              name: cleanName,
+              hash: hashMatch[1],
+              type: 'lora',
+              weight: typeof strength === 'number' ? strength : 1.0
+            });
+          }
+        }
+      }
+    }
+
+    // 3. Add LoRAs from prompt with weights (if they have hashes embedded)
+    if (aiInfo.positive_prompt) {
+      const lorasWithWeights = this.extractLoRAInfoWithWeights(aiInfo.positive_prompt);
+      for (const lora of lorasWithWeights) {
+        const hashMatch = lora.name.match(/\[([a-fA-F0-9]{8,})\]/);
+        if (hashMatch && !refs.some(r => r.hash === hashMatch[1])) {
+          refs.push({
+            name: lora.name.replace(/\[([a-fA-F0-9]{8,})\]/, '').trim(),
+            hash: hashMatch[1],
+            type: 'lora',
+            weight: lora.weight
+          });
+        }
+      }
+    }
+
+    return refs;
   }
 }

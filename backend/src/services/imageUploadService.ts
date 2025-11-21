@@ -94,7 +94,8 @@ export class ImageUploadService {
         video_codec: imageData.videoCodec,
         audio_codec: imageData.audioCodec,
         bitrate: imageData.bitrate,
-        rating_score: 0
+        rating_score: 0,
+        model_references: null
       };
 
       MediaMetadataModel.create(metadataRecord);
