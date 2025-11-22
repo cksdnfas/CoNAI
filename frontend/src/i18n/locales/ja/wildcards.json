@@ -101,6 +101,8 @@
     "filesFound": "<strong>{{count}}個のLORAファイル</strong>が見つかりました:",
     "promptsCount": "{{count}}個のプロンプト",
     "moreFiles": "...他{{count}}個のファイル",
+    "childCount": "{{count}}個のサブ項目",
+    "noItems": "項目がありません",
     "filters": {
       "tierFilter": "階層フィルター",
       "wildcardSearch": "ワイルドカード検索",

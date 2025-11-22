@@ -94,6 +94,8 @@
     "filesFound": "<strong>{{count}}개 LORA 파일</strong>을 발견했습니다:",
     "promptsCount": "{{count}}개 프롬프트",
     "moreFiles": "...외 {{count}}개 파일",
+    "childCount": "{{count}}개 하위 항목",
+    "noItems": "항목 없음",
     "filters": {
       "tierFilter": "계층 필터",
       "wildcardSearch": "와일드카드 검색",

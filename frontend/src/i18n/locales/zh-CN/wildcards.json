@@ -101,6 +101,8 @@
     "filesFound": "找到<strong>{{count}}个LORA文件</strong>:",
     "promptsCount": "{{count}}个提示词",
     "moreFiles": "...还有{{count}}个文件",
+    "childCount": "{{count}}个子项",
+    "noItems": "无项目",
     "filters": {
       "tierFilter": "层级过滤器",
       "wildcardSearch": "通配符搜索",

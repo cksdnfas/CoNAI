@@ -662,57 +662,44 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
             items.push(loraTag);
           }
         }
-      } else {
-        // 레벨 2+: 자식 와일드카드 참조
-        // 현재 폴더의 직접 자식 폴더들 찾기
-        const childFolders = allFolders.filter(f => {
-          // 자식 조건: pathParts 길이가 현재 + 1이고, 경로가 현재로 시작
-          return f.pathParts.length === folder.pathParts.length + 1 &&
-                 f.folderName.startsWith(folder.folderName + '/');
-        });
-
-        for (const child of childFolders) {
-          const childWildcardName = pathToWildcardName.get(child.folderName);
-          if (childWildcardName) {
-            items.push(`++${childWildcardName}++`);
-          }
-        }
       }
+      // 레벨 2+: 부모 폴더는 자신의 폴더에 직접 있는 LORA만 (대부분 없음)
+      // items는 빈 배열일 가능성 높음 - include_children으로 자식 항목 자동 포함
 
-      // 와일드카드 생성 (항목이 있을 때만)
-      if (items.length > 0) {
-        const wildcardData: WildcardCreateData = {
-          name: wildcardName,
-          description: `Auto-generated from ${folder.folderName}`,
-          items: {
-            comfyui: items,
-            nai: []
-          },
-          customId,
-          parent_id: null // 초기에는 null로 생성
-        };
+      // 와일드카드 생성 (부모 폴더는 빈 항목도 허용)
+      // 레벨 1은 무조건 items가 있고, 레벨 2+는 빈 배열 가능 (include_children으로 자식 사용)
+      const wildcardData: WildcardCreateData = {
+        name: wildcardName,
+        description: `Auto-generated from ${folder.folderName}`,
+        items: {
+          comfyui: items,
+          nai: []
+        },
+        customId,
+        parent_id: null, // 초기에는 null로 생성
+        include_children: 1 // 모든 자동 수집 와일드카드는 include_children 활성화
+      };
 
-        const wildcard = WildcardModel.create(wildcardData);
+      const wildcard = WildcardModel.create(wildcardData);
 
-        // 경로 -> ID 매핑 저장
-        pathToWildcardId.set(folder.folderName, wildcard.id);
+      // 경로 -> ID 매핑 저장
+      pathToWildcardId.set(folder.folderName, wildcard.id);
 
-        // is_auto_collected, lora_weight 설정 (source_path는 null)
-        db.prepare(`
-          UPDATE wildcards
-          SET is_auto_collected = 1, source_path = NULL, lora_weight = ?
-          WHERE id = ?
-        `).run(loraWeight, wildcard.id);
+      // is_auto_collected, lora_weight 설정 (source_path는 null)
+      db.prepare(`
+        UPDATE wildcards
+        SET is_auto_collected = 1, source_path = NULL, lora_weight = ?
+        WHERE id = ?
+      `).run(loraWeight, wildcard.id);
 
-        createdWildcards.push({
-          id: wildcard.id,
-          name: wildcardName,
-          itemCount: items.length,
-          folderName: folder.folderName,
-          level: folder.level,
-          parentPath // 나중에 parent_id 업데이트용
-        });
-      }
+      createdWildcards.push({
+        id: wildcard.id,
+        name: wildcardName,
+        itemCount: items.length,
+        folderName: folder.folderName,
+        level: folder.level,
+        parentPath // 나중에 parent_id 업데이트용
+      });
     }
 
     // 5. parent_id 설정 (모든 와일드카드 생성 후)

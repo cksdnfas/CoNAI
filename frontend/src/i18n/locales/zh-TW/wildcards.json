@@ -101,6 +101,8 @@
     "filesFound": "找到<strong>{{count}}個LORA檔案</strong>:",
     "promptsCount": "{{count}}個提示詞",
     "moreFiles": "...還有{{count}}個檔案",
+    "childCount": "{{count}}個子項",
+    "noItems": "無項目",
     "filters": {
       "tierFilter": "階層篩選器",
       "wildcardSearch": "萬用字元搜尋",

@@ -94,6 +94,8 @@
     "filesFound": "Found <strong>{{count}} LORA files</strong>:",
     "promptsCount": "{{count}} prompts",
     "moreFiles": "...and {{count}} more files",
+    "childCount": "{{count}} children",
+    "noItems": "No items",
     "filters": {
       "tierFilter": "Tier Filter",
       "wildcardSearch": "Wildcard Search",

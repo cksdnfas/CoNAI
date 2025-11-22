@@ -1,9 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Button,
-  Card,
-  CardContent,
   Typography,
   TextField,
   Stack,
@@ -16,143 +14,59 @@ import {
   FormControl,
   FormLabel,
   Divider,
-  Chip,
   IconButton,
   List,
   ListItem,
   ListItemText,
-  ListItemIcon,
-  ListItemButton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Collapse,
   Tooltip,
   useMediaQuery,
   useTheme
 } from '@mui/material';
 import {
   FolderOpen as FolderIcon,
-  Folder as FolderClosedIcon,
   History as HistoryIcon,
-  Upload as UploadIcon,
-  ExpandMore as ExpandMoreIcon,
-  ChevronRight as ChevronRightIcon,
-  Description as FileIcon,
-  ContentCopy as CopyIcon
+  Upload as UploadIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useSnackbar } from 'notistack';
 import {
   wildcardApi,
-  type WildcardWithItems,
   type WildcardWithHierarchy,
   type LoraScanRequest,
   type LoraScanLog,
   type LoraFileData
 } from '../../services/api/wildcardApi';
-
-// 트리 노드 컴포넌트
-interface TreeNodeProps {
-  node: WildcardWithHierarchy;
-  level: number;
-  selectedId: number | null;
-  expandedIds: Set<number>;
-  onSelect: (node: WildcardWithHierarchy) => void;
-  onToggle: (id: number) => void;
-}
-
-function TreeNode({ node, level, selectedId, expandedIds, onSelect, onToggle }: TreeNodeProps) {
-  const hasChildren = node.children && node.children.length > 0;
-  const isExpanded = expandedIds.has(node.id);
-  const isSelected = selectedId === node.id;
-
-  const handleClick = () => {
-    onSelect(node);
-    if (hasChildren && !isExpanded) {
-      onToggle(node.id);
-    }
-  };
-
-  return (
-    <>
-      <ListItemButton
-        onClick={handleClick}
-        selected={isSelected}
-        sx={{
-          pl: 1 + level * 2,
-          py: 0.5,
-          minHeight: 36,
-          '&.Mui-selected': {
-            bgcolor: 'primary.dark',
-            '&:hover': { bgcolor: 'primary.dark' }
-          }
-        }}
-      >
-        {hasChildren ? (
-          <IconButton
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggle(node.id);
-            }}
-            sx={{ p: 0.25, mr: 0.5 }}
-          >
-            {isExpanded ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
-          </IconButton>
-        ) : (
-          <Box sx={{ width: 28 }} />
-        )}
-        <ListItemIcon sx={{ minWidth: 28 }}>
-          {hasChildren ? (
-            isExpanded ? <FolderIcon fontSize="small" color="warning" /> : <FolderClosedIcon fontSize="small" color="warning" />
-          ) : (
-            <FileIcon fontSize="small" color="info" />
-          )}
-        </ListItemIcon>
-        <ListItemText
-          primary={node.name}
-          primaryTypographyProps={{
-            variant: 'body2',
-            noWrap: true,
-            sx: { fontWeight: isSelected ? 600 : 400 }
-          }}
-        />
-      </ListItemButton>
-      {hasChildren && (
-        <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-          {/* 폴더(자식 있음)를 먼저, 파일(리프)를 나중에 정렬 */}
-          {[...node.children!]
-            .sort((a, b) => {
-              const aHasChildren = a.children && a.children.length > 0;
-              const bHasChildren = b.children && b.children.length > 0;
-              if (aHasChildren && !bHasChildren) return -1;
-              if (!aHasChildren && bHasChildren) return 1;
-              return a.name.localeCompare(b.name);
-            })
-            .map((child) => (
-              <TreeNode
-                key={child.id}
-                node={child}
-                level={level + 1}
-                selectedId={selectedId}
-                expandedIds={expandedIds}
-                onSelect={onSelect}
-                onToggle={onToggle}
-              />
-            ))}
-        </Collapse>
-      )}
-    </>
-  );
-}
+import { useWildcardTree } from '../../hooks/useWildcardTree';
+import { WildcardTreePanel } from '../../components/Wildcard/WildcardTreePanel';
+import { WildcardDetailPanel } from '../../components/Wildcard/WildcardDetailPanel';
 
 export default function AutoCollectedWildcardsTab() {
   const { t } = useTranslation(['wildcards', 'common']);
   const { enqueueSnackbar } = useSnackbar();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+  // Hierarchical wildcards data
+  const [hierarchyData, setHierarchyData] = useState<WildcardWithHierarchy[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Use common wildcard tree hook
+  const {
+    selectedNode,
+    expandedIds,
+    totalCount,
+    handleSelect,
+    handleToggle,
+    handleExpandAll,
+    handleCollapseAll,
+    handleCopy,
+    sortNodesByHierarchy,
+    setSelectedNode
+  } = useWildcardTree(hierarchyData);
 
   // Scan form states
   const [loraWeight, setLoraWeight] = useState(1.0);
@@ -164,29 +78,12 @@ export default function AutoCollectedWildcardsTab() {
   const [scanError, setScanError] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<LoraFileData[]>([]);
 
-  // Hierarchical wildcards data
-  const [hierarchyData, setHierarchyData] = useState<WildcardWithHierarchy[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Tree navigation state
-  const [selectedNode, setSelectedNode] = useState<WildcardWithHierarchy | null>(null);
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
-
   // Last scan log
   const [lastScanLog, setLastScanLog] = useState<LoraScanLog | null>(null);
 
   // Modal states
   const [openScanDialog, setOpenScanDialog] = useState(false);
   const [openLogDialog, setOpenLogDialog] = useState(false);
-
-  const handleCopy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      enqueueSnackbar(`"${text}" ${t('wildcards:actions.copiedToClipboard') || '클립보드에 복사됨!'}`, { variant: 'success' });
-    } catch (err) {
-      enqueueSnackbar(t('wildcards:errors.copyFailed') || '복사 실패', { variant: 'error' });
-    }
-  };
 
   useEffect(() => {
     loadHierarchyData();
@@ -221,49 +118,6 @@ export default function AutoCollectedWildcardsTab() {
     }
   };
 
-  // 총 와일드카드 수 계산
-  const totalCount = useMemo(() => {
-    const countNodes = (nodes: WildcardWithHierarchy[]): number => {
-      return nodes.reduce((sum, node) => {
-        return sum + 1 + (node.children ? countNodes(node.children) : 0);
-      }, 0);
-    };
-    return countNodes(hierarchyData);
-  }, [hierarchyData]);
-
-  // 트리 노드 선택 핸들러
-  const handleSelectNode = (node: WildcardWithHierarchy) => {
-    setSelectedNode(node);
-  };
-
-  // 트리 노드 토글 핸들러
-  const handleToggleNode = (id: number) => {
-    setExpandedIds((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return newSet;
-    });
-  };
-
-  // 모든 노드 확장
-  const handleExpandAll = () => {
-    const collectIds = (nodes: WildcardWithHierarchy[]): number[] => {
-      return nodes.flatMap((node) => [
-        node.id,
-        ...(node.children ? collectIds(node.children) : [])
-      ]);
-    };
-    setExpandedIds(new Set(collectIds(hierarchyData)));
-  };
-
-  // 모든 노드 축소
-  const handleCollapseAll = () => {
-    setExpandedIds(new Set());
-  };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -502,222 +356,30 @@ export default function AutoCollectedWildcardsTab() {
           minHeight: 0
         }}>
           {/* Left Panel - Tree View */}
-          <Paper
-            variant="outlined"
-            sx={{
-              width: isMobile ? '100%' : 280,
-              minWidth: isMobile ? 'auto' : 280,
-              maxHeight: isMobile ? 300 : 'none',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden'
-            }}
-          >
-            {/* Tree Controls */}
-            <Box sx={{ p: 1, borderBottom: 1, borderColor: 'divider', display: 'flex', gap: 0.5 }}>
-              <Button size="small" onClick={handleExpandAll}>
-                {t('common:expandAll') || 'Expand All'}
-              </Button>
-              <Button size="small" onClick={handleCollapseAll}>
-                {t('common:collapseAll') || 'Collapse All'}
-              </Button>
-            </Box>
-            {/* Tree List */}
-            <List
-              dense
-              sx={{
-                flex: 1,
-                overflow: 'auto',
-                py: 0,
-                '& .MuiListItemButton-root': {
-                  borderRadius: 0
-                }
-              }}
-            >
-              {/* 루트 레벨도 폴더 먼저 정렬 */}
-              {[...hierarchyData]
-                .sort((a, b) => {
-                  const aHasChildren = a.children && a.children.length > 0;
-                  const bHasChildren = b.children && b.children.length > 0;
-                  if (aHasChildren && !bHasChildren) return -1;
-                  if (!aHasChildren && bHasChildren) return 1;
-                  return a.name.localeCompare(b.name);
-                })
-                .map((node) => (
-                  <TreeNode
-                    key={node.id}
-                    node={node}
-                    level={0}
-                    selectedId={selectedNode?.id ?? null}
-                    expandedIds={expandedIds}
-                    onSelect={handleSelectNode}
-                    onToggle={handleToggleNode}
-                  />
-                ))}
-            </List>
-          </Paper>
+          <WildcardTreePanel
+            data={hierarchyData}
+            selectedId={selectedNode?.id ?? null}
+            expandedIds={expandedIds}
+            onSelect={handleSelect}
+            onToggle={handleToggle}
+            onExpandAll={handleExpandAll}
+            onCollapseAll={handleCollapseAll}
+            sortChildren={sortNodesByHierarchy}
+          />
 
           {/* Right Panel - Detail View */}
-          <Paper
-            variant="outlined"
-            sx={{
-              flex: 1,
-              minHeight: isMobile ? 300 : 'auto',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              p: 2
+          <WildcardDetailPanel
+            selectedNode={selectedNode}
+            onCopy={handleCopy}
+            onChildClick={(child) => {
+              handleSelect(child);
+              // 자동으로 부모 확장
+              if (selectedNode) {
+                handleToggle(selectedNode.id);
+              }
             }}
-          >
-            {selectedNode ? (
-              <>
-                {/* Header */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                  <Box
-                    sx={{ cursor: 'pointer', '&:hover': { opacity: 0.7 } }}
-                    onClick={() => handleCopy(`++${selectedNode.name}++`)}
-                    title={t('common:copy') || 'Copy'}
-                  >
-                    <Typography variant="h5" sx={{ fontFamily: 'monospace' }}>
-                      ++{selectedNode.name}++
-                    </Typography>
-                    {selectedNode.description && (
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                        {selectedNode.description}
-                      </Typography>
-                    )}
-                  </Box>
-                  <IconButton
-                    onClick={() => handleCopy(`++${selectedNode.name}++`)}
-                    title={t('common:copy') || 'Copy'}
-                  >
-                    <CopyIcon />
-                  </IconButton>
-                </Box>
-
-                <Divider sx={{ mb: 2 }} />
-
-                {/* Content: Children or Items */}
-                {selectedNode.children && selectedNode.children.length > 0 ? (
-                  // 자식이 있으면 자식 목록 표시
-                  <Box sx={{ flex: 1, overflow: 'auto' }}>
-                    <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                      {t('wildcards:autoCollect.childCount', { count: selectedNode.children.length }) || `${selectedNode.children.length} children`}
-                    </Typography>
-                    <Stack spacing={1}>
-                      {selectedNode.children.map((child) => (
-                        <Card
-                          key={child.id}
-                          variant="outlined"
-                          sx={{
-                            cursor: 'pointer',
-                            '&:hover': { bgcolor: 'action.hover' }
-                          }}
-                          onClick={() => {
-                            handleSelectNode(child);
-                            // 자동으로 부모 확장
-                            setExpandedIds((prev) => new Set([...prev, selectedNode.id]));
-                          }}
-                        >
-                          <CardContent sx={{ py: 1, '&:last-child': { pb: 1 } }}>
-                            <Stack direction="row" alignItems="center" spacing={1} sx={{ width: '100%' }}>
-                              {child.children && child.children.length > 0 ? (
-                                <FolderIcon fontSize="small" color="warning" />
-                              ) : (
-                                <FileIcon fontSize="small" color="info" />
-                              )}
-                              <Typography variant="body1" sx={{ flex: 1 }}>++{child.name}++</Typography>
-                              {child.children && child.children.length > 0 && (
-                                <Chip
-                                  label={`${child.children.length} sub`}
-                                  size="small"
-                                  variant="outlined"
-                                />
-                              )}
-                              {child.items && child.items.length > 0 && (
-                                <Chip
-                                  label={`${child.items.filter(i => i.tool === 'comfyui').length} items`}
-                                  size="small"
-                                  color="primary"
-                                  variant="outlined"
-                                />
-                              )}
-                              <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleCopy(`++${child.name}++`);
-                                }}
-                                title={t('common:copy') || 'Copy'}
-                              >
-                                <CopyIcon fontSize="small" />
-                              </IconButton>
-                            </Stack>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </Stack>
-                  </Box>
-                ) : (
-                  // 자식이 없으면 items 상세 표시
-                  <Box sx={{ flex: 1, overflow: 'auto' }}>
-                    <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                      {t('wildcards:detailDialog.itemList', {
-                        count: selectedNode.items?.filter((i) => i.tool === 'comfyui').length || 0
-                      })}
-                    </Typography>
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        p: 2,
-                        bgcolor: 'background.default',
-                        maxHeight: 400,
-                        overflow: 'auto'
-                      }}
-                    >
-                      {selectedNode.items && selectedNode.items.filter((i) => i.tool === 'comfyui').length > 0 ? (
-                        selectedNode.items
-                          .filter((item) => item.tool === 'comfyui')
-                          .map((item, idx) => (
-                            <Typography
-                              key={idx}
-                              variant="body2"
-                              sx={{
-                                fontFamily: 'monospace',
-                                fontSize: '0.85em',
-                                py: 0.5,
-                                borderBottom: '1px solid',
-                                borderColor: 'divider',
-                                '&:last-child': { borderBottom: 'none' }
-                              }}
-                            >
-                              {item.content}
-                            </Typography>
-                          ))
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">
-                          {t('wildcards:autoCollect.noItems') || 'No items'}
-                        </Typography>
-                      )}
-                    </Paper>
-                  </Box>
-                )}
-              </>
-            ) : (
-              <Box
-                sx={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                <Typography variant="body1" color="text.secondary">
-                  {t('wildcards:autoCollect.selectWildcard') || 'Select a wildcard from the tree'}
-                </Typography>
-              </Box>
-            )}
-          </Paper>
+            sortChildren={sortNodesByHierarchy}
+          />
         </Box>
       )}
 
