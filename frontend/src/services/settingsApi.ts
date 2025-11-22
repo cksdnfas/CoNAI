@@ -229,7 +229,7 @@ export interface BatchTagResult {
   success_count: number;
   fail_count: number;
   results: Array<{
-    image_id: number;
+    composite_hash: string;  // ✅ Changed from image_id: number to match backend response
     success: boolean;
     auto_tags?: any;
     error?: string;

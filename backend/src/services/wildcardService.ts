@@ -1,4 +1,4 @@
-import { WildcardModel, WildcardWithItems } from '../models/Wildcard';
+import { WildcardModel, WildcardWithItems, WildcardItem } from '../models/Wildcard';
 
 /**
  * Wildcard Service
@@ -104,7 +104,7 @@ export class WildcardService {
     tool: 'comfyui' | 'nai',
     wildcardMap: Map<string, WildcardWithItems>,
     visited: Set<number> = new Set()
-  ): { content: string }[] {
+  ): WildcardItem[] {
     // 순환 참조 방지
     if (visited.has(wildcard.id)) {
       return [];

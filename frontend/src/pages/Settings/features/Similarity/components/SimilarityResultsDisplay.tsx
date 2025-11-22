@@ -75,7 +75,7 @@ export const SimilarityResultsDisplay: React.FC<SimilarityResultsDisplayProps> =
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' }, gap: 2 }}>
             {testResults.slice(0, 12).map((result, index) => (
-              <Box key={result.image.file_id ? `file-${result.image.file_id}` : `hash-${result.image.composite_hash}-${index}`}>
+              <Box key={`${result.image.composite_hash}-${result.image.file_id || index}`}>
                 <Card
                   variant="outlined"
                   onClick={() => {

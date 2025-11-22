@@ -13,6 +13,7 @@ import {
   Download as DownloadIcon,
   FolderOpen as FolderOpenIcon,
   Close as CloseIcon,
+  LocalOffer as TagIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useBulkActions } from '../../hooks/useBulkActions';
@@ -110,6 +111,49 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
     }
   };
 
+  const handleBatchTag = async () => {
+    // ✅ Phase 3.2: Batch tagging feature
+    const compositeHashes = selectedImages
+      .map(img => img.composite_hash)
+      .filter((hash): hash is string => hash !== null);
+
+    if (compositeHashes.length === 0) {
+      return;
+    }
+
+    const confirmMessage = t('common:bulkActions.confirmBatchTag', { count: compositeHashes.length }) ||
+      `태그를 생성하시겠습니까? (${compositeHashes.length}개 이미지)`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      // Import taggerBatchApi dynamically to avoid circular dependency
+      const { taggerBatchApi } = await import('../../services/settingsApi');
+
+      // Call batch tag API with selected composite_hashes
+      const response = await fetch('/api/images/batch-tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_ids: compositeHashes }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(t('common:bulkActions.batchTagSuccess', { count: result.data?.success_count || 0 }) ||
+          `${result.data?.success_count || 0}개 이미지 태그 생성 완료`);
+        onSelectionClear();
+      } else {
+        throw new Error(result.error || 'Batch tag failed');
+      }
+    } catch (error) {
+      console.error('Batch tag error:', error);
+      alert(t('common:bulkActions.batchTagError') || '배치 태그 생성 중 오류가 발생했습니다.');
+    }
+  };
+
   if (selectedCount === 0) {
     return null;
   }
@@ -165,6 +209,16 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
             color="primary"
           >
             <FolderOpenIcon />
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title={t('common:bulkActions.tooltips.batchTag') || '일괄 태그 생성'}>
+          <IconButton
+            onClick={handleBatchTag}
+            disabled={loading}
+            color="primary"
+          >
+            <TagIcon />
           </IconButton>
         </Tooltip>
 

@@ -9,6 +9,7 @@
   - 모델 썸네일 다운로드
   - Post Intent URL 생성 (Civitai 업로드용)
   - Settings → Civitai 탭에서 설정 및 통계 확인
+  - 테스트 중인 기능 차 후 개선...
 
 ### Wildcard System Enhancements
 - **계층형 와일드카드 자동 포함**: `include_children` 옵션 추가

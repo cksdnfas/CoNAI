@@ -94,9 +94,22 @@ export const imageApi = {
   deleteImages: async (
     compositeHashes: string[]
   ): Promise<{ success: boolean; error?: string; details?: any }> => {
+    if (compositeHashes.length === 0) {
+      return { success: true, details: { deleted: 0 } };
+    }
+
+    // ✅ Remove duplicates to prevent race condition
+    const uniqueHashes = Array.from(new Set(compositeHashes));
+
+    if (uniqueHashes.length !== compositeHashes.length) {
+      console.warn(
+        `⚠️ Removed ${compositeHashes.length - uniqueHashes.length} duplicate hashes from deletion request`
+      );
+    }
+
     try {
       const results = await Promise.all(
-        compositeHashes.map((hash) => imageApi.deleteImage(hash))
+        uniqueHashes.map((hash) => imageApi.deleteImage(hash))
       );
 
       const failed = results.filter(r => !r.success);
@@ -104,14 +117,14 @@ export const imageApi = {
       if (failed.length > 0) {
         return {
           success: false,
-          error: `${failed.length}/${compositeHashes.length} 이미지 삭제 실패`,
-          details: { failed, total: compositeHashes.length }
+          error: `${failed.length}/${uniqueHashes.length} 이미지 삭제 실패`,
+          details: { failed, total: uniqueHashes.length }
         };
       }
 
       return {
         success: true,
-        details: { deleted: compositeHashes.length }
+        details: { deleted: uniqueHashes.length }
       };
     } catch (error) {
       return {

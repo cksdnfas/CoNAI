@@ -107,7 +107,9 @@ export class DeletionService {
     // 2. 메타데이터 조회
     const metadata = MediaMetadataModel.findByHash(compositeHash);
     if (!metadata) {
-      throw new Error('Image not found');
+      // ✅ Idempotent: Already deleted images return success instead of error
+      console.warn(`⚠️ Image already deleted or not found: ${compositeHash}`);
+      return true;
     }
 
     // 3. 파일 목록 조회

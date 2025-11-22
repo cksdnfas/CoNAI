@@ -7,7 +7,8 @@ import {
   Switch,
   Alert,
   Divider,
-  Stack
+  Stack,
+  Tooltip
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, SwapHoriz as SwapHorizIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
@@ -193,11 +194,6 @@ export default function ResolutionSettings({ config, onChange, disabled = false 
             />
           ))}
         </Box>
-        {config.swapDimensions && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-            {t('nai.resolution.randomSwapInfo')}
-          </Typography>
-        )}
       </Alert>
     );
   };
@@ -205,9 +201,6 @@ export default function ResolutionSettings({ config, onChange, disabled = false 
   return (
     <Box>
       {/* 해상도 선택 */}
-      <Typography variant="body2" color="text.secondary" gutterBottom>
-        {t('nai.resolution.selectResolution')}
-      </Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
         {RESOLUTION_KEYS.map(key => {
           const isSelected = selectedResolutions.includes(key);
@@ -253,26 +246,29 @@ export default function ResolutionSettings({ config, onChange, disabled = false 
       <Divider sx={{ my: 2 }} />
 
       {/* 가로세로 전환 옵션 */}
-      <FormControlLabel
-        control={
-          <Switch
-            checked={config.swapDimensions}
-            onChange={handleSwapToggle}
-            disabled={disabled}
-          />
-        }
-        label={
-          <Stack direction="row" spacing={1} alignItems="center">
-            <SwapHorizIcon fontSize="small" />
-            <Box>
-              <Typography variant="body2">{t('nai.resolution.swapDimensions')}</Typography>
-              <Typography variant="caption" color="text.secondary">
-                {t('nai.resolution.swapDimensionsDesc')}
-              </Typography>
-            </Box>
-          </Stack>
-        }
-      />
+      <Tooltip
+        title={config.mode === 'random' ? t('nai.resolution.randomSwapInfo') : ''}
+        placement="right"
+        arrow
+      >
+        <FormControlLabel
+          control={
+            <Switch
+              checked={config.swapDimensions}
+              onChange={handleSwapToggle}
+              disabled={disabled}
+            />
+          }
+          label={
+            <Stack direction="row" spacing={1} alignItems="center">
+              <SwapHorizIcon fontSize="small" />
+              <Box>
+                <Typography variant="body2">{t('nai.resolution.swapDimensions')}</Typography>
+              </Box>
+            </Stack>
+          }
+        />
+      </Tooltip>
 
       {/* 최종 해상도 정보 */}
       {renderFinalResolutionInfo()}

@@ -34,10 +34,10 @@ router.use('/', queryRoutes);
 // Complex search routes (PoE-style AND/OR/NOT filtering)
 router.use('/search/complex', complexSearchRoutes);
 
+// Similarity search routes (must come before managementRoutes to avoid /:compositeHash catching /files/bulk)
+router.use('/', similarityRoutes);
+
 // Management routes (delete, update, etc.)
 router.use('/', managementRoutes);
-
-// Similarity search routes
-router.use('/', similarityRoutes);
 
 export { router as imageRoutes };
