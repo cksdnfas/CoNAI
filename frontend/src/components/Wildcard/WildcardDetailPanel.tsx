@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Paper,
@@ -51,7 +51,7 @@ export function WildcardDetailPanel({
   const { t } = useTranslation(['wildcards', 'common']);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [itemTab, setItemTab] = useState<'comfyui' | 'nai'>('comfyui');
+  const [contentTab, setContentTab] = useState<'children' | 'comfyui' | 'nai'>('children');
 
   // 자식 노드 정렬
   const sortedChildren = selectedNode?.children && sortChildren
@@ -61,7 +61,27 @@ export function WildcardDetailPanel({
   // ComfyUI / NAI 아이템 필터링
   const comfyuiItems = selectedNode?.items?.filter((i) => i.tool === 'comfyui') || [];
   const naiItems = selectedNode?.items?.filter((i) => i.tool === 'nai') || [];
+
+  // 탭 표시 여부 결정
+  const hasChildren = sortedChildren.length > 0;
+  const hasComfyuiItems = comfyuiItems.length > 0;
   const hasNaiItems = naiItems.length > 0;
+
+  // 표시할 탭이 여러 개인지 확인 (부모 와일드카드인 경우)
+  const showTabs = (hasChildren && (hasComfyuiItems || hasNaiItems)) || (hasComfyuiItems && hasNaiItems);
+
+  // 초기 탭 설정
+  React.useEffect(() => {
+    if (selectedNode) {
+      if (hasChildren) {
+        setContentTab('children');
+      } else if (hasComfyuiItems) {
+        setContentTab('comfyui');
+      } else if (hasNaiItems) {
+        setContentTab('nai');
+      }
+    }
+  }, [selectedNode?.id, hasChildren, hasComfyuiItems, hasNaiItems]);
 
   return (
     <Paper
@@ -113,164 +133,331 @@ export function WildcardDetailPanel({
             </Box>
           )}
 
-          {/* Content: Children or Items */}
-          {sortedChildren.length > 0 ? (
-            // 자식이 있으면 자식 목록 표시
-            <Box sx={{ flex: 1, overflow: 'auto' }}>
-              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                {t('wildcards:autoCollect.childCount', { count: sortedChildren.length }) || `${sortedChildren.length} children`}
-              </Typography>
-              <Stack spacing={1}>
-                {sortedChildren.map((child) => (
-                  <Card
-                    key={child.id}
-                    variant="outlined"
-                    sx={{
-                      cursor: 'pointer',
-                      '&:hover': { bgcolor: 'action.hover' }
-                    }}
-                    onClick={() => onChildClick?.(child)}
-                  >
-                    <CardContent sx={{ py: 1, '&:last-child': { pb: 1 } }}>
-                      <Stack direction="row" alignItems="center" spacing={1} sx={{ width: '100%' }}>
-                        {child.children && child.children.length > 0 ? (
-                          <FolderIcon fontSize="small" color="warning" />
-                        ) : (
-                          <FileIcon fontSize="small" color="info" />
-                        )}
-                        <Typography variant="body1" sx={{ flex: 1 }}>++{child.name}++</Typography>
-                        {child.children && child.children.length > 0 && (
-                          <Chip
-                            label={`${child.children.length} sub`}
-                            size="small"
-                            variant="outlined"
-                          />
-                        )}
-                        {child.items && child.items.length > 0 && (
-                          <Chip
-                            label={`${child.items.filter(i => i.tool === 'comfyui').length} items`}
-                            size="small"
-                            color="primary"
-                            variant="outlined"
-                          />
-                        )}
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onCopy(`++${child.name}++`);
-                          }}
-                          title={t('common:copy') || 'Copy'}
-                        >
-                          <CopyIcon fontSize="small" />
-                        </IconButton>
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                ))}
-              </Stack>
-            </Box>
-          ) : (
-            // 자식이 없으면 items 상세 표시 또는 커스텀 컨텐츠
-            <Box sx={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
-              {renderExtraContent ? (
-                renderExtraContent(selectedNode)
-              ) : (
-                <>
-                  {/* Tool Tabs */}
-                  <Tabs
-                    value={itemTab}
-                    onChange={(_, newValue) => setItemTab(newValue)}
-                    sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 40 }}
-                  >
+          {/* Content: Tabs or Direct Display */}
+          <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            {renderExtraContent ? (
+              renderExtraContent(selectedNode)
+            ) : showTabs ? (
+              <>
+                {/* Multi-Content Tabs */}
+                <Tabs
+                  value={contentTab}
+                  onChange={(_, newValue) => setContentTab(newValue)}
+                  sx={{
+                    borderBottom: 1,
+                    borderColor: 'divider',
+                    minHeight: 48,
+                    '& .MuiTabs-indicator': {
+                      height: 3,
+                      borderRadius: '3px 3px 0 0'
+                    }
+                  }}
+                >
+                  {hasChildren && (
+                    <Tab
+                      value="children"
+                      label={`${t('wildcards:detail.children') || '하위 항목'} (${sortedChildren.length})`}
+                      sx={{
+                        minHeight: 48,
+                        fontWeight: contentTab === 'children' ? 600 : 400,
+                        '&.Mui-selected': {
+                          color: 'warning.main'
+                        }
+                      }}
+                    />
+                  )}
+                  {hasComfyuiItems && (
                     <Tab
                       value="comfyui"
-                      label={`ComfyUI: ${comfyuiItems.length}${t('wildcards:card.itemsCount')}`}
-                      sx={{ minHeight: 40, py: 1 }}
+                      label={`ComfyUI (${comfyuiItems.length})`}
+                      sx={{
+                        minHeight: 48,
+                        fontWeight: contentTab === 'comfyui' ? 600 : 400,
+                        '&.Mui-selected': {
+                          color: 'primary.main'
+                        }
+                      }}
                     />
-                    {hasNaiItems && (
-                      <Tab
-                        value="nai"
-                        label={`NAI: ${naiItems.length}${t('wildcards:card.itemsCount')}`}
-                        sx={{ minHeight: 40, py: 1 }}
-                      />
-                    )}
-                  </Tabs>
+                  )}
+                  {hasNaiItems && (
+                    <Tab
+                      value="nai"
+                      label={`NAI (${naiItems.length})`}
+                      sx={{
+                        minHeight: 48,
+                        fontWeight: contentTab === 'nai' ? 600 : 400,
+                        '&.Mui-selected': {
+                          color: 'secondary.main'
+                        }
+                      }}
+                    />
+                  )}
+                </Tabs>
 
-                  {/* Items Display */}
+                {/* Tab Content */}
+                <Box sx={{ flex: 1, overflow: 'auto', mt: 2 }}>
+                  {contentTab === 'children' && hasChildren && (
+                    <Stack spacing={1}>
+                      {sortedChildren.map((child) => (
+                        <Card
+                          key={child.id}
+                          variant="outlined"
+                          sx={{
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            '&:hover': {
+                              bgcolor: 'action.hover',
+                              borderColor: 'primary.main'
+                            }
+                          }}
+                          onClick={() => onChildClick?.(child)}
+                        >
+                          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                            <Stack direction="row" alignItems="center" spacing={1} sx={{ width: '100%' }}>
+                              {child.children && child.children.length > 0 ? (
+                                <FolderIcon fontSize="small" color="warning" />
+                              ) : (
+                                <FileIcon fontSize="small" color="info" />
+                              )}
+                              <Typography variant="body1" sx={{ flex: 1, fontFamily: 'monospace' }}>
+                                ++{child.name}++
+                              </Typography>
+                              {child.children && child.children.length > 0 && (
+                                <Chip
+                                  label={`${child.children.length} sub`}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              )}
+                              {child.items && child.items.length > 0 && (
+                                <Chip
+                                  label={`${child.items.filter(i => i.tool === 'comfyui').length} items`}
+                                  size="small"
+                                  color="primary"
+                                  variant="outlined"
+                                />
+                              )}
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onCopy(`++${child.name}++`);
+                                }}
+                                title={t('common:copy') || 'Copy'}
+                              >
+                                <CopyIcon fontSize="small" />
+                              </IconButton>
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </Stack>
+                  )}
+
+                  {contentTab === 'comfyui' && hasComfyuiItems && (
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 2,
+                        bgcolor: 'background.default',
+                        maxHeight: '100%',
+                        overflow: 'auto'
+                      }}
+                    >
+                      {comfyuiItems.map((item, idx) => (
+                        <Typography
+                          key={idx}
+                          variant="body2"
+                          sx={{
+                            fontFamily: 'monospace',
+                            fontSize: '0.85em',
+                            py: 0.5,
+                            borderBottom: '1px solid',
+                            borderColor: 'divider',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s',
+                            '&:hover': {
+                              bgcolor: 'action.hover'
+                            },
+                            '&:last-child': { borderBottom: 'none' }
+                          }}
+                          onClick={() => onCopy(item.content)}
+                        >
+                          {item.content}
+                        </Typography>
+                      ))}
+                    </Paper>
+                  )}
+
+                  {contentTab === 'nai' && hasNaiItems && (
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 2,
+                        bgcolor: 'background.default',
+                        maxHeight: '100%',
+                        overflow: 'auto'
+                      }}
+                    >
+                      {naiItems.map((item, idx) => (
+                        <Typography
+                          key={idx}
+                          variant="body2"
+                          sx={{
+                            fontFamily: 'monospace',
+                            fontSize: '0.85em',
+                            py: 0.5,
+                            borderBottom: '1px solid',
+                            borderColor: 'divider',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s',
+                            '&:hover': {
+                              bgcolor: 'action.hover'
+                            },
+                            '&:last-child': { borderBottom: 'none' }
+                          }}
+                          onClick={() => onCopy(item.content)}
+                        >
+                          {item.content}
+                        </Typography>
+                      ))}
+                    </Paper>
+                  )}
+                </Box>
+              </>
+            ) : (
+              // 탭이 필요없는 경우 (단일 컨텐츠만 있음)
+              <Box sx={{ flex: 1, overflow: 'auto' }}>
+                {hasChildren ? (
+                  <Stack spacing={1}>
+                    {sortedChildren.map((child) => (
+                      <Card
+                        key={child.id}
+                        variant="outlined"
+                        sx={{
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          '&:hover': {
+                            bgcolor: 'action.hover',
+                            borderColor: 'primary.main'
+                          }
+                        }}
+                        onClick={() => onChildClick?.(child)}
+                      >
+                        <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                          <Stack direction="row" alignItems="center" spacing={1} sx={{ width: '100%' }}>
+                            {child.children && child.children.length > 0 ? (
+                              <FolderIcon fontSize="small" color="warning" />
+                            ) : (
+                              <FileIcon fontSize="small" color="info" />
+                            )}
+                            <Typography variant="body1" sx={{ flex: 1, fontFamily: 'monospace' }}>
+                              ++{child.name}++
+                            </Typography>
+                            {child.children && child.children.length > 0 && (
+                              <Chip
+                                label={`${child.children.length} sub`}
+                                size="small"
+                                variant="outlined"
+                              />
+                            )}
+                            {child.items && child.items.length > 0 && (
+                              <Chip
+                                label={`${child.items.filter(i => i.tool === 'comfyui').length} items`}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                              />
+                            )}
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onCopy(`++${child.name}++`);
+                              }}
+                              title={t('common:copy') || 'Copy'}
+                            >
+                              <CopyIcon fontSize="small" />
+                            </IconButton>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </Stack>
+                ) : hasComfyuiItems ? (
                   <Paper
                     variant="outlined"
                     sx={{
                       p: 2,
                       bgcolor: 'background.default',
                       maxHeight: 400,
-                      overflow: 'auto',
-                      mt: 2,
-                      flex: 1
+                      overflow: 'auto'
                     }}
                   >
-                    {itemTab === 'comfyui' ? (
-                      comfyuiItems.length > 0 ? (
-                        comfyuiItems.map((item, idx) => (
-                          <Typography
-                            key={idx}
-                            variant="body2"
-                            sx={{
-                              fontFamily: 'monospace',
-                              fontSize: '0.85em',
-                              py: 0.5,
-                              borderBottom: '1px solid',
-                              borderColor: 'divider',
-                              cursor: 'pointer',
-                              '&:hover': {
-                                bgcolor: 'action.hover'
-                              },
-                              '&:last-child': { borderBottom: 'none' }
-                            }}
-                            onClick={() => onCopy(item.content)}
-                          >
-                            {item.content}
-                          </Typography>
-                        ))
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">
-                          {t('wildcards:autoCollect.noItems') || 'No items'}
-                        </Typography>
-                      )
-                    ) : (
-                      naiItems.length > 0 ? (
-                        naiItems.map((item, idx) => (
-                          <Typography
-                            key={idx}
-                            variant="body2"
-                            sx={{
-                              fontFamily: 'monospace',
-                              fontSize: '0.85em',
-                              py: 0.5,
-                              borderBottom: '1px solid',
-                              borderColor: 'divider',
-                              cursor: 'pointer',
-                              '&:hover': {
-                                bgcolor: 'action.hover'
-                              },
-                              '&:last-child': { borderBottom: 'none' }
-                            }}
-                            onClick={() => onCopy(item.content)}
-                          >
-                            {item.content}
-                          </Typography>
-                        ))
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">
-                          {t('wildcards:autoCollect.noItems') || 'No items'}
-                        </Typography>
-                      )
-                    )}
+                    {comfyuiItems.map((item, idx) => (
+                      <Typography
+                        key={idx}
+                        variant="body2"
+                        sx={{
+                          fontFamily: 'monospace',
+                          fontSize: '0.85em',
+                          py: 0.5,
+                          borderBottom: '1px solid',
+                          borderColor: 'divider',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.2s',
+                          '&:hover': {
+                            bgcolor: 'action.hover'
+                          },
+                          '&:last-child': { borderBottom: 'none' }
+                        }}
+                        onClick={() => onCopy(item.content)}
+                      >
+                        {item.content}
+                      </Typography>
+                    ))}
                   </Paper>
-                </>
-              )}
-            </Box>
-          )}
+                ) : hasNaiItems ? (
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      p: 2,
+                      bgcolor: 'background.default',
+                      maxHeight: 400,
+                      overflow: 'auto'
+                    }}
+                  >
+                    {naiItems.map((item, idx) => (
+                      <Typography
+                        key={idx}
+                        variant="body2"
+                        sx={{
+                          fontFamily: 'monospace',
+                          fontSize: '0.85em',
+                          py: 0.5,
+                          borderBottom: '1px solid',
+                          borderColor: 'divider',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.2s',
+                          '&:hover': {
+                            bgcolor: 'action.hover'
+                          },
+                          '&:last-child': { borderBottom: 'none' }
+                        }}
+                        onClick={() => onCopy(item.content)}
+                      >
+                        {item.content}
+                      </Typography>
+                    ))}
+                  </Paper>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    {t('wildcards:autoCollect.noItems') || 'No items'}
+                  </Typography>
+                )}
+              </Box>
+            )}
+          </Box>
         </>
       ) : (
         <Box
