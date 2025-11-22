@@ -144,6 +144,7 @@
     "pageTitle": "Generate Image",
     "settingsTitle": "Generation Settings",
     "missingFields": "Please enter required fields: {{fields}}",
+    "emptyPrompt": "Prompt is empty. Cannot generate image.",
     "selectPlaceholder": "Please select",
     "previewTitle": "Data to be sent Preview",
     "generateAll": "Generate on all active servers ({{count}})",

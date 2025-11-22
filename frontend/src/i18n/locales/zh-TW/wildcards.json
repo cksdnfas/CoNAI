@@ -29,6 +29,11 @@
     "name": "名稱",
     "nameHelper": "請輸入不帶++的名稱 (例如: 花, 顏色)",
     "description": "描述 (選填)",
+    "parent": "父萬用字元",
+    "parentHelper": "選擇父萬用字元以建立層次結構",
+    "noParent": "無 (根層級)",
+    "includeChildren": "自動包含子萬用字元",
+    "includeChildrenHelper": "啟用後，使用此萬用字元時將自動包含直接子層級的項目",
     "comfyuiItems": "ComfyUI提示詞項目",
     "naiItems": "NovelAI提示詞項目",
     "itemsHelper": "每個項目可以包含逗號分隔的詞語。您可以使用++名稱++格式嵌套其他萬用字元。",
@@ -145,5 +150,32 @@
     "autoTab": "自動 (LORA)",
     "noResults": "無結果",
     "selectTier": "請選擇層級"
+  },
+  "deleteConfirm": {
+    "title": "確認刪除萬用字元",
+    "message": "確定要刪除'{{name}}'萬用字元嗎?",
+    "childrenNotice": "此萬用字元包含子萬用字元。",
+    "wildcardInfo": {
+      "itemCount": "項目數: {{count}}",
+      "childCount": "子萬用字元數: {{count}}"
+    },
+    "warning": {
+      "permanent": "此操作無法復原。"
+    },
+    "options": {
+      "title": "選擇刪除選項:",
+      "moveUp": {
+        "label": "僅刪除此項",
+        "description": "子萬用字元將提升一級"
+      },
+      "cascade": {
+        "label": "刪除此項及所有子項",
+        "description": "將同時刪除{{count}}個子萬用字元"
+      }
+    }
+  },
+  "messages": {
+    "deleteSuccess": "萬用字元刪除成功",
+    "deleteFailed": "萬用字元刪除失敗"
   }
 }

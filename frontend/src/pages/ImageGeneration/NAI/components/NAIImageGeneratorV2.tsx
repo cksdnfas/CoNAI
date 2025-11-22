@@ -62,30 +62,75 @@ export default function NAIImageGeneratorV2({
     }
   });
 
-  // 비용 계산
+  // 선택된 모든 해상도 가져오기
+  const getSelectedResolutions = () => {
+    const config = params.resolutionConfig;
+    const selections = config.mode === 'fixed' ? [config.fixed] : config.random;
+
+    return selections
+      .map(key => {
+        if (key in RESOLUTIONS) {
+          return RESOLUTIONS[key as keyof typeof RESOLUTIONS];
+        }
+        const custom = config.customResolutions.find(r => `custom_${r.id}` === key);
+        return custom ? { width: custom.width, height: custom.height } : null;
+      })
+      .filter(Boolean) as Array<{ width: number; height: number }>;
+  };
+
+  // 비용 계산 (최소~최대 범위)
   const costInfo = useMemo(() => {
     if (!userData) {
-      return { cost: 0, balance: 0, canGenerate: false, buttonText: '이미지생성' };
+      return {
+        minCost: 0,
+        maxCost: 0,
+        balance: 0,
+        canGenerate: false,
+        buttonText: '이미지생성'
+      };
     }
 
-    const resolution = RESOLUTIONS[params.resolution as keyof typeof RESOLUTIONS];
+    const resolutions = getSelectedResolutions();
+    if (resolutions.length === 0) {
+      resolutions.push({ width: 832, height: 1216 }); // 폴백
+    }
 
-    const cost = calculateCost({
-      width: resolution.width,
-      height: resolution.height,
-      steps: params.steps,
-      n_samples: params.n_samples,
-      uncond_scale: params.uncond_scale
-    });
+    // 가로세로 전환 고려
+    const possibleResolutions = params.resolutionConfig.swapDimensions && params.resolutionConfig.mode === 'random'
+      ? resolutions.flatMap(r => [r, { width: r.height, height: r.width }])
+      : params.resolutionConfig.swapDimensions
+      ? resolutions.map(r => ({ width: r.height, height: r.width }))
+      : resolutions;
 
+    // 각 해상도별 비용 계산
+    const costs = possibleResolutions.map(res =>
+      calculateCost({
+        width: res.width,
+        height: res.height,
+        steps: params.steps,
+        n_samples: params.n_samples,
+        uncond_scale: params.uncond_scale
+      })
+    );
+
+    const minCost = Math.min(...costs);
+    const maxCost = Math.max(...costs);
     const balance = userData.anlasBalance;
-    const canGenerate = balance >= cost;
-    const buttonText = canGenerate
-      ? `이미지생성 (비용: ${cost} / 잔액: ${balance.toLocaleString()})`
-      : `이미지생성 (잔액 부족)`;
+    const canGenerate = balance >= minCost;
 
-    return { cost, balance, canGenerate, buttonText };
-  }, [userData, params.resolution, params.steps, params.n_samples, params.uncond_scale, calculateCost]);
+    let buttonText: string;
+    if (!canGenerate) {
+      buttonText = '이미지생성 (잔액 부족)';
+    } else if (minCost === maxCost) {
+      // 단일 해상도
+      buttonText = `이미지생성 (비용: ${minCost} / 잔액: ${balance.toLocaleString()})`;
+    } else {
+      // 다중 해상도
+      buttonText = `이미지생성 (비용: ${minCost}~${maxCost} / 잔액: ${balance.toLocaleString()})`;
+    }
+
+    return { minCost, maxCost, balance, canGenerate, buttonText };
+  }, [userData, params.resolutionConfig, params.steps, params.n_samples, params.uncond_scale, calculateCost]);
 
   // 생성 버튼 클릭 핸들러
   const handleGenerate = async (e?: React.FormEvent) => {

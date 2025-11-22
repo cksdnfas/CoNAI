@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { DEFAULT_PARAMS, PARAMS_STORAGE_KEY } from '../constants/nai.constants';
+import { DEFAULT_PARAMS, DEFAULT_RESOLUTION_CONFIG, PARAMS_STORAGE_KEY } from '../constants/nai.constants';
 import type { NAIParams } from '../types/nai.types';
 
 export function useNAIParams() {
@@ -13,10 +13,20 @@ export function useNAIParams() {
         const parsed = JSON.parse(saved);
         // 프롬프트는 저장하지 않으므로 제외
         const { prompt: _, negative_prompt: __, ...savedParams } = parsed;
+
+        // 하위 호환성: resolutionConfig가 없으면 기존 resolution에서 마이그레이션
+        if (!savedParams.resolutionConfig && savedParams.resolution) {
+          savedParams.resolutionConfig = {
+            ...DEFAULT_RESOLUTION_CONFIG,
+            fixed: savedParams.resolution
+          };
+        }
+
         // 기본값과 병합 (새로운 파라미터가 추가될 경우를 대비)
         return {
           ...DEFAULT_PARAMS,
           ...savedParams,
+          resolutionConfig: savedParams.resolutionConfig || DEFAULT_RESOLUTION_CONFIG,
           prompt: '',
           negative_prompt: ''
         };

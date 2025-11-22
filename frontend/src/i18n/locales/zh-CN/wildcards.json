@@ -29,6 +29,11 @@
     "name": "名称",
     "nameHelper": "请输入不带++的名称 (例如: 花, 颜色)",
     "description": "描述 (可选)",
+    "parent": "父通配符",
+    "parentHelper": "选择父通配符以创建层次结构",
+    "noParent": "无 (根级别)",
+    "includeChildren": "自动包含子通配符",
+    "includeChildrenHelper": "启用后，使用此通配符时将自动包含直接子级的项目",
     "comfyuiItems": "ComfyUI提示词项目",
     "naiItems": "NovelAI提示词项目",
     "itemsHelper": "每个项目可以包含逗号分隔的词语。您可以使用++名称++格式嵌套其他通配符。",
@@ -145,5 +150,32 @@
     "autoTab": "自动 (LORA)",
     "noResults": "无结果",
     "selectTier": "请选择层级"
+  },
+  "deleteConfirm": {
+    "title": "确认删除通配符",
+    "message": "确定要删除'{{name}}'通配符吗?",
+    "childrenNotice": "此通配符包含子通配符。",
+    "wildcardInfo": {
+      "itemCount": "项目数: {{count}}",
+      "childCount": "子通配符数: {{count}}"
+    },
+    "warning": {
+      "permanent": "此操作无法撤销。"
+    },
+    "options": {
+      "title": "选择删除选项:",
+      "moveUp": {
+        "label": "仅删除此项",
+        "description": "子通配符将提升一级"
+      },
+      "cascade": {
+        "label": "删除此项及所有子项",
+        "description": "将同时删除{{count}}个子通配符"
+      }
+    }
+  },
+  "messages": {
+    "deleteSuccess": "通配符删除成功",
+    "deleteFailed": "通配符删除失败"
   }
 }

@@ -8,8 +8,8 @@
     "servers": "サーバー管理",
     "novelai": "NovelAI",
     "ariaLabel": "画像生成タブ",
-    "comfyui": "[ja] ComfyUI",
-    "wildcards": "[ja] Wildcards"
+    "comfyui": "ComfyUI",
+    "wildcards": "Wildcards"
   },
   "nai": {
     "subtabs": {
@@ -62,6 +62,9 @@
       "completed": "画像生成が完了しました",
       "failed": "画像生成に失敗しました"
     },
+    "errors": {
+      "emptyPrompt": "プロンプトが空です。画像を生成できません。"
+    },
     "repeat": {
       "title": "繰り返し実行",
       "enable": "繰り返し実行を有効にする",
@@ -73,6 +76,34 @@
       "progress": "{{current}}回目実行中",
       "progressWithTotal": "{{current}}/{{total}}回目実行中",
       "stop": "停止"
+    },
+    "resolution": {
+      "mode": "解像度モード",
+      "modeFixed": "固定モード",
+      "modeRandom": "ランダムモード",
+      "selectResolution": "解像度を選択",
+      "selectMultiple": "解像度を選択（複数選択可）",
+      "addCustom": "カスタム追加",
+      "swapDimensions": "縦横を入れ替え",
+      "swapDimensionsDesc": "選択した解像度の幅と高さを入れ替えます",
+      "finalResolution": "最終解像度",
+      "randomPool": "ランダムプール",
+      "swapped": "入れ替え済み",
+      "randomSwapInfo": "各解像度は50%の確率で縦横が入れ替わります",
+      "selectAtLeastOne": "ランダムモードでは少なくとも1つの解像度を選択してください",
+      "customDialog": {
+        "addTitle": "カスタム解像度を追加",
+        "editTitle": "カスタム解像度を編集",
+        "name": "名前",
+        "namePlaceholder": "例：マイ解像度",
+        "width": "幅",
+        "height": "高さ",
+        "save": "保存",
+        "cancel": "キャンセル",
+        "nameRequired": "名前を入力してください",
+        "widthInvalid": "幅は64〜2048の範囲で指定してください",
+        "heightInvalid": "高さは64〜2048の範囲で指定してください"
+      }
     },
     "naiSettings": {
       "basic": {
@@ -100,87 +131,87 @@
       }
     },
     "tabs": {
-      "basic": "[ja] Basic Settings",
-      "advanced": "[ja] Advanced Settings"
+      "basic": "Basic Settings",
+      "advanced": "Advanced Settings"
     },
     "sections": {
-      "preset": "[ja] Quality Presets",
-      "prompts": "[ja] Prompts",
-      "output": "[ja] Output Settings",
-      "advanced": "[ja] Advanced Settings",
-      "sampling": "[ja] Sampling Settings",
-      "quality": "[ja] Quality Settings",
-      "model": "[ja] Model Selection"
+      "preset": "Quality Presets",
+      "prompts": "Prompts",
+      "output": "Output Settings",
+      "advanced": "Advanced Settings",
+      "sampling": "Sampling Settings",
+      "quality": "Quality Settings",
+      "model": "Model Selection"
     },
     "anlas": {
-      "balance": "[ja] Anlas Balance",
+      "balance": "Anlas Balance",
       "refresh": "更新",
-      "subscription": "[ja] Subscription",
-      "free": "[ja] Free",
-      "tablet": "[ja] Tablet",
-      "scroll": "[ja] Scroll",
-      "opus": "[ja] Opus"
+      "subscription": "Subscription",
+      "free": "Free",
+      "tablet": "Tablet",
+      "scroll": "Scroll",
+      "opus": "Opus"
     },
     "cost": {
-      "title": "[ja] Cost Estimate",
-      "anlas": "[ja] Anlas",
-      "balance": "[ja] Balance",
-      "sufficient": "[ja] Sufficient",
-      "insufficient": "[ja] Insufficient",
-      "opusFree": "[ja] Opus Free Generation",
-      "maxSamples": "[ja] Max Samples"
+      "title": "Cost Estimate",
+      "anlas": "Anlas",
+      "balance": "Balance",
+      "sufficient": "Sufficient",
+      "insufficient": "Insufficient",
+      "opusFree": "Opus Free Generation",
+      "maxSamples": "Max Samples"
     },
     "models": {
-      "label": "[ja] Model Selection",
-      "v45curated": "[ja] V4.5 Curated (Recommended)",
-      "v45full": "[ja] V4.5 Full",
-      "v4curated": "[ja] V4 Curated",
-      "v4full": "[ja] V4 Full",
-      "v3": "[ja] V3 (Legacy)",
-      "v3furry": "[ja] V3 Furry"
+      "label": "Model Selection",
+      "v45curated": "V4.5 Curated (Recommended)",
+      "v45full": "V4.5 Full",
+      "v4curated": "V4 Curated",
+      "v4full": "V4 Full",
+      "v3": "V3 (Legacy)",
+      "v3furry": "V3 Furry"
     },
     "advanced": {
-      "cfgRescale": "[ja] Prompt Guidance Rescale",
-      "noiseSchedule": "[ja] Noise Schedule",
-      "uncondScale": "[ja] Undesired Content Strength"
+      "cfgRescale": "Prompt Guidance Rescale",
+      "noiseSchedule": "Noise Schedule",
+      "uncondScale": "Undesired Content Strength"
     },
     "settings": {
-      "qualityToggle": "[ja] Auto-add quality tags"
+      "qualityToggle": "Auto-add quality tags"
     },
     "presets": {
-      "title": "[ja] Quality Presets",
-      "label": "[ja] Quality Presets",
+      "title": "Quality Presets",
+      "label": "Quality Presets",
       "quality": {
-        "name": "[ja] Quality",
-        "description": "[ja] Balanced quality and speed (28 steps, Euler)"
+        "name": "Quality",
+        "description": "Balanced quality and speed (28 steps, Euler)"
       },
       "fast": {
-        "name": "[ja] Fast",
-        "description": "[ja] Quick generation (15 steps, Euler)"
+        "name": "Fast",
+        "description": "Quick generation (15 steps, Euler)"
       },
       "artistic": {
-        "name": "[ja] Artistic",
-        "description": "[ja] Creative results (35 steps, DPM++ 2S Ancestral, SMEA DYN)"
+        "name": "Artistic",
+        "description": "Creative results (35 steps, DPM++ 2S Ancestral, SMEA DYN)"
       },
       "realistic": {
-        "name": "[ja] Realistic",
-        "description": "[ja] Realistic images (40 steps, DPM++ 2M, SMEA)"
+        "name": "Realistic",
+        "description": "Realistic images (40 steps, DPM++ 2M, SMEA)"
       },
       "detail": {
-        "name": "[ja] Detail",
-        "description": "[ja] Maximum detail (50 steps, DPM++ SDE, SMEA DYN)"
+        "name": "Detail",
+        "description": "Maximum detail (50 steps, DPM++ SDE, SMEA DYN)"
       }
     },
     "gallery": {
-      "images": "[ja] Images",
-      "showMetadata": "[ja] Show Metadata",
-      "hideMetadata": "[ja] Hide Metadata",
-      "downloadAll": "[ja] Download All"
+      "images": "Images",
+      "showMetadata": "Show Metadata",
+      "hideMetadata": "Hide Metadata",
+      "downloadAll": "Download All"
     },
     "history": {
-      "title": "[ja] Generation History",
-      "comingSoon": "[ja] This feature is coming soon.",
-      "description": "[ja] View your previously generated images and settings."
+      "title": "Generation History",
+      "comingSoon": "This feature is coming soon.",
+      "description": "View your previously generated images and settings."
     }
   },
   "customDropdown": {

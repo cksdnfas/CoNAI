@@ -89,16 +89,16 @@
     }
   },
   "info": {
-    "title": "[ja] Image Information"
+    "title": "Image Information"
   },
-  "copyHash": "[ja] Copy hash",
-  "hashGenerating": "[ja] Waiting for hash generation...",
-  "hashCopied": "[ja] Hash copied",
-  "viewThumbnail": "[ja] View Thumbnail (Fast Loading)",
-  "viewOriginal": "[ja] View Original (High Quality)",
-  "originalNotFound": "[ja] Original image not found. Showing thumbnail.",
+  "copyHash": "Copy hash",
+  "hashGenerating": "Waiting for hash generation...",
+  "hashCopied": "Hash copied",
+  "viewThumbnail": "View Thumbnail (Fast Loading)",
+  "viewOriginal": "View Original (High Quality)",
+  "originalNotFound": "Original image not found. Showing thumbnail.",
   "groupModal": {
-    "title": "[ja] Group: {{name}}",
-    "defaultTitle": "[ja] Group Images"
+    "title": "Group: {{name}}",
+    "defaultTitle": "Group Images"
   }
 }

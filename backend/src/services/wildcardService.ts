@@ -90,6 +90,46 @@ export class WildcardService {
   }
 
   /**
+   * 와일드카드의 항목을 수집 (include_children 옵션 고려, 재귀적)
+   * include_children이 활성화된 경우 모든 하위 항목을 재귀적으로 포함
+   *
+   * @param wildcard 대상 와일드카드
+   * @param tool 사용할 도구
+   * @param wildcardMap 모든 와일드카드 맵
+   * @param visited 순환 참조 방지용 (이미 방문한 와일드카드 ID)
+   * @returns 항목 배열
+   */
+  private static collectItemsWithChildren(
+    wildcard: WildcardWithItems,
+    tool: 'comfyui' | 'nai',
+    wildcardMap: Map<string, WildcardWithItems>,
+    visited: Set<number> = new Set()
+  ): { content: string }[] {
+    // 순환 참조 방지
+    if (visited.has(wildcard.id)) {
+      return [];
+    }
+    visited.add(wildcard.id);
+
+    // 1. 자기 자신의 항목 수집
+    const items = wildcard.items.filter(item => item.tool === tool);
+
+    // 2. include_children이 활성화된 경우 하위 항목 재귀적으로 수집
+    if (wildcard.include_children === 1) {
+      // 모든 와일드카드를 순회하며 직계 자식 찾기
+      for (const [, wc] of wildcardMap) {
+        if (wc.parent_id === wildcard.id) {
+          // 자식의 include_children 설정도 고려하여 재귀 호출
+          const childItems = this.collectItemsWithChildren(wc, tool, wildcardMap, visited);
+          items.push(...childItems);
+        }
+      }
+    }
+
+    return items;
+  }
+
+  /**
    * 재귀적 파싱 (중첩 지원)
    *
    * @param text 파싱할 텍스트
@@ -116,13 +156,13 @@ export class WildcardService {
 
       // 와일드카드 조회
       const wildcard = wildcardMap.get(name);
-      if (!wildcard || !wildcard.items || wildcard.items.length === 0) {
-        console.warn(`Wildcard not found or empty: ${name}`);
+      if (!wildcard) {
+        console.warn(`Wildcard not found: ${name}`);
         return ''; // 빈 문자열 반환
       }
 
-      // 해당 도구의 항목만 필터링
-      const toolItems = wildcard.items.filter(item => item.tool === tool);
+      // 해당 도구의 항목 수집 (include_children 옵션 고려)
+      const toolItems = this.collectItemsWithChildren(wildcard, tool, wildcardMap);
 
       if (toolItems.length === 0) {
         console.warn(`No items found for wildcard '${name}' with tool '${tool}'`);

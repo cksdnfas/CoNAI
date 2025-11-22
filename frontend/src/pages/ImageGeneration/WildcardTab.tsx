@@ -11,7 +11,6 @@ import {
   TextField,
   Chip,
   Stack,
-  Alert,
   CircularProgress,
   Paper,
   Divider,
@@ -25,10 +24,11 @@ import {
   Tooltip,
   useMediaQuery,
   useTheme,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem
+  FormControlLabel,
+  Checkbox,
+  Card,
+  CardContent,
+  Alert
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -47,6 +47,8 @@ import { useTranslation } from 'react-i18next';
 import { useSnackbar } from 'notistack';
 import { wildcardApi, type WildcardWithItems, type WildcardWithHierarchy, type WildcardCreateData, type WildcardUpdateData, type ToolItems } from '../../services/api/wildcardApi';
 import AutoCollectedWildcardsTab from './AutoCollectedWildcardsTab';
+import { HierarchyParentSelector } from '../../components/GroupTreeSelector';
+import { WildcardDeleteConfirmDialog } from './components/WildcardDeleteConfirmDialog';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -154,13 +156,28 @@ function ManualWildcardsTab() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const [hierarchicalData, setHierarchicalData] = useState<WildcardWithHierarchy[]>([]);
-  const [flatWildcards, setFlatWildcards] = useState<WildcardWithItems[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   // Tree state
   const [selectedNode, setSelectedNode] = useState<WildcardWithHierarchy | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+
+  // Helper function to flatten hierarchical data
+  const flattenHierarchy = (nodes: WildcardWithHierarchy[]): WildcardWithHierarchy[] => {
+    const result: WildcardWithHierarchy[] = [];
+    const flatten = (items: WildcardWithHierarchy[]) => {
+      items.forEach(item => {
+        result.push(item);
+        if (item.children && item.children.length > 0) {
+          flatten(item.children);
+        }
+      });
+    };
+    flatten(nodes);
+    return result;
+  };
+
+  const flatWildcards = flattenHierarchy(hierarchicalData);
 
   // Dialog states
   const [openDialog, setOpenDialog] = useState(false);
@@ -172,12 +189,14 @@ function ManualWildcardsTab() {
     comfyuiItems: string[];
     naiItems: string[];
     parent_id: number | null;
+    include_children: boolean;
   }>({
     name: '',
     description: '',
     comfyuiItems: [''],
     naiItems: [''],
-    parent_id: null
+    parent_id: null,
+    include_children: true
   });
 
   // Preview states
@@ -186,6 +205,10 @@ function ManualWildcardsTab() {
   const [previewText, setPreviewText] = useState('');
   const [previewResults, setPreviewResults] = useState<string[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [wildcardToDelete, setWildcardToDelete] = useState<WildcardWithHierarchy | null>(null);
 
   useEffect(() => {
     loadWildcards();
@@ -206,15 +229,8 @@ function ManualWildcardsTab() {
       };
       const manualData = filterManual(response.data || []);
       setHierarchicalData(manualData);
-
-      // Flat 목록도 로드 (부모 선택용)
-      const flatResponse = await wildcardApi.getAllWildcards(false);
-      const manualFlat = (flatResponse.data || []).filter((wc: any) => wc.is_auto_collected !== 1);
-      setFlatWildcards(manualFlat);
-
-      setError(null);
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message);
+      enqueueSnackbar(err.response?.data?.error || err.message, { variant: 'error' });
     } finally {
       setLoading(false);
     }
@@ -253,7 +269,8 @@ function ManualWildcardsTab() {
         description: wildcard.description || '',
         comfyuiItems: comfyuiItems.length > 0 ? comfyuiItems : [''],
         naiItems: naiItems.length > 0 ? naiItems : [''],
-        parent_id: wildcard.parent_id ?? null
+        parent_id: wildcard.parent_id ?? null,
+        include_children: wildcard.include_children === 1
       });
     } else {
       setEditingWildcard(null);
@@ -262,7 +279,8 @@ function ManualWildcardsTab() {
         description: '',
         comfyuiItems: [''],
         naiItems: [''],
-        parent_id: selectedNode?.id ?? null
+        parent_id: selectedNode?.id ?? null,
+        include_children: true
       });
     }
     setCurrentToolTab(0);
@@ -281,12 +299,12 @@ function ManualWildcardsTab() {
       const filteredNaiItems = formData.naiItems.filter(item => item.trim() !== '');
 
       if (!formData.name.trim()) {
-        setError(t('wildcards:errors.nameRequired'));
+        enqueueSnackbar(t('wildcards:errors.nameRequired'), { variant: 'error' });
         return;
       }
 
       if (filteredComfyuiItems.length === 0 && filteredNaiItems.length === 0) {
-        setError(t('wildcards:errors.itemsRequired'));
+        enqueueSnackbar(t('wildcards:errors.itemsRequired'), { variant: 'error' });
         return;
       }
 
@@ -300,37 +318,57 @@ function ManualWildcardsTab() {
           name: formData.name.trim(),
           description: formData.description.trim() || undefined,
           items,
-          parent_id: formData.parent_id
+          parent_id: formData.parent_id,
+          include_children: formData.include_children ? 1 : 0
         };
         const response = await wildcardApi.updateWildcard(editingWildcard.id, updateData);
-        if (response.warning) setError(response.warning);
+        if (response.warning) {
+          enqueueSnackbar(response.warning, { variant: 'warning' });
+        }
       } else {
         const createData: WildcardCreateData = {
           name: formData.name.trim(),
           description: formData.description.trim() || undefined,
           items,
-          parent_id: formData.parent_id
+          parent_id: formData.parent_id,
+          include_children: formData.include_children ? 1 : 0
         };
         const response = await wildcardApi.createWildcard(createData);
-        if (response.warning) setError(response.warning);
+        if (response.warning) {
+          enqueueSnackbar(response.warning, { variant: 'warning' });
+        }
       }
 
       handleCloseDialog();
       loadWildcards();
+      enqueueSnackbar(
+        editingWildcard
+          ? t('wildcards:messages.updateSuccess')
+          : t('wildcards:messages.createSuccess'),
+        { variant: 'success' }
+      );
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message);
+      enqueueSnackbar(err.response?.data?.error || err.message, { variant: 'error' });
     }
   };
 
-  const handleDelete = async (id: number, name: string) => {
-    if (!confirm(t('wildcards:actions.confirmDelete', { name }))) return;
+  const handleDelete = (wildcard: WildcardWithHierarchy) => {
+    setWildcardToDelete(wildcard);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async (cascade: boolean) => {
+    if (!wildcardToDelete) return;
 
     try {
-      await wildcardApi.deleteWildcard(id);
-      if (selectedNode?.id === id) setSelectedNode(null);
+      await wildcardApi.deleteWildcard(wildcardToDelete.id, cascade);
+      if (selectedNode?.id === wildcardToDelete.id) setSelectedNode(null);
+      setDeleteDialogOpen(false);
+      setWildcardToDelete(null);
       loadWildcards();
+      enqueueSnackbar(t('wildcards:messages.deleteSuccess'), { variant: 'success' });
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message);
+      enqueueSnackbar(err.response?.data?.error || t('wildcards:messages.deleteFailed'), { variant: 'error' });
     }
   };
 
@@ -362,7 +400,7 @@ function ManualWildcardsTab() {
 
   const handlePreview = async () => {
     if (!previewText.trim()) {
-      setError(t('wildcards:errors.previewTextRequired'));
+      enqueueSnackbar(t('wildcards:errors.previewTextRequired'), { variant: 'error' });
       return;
     }
 
@@ -375,7 +413,7 @@ function ManualWildcardsTab() {
       });
       setPreviewResults(response.data.results);
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message);
+      enqueueSnackbar(err.response?.data?.error || err.message, { variant: 'error' });
     } finally {
       setPreviewLoading(false);
     }
@@ -436,12 +474,6 @@ function ManualWildcardsTab() {
           </Tooltip>
         </Box>
       </Box>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
 
       {/* Explorer Layout */}
       <Box sx={{
@@ -514,7 +546,7 @@ function ManualWildcardsTab() {
                     </IconButton>
                   </Tooltip>
                   <Tooltip title={t('wildcards:actions.delete')}>
-                    <IconButton size="small" color="error" onClick={() => handleDelete(selectedNode.id, selectedNode.name)}>
+                    <IconButton size="small" color="error" onClick={() => handleDelete(selectedNode)}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
@@ -543,34 +575,64 @@ function ManualWildcardsTab() {
                   <Typography variant="subtitle2" sx={{ mb: 1 }}>
                     {t('wildcards:detail.children') || '하위 항목'}
                   </Typography>
-                  <List dense>
+                  <Stack spacing={1}>
                     {childItems.map(child => {
                       const hasSubChildren = child.children && child.children.length > 0;
                       return (
-                        <ListItemButton
+                        <Card
                           key={child.id}
+                          variant="outlined"
+                          sx={{
+                            cursor: 'pointer',
+                            '&:hover': { bgcolor: 'action.hover' }
+                          }}
                           onClick={() => handleSelect(child)}
-                          sx={{ borderRadius: 1, mb: 0.5 }}
                         >
-                          <ListItemIcon sx={{ minWidth: 32 }}>
-                            {hasSubChildren ? <FolderIcon color="primary" /> : <FileIcon color="action" />}
-                          </ListItemIcon>
-                          <ListItemText
-                            primary={child.name}
-                            secondary={`ComfyUI: ${getItemCount(child, 'comfyui')}, NAI: ${getItemCount(child, 'nai')}`}
-                          />
-                          <Tooltip title={t('wildcards:actions.copy')}>
-                            <IconButton
-                              size="small"
-                              onClick={(e) => { e.stopPropagation(); handleCopy(`++${child.name}++`); }}
-                            >
-                              <CopyIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </ListItemButton>
+                          <CardContent sx={{ py: 1, '&:last-child': { pb: 1 } }}>
+                            <Stack direction="row" alignItems="center" spacing={1} sx={{ width: '100%' }}>
+                              {hasSubChildren ? (
+                                <FolderIcon fontSize="small" color="primary" />
+                              ) : (
+                                <FileIcon fontSize="small" color="action" />
+                              )}
+                              <Typography variant="body1" sx={{ flex: 1 }}>++{child.name}++</Typography>
+                              {hasSubChildren && (
+                                <Chip
+                                  label={`${child.children!.length} sub`}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              )}
+                              <Chip
+                                label={`ComfyUI: ${getItemCount(child, 'comfyui')}`}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                              />
+                              {getItemCount(child, 'nai') > 0 && (
+                                <Chip
+                                  label={`NAI: ${getItemCount(child, 'nai')}`}
+                                  size="small"
+                                  color="secondary"
+                                  variant="outlined"
+                                />
+                              )}
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCopy(`++${child.name}++`);
+                                }}
+                                title={t('wildcards:actions.copy')}
+                              >
+                                <CopyIcon fontSize="small" />
+                              </IconButton>
+                            </Stack>
+                          </CardContent>
+                        </Card>
                       );
                     })}
-                  </List>
+                  </Stack>
                 </Box>
               )}
 
@@ -636,22 +698,28 @@ function ManualWildcardsTab() {
             />
 
             {/* 부모 선택 */}
-            <FormControl fullWidth>
-              <InputLabel>{t('wildcards:form.parent') || '상위 와일드카드'}</InputLabel>
-              <Select
-                value={formData.parent_id ?? ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, parent_id: e.target.value === '' ? null : Number(e.target.value) }))}
-                label={t('wildcards:form.parent') || '상위 와일드카드'}
-              >
-                <MenuItem value="">{t('wildcards:form.noParent') || '없음 (루트)'}</MenuItem>
-                {flatWildcards
-                  .filter(wc => wc.id !== editingWildcard?.id)
-                  .map(wc => (
-                    <MenuItem key={wc.id} value={wc.id}>{wc.name}</MenuItem>
-                  ))
+            <HierarchyParentSelector
+              items={flatWildcards}
+              selectedParentId={formData.parent_id}
+              onParentChange={(parentId) => setFormData(prev => ({ ...prev, parent_id: parentId }))}
+              excludeIds={editingWildcard ? [editingWildcard.id] : []}
+              label={t('wildcards:form.parent')}
+              noParentLabel={t('wildcards:form.noParent')}
+              showItemCount={true}
+            />
+
+            {/* 하위 와일드카드 자동 포함 옵션 */}
+            <Tooltip title={t('wildcards:form.includeChildrenHelper')} arrow placement="bottom">
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={formData.include_children}
+                    onChange={(e) => setFormData(prev => ({ ...prev, include_children: e.target.checked }))}
+                  />
                 }
-              </Select>
-            </FormControl>
+                label={t('wildcards:form.includeChildren')}
+              />
+            </Tooltip>
 
             <Divider />
 
@@ -788,6 +856,18 @@ function ManualWildcardsTab() {
           <Button onClick={() => setOpenPreview(false)}>{t('common:close')}</Button>
         </DialogActions>
       </Dialog>
+
+      {/* 삭제 확인 다이얼로그 */}
+      <WildcardDeleteConfirmDialog
+        open={deleteDialogOpen}
+        wildcard={wildcardToDelete}
+        childCount={wildcardToDelete?.children?.length || 0}
+        onClose={() => {
+          setDeleteDialogOpen(false);
+          setWildcardToDelete(null);
+        }}
+        onConfirm={handleDeleteConfirm}
+      />
     </Box>
   );
 }

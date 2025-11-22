@@ -28,9 +28,6 @@ export const TaggerMemoryManagement: React.FC<TaggerMemoryManagementProps> = ({
       <Typography variant="h6" gutterBottom>
         {t('tagger.memoryManagement.title')}
       </Typography>
-      <Typography variant="body2" color="text.secondary" paragraph>
-        {t('tagger.memoryManagement.description')}
-      </Typography>
 
       <Stack spacing={2}>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -60,22 +57,26 @@ export const TaggerMemoryManagement: React.FC<TaggerMemoryManagementProps> = ({
             <Typography gutterBottom>
               {t('tagger.memoryManagement.autoUnloadMinutes', { minutes: localSettings.autoUnloadMinutes })}
             </Typography>
-            <Slider
-              value={localSettings.autoUnloadMinutes}
-              onChange={(_, value) => onUpdateSettings({ autoUnloadMinutes: value as number })}
-              min={1}
-              max={60}
-              step={1}
-              marks={[
-                { value: 1, label: '1min' },
-                { value: 15, label: '15min' },
-                { value: 30, label: '30min' },
-                { value: 60, label: '60min' },
-              ]}
-            />
-            <Typography variant="caption" color="text.secondary">
-              {t('tagger.memoryManagement.autoUnloadDescription')}
-            </Typography>
+            <Box sx={{ width: '90%', mx: 'auto' }}>
+              <Slider
+                value={localSettings.autoUnloadMinutes}
+                onChange={(_, value) => onUpdateSettings({ autoUnloadMinutes: value as number })}
+                min={1}
+                max={60}
+                step={1}
+                marks={[
+                  { value: 1, label: '1min' },
+                  { value: 15, label: '15min' },
+                  { value: 30, label: '30min' },
+                  { value: 60, label: '60min' },
+                ]}
+                sx={{
+                  '& .MuiSlider-markLabel': {
+                    fontSize: '0.75rem',
+                  },
+                }}
+              />
+            </Box>
           </Box>
         )}
       </Stack>

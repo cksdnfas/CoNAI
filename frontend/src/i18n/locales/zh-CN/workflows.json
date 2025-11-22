@@ -132,6 +132,7 @@
     "pageTitle": "生成图像",
     "settingsTitle": "生成设置",
     "missingFields": "请输入必填字段: {{fields}}",
+    "emptyPrompt": "提示词为空。无法生成图像。",
     "selectPlaceholder": "请选择",
     "previewTitle": "要发送的数据预览",
     "generateAll": "在所有活动服务器上同时生成 ({{count}}个)",

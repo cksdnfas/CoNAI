@@ -144,6 +144,7 @@
     "pageTitle": "이미지 생성",
     "settingsTitle": "생성 설정",
     "missingFields": "필수 필드를 입력하세요: {{fields}}",
+    "emptyPrompt": "프롬프트가 비어있습니다. 이미지를 생성할 수 없습니다.",
     "selectPlaceholder": "선택하세요",
     "previewTitle": "전송될 데이터 미리보기",
     "generateAll": "모든 활성 서버에서 동시 생성 ({{count}}개)",

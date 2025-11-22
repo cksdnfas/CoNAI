@@ -43,7 +43,8 @@ export const GroupTreeItem: React.FC<GroupTreeItemProps> = ({
       sx={{
         display: 'flex',
         alignItems: 'center',
-        paddingLeft: `${level * 24}px`,
+        paddingLeft: `${level * 24 + 8}px`,
+        paddingRight: `${8}px`,
         paddingY: 0.5,
         cursor: 'pointer',
         backgroundColor: isSelected

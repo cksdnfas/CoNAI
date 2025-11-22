@@ -8,18 +8,14 @@ import {
   Select,
   MenuItem,
   Slider,
-  TextField,
   Typography,
   Stack,
   Chip,
   CircularProgress,
-  Button,
   Tooltip,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
-  CloudDownload as CloudDownloadIcon,
-  Refresh as RefreshIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
@@ -29,18 +25,12 @@ interface TaggerConfigFormProps {
   localSettings: TaggerSettings;
   models: TaggerModel[];
   onUpdateSettings: (updates: Partial<TaggerSettings>) => void;
-  onDownloadModel: () => void;
-  onRefreshModels: () => void;
-  downloading: boolean;
 }
 
 export const TaggerConfigForm: React.FC<TaggerConfigFormProps> = ({
   localSettings,
   models,
   onUpdateSettings,
-  onDownloadModel,
-  onRefreshModels,
-  downloading,
 }) => {
   const { t } = useTranslation('settings');
   const currentModel = models.find(m => m.name === localSettings.model);
@@ -72,9 +62,9 @@ export const TaggerConfigForm: React.FC<TaggerConfigFormProps> = ({
               <MenuItem key={model.name} value={model.name}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                   <Box>
-                    <Typography variant="body1">{model.label}</Typography>
+                    <Typography variant="body1">{t(`tagger.model.${model.name}.label`)}</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {model.description}
+                      {t(`tagger.model.${model.name}.description`)}
                     </Typography>
                   </Box>
                   {model.downloaded && (
@@ -133,109 +123,89 @@ export const TaggerConfigForm: React.FC<TaggerConfigFormProps> = ({
         </Select>
       </FormControl>
 
-      {/* Download Status and Button */}
+      {/* Download Status */}
       {localSettings.enabled && (
-        <Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
-            <Chip
-              icon={isModelDownloaded ? <CheckCircleIcon /> : <InfoIcon />}
-              label={
-                isModelDownloaded
-                  ? t('tagger.status.downloaded')
-                  : t('tagger.status.notDownloaded')
-              }
-              color={isModelDownloaded ? 'success' : 'warning'}
-              size="small"
-            />
-            <Tooltip
-              title={
-                isModelDownloaded
-                  ? t('tagger.alerts.modelDownloaded', { model: currentModel?.label })
-                  : t('tagger.alerts.modelNotDownloaded', { model: currentModel?.label })
-              }
-              arrow
-            >
-              <InfoIcon fontSize="small" sx={{ color: 'text.secondary', cursor: 'help' }} />
-            </Tooltip>
-          </Box>
-
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <Button
-              fullWidth
-              variant="outlined"
-              startIcon={downloading ? <CircularProgress size={20} /> : <CloudDownloadIcon />}
-              onClick={onDownloadModel}
-              disabled={downloading || isModelDownloaded}
-            >
-              {downloading ? t('tagger.buttons.downloading') : t('tagger.buttons.download')}
-            </Button>
-            <Button
-              fullWidth
-              variant="outlined"
-              startIcon={<RefreshIcon />}
-              onClick={onRefreshModels}
-            >
-              {t('tagger.buttons.refreshStatus')}
-            </Button>
-          </Stack>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Chip
+            icon={isModelDownloaded ? <CheckCircleIcon /> : <InfoIcon />}
+            label={
+              isModelDownloaded
+                ? t('tagger.status.downloaded')
+                : t('tagger.status.notDownloaded')
+            }
+            color={isModelDownloaded ? 'success' : 'warning'}
+            size="small"
+          />
+          <Tooltip
+            title={
+              isModelDownloaded
+                ? t('tagger.alerts.modelDownloaded', {
+                    model: currentModel ? t(`tagger.model.${currentModel.name}.label`) : ''
+                  })
+                : t('tagger.alerts.modelNotDownloaded', {
+                    model: currentModel ? t(`tagger.model.${currentModel.name}.label`) : ''
+                  })
+            }
+            arrow
+          >
+            <InfoIcon fontSize="small" sx={{ color: 'text.secondary', cursor: 'help' }} />
+          </Tooltip>
         </Box>
       )}
 
       {/* General Threshold */}
       <Box>
-        <Typography gutterBottom>
-          {t('tagger.threshold.general.label', { value: localSettings.generalThreshold.toFixed(2) })}
-        </Typography>
-        <Slider
-          value={localSettings.generalThreshold}
-          onChange={(_, value) => onUpdateSettings({ generalThreshold: value as number })}
-          min={0}
-          max={1}
-          step={0.05}
-          marks={[
-            { value: 0, label: '0.0' },
-            { value: 0.5, label: '0.5' },
-            { value: 1, label: '1.0' },
-          ]}
-          disabled={!localSettings.enabled}
-        />
-        <Typography variant="caption" color="text.secondary">
-          {t('tagger.threshold.general.description')}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <Typography>
+            {t('tagger.threshold.general.label', { value: localSettings.generalThreshold.toFixed(2) })}
+          </Typography>
+          <Tooltip title={t('tagger.threshold.general.description')} arrow>
+            <InfoIcon fontSize="small" sx={{ color: 'text.secondary', cursor: 'help' }} />
+          </Tooltip>
+        </Box>
+        <Box sx={{ width: '90%', mx: 'auto' }}>
+          <Slider
+            value={localSettings.generalThreshold}
+            onChange={(_, value) => onUpdateSettings({ generalThreshold: value as number })}
+            min={0}
+            max={1}
+            step={0.05}
+            marks={[
+              { value: 0, label: '0.0' },
+              { value: 0.5, label: '0.5' },
+              { value: 1, label: '1.0' },
+            ]}
+            disabled={!localSettings.enabled}
+          />
+        </Box>
       </Box>
 
       {/* Character Threshold */}
       <Box>
-        <Typography gutterBottom>
-          {t('tagger.threshold.character.label', { value: localSettings.characterThreshold.toFixed(2) })}
-        </Typography>
-        <Slider
-          value={localSettings.characterThreshold}
-          onChange={(_, value) => onUpdateSettings({ characterThreshold: value as number })}
-          min={0}
-          max={1}
-          step={0.05}
-          marks={[
-            { value: 0, label: '0.0' },
-            { value: 0.5, label: '0.5' },
-            { value: 1, label: '1.0' },
-          ]}
-          disabled={!localSettings.enabled}
-        />
-        <Typography variant="caption" color="text.secondary">
-          {t('tagger.threshold.character.description')}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <Typography>
+            {t('tagger.threshold.character.label', { value: localSettings.characterThreshold.toFixed(2) })}
+          </Typography>
+          <Tooltip title={t('tagger.threshold.character.description')} arrow>
+            <InfoIcon fontSize="small" sx={{ color: 'text.secondary', cursor: 'help' }} />
+          </Tooltip>
+        </Box>
+        <Box sx={{ width: '90%', mx: 'auto' }}>
+          <Slider
+            value={localSettings.characterThreshold}
+            onChange={(_, value) => onUpdateSettings({ characterThreshold: value as number })}
+            min={0}
+            max={1}
+            step={0.05}
+            marks={[
+              { value: 0, label: '0.0' },
+              { value: 0.5, label: '0.5' },
+              { value: 1, label: '1.0' },
+            ]}
+            disabled={!localSettings.enabled}
+          />
+        </Box>
       </Box>
-
-      {/* Python Path */}
-      <TextField
-        label={t('tagger.pythonPath.label')}
-        value={localSettings.pythonPath}
-        onChange={(e) => onUpdateSettings({ pythonPath: e.target.value })}
-        fullWidth
-        disabled={!localSettings.enabled}
-        helperText={t('tagger.pythonPath.helper')}
-      />
     </Stack>
   );
 };

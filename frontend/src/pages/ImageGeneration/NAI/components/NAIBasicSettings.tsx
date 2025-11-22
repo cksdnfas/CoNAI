@@ -1,5 +1,4 @@
 import {
-  TextField,
   FormControl,
   InputLabel,
   Select,
@@ -10,8 +9,10 @@ import {
   Grid
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { MODELS, RESOLUTIONS } from '../constants/nai.constants';
+import { MODELS } from '../constants/nai.constants';
 import type { NAIParams } from '../types/nai.types';
+import { WildcardTextField } from '../../../../components/WildcardTextField';
+import ResolutionSettings from './ResolutionSettings';
 
 interface NAIBasicSettingsProps {
   params: NAIParams;
@@ -45,33 +46,23 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
         </Grid>
 
         <Grid size={12}>
-          <FormControl fullWidth disabled={disabled}>
-            <InputLabel>{t('nai.naiSettings.basic.resolution')}</InputLabel>
-            <Select
-              value={params.resolution}
-              onChange={(e) => onChange({ ...params, resolution: e.target.value })}
-              label={t('nai.naiSettings.basic.resolution')}
-            >
-              {Object.keys(RESOLUTIONS).map(key => {
-                const res = RESOLUTIONS[key as keyof typeof RESOLUTIONS];
-                return (
-                  <MenuItem key={key} value={key}>
-                    {key} ({res.width}×{res.height})
-                  </MenuItem>
-                );
-              })}
-            </Select>
-          </FormControl>
+          <Typography variant="body2" gutterBottom fontWeight="medium">
+            {t('nai.naiSettings.basic.resolution')}
+          </Typography>
+          <ResolutionSettings
+            config={params.resolutionConfig}
+            onChange={(resolutionConfig) => onChange({ ...params, resolutionConfig })}
+            disabled={disabled}
+          />
         </Grid>
 
         <Grid size={12}>
-          <TextField
-            fullWidth
+          <WildcardTextField
             multiline
             rows={4}
             label={t('nai.naiSettings.basic.prompt')}
             value={params.prompt}
-            onChange={(e) => onChange({ ...params, prompt: e.target.value })}
+            onChange={(value) => onChange({ ...params, prompt: value })}
             placeholder={t('nai.naiSettings.basic.promptPlaceholder')}
             required
             disabled={disabled}
@@ -79,13 +70,12 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
         </Grid>
 
         <Grid size={12}>
-          <TextField
-            fullWidth
+          <WildcardTextField
             multiline
             rows={2}
             label={t('nai.naiSettings.basic.negativePrompt')}
             value={params.negative_prompt}
-            onChange={(e) => onChange({ ...params, negative_prompt: e.target.value })}
+            onChange={(value) => onChange({ ...params, negative_prompt: value })}
             placeholder={t('nai.naiSettings.basic.negativePromptPlaceholder')}
             disabled={disabled}
           />

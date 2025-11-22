@@ -209,13 +209,23 @@ export class StealthPngExtractor {
 
       try {
         let decodedData: string;
+        let rawBuffer: Buffer;
 
         if (compressed) {
           console.log('🗜️ [StealthPNG] Decompressing gzip data...');
-          const decompressed = zlib.gunzipSync(Buffer.from(byteData));
-          decodedData = decompressed.toString('utf-8');
+          rawBuffer = zlib.gunzipSync(Buffer.from(byteData));
         } else {
-          decodedData = Buffer.from(byteData).toString('utf-8');
+          rawBuffer = Buffer.from(byteData);
+        }
+
+        // Try UTF-8 first, with validation for proper Unicode handling
+        decodedData = rawBuffer.toString('utf-8');
+
+        // Check for replacement characters indicating encoding issues
+        // If too many replacement chars, the data might be corrupted but we still return it
+        const replacementCount = (decodedData.match(/\uFFFD/g) || []).length;
+        if (replacementCount > 10) {
+          console.warn(`⚠️ [StealthPNG] Possible encoding issue: ${replacementCount} replacement characters found`);
         }
 
         console.log(`✅ [StealthPNG] Successfully decoded ${decodedData.length} characters`);

@@ -62,6 +62,9 @@
       "completed": "圖片產生完成",
       "failed": "圖片產生失敗"
     },
+    "errors": {
+      "emptyPrompt": "提示詞為空。無法產生圖片。"
+    },
     "repeat": {
       "title": "重複執行",
       "enable": "啟用重複執行",
@@ -73,6 +76,34 @@
       "progress": "正在執行第{{current}}次",
       "progressWithTotal": "正在執行第{{current}}/{{total}}次",
       "stop": "停止"
+    },
+    "resolution": {
+      "mode": "解析度模式",
+      "modeFixed": "固定模式",
+      "modeRandom": "隨機模式",
+      "selectResolution": "選擇解析度",
+      "selectMultiple": "選擇解析度（可多選）",
+      "addCustom": "新增自訂",
+      "swapDimensions": "交換寬高",
+      "swapDimensionsDesc": "交換所選解析度的寬度和高度",
+      "finalResolution": "最終解析度",
+      "randomPool": "隨機池",
+      "swapped": "已交換",
+      "randomSwapInfo": "每個解析度有50%的機率被交換寬高",
+      "selectAtLeastOne": "隨機模式下至少選擇一個解析度",
+      "customDialog": {
+        "addTitle": "新增自訂解析度",
+        "editTitle": "編輯自訂解析度",
+        "name": "名稱",
+        "namePlaceholder": "例：我的解析度",
+        "width": "寬度",
+        "height": "高度",
+        "save": "儲存",
+        "cancel": "取消",
+        "nameRequired": "請輸入名稱",
+        "widthInvalid": "寬度必須在64到2048之間",
+        "heightInvalid": "高度必須在64到2048之間"
+      }
     },
     "naiSettings": {
       "basic": {

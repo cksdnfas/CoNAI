@@ -45,7 +45,6 @@ export const GroupParentSelector: React.FC<GroupParentSelectorProps> = ({
     selectedIds: selectedParentId ? [selectedParentId] : [],
     onSelectionChange: (selectedIds) => {
       onParentChange(selectedIds[0] || null);
-      setIsOpen(false);
     },
     multiSelect: false,
   });
@@ -184,7 +183,6 @@ export const GroupParentSelector: React.FC<GroupParentSelectorProps> = ({
             }}
             onClick={() => {
               onParentChange(null);
-              setIsOpen(false);
             }}
           >
             <Typography variant="body2" color="text.secondary">

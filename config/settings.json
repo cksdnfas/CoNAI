@@ -17,7 +17,7 @@
     "generalThreshold": 0.35,
     "characterThreshold": 0.75,
     "pythonPath": "python",
-    "keepModelLoaded": false,
+    "keepModelLoaded": true,
     "autoUnloadMinutes": 5
   },
   "similarity": {

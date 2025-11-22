@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { enqueueSnackbar } from 'notistack';
 import { workflowApi, type Workflow, type MarkedField } from '../../../services/api/workflowApi';
 import { generationHistoryApi } from '../../../services/api';
 import type { ComfyUIServer } from '../../../services/api/comfyuiServerApi';
 import type { ServerGenerationStatus } from '../types/workflow.types';
+import { isPromptEmpty } from '../../../utils/promptCleaner';
 
 interface UseImageGenerationProps {
   workflowId: string | undefined;
@@ -63,11 +65,34 @@ export function useImageGeneration({
       }));
       setError(null);
 
-      const promptData = await getPromptData();
+      const parseResult = await getPromptData();
+
+      // 빈 와일드카드 경고
+      if (parseResult.emptyWildcards && parseResult.emptyWildcards.length > 0) {
+        const uniqueEmpty = Array.from(new Set(parseResult.emptyWildcards));
+        enqueueSnackbar(
+          `다음 와일드카드에 ComfyUI 항목이 없습니다: ${uniqueEmpty.join(', ')}`,
+          { variant: 'warning', autoHideDuration: 5000 }
+        );
+      }
+
+      // 프롬프트 데이터의 모든 텍스트 필드 검증
+      const { hasEmptyPrompts } = await import('../utils/promptBuilder');
+      if (hasEmptyPrompts(parseResult.data)) {
+        const errorMsg = t('workflows:generate.emptyPrompt');
+        setError(errorMsg);
+        enqueueSnackbar(errorMsg, { variant: 'error', autoHideDuration: 5000 });
+        setGenerationStatus(prev => ({
+          ...prev,
+          [serverId]: { status: 'failed', error: errorMsg }
+        }));
+        return;
+      }
+
       const response = await workflowApi.generateImageOnServer(
         parseInt(workflowId!),
         serverId,
-        promptData,
+        parseResult.data,
         selectedGroupId || undefined
       );
 

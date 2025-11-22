@@ -4,8 +4,8 @@
     "description": "画像をグループ別に管理し、自動収集ルールを設定できます。",
     "emptyTitle": "まだグループが作成されていません",
     "emptyDescription": "新しいグループを作成して、画像を体系的に管理しましょう。",
-    "customGroupsTab": "[ja] Custom Groups",
-    "autoFolderGroupsTab": "[ja] Auto Folder Groups"
+    "customGroupsTab": "Custom Groups",
+    "autoFolderGroupsTab": "Auto Folder Groups"
   },
   "groupCard": {
     "imageCount": "{{count}}枚の画像",
@@ -52,9 +52,9 @@
     "filterApplied": "{{count}}個のフィルターが適用されます。実行順序: 除外 → OR → AND",
     "addFiltersPrompt": "フィルターを追加して自動収集条件を設定してください",
     "filterHelpTooltip": "フィルター使用方法ヘルプ",
-    "parentGroup": "[ja] Parent Group",
-    "noParent": "[ja] None (Root Level)",
-    "selectParent": "[ja] Select Parent Group"
+    "parentGroup": "Parent Group",
+    "noParent": "None (Root Level)",
+    "selectParent": "Select Parent Group"
   },
   "conditions": {
     "conditionNumber": "条件{{number}}",
@@ -186,70 +186,70 @@
   },
   "hierarchy": {
     "groupList": "グループリスト",
-    "root": "[ja] Root",
-    "childGroups": "[ja] {{count}} subgroups",
-    "openSubgroups": "[ja] Open Subgroups",
-    "backToParent": "[ja] Back to Parent",
-    "moveGroup": "[ja] Move Group",
-    "moveToRoot": "[ja] Move to Root",
-    "cannotMoveToSelf": "[ja] Cannot move to itself",
-    "cannotMoveToDescendant": "[ja] Cannot move to descendant group",
-    "maxDepthExceeded": "[ja] Maximum depth (5 levels) exceeded",
-    "circularReference": "[ja] Circular reference detected",
-    "hierarchyInvalid": "[ja] Invalid hierarchy structure"
+    "root": "Root",
+    "childGroups": "{{count}} subgroups",
+    "openSubgroups": "Open Subgroups",
+    "backToParent": "Back to Parent",
+    "moveGroup": "Move Group",
+    "moveToRoot": "Move to Root",
+    "cannotMoveToSelf": "Cannot move to itself",
+    "cannotMoveToDescendant": "Cannot move to descendant group",
+    "maxDepthExceeded": "Maximum depth (5 levels) exceeded",
+    "circularReference": "Circular reference detected",
+    "hierarchyInvalid": "Invalid hierarchy structure"
   },
   "deleteConfirm": {
-    "title": "[ja] Confirm Group Deletion",
-    "message": "[ja] Are you sure you want to delete the group '{{name}}'?",
+    "title": "Confirm Group Deletion",
+    "message": "Are you sure you want to delete the group '{{name}}'?",
     "groupInfo": {
-      "imageCount": "[ja] Associated images: {{count}}",
-      "childCount": "[ja] Subgroups: {{count}}"
+      "imageCount": "Associated images: {{count}}",
+      "childCount": "Subgroups: {{count}}"
     },
     "warning": {
-      "imageAssociations": "[ja] ⚠️ All associations between this group and images will be removed. The image files themselves will not be deleted."
+      "imageAssociations": "⚠️ All associations between this group and images will be removed. The image files themselves will not be deleted."
     },
     "options": {
-      "title": "[ja] How to handle subgroups",
+      "title": "How to handle subgroups",
       "orphan": {
-        "label": "[ja] Delete only this group (Recommended)",
-        "description": "[ja] Subgroups will be moved to root level."
+        "label": "Delete only this group (Recommended)",
+        "description": "Subgroups will be moved to root level."
       },
       "cascade": {
-        "label": "[ja] Delete this group and all subgroups",
-        "description": "[ja] {{count}} subgroups will be deleted. This action cannot be undone."
+        "label": "Delete this group and all subgroups",
+        "description": "{{count}} subgroups will be deleted. This action cannot be undone."
       }
     }
   },
   "download": {
-    "menuTitle": "[ja] Download Options",
-    "scopeAll": "[ja] Download All",
-    "scopeSelected": "[ja] Selected {{count}} Only",
-    "typeThumbnail": "[ja] Images (Thumbnail)",
-    "typeOriginal": "[ja] Images (Original)",
-    "typeVideo": "[ja] Videos & Animations (Original)",
-    "confirmTitle": "[ja] Confirm Large Download",
-    "confirmMessage": "[ja] Download {{count}} files. Continue?",
-    "confirmButton": "[ja] Download"
+    "menuTitle": "Download Options",
+    "scopeAll": "Download All",
+    "scopeSelected": "Selected {{count}} Only",
+    "typeThumbnail": "Images (Thumbnail)",
+    "typeOriginal": "Images (Original)",
+    "typeVideo": "Videos & Animations (Original)",
+    "confirmTitle": "Confirm Large Download",
+    "confirmMessage": "Download {{count}} files. Continue?",
+    "confirmButton": "Download"
   },
-  "defaultGroupName": "[ja] Group",
-  "autoNavigate": "[ja] Auto-navigate to subgroup: {{from}} → {{to}}",
-  "created": "[ja] Group created. Please refresh your browser.",
-  "updated": "[ja] Group updated. Please refresh your browser.",
+  "defaultGroupName": "Group",
+  "autoNavigate": "Auto-navigate to subgroup: {{from}} → {{to}}",
+  "created": "Group created. Please refresh your browser.",
+  "updated": "Group updated. Please refresh your browser.",
   "emptyState": {
-    "noGroups": "[ja] No groups created",
-    "noSubgroups": "[ja] No subgroups",
-    "createPrompt": "[ja] Press the + button to create a new group",
-    "noSubgroupsHelp": "[ja] Current group has no subgroups"
+    "noGroups": "No groups created",
+    "noSubgroups": "No subgroups",
+    "createPrompt": "Press the + button to create a new group",
+    "noSubgroupsHelp": "Current group has no subgroups"
   },
   "autoFolder": {
-    "readOnlyMessage": "[ja] This is a read-only group. Changes must be made to the original file location.",
-    "rebuilding": "[ja] Rebuilding...",
+    "readOnlyMessage": "This is a read-only group. Changes must be made to the original file location.",
+    "rebuilding": "Rebuilding...",
     "refresh": "更新",
     "emptyState": {
-      "noGroups": "[ja] No auto folder groups",
-      "noSubfolders": "[ja] No subfolders",
-      "refreshPrompt": "[ja] Press the refresh button to create folder structure",
-      "noSubfoldersHelp": "[ja] Current folder has no subfolders"
+      "noGroups": "No auto folder groups",
+      "noSubfolders": "No subfolders",
+      "refreshPrompt": "Press the refresh button to create folder structure",
+      "noSubfoldersHelp": "Current folder has no subfolders"
     }
   }
 }

@@ -44,20 +44,20 @@
     "partialSuccess": "{{success}}個成功、{{failed}}個失敗しました。"
   },
   "promptPreview": {
-    "title": "[ja] Prompt Preview",
-    "description": "[ja] Select an image to instantly view AI metadata without uploading to server.",
-    "dragOrClick": "[ja] Drag or click to select an image",
-    "dropHere": "[ja] Drop file here",
-    "noUpload": "[ja] Images are analyzed in browser only, not uploaded to server",
-    "imagePreview": "[ja] Image Preview",
-    "aiTool": "[ja] AI Tool",
-    "positivePrompt": "[ja] Prompt",
-    "negativePrompt": "[ja] Negative Prompt",
-    "terms": "[ja] Extracted Terms",
-    "loraModels": "[ja] LoRA Models",
-    "parameters": "[ja] Generation Parameters",
-    "rawMetadata": "[ja] Raw Metadata (EXIF/PNG Chunks)",
-    "invalidFileType": "[ja] Only image files are allowed",
-    "extractionFailed": "[ja] Failed to extract metadata"
+    "title": "Prompt Preview",
+    "description": "Select an image to instantly view AI metadata without uploading to server.",
+    "dragOrClick": "Drag or click to select an image",
+    "dropHere": "Drop file here",
+    "noUpload": "Images are analyzed in browser only, not uploaded to server",
+    "imagePreview": "Image Preview",
+    "aiTool": "AI Tool",
+    "positivePrompt": "Prompt",
+    "negativePrompt": "Negative Prompt",
+    "terms": "Extracted Terms",
+    "loraModels": "LoRA Models",
+    "parameters": "Generation Parameters",
+    "rawMetadata": "Raw Metadata (EXIF/PNG Chunks)",
+    "invalidFileType": "Only image files are allowed",
+    "extractionFailed": "Failed to extract metadata"
   }
 }

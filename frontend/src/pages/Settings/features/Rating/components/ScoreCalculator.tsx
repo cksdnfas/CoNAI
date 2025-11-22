@@ -50,80 +50,88 @@ export const ScoreCalculator: React.FC<ScoreCalculatorProps> = ({
             <Typography gutterBottom>
               {t('rating.calculator.general', { value: testRating.general.toFixed(3) })}
             </Typography>
-            <Slider
-              value={testRating.general}
-              onChange={(_, value) =>
-                onUpdateTestRating({ ...testRating, general: value as number })
-              }
-              min={0}
-              max={1}
-              step={0.001}
-              marks={[
-                { value: 0, label: '0.0' },
-                { value: 0.5, label: '0.5' },
-                { value: 1, label: '1.0' },
-              ]}
-            />
+            <Box sx={{ width: '90%', mx: 'auto' }}>
+              <Slider
+                value={testRating.general}
+                onChange={(_, value) =>
+                  onUpdateTestRating({ ...testRating, general: value as number })
+                }
+                min={0}
+                max={1}
+                step={0.001}
+                marks={[
+                  { value: 0, label: '0.0' },
+                  { value: 0.5, label: '0.5' },
+                  { value: 1, label: '1.0' },
+                ]}
+              />
+            </Box>
           </Box>
 
           <Box>
             <Typography gutterBottom>
               {t('rating.calculator.sensitive', { value: testRating.sensitive.toFixed(3) })}
             </Typography>
-            <Slider
-              value={testRating.sensitive}
-              onChange={(_, value) =>
-                onUpdateTestRating({ ...testRating, sensitive: value as number })
-              }
-              min={0}
-              max={1}
-              step={0.001}
-              marks={[
-                { value: 0, label: '0.0' },
-                { value: 0.5, label: '0.5' },
-                { value: 1, label: '1.0' },
-              ]}
-            />
+            <Box sx={{ width: '90%', mx: 'auto' }}>
+              <Slider
+                value={testRating.sensitive}
+                onChange={(_, value) =>
+                  onUpdateTestRating({ ...testRating, sensitive: value as number })
+                }
+                min={0}
+                max={1}
+                step={0.001}
+                marks={[
+                  { value: 0, label: '0.0' },
+                  { value: 0.5, label: '0.5' },
+                  { value: 1, label: '1.0' },
+                ]}
+              />
+            </Box>
           </Box>
 
           <Box>
             <Typography gutterBottom>
               {t('rating.calculator.questionable', { value: testRating.questionable.toFixed(3) })}
             </Typography>
-            <Slider
-              value={testRating.questionable}
-              onChange={(_, value) =>
-                onUpdateTestRating({ ...testRating, questionable: value as number })
-              }
-              min={0}
-              max={1}
-              step={0.001}
-              marks={[
-                { value: 0, label: '0.0' },
-                { value: 0.5, label: '0.5' },
-                { value: 1, label: '1.0' },
-              ]}
-            />
+            <Box sx={{ width: '90%', mx: 'auto' }}>
+              <Slider
+                value={testRating.questionable}
+                onChange={(_, value) =>
+                  onUpdateTestRating({ ...testRating, questionable: value as number })
+                }
+                min={0}
+                max={1}
+                step={0.001}
+                marks={[
+                  { value: 0, label: '0.0' },
+                  { value: 0.5, label: '0.5' },
+                  { value: 1, label: '1.0' },
+                ]}
+              />
+            </Box>
           </Box>
 
           <Box>
             <Typography gutterBottom>
               {t('rating.calculator.explicit', { value: testRating.explicit.toFixed(3) })}
             </Typography>
-            <Slider
-              value={testRating.explicit}
-              onChange={(_, value) =>
-                onUpdateTestRating({ ...testRating, explicit: value as number })
-              }
-              min={0}
-              max={1}
-              step={0.001}
-              marks={[
-                { value: 0, label: '0.0' },
-                { value: 0.5, label: '0.5' },
-                { value: 1, label: '1.0' },
-              ]}
-            />
+            <Box sx={{ width: '90%', mx: 'auto' }}>
+              <Slider
+                value={testRating.explicit}
+                onChange={(_, value) =>
+                  onUpdateTestRating({ ...testRating, explicit: value as number })
+                }
+                min={0}
+                max={1}
+                step={0.001}
+                marks={[
+                  { value: 0, label: '0.0' },
+                  { value: 0.5, label: '0.5' },
+                  { value: 1, label: '1.0' },
+                ]}
+              />
+            </Box>
           </Box>
 
           <Button

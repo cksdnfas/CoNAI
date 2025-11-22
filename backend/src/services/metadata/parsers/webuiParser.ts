@@ -8,6 +8,20 @@ import { AIMetadata, LoRAModel, ModelReference } from '../types';
 
 export class WebUIParser {
   /**
+   * Sanitize text by removing null bytes and normalizing Unicode
+   * Preserves Korean, Japanese, Chinese and other Unicode characters
+   */
+  private static sanitizeText(text: string): string {
+    // Remove null bytes that can cause issues
+    let sanitized = text.replace(/\u0000/g, '');
+
+    // Normalize Unicode to NFC form (important for Korean/Japanese/Chinese)
+    sanitized = sanitized.normalize('NFC');
+
+    return sanitized;
+  }
+
+  /**
    * Check if data is WebUI format
    */
   static isWebUIFormat(data: any): boolean {
@@ -92,22 +106,21 @@ export class WebUIParser {
     if (negPromptIndex > 0) {
       // Positive prompt: all lines before "Negative prompt:"
       const positiveLines = lines.slice(0, negPromptIndex);
-      aiInfo.positive_prompt = positiveLines.join('\n').trim().replace(/\u0000/g, '');
+      aiInfo.positive_prompt = this.sanitizeText(positiveLines.join('\n').trim());
       aiInfo.prompt = aiInfo.positive_prompt;
 
       // Negative prompt: text after "Negative prompt:" on that line
       const negLine = lines[negPromptIndex];
-      aiInfo.negative_prompt = negLine
-        .substring('Negative prompt:'.length)
-        .trim()
-        .replace(/\u0000/g, '');
+      aiInfo.negative_prompt = this.sanitizeText(
+        negLine.substring('Negative prompt:'.length).trim()
+      );
 
       // Options: lines after negative prompt
       const optionLines = lines.slice(negPromptIndex + 1);
       this.parseOptionLines(optionLines, aiInfo);
     } else {
       // No negative prompt - all text is positive prompt
-      aiInfo.positive_prompt = text.trim().replace(/\u0000/g, '');
+      aiInfo.positive_prompt = this.sanitizeText(text.trim());
       aiInfo.prompt = aiInfo.positive_prompt;
       aiInfo.negative_prompt = '';
     }
@@ -142,7 +155,7 @@ export class WebUIParser {
 
       const colonIndex = trimmedPart.indexOf(':');
       const key = trimmedPart.substring(0, colonIndex).trim();
-      const value = trimmedPart.substring(colonIndex + 1).trim().replace(/\u0000/g, '');
+      const value = this.sanitizeText(trimmedPart.substring(colonIndex + 1).trim());
 
       // Parse specific fields
       this.parseOptionField(key, value, aiInfo);

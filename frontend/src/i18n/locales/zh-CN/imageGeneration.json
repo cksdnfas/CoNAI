@@ -62,6 +62,9 @@
       "completed": "图像生成完成",
       "failed": "图像生成失败"
     },
+    "errors": {
+      "emptyPrompt": "提示词为空。无法生成图像。"
+    },
     "repeat": {
       "title": "重复执行",
       "enable": "启用重复执行",
@@ -73,6 +76,34 @@
       "progress": "正在执行第{{current}}次",
       "progressWithTotal": "正在执行第{{current}}/{{total}}次",
       "stop": "停止"
+    },
+    "resolution": {
+      "mode": "分辨率模式",
+      "modeFixed": "固定模式",
+      "modeRandom": "随机模式",
+      "selectResolution": "选择分辨率",
+      "selectMultiple": "选择分辨率（可多选）",
+      "addCustom": "添加自定义",
+      "swapDimensions": "交换宽高",
+      "swapDimensionsDesc": "交换所选分辨率的宽度和高度",
+      "finalResolution": "最终分辨率",
+      "randomPool": "随机池",
+      "swapped": "已交换",
+      "randomSwapInfo": "每个分辨率有50%的几率被交换宽高",
+      "selectAtLeastOne": "随机模式下至少选择一个分辨率",
+      "customDialog": {
+        "addTitle": "添加自定义分辨率",
+        "editTitle": "编辑自定义分辨率",
+        "name": "名称",
+        "namePlaceholder": "例：我的分辨率",
+        "width": "宽度",
+        "height": "高度",
+        "save": "保存",
+        "cancel": "取消",
+        "nameRequired": "请输入名称",
+        "widthInvalid": "宽度必须在64到2048之间",
+        "heightInvalid": "高度必须在64到2048之间"
+      }
     },
     "naiSettings": {
       "basic": {

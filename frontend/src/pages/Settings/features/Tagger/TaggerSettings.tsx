@@ -9,9 +9,12 @@ import {
   CircularProgress,
   Stack,
   Divider,
+  TextField,
+  Tooltip,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { TaggerSettings as TaggerSettingsType } from '../../../../services/settingsApi';
@@ -127,9 +130,6 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
               localSettings={localSettings}
               models={models}
               onUpdateSettings={updateSettings}
-              onDownloadModel={handleDownload}
-              onRefreshModels={loadModels}
-              downloading={downloading}
             />
 
             <Divider sx={{ my: 2 }} />
@@ -144,17 +144,35 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
 
             <Divider sx={{ my: 2 }} />
 
-            {/* Dependency Check */}
+            {/* Python Path & Dependency Check */}
             <Box>
-              <Button
-                variant="outlined"
-                startIcon={checking ? <CircularProgress size={20} /> : <CheckCircleIcon />}
-                onClick={handleCheckDeps}
-                disabled={checking || !localSettings.enabled}
-                fullWidth
-              >
-                {checking ? t('tagger.buttons.checking') : t('tagger.buttons.checkDependencies')}
-              </Button>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Typography variant="subtitle1">
+                  {t('tagger.pythonPath.label')}
+                </Typography>
+                <Tooltip title={t('tagger.pythonPath.helper')} arrow>
+                  <InfoIcon fontSize="small" sx={{ color: 'text.secondary', cursor: 'help' }} />
+                </Tooltip>
+              </Box>
+
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                <TextField
+                  value={localSettings.pythonPath}
+                  onChange={(e) => updateSettings({ pythonPath: e.target.value })}
+                  fullWidth
+                  disabled={!localSettings.enabled}
+                  placeholder="python"
+                />
+                <Button
+                  variant="outlined"
+                  startIcon={checking ? <CircularProgress size={20} /> : <CheckCircleIcon />}
+                  onClick={handleCheckDeps}
+                  disabled={checking || !localSettings.enabled}
+                  sx={{ minWidth: { sm: '200px' }, whiteSpace: 'nowrap' }}
+                >
+                  {checking ? t('tagger.buttons.checking') : t('tagger.buttons.checkDependencies')}
+                </Button>
+              </Stack>
 
               {dependencyStatus && (
                 <Alert severity={dependencyAvailable ? 'success' : 'error'} sx={{ mt: 2 }}>

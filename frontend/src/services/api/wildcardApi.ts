@@ -12,6 +12,7 @@ export interface Wildcard {
   name: string;
   description?: string;
   parent_id: number | null;
+  include_children: number; // 0 or 1: 하위 와일드카드 자동 포함 여부
   created_date: string;
   updated_date: string;
 }
@@ -39,6 +40,7 @@ export interface WildcardCreateData {
   description?: string;
   items: ToolItems;
   parent_id?: number | null;
+  include_children?: number; // 하위 와일드카드 자동 포함 여부 (기본값 0)
 }
 
 export interface WildcardUpdateData {
@@ -46,6 +48,7 @@ export interface WildcardUpdateData {
   description?: string;
   items?: ToolItems;
   parent_id?: number | null;
+  include_children?: number; // 하위 와일드카드 자동 포함 여부
 }
 
 export interface WildcardWithHierarchy extends WildcardWithItems {
@@ -210,10 +213,12 @@ export const wildcardApi = {
 
   /**
    * 와일드카드 삭제
+   * @param id 삭제할 와일드카드 ID
+   * @param cascade true인 경우 모든 하위 와일드카드도 함께 삭제, false인 경우 자식들을 한 단계 위로 이동
    */
-  deleteWildcard: async (id: number) => {
+  deleteWildcard: async (id: number, cascade: boolean = false) => {
     const response = await api.delete<{ success: boolean; message: string }>(
-      `/wildcards/${id}`
+      `/wildcards/${id}?cascade=${cascade}`
     );
     return response.data;
   },

@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, CardMedia, Box, Skeleton, Chip, Typography, IconButton } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
   Delete as DeleteIcon,
+  BrokenImage as BrokenImageIcon,
   // CheckCircleOutline as CompletedIcon,
   // Error as FailedIcon,
   // HourglassEmpty as PendingIcon,
@@ -79,6 +80,23 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
           : hasValidHash
             ? `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`
             : getFallbackUrl());
+
+  // 플레이스홀더 아이콘 SVG (이미지 로딩 실패 시 표시)
+  const placeholderIconSvg = useMemo(() =>
+    `data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24">
+        <rect width="24" height="24" fill="#1a1a1a"/>
+        <path fill="#666" d="M21 5v6.59l-3-3.01-4 4.01-4-4-4 4-3-3.01V5c0-1.1.9-2 2-2h14c1.1 0 2 .9 2 2zm-3 6.42l3 3.01V19c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2v-6.58l3 2.99 4-4 4 4 4-3.99z"/>
+      </svg>`
+    )}`, []
+  );
+
+  // 랜덤 플레이스홀더 이미지 선택 (이미지 로딩 실패 시)
+  const randomPlaceholder = useMemo(() => {
+    const PLACEHOLDER_COUNT = 12; // config.json의 count와 일치
+    const randomIndex = Math.floor(Math.random() * PLACEHOLDER_COUNT) + 1;
+    return `/placeholders/folder-overlay-${randomIndex}.webp`;
+  }, [image.composite_hash]); // composite_hash를 의존성으로 추가하여 각 이미지마다 다른 플레이스홀더
 
   const handleSelectionChange = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -252,7 +270,7 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
         }}
       >
         {/* Skeleton 로딩 표시 */}
-        {!imageLoaded && (
+        {!imageLoaded && !imageError && imageUrl && (
           <Skeleton
             variant="rectangular"
             sx={{
@@ -263,6 +281,53 @@ const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
               height: '100%',
             }}
           />
+        )}
+
+        {/* 플레이스홀더 표시 (이미지 로딩 실패 또는 URL 없음) */}
+        {(!imageUrl || (imageError && !imageUrl)) && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              zIndex: 1,
+            }}
+          >
+            {/* 배경: 이미지 아이콘 */}
+            <CardMedia
+              component="img"
+              image={placeholderIconSvg}
+              alt="Processing image"
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                opacity: 0.4,
+              }}
+            />
+            {/* 오버레이: 랜덤 플레이스홀더 이미지 */}
+            <Box
+              component="img"
+              src={randomPlaceholder}
+              alt="Placeholder"
+              sx={{
+                position: 'absolute',
+                top: '58%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '70%',
+                height: 'auto',
+                maxWidth: '200px',
+                opacity: 0.8,
+                objectFit: 'contain',
+              }}
+            />
+          </Box>
         )}
 
         {/* 이미지/비디오 - 뷰포트에 들어왔을 때만 로드 (imageUrl이 유효한 경우만) */}

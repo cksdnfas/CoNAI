@@ -132,6 +132,7 @@
     "pageTitle": "產生圖片",
     "settingsTitle": "產生設定",
     "missingFields": "請輸入必填欄位: {{fields}}",
+    "emptyPrompt": "提示詞為空。無法產生圖片。",
     "selectPlaceholder": "請選擇",
     "previewTitle": "要傳送的資料預覽",
     "generateAll": "在所有啟用伺服器上同時產生 ({{count}}個)",

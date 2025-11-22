@@ -8,9 +8,9 @@
     "similarity": "画像類似度検索",
     "prompts": "プロンプト管理",
     "advanced": "詳細設定",
-    "metadata": "[ja] Metadata Extraction",
-    "folders": "[ja] Folder Management",
-    "account": "[ja] Account",
+    "metadata": "Metadata Extraction",
+    "folders": "Folder Management",
+    "account": "Account",
     "externalApi": "外部API認証"
   },
   "general": {
@@ -33,77 +33,77 @@
       "tooltip": "サーバー終了時にCanvasフォルダの編集済み画像を自動削除します。無効にすると編集済み画像が保持されます。"
     },
     "deleteProtection": {
-      "title": "[ja] Delete File Protection",
-      "description": "[ja] Store deleted files in RecycleBin folder for recovery",
+      "title": "Delete File Protection",
+      "description": "Store deleted files in RecycleBin folder for recovery",
       "enabled": {
-        "label": "[ja] Store deleted files in RecycleBin",
-        "description": "[ja] When enabled, deleted files are backed up to RecycleBin folder instead of being permanently removed."
+        "label": "Store deleted files in RecycleBin",
+        "description": "When enabled, deleted files are backed up to RecycleBin folder instead of being permanently removed."
       },
-      "info": "[ja] RecycleBin folder is created in the project root. Deleted files are stored with timestamps. You can manually copy files from RecycleBin if recovery is needed."
+      "info": "RecycleBin folder is created in the project root. Deleted files are stored with timestamps. You can manually copy files from RecycleBin if recovery is needed."
     },
     "metadata": {
-      "title": "[ja] Metadata Extraction Optimization",
+      "title": "Metadata Extraction Optimization",
       "scanMode": {
-        "title": "[ja] Stealth PNG Scan Mode",
+        "title": "Stealth PNG Scan Mode",
         "fast": {
-          "label": "[ja] Fast (Recommended)",
-          "description": "[ja] Quick signature scan - checks first 200 pixels then exits early"
+          "label": "Fast (Recommended)",
+          "description": "Quick signature scan - checks first 200 pixels then exits early"
         },
         "full": {
-          "label": "[ja] Full",
-          "description": "[ja] Full file scan - checks all pixels (slow)"
+          "label": "Full",
+          "description": "Full file scan - checks all pixels (slow)"
         },
         "skip": {
-          "label": "[ja] Skip",
-          "description": "[ja] Skip scanning - disables secondary extraction"
+          "label": "Skip",
+          "description": "Skip scanning - disables secondary extraction"
         }
       },
       "limits": {
-        "title": "[ja] File Size and Resolution Limits",
+        "title": "File Size and Resolution Limits",
         "fileSize": {
-          "label": "[ja] Max File Size (MB)",
-          "helper": "[ja] Files larger than this will skip Stealth PNG scanning"
+          "label": "Max File Size (MB)",
+          "helper": "Files larger than this will skip Stealth PNG scanning"
         },
         "resolution": {
-          "label": "[ja] Max Resolution (Megapixels)",
-          "helper": "[ja] Images larger than this will skip Stealth PNG scanning"
+          "label": "Max Resolution (Megapixels)",
+          "helper": "Images larger than this will skip Stealth PNG scanning"
         }
       },
       "skipSettings": {
-        "title": "[ja] AI Tool Skip Settings",
-        "description": "[ja] Automatically skip Stealth PNG scanning for specific AI tool images.",
+        "title": "AI Tool Skip Settings",
+        "description": "Automatically skip Stealth PNG scanning for specific AI tool images.",
         "comfyui": {
-          "label": "[ja] Skip ComfyUI images (Recommended)",
-          "description": "[ja] ComfyUI doesn't use Stealth PNG, scanning unnecessary"
+          "label": "Skip ComfyUI images (Recommended)",
+          "description": "ComfyUI doesn't use Stealth PNG, scanning unnecessary"
         },
         "webui": {
-          "label": "[ja] Skip WebUI images",
-          "description": "[ja] WebUI may use Stealth PNG, enable only if needed"
+          "label": "Skip WebUI images",
+          "description": "WebUI may use Stealth PNG, enable only if needed"
         }
       },
       "secondary": {
-        "label": "[ja] Enable secondary extraction",
-        "description": "[ja] Retry with Stealth PNG method if primary extraction fails."
+        "label": "Enable secondary extraction",
+        "description": "Retry with Stealth PNG method if primary extraction fails."
       },
-      "performanceNote": "[ja] 💡 Tip: Default settings (Fast + ComfyUI skip) provide optimal performance for most cases. ComfyUI image processing time reduced from 2682ms → 4ms!"
+      "performanceNote": "💡 Tip: Default settings (Fast + ComfyUI skip) provide optimal performance for most cases. ComfyUI image processing time reduced from 2682ms → 4ms!"
     },
     "thumbnail": {
-      "title": "[ja] Thumbnail Settings",
-      "description": "[ja] Configure the size and quality used when generating thumbnails",
-      "saveFailed": "[ja] Failed to save thumbnail settings",
+      "title": "Thumbnail Settings",
+      "description": "Configure the size and quality used when generating thumbnails",
+      "saveFailed": "Failed to save thumbnail settings",
       "size": {
-        "label": "[ja] Thumbnail Size",
-        "selectLabel": "[ja] Thumbnail Size",
-        "original": "[ja] Same as original",
-        "default": "[ja] 1080px (default)"
+        "label": "Thumbnail Size",
+        "selectLabel": "Thumbnail Size",
+        "original": "Same as original",
+        "default": "1080px (default)"
       },
       "quality": {
-        "label": "[ja] Thumbnail Quality",
-        "helperText": "[ja] Higher quality increases file size (60-100%)"
+        "label": "Thumbnail Quality",
+        "helperText": "Higher quality increases file size (60-100%)"
       },
       "regenerate": {
-        "button": "[ja] Regenerate Thumbnails",
-        "description": "[ja] Regenerate thumbnails for all images with current settings"
+        "button": "Regenerate Thumbnails",
+        "description": "Regenerate thumbnails for all images with current settings"
       }
     }
   },
@@ -115,7 +115,19 @@
     "model": {
       "label": "モデル選択",
       "loading": "モデルリストを読み込み中...",
-      "downloaded": "ダウンロード済み"
+      "downloaded": "ダウンロード済み",
+      "vit": {
+        "label": "ViT (Vision Transformer)",
+        "description": "高速、高精度 - 一般的な使用に推奨"
+      },
+      "swinv2": {
+        "label": "SwinV2 (Swin Transformer V2)",
+        "description": "中速、非常に高精度 - 高精度が必要な場合"
+      },
+      "convnext": {
+        "label": "ConvNeXt",
+        "description": "高速、高精度 - 高速処理が必要な場合"
+      }
     },
     "device": {
       "label": "デバイス選択",
@@ -156,8 +168,8 @@
       "cancel": "キャンセル"
     },
     "alerts": {
-      "modelDownloaded": "<strong>{{model}}</strong>モデルがダウンロードされています。",
-      "modelNotDownloaded": "<strong>{{model}}</strong>モデルがダウンロードされていません。初回使用時に自動ダウンロードされます。",
+      "modelDownloaded": "{{model}}モデルがダウンロードされています。",
+      "modelNotDownloaded": "{{model}}モデルがダウンロードされていません。初回使用時に自動ダウンロードされます。",
       "modelLoaded": "モデルがロードされました",
       "modelUnloaded": "モデルがアンロードされました",
       "loadFailed": "モデルロード失敗",
@@ -181,12 +193,12 @@
     },
     "memoryManagement": {
       "title": "メモリ管理",
-      "description": "モデルのメモリ保持方式を設定します。",
-      "keepModelLoaded": "作業後モデルメモリ保持",
+      "description": "モデルのメモリアンロード方式を設定します。",
+      "keepModelLoaded": "作業後の自動アンロードを有効化",
       "autoUnloadMinutes": "自動アンロード時間: {{minutes}}分",
       "autoUnloadDescription": "最終使用後、設定時間経過で自動的にメモリからアンロードされます。",
-      "keepLoadedAlert": "モデルがメモリに保持されます。設定時間経過後、自動的にアンロードされます。",
-      "notKeepLoadedAlert": "モデルがメモリに保持されません。作業開始時に自動ロード、プログラム終了時にアンロードされます。"
+      "keepLoadedAlert": "作業後、設定時間経過で自動的にメモリからアンロードされます。",
+      "notKeepLoadedAlert": "モデルはメモリに保持され続けます。手動でアンロードするか、プログラム終了時までメモリに残ります。"
     },
     "batch": {
       "title": "バッチ作業",
@@ -220,10 +232,10 @@
       "result": "タグ付け結果:",
       "failed": "テスト失敗",
       "invalidId": "有効な画像IDを入力してください",
-      "imageHash": "[ja] Image Hash",
-      "placeholderHash": "[ja] e.g., abc123def456..."
+      "imageHash": "Image Hash",
+      "placeholderHash": "e.g., abc123def456..."
     },
-    "enableAutoTagging": "[ja] Enable Auto-Tagging"
+    "enableAutoTagging": "Enable Auto-Tagging"
   },
   "rating": {
     "title": "レーティングスコア設定",
@@ -308,6 +320,23 @@
         "explicitScore": "Explicit: {{score}}点"
       },
       "failed": "スコア計算に失敗しました。"
+    },
+    "recalculation": {
+      "title": "レーティングスコア再計算",
+      "description": "すべての画像のrating_scoreを現在の重み設定に従って再計算します。auto_tagsがあるすべての画像が対象です。",
+      "buttons": {
+        "recalculate": "すべての画像スコア再計算",
+        "processing": "再計算中..."
+      },
+      "progress": "再計算進行中... {{current}}/{{total}}",
+      "success": "再計算完了: 全{{total}}個のうち{{success}}個成功、{{failed}}個失敗",
+      "failed": "スコア再計算に失敗しました。",
+      "confirmDialog": {
+        "title": "レーティングスコア再計算",
+        "message": "すべての画像のrating_scoreを再計算しますか？この作業には時間がかかる場合があります。",
+        "confirm": "再計算",
+        "cancel": "キャンセル"
+      }
     }
   },
   "similarity": {
@@ -370,14 +399,14 @@
         "success": "処理完了: {{processed}}個完了、{{failed}}個失敗、{{remaining}}個残り",
         "error": "エラー: {{error}}"
       },
-      "imageHash": "[ja] Image Hash",
-      "placeholderHash": "[ja] e.g., abc123def456...",
-      "compositeHash": "[ja] Image Hash",
-      "hashHelperText": "[ja] Enter the image's composite_hash",
-      "button": "[ja] Run Test",
-      "processing": "[ja] Processing...",
-      "result": "[ja] Tagging Result:",
-      "failed": "[ja] Test failed"
+      "imageHash": "Image Hash",
+      "placeholderHash": "e.g., abc123def456...",
+      "compositeHash": "Image Hash",
+      "hashHelperText": "Enter the image's composite_hash",
+      "button": "Run Test",
+      "processing": "Processing...",
+      "result": "Tagging Result:",
+      "failed": "Test failed"
     },
     "duplicateScan": {
       "title": "全体重複分析",
@@ -390,20 +419,20 @@
       "moreImages": "+{{count}}枚追加",
       "noResults": "スキャンを実行すると重複画像グループが表示されます。",
       "id": "ID: {{id}}",
-      "selectAll": "[ja] Select All",
-      "deselectAll": "[ja] Deselect All",
-      "keepOne": "[ja] Keep 1",
-      "keepOneDelete": "[ja] Keep first image and select rest for deletion",
-      "deleteSelected": "[ja] Delete {{count}} Selected",
-      "deleteConfirmTitle": "[ja] Confirm Image Deletion",
-      "deleteConfirmMessage": "[ja] Are you sure you want to delete {{count}} selected images?",
-      "deleteWarning": "[ja] Deleted images cannot be recovered!",
-      "cancel": "[ja] Cancel",
-      "confirmDelete": "[ja] Delete",
-      "deleting": "[ja] Deleting...",
-      "deleteSuccess": "[ja] {{count}} images deleted successfully.",
-      "deletePartialSuccess": "[ja] {{success}} succeeded, {{failed}} failed",
-      "deleteFailed": "[ja] Failed to delete images."
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "keepOne": "Keep 1",
+      "keepOneDelete": "Keep first image and select rest for deletion",
+      "deleteSelected": "Delete {{count}} Selected",
+      "deleteConfirmTitle": "Confirm Image Deletion",
+      "deleteConfirmMessage": "Are you sure you want to delete {{count}} selected images?",
+      "deleteWarning": "Deleted images cannot be recovered!",
+      "cancel": "Cancel",
+      "confirmDelete": "Delete",
+      "deleting": "Deleting...",
+      "deleteSuccess": "{{count}} images deleted successfully.",
+      "deletePartialSuccess": "{{success}} succeeded, {{failed}} failed",
+      "deleteFailed": "Failed to delete images."
     },
     "thresholds": {
       "title": "閾値設定",
@@ -440,8 +469,8 @@
       },
       "localStorageNote": "設定値はローカルにのみ保存され、検索時にリアルタイムで適用されます。"
     },
-    "autoGenerateHash": "[ja] Auto-generate Hash on Upload",
-    "hashPlaceholder": "[ja] e.g., a1b2c3d4e5f6..."
+    "autoGenerateHash": "Auto-generate Hash on Upload",
+    "hashPlaceholder": "e.g., a1b2c3d4e5f6..."
   },
   "messages": {
     "saveSuccess": "設定が正常に保存されました",
@@ -661,123 +690,123 @@
     }
   },
   "thumbnail": {
-    "title": "[ja] Thumbnail Settings",
-    "description": "[ja] Configure size and quality used for thumbnail generation",
-    "saveFailed": "[ja] Failed to save thumbnail settings",
+    "title": "Thumbnail Settings",
+    "description": "Configure size and quality used for thumbnail generation",
+    "saveFailed": "Failed to save thumbnail settings",
     "size": {
-      "label": "[ja] Thumbnail Size",
-      "selectLabel": "[ja] Thumbnail Size",
-      "original": "[ja] Same as original size",
-      "default": "[ja] 1080px (default)"
+      "label": "Thumbnail Size",
+      "selectLabel": "Thumbnail Size",
+      "original": "Same as original size",
+      "default": "1080px (default)"
     },
     "quality": {
-      "label": "[ja] Thumbnail Quality",
-      "helperText": "[ja] Higher quality increases file size (60-100%)"
+      "label": "Thumbnail Quality",
+      "helperText": "Higher quality increases file size (60-100%)"
     },
     "regenerate": {
-      "button": "[ja] Regenerate Thumbnails",
-      "description": "[ja] Regenerate all image thumbnails with current settings"
+      "button": "Regenerate Thumbnails",
+      "description": "Regenerate all image thumbnails with current settings"
     }
   },
   "background": {
-    "title": "[ja] Background Task Monitoring",
-    "loadFailed": "[ja] Failed to load background task status",
-    "confirmReset": "[ja] Reset background queue? All pending tasks will be cancelled.",
-    "resetFailed": "[ja] Failed to reset queue",
-    "resetQueue": "[ja] Reset Queue",
-    "autoTagFailed": "[ja] Failed to trigger auto-tagging",
-    "confirmHashGen": "[ja] Generate hash for {{count}} images?",
-    "hashGenComplete": "[ja] Hash generation complete: {{processed}} succeeded, {{failed}} failed",
-    "hashGenFailed": "[ja] Failed to regenerate hashes",
-    "confirmVerify": "[ja] Verify {{count}} files?\\nThis may take time if there are many files.",
-    "verifyFailed": "[ja] Failed to run file verification",
-    "verifyIntervalError": "[ja] Verification interval must be between 300-86400 seconds",
-    "verifySaveFailed": "[ja] Failed to save file verification settings",
-    "autoUpdate": "[ja] Auto-updates every 5 seconds.",
-    "autoUpdateDisabled": "[ja] Auto-update is disabled.",
+    "title": "Background Task Monitoring",
+    "loadFailed": "Failed to load background task status",
+    "confirmReset": "Reset background queue? All pending tasks will be cancelled.",
+    "resetFailed": "Failed to reset queue",
+    "resetQueue": "Reset Queue",
+    "autoTagFailed": "Failed to trigger auto-tagging",
+    "confirmHashGen": "Generate hash for {{count}} images?",
+    "hashGenComplete": "Hash generation complete: {{processed}} succeeded, {{failed}} failed",
+    "hashGenFailed": "Failed to regenerate hashes",
+    "confirmVerify": "Verify {{count}} files?\\nThis may take time if there are many files.",
+    "verifyFailed": "Failed to run file verification",
+    "verifyIntervalError": "Verification interval must be between 300-86400 seconds",
+    "verifySaveFailed": "Failed to save file verification settings",
+    "autoUpdate": "Auto-updates every 5 seconds.",
+    "autoUpdateDisabled": "Auto-update is disabled.",
     "queue": {
-      "title": "[ja] Background Queue",
-      "pending": "[ja] Pending: {{count}}",
-      "processing": "[ja] Processing",
-      "waiting": "[ja] Waiting"
+      "title": "Background Queue",
+      "pending": "Pending: {{count}}",
+      "processing": "Processing",
+      "waiting": "Waiting"
     },
     "tasks": {
-      "metadata": "[ja] Metadata Extraction",
-      "promptCollection": "[ja] Prompt Collection",
-      "pendingCount": "[ja] {{count}} pending"
+      "metadata": "Metadata Extraction",
+      "promptCollection": "Prompt Collection",
+      "pendingCount": "{{count}} pending"
     },
     "autoTag": {
-      "title": "[ja] Auto-Tagging Scheduler",
-      "manualTrigger": "[ja] Manual Run",
-      "running": "[ja] Running",
-      "stopped": "[ja] Stopped",
-      "untaggedCount": "[ja] Untagged images: {{count}}",
-      "pollingInterval": "[ja] Polling interval: {{seconds}}s",
-      "batchSize": "[ja] Batch size: {{size}}"
+      "title": "Auto-Tagging Scheduler",
+      "manualTrigger": "Manual Run",
+      "running": "Running",
+      "stopped": "Stopped",
+      "untaggedCount": "Untagged images: {{count}}",
+      "pollingInterval": "Polling interval: {{seconds}}s",
+      "batchSize": "Batch size: {{size}}"
     },
     "hash": {
-      "title": "[ja] Media Hash Status",
-      "generate": "[ja] Generate Hash",
-      "total": "[ja] Total: {{count}}",
-      "completed": "[ja] Hash generated: {{count}}",
-      "pending": "[ja] Not generated: {{count}}",
-      "completion": "[ja] Completion: {{percent}}%"
+      "title": "Media Hash Status",
+      "generate": "Generate Hash",
+      "total": "Total: {{count}}",
+      "completed": "Hash generated: {{count}}",
+      "pending": "Not generated: {{count}}",
+      "completion": "Completion: {{percent}}%"
     },
     "verify": {
-      "title": "[ja] File Verification Status",
-      "viewLogs": "[ja] View Logs",
-      "run": "[ja] Run Verification",
-      "progress": "[ja] File verification in progress: {{checked}}/{{total}}",
-      "missing": "[ja] Missing: {{count}}",
-      "totalFiles": "[ja] Total files: {{count}}",
-      "missingFiles": "[ja] Missing files: {{count}}",
-      "lastVerification": "[ja] Last verification: {{date}}",
-      "schedulerTitle": "[ja] Verification Scheduler Settings",
-      "intervalLabel": "[ja] Verification Interval (seconds)",
-      "intervalHelper": "[ja] 300-86400 seconds (5 min - 24 hours)",
-      "intervalTooltip": "[ja] May cause time consumption and system load if there are many files"
+      "title": "File Verification Status",
+      "viewLogs": "View Logs",
+      "run": "Run Verification",
+      "progress": "File verification in progress: {{checked}}/{{total}}",
+      "missing": "Missing: {{count}}",
+      "totalFiles": "Total files: {{count}}",
+      "missingFiles": "Missing files: {{count}}",
+      "lastVerification": "Last verification: {{date}}",
+      "schedulerTitle": "Verification Scheduler Settings",
+      "intervalLabel": "Verification Interval (seconds)",
+      "intervalHelper": "300-86400 seconds (5 min - 24 hours)",
+      "intervalTooltip": "May cause time consumption and system load if there are many files"
     }
   },
   "auth": {
     "forgotAccount": {
-      "title": "[ja] Forgot your account?",
-      "description": "[ja] If you forgot your password, you can recover your account using the following method.",
-      "methodTitle": "[ja] Recovery Method:",
-      "step1": "[ja] Stop the server",
-      "step2": "[ja] Delete the file below",
-      "step3": "[ja] Restart the server",
-      "step4": "[ja] Set up a new account",
-      "fileToDelete": "[ja] File to delete:",
-      "warning": "[ja] ⚠️ Warning: Deleting this file will invalidate all sessions and require re-login.",
-      "warningNote": "[ja] Other data such as workflows and settings will not be affected."
+      "title": "Forgot your account?",
+      "description": "If you forgot your password, you can recover your account using the following method.",
+      "methodTitle": "Recovery Method:",
+      "step1": "Stop the server",
+      "step2": "Delete the file below",
+      "step3": "Restart the server",
+      "step4": "Set up a new account",
+      "fileToDelete": "File to delete:",
+      "warning": "⚠️ Warning: Deleting this file will invalidate all sessions and require re-login.",
+      "warningNote": "Other data such as workflows and settings will not be affected."
     },
     "setup": {
-      "title": "[ja] Setup Authentication",
-      "description": "[ja] Configure username and password to protect your image manager from unauthorized access. Once set, you will need to login to access the application.",
-      "username": "[ja] Username",
-      "password": "[ja] Password",
-      "confirmPassword": "[ja] Confirm Password",
-      "button": "[ja] Setup Authentication",
-      "success": "[ja] Authentication configured successfully! You will need to login on your next visit.",
+      "title": "Setup Authentication",
+      "description": "Configure username and password to protect your image manager from unauthorized access. Once set, you will need to login to access the application.",
+      "username": "Username",
+      "password": "Password",
+      "confirmPassword": "Confirm Password",
+      "button": "Setup Authentication",
+      "success": "Authentication configured successfully! You will need to login on your next visit.",
       "errors": {
-        "required": "[ja] Username and password are required",
-        "mismatch": "[ja] Passwords do not match",
-        "failed": "[ja] Failed to setup authentication"
+        "required": "Username and password are required",
+        "mismatch": "Passwords do not match",
+        "failed": "Failed to setup authentication"
       }
     },
     "update": {
-      "title": "[ja] Change Credentials",
-      "description": "[ja] Changing your credentials will require you to login again with the new credentials.",
-      "currentPassword": "[ja] Current Password",
-      "newUsername": "[ja] New Username",
-      "newPassword": "[ja] New Password",
-      "confirmNewPassword": "[ja] Confirm New Password",
-      "button": "[ja] Update Credentials",
-      "success": "[ja] Credentials updated successfully!",
+      "title": "Change Credentials",
+      "description": "Changing your credentials will require you to login again with the new credentials.",
+      "currentPassword": "Current Password",
+      "newUsername": "New Username",
+      "newPassword": "New Password",
+      "confirmNewPassword": "Confirm New Password",
+      "button": "Update Credentials",
+      "success": "Credentials updated successfully!",
       "errors": {
-        "required": "[ja] All fields are required",
-        "mismatch": "[ja] New passwords do not match",
-        "failed": "[ja] Failed to update credentials"
+        "required": "All fields are required",
+        "mismatch": "New passwords do not match",
+        "failed": "Failed to update credentials"
       }
     }
   },

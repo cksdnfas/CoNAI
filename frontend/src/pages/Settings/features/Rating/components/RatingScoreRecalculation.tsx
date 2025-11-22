@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import {
   Box,
+  Card,
+  CardContent,
   Typography,
   Button,
   Alert,
@@ -62,13 +64,14 @@ export const RatingScoreRecalculation: React.FC = () => {
   };
 
   return (
-    <Box>
-      <Typography variant="h6" gutterBottom>
-        {t('rating.recalculation.title')}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" paragraph>
-        {t('rating.recalculation.description')}
-      </Typography>
+    <Card sx={{ mt: 3, mb: 3 }}>
+      <CardContent>
+        <Typography variant="h6" gutterBottom>
+          {t('rating.recalculation.title')}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" paragraph>
+          {t('rating.recalculation.description')}
+        </Typography>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -109,23 +112,24 @@ export const RatingScoreRecalculation: React.FC = () => {
         </Button>
       </Stack>
 
-      {/* Confirmation Dialog */}
-      <Dialog open={confirmDialog} onClose={() => setConfirmDialog(false)}>
-        <DialogTitle>{t('rating.recalculation.confirmDialog.title')}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            {t('rating.recalculation.confirmDialog.message')}
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDialog(false)}>
-            {t('rating.recalculation.confirmDialog.cancel')}
-          </Button>
-          <Button onClick={handleRecalculate} color="primary" variant="contained">
-            {t('rating.recalculation.confirmDialog.confirm')}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+        {/* Confirmation Dialog */}
+        <Dialog open={confirmDialog} onClose={() => setConfirmDialog(false)}>
+          <DialogTitle>{t('rating.recalculation.confirmDialog.title')}</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              {t('rating.recalculation.confirmDialog.message')}
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setConfirmDialog(false)}>
+              {t('rating.recalculation.confirmDialog.cancel')}
+            </Button>
+            <Button onClick={handleRecalculate} color="primary" variant="contained">
+              {t('rating.recalculation.confirmDialog.confirm')}
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </CardContent>
+    </Card>
   );
 };

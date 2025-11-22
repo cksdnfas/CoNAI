@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next';
 import type { Workflow, MarkedField } from '../../../services/api/workflowApi';
 import ImageSelectionModal from './ImageSelectionModal';
 import { HierarchicalModelSelector } from './HierarchicalModelSelector';
-import { WildcardTextField } from './WildcardTextField';
+import { WildcardTextField } from '../../../components/WildcardTextField';
 import { customDropdownListApi } from '../../../services/api/customDropdownListApi';
 
 interface WorkflowFormFieldsProps {
@@ -111,16 +111,17 @@ export function WorkflowFormFields({
     switch (field.type) {
       case 'textarea':
         return (
-          <WildcardTextField
-            key={field.id}
-            multiline
-            rows={4}
-            label={field.label}
-            value={value}
-            onChange={(newValue) => onFieldChange(field.id, newValue)}
-            required={field.required}
-            placeholder={field.placeholder}
-          />
+          <Box key={field.id} sx={{ mb: 2 }}>
+            <WildcardTextField
+              multiline
+              rows={4}
+              label={field.label}
+              value={value}
+              onChange={(newValue) => onFieldChange(field.id, newValue)}
+              required={field.required}
+              placeholder={field.placeholder}
+            />
+          </Box>
         );
 
       case 'number':
@@ -216,14 +217,15 @@ export function WorkflowFormFields({
 
       default: // text
         return (
-          <WildcardTextField
-            key={field.id}
-            label={field.label}
-            value={value}
-            onChange={(newValue) => onFieldChange(field.id, newValue)}
-            required={field.required}
-            placeholder={field.placeholder}
-          />
+          <Box key={field.id} sx={{ mb: 2 }}>
+            <WildcardTextField
+              label={field.label}
+              value={value}
+              onChange={(newValue) => onFieldChange(field.id, newValue)}
+              required={field.required}
+              placeholder={field.placeholder}
+            />
+          </Box>
         );
     }
   };

@@ -19,8 +19,8 @@ export class JpegExtractor {
 
       // Extract AI metadata from EXIF Comment or UserComment
       if (metadata.exif) {
-        // Sharp's exif data is in Buffer format
-        const exifString = metadata.exif.toString();
+        // Sharp's exif data is in Buffer format - explicitly use utf8 for proper Unicode handling
+        const exifString = metadata.exif.toString('utf8');
 
         if (exifString.includes('parameters') && exifString.includes('Steps:')) {
           // Will be parsed by WebUIParser

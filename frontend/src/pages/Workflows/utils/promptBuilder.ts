@@ -1,5 +1,6 @@
 import type { Workflow, MarkedField } from '../../../services/api/workflowApi';
-import { parseObjectWildcards } from '../../../utils/wildcardParser';
+import { parseObjectWildcards, type ObjectParseResult } from '../../../utils/wildcardParser';
+import { cleanPrompt, isPromptEmpty } from '../../../utils/promptCleaner';
 
 /**
  * 이미지를 Base64로 변환하는 헬퍼 함수
@@ -104,11 +105,19 @@ export async function buildPromptData(
 export async function buildPromptDataWithWildcards(
   workflow: Workflow | null,
   formData: Record<string, any>
-): Promise<Record<string, any>> {
+): Promise<ObjectParseResult> {
   const promptData = await buildPromptData(workflow, formData);
 
+  console.log('[ComfyUI Wildcard] Before parsing:', JSON.stringify(promptData).substring(0, 200));
+
   // 와일드카드 파싱 (객체 전체를 재귀적으로 파싱)
-  return await parseObjectWildcards(promptData, 'comfyui');
+  const parseResult = await parseObjectWildcards(promptData, 'comfyui');
+
+  console.log('[ComfyUI Wildcard] After parsing:', JSON.stringify(parseResult.data).substring(0, 200));
+  console.log('[ComfyUI Wildcard] Was changed:', JSON.stringify(promptData) !== JSON.stringify(parseResult.data));
+  console.log('[ComfyUI Wildcard] Empty wildcards:', parseResult.emptyWildcards);
+
+  return parseResult;
 }
 
 /**
@@ -127,4 +136,43 @@ export function initializeFormData(workflow: Workflow): Record<string, any> {
   });
 
   return initialData;
+}
+
+/**
+ * 파싱된 워크플로우 데이터에서 프롬프트 필드가 비어있는지 확인
+ * @param promptData 파싱된 프롬프트 데이터
+ * @returns 프롬프트가 비어있으면 true
+ */
+export function hasEmptyPrompts(promptData: Record<string, any>): boolean {
+  // 워크플로우 JSON에서 일반적인 프롬프트 필드를 찾아 확인
+  // 재귀적으로 "text" 필드를 찾아서 확인
+  function findTextFields(obj: any): string[] {
+    const texts: string[] = [];
+
+    if (obj && typeof obj === 'object') {
+      for (const key in obj) {
+        const value = obj[key];
+
+        if (key === 'text' && typeof value === 'string') {
+          texts.push(value);
+        } else if (key === 'inputs' && value && typeof value === 'object') {
+          // ComfyUI의 inputs 객체에서 text 필드 확인
+          if ('text' in value && typeof value.text === 'string') {
+            texts.push(value.text);
+          }
+        }
+
+        if (typeof value === 'object') {
+          texts.push(...findTextFields(value));
+        }
+      }
+    }
+
+    return texts;
+  }
+
+  const textFields = findTextFields(promptData);
+
+  // 모든 텍스트 필드가 비어있으면 true
+  return textFields.length > 0 && textFields.every(text => isPromptEmpty(text));
 }

@@ -3,6 +3,7 @@
  * Extracts metadata from PNG tEXt/zTXt chunks
  */
 
+import zlib from 'zlib';
 import { RawPngMetadata, AIMetadata } from '../types';
 
 export class PngExtractor {
@@ -120,8 +121,8 @@ export class PngExtractor {
         const chunkLength = buffer.readUInt32BE(offset);
         const chunkType = buffer.toString('ascii', offset + 4, offset + 8);
 
-        // Process tEXt and zTXt chunks
-        if (chunkType === 'tEXt' || chunkType === 'zTXt') {
+        // Process tEXt chunks (uncompressed)
+        if (chunkType === 'tEXt') {
           const chunkData = buffer.subarray(offset + 8, offset + 8 + chunkLength);
           const rawText = chunkData.toString('utf8');
           rawStrings.push(rawText);
@@ -132,6 +133,32 @@ export class PngExtractor {
             const key = rawText.substring(0, nullIndex);
             const value = rawText.substring(nullIndex + 1);
             textChunks[key] = value;
+          }
+        }
+
+        // Process zTXt chunks (compressed)
+        if (chunkType === 'zTXt') {
+          const chunkData = buffer.subarray(offset + 8, offset + 8 + chunkLength);
+
+          // Find null byte separating keyword from compressed data
+          const nullIndex = chunkData.indexOf(0);
+          if (nullIndex > 0) {
+            const key = chunkData.subarray(0, nullIndex).toString('utf8');
+            // Skip compression method byte (always 0 for deflate)
+            const compressedData = chunkData.subarray(nullIndex + 2);
+
+            try {
+              // Decompress zlib data
+              const decompressed = zlib.inflateSync(compressedData);
+              const value = decompressed.toString('utf8');
+              textChunks[key] = value;
+              rawStrings.push(`${key}\0${value}`);
+            } catch (zlibError) {
+              console.warn(`zTXt decompression failed for key "${key}":`, zlibError);
+              // Fallback: store raw data
+              const rawText = chunkData.toString('utf8');
+              rawStrings.push(rawText);
+            }
           }
         }
 

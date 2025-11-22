@@ -1,10 +1,75 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { enqueueSnackbar } from 'notistack';
 import { naiApi, generationHistoryApi } from '../../../../services/api';
 import api from '../../../../services/api';
 import { RESOLUTIONS } from '../constants/nai.constants';
-import type { NAIParams, NAIUserData, NAIGenerationResponse } from '../types/nai.types';
+import type { NAIParams, NAIUserData, NAIGenerationResponse, ResolutionConfig } from '../types/nai.types';
 import { parseWildcards } from '../../../../utils/wildcardParser';
+import { cleanPrompt, isPromptEmpty } from '../../../../utils/promptCleaner';
+
+/**
+ * 해상도 설정에서 실제 width/height 선택
+ */
+function selectResolution(config: ResolutionConfig): { width: number; height: number } {
+  let selected: { width: number; height: number };
+
+  if (config.mode === 'fixed') {
+    // 고정 모드: 선택된 해상도 사용
+    if (config.fixed in RESOLUTIONS) {
+      selected = RESOLUTIONS[config.fixed as keyof typeof RESOLUTIONS];
+    } else if (config.fixed.startsWith('custom_')) {
+      const customId = config.fixed.replace('custom_', '');
+      const custom = config.customResolutions.find(r => r.id === customId);
+      if (custom) {
+        selected = { width: custom.width, height: custom.height };
+      } else {
+        // 폴백: 기본 해상도
+        selected = { width: 832, height: 1216 };
+      }
+    } else {
+      // 폴백: 기본 해상도
+      selected = { width: 832, height: 1216 };
+    }
+  } else {
+    // 랜덤 모드: 선택된 해상도들 중 무작위
+    if (config.random.length === 0) {
+      // 선택된 해상도가 없으면 기본값
+      selected = { width: 832, height: 1216 };
+    } else {
+      const randomKey = config.random[Math.floor(Math.random() * config.random.length)];
+
+      if (randomKey in RESOLUTIONS) {
+        selected = RESOLUTIONS[randomKey as keyof typeof RESOLUTIONS];
+      } else if (randomKey.startsWith('custom_')) {
+        const customId = randomKey.replace('custom_', '');
+        const custom = config.customResolutions.find(r => r.id === customId);
+        if (custom) {
+          selected = { width: custom.width, height: custom.height };
+        } else {
+          selected = { width: 832, height: 1216 };
+        }
+      } else {
+        selected = { width: 832, height: 1216 };
+      }
+    }
+  }
+
+  // 가로세로 전환 적용
+  if (config.swapDimensions) {
+    if (config.mode === 'random') {
+      // 랜덤 모드 + 전환: 50% 확률로 전환
+      if (Math.random() < 0.5) {
+        return { width: selected.height, height: selected.width };
+      }
+    } else {
+      // 고정 모드 + 전환: 항상 전환
+      return { width: selected.height, height: selected.width };
+    }
+  }
+
+  return selected;
+}
 
 /**
  * Anlas 비용 계산 함수 (SMEA 비활성화 버전)
@@ -197,18 +262,65 @@ export function useNAIGeneration({ token, onLogout, onGenerationComplete }: UseN
     setError(null);
 
     try {
-      const resolution = RESOLUTIONS[params.resolution as keyof typeof RESOLUTIONS];
+      // 해상도 선택 (고정/랜덤 모드 + 가로세로 전환 적용)
+      const resolution = selectResolution(params.resolutionConfig);
 
       // 와일드카드 파싱
-      const parsedPrompt = await parseWildcards(params.prompt, 'nai');
-      const parsedNegativePrompt = params.negative_prompt
+      const promptParseResult = await parseWildcards(params.prompt, 'nai');
+      const negativePromptParseResult = params.negative_prompt
         ? await parseWildcards(params.negative_prompt, 'nai')
-        : params.negative_prompt;
+        : { text: params.negative_prompt || '', emptyWildcards: [] };
+
+      // 빈 와일드카드 수집
+      const allEmptyWildcards = [
+        ...promptParseResult.emptyWildcards,
+        ...negativePromptParseResult.emptyWildcards
+      ];
+
+      // 빈 와일드카드 경고
+      if (allEmptyWildcards.length > 0) {
+        const uniqueEmpty = Array.from(new Set(allEmptyWildcards));
+        enqueueSnackbar(
+          `다음 와일드카드에 NAI 항목이 없습니다: ${uniqueEmpty.join(', ')}`,
+          { variant: 'warning', autoHideDuration: 5000 }
+        );
+      }
+
+      // 프롬프트 전처리: 빈 문자열과 중복 쉼표 제거
+      const cleanedPrompt = cleanPrompt(promptParseResult.text);
+      const cleanedNegativePrompt = cleanPrompt(negativePromptParseResult.text);
+
+      // 최종 프롬프트가 완전히 비어있는지 확인
+      if (isPromptEmpty(cleanedPrompt)) {
+        enqueueSnackbar(
+          t('imageGeneration:nai.errors.emptyPrompt'),
+          { variant: 'error', autoHideDuration: 5000 }
+        );
+        setError(t('imageGeneration:nai.errors.emptyPrompt'));
+        setGenerating(false);
+        return null;
+      }
+
+      console.log(`[NAI Wildcard] Parsing complete:`, {
+        originalPrompt: params.prompt.substring(0, 100),
+        parsedPrompt: promptParseResult.text.substring(0, 100),
+        cleanedPrompt: cleanedPrompt.substring(0, 100),
+        originalNegative: params.negative_prompt?.substring(0, 100),
+        parsedNegative: negativePromptParseResult.text?.substring(0, 100),
+        cleanedNegative: cleanedNegativePrompt?.substring(0, 100),
+        wasChanged: params.prompt !== cleanedPrompt || params.negative_prompt !== cleanedNegativePrompt,
+        emptyWildcards: allEmptyWildcards
+      });
+
+      console.log(`[NAI] Selected resolution: ${resolution.width}×${resolution.height}`, {
+        mode: params.resolutionConfig.mode,
+        swap: params.resolutionConfig.swapDimensions
+      });
 
       const response = await naiApi.generateImage(token, {
         ...params,
-        prompt: parsedPrompt,
-        negative_prompt: parsedNegativePrompt,
+        prompt: cleanedPrompt,
+        negative_prompt: cleanedNegativePrompt,
         width: resolution.width,
         height: resolution.height,
         model: params.model,

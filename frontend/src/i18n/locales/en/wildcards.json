@@ -33,6 +33,11 @@
     "name": "Name",
     "nameHelper": "Enter name without ++ (e.g. flower, color)",
     "description": "Description (optional)",
+    "parent": "Parent Wildcard",
+    "parentHelper": "Select a parent wildcard to create a hierarchy",
+    "noParent": "None (Root Level)",
+    "includeChildren": "Automatically Include Child Wildcards",
+    "includeChildrenHelper": "When enabled, using this wildcard will automatically include items from direct children",
     "comfyuiItems": "ComfyUI Prompt Items",
     "naiItems": "NovelAI Prompt Items",
     "itemsHelper": "Each item can contain comma-separated words. You can nest other wildcards using ++name++ format.",
@@ -144,6 +149,34 @@
     "manualTab": "Manual",
     "autoTab": "Auto (LORA)",
     "noResults": "No results",
-    "selectTier": "Select a tier"
+    "selectTier": "Select a tier",
+    "root": "Root"
+  },
+  "deleteConfirm": {
+    "title": "Confirm Wildcard Deletion",
+    "message": "Are you sure you want to delete '{{name}}' wildcard?",
+    "childrenNotice": "This wildcard has child wildcards.",
+    "wildcardInfo": {
+      "itemCount": "Items: {{count}}",
+      "childCount": "Child wildcards: {{count}}"
+    },
+    "warning": {
+      "permanent": "This action cannot be undone."
+    },
+    "options": {
+      "title": "Choose deletion option:",
+      "moveUp": {
+        "label": "Delete this item only",
+        "description": "Child wildcards will move one level up"
+      },
+      "cascade": {
+        "label": "Delete with children",
+        "description": "{{count}} child wildcard(s) will also be deleted"
+      }
+    }
+  },
+  "messages": {
+    "deleteSuccess": "Wildcard deleted successfully",
+    "deleteFailed": "Failed to delete wildcard"
   }
 }

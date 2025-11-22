@@ -137,6 +137,9 @@
       "completed": "이미지 생성이 완료되었습니다",
       "failed": "이미지 생성에 실패했습니다"
     },
+    "errors": {
+      "emptyPrompt": "프롬프트가 비어있습니다. 이미지를 생성할 수 없습니다."
+    },
     "repeat": {
       "title": "반복 실행",
       "enable": "반복 실행 활성화",
@@ -153,6 +156,34 @@
       "title": "생성 히스토리",
       "comingSoon": "이 기능은 곧 추가될 예정입니다.",
       "description": "과거 생성한 이미지와 설정을 확인할 수 있습니다."
+    },
+    "resolution": {
+      "mode": "해상도 모드",
+      "modeFixed": "고정 모드",
+      "modeRandom": "랜덤 모드",
+      "selectResolution": "해상도 선택",
+      "selectMultiple": "해상도 선택 (여러 개 선택 가능)",
+      "addCustom": "커스텀 추가",
+      "swapDimensions": "가로세로 전환",
+      "swapDimensionsDesc": "선택된 해상도의 가로/세로를 바꿉니다",
+      "finalResolution": "최종 해상도",
+      "randomPool": "랜덤 풀",
+      "swapped": "전환됨",
+      "randomSwapInfo": "각 해상도마다 50% 확률로 가로세로가 전환됩니다",
+      "selectAtLeastOne": "랜덤 모드에서는 최소 1개 이상의 해상도를 선택해야 합니다",
+      "customDialog": {
+        "addTitle": "커스텀 해상도 추가",
+        "editTitle": "커스텀 해상도 수정",
+        "name": "이름",
+        "namePlaceholder": "예: 내 해상도",
+        "width": "가로",
+        "height": "세로",
+        "save": "저장",
+        "cancel": "취소",
+        "nameRequired": "이름을 입력해주세요",
+        "widthInvalid": "가로는 64~2048 사이의 숫자여야 합니다",
+        "heightInvalid": "세로는 64~2048 사이의 숫자여야 합니다"
+      }
     },
     "naiSettings": {
       "basic": {

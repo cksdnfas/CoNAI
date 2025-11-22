@@ -1,4 +1,5 @@
 import { wildcardApi, type WildcardWithItems } from '../services/api/wildcardApi';
+import { cleanPrompt } from './promptCleaner';
 
 /**
  * 클라이언트 사이드 와일드카드 파서
@@ -108,7 +109,15 @@ function cleanupWildcardWeights(text: string): string {
 }
 
 /**
- * 존재하지 않는 와일드카드 제거
+ * 파싱 결과 정보
+ */
+export interface ParseResult {
+  text: string;
+  emptyWildcards: string[]; // 항목이 비어있는 와일드카드 목록
+}
+
+/**
+ * 존재하지 않는 와일드카드 제거 (빈 문자열로 치환)
  */
 function removeInvalidWildcards(
   text: string,
@@ -121,7 +130,7 @@ function removeInvalidWildcards(
     // 와일드카드가 존재하지 않거나 항목이 없으면 빈 문자열로 치환
     if (!wildcard || !wildcard.items || wildcard.items.length === 0) {
       console.warn(`[Wildcard] Removing invalid wildcard: ${name}`);
-      return '';
+      return ''; // 빈 문자열로 치환
     }
     return match;
   });
@@ -134,7 +143,8 @@ function parseRecursive(
   text: string,
   wildcardMap: Map<string, WildcardWithItems>,
   tool: 'comfyui' | 'nai',
-  visited: Set<string>
+  visited: Set<string>,
+  emptyWildcards: Set<string>
 ): string {
   // ++name++ 패턴 매칭
   const pattern = /\+\+([^+]+)\+\+/g;
@@ -150,7 +160,8 @@ function parseRecursive(
     const wildcard = wildcardMap.get(name);
     if (!wildcard || !wildcard.items || wildcard.items.length === 0) {
       console.warn(`[Wildcard] Not found or empty: ${name}`);
-      return match;
+      emptyWildcards.add(name);
+      return ''; // 빈 문자열로 치환
     }
 
     // 해당 도구의 항목만 필터링
@@ -158,7 +169,8 @@ function parseRecursive(
 
     if (toolItems.length === 0) {
       console.warn(`[Wildcard] No items for '${name}' with tool '${tool}'`);
-      return match;
+      emptyWildcards.add(`${name} (${tool})`);
+      return ''; // 빈 문자열로 치환
     }
 
     // 랜덤 항목 선택
@@ -169,7 +181,7 @@ function parseRecursive(
     visited.add(name);
 
     // 재귀 파싱 (중첩 와일드카드 처리)
-    const recursiveResult = parseRecursive(selectedItem.content, wildcardMap, tool, visited);
+    const recursiveResult = parseRecursive(selectedItem.content, wildcardMap, tool, visited, emptyWildcards);
 
     // 방문 해제
     visited.delete(name);
@@ -188,14 +200,14 @@ function parseRecursive(
  * 텍스트에서 와일드카드 파싱
  * @param text 파싱할 텍스트
  * @param tool 사용할 도구 ('comfyui' | 'nai')
- * @returns 파싱된 텍스트
+ * @returns 파싱 결과 (파싱된 텍스트 + 빈 와일드카드 목록)
  */
 export async function parseWildcards(
   text: string,
   tool: 'comfyui' | 'nai'
-): Promise<string> {
+): Promise<ParseResult> {
   if (!text) {
-    return text;
+    return { text, emptyWildcards: [] };
   }
 
   // 와일드카드 로드
@@ -208,15 +220,13 @@ export async function parseWildcards(
   // 전처리: 와일드카드 자체의 가중치 제거
   let processedText = cleanupWildcardWeights(text);
 
-  // 존재하지 않는 와일드카드 제거 (++name++ 패턴이 있을 때만)
-  if (processedText.includes('++')) {
-    processedText = removeInvalidWildcards(processedText, wildcardMap);
-  }
+  // 빈 와일드카드 추적
+  const emptyWildcards = new Set<string>();
 
   // 재귀 파싱 시작 (++name++ 패턴이 있을 때만)
   let result = processedText;
   if (processedText.includes('++')) {
-    result = parseRecursive(processedText, wildcardMap, tool, new Set());
+    result = parseRecursive(processedText, wildcardMap, tool, new Set(), emptyWildcards);
   } else {
     // 와일드카드가 없어도 가중치 문법은 파싱
     result = parseWeightRangeSyntax(processedText);
@@ -230,40 +240,66 @@ export async function parseWildcards(
   if (result !== text) {
     console.log(`[Wildcard] Parsed (${tool}):`, {
       original: text.substring(0, 80),
-      parsed: result.substring(0, 80)
+      parsed: result.substring(0, 80),
+      emptyWildcards: Array.from(emptyWildcards)
     });
   }
 
-  return result;
+  return {
+    text: result,
+    emptyWildcards: Array.from(emptyWildcards)
+  };
+}
+
+/**
+ * 객체 파싱 결과
+ */
+export interface ObjectParseResult {
+  data: any;
+  emptyWildcards: string[];
 }
 
 /**
  * 객체의 모든 문자열 필드를 재귀적으로 파싱
  * @param obj 파싱할 객체
  * @param tool 사용할 도구
- * @returns 파싱된 객체
+ * @returns 파싱된 객체 + 빈 와일드카드 목록
  */
 export async function parseObjectWildcards(
   obj: any,
   tool: 'comfyui' | 'nai'
-): Promise<any> {
-  if (typeof obj === 'string') {
-    return await parseWildcards(obj, tool);
-  }
+): Promise<ObjectParseResult> {
+  const emptyWildcardsSet = new Set<string>();
 
-  if (Array.isArray(obj)) {
-    return Promise.all(obj.map(item => parseObjectWildcards(item, tool)));
-  }
-
-  if (obj && typeof obj === 'object') {
-    const result: any = {};
-    for (const key in obj) {
-      result[key] = await parseObjectWildcards(obj[key], tool);
+  async function parseRecursiveObject(value: any): Promise<any> {
+    if (typeof value === 'string') {
+      const result = await parseWildcards(value, tool);
+      result.emptyWildcards.forEach(w => emptyWildcardsSet.add(w));
+      // 프롬프트 전처리: 빈 문자열과 중복 쉼표 제거
+      return cleanPrompt(result.text);
     }
-    return result;
+
+    if (Array.isArray(value)) {
+      return Promise.all(value.map(item => parseRecursiveObject(item)));
+    }
+
+    if (value && typeof value === 'object') {
+      const result: any = {};
+      for (const key in value) {
+        result[key] = await parseRecursiveObject(value[key]);
+      }
+      return result;
+    }
+
+    return value;
   }
 
-  return obj;
+  const data = await parseRecursiveObject(obj);
+
+  return {
+    data,
+    emptyWildcards: Array.from(emptyWildcardsSet)
+  };
 }
 
 /**

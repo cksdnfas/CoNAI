@@ -336,10 +336,15 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * 와일드카드 삭제
- * DELETE /api/wildcards/:id
+ * DELETE /api/wildcards/:id?cascade=true|false
+ * Query params:
+ *   - cascade: 'true' | 'false' (default: 'false')
+ *     true: 모든 하위 와일드카드도 함께 삭제
+ *     false: 선택한 와일드카드만 삭제하고 자식들을 한 단계 위로 이동
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
+  const cascade = req.query.cascade === 'true';
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -349,7 +354,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    const deleted = WildcardModel.delete(id);
+    const deleted = WildcardModel.delete(id, cascade);
 
     if (!deleted) {
       return res.status(404).json({
@@ -360,7 +365,9 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      message: 'Wildcard deleted successfully'
+      message: cascade
+        ? 'Wildcard and all children deleted successfully'
+        : 'Wildcard deleted successfully'
     });
   } catch (error) {
     console.error('Error deleting wildcard:', error);

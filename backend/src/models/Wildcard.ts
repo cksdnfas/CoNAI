@@ -8,6 +8,7 @@ export interface Wildcard {
   name: string;
   description?: string;
   parent_id: number | null;
+  include_children: number; // 0 or 1: 하위 와일드카드 자동 포함 여부
   created_date: string;
   updated_date: string;
 }
@@ -41,6 +42,7 @@ export interface WildcardCreateData {
   items: ToolItems; // 도구별 항목 배열
   customId?: number; // 자동 LORA용 커스텀 ID (선택적)
   parent_id?: number | null; // 부모 와일드카드 ID
+  include_children?: number; // 하위 와일드카드 자동 포함 여부 (기본값 0)
 }
 
 /**
@@ -51,6 +53,7 @@ export interface WildcardUpdateData {
   description?: string;
   items?: ToolItems; // 도구별 항목 배열
   parent_id?: number | null; // 부모 와일드카드 ID
+  include_children?: number; // 하위 와일드카드 자동 포함 여부
 }
 
 /**
@@ -111,16 +114,16 @@ export class WildcardModel {
       if (data.customId) {
         // 커스텀 ID로 생성 (자동 LORA용)
         db.prepare(`
-          INSERT INTO wildcards (id, name, description, parent_id)
-          VALUES (?, ?, ?, ?)
-        `).run(data.customId, data.name, data.description || null, data.parent_id ?? null);
+          INSERT INTO wildcards (id, name, description, parent_id, include_children)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(data.customId, data.name, data.description || null, data.parent_id ?? null, data.include_children ?? 0);
         wildcardId = data.customId;
       } else {
         // 기본 자동 증가 ID
         const wildcardResult = db.prepare(`
-          INSERT INTO wildcards (name, description, parent_id)
-          VALUES (?, ?, ?)
-        `).run(data.name, data.description || null, data.parent_id ?? null);
+          INSERT INTO wildcards (name, description, parent_id, include_children)
+          VALUES (?, ?, ?, ?)
+        `).run(data.name, data.description || null, data.parent_id ?? null, data.include_children ?? 0);
         wildcardId = wildcardResult.lastInsertRowid as number;
       }
 
@@ -181,6 +184,10 @@ export class WildcardModel {
         updates.push('parent_id = ?');
         params.push(data.parent_id);
       }
+      if (data.include_children !== undefined) {
+        updates.push('include_children = ?');
+        params.push(data.include_children);
+      }
 
       updates.push('updated_date = CURRENT_TIMESTAMP');
       params.push(id);
@@ -235,11 +242,37 @@ export class WildcardModel {
 
   /**
    * 와일드카드 삭제
+   * @param id 삭제할 와일드카드 ID
+   * @param cascade true인 경우 모든 하위 와일드카드도 함께 삭제, false인 경우 자식들의 parent_id를 현재 와일드카드의 parent_id로 변경
    */
-  static delete(id: number): boolean {
+  static delete(id: number, cascade: boolean = false): boolean {
     const db = getUserSettingsDb();
-    const result = db.prepare('DELETE FROM wildcards WHERE id = ?').run(id);
-    return result.changes > 0;
+
+    if (cascade) {
+      // Cascade 삭제: 모든 하위 와일드카드 재귀적으로 삭제
+      const children = db.prepare('SELECT id FROM wildcards WHERE parent_id = ?').all(id) as { id: number }[];
+
+      // 먼저 모든 자식을 재귀적으로 삭제
+      for (const child of children) {
+        this.delete(child.id, true);
+      }
+
+      // 그 다음 자신을 삭제 (wildcard_items는 ON DELETE CASCADE로 자동 삭제됨)
+      const result = db.prepare('DELETE FROM wildcards WHERE id = ?').run(id);
+      return result.changes > 0;
+    } else {
+      // 단일 삭제: 자식들의 parent_id를 현재 와일드카드의 parent_id로 변경
+      const wildcard = this.findById(id);
+      if (!wildcard) return false;
+
+      // 자식들의 parent_id를 현재 와일드카드의 parent_id로 업데이트
+      db.prepare('UPDATE wildcards SET parent_id = ? WHERE parent_id = ?')
+        .run(wildcard.parent_id, id);
+
+      // 현재 와일드카드 삭제
+      const result = db.prepare('DELETE FROM wildcards WHERE id = ?').run(id);
+      return result.changes > 0;
+    }
   }
 
   /**

@@ -137,6 +137,9 @@
       "completed": "Image generation completed",
       "failed": "Image generation failed"
     },
+    "errors": {
+      "emptyPrompt": "Prompt is empty. Cannot generate image."
+    },
     "repeat": {
       "title": "Repeat Execution",
       "enable": "Enable repeat execution",
@@ -153,6 +156,34 @@
       "title": "Generation History",
       "comingSoon": "This feature is coming soon.",
       "description": "View your previously generated images and settings."
+    },
+    "resolution": {
+      "mode": "Resolution Mode",
+      "modeFixed": "Fixed Mode",
+      "modeRandom": "Random Mode",
+      "selectResolution": "Select Resolution",
+      "selectMultiple": "Select Resolutions (Multiple)",
+      "addCustom": "Add Custom",
+      "swapDimensions": "Swap Dimensions",
+      "swapDimensionsDesc": "Swap width and height of selected resolution",
+      "finalResolution": "Final Resolution",
+      "randomPool": "Random Pool",
+      "swapped": "swapped",
+      "randomSwapInfo": "Each resolution has 50% chance to be swapped",
+      "selectAtLeastOne": "Select at least one resolution in random mode",
+      "customDialog": {
+        "addTitle": "Add Custom Resolution",
+        "editTitle": "Edit Custom Resolution",
+        "name": "Name",
+        "namePlaceholder": "e.g., My Resolution",
+        "width": "Width",
+        "height": "Height",
+        "save": "Save",
+        "cancel": "Cancel",
+        "nameRequired": "Name is required",
+        "widthInvalid": "Width must be between 64 and 2048",
+        "heightInvalid": "Height must be between 64 and 2048"
+      }
     },
     "naiSettings": {
       "basic": {

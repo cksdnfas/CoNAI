@@ -52,7 +52,7 @@ export class SettingsService {
         generalThreshold: parseFloat(process.env.TAGGER_GEN_THRESHOLD || '0.35'),
         characterThreshold: parseFloat(process.env.TAGGER_CHAR_THRESHOLD || '0.75'),
         pythonPath: process.env.PYTHON_PATH || 'python',
-        keepModelLoaded: false,    // 기본값: 메모리 유지 안 함
+        keepModelLoaded: true,     // 기본값: 자동 언로드 활성화 (메모리 관리 활성)
         autoUnloadMinutes: 5,      // 기본값: 5분 후 자동 언로드
       },
       similarity: {

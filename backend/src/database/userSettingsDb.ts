@@ -243,6 +243,10 @@ function createTables(): void {
     console.log('  Migrating wildcards: adding parent_id column');
     userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN parent_id INTEGER DEFAULT NULL');
   }
+  if (!hasColumn('wildcards', 'include_children')) {
+    console.log('  Migrating wildcards: adding include_children column');
+    userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN include_children INTEGER DEFAULT 0');
+  }
 
   // Migrate custom_dropdown_lists table
   if (!hasColumn('custom_dropdown_lists', 'is_auto_collected')) {

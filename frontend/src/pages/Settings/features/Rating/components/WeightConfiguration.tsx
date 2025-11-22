@@ -56,80 +56,88 @@ export const WeightConfiguration: React.FC<WeightConfigurationProps> = ({
             <Typography gutterBottom>
               {t('rating.weights.general', { value: getCurrentWeight(weights, localWeights, 'general_weight') })}
             </Typography>
-            <Slider
-              value={getCurrentWeight(weights, localWeights, 'general_weight')}
-              onChange={(_, value) =>
-                onUpdateWeights({ ...localWeights, general_weight: value as number })
-              }
-              min={0}
-              max={100}
-              step={1}
-              marks={[
-                { value: 0, label: '0' },
-                { value: 50, label: '50' },
-                { value: 100, label: '100' },
-              ]}
-            />
+            <Box sx={{ width: '90%', mx: 'auto' }}>
+              <Slider
+                value={getCurrentWeight(weights, localWeights, 'general_weight')}
+                onChange={(_, value) =>
+                  onUpdateWeights({ ...localWeights, general_weight: value as number })
+                }
+                min={0}
+                max={100}
+                step={1}
+                marks={[
+                  { value: 0, label: '0' },
+                  { value: 50, label: '50' },
+                  { value: 100, label: '100' },
+                ]}
+              />
+            </Box>
           </Box>
 
           <Box>
             <Typography gutterBottom>
               {t('rating.weights.sensitive', { value: getCurrentWeight(weights, localWeights, 'sensitive_weight') })}
             </Typography>
-            <Slider
-              value={getCurrentWeight(weights, localWeights, 'sensitive_weight')}
-              onChange={(_, value) =>
-                onUpdateWeights({ ...localWeights, sensitive_weight: value as number })
-              }
-              min={0}
-              max={100}
-              step={1}
-              marks={[
-                { value: 0, label: '0' },
-                { value: 50, label: '50' },
-                { value: 100, label: '100' },
-              ]}
-            />
+            <Box sx={{ width: '90%', mx: 'auto' }}>
+              <Slider
+                value={getCurrentWeight(weights, localWeights, 'sensitive_weight')}
+                onChange={(_, value) =>
+                  onUpdateWeights({ ...localWeights, sensitive_weight: value as number })
+                }
+                min={0}
+                max={100}
+                step={1}
+                marks={[
+                  { value: 0, label: '0' },
+                  { value: 50, label: '50' },
+                  { value: 100, label: '100' },
+                ]}
+              />
+            </Box>
           </Box>
 
           <Box>
             <Typography gutterBottom>
               {t('rating.weights.questionable', { value: getCurrentWeight(weights, localWeights, 'questionable_weight') })}
             </Typography>
-            <Slider
-              value={getCurrentWeight(weights, localWeights, 'questionable_weight')}
-              onChange={(_, value) =>
-                onUpdateWeights({ ...localWeights, questionable_weight: value as number })
-              }
-              min={0}
-              max={100}
-              step={1}
-              marks={[
-                { value: 0, label: '0' },
-                { value: 50, label: '50' },
-                { value: 100, label: '100' },
-              ]}
-            />
+            <Box sx={{ width: '90%', mx: 'auto' }}>
+              <Slider
+                value={getCurrentWeight(weights, localWeights, 'questionable_weight')}
+                onChange={(_, value) =>
+                  onUpdateWeights({ ...localWeights, questionable_weight: value as number })
+                }
+                min={0}
+                max={100}
+                step={1}
+                marks={[
+                  { value: 0, label: '0' },
+                  { value: 50, label: '50' },
+                  { value: 100, label: '100' },
+                ]}
+              />
+            </Box>
           </Box>
 
           <Box>
             <Typography gutterBottom>
               {t('rating.weights.explicit', { value: getCurrentWeight(weights, localWeights, 'explicit_weight') })}
             </Typography>
-            <Slider
-              value={getCurrentWeight(weights, localWeights, 'explicit_weight')}
-              onChange={(_, value) =>
-                onUpdateWeights({ ...localWeights, explicit_weight: value as number })
-              }
-              min={0}
-              max={100}
-              step={1}
-              marks={[
-                { value: 0, label: '0' },
-                { value: 50, label: '50' },
-                { value: 100, label: '100' },
-              ]}
-            />
+            <Box sx={{ width: '90%', mx: 'auto' }}>
+              <Slider
+                value={getCurrentWeight(weights, localWeights, 'explicit_weight')}
+                onChange={(_, value) =>
+                  onUpdateWeights({ ...localWeights, explicit_weight: value as number })
+                }
+                min={0}
+                max={100}
+                step={1}
+                marks={[
+                  { value: 0, label: '0' },
+                  { value: 50, label: '50' },
+                  { value: 100, label: '100' },
+                ]}
+              />
+            </Box>
           </Box>
 
           {/* Preview */}

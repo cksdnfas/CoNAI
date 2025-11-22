@@ -115,7 +115,19 @@
     "model": {
       "label": "模型選擇",
       "loading": "正在載入模型清單...",
-      "downloaded": "已下載"
+      "downloaded": "已下載",
+      "vit": {
+        "label": "ViT (Vision Transformer)",
+        "description": "快速、高精度 - 推薦一般使用"
+      },
+      "swinv2": {
+        "label": "SwinV2 (Swin Transformer V2)",
+        "description": "中速、極高精度 - 需要高精度時使用"
+      },
+      "convnext": {
+        "label": "ConvNeXt",
+        "description": "快速、高精度 - 需要快速處理時使用"
+      }
     },
     "device": {
       "label": "裝置選擇",
@@ -156,8 +168,8 @@
       "cancel": "取消"
     },
     "alerts": {
-      "modelDownloaded": "<strong>{{model}}</strong>模型已下載。",
-      "modelNotDownloaded": "<strong>{{model}}</strong>模型尚未下載。首次使用時將自動下載。",
+      "modelDownloaded": "{{model}}模型已下載。",
+      "modelNotDownloaded": "{{model}}模型尚未下載。首次使用時將自動下載。",
       "modelLoaded": "模型已載入",
       "modelUnloaded": "模型已卸載",
       "loadFailed": "模型載入失敗",
@@ -181,12 +193,12 @@
     },
     "memoryManagement": {
       "title": "記憶體管理",
-      "description": "設定模型的記憶體保留方式。",
-      "keepModelLoaded": "任務後保留模型記憶體",
+      "description": "設定模型的記憶體卸載方式。",
+      "keepModelLoaded": "啟用任務後自動卸載",
       "autoUnloadMinutes": "自動卸載時間: {{minutes}}分鐘",
       "autoUnloadDescription": "最後使用後經過設定時間將自動從記憶體中卸載。",
-      "keepLoadedAlert": "模型將保留在記憶體中。經過設定時間後將自動卸載。",
-      "notKeepLoadedAlert": "模型不會保留在記憶體中。任務開始時自動載入，程式關閉時卸載。"
+      "keepLoadedAlert": "任務後經過設定時間將自動從記憶體中卸載。",
+      "notKeepLoadedAlert": "模型將持續保留在記憶體中。需手動卸載或等待程式關閉才會從記憶體中移除。"
     },
     "batch": {
       "title": "批次作業",
@@ -308,6 +320,23 @@
         "explicitScore": "Explicit: {{score}}分"
       },
       "failed": "分數計算失敗。"
+    },
+    "recalculation": {
+      "title": "重新計算評分",
+      "description": "根據目前權重設定重新計算所有圖像的rating_score。將處理所有包含auto_tags的圖像。",
+      "buttons": {
+        "recalculate": "重新計算所有圖像分數",
+        "processing": "重新計算中..."
+      },
+      "progress": "重新計算進行中... {{current}}/{{total}}",
+      "success": "重新計算完成: 總計{{total}}個，成功{{success}}個，失敗{{failed}}個",
+      "failed": "分數重新計算失敗。",
+      "confirmDialog": {
+        "title": "重新計算評分",
+        "message": "是否重新計算所有圖像的rating_score？此操作可能需要一些時間。",
+        "confirm": "重新計算",
+        "cancel": "取消"
+      }
     }
   },
   "similarity": {

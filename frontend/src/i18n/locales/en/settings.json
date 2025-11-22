@@ -114,7 +114,19 @@
     "model": {
       "label": "Model Selection",
       "loading": "Loading models...",
-      "downloaded": "Downloaded"
+      "downloaded": "Downloaded",
+      "vit": {
+        "label": "ViT (Vision Transformer)",
+        "description": "Fast speed, high accuracy - recommended for general use"
+      },
+      "swinv2": {
+        "label": "SwinV2 (Swin Transformer V2)",
+        "description": "Moderate speed, very high accuracy - for cases requiring high accuracy"
+      },
+      "convnext": {
+        "label": "ConvNeXt",
+        "description": "Fast speed, high accuracy - for cases requiring fast processing"
+      }
     },
     "device": {
       "label": "Device Selection",
@@ -145,6 +157,15 @@
       "label": "Python Executable Path",
       "helper": "Path to Python executable (e.g., python, python3, C:\\Python39\\python.exe)"
     },
+    "memoryManagement": {
+      "title": "Memory Management",
+      "description": "Configure how the model is unloaded from memory.",
+      "keepModelLoaded": "Enable Auto-Unload After Tasks",
+      "autoUnloadMinutes": "Auto-Unload Time: {{minutes}} minutes",
+      "autoUnloadDescription": "Automatically unloads from memory after the configured time since last use.",
+      "keepLoadedAlert": "Model will be automatically unloaded from memory after the configured time.",
+      "notKeepLoadedAlert": "Model will remain in memory. It will stay loaded until manually unloaded or program shutdown."
+    },
     "test": {
       "title": "Test",
       "description": "Test current settings with a specific image.",
@@ -166,7 +187,105 @@
   },
   "rating": {
     "title": "Rating Score Settings",
-    "description": "Configure the image rating score system"
+    "description": "Configure the image rating score system",
+    "weights": {
+      "title": "Weight Configuration",
+      "description": "Configure scoring weights for each rating category.",
+      "general": "General: {{value}}",
+      "sensitive": "Sensitive: {{value}}",
+      "questionable": "Questionable: {{value}}",
+      "explicit": "Explicit: {{value}}",
+      "preview": {
+        "title": "Live Preview (Example Rating: general=0.001, sensitive=0.045, questionable=0.735, explicit=0.470)",
+        "score": "Total Score: <strong>{{score}} points</strong>"
+      },
+      "buttons": {
+        "save": "Save Weights",
+        "cancel": "Cancel",
+        "saving": "Saving..."
+      },
+      "alerts": {
+        "saveSuccess": "Weight settings have been saved.",
+        "saveFailed": "Failed to save weight settings.",
+        "loadFailed": "Failed to load weight settings."
+      }
+    },
+    "tiers": {
+      "title": "Tier Configuration",
+      "description": "Configure rating tiers by score range.",
+      "addButton": "Add Tier",
+      "table": {
+        "order": "Order",
+        "name": "Tier Name",
+        "scoreRange": "Score Range",
+        "color": "Color",
+        "actions": "Actions",
+        "empty": "No tiers. Please add a tier.",
+        "scoreFormat": "{{min}} ~ {{max}} points",
+        "infinity": "∞"
+      },
+      "dialog": {
+        "createTitle": "Add Tier",
+        "editTitle": "Edit Tier",
+        "tierName": "Tier Name",
+        "minScore": "Minimum Score",
+        "maxScore": "Maximum Score (empty = infinity)",
+        "order": "Order",
+        "color": "Color (Hex)",
+        "colorPlaceholder": "#2196f3",
+        "colorHelper": "e.g., #22c55e, #3b82f6, #f59e0b, #ef4444",
+        "save": "Save",
+        "cancel": "Cancel",
+        "saving": "Saving...",
+        "requiredFields": "Please fill in all required fields."
+      },
+      "alerts": {
+        "created": "Tier has been added.",
+        "updated": "Tier has been updated.",
+        "deleted": "Tier has been deleted.",
+        "saveFailed": "Failed to save tier.",
+        "deleteFailed": "Failed to delete tier.",
+        "loadFailed": "Failed to load tier settings.",
+        "deleteConfirm": "Delete this tier?"
+      }
+    },
+    "calculator": {
+      "title": "Score Calculator Test",
+      "description": "Enter rating values to calculate the score.",
+      "general": "General: {{value}}",
+      "sensitive": "Sensitive: {{value}}",
+      "questionable": "Questionable: {{value}}",
+      "explicit": "Explicit: {{value}}",
+      "calculate": "Calculate Score",
+      "calculating": "Calculating...",
+      "result": {
+        "title": "Calculation Result",
+        "score": "Total Score: <strong>{{score}} points</strong>",
+        "breakdown": "Detailed Scores:",
+        "generalScore": "General: {{score}} points",
+        "sensitiveScore": "Sensitive: {{score}} points",
+        "questionableScore": "Questionable: {{score}} points",
+        "explicitScore": "Explicit: {{score}} points"
+      },
+      "failed": "Failed to calculate score."
+    },
+    "recalculation": {
+      "title": "Recalculate Rating Scores",
+      "description": "Recalculate rating_score for all images based on current weight settings. All images with auto_tags will be processed.",
+      "buttons": {
+        "recalculate": "Recalculate All Image Scores",
+        "processing": "Recalculating..."
+      },
+      "progress": "Recalculation in progress... {{current}}/{{total}}",
+      "success": "Recalculation complete: {{success}} succeeded, {{failed}} failed out of {{total}}",
+      "failed": "Failed to recalculate scores.",
+      "confirmDialog": {
+        "title": "Recalculate Rating Scores",
+        "message": "Recalculate rating_score for all images? This may take some time.",
+        "confirm": "Recalculate",
+        "cancel": "Cancel"
+      }
+    }
   },
   "thumbnail": {
     "title": "Thumbnail Settings",

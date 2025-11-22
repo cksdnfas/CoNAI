@@ -1,6 +1,6 @@
 # Release Notes
 
-## Version 2.0.2 (2025-11-21)
+## Version 2.0.2 (2025-11-22)
 
 ### New Features
 - **Civitai Integration**: 이미지 메타데이터의 모델 해시를 기반으로 Civitai API 연동
@@ -9,6 +9,32 @@
   - 모델 썸네일 다운로드
   - Post Intent URL 생성 (Civitai 업로드용)
   - Settings → Civitai 탭에서 설정 및 통계 확인
+
+### Wildcard System Enhancements
+- **계층형 와일드카드 자동 포함**: `include_children` 옵션 추가
+  - 부모 와일드카드 사용 시 하위 항목 자동 병합
+  - 재귀적 수집으로 다단계 계층 지원
+- **삭제 모드 선택**: Cascade/단일 삭제 지원
+  - Cascade: 하위 와일드카드 전체 삭제
+  - 단일: 자식의 parent_id를 부모로 이동
+- **빈 와일드카드 감지**: 파싱 결과에 emptyWildcards 추가
+- **프롬프트 정리**: `cleanPrompt` 유틸리티로 중복 공백/개행 제거
+
+### NovelAI Generator Improvements
+- **다중 해상도 지원**: 랜덤 모드에서 여러 해상도 선택 가능
+- **커스텀 해상도**: 사용자 정의 해상도 추가/삭제 기능
+- **가로세로 전환**: `swapDimensions` 옵션으로 자동 전환
+- **비용 범위 표시**: 다중 해상도 선택 시 최소~최대 비용 표시
+- **해상도 설정 UI**: ResolutionSettings 컴포넌트 분리
+
+### Metadata Extraction
+- **zTXt 청크 지원**: PNG 압축 메타데이터 디코딩 (zlib inflate)
+- **텍스트 정제**: null byte 제거, Unicode NFC 정규화
+- **다국어 호환성**: 한글/일본어/중국어 프롬프트 보존
+
+### ComfyUI Workflow
+- **빈 프롬프트 검사**: `hasEmptyPrompts` 함수로 생성 전 검증
+- **와일드카드 파싱 로그**: 파싱 전후 데이터 디버깅 지원
 
 ---
 
