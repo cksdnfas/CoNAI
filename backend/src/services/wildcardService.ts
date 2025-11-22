@@ -151,7 +151,7 @@ export class WildcardService {
       // 순환 참조 체크
       if (visited.has(name)) {
         console.warn(`Circular reference detected for wildcard: ${name}`);
-        return match; // 원본 그대로 반환
+        return ''; // 순환 참조 시 빈 문자열 반환 (프롬프트에 영향 없음)
       }
 
       // 와일드카드 조회
