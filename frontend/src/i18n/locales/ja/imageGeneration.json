@@ -259,7 +259,7 @@
       "deleteConfirm": "本当にこのリストを削除しますか？",
       "selectFolderError": "モデルフォルダを選択してください。",
       "autoCollectedReadOnly": "自動収集された項目は編集できません。内容の確認のみ可能です。",
-      "selectComfyUIFolder": "ComfyUIのmodelsフォルダを選択してください。\nComfyUIのmodelsフォルダを選択してください。",
+      "selectComfyUIFolder": "ComfyUIのmodelsフォルダを選択してください。",
       "foldersDetected": "{{count}}個のフォルダでモデルファイルが検出されました：",
       "fileCount": "{{count}}ファイル",
       "moreCount": "...他{{count}}個のフォルダ",

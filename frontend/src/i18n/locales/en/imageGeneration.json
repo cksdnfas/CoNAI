@@ -256,7 +256,7 @@
       "deleteConfirm": "Are you sure you want to delete this list?",
       "selectFolderError": "Please select a model folder.",
       "autoCollectedReadOnly": "Auto-collected items cannot be edited. You can only view the content.",
-      "selectComfyUIFolder": "Please select the ComfyUI models folder.\nSelect the models folder from ComfyUI.",
+      "selectComfyUIFolder": "Please select the ComfyUI models folder.",
       "foldersDetected": "Model files detected in {{count}} folder(s):",
       "fileCount": "{{count}} files",
       "moreCount": "...and {{count}} more folders",

@@ -39,7 +39,17 @@ export const useInfiniteImages = () => {
 
   // 모든 페이지의 이미지를 하나의 배열로 병합
   const images = useMemo(() => {
-    return data?.pages.flatMap(page => page.images) ?? [];
+    const result = data?.pages.flatMap(page => page.images) ?? [];
+
+    // 🔍 Debug: Log received data
+    if (result.length > 0) {
+      console.log('🔍 [useInfiniteImages] First 3 images received:');
+      result.slice(0, 3).forEach((img, idx) => {
+        console.log(`  [${idx}] id=${img.id}, hash=${img.composite_hash?.substring(0, 8)}, path=${img.original_file_path}`);
+      });
+    }
+
+    return result;
   }, [data]);
 
   // 로딩 상태

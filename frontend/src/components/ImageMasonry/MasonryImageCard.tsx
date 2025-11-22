@@ -39,15 +39,15 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
 
     // Debug logging for rating_score
     if (Math.random() < 0.05) {  // Log 5% of images to avoid spam
-      console.log('[MasonryImageCard] Rating debug:', {
-        composite_hash: image.composite_hash,
-        rating_score: image.rating_score,
-        rating_score_type: typeof image.rating_score,
-        has_auto_tags: !!image.auto_tags,
-        tier_found: !!tier,
-        tier_name: tier?.tier_name,
-        will_show_badge: !!(tier && image.rating_score !== null && image.rating_score !== undefined),
-      });
+      // console.log('[MasonryImageCard] Rating debug:', {
+      //   composite_hash: image.composite_hash,
+      //   rating_score: image.rating_score,
+      //   rating_score_type: typeof image.rating_score,
+      //   has_auto_tags: !!image.auto_tags,
+      //   tier_found: !!tier,
+      //   tier_name: tier?.tier_name,
+      //   will_show_badge: !!(tier && image.rating_score !== null && image.rating_score !== undefined),
+      // });
     }
     return tier;
   }, [image.rating_score, image.composite_hash, image.auto_tags, getTierByScore]);
@@ -75,11 +75,11 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
 
   const handleSelectionChange = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    console.log('[MasonryImageCard] Selection clicked:', {
-      imageId: image.id,
-      hasCallback: !!onSelectionChange,
-      selectable
-    });
+    // console.log('[MasonryImageCard] Selection clicked:', {
+    //   imageId: image.id,
+    //   hasCallback: !!onSelectionChange,
+    //   selectable
+    // });
     if (onSelectionChange && image.id) {
       onSelectionChange(image.id, e);
     }

@@ -210,6 +210,89 @@ export class DeletionService {
   }
 
   /**
+   * file_id 기반 개별 파일 삭제 (중복 파일 개별 삭제 지원)
+   *
+   * - 지정된 file_id의 파일만 정확히 삭제
+   * - 물리 파일을 RecycleBin으로 이동 또는 완전 삭제
+   * - 해당 composite_hash의 마지막 파일이면 메타데이터도 정리
+   *
+   * @param fileId - 삭제할 image_files.id
+   * @returns 삭제 성공 여부
+   */
+  static async deleteImageFile(fileId: number): Promise<boolean> {
+    console.log(`🔍 Starting deleteImageFile for file_id: ${fileId}`);
+
+    // 1. 파일 정보 조회
+    const file = ImageFileModel.findById(fileId);
+    if (!file) {
+      console.warn(`⚠️ File not found: ${fileId}`);
+      return false;
+    }
+
+    const { composite_hash, original_file_path } = file;
+    console.log(`📁 File info: ${original_file_path}`);
+
+    // 2. RecycleBin 설정 확인
+    const settings = settingsService.loadSettings();
+    const useRecycleBin = settings.general.deleteProtection.enabled;
+    const recycleBinPath = settings.general.deleteProtection.recycleBinPath || runtimePaths.recycleBinDir;
+
+    console.log(`🗑️ Deleting file_id ${fileId}: {
+  path: ${original_file_path},
+  composite_hash: ${composite_hash},
+  useRecycleBin: ${useRecycleBin},
+  recycleBinPath: ${recycleBinPath}
+}`);
+
+    // 3. 물리 파일 삭제 (RecycleBin 또는 완전 삭제)
+    try {
+      await this.deletePhysicalFile(original_file_path, useRecycleBin);
+      console.log(`✅ Physical file deleted: ${original_file_path}`);
+    } catch (error) {
+      console.error(`❌ Failed to delete physical file: ${original_file_path}`, error);
+      // 물리 파일 삭제 실패해도 DB는 정리 (파일이 이미 없을 수도 있음)
+    }
+
+    // 4. image_files 테이블에서 삭제
+    db.prepare('DELETE FROM image_files WHERE id = ?').run(fileId);
+    console.log(`✅ Deleted image_file record: ${fileId}`);
+
+    // 5. 같은 composite_hash의 남은 파일 확인
+    if (composite_hash) {
+      const remainingFiles = ImageFileModel.findActiveByHash(composite_hash);
+
+      if (remainingFiles.length === 0) {
+        // 마지막 파일 삭제됨 → 메타데이터 정리
+        console.log(`⚠️ Last file deleted - cleaning up metadata for ${composite_hash}`);
+
+        const metadata = MediaMetadataModel.findByHash(composite_hash);
+        if (metadata) {
+          // 프롬프트 수집에서 제거
+          await this.cleanupPromptCollection(metadata.prompt, metadata.negative_prompt);
+
+          // 썸네일 삭제
+          if (metadata.thumbnail_path) {
+            try {
+              await this.deletePhysicalFile(metadata.thumbnail_path, useRecycleBin);
+            } catch (error) {
+              console.warn(`⚠️ Failed to delete thumbnail (non-critical)`);
+            }
+          }
+
+          // 메타데이터 삭제
+          MediaMetadataModel.delete(composite_hash);
+          console.log(`✅ Metadata cleaned up for ${composite_hash}`);
+        }
+      } else {
+        console.log(`📋 ${remainingFiles.length} file(s) remaining with same hash - keeping metadata`);
+      }
+    }
+
+    console.log(`✅ File ${fileId} deleted successfully`);
+    return true;
+  }
+
+  /**
    * 생성 히스토리만 삭제
    *
    * @param historyId - 삭제할 히스토리 ID

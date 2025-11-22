@@ -259,7 +259,7 @@
       "deleteConfirm": "確定要刪除此清單嗎？",
       "selectFolderError": "請選擇模型資料夾。",
       "autoCollectedReadOnly": "自動收集的項目無法編輯。您只能檢視內容。",
-      "selectComfyUIFolder": "請選擇ComfyUI的models資料夾。\n選擇ComfyUI的models資料夾。",
+      "selectComfyUIFolder": "請選擇ComfyUI的models資料夾。",
       "foldersDetected": "在{{count}}個資料夾中偵測到模型檔案：",
       "fileCount": "{{count}}個檔案",
       "moreCount": "...還有{{count}}個資料夾",

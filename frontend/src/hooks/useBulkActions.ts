@@ -5,15 +5,15 @@ export const useBulkActions = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ✅ composite_hash 기반으로 변경
-  const deleteImages = useCallback(async (compositeHashes: string[]): Promise<boolean> => {
-    if (compositeHashes.length === 0) return false;
+  // ✅ file_id 기반 삭제 (중복 파일 개별 삭제 지원)
+  const deleteImages = useCallback(async (fileIds: number[]): Promise<boolean> => {
+    if (fileIds.length === 0) return false;
 
     setLoading(true);
     setError(null);
 
     try {
-      const result = await imageApi.deleteImages(compositeHashes);
+      const result = await imageApi.deleteImageFiles(fileIds);
 
       if (!result.success) {
         setError(result.error || '이미지 삭제에 실패했습니다.');

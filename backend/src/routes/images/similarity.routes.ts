@@ -426,88 +426,21 @@ router.delete('/files/bulk', asyncHandler(async (req: Request, res: Response) =>
     return res.status(400).json(errorResponse('All fileIds must be valid numbers'));
   }
 
-  const { settingsService } = await import('../../services/settingsService');
-  const { deleteFile: recycleBinDeleteFile } = await import('../../utils/recycleBin');
-  const { ImageFileModel } = await import('../../models/Image/ImageFileModel');
-  const { MediaMetadataModel } = await import('../../models/Image/MediaMetadataModel');
-  const fs = await import('fs');
-
-  const settings = settingsService.loadSettings();
-  const useRecycleBin = settings.general.deleteProtection.enabled;
+  const { DeletionService } = await import('../../services/deletionService');
 
   const deletedFiles: number[] = [];
   const failedFiles: Array<{ fileId: number; error: string }> = [];
-  const orphanedHashes: string[] = [];
 
-  console.log(`🗑️ Starting bulk file deletion: ${validFileIds.length} files, RecycleBin: ${useRecycleBin}`);
+  console.log(`🗑️ Starting bulk file deletion: ${validFileIds.length} files`);
 
   for (const fileId of validFileIds) {
     try {
-      // Get file info
-      const fileRecord = ImageFileModel.findById(fileId);
+      const success = await DeletionService.deleteImageFile(fileId);
 
-      if (!fileRecord) {
-        failedFiles.push({ fileId, error: 'File not found' });
-        continue;
-      }
-
-      const filePath = path.join(UPLOAD_BASE_PATH, fileRecord.original_file_path);
-      const compositeHash = fileRecord.composite_hash;
-
-      // Delete physical file with RecycleBin support
-      if (fs.existsSync(filePath)) {
-        try {
-          await recycleBinDeleteFile(filePath, useRecycleBin);
-          console.log(`✅ Physical file deleted: ${filePath}`);
-        } catch (fsError) {
-          const errorMessage = fsError instanceof Error ? fsError.message : 'File deletion failed';
-          console.error(`❌ Failed to delete physical file: ${filePath}`, fsError);
-          failedFiles.push({ fileId, error: errorMessage });
-          continue;
-        }
-      } else {
-        console.warn(`⚠️ Physical file not found (continuing): ${filePath}`);
-      }
-
-      // Delete from database
-      const deleted = ImageFileModel.delete(fileId);
-
-      if (deleted) {
+      if (success) {
         deletedFiles.push(fileId);
-        console.log(`✅ DB record deleted: file_id ${fileId}`);
-
-        // Check if this was the last file with this composite_hash
-        if (compositeHash) {
-          const remainingFiles = ImageFileModel.findActiveByHash(compositeHash);
-
-          if (remainingFiles.length === 0) {
-            // Delete orphaned metadata and thumbnail
-            const metadata = MediaMetadataModel.findByHash(compositeHash);
-
-            if (metadata) {
-              // Delete thumbnail if exists
-              if (metadata.thumbnail_path) {
-                const thumbnailPath = path.join(UPLOAD_BASE_PATH, metadata.thumbnail_path);
-                if (fs.existsSync(thumbnailPath)) {
-                  try {
-                    // Thumbnails are always deleted immediately (can be regenerated)
-                    await recycleBinDeleteFile(thumbnailPath, false);
-                    console.log(`✅ Thumbnail deleted: ${thumbnailPath}`);
-                  } catch (error) {
-                    console.warn(`⚠️ Failed to delete thumbnail: ${thumbnailPath}`, error);
-                  }
-                }
-              }
-
-              // Delete metadata record
-              MediaMetadataModel.delete(compositeHash);
-              orphanedHashes.push(compositeHash);
-              console.log(`✅ Orphaned metadata cleaned up: ${compositeHash}`);
-            }
-          }
-        }
       } else {
-        failedFiles.push({ fileId, error: 'Failed to delete from database' });
+        failedFiles.push({ fileId, error: 'File not found' });
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -522,7 +455,6 @@ router.delete('/files/bulk', asyncHandler(async (req: Request, res: Response) =>
     message: `Deleted ${deletedFiles.length} files${failedFiles.length > 0 ? `, ${failedFiles.length} failed` : ''}`,
     deletedFiles,
     failedFiles: failedFiles.length > 0 ? failedFiles : undefined,
-    orphanedMetadataRemoved: orphanedHashes.length,
     total: fileIds.length
   }));
 }));

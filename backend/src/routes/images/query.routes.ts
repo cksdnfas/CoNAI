@@ -48,8 +48,20 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
       sortOrder
     });
 
+    // 🔍 Debug: Log query result
+    console.log('🔍 [QueryRoutes] Query result - first 3 records:');
+    result.items.slice(0, 3).forEach((item, idx) => {
+      console.log(`  [${idx}] file_id=${item.id}, hash=${item.composite_hash?.substring(0, 8)}, path=${item.original_file_path}`);
+    });
+
     // URL 추가
     const enrichedImages = result.items.map(enrichImageWithFileView);
+
+    // 🔍 Debug: Log enriched result
+    console.log('🔍 [QueryRoutes] Enriched result - first 3 records:');
+    enrichedImages.slice(0, 3).forEach((item, idx) => {
+      console.log(`  [${idx}] file_id=${item.id}, hash=${item.composite_hash?.substring(0, 8)}, path=${item.original_file_path}`);
+    });
 
     // Debug: Log first image's rating_score
     if (enrichedImages.length > 0) {

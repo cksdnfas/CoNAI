@@ -32,7 +32,7 @@ interface BulkActionBarProps {
 
 const BulkActionBar: React.FC<BulkActionBarProps> = ({
   selectedCount,
-  selectedIds: _selectedIds,
+  selectedIds,
   selectedImages = [],
   onSelectionClear,
   onActionComplete,
@@ -72,16 +72,16 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
       return;
     }
 
-    // selectedImages에서 composite_hash 추출 (메타데이터 작업용)
-    const compositeHashes = selectedImages
-      .map(img => img.composite_hash)
-      .filter((hash): hash is string => hash !== null);
-
-    const success = await deleteImages(compositeHashes);
+    // ✅ selectedIds (file_id 배열) 직접 사용 - 중복 파일 개별 삭제 지원
+    const success = await deleteImages(selectedIds);
     if (success) {
-      // 삭제된 composite_hash를 전달하여 선택에서 제거
+      // 삭제된 이미지의 composite_hash 목록 전달 (선택 해제용)
+      const deletedHashes = selectedImages
+        .map(img => img.composite_hash)
+        .filter((hash): hash is string => hash !== null);
+
       if (onActionComplete) {
-        onActionComplete(compositeHashes);
+        onActionComplete(deletedHashes);
       }
     }
   };

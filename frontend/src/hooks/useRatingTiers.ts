@@ -28,12 +28,12 @@ export function useRatingTiers(): UseRatingTiersReturn {
       // Sort by tier_order for consistent lookup
       const sortedTiers = [...tiersData].sort((a, b) => a.tier_order - b.tier_order);
       setTiers(sortedTiers);
-      console.log('[useRatingTiers] Loaded tiers:', sortedTiers.map(t => ({
-        name: t.tier_name,
-        min: t.min_score,
-        max: t.max_score,
-        color: t.color
-      })));
+      // console.log('[useRatingTiers] Loaded tiers:', sortedTiers.map(t => ({
+      //   name: t.tier_name,
+      //   min: t.min_score,
+      //   max: t.max_score,
+      //   color: t.color
+      // })));
     } catch (err) {
       console.error('[useRatingTiers] Error fetching tiers:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');

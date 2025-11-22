@@ -259,7 +259,7 @@
       "deleteConfirm": "确定要删除此列表吗？",
       "selectFolderError": "请选择模型文件夹。",
       "autoCollectedReadOnly": "自动收集的项目无法编辑。您只能查看内容。",
-      "selectComfyUIFolder": "请选择ComfyUI的models文件夹。\n选择ComfyUI的models文件夹。",
+      "selectComfyUIFolder": "请选择ComfyUI的models文件夹。",
       "foldersDetected": "在{{count}}个文件夹中检测到模型文件：",
       "fileCount": "{{count}}个文件",
       "moreCount": "...还有{{count}}个文件夹",
