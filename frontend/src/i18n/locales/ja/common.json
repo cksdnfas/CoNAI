@@ -72,14 +72,18 @@
       "download": "ダウンロード",
       "addToGroup": "グループに追加",
       "delete": "削除",
-      "clearSelection": "選択解除"
+      "clearSelection": "選択解除",
+      "batchTag": "一括タグ生成"
     },
     "confirmDelete": {
       "mixed": "選択された{{count}}個のファイル（画像/動画）を削除しますか？",
       "images": "選択された{{count}}個の画像を削除しますか？",
       "videos": "選択された{{count}}個の動画を削除しますか？",
       "files": "選択された{{count}}個のファイルを削除しますか？"
-    }
+    },
+    "confirmBatchTag": "選択された{{count}}個の画像にタグを生成しますか？",
+    "batchTagSuccess": "{{count}}個の画像のタグ生成が完了しました",
+    "batchTagError": "バッチタグ生成中にエラーが発生しました"
   },
   "pagination": {
     "perPage": "ページあたり",

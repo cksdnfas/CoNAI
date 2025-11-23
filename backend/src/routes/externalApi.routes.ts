@@ -172,6 +172,18 @@ router.patch('/providers/:name/toggle', asyncHandler(async (req: Request, res: R
     return;
   }
 
+  // 활성화하려는 경우, API 키가 있는지 확인
+  if (is_enabled) {
+    const apiKey = ExternalApiProvider.getDecryptedKey(name);
+    if (!apiKey) {
+      res.status(400).json({
+        success: false,
+        error: 'Cannot enable provider without API key. Please add an API key first.'
+      });
+      return;
+    }
+  }
+
   const updated = ExternalApiProvider.toggleEnabled(name, is_enabled);
 
   if (!updated) {

@@ -72,14 +72,18 @@
       "download": "下載",
       "addToGroup": "加入群組",
       "delete": "刪除",
-      "clearSelection": "取消選擇"
+      "clearSelection": "取消選擇",
+      "batchTag": "批次標籤產生"
     },
     "confirmDelete": {
       "mixed": "確定要刪除選取的{{count}}個檔案（圖片/影片）嗎？",
       "images": "確定要刪除選取的{{count}}張圖片嗎？",
       "videos": "確定要刪除選取的{{count}}個影片嗎？",
       "files": "確定要刪除選取的{{count}}個檔案嗎？"
-    }
+    },
+    "confirmBatchTag": "為選取的{{count}}張圖片產生標籤？",
+    "batchTagSuccess": "已成功為{{count}}張圖片產生標籤",
+    "batchTagError": "批次標籤產生時發生錯誤"
   },
   "pagination": {
     "perPage": "每頁",

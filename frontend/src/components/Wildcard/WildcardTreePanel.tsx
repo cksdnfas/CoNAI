@@ -144,7 +144,7 @@ export function WildcardTreePanel({
             />
           ))
         ) : (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200, p: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400, p: 2 }}>
             <Typography variant="body2" color="text.secondary">
               {emptyMessage || t('wildcards:page.noWildcards')}
             </Typography>

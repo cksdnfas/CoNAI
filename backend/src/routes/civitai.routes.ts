@@ -266,10 +266,15 @@ router.get('/temp-image/:token', asyncHandler(async (req: Request, res: Response
 
   // Get image path from database
   const imageData = db.prepare(`
-    SELECT original_path FROM media_metadata WHERE composite_hash = ?
-  `).get(tempUrl.composite_hash) as { original_path: string } | undefined;
+    SELECT if.original_file_path
+    FROM image_files if
+    WHERE if.composite_hash = ?
+      AND if.file_status = 'active'
+    ORDER BY if.last_verified_date DESC
+    LIMIT 1
+  `).get(tempUrl.composite_hash) as { original_file_path: string } | undefined;
 
-  if (!imageData || !imageData.original_path) {
+  if (!imageData || !imageData.original_file_path) {
     res.status(404).json({
       success: false,
       error: 'Image file not found'
@@ -277,7 +282,7 @@ router.get('/temp-image/:token', asyncHandler(async (req: Request, res: Response
     return;
   }
 
-  const imagePath = imageData.original_path;
+  const imagePath = imageData.original_file_path;
 
   if (!fs.existsSync(imagePath)) {
     res.status(404).json({

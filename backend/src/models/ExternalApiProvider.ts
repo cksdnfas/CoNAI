@@ -105,6 +105,15 @@ export class ExternalApiProvider {
       ? JSON.stringify(input.additional_config)
       : null;
 
+    // API 키가 없으면 기본적으로 비활성화 상태로 생성
+    let isEnabled: number;
+    if (input.is_enabled !== undefined) {
+      isEnabled = input.is_enabled ? 1 : 0;
+    } else {
+      // API 키가 있으면 활성화, 없으면 비활성화
+      isEnabled = encryptedKey ? 1 : 0;
+    }
+
     const result = db.prepare(`
       INSERT INTO external_api_providers (
         provider_name,
@@ -122,7 +131,7 @@ export class ExternalApiProvider {
       encryptedSecret,
       input.base_url || null,
       additionalConfig,
-      input.is_enabled !== undefined ? (input.is_enabled ? 1 : 0) : 1
+      isEnabled
     );
 
     return result.lastInsertRowid as number;

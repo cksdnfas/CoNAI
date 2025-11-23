@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import sharp from 'sharp';
 import { ExternalApiProvider } from '../models/ExternalApiProvider';
 import { ModelInfo, CreateModelInfoInput } from '../models/ModelInfo';
 import { ImageModel } from '../models/ImageModel';
@@ -127,6 +128,8 @@ export class CivitaiService {
 
   /**
    * 썸네일 다운로드
+   * - 이미지: WebP 포맷으로 변환 (90% 품질, 원본 사이즈)
+   * - 비디오: 원본 그대로 저장
    */
   static async downloadThumbnail(url: string, hash: string): Promise<string | null> {
     try {
@@ -138,16 +141,52 @@ export class CivitaiService {
       }
 
       const buffer = Buffer.from(await response.arrayBuffer());
-      const ext = url.includes('.png') ? '.png' : '.jpg';
-      const filename = `${hash.toUpperCase()}${ext}`;
-      const filepath = path.join(this.thumbnailDir, filename);
+      const contentType = response.headers.get('content-type') || '';
 
-      fs.writeFileSync(filepath, buffer);
-      console.log(`[Civitai] Thumbnail saved: ${filepath}`);
+      // 비디오 타입 체크
+      const isVideo = contentType.startsWith('video/');
 
-      return filepath;
+      if (isVideo) {
+        // 비디오는 원본 그대로 저장
+        const ext = this.getExtensionFromUrl(url) || '.mp4';
+        const filename = `${hash.toUpperCase()}${ext}`;
+        const filepath = path.join(this.thumbnailDir, filename);
+
+        fs.writeFileSync(filepath, buffer);
+        console.log(`[Civitai] Video thumbnail saved: ${filepath}`);
+
+        return filepath;
+      } else {
+        // 이미지는 WebP로 변환 (90% 품질, 원본 사이즈)
+        const filename = `${hash.toUpperCase()}.webp`;
+        const filepath = path.join(this.thumbnailDir, filename);
+
+        await sharp(buffer)
+          .webp({
+            quality: 90,
+            effort: 4
+          })
+          .toFile(filepath);
+
+        console.log(`[Civitai] Image thumbnail converted to WebP: ${filepath}`);
+
+        return filepath;
+      }
     } catch (error) {
       console.error('[Civitai] Thumbnail download failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * URL에서 파일 확장자 추출
+   */
+  private static getExtensionFromUrl(url: string): string | null {
+    try {
+      const urlPath = new URL(url).pathname;
+      const match = urlPath.match(/\.(mp4|webm|mov|avi)$/i);
+      return match ? match[0] : null;
+    } catch {
       return null;
     }
   }

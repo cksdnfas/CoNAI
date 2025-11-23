@@ -72,14 +72,18 @@
       "download": "다운로드",
       "addToGroup": "그룹에 추가",
       "delete": "삭제",
-      "clearSelection": "선택 해제"
+      "clearSelection": "선택 해제",
+      "batchTag": "일괄 태그 생성"
     },
     "confirmDelete": {
       "mixed": "선택된 {{count}}개 파일(이미지/비디오)을 삭제하시겠습니까?",
       "images": "선택된 {{count}}개 이미지를 삭제하시겠습니까?",
       "videos": "선택된 {{count}}개 비디오를 삭제하시겠습니까?",
       "files": "선택된 {{count}}개 파일을 삭제하시겠습니까?"
-    }
+    },
+    "confirmBatchTag": "선택된 {{count}}개 이미지에 태그를 생성하시겠습니까?",
+    "batchTagSuccess": "{{count}}개 이미지 태그 생성 완료",
+    "batchTagError": "배치 태그 생성 중 오류가 발생했습니다"
   },
   "pagination": {
     "perPage": "페이지당",

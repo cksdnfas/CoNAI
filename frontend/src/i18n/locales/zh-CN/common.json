@@ -72,14 +72,18 @@
       "download": "下载",
       "addToGroup": "添加到组",
       "delete": "删除",
-      "clearSelection": "取消选择"
+      "clearSelection": "取消选择",
+      "batchTag": "批量标签生成"
     },
     "confirmDelete": {
       "mixed": "确定要删除选中的{{count}}个文件（图片/视频）吗？",
       "images": "确定要删除选中的{{count}}张图片吗？",
       "videos": "确定要删除选中的{{count}}个视频吗？",
       "files": "确定要删除选中的{{count}}个文件吗？"
-    }
+    },
+    "confirmBatchTag": "为选中的{{count}}张图片生成标签？",
+    "batchTagSuccess": "已成功为{{count}}张图片生成标签",
+    "batchTagError": "批量标签生成时发生错误"
   },
   "pagination": {
     "perPage": "每页",

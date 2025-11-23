@@ -72,14 +72,18 @@
       "download": "Download",
       "addToGroup": "Add to Group",
       "delete": "Delete",
-      "clearSelection": "Clear Selection"
+      "clearSelection": "Clear Selection",
+      "batchTag": "Batch Tag Generation"
     },
     "confirmDelete": {
       "mixed": "Are you sure you want to delete {{count}} files (images/videos)?",
       "images": "Are you sure you want to delete {{count}} images?",
       "videos": "Are you sure you want to delete {{count}} videos?",
       "files": "Are you sure you want to delete {{count}} files?"
-    }
+    },
+    "confirmBatchTag": "Generate tags for {{count}} selected images?",
+    "batchTagSuccess": "Successfully generated tags for {{count}} images",
+    "batchTagError": "An error occurred during batch tag generation"
   },
   "pagination": {
     "perPage": "per page",

@@ -39,7 +39,7 @@ import { ImageDisplay } from './components/ImageDisplay';
 import { ImageDetailSidebar } from './components/ImageDetailSidebar';
 import { ImageEditorModal } from '../ImageEditorModal';
 import { CivitaiUploadModal } from '../CivitaiUploadModal';
-import { civitaiApi } from '../../services/civitaiApi';
+import { externalApiApi } from '../../services/externalApiApi';
 
 // ✅ composite_hash 기반으로 변경
 interface ImageViewerModalProps {
@@ -120,12 +120,17 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const [settings, civitaiSettings] = await Promise.all([
+        const [settings, civitaiProvider] = await Promise.all([
           settingsApi.getSettings(),
-          civitaiApi.getSettings()
+          externalApiApi.getProvider('civitai').catch(() => null)
         ]);
         setIsTaggerEnabled(settings.tagger.enabled);
-        setIsCivitaiEnabled(civitaiSettings.enabled);
+        // Civitai 아이콘은 외부 API에 Civitai가 활성화되고 API 키가 있을 때만 표시
+        setIsCivitaiEnabled(
+          !!civitaiProvider &&
+          civitaiProvider.is_enabled &&
+          civitaiProvider.api_key_masked !== '********'
+        );
       } catch (err) {
         console.error('Failed to load settings:', err);
         setIsTaggerEnabled(false);
