@@ -8,8 +8,8 @@
     "servers": "伺服器管理",
     "novelai": "NovelAI",
     "ariaLabel": "圖片產生分頁",
-    "comfyui": "[zh-TW] ComfyUI",
-    "wildcards": "[zh-TW] Wildcards"
+    "comfyui": "ComfyUI",
+    "wildcards": "萬用字元"
   },
   "nai": {
     "subtabs": {
@@ -131,87 +131,92 @@
       }
     },
     "tabs": {
-      "basic": "[zh-TW] Basic Settings",
-      "advanced": "[zh-TW] Advanced Settings"
+      "basic": "基本設定",
+      "advanced": "進階設定"
     },
     "sections": {
-      "preset": "[zh-TW] Quality Presets",
-      "prompts": "[zh-TW] Prompts",
-      "output": "[zh-TW] Output Settings",
-      "advanced": "[zh-TW] Advanced Settings",
-      "sampling": "[zh-TW] Sampling Settings",
-      "quality": "[zh-TW] Quality Settings",
-      "model": "[zh-TW] Model Selection"
+      "preset": "品質預設",
+      "prompts": "提示詞",
+      "output": "輸出設定",
+      "advanced": "進階設定",
+      "sampling": "採樣設定",
+      "quality": "品質設定",
+      "model": "模型選擇"
     },
     "anlas": {
-      "balance": "[zh-TW] Anlas Balance",
+      "balance": "Anlas餘額",
       "refresh": "重新整理",
-      "subscription": "[zh-TW] Subscription",
-      "free": "[zh-TW] Free",
-      "tablet": "[zh-TW] Tablet",
-      "scroll": "[zh-TW] Scroll",
-      "opus": "[zh-TW] Opus"
+      "subscription": "訂閱",
+      "free": "免費",
+      "tablet": "Tablet",
+      "scroll": "Scroll",
+      "opus": "Opus"
     },
     "cost": {
-      "title": "[zh-TW] Cost Estimate",
-      "anlas": "[zh-TW] Anlas",
-      "balance": "[zh-TW] Balance",
-      "sufficient": "[zh-TW] Sufficient",
-      "insufficient": "[zh-TW] Insufficient",
-      "opusFree": "[zh-TW] Opus Free Generation",
-      "maxSamples": "[zh-TW] Max Samples"
+      "title": "費用估算",
+      "anlas": "Anlas",
+      "balance": "餘額",
+      "sufficient": "充足",
+      "insufficient": "不足",
+      "opusFree": "Opus免費產生",
+      "maxSamples": "最大樣本數"
     },
     "models": {
-      "label": "[zh-TW] Model Selection",
-      "v45curated": "[zh-TW] V4.5 Curated (Recommended)",
-      "v45full": "[zh-TW] V4.5 Full",
-      "v4curated": "[zh-TW] V4 Curated",
-      "v4full": "[zh-TW] V4 Full",
-      "v3": "[zh-TW] V3 (Legacy)",
-      "v3furry": "[zh-TW] V3 Furry"
+      "label": "模型選擇",
+      "v45curated": "V4.5 Curated（推薦）",
+      "v45full": "V4.5 Full",
+      "v4curated": "V4 Curated",
+      "v4full": "V4 Full",
+      "v3": "V3（舊版）",
+      "v3furry": "V3 Furry"
     },
     "advanced": {
-      "cfgRescale": "[zh-TW] Prompt Guidance Rescale",
-      "noiseSchedule": "[zh-TW] Noise Schedule",
-      "uncondScale": "[zh-TW] Undesired Content Strength"
+      "cfgRescale": "提示引導重縮放",
+      "noiseSchedule": "雜訊時序",
+      "uncondScale": "非期望內容強度"
     },
     "settings": {
-      "qualityToggle": "[zh-TW] Auto-add quality tags"
+      "qualityToggle": "自動新增品質標籤"
     },
     "presets": {
-      "title": "[zh-TW] Quality Presets",
-      "label": "[zh-TW] Quality Presets",
+      "title": "品質預設",
+      "label": "品質預設",
       "quality": {
-        "name": "[zh-TW] Quality",
-        "description": "[zh-TW] Balanced quality and speed (28 steps, Euler)"
+        "name": "品質",
+        "description": "平衡品質與速度（28步，Euler）"
       },
       "fast": {
-        "name": "[zh-TW] Fast",
-        "description": "[zh-TW] Quick generation (15 steps, Euler)"
+        "name": "快速",
+        "description": "快速產生（15步，Euler）"
       },
       "artistic": {
-        "name": "[zh-TW] Artistic",
-        "description": "[zh-TW] Creative results (35 steps, DPM++ 2S Ancestral, SMEA DYN)"
+        "name": "藝術",
+        "description": "創意結果（35步，DPM++ 2S Ancestral，SMEA DYN）"
       },
       "realistic": {
-        "name": "[zh-TW] Realistic",
-        "description": "[zh-TW] Realistic images (40 steps, DPM++ 2M, SMEA)"
+        "name": "寫實",
+        "description": "寫實圖片（40步，DPM++ 2M，SMEA）"
       },
       "detail": {
-        "name": "[zh-TW] Detail",
-        "description": "[zh-TW] Maximum detail (50 steps, DPM++ SDE, SMEA DYN)"
+        "name": "細節",
+        "description": "最大化細節（50步，DPM++ SDE，SMEA DYN）"
       }
     },
     "gallery": {
-      "images": "[zh-TW] Images",
-      "showMetadata": "[zh-TW] Show Metadata",
-      "hideMetadata": "[zh-TW] Hide Metadata",
-      "downloadAll": "[zh-TW] Download All"
+      "images": "圖片",
+      "showMetadata": "顯示中繼資料",
+      "hideMetadata": "隱藏中繼資料",
+      "downloadAll": "下載全部"
     },
     "history": {
-      "title": "[zh-TW] Generation History",
-      "comingSoon": "[zh-TW] This feature is coming soon.",
-      "description": "[zh-TW] View your previously generated images and settings."
+      "title": "產生歷史",
+      "comingSoon": "此功能即將推出。",
+      "description": "檢視先前產生的圖片和設定。"
+    },
+    "groupSelector": {
+      "title": "群組分配",
+      "selectButton": "選擇群組",
+      "description": "生成的圖像將自動加入所選群組"
     }
   },
   "customDropdown": {

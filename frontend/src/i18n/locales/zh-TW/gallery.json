@@ -32,33 +32,33 @@
   "chips": {
     "aiToolLabel": "AI 工具: {{tool}}"
   },
-  "selectAllLabel": "[zh-TW] Select All ({{selected}}/{{total}})",
-  "totalImages": "[zh-TW] Total {{count}} images",
+  "selectAllLabel": "全選 ({{selected}}/{{total}})",
+  "totalImages": "共 {{count}} 張圖像",
   "imageGridModal": {
-    "title": "[zh-TW] Image Grid"
+    "title": "圖像網格"
   },
   "selection": {
-    "toggleMode": "[zh-TW] Deactivate Selection Mode",
-    "activateMode": "[zh-TW] Activate Selection Mode",
-    "selectedImages": "[zh-TW] Selected Images:",
-    "selectAll": "[zh-TW] Select All",
-    "deselectAll": "[zh-TW] Deselect All",
-    "selectAllWithCount": "[zh-TW] Select All ({{selected}}/{{total}})",
+    "toggleMode": "停用選擇模式",
+    "activateMode": "啟用選擇模式",
+    "selectedImages": "已選擇的圖像:",
+    "selectAll": "全選",
+    "deselectAll": "取消全選",
+    "selectAllWithCount": "全選 ({{selected}}/{{total}})",
     "methods": {
-      "title": "[zh-TW] Selection Methods:",
-      "click": "[zh-TW] • Click: Select/deselect individual",
-      "drag": "[zh-TW] • Drag: Select multiple images",
-      "shiftClick": "[zh-TW] • Shift + Click: Range select",
-      "ctrlClick": "[zh-TW] • Ctrl/Cmd + Click: Toggle select",
-      "ctrlA": "[zh-TW] • Ctrl/Cmd + A: Select all",
-      "esc": "[zh-TW] • ESC: Deselect"
+      "title": "選擇方法:",
+      "click": "• 點擊: 選擇/取消選擇單個",
+      "drag": "• 拖動: 選擇多個圖像",
+      "shiftClick": "• Shift + 點擊: 範圍選擇",
+      "ctrlClick": "• Ctrl/Cmd + 點擊: 切換選擇",
+      "ctrlA": "• Ctrl/Cmd + A: 全選",
+      "esc": "• ESC: 取消選擇"
     }
   },
   "emptyState": {
-    "noImages": "[zh-TW] No images",
-    "uploadPrompt": "[zh-TW] Try uploading images.",
-    "uploadOrSearch": "[zh-TW] Upload images or change search criteria."
+    "noImages": "無圖像",
+    "uploadPrompt": "嘗試上傳圖像。",
+    "uploadOrSearch": "上傳圖像或更改搜尋條件。"
   },
-  "loading": "[zh-TW] Loading images...",
-  "allImagesLoaded": "[zh-TW] All images loaded"
+  "loading": "正在載入圖像...",
+  "allImagesLoaded": "所有圖像已載入"
 }

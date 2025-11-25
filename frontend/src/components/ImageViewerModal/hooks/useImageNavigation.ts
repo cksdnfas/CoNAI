@@ -14,6 +14,7 @@ interface UseImageNavigationProps {
   allImageIds?: number[]; // ✅ 전체 이미지 image_files.id 목록 (랜덤 선택용)
   onRandomImageLoaded?: (image: ImageRecord) => void;
   onRandomModeChange?: (isRandom: boolean) => void;
+  isRandomMode?: boolean; // ✅ 현재 랜덤 모드 여부
 }
 
 interface UseImageNavigationResult {
@@ -37,6 +38,7 @@ export const useImageNavigation = ({
   allImageIds = [],
   onRandomImageLoaded,
   onRandomModeChange,
+  isRandomMode = false,
 }: UseImageNavigationProps): UseImageNavigationResult => {
   const handlePrevious = useCallback(() => {
     if (currentIndex > 0 && onImageChange) {
@@ -60,14 +62,16 @@ export const useImageNavigation = ({
   }, [currentIndex, images, onImageChange, onRandomModeChange]);
 
   const handleRandom = useCallback(async () => {
-    // allImageIds가 있으면 메모리에서 랜덤 선택 (새로운 방식)
-    if (allImageIds && allImageIds.length > 0) {
+    // 랜덤 모드가 아니고 allImageIds가 있으면 메모리에서 랜덤 선택 시도
+    if (!isRandomMode && allImageIds && allImageIds.length > 0) {
       try {
         // 메모리의 ID 목록에서 랜덤 선택
         const randomId = allImageIds[Math.floor(Math.random() * allImageIds.length)];
 
-        // 현재 배열에 있는지 확인 (id 기반)
-        const foundIndex = images?.findIndex(img => img.id === randomId) ?? -1;
+        // 현재 배열에 있는지 확인 (id 또는 file_id 기반)
+        const foundIndex = images?.findIndex(img =>
+          img.id === randomId || img.file_id === randomId
+        ) ?? -1;
 
         if (foundIndex >= 0 && onImageChange) {
           // 현재 페이지에 있음 - 바로 이동
@@ -75,14 +79,10 @@ export const useImageNavigation = ({
           if (onRandomModeChange) {
             onRandomModeChange(false);
           }
-        } else {
-          // 현재 페이지에 없음 - 폴백으로 API 랜덤 조회 사용
-          // ID 기반 직접 조회는 현재 지원하지 않으므로 폴백 로직으로 넘어감
-          console.warn('Random image not in current page - falling back to API random');
+          return;
         }
-        return;
       } catch (error) {
-        console.error('Failed to load random image:', error);
+        console.error('Failed to select from allImageIds:', error);
       }
     }
 
@@ -139,7 +139,7 @@ export const useImageNavigation = ({
     if (onRandomModeChange) {
       onRandomModeChange(false);
     }
-  }, [allImageIds, images, currentIndex, onImageChange, onRandomImageLoaded, onRandomModeChange, searchContext, searchParams, groupId]);
+  }, [isRandomMode, allImageIds, images, currentIndex, onImageChange, onRandomImageLoaded, onRandomModeChange, searchContext, searchParams, groupId]);
 
   // Keyboard event handler
   useEffect(() => {

@@ -8,9 +8,9 @@
     "similarity": "画像類似度検索",
     "prompts": "プロンプト管理",
     "advanced": "詳細設定",
-    "metadata": "Metadata Extraction",
-    "folders": "Folder Management",
-    "account": "Account",
+    "metadata": "メタデータ抽出",
+    "folders": "フォルダ管理",
+    "account": "アカウント",
     "externalApi": "外部API認証"
   },
   "general": {
@@ -32,78 +32,83 @@
       "label": "終了時にCanvasフォルダを自動クリーンアップ",
       "tooltip": "サーバー終了時にCanvasフォルダの編集済み画像を自動削除します。無効にすると編集済み画像が保持されます。"
     },
+    "ratingBadges": {
+      "label": "レーティングバッジを表示",
+      "tooltip": "画像のレーティングスコアとティアバッジを表示します。無効にするとレーティング情報が非表示になります。"
+    },
     "deleteProtection": {
-      "title": "Delete File Protection",
-      "description": "Store deleted files in RecycleBin folder for recovery",
+      "title": "削除ファイル保護",
+      "description": "削除されたファイルをRecycleBinフォルダに保存して復元可能にします",
+      "label": "削除ファイルをRecycleBinに保存",
       "enabled": {
-        "label": "Store deleted files in RecycleBin",
-        "description": "When enabled, deleted files are backed up to RecycleBin folder instead of being permanently removed."
+        "label": "削除ファイルをRecycleBinに保存",
+        "description": "有効にすると、削除されたファイルは完全に削除される代わりにRecycleBinフォルダにバックアップされます。"
       },
-      "info": "RecycleBin folder is created in the project root. Deleted files are stored with timestamps. You can manually copy files from RecycleBin if recovery is needed."
+      "info": "RecycleBinフォルダはプロジェクトのルートに作成されます。削除されたファイルはタイムスタンプと共に保存されます。必要に応じてRecycleBinから手動でファイルをコピーできます。"
     },
     "metadata": {
-      "title": "Metadata Extraction Optimization",
+      "title": "メタデータ抽出最適化",
       "scanMode": {
-        "title": "Stealth PNG Scan Mode",
+        "title": "Stealth PNGスキャンモード",
         "fast": {
-          "label": "Fast (Recommended)",
-          "description": "Quick signature scan - checks first 200 pixels then exits early"
+          "label": "高速（推奨）",
+          "description": "高速署名スキャン - 最初の200ピクセルを確認後、早期終了"
         },
         "full": {
-          "label": "Full",
-          "description": "Full file scan - checks all pixels (slow)"
+          "label": "完全",
+          "description": "完全ファイルスキャン - すべてのピクセルを確認（低速）"
         },
         "skip": {
-          "label": "Skip",
-          "description": "Skip scanning - disables secondary extraction"
+          "label": "スキップ",
+          "description": "スキャンをスキップ - 二次抽出を無効化"
         }
       },
       "limits": {
-        "title": "File Size and Resolution Limits",
+        "title": "ファイルサイズと解像度の制限",
         "fileSize": {
-          "label": "Max File Size (MB)",
-          "helper": "Files larger than this will skip Stealth PNG scanning"
+          "label": "最大ファイルサイズ（MB）",
+          "helper": "この値より大きいファイルはStealth PNGスキャンをスキップします"
         },
         "resolution": {
-          "label": "Max Resolution (Megapixels)",
-          "helper": "Images larger than this will skip Stealth PNG scanning"
+          "label": "最大解像度（メガピクセル）",
+          "helper": "この値より大きい画像はStealth PNGスキャンをスキップします"
         }
       },
       "skipSettings": {
-        "title": "AI Tool Skip Settings",
-        "description": "Automatically skip Stealth PNG scanning for specific AI tool images.",
+        "title": "AIツールスキップ設定",
+        "description": "特定のAIツール画像のStealth PNGスキャンを自動的にスキップします。",
         "comfyui": {
-          "label": "Skip ComfyUI images (Recommended)",
-          "description": "ComfyUI doesn't use Stealth PNG, scanning unnecessary"
+          "label": "ComfyUI画像をスキップ（推奨）",
+          "description": "ComfyUIはStealth PNGを使用しないため、スキャン不要"
         },
         "webui": {
-          "label": "Skip WebUI images",
-          "description": "WebUI may use Stealth PNG, enable only if needed"
+          "label": "WebUI画像をスキップ",
+          "description": "WebUIはStealth PNGを使用する可能性があるため、必要な場合のみ有効化"
         }
       },
       "secondary": {
-        "label": "Enable secondary extraction",
-        "description": "Retry with Stealth PNG method if primary extraction fails."
+        "label": "二次抽出を有効化",
+        "description": "主要抽出が失敗した場合、Stealth PNG方式で再試行します。"
       },
-      "performanceNote": "💡 Tip: Default settings (Fast + ComfyUI skip) provide optimal performance for most cases. ComfyUI image processing time reduced from 2682ms → 4ms!"
+      "performanceNote": "💡 ヒント：デフォルト設定（高速 + ComfyUIスキップ）は、ほとんどの場合に最適なパフォーマンスを提供します。ComfyUI画像処理時間が2682ms → 4msに短縮！"
     },
     "thumbnail": {
-      "title": "Thumbnail Settings",
-      "description": "Configure the size and quality used when generating thumbnails",
-      "saveFailed": "Failed to save thumbnail settings",
+      "title": "サムネイル設定",
+      "description": "サムネイル生成時に使用するサイズと品質を設定します",
+      "saveFailed": "サムネイル設定の保存に失敗しました",
       "size": {
-        "label": "Thumbnail Size",
-        "selectLabel": "Thumbnail Size",
-        "original": "Same as original",
-        "default": "1080px (default)"
+        "label": "サムネイルサイズ",
+        "selectLabel": "サムネイルサイズ",
+        "original": "元のサイズと同じ",
+        "default": "1080px（デフォルト）"
       },
       "quality": {
-        "label": "Thumbnail Quality",
-        "helperText": "Higher quality increases file size (60-100%)"
+        "label": "サムネイル品質",
+        "helperText": "品質が高いほどファイルサイズが増加します（60-100%）"
       },
       "regenerate": {
-        "button": "Regenerate Thumbnails",
-        "description": "Regenerate thumbnails for all images with current settings"
+        "button": "サムネイルを再生成",
+        "description": "現在の設定ですべての画像のサムネイルを再生成します"
       }
     }
   },
@@ -232,10 +237,10 @@
       "result": "タグ付け結果:",
       "failed": "テスト失敗",
       "invalidId": "有効な画像IDを入力してください",
-      "imageHash": "Image Hash",
-      "placeholderHash": "e.g., abc123def456..."
+      "imageHash": "画像ハッシュ",
+      "placeholderHash": "例: abc123def456..."
     },
-    "enableAutoTagging": "Enable Auto-Tagging"
+    "enableAutoTagging": "自動タグ付けを有効化"
   },
   "rating": {
     "title": "レーティングスコア設定",
@@ -419,20 +424,20 @@
       "moreImages": "+{{count}}枚追加",
       "noResults": "スキャンを実行すると重複画像グループが表示されます。",
       "id": "ID: {{id}}",
-      "selectAll": "Select All",
-      "deselectAll": "Deselect All",
-      "keepOne": "Keep 1",
-      "keepOneDelete": "Keep first image and select rest for deletion",
-      "deleteSelected": "Delete {{count}} Selected",
-      "deleteConfirmTitle": "Confirm Image Deletion",
-      "deleteConfirmMessage": "Are you sure you want to delete {{count}} selected images?",
-      "deleteWarning": "Deleted images cannot be recovered!",
-      "cancel": "Cancel",
-      "confirmDelete": "Delete",
-      "deleting": "Deleting...",
-      "deleteSuccess": "{{count}} images deleted successfully.",
-      "deletePartialSuccess": "{{success}} succeeded, {{failed}} failed",
-      "deleteFailed": "Failed to delete images."
+      "selectAll": "すべて選択",
+      "deselectAll": "選択解除",
+      "keepOne": "1枚を残す",
+      "keepOneDelete": "最初の画像を残して残りを削除対象に選択",
+      "deleteSelected": "選択した{{count}}枚を削除",
+      "deleteConfirmTitle": "画像削除の確認",
+      "deleteConfirmMessage": "選択した{{count}}枚の画像を削除してもよろしいですか？",
+      "deleteWarning": "削除された画像は復元できません！",
+      "cancel": "キャンセル",
+      "confirmDelete": "削除",
+      "deleting": "削除中...",
+      "deleteSuccess": "{{count}}枚の画像を削除しました。",
+      "deletePartialSuccess": "{{success}}枚成功、{{failed}}枚失敗",
+      "deleteFailed": "画像の削除に失敗しました。"
     },
     "thresholds": {
       "title": "閾値設定",
@@ -469,8 +474,8 @@
       },
       "localStorageNote": "設定値はローカルにのみ保存され、検索時にリアルタイムで適用されます。"
     },
-    "autoGenerateHash": "Auto-generate Hash on Upload",
-    "hashPlaceholder": "e.g., a1b2c3d4e5f6..."
+    "autoGenerateHash": "アップロード時に自動ハッシュ生成",
+    "hashPlaceholder": "例: a1b2c3d4e5f6..."
   },
   "messages": {
     "saveSuccess": "設定が正常に保存されました",
@@ -690,123 +695,123 @@
     }
   },
   "thumbnail": {
-    "title": "Thumbnail Settings",
-    "description": "Configure size and quality used for thumbnail generation",
-    "saveFailed": "Failed to save thumbnail settings",
+    "title": "サムネイル設定",
+    "description": "サムネイル生成時に使用するサイズと品質を設定します",
+    "saveFailed": "サムネイル設定の保存に失敗しました",
     "size": {
-      "label": "Thumbnail Size",
-      "selectLabel": "Thumbnail Size",
-      "original": "Same as original size",
-      "default": "1080px (default)"
+      "label": "サムネイルサイズ",
+      "selectLabel": "サムネイルサイズ",
+      "original": "元のサイズと同じ",
+      "default": "1080px（デフォルト）"
     },
     "quality": {
-      "label": "Thumbnail Quality",
-      "helperText": "Higher quality increases file size (60-100%)"
+      "label": "サムネイル品質",
+      "helperText": "品質が高いほどファイルサイズが増加します（60-100%）"
     },
     "regenerate": {
-      "button": "Regenerate Thumbnails",
-      "description": "Regenerate all image thumbnails with current settings"
+      "button": "サムネイルを再生成",
+      "description": "現在の設定ですべての画像のサムネイルを再生成します"
     }
   },
   "background": {
-    "title": "Background Task Monitoring",
-    "loadFailed": "Failed to load background task status",
-    "confirmReset": "Reset background queue? All pending tasks will be cancelled.",
-    "resetFailed": "Failed to reset queue",
-    "resetQueue": "Reset Queue",
-    "autoTagFailed": "Failed to trigger auto-tagging",
-    "confirmHashGen": "Generate hash for {{count}} images?",
-    "hashGenComplete": "Hash generation complete: {{processed}} succeeded, {{failed}} failed",
-    "hashGenFailed": "Failed to regenerate hashes",
-    "confirmVerify": "Verify {{count}} files?\\nThis may take time if there are many files.",
-    "verifyFailed": "Failed to run file verification",
-    "verifyIntervalError": "Verification interval must be between 300-86400 seconds",
-    "verifySaveFailed": "Failed to save file verification settings",
-    "autoUpdate": "Auto-updates every 5 seconds.",
-    "autoUpdateDisabled": "Auto-update is disabled.",
+    "title": "バックグラウンドタスク監視",
+    "loadFailed": "バックグラウンドタスクステータスの読み込みに失敗しました",
+    "confirmReset": "バックグラウンドキューをリセットしますか？すべての保留中のタスクがキャンセルされます。",
+    "resetFailed": "キューのリセットに失敗しました",
+    "resetQueue": "キューをリセット",
+    "autoTagFailed": "自動タグ付けのトリガーに失敗しました",
+    "confirmHashGen": "{{count}}枚の画像のハッシュを生成しますか？",
+    "hashGenComplete": "ハッシュ生成完了：{{processed}}枚成功、{{failed}}枚失敗",
+    "hashGenFailed": "ハッシュの再生成に失敗しました",
+    "confirmVerify": "{{count}}ファイルを検証しますか？\\nファイルが多い場合は時間がかかることがあります。",
+    "verifyFailed": "ファイル検証の実行に失敗しました",
+    "verifyIntervalError": "検証間隔は300〜86400秒の間である必要があります",
+    "verifySaveFailed": "ファイル検証設定の保存に失敗しました",
+    "autoUpdate": "5秒ごとに自動更新します。",
+    "autoUpdateDisabled": "自動更新が無効です。",
     "queue": {
-      "title": "Background Queue",
-      "pending": "Pending: {{count}}",
-      "processing": "Processing",
-      "waiting": "Waiting"
+      "title": "バックグラウンドキュー",
+      "pending": "保留中：{{count}}",
+      "processing": "処理中",
+      "waiting": "待機中"
     },
     "tasks": {
-      "metadata": "Metadata Extraction",
-      "promptCollection": "Prompt Collection",
-      "pendingCount": "{{count}} pending"
+      "metadata": "メタデータ抽出",
+      "promptCollection": "プロンプト収集",
+      "pendingCount": "{{count}}保留中"
     },
     "autoTag": {
-      "title": "Auto-Tagging Scheduler",
-      "manualTrigger": "Manual Run",
-      "running": "Running",
-      "stopped": "Stopped",
-      "untaggedCount": "Untagged images: {{count}}",
-      "pollingInterval": "Polling interval: {{seconds}}s",
-      "batchSize": "Batch size: {{size}}"
+      "title": "自動タグ付けスケジューラ",
+      "manualTrigger": "手動実行",
+      "running": "実行中",
+      "stopped": "停止",
+      "untaggedCount": "未タグ付け画像：{{count}}",
+      "pollingInterval": "ポーリング間隔：{{seconds}}秒",
+      "batchSize": "バッチサイズ：{{size}}"
     },
     "hash": {
-      "title": "Media Hash Status",
-      "generate": "Generate Hash",
-      "total": "Total: {{count}}",
-      "completed": "Hash generated: {{count}}",
-      "pending": "Not generated: {{count}}",
-      "completion": "Completion: {{percent}}%"
+      "title": "メディアハッシュステータス",
+      "generate": "ハッシュ生成",
+      "total": "合計：{{count}}",
+      "completed": "ハッシュ生成済み：{{count}}",
+      "pending": "未生成：{{count}}",
+      "completion": "完了率：{{percent}}%"
     },
     "verify": {
-      "title": "File Verification Status",
-      "viewLogs": "View Logs",
-      "run": "Run Verification",
-      "progress": "File verification in progress: {{checked}}/{{total}}",
-      "missing": "Missing: {{count}}",
-      "totalFiles": "Total files: {{count}}",
-      "missingFiles": "Missing files: {{count}}",
-      "lastVerification": "Last verification: {{date}}",
-      "schedulerTitle": "Verification Scheduler Settings",
-      "intervalLabel": "Verification Interval (seconds)",
-      "intervalHelper": "300-86400 seconds (5 min - 24 hours)",
-      "intervalTooltip": "May cause time consumption and system load if there are many files"
+      "title": "ファイル検証ステータス",
+      "viewLogs": "ログを表示",
+      "run": "検証実行",
+      "progress": "ファイル検証進行中：{{checked}}/{{total}}",
+      "missing": "欠落：{{count}}",
+      "totalFiles": "合計ファイル：{{count}}",
+      "missingFiles": "欠落ファイル：{{count}}",
+      "lastVerification": "最終検証：{{date}}",
+      "schedulerTitle": "検証スケジューラ設定",
+      "intervalLabel": "検証間隔（秒）",
+      "intervalHelper": "300〜86400秒（5分〜24時間）",
+      "intervalTooltip": "ファイルが多い場合、時間とシステム負荷が発生する可能性があります"
     }
   },
   "auth": {
     "forgotAccount": {
-      "title": "Forgot your account?",
-      "description": "If you forgot your password, you can recover your account using the following method.",
-      "methodTitle": "Recovery Method:",
-      "step1": "Stop the server",
-      "step2": "Delete the file below",
-      "step3": "Restart the server",
-      "step4": "Set up a new account",
-      "fileToDelete": "File to delete:",
-      "warning": "⚠️ Warning: Deleting this file will invalidate all sessions and require re-login.",
-      "warningNote": "Other data such as workflows and settings will not be affected."
+      "title": "アカウントをお忘れですか？",
+      "description": "パスワードを忘れた場合、以下の方法でアカウントを回復できます。",
+      "methodTitle": "回復方法：",
+      "step1": "サーバーを停止する",
+      "step2": "以下のファイルを削除する",
+      "step3": "サーバーを再起動する",
+      "step4": "新しいアカウントを設定する",
+      "fileToDelete": "削除するファイル：",
+      "warning": "⚠️ 警告：このファイルを削除すると、すべてのセッションが無効になり、再ログインが必要になります。",
+      "warningNote": "ワークフローや設定などの他のデータには影響しません。"
     },
     "setup": {
-      "title": "Setup Authentication",
-      "description": "Configure username and password to protect your image manager from unauthorized access. Once set, you will need to login to access the application.",
-      "username": "Username",
-      "password": "Password",
-      "confirmPassword": "Confirm Password",
-      "button": "Setup Authentication",
-      "success": "Authentication configured successfully! You will need to login on your next visit.",
+      "title": "認証設定",
+      "description": "不正アクセスからイメージマネージャーを保護するため、ユーザー名とパスワードを設定してください。設定後、アプリケーションにアクセスするにはログインが必要になります。",
+      "username": "ユーザー名",
+      "password": "パスワード",
+      "confirmPassword": "パスワード確認",
+      "button": "認証を設定",
+      "success": "認証設定が完了しました！次回のアクセス時にログインが必要です。",
       "errors": {
-        "required": "Username and password are required",
-        "mismatch": "Passwords do not match",
-        "failed": "Failed to setup authentication"
+        "required": "ユーザー名とパスワードは必須です",
+        "mismatch": "パスワードが一致しません",
+        "failed": "認証設定に失敗しました"
       }
     },
     "update": {
-      "title": "Change Credentials",
-      "description": "Changing your credentials will require you to login again with the new credentials.",
-      "currentPassword": "Current Password",
-      "newUsername": "New Username",
-      "newPassword": "New Password",
-      "confirmNewPassword": "Confirm New Password",
-      "button": "Update Credentials",
-      "success": "Credentials updated successfully!",
+      "title": "認証情報の変更",
+      "description": "認証情報を変更すると、新しい認証情報で再度ログインする必要があります。",
+      "currentPassword": "現在のパスワード",
+      "newUsername": "新しいユーザー名",
+      "newPassword": "新しいパスワード",
+      "confirmNewPassword": "新しいパスワード確認",
+      "button": "認証情報を更新",
+      "success": "認証情報を正常に更新しました！",
       "errors": {
-        "required": "All fields are required",
-        "mismatch": "New passwords do not match",
-        "failed": "Failed to update credentials"
+        "required": "すべてのフィールドは必須です",
+        "mismatch": "新しいパスワードが一致しません",
+        "failed": "認証情報の更新に失敗しました"
       }
     }
   },

@@ -4,8 +4,8 @@
     "description": "画像をグループ別に管理し、自動収集ルールを設定できます。",
     "emptyTitle": "まだグループが作成されていません",
     "emptyDescription": "新しいグループを作成して、画像を体系的に管理しましょう。",
-    "customGroupsTab": "Custom Groups",
-    "autoFolderGroupsTab": "Auto Folder Groups"
+    "customGroupsTab": "カスタムグループ",
+    "autoFolderGroupsTab": "自動フォルダグループ"
   },
   "groupCard": {
     "imageCount": "{{count}}枚の画像",
@@ -39,7 +39,7 @@
     "autoCollectEnable": "自動収集を有効化",
     "autoCollectDescription": "設定した条件に合う画像を自動的にこのグループに追加します。",
     "orConditionInfo": "OR条件：複数の条件を追加すると、いずれか一つでも満たす画像が自動収集されます。",
-    "orConditionExample": "例：「プロンプトに'anime'を含む」+「オートタグにキャラクターが存在」→どちらか一つを満たせば収集",
+    "orConditionExample": "例：\\\"プロンプトに'anime'を含む\\\" + \\\"オートタグにキャラクターが存在\\\" → どちらか一つを満たせば収集",
     "conditionsTitle": "自動収集条件",
     "addCondition": "条件を追加",
     "conditionType": "条件タイプ",
@@ -52,9 +52,9 @@
     "filterApplied": "{{count}}個のフィルターが適用されます。実行順序: 除外 → OR → AND",
     "addFiltersPrompt": "フィルターを追加して自動収集条件を設定してください",
     "filterHelpTooltip": "フィルター使用方法ヘルプ",
-    "parentGroup": "Parent Group",
-    "noParent": "None (Root Level)",
-    "selectParent": "Select Parent Group"
+    "parentGroup": "親グループ",
+    "noParent": "なし（ルートレベル）",
+    "selectParent": "親グループを選択"
   },
   "conditions": {
     "conditionNumber": "条件{{number}}",
@@ -186,70 +186,70 @@
   },
   "hierarchy": {
     "groupList": "グループリスト",
-    "root": "Root",
-    "childGroups": "{{count}} subgroups",
-    "openSubgroups": "Open Subgroups",
-    "backToParent": "Back to Parent",
-    "moveGroup": "Move Group",
-    "moveToRoot": "Move to Root",
-    "cannotMoveToSelf": "Cannot move to itself",
-    "cannotMoveToDescendant": "Cannot move to descendant group",
-    "maxDepthExceeded": "Maximum depth (5 levels) exceeded",
-    "circularReference": "Circular reference detected",
-    "hierarchyInvalid": "Invalid hierarchy structure"
+    "root": "ルート",
+    "childGroups": "{{count}}個のサブグループ",
+    "openSubgroups": "サブグループを開く",
+    "backToParent": "親に戻る",
+    "moveGroup": "グループを移動",
+    "moveToRoot": "ルートに移動",
+    "cannotMoveToSelf": "自分自身には移動できません",
+    "cannotMoveToDescendant": "子孫グループには移動できません",
+    "maxDepthExceeded": "最大深度（5レベル）を超えています",
+    "circularReference": "循環参照が検出されました",
+    "hierarchyInvalid": "無効な階層構造です"
   },
   "deleteConfirm": {
-    "title": "Confirm Group Deletion",
-    "message": "Are you sure you want to delete the group '{{name}}'?",
+    "title": "グループ削除の確認",
+    "message": "グループ\"{{name}}\"を削除してもよろしいですか？",
     "groupInfo": {
-      "imageCount": "Associated images: {{count}}",
-      "childCount": "Subgroups: {{count}}"
+      "imageCount": "関連画像：{{count}}枚",
+      "childCount": "サブグループ：{{count}}個"
     },
     "warning": {
-      "imageAssociations": "⚠️ All associations between this group and images will be removed. The image files themselves will not be deleted."
+      "imageAssociations": "⚠️ このグループと画像の関連付けはすべて削除されます。画像ファイル自体は削除されません。"
     },
     "options": {
-      "title": "How to handle subgroups",
+      "title": "サブグループの処理方法",
       "orphan": {
-        "label": "Delete only this group (Recommended)",
-        "description": "Subgroups will be moved to root level."
+        "label": "このグループのみ削除（推奨）",
+        "description": "サブグループはルートレベルに移動されます。"
       },
       "cascade": {
-        "label": "Delete this group and all subgroups",
-        "description": "{{count}} subgroups will be deleted. This action cannot be undone."
+        "label": "このグループとすべてのサブグループを削除",
+        "description": "{{count}}個のサブグループが削除されます。この操作は元に戻せません。"
       }
     }
   },
   "download": {
-    "menuTitle": "Download Options",
-    "scopeAll": "Download All",
-    "scopeSelected": "Selected {{count}} Only",
-    "typeThumbnail": "Images (Thumbnail)",
-    "typeOriginal": "Images (Original)",
-    "typeVideo": "Videos & Animations (Original)",
-    "confirmTitle": "Confirm Large Download",
-    "confirmMessage": "Download {{count}} files. Continue?",
-    "confirmButton": "Download"
+    "menuTitle": "ダウンロードオプション",
+    "scopeAll": "すべてダウンロード",
+    "scopeSelected": "選択した{{count}}枚のみ",
+    "typeThumbnail": "画像（サムネイル）",
+    "typeOriginal": "画像（オリジナル）",
+    "typeVideo": "動画とアニメーション（オリジナル）",
+    "confirmTitle": "大容量ダウンロードの確認",
+    "confirmMessage": "{{count}}ファイルをダウンロードします。続けますか？",
+    "confirmButton": "ダウンロード"
   },
-  "defaultGroupName": "Group",
-  "autoNavigate": "Auto-navigate to subgroup: {{from}} → {{to}}",
-  "created": "Group created. Please refresh your browser.",
-  "updated": "Group updated. Please refresh your browser.",
+  "defaultGroupName": "グループ",
+  "autoNavigate": "サブグループに自動移動：{{from}} → {{to}}",
+  "created": "グループが作成されました。ブラウザを更新してください。",
+  "updated": "グループが更新されました。ブラウザを更新してください。",
   "emptyState": {
-    "noGroups": "No groups created",
-    "noSubgroups": "No subgroups",
-    "createPrompt": "Press the + button to create a new group",
-    "noSubgroupsHelp": "Current group has no subgroups"
+    "noGroups": "作成されたグループがありません",
+    "noSubgroups": "サブグループがありません",
+    "createPrompt": "+ボタンを押して新しいグループを作成",
+    "noSubgroupsHelp": "現在のグループにはサブグループがありません"
   },
   "autoFolder": {
-    "readOnlyMessage": "This is a read-only group. Changes must be made to the original file location.",
-    "rebuilding": "Rebuilding...",
+    "readOnlyMessage": "これは読み取り専用グループです。変更は元のファイルの場所で行う必要があります。",
+    "rebuilding": "再構築中...",
     "refresh": "更新",
     "emptyState": {
-      "noGroups": "No auto folder groups",
-      "noSubfolders": "No subfolders",
-      "refreshPrompt": "Press the refresh button to create folder structure",
-      "noSubfoldersHelp": "Current folder has no subfolders"
+      "noGroups": "自動フォルダグループがありません",
+      "noSubfolders": "サブフォルダがありません",
+      "refreshPrompt": "更新ボタンを押してフォルダ構造を作成",
+      "noSubfoldersHelp": "現在のフォルダにはサブフォルダがありません"
     }
   }
 }

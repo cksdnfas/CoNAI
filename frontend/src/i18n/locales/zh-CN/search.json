@@ -7,6 +7,15 @@
     "clear": "全部重置",
     "execute": "执行搜索"
   },
+  "simpleSearch": {
+    "description": "在正面提示词和自动标签中搜索。",
+    "placeholder": "输入搜索词 (例如: girl, masterpiece, hatsune miku)",
+    "helpTooltip": {
+      "searchScope": "搜索范围: 正面提示词、自动标签 General/Character",
+      "ignoreWeights": "权重将被忽略",
+      "advancedTip": "复杂条件请使用 \"高级搜索\""
+    }
+  },
   "results": {
     "title": "搜索结果",
     "searching": "搜索中...",
@@ -106,75 +115,102 @@
   "searchHistory": {
     "title": "最近搜索"
   },
+  "advancedTab": {
+    "title": "复合过滤搜索",
+    "descriptionActive": "{{count}}个过滤器正在应用 · 执行顺序: 排除 → OR → AND",
+    "descriptionEmpty": "添加过滤器以开始精细搜索",
+    "helpTooltip": "过滤器使用帮助"
+  },
+
+  "searchBar": {
+    "tabs": {
+      "simple": "普通搜索",
+      "advanced": "高级搜索"
+    },
+    "buttons": {
+      "search": "搜索",
+      "searching": "搜索中...",
+      "reset": "重置"
+    },
+    "validation": {
+      "searchTextRequired": "请输入搜索词",
+      "filterRequired": "请添加至少一个条件",
+      "filterError": "过滤器 {{index}}: {{error}}",
+      "booleanRequired": "值必须是 是/否",
+      "valueRequired": "请输入值",
+      "scoreRequired": "请设置最小分数或最大分数"
+    }
+  },
+
   "filterBlock": {
-    "addButton": "[zh-CN] Add Filter",
-    "emptyMessage": "[zh-CN] Add filters to start searching",
-    "countInfo": "[zh-CN] {{count}} filter(s) will be applied.",
-    "executionOrder": "[zh-CN] Execution order: Exclude → OR → AND",
+    "addButton": "添加过滤器",
+    "emptyMessage": "添加过滤器以开始搜索",
+    "countInfo": "将应用{{count}}个过滤器。",
+    "executionOrder": "执行顺序: 排除 → OR → AND",
     "modal": {
-      "title": "[zh-CN] Add Filter",
-      "cancel": "[zh-CN] Cancel",
-      "back": "[zh-CN] Back",
-      "next": "[zh-CN] Next",
-      "add": "[zh-CN] Add Filter",
+      "title": "添加过滤器",
+      "cancel": "取消",
+      "back": "返回",
+      "next": "下一步",
+      "add": "添加过滤器",
       "steps": {
-        "selectGroup": "[zh-CN] Select Filter Group",
-        "selectCategory": "[zh-CN] Select Category",
-        "configureCondition": "[zh-CN] Configure Condition"
+        "selectGroup": "选择过滤器组",
+        "selectCategory": "选择类别",
+        "configureCondition": "配置条件"
       },
       "step1": {
-        "description": "[zh-CN] Choose how to apply the filter"
+        "description": "选择如何应用过滤器"
       },
       "step2": {
-        "description": "[zh-CN] Select what information to search by"
+        "description": "选择要搜索的信息类型"
       },
       "step3": {
-        "description": "[zh-CN] Configure the condition. Filters cannot be edited after creation, you must delete and recreate them."
+        "description": "配置条件。过滤器创建后无法编辑，必须删除并重新创建。"
       }
     },
     "groupTypes": {
       "exclude": {
-        "label": "[zh-CN] Exclude (NOT)",
-        "description": "[zh-CN] Exclude images matching this condition from results"
+        "label": "排除 (NOT)",
+        "description": "从结果中排除符合此条件的图像"
       },
       "or": {
-        "label": "[zh-CN] OR Group",
-        "description": "[zh-CN] Include images matching this condition in results"
+        "label": "OR组",
+        "description": "将符合此条件的图像包含在结果中"
       },
       "and": {
-        "label": "[zh-CN] AND Group",
-        "description": "[zh-CN] Only include images matching all conditions"
+        "label": "AND组",
+        "description": "仅包含符合所有条件的图像"
       }
     },
     "categories": {
       "positive_prompt": {
-        "label": "[zh-CN] Positive Prompt",
-        "description": "[zh-CN] Search positive prompts used in image generation"
+        "label": "正面提示词",
+        "description": "搜索图像生成中使用的正面提示词"
       },
       "negative_prompt": {
-        "label": "[zh-CN] Negative Prompt",
-        "description": "[zh-CN] Search negative prompts used in image generation"
+        "label": "负面提示词",
+        "description": "搜索图像生成中使用的负面提示词"
       },
       "auto_tag": {
-        "label": "[zh-CN] Auto Tag (WD Tagger)",
-        "description": "[zh-CN] Search auto-generated tags from WD v3 Tagger"
+        "label": "自动标签 (WD Tagger)",
+        "description": "搜索WD v3 Tagger自动生成的标签"
       },
       "basic": {
-        "label": "[zh-CN] Basic Info",
-        "description": "[zh-CN] Search basic metadata like AI tool and model name"
+        "label": "基本信息",
+        "description": "搜索AI工具和模型名称等基本元数据"
       }
     },
     "conditionTypes": {
-      "conditionType": "[zh-CN] Condition Type",
-      "value": "[zh-CN] Value",
-      "placeholder": "[zh-CN] Enter value to search",
-      "scoreRange": "[zh-CN] Score Range",
-      "weightRange": "[zh-CN] Weight Range",
-      "tagName": "[zh-CN] Tag/Character Name",
-      "tagPlaceholder": "[zh-CN] e.g., 1girl, hatsune_miku",
-      "ratingType": "[zh-CN] Rating Type",
-      "exists": "[zh-CN] Present",
-      "notExists": "[zh-CN] Absent"
+      "conditionType": "条件类型",
+      "value": "值",
+      "placeholder": "输入要搜索的值",
+      "scoreRange": "分数范围",
+      "weightRange": "权重范围",
+      "tagName": "标签/角色名称",
+      "tagPlaceholder": "例如: 1girl, hatsune_miku",
+      "ratingType": "评级类型",
+      "exists": "存在",
+      "notExists": "不存在"
     }
   }
 }

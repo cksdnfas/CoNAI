@@ -10,7 +10,7 @@
     "editTitle": "編輯工作流程",
     "createTitle": "新增工作流程",
     "noWorkflows": "沒有註冊的工作流程",
-    "noWorkflowsDesc": "點擊「新增工作流程」按鈕新增ComfyUI工作流程"
+    "noWorkflowsDesc": "點擊\"新增工作流程\"按鈕新增ComfyUI工作流程"
   },
   "card": {
     "active": "啟用",
@@ -35,13 +35,13 @@
     "nameRequired": "請輸入工作流程名稱",
     "jsonRequired": "請輸入工作流程JSON",
     "validateJson": "請檢查JSON格式",
-    "colorLabel": "[zh-TW] Workflow Color",
-    "customColorTooltip": "[zh-TW] Select custom color",
-    "selectImage": "[zh-TW] Select Image"
+    "colorLabel": "工作流程顏色",
+    "customColorTooltip": "選擇自訂顏色",
+    "selectImage": "選擇圖片"
   },
   "alerts": {
     "importantNote": "重要:",
-    "apiFormatWarning": "使用ComfyUI中「Save (API Format)」按鈕儲存的JSON。一般工作流程JSON將無法運作。",
+    "apiFormatWarning": "使用ComfyUI中\"Save (API Format)\"按鈕儲存的JSON。一般工作流程JSON將無法運作。",
     "created": "工作流程建立成功",
     "updated": "工作流程更新成功",
     "inactiveWarning": "此工作流程目前處於停用狀態。您需要先啟用它才能產生圖片。",
@@ -88,17 +88,17 @@
     "tipTitle": "💡 提示:",
     "tipDesc": "JSON路徑遵循工作流程JSON的結構。例如，如果JSON是{\"3\": {\"inputs\": {\"seed\": 123}}}，則JSON路徑為3.inputs.seed。",
     "previewTitle": "標記欄位預覽",
-    "unnamedField": "[zh-TW] Unnamed Field",
-    "noJsonPath": "[zh-TW] No JSON Path",
-    "stepLabel": "[zh-TW] Step Unit",
-    "stepHelperText": "[zh-TW] Step value (e.g., 0.01)",
-    "stepPlaceholder": "[zh-TW] 0.01",
-    "autoUpdated": "[zh-TW] (Auto-updated)",
-    "listPreviewHelper": "[zh-TW] Preview of referenced list (read-only)",
-    "loadFromListTooltip": "[zh-TW] Load from custom list",
-    "loadFromListTitle": "[zh-TW] Load from Custom List",
-    "noCustomLists": "[zh-TW] No custom lists registered.",
-    "itemCount": "[zh-TW] {{count}} items - "
+    "unnamedField": "未命名欄位",
+    "noJsonPath": "無JSON路徑",
+    "stepLabel": "步長單位",
+    "stepHelperText": "步長值（例: 0.01）",
+    "stepPlaceholder": "0.01",
+    "autoUpdated": "（自動更新）",
+    "listPreviewHelper": "引用清單的預覽（唯讀）",
+    "loadFromListTooltip": "從自訂清單載入",
+    "loadFromListTitle": "從自訂清單載入",
+    "noCustomLists": "沒有註冊的自訂清單。",
+    "itemCount": "{{count}}個項目 - "
   },
   "fieldForm": {
     "fieldId": "欄位ID",
@@ -242,48 +242,48 @@
     "jsonView": "JSON檢視"
   },
   "colors": {
-    "blue": "[zh-TW] Blue (default)",
-    "red": "[zh-TW] Red",
-    "green": "[zh-TW] Green",
-    "orange": "[zh-TW] Orange",
-    "purple": "[zh-TW] Purple",
-    "cyan": "[zh-TW] Cyan",
-    "yellow": "[zh-TW] Yellow",
-    "brown": "[zh-TW] Brown",
-    "gray": "[zh-TW] Gray",
-    "pink": "[zh-TW] Pink"
+    "blue": "藍色（預設）",
+    "red": "紅色",
+    "green": "綠色",
+    "orange": "橙色",
+    "purple": "紫色",
+    "cyan": "青色",
+    "yellow": "黃色",
+    "brown": "棕色",
+    "gray": "灰色",
+    "pink": "粉色"
   },
   "preview": {
-    "title": "[zh-TW] Marked Fields Preview",
-    "parseError": "[zh-TW] Cannot parse Workflow JSON",
-    "noJson": "[zh-TW] No Workflow JSON",
-    "pathNotFound": "[zh-TW] Path not found: {{path}}",
-    "validationError": "[zh-TW] Error during path validation",
-    "substitutionError": "[zh-TW] Error during substitution",
-    "validationResults": "[zh-TW] Path Validation Results",
-    "currentValue": "[zh-TW] Current value:",
-    "formTitle": "[zh-TW] Form to be displayed during image generation",
-    "generateButton": "[zh-TW] Generate Image (Preview)",
-    "testDataButton": "[zh-TW] Preview with test data",
-    "viewJsonTitle": "[zh-TW] View substituted Workflow JSON"
+    "title": "標記欄位預覽",
+    "parseError": "無法解析工作流程JSON",
+    "noJson": "無工作流程JSON",
+    "pathNotFound": "未找到路徑: {{path}}",
+    "validationError": "路徑驗證時出錯",
+    "substitutionError": "替換時出錯",
+    "validationResults": "路徑驗證結果",
+    "currentValue": "目前值:",
+    "formTitle": "圖片產生時顯示的表單",
+    "generateButton": "產生圖片（預覽）",
+    "testDataButton": "使用測試資料預覽",
+    "viewJsonTitle": "檢視替換後的工作流程JSON"
   },
   "imageSelection": {
-    "title": "[zh-TW] Select Image",
+    "title": "選擇圖片",
     "tabs": {
-      "dbSearch": "[zh-TW] DB Search",
-      "hash": "[zh-TW] Hash",
-      "upload": "[zh-TW] Upload",
-      "history": "[zh-TW] History",
-      "dedicatedFolder": "[zh-TW] Dedicated Folder"
+      "dbSearch": "資料庫搜尋",
+      "hash": "雜湊值",
+      "upload": "上傳",
+      "history": "歷史記錄",
+      "dedicatedFolder": "專用資料夾"
     },
-    "inPreparation": "[zh-TW] In preparation",
-    "hashInputLabel": "[zh-TW] Enter image hash",
-    "hashInputPlaceholder": "[zh-TW] Enter image hash",
-    "hashComingSoon": "[zh-TW] Hash-based image loading will be implemented in the future.",
-    "selectButton": "[zh-TW] Select Image",
-    "useAsIs": "[zh-TW] Use as is",
-    "editButton": "[zh-TW] Edit (In preparation)",
-    "noImagesInFolder": "[zh-TW] No images in dedicated folder.",
-    "addImagesPrompt": "[zh-TW] Add images to folder."
+    "inPreparation": "準備中",
+    "hashInputLabel": "輸入圖片雜湊值",
+    "hashInputPlaceholder": "輸入圖片雜湊值",
+    "hashComingSoon": "基於雜湊值的圖片載入將在未來實現。",
+    "selectButton": "選擇圖片",
+    "useAsIs": "直接使用",
+    "editButton": "編輯（準備中）",
+    "noImagesInFolder": "專用資料夾中沒有圖片。",
+    "addImagesPrompt": "新增圖片到資料夾。"
   }
 }

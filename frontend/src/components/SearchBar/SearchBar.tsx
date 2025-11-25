@@ -14,6 +14,7 @@ import {
   Search as SearchIcon,
   Clear as ClearIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import type { FilterCondition, ComplexSearchRequest, FilterGroupType } from '@comfyui-image-manager/shared';
 import SimpleSearchTab from './SimpleSearchTab';
 import AdvancedSearchTab from './AdvancedSearchTab';
@@ -44,6 +45,8 @@ const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
 };
 
 const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
+  const { t } = useTranslation();
+
   // Tab state
   const [activeTab, setActiveTab] = useState(0); // 0: Simple, 1: Advanced
 
@@ -83,7 +86,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
     // Boolean types
     if (condition.type === 'auto_tag_exists' || condition.type === 'auto_tag_has_character') {
       if (typeof condition.value !== 'boolean') {
-        return `조건의 값은 예/아니오여야 합니다`;
+        return t('search:searchBar.validation.booleanRequired');
       }
     }
     // String types that require non-empty value
@@ -99,13 +102,13 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
       condition.type === 'auto_tag_model'
     ) {
       if (!condition.value || (typeof condition.value === 'string' && condition.value.trim() === '')) {
-        return `조건의 값을 입력해주세요`;
+        return t('search:searchBar.validation.valueRequired');
       }
     }
     // Rating types
     else if (condition.type === 'auto_tag_rating' || condition.type === 'auto_tag_rating_score') {
       if (condition.min_score === undefined && condition.max_score === undefined) {
-        return `최소 점수 또는 최대 점수를 설정해주세요`;
+        return t('search:searchBar.validation.scoreRequired');
       }
     }
 
@@ -119,7 +122,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
     if (activeTab === 0) {
       // Simple search mode
       if (!simpleSearchText.trim()) {
-        setValidationError('검색어를 입력해주세요');
+        setValidationError(t('search:searchBar.validation.searchTextRequired'));
         return;
       }
 
@@ -135,7 +138,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
     } else {
       // Advanced search mode
       if (filterBlocks.length === 0) {
-        setValidationError('조건을 하나 이상 추가해주세요');
+        setValidationError(t('search:searchBar.validation.filterRequired'));
         return;
       }
 
@@ -143,7 +146,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
       for (let i = 0; i < filterBlocks.length; i++) {
         const error = validateCondition(filterBlocks[i].condition);
         if (error) {
-          setValidationError(`필터 ${i + 1}: ${error}`);
+          setValidationError(t('search:searchBar.validation.filterError', { index: i + 1, error }));
           return;
         }
       }
@@ -211,8 +214,8 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
         aria-label="search tabs"
         sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
       >
-        <Tab label="일반 검색" id="search-tab-0" aria-controls="search-tabpanel-0" />
-        <Tab label="고급 검색" id="search-tab-1" aria-controls="search-tabpanel-1" />
+        <Tab label={t('search:searchBar.tabs.simple')} id="search-tab-0" aria-controls="search-tabpanel-0" />
+        <Tab label={t('search:searchBar.tabs.advanced')} id="search-tab-1" aria-controls="search-tabpanel-1" />
       </Tabs>
 
       {/* Simple Search Tab */}
@@ -246,9 +249,9 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
           fullWidth
           sx={{ py: 1 }}
         >
-          {loading ? '검색 중...' : '검색'}
+          {loading ? t('search:searchBar.buttons.searching') : t('search:searchBar.buttons.search')}
         </Button>
-        <Tooltip title="초기화" arrow>
+        <Tooltip title={t('search:searchBar.buttons.reset')} arrow>
           <span>
             <IconButton
               onClick={handleClearSearch}

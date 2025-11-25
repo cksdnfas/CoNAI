@@ -9,6 +9,16 @@
     "execute": "Execute Search"
   },
 
+  "simpleSearch": {
+    "description": "Search in positive prompts and auto tags.",
+    "placeholder": "Enter search terms (e.g., girl, masterpiece, hatsune miku)",
+    "helpTooltip": {
+      "searchScope": "Search scope: Positive prompts, Auto tags General/Character",
+      "ignoreWeights": "Weights are ignored",
+      "advancedTip": "Use \"Advanced Search\" for complex conditions"
+    }
+  },
+
   "results": {
     "title": "Search Results",
     "searching": "Searching...",
@@ -116,6 +126,33 @@
 
   "searchHistory": {
     "title": "Recent Searches"
+  },
+
+  "advancedTab": {
+    "title": "Advanced Filter Search",
+    "descriptionActive": "{{count}} filter(s) active · Execution order: Exclude → OR → AND",
+    "descriptionEmpty": "Add filters to start advanced searching",
+    "helpTooltip": "Filter usage help"
+  },
+
+  "searchBar": {
+    "tabs": {
+      "simple": "Simple Search",
+      "advanced": "Advanced Search"
+    },
+    "buttons": {
+      "search": "Search",
+      "searching": "Searching...",
+      "reset": "Reset"
+    },
+    "validation": {
+      "searchTextRequired": "Please enter search text",
+      "filterRequired": "Please add at least one filter",
+      "filterError": "Filter {{index}}: {{error}}",
+      "booleanRequired": "The value must be Yes/No",
+      "valueRequired": "Please enter a value",
+      "scoreRequired": "Please set minimum or maximum score"
+    }
   },
 
   "filterBlock": {

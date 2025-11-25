@@ -212,7 +212,7 @@ export const BulkAssignModal: React.FC<BulkAssignModalProps> = ({
 
       <DialogActions>
         <Button onClick={handleClose} disabled={loading}>
-          {result ? '닫기' : t('bulkAssignDialog.actions.cancel')}
+          {result ? t('bulkAssignDialog.actions.close') : t('bulkAssignDialog.actions.cancel')}
         </Button>
         {!result && (
           <Button

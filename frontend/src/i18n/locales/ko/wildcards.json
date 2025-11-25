@@ -150,9 +150,12 @@
     "hint": "++를 입력하면 와일드카드 목록이 표시됩니다",
     "manualTab": "수동",
     "autoTab": "자동 (LORA)",
+    "searchTab": "검색",
     "noResults": "결과가 없습니다",
     "selectTier": "계층을 선택하세요",
-    "root": "최상위"
+    "root": "최상위",
+    "searchPlaceholder": "와일드카드 검색...",
+    "searchHint": "검색어를 입력하세요"
   },
   "deleteConfirm": {
     "title": "와일드카드 삭제 확인",

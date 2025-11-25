@@ -155,25 +155,30 @@ export const imageApi = {
 
   /**
    * Get random image
+   * Note: Adding timestamp to prevent caching
    */
   getRandomImage: async (): Promise<{
     success: boolean;
     data?: ImageRecord;
     error?: string;
   }> => {
-    const response = await apiClient.get('/api/images/random');
+    const response = await apiClient.get(`/api/images/random?_t=${Date.now()}`);
     return response.data;
   },
 
   /**
    * Get random image from search results
+   * Note: Adding timestamp to prevent caching (even though POST requests aren't cached by default)
    */
   getRandomFromSearch: async (params: ImageSearchParams): Promise<{
     success: boolean;
     data?: ImageRecord;
     error?: string;
   }> => {
-    const response = await apiClient.post('/api/images/random-from-search', params);
+    const response = await apiClient.post('/api/images/random-from-search', {
+      ...params,
+      _t: Date.now()
+    });
     return response.data;
   },
 

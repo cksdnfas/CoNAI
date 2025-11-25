@@ -44,20 +44,20 @@
     "partialSuccess": "{{success}}個成功、{{failed}}個失敗しました。"
   },
   "promptPreview": {
-    "title": "Prompt Preview",
-    "description": "Select an image to instantly view AI metadata without uploading to server.",
-    "dragOrClick": "Drag or click to select an image",
-    "dropHere": "Drop file here",
-    "noUpload": "Images are analyzed in browser only, not uploaded to server",
-    "imagePreview": "Image Preview",
-    "aiTool": "AI Tool",
-    "positivePrompt": "Prompt",
-    "negativePrompt": "Negative Prompt",
-    "terms": "Extracted Terms",
-    "loraModels": "LoRA Models",
-    "parameters": "Generation Parameters",
-    "rawMetadata": "Raw Metadata (EXIF/PNG Chunks)",
-    "invalidFileType": "Only image files are allowed",
-    "extractionFailed": "Failed to extract metadata"
+    "title": "プロンプトプレビュー",
+    "description": "画像を選択してサーバーにアップロードせずにAIメタデータを即座に表示します。",
+    "dragOrClick": "画像をドラッグまたはクリックして選択",
+    "dropHere": "ファイルをここにドロップ",
+    "noUpload": "画像はブラウザでのみ分析され、サーバーにアップロードされません",
+    "imagePreview": "画像プレビュー",
+    "aiTool": "AIツール",
+    "positivePrompt": "プロンプト",
+    "negativePrompt": "ネガティブプロンプト",
+    "terms": "抽出された用語",
+    "loraModels": "LORAモデル",
+    "parameters": "生成パラメータ",
+    "rawMetadata": "生メタデータ（EXIF/PNGチャンク）",
+    "invalidFileType": "画像ファイルのみ許可されています",
+    "extractionFailed": "メタデータの抽出に失敗しました"
   }
 }

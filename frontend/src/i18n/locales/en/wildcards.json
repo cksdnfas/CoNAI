@@ -150,9 +150,12 @@
     "hint": "Type ++ to show wildcard list",
     "manualTab": "Manual",
     "autoTab": "Auto (LORA)",
+    "searchTab": "Search",
     "noResults": "No results",
     "selectTier": "Select a tier",
-    "root": "Root"
+    "root": "Root",
+    "searchPlaceholder": "Search wildcards...",
+    "searchHint": "Enter search term"
   },
   "deleteConfirm": {
     "title": "Confirm Wildcard Deletion",

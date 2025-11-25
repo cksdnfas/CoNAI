@@ -13,8 +13,8 @@
     "addItem": "添加项目",
     "preview": "预览",
     "confirmDelete": "确定要删除'{{name}}'通配符吗?",
-    "copiedToClipboard": "[zh-CN] Copied to clipboard",
-    "copyFailed": "[zh-CN] Failed to copy"
+    "copiedToClipboard": "已复制到剪贴板",
+    "copyFailed": "复制失败"
   },
   "card": {
     "items": "{{count}}个项目",
@@ -51,7 +51,7 @@
     "nameRequired": "通配符名称为必填项",
     "itemsRequired": "至少需要一个项目",
     "previewTextRequired": "请输入要测试的提示词",
-    "copyFailed": "[zh-CN] Failed to copy"
+    "copyFailed": "复制失败"
   },
   "tabs": {
     "manual": "手动创建",
@@ -90,7 +90,7 @@
     "noAutoWildcards": "没有自动收集的通配符",
     "noAutoWildcardsDesc": "扫描LORA文件夹以生成通配符",
     "autoCollectedBadge": "自动",
-    "viewDetail": "[zh-CN] View Details",
+    "viewDetail": "查看详情",
     "errors": {
       "folderPathRequired": "LORA文件夹路径为必填项",
       "invalidWeight": "请输入有效的权重值 (0.1 ~ 2.0)",
@@ -113,45 +113,49 @@
       "noResults": "未找到结果",
       "tryDifferentFilters": "请尝试不同的搜索词或过滤器"
     },
-    "matchingMode": "[zh-CN] Text File Matching Mode",
-    "matchingModeFilename": "[zh-CN] Filename Matching (lora.txt)",
-    "matchingModeCommon": "[zh-CN] Use Common Text File",
-    "commonTextFilename": "[zh-CN] Common Text Filename",
-    "commonTextFilenameHelper": "[zh-CN] Common text filename to use within folders (e.g., add.txt, common.txt)",
-    "matchingPriority": "[zh-CN] Matching Priority",
-    "priorityFilename": "[zh-CN] Filename Matching First (fallback to common text)",
-    "priorityCommon": "[zh-CN] Common Text First (fallback to filename matching)"
+    "matchingMode": "文本文件匹配模式",
+    "matchingModeFilename": "文件名匹配 (lora.txt)",
+    "matchingModeCommon": "使用公共文本文件",
+    "commonTextFilename": "公共文本文件名",
+    "commonTextFilenameHelper": "在文件夹中使用的公共文本文件名 (例如: add.txt, common.txt)",
+    "matchingPriority": "匹配优先级",
+    "priorityFilename": "文件名匹配优先 (回退到公共文本)",
+    "priorityCommon": "公共文本优先 (回退到文件名匹配)"
   },
   "buttons": {
-    "openScanDialog": "[zh-CN] Scan LORA",
-    "openLogDialog": "[zh-CN] Last Scan Log"
+    "openScanDialog": "扫描LORA",
+    "openLogDialog": "最后扫描日志"
   },
   "scanDialog": {
-    "title": "[zh-CN] LORA Wildcard Auto-Generation",
-    "infoMessage": "[zh-CN] Please select ComfyUI's loras folder or a folder containing LORA files.",
-    "scanButton": "[zh-CN] Collect LORA",
-    "warningTitle": "[zh-CN] Scan Information:",
-    "warning1": "[zh-CN] Automatically collects .safetensors files",
-    "warning2": "[zh-CN] Re-scanning the same folder will update the items",
-    "warning3": "[zh-CN] Auto-collected items can be found in this tab"
+    "title": "LORA通配符自动生成",
+    "infoMessage": "请选择ComfyUI的loras文件夹或包含LORA文件的文件夹。",
+    "scanButton": "收集LORA",
+    "warningTitle": "扫描信息:",
+    "warning1": "自动收集.safetensors文件",
+    "warning2": "重新扫描同一文件夹将更新项目",
+    "warning3": "自动收集的项目可以在此标签中找到"
   },
   "logDialog": {
-    "title": "[zh-CN] Last LORA Scan Log"
+    "title": "最后LORA扫描日志"
   },
   "detailDialog": {
-    "title": "[zh-CN] View List (Read-Only)",
-    "readOnlyInfo": "[zh-CN] Auto-collected items cannot be edited. You can only view the contents.",
-    "name": "[zh-CN] List Name",
-    "description": "[zh-CN] Description",
-    "path": "[zh-CN] Path",
-    "itemList": "[zh-CN] Item List ({{count}} items)"
+    "title": "查看列表 (只读)",
+    "readOnlyInfo": "自动收集的项目无法编辑。您只能查看内容。",
+    "name": "列表名称",
+    "description": "描述",
+    "path": "路径",
+    "itemList": "项目列表 ({{count}}个项目)"
   },
   "autocomplete": {
     "hint": "输入 ++ 可显示通配符列表",
     "manualTab": "手动",
     "autoTab": "自动 (LORA)",
+    "searchTab": "搜索",
     "noResults": "无结果",
-    "selectTier": "请选择层级"
+    "selectTier": "请选择层级",
+    "root": "根目录",
+    "searchPlaceholder": "搜索通配符...",
+    "searchHint": "请输入搜索内容"
   },
   "deleteConfirm": {
     "title": "确认删除通配符",

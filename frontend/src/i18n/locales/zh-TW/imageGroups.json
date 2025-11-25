@@ -4,8 +4,8 @@
     "description": "按組管理圖像並設定自動收集規則。",
     "emptyTitle": "尚未建立任何群組",
     "emptyDescription": "建立新群組以系統化管理您的圖像。",
-    "customGroupsTab": "[zh-TW] Custom Groups",
-    "autoFolderGroupsTab": "[zh-TW] Auto Folder Groups"
+    "customGroupsTab": "自訂群組",
+    "autoFolderGroupsTab": "自動資料夾群組"
   },
   "groupCard": {
     "imageCount": "{{count}}張圖像",
@@ -39,7 +39,7 @@
     "autoCollectEnable": "啟用自動收集",
     "autoCollectDescription": "將符合設定條件的圖像自動新增到此群組。",
     "orConditionInfo": "OR條件：多個條件將收集滿足至少一個條件的圖像。",
-    "orConditionExample": "例如：「提示詞包含'anime'」+「自動標籤有角色」→ 滿足任一條件即可收集",
+    "orConditionExample": "例如：\\\"提示詞包含'anime'\\\" + \\\"自動標籤有角色\\\" → 滿足任一條件即可收集",
     "conditionsTitle": "自動收集條件",
     "addCondition": "新增條件",
     "conditionType": "條件類型",
@@ -52,9 +52,9 @@
     "filterApplied": "已套用{{count}}個篩選器。執行順序: 排除 → OR → AND",
     "addFiltersPrompt": "添加篩選器以配置自動收集條件",
     "filterHelpTooltip": "篩選器使用說明",
-    "parentGroup": "[zh-TW] Parent Group",
-    "noParent": "[zh-TW] None (Root Level)",
-    "selectParent": "[zh-TW] Select Parent Group"
+    "parentGroup": "父層群組",
+    "noParent": "無（根層級）",
+    "selectParent": "選擇父層群組"
   },
   "conditions": {
     "conditionNumber": "條件{{number}}",
@@ -186,70 +186,70 @@
   },
   "hierarchy": {
     "groupList": "群組列表",
-    "root": "[zh-TW] Root",
-    "childGroups": "[zh-TW] {{count}} subgroups",
-    "openSubgroups": "[zh-TW] Open Subgroups",
-    "backToParent": "[zh-TW] Back to Parent",
-    "moveGroup": "[zh-TW] Move Group",
-    "moveToRoot": "[zh-TW] Move to Root",
-    "cannotMoveToSelf": "[zh-TW] Cannot move to itself",
-    "cannotMoveToDescendant": "[zh-TW] Cannot move to descendant group",
-    "maxDepthExceeded": "[zh-TW] Maximum depth (5 levels) exceeded",
-    "circularReference": "[zh-TW] Circular reference detected",
-    "hierarchyInvalid": "[zh-TW] Invalid hierarchy structure"
+    "root": "根層級",
+    "childGroups": "{{count}}個子群組",
+    "openSubgroups": "開啟子群組",
+    "backToParent": "返回上層",
+    "moveGroup": "移動群組",
+    "moveToRoot": "移至根層級",
+    "cannotMoveToSelf": "無法移動到自身",
+    "cannotMoveToDescendant": "無法移動到子孫群組",
+    "maxDepthExceeded": "超出最大深度（5層）",
+    "circularReference": "偵測到循環參照",
+    "hierarchyInvalid": "階層結構無效"
   },
   "deleteConfirm": {
-    "title": "[zh-TW] Confirm Group Deletion",
-    "message": "[zh-TW] Are you sure you want to delete the group '{{name}}'?",
+    "title": "確認刪除群組",
+    "message": "確定要刪除群組\"{{name}}\"嗎？",
     "groupInfo": {
-      "imageCount": "[zh-TW] Associated images: {{count}}",
-      "childCount": "[zh-TW] Subgroups: {{count}}"
+      "imageCount": "關聯圖像：{{count}}",
+      "childCount": "子群組：{{count}}"
     },
     "warning": {
-      "imageAssociations": "[zh-TW] ⚠️ All associations between this group and images will be removed. The image files themselves will not be deleted."
+      "imageAssociations": "⚠️ 此群組與圖像之間的所有關聯將被移除。圖像檔案本身不會被刪除。"
     },
     "options": {
-      "title": "[zh-TW] How to handle subgroups",
+      "title": "如何處理子群組",
       "orphan": {
-        "label": "[zh-TW] Delete only this group (Recommended)",
-        "description": "[zh-TW] Subgroups will be moved to root level."
+        "label": "僅刪除此群組（建議）",
+        "description": "子群組將移至根層級。"
       },
       "cascade": {
-        "label": "[zh-TW] Delete this group and all subgroups",
-        "description": "[zh-TW] {{count}} subgroups will be deleted. This action cannot be undone."
+        "label": "刪除此群組及所有子群組",
+        "description": "{{count}}個子群組將被刪除。此操作無法復原。"
       }
     }
   },
   "download": {
-    "menuTitle": "[zh-TW] Download Options",
-    "scopeAll": "[zh-TW] Download All",
-    "scopeSelected": "[zh-TW] Selected {{count}} Only",
-    "typeThumbnail": "[zh-TW] Images (Thumbnail)",
-    "typeOriginal": "[zh-TW] Images (Original)",
-    "typeVideo": "[zh-TW] Videos & Animations (Original)",
-    "confirmTitle": "[zh-TW] Confirm Large Download",
-    "confirmMessage": "[zh-TW] Download {{count}} files. Continue?",
-    "confirmButton": "[zh-TW] Download"
+    "menuTitle": "下載選項",
+    "scopeAll": "下載全部",
+    "scopeSelected": "僅選取的{{count}}個",
+    "typeThumbnail": "圖像（縮圖）",
+    "typeOriginal": "圖像（原圖）",
+    "typeVideo": "影片與動畫（原始）",
+    "confirmTitle": "確認大量下載",
+    "confirmMessage": "下載{{count}}個檔案。繼續？",
+    "confirmButton": "下載"
   },
-  "defaultGroupName": "[zh-TW] Group",
-  "autoNavigate": "[zh-TW] Auto-navigate to subgroup: {{from}} → {{to}}",
-  "created": "[zh-TW] Group created. Please refresh your browser.",
-  "updated": "[zh-TW] Group updated. Please refresh your browser.",
+  "defaultGroupName": "群組",
+  "autoNavigate": "自動導覽至子群組：{{from}} → {{to}}",
+  "created": "群組已建立。請重新整理您的瀏覽器。",
+  "updated": "群組已更新。請重新整理您的瀏覽器。",
   "emptyState": {
-    "noGroups": "[zh-TW] No groups created",
-    "noSubgroups": "[zh-TW] No subgroups",
-    "createPrompt": "[zh-TW] Press the + button to create a new group",
-    "noSubgroupsHelp": "[zh-TW] Current group has no subgroups"
+    "noGroups": "未建立任何群組",
+    "noSubgroups": "無子群組",
+    "createPrompt": "按 + 按鈕建立新群組",
+    "noSubgroupsHelp": "目前群組沒有子群組"
   },
   "autoFolder": {
-    "readOnlyMessage": "[zh-TW] This is a read-only group. Changes must be made to the original file location.",
-    "rebuilding": "[zh-TW] Rebuilding...",
+    "readOnlyMessage": "這是唯讀群組。必須在原始檔案位置進行變更。",
+    "rebuilding": "重建中...",
     "refresh": "重新整理",
     "emptyState": {
-      "noGroups": "[zh-TW] No auto folder groups",
-      "noSubfolders": "[zh-TW] No subfolders",
-      "refreshPrompt": "[zh-TW] Press the refresh button to create folder structure",
-      "noSubfoldersHelp": "[zh-TW] Current folder has no subfolders"
+      "noGroups": "無自動資料夾群組",
+      "noSubfolders": "無子資料夾",
+      "refreshPrompt": "按重新整理按鈕建立資料夾結構",
+      "noSubfoldersHelp": "目前資料夾沒有子資料夾"
     }
   }
 }

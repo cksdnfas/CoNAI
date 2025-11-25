@@ -4,7 +4,7 @@
     "listTitle": "ComfyUI伺服器清單",
     "addButton": "新增伺服器",
     "noServers": "沒有註冊的伺服器",
-    "noServersDesc": "點擊「新增伺服器」按鈕新增ComfyUI伺服器"
+    "noServersDesc": "點擊\"新增伺服器\"按鈕新增ComfyUI伺服器"
   },
   "card": {
     "active": "啟用",

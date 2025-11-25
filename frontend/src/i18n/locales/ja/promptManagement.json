@@ -20,6 +20,12 @@
       }
     },
 
+    "bulkActions": {
+      "selectedCount": "{{count}}個選択中",
+      "assignSelected": "選択項目を割り当て",
+      "bulkAssign": "一括割り当て"
+    },
+
     "table": {
       "headers": {
         "prompt": "プロンプト",
@@ -68,6 +74,35 @@
     "actions": {
       "cancel": "キャンセル",
       "assign": "割り当て"
+    }
+  },
+
+  "bulkAssignDialog": {
+    "title": "プロンプト一括割り当て",
+    "groupSelect": {
+      "label": "対象グループ",
+      "placeholder": "グループを選択してください"
+    },
+    "textInput": {
+      "label": "プロンプト入力",
+      "placeholder": "プロンプトを入力してください（カンマまたは改行で区切る）",
+      "example": "例: プロンプト1, プロンプト2, プロンプト3"
+    },
+    "preview": {
+      "title": "プレビュー ({{count}}個)",
+      "empty": "入力されたプロンプトがありません"
+    },
+    "actions": {
+      "assign": "割り当て",
+      "cancel": "キャンセル",
+      "close": "閉じる"
+    },
+    "results": {
+      "title": "割り当て結果",
+      "created": "作成: {{count}}個",
+      "updated": "更新: {{count}}個",
+      "failed": "失敗: {{count}}個",
+      "total": "合計 {{count}}個処理"
     }
   },
 

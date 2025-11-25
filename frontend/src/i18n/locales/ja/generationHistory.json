@@ -47,13 +47,13 @@
     "createdAt": "作成日時",
     "completedAt": "完了日時"
   },
-  "cleanupFailed": "Failed to cleanup",
-  "cleanupFailedTitle": "Cleanup Failed Items",
-  "cleanupFailedConfirm": "Are you sure you want to delete {{count}} failed generation histories?",
-  "cleanupFailedNote": "Only database records will be deleted, files will be kept.",
-  "cleanup": "Cleanup",
-  "cleaning": "Cleaning...",
-  "cleanupSuccess": "{{count}} failed items have been deleted",
-  "noFailedRecords": "No failed items to clean up",
-  "bulkDeleteFailed": "Failed to bulk delete"
+  "cleanupFailed": "クリーンアップに失敗しました",
+  "cleanupFailedTitle": "失敗項目のクリーンアップ",
+  "cleanupFailedConfirm": "{{count}}件の失敗した生成履歴を削除してもよろしいですか？",
+  "cleanupFailedNote": "データベースレコードのみ削除され、ファイルは保持されます。",
+  "cleanup": "クリーンアップ",
+  "cleaning": "クリーンアップ中...",
+  "cleanupSuccess": "{{count}}件の失敗項目を削除しました",
+  "noFailedRecords": "クリーンアップする失敗項目がありません",
+  "bulkDeleteFailed": "一括削除に失敗しました"
 }

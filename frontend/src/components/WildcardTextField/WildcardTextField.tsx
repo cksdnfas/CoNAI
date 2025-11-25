@@ -70,7 +70,7 @@ export function WildcardTextField({
   const [hierarchicalWildcards, setHierarchicalWildcards] = useState<WildcardWithHierarchy[]>([]);
   const [flatWildcards, setFlatWildcards] = useState<WildcardWithItems[]>([]);
   const [loading, setLoading] = useState(false);
-  const [tabValue, setTabValue] = useState(0); // 0: 수동, 1: 자동(LORA)
+  const [tabValue, setTabValue] = useState(0); // 0: 수동, 1: 자동(LORA), 2: 검색
 
   // 수동 와일드카드 계층 탐색용
   const [currentPath, setCurrentPath] = useState<WildcardWithHierarchy[]>([]); // Breadcrumb path
@@ -146,15 +146,42 @@ export function WildcardTextField({
   // 자동 와일드카드 계층 구조 (LORA)
   const autoHierarchicalWildcards = hierarchicalWildcards.filter(w => (w as any).is_auto_collected);
 
-  // 현재 표시할 항목들
-  // 검색어가 있으면 전체 계층에서 검색, 없으면 현재 폴더의 children만 표시
-  const baseHierarchy = tabValue === 0 ? manualHierarchicalWildcards : autoHierarchicalWildcards;
+  // 폴더 우선, 이름순 정렬 함수
+  const sortByFolderThenName = (a: WildcardWithHierarchy, b: WildcardWithHierarchy) => {
+    const aHasChildren = a.children && a.children.length > 0;
+    const bHasChildren = b.children && b.children.length > 0;
 
-  const displayItems = searchText
-    ? flattenHierarchy(baseHierarchy).filter(w =>
-        w.name.toLowerCase().includes(searchText.toLowerCase())
-      )
-    : currentChildren;
+    // 폴더가 먼저
+    if (aHasChildren && !bHasChildren) return -1;
+    if (!aHasChildren && bHasChildren) return 1;
+
+    // 같은 타입이면 이름순
+    return a.name.localeCompare(b.name);
+  };
+
+  // 현재 표시할 항목들
+  // 검색 탭이면 전체 검색, 아니면 각 탭별로 처리
+  let displayItems: WildcardWithHierarchy[] = [];
+
+  if (tabValue === 2) {
+    // 검색 탭: 모든 와일드카드에서 검색
+    if (searchText) {
+      displayItems = flattenHierarchy(hierarchicalWildcards)
+        .filter(w => w.name.toLowerCase().includes(searchText.toLowerCase()))
+        .sort(sortByFolderThenName);
+    }
+  } else {
+    // 수동/자동 탭
+    const baseHierarchy = tabValue === 0 ? manualHierarchicalWildcards : autoHierarchicalWildcards;
+
+    if (searchText) {
+      displayItems = flattenHierarchy(baseHierarchy)
+        .filter(w => w.name.toLowerCase().includes(searchText.toLowerCase()))
+        .sort(sortByFolderThenName);
+    } else {
+      displayItems = [...currentChildren].sort(sortByFolderThenName);
+    }
+  }
 
   // 폴더로 이동
   const navigateToFolder = (item: WildcardWithHierarchy) => {
@@ -236,6 +263,11 @@ export function WildcardTextField({
           setSearchText(textAfterTrigger);
           setAnchorEl(e.target as HTMLElement);
           setIsOpen(true);
+
+          // 검색어가 있으면 검색 탭으로 자동 전환
+          if (textAfterTrigger.trim()) {
+            setTabValue(2);
+          }
           return;
         }
       }
@@ -402,15 +434,24 @@ export function WildcardTextField({
                 setSelectedTier(null);
                 setCurrentPath([]);
                 // 탭에 따라 적절한 계층 구조 설정
-                setCurrentChildren(
-                  v === 0 ? manualHierarchicalWildcards : autoHierarchicalWildcards
-                );
-                setSearchText('');
+                if (v !== 2) {
+                  setCurrentChildren(
+                    v === 0 ? manualHierarchicalWildcards : autoHierarchicalWildcards
+                  );
+                }
+                if (v !== 2) {
+                  setSearchText('');
+                }
               }}
               sx={{ flex: 1 }}
             >
               <Tab label={t('wildcards:autocomplete.manualTab')} />
               <Tab label={t('wildcards:autocomplete.autoTab')} />
+              <Tab
+                icon={<SearchIcon />}
+                iconPosition="start"
+                label={t('wildcards:autocomplete.searchTab', { defaultValue: '검색' })}
+              />
             </Tabs>
             <IconButton
               size="small"
@@ -655,6 +696,99 @@ export function WildcardTextField({
                                 <ChevronRightIcon fontSize="small" />
                               </IconButton>
                             )}
+                          </ListItemButton>
+                        );
+                      })
+                    )}
+                  </List>
+                </>
+              )}
+
+              {/* 검색 탭 */}
+              {tabValue === 2 && (
+                <>
+                  {/* 검색 입력 */}
+                  <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      placeholder={t('wildcards:autocomplete.searchPlaceholder', { defaultValue: '와일드카드 검색...' })}
+                      value={searchText}
+                      onChange={(e) => setSearchText(e.target.value)}
+                      autoFocus
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <SearchIcon fontSize="small" />
+                          </InputAdornment>
+                        )
+                      }}
+                    />
+                  </Box>
+
+                  {/* 검색 결과 */}
+                  <List dense>
+                    {!searchText ? (
+                      <Box sx={{ p: 3, textAlign: 'center' }}>
+                        <SearchIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+                        <Typography variant="body2" color="text.secondary">
+                          {t('wildcards:autocomplete.searchHint', { defaultValue: '검색어를 입력하세요' })}
+                        </Typography>
+                      </Box>
+                    ) : displayItems.length === 0 ? (
+                      <Typography sx={{ p: 2, color: 'text.secondary', textAlign: 'center' }}>
+                        {t('wildcards:autocomplete.noResults')}
+                      </Typography>
+                    ) : (
+                      displayItems.map(w => {
+                        const hasChildren = w.children && w.children.length > 0;
+                        const isAuto = (w as any).is_auto_collected;
+                        return (
+                          <ListItemButton
+                            key={w.id}
+                            onClick={() => handleSelectWildcard(w.name)}
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              '&:hover': {
+                                bgcolor: isAuto
+                                  ? 'rgba(156, 39, 176, 0.08)'
+                                  : 'rgba(25, 118, 210, 0.08)'
+                              }
+                            }}
+                          >
+                            {/* 아이콘 */}
+                            <ListItemIcon sx={{ minWidth: 36 }}>
+                              {hasChildren ? (
+                                <FolderIcon
+                                  fontSize="small"
+                                  color={isAuto ? 'secondary' : 'primary'}
+                                />
+                              ) : isAuto ? (
+                                <AutoIcon fontSize="small" sx={{ color: 'secondary.main' }} />
+                              ) : (
+                                <TextIcon fontSize="small" color="action" />
+                              )}
+                            </ListItemIcon>
+
+                            {/* 이름 */}
+                            <ListItemText
+                              primary={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                  <span>{w.name}</span>
+                                  {isAuto && (
+                                    <Chip
+                                      label={t('wildcards:autoCollect.autoCollectedBadge', { defaultValue: '자동' })}
+                                      size="small"
+                                      color="secondary"
+                                      sx={{ height: 16, fontSize: '0.6rem' }}
+                                    />
+                                  )}
+                                </Box>
+                              }
+                              secondary={w.description}
+                              sx={{ cursor: 'pointer' }}
+                            />
                           </ListItemButton>
                         );
                       })

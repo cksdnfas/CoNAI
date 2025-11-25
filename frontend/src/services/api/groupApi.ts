@@ -195,13 +195,14 @@ export const groupApi = {
 
   /**
    * Get random image from group
+   * Note: Adding timestamp to prevent caching
    */
   getRandomImageFromGroup: async (id: number): Promise<{
     success: boolean;
     data?: ImageRecord;
     error?: string;
   }> => {
-    const response = await apiClient.get(`/api/groups/${id}/random-image`);
+    const response = await apiClient.get(`/api/groups/${id}/random-image?_t=${Date.now()}`);
     return response.data;
   },
 

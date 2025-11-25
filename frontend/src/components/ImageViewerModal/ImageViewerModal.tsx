@@ -96,7 +96,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [lastFocusedElement, setLastFocusedElement] = useState<HTMLElement | null>(null); // Focus management for nested modals
 
   // Custom hooks - ✅ composite_hash 사용 (null 체크 포함)
-  const transform = useImageTransform(image?.composite_hash || undefined, open);
+  // Use currentImage instead of image prop to support random mode
+  const transform = useImageTransform(currentImage?.composite_hash || undefined, open);
   const navigation = useImageNavigation({
     images,
     currentIndex,
@@ -107,6 +108,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     searchParams,
     groupId,
     allImageIds,
+    isRandomMode,
     onRandomImageLoaded: (newImage: ImageRecord) => {
       setCurrentImage(newImage);
     },

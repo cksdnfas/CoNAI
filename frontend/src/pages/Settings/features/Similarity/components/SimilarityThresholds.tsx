@@ -56,68 +56,86 @@ export const SimilarityThresholds: React.FC<SimilarityThresholdsProps> = ({
         <Stack spacing={3}>
           {/* Duplicate Threshold */}
           <Box>
-            <Typography gutterBottom>
-              {t('similarity.thresholds.duplicate.label', { value: duplicateThreshold })}
-            </Typography>
-            <Slider
-              value={duplicateThreshold}
-              onChange={(_, value) => onSetDuplicateThreshold(value as number)}
-              min={0}
-              max={10}
-              step={1}
-              marks={[
-                { value: 0, label: t('similarity.thresholds.duplicate.strict') },
-                { value: 5, label: t('similarity.thresholds.duplicate.recommended') },
-                { value: 10, label: t('similarity.thresholds.duplicate.lenient') },
-              ]}
-            />
-            <Typography variant="caption" color="text.secondary">
-              {t('similarity.thresholds.duplicate.description')}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <Typography>
+                {t('similarity.thresholds.duplicate.label', { value: duplicateThreshold })}
+              </Typography>
+              <Tooltip title={t('similarity.thresholds.duplicate.description')} arrow>
+                <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
+              </Tooltip>
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+              <Box sx={{ width: '90%' }}>
+                <Slider
+                  value={duplicateThreshold}
+                  onChange={(_, value) => onSetDuplicateThreshold(value as number)}
+                  min={0}
+                  max={10}
+                  step={1}
+                  marks={[
+                    { value: 0, label: t('similarity.thresholds.duplicate.strict') },
+                    { value: 5, label: t('similarity.thresholds.duplicate.recommended') },
+                    { value: 10, label: t('similarity.thresholds.duplicate.lenient') },
+                  ]}
+                />
+              </Box>
+            </Box>
           </Box>
 
           {/* Similar Threshold */}
           <Box>
-            <Typography gutterBottom>
-              {t('similarity.thresholds.similar.label', { value: similarThreshold })}
-            </Typography>
-            <Slider
-              value={similarThreshold}
-              onChange={(_, value) => onSetSimilarThreshold(value as number)}
-              min={5}
-              max={25}
-              step={1}
-              marks={[
-                { value: 5, label: t('similarity.thresholds.similar.strict') },
-                { value: 15, label: t('similarity.thresholds.similar.recommended') },
-                { value: 25, label: t('similarity.thresholds.similar.lenient') },
-              ]}
-            />
-            <Typography variant="caption" color="text.secondary">
-              {t('similarity.thresholds.similar.description')}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <Typography>
+                {t('similarity.thresholds.similar.label', { value: similarThreshold })}
+              </Typography>
+              <Tooltip title={t('similarity.thresholds.similar.description')} arrow>
+                <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
+              </Tooltip>
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+              <Box sx={{ width: '90%' }}>
+                <Slider
+                  value={similarThreshold}
+                  onChange={(_, value) => onSetSimilarThreshold(value as number)}
+                  min={5}
+                  max={25}
+                  step={1}
+                  marks={[
+                    { value: 5, label: t('similarity.thresholds.similar.strict') },
+                    { value: 15, label: t('similarity.thresholds.similar.recommended') },
+                    { value: 25, label: t('similarity.thresholds.similar.lenient') },
+                  ]}
+                />
+              </Box>
+            </Box>
           </Box>
 
           {/* Color Threshold */}
           <Box>
-            <Typography gutterBottom>
-              {t('similarity.thresholds.color.label', { value: colorThreshold })}
-            </Typography>
-            <Slider
-              value={colorThreshold}
-              onChange={(_, value) => onSetColorThreshold(value as number)}
-              min={70}
-              max={100}
-              step={5}
-              marks={[
-                { value: 70, label: t('similarity.thresholds.color.min') },
-                { value: 85, label: t('similarity.thresholds.color.recommended') },
-                { value: 100, label: t('similarity.thresholds.color.max') },
-              ]}
-            />
-            <Typography variant="caption" color="text.secondary">
-              {t('similarity.thresholds.color.description')}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <Typography>
+                {t('similarity.thresholds.color.label', { value: colorThreshold })}
+              </Typography>
+              <Tooltip title={t('similarity.thresholds.color.description')} arrow>
+                <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
+              </Tooltip>
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+              <Box sx={{ width: '90%' }}>
+                <Slider
+                  value={colorThreshold}
+                  onChange={(_, value) => onSetColorThreshold(value as number)}
+                  min={70}
+                  max={100}
+                  step={5}
+                  marks={[
+                    { value: 70, label: t('similarity.thresholds.color.min') },
+                    { value: 85, label: t('similarity.thresholds.color.recommended') },
+                    { value: 100, label: t('similarity.thresholds.color.max') },
+                  ]}
+                />
+              </Box>
+            </Box>
           </Box>
 
           {/* Search Limit */}

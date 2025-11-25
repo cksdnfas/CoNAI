@@ -89,16 +89,16 @@
     }
   },
   "info": {
-    "title": "Image Information"
+    "title": "画像情報"
   },
-  "copyHash": "Copy hash",
-  "hashGenerating": "Waiting for hash generation...",
-  "hashCopied": "Hash copied",
-  "viewThumbnail": "View Thumbnail (Fast Loading)",
-  "viewOriginal": "View Original (High Quality)",
-  "originalNotFound": "Original image not found. Showing thumbnail.",
+  "copyHash": "ハッシュをコピー",
+  "hashGenerating": "ハッシュ生成待機中...",
+  "hashCopied": "ハッシュをコピーしました",
+  "viewThumbnail": "サムネイルを表示（高速読み込み）",
+  "viewOriginal": "オリジナルを表示（高品質）",
+  "originalNotFound": "オリジナル画像が見つかりません。サムネイルを表示します。",
   "groupModal": {
-    "title": "Group: {{name}}",
-    "defaultTitle": "Group Images"
+    "title": "グループ: {{name}}",
+    "defaultTitle": "グループ画像"
   }
 }

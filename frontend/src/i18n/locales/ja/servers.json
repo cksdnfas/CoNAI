@@ -4,7 +4,7 @@
     "listTitle": "ComfyUIサーバーリスト",
     "addButton": "サーバー追加",
     "noServers": "登録されたサーバーがありません",
-    "noServersDesc": "「サーバー追加」ボタンをクリックしてComfyUIサーバーを追加してください"
+    "noServersDesc": "\"サーバー追加\"ボタンをクリックしてComfyUIサーバーを追加してください"
   },
   "card": {
     "active": "アクティブ",

@@ -7,6 +7,15 @@
     "clear": "すべてリセット",
     "execute": "検索実行"
   },
+  "simpleSearch": {
+    "description": "ポジティブプロンプトと自動タグから検索します。",
+    "placeholder": "検索語を入力してください (例: girl, masterpiece, hatsune miku)",
+    "helpTooltip": {
+      "searchScope": "検索範囲: ポジティブプロンプト、自動タグ General/Character",
+      "ignoreWeights": "ウェイトは無視されます",
+      "advancedTip": "複雑な条件は\\\"高度な検索\\\"を使用"
+    }
+  },
   "results": {
     "title": "検索結果",
     "searching": "検索中...",
@@ -106,75 +115,102 @@
   "searchHistory": {
     "title": "最近の検索"
   },
+  "advancedTab": {
+    "title": "複合フィルター検索",
+    "descriptionActive": "{{count}}個のフィルターが適用中 · 実行順序: 除外 → OR → AND",
+    "descriptionEmpty": "フィルターを追加して詳細な検索を開始してください",
+    "helpTooltip": "フィルター使用方法ヘルプ"
+  },
+
+  "searchBar": {
+    "tabs": {
+      "simple": "一般検索",
+      "advanced": "高度な検索"
+    },
+    "buttons": {
+      "search": "検索",
+      "searching": "検索中...",
+      "reset": "リセット"
+    },
+    "validation": {
+      "searchTextRequired": "検索語を入力してください",
+      "filterRequired": "条件を1つ以上追加してください",
+      "filterError": "フィルター {{index}}: {{error}}",
+      "booleanRequired": "値は はい/いいえ である必要があります",
+      "valueRequired": "値を入力してください",
+      "scoreRequired": "最小スコアまたは最大スコアを設定してください"
+    }
+  },
+
   "filterBlock": {
-    "addButton": "Add Filter",
-    "emptyMessage": "Add filters to start searching",
-    "countInfo": "{{count}} filter(s) will be applied.",
-    "executionOrder": "Execution order: Exclude → OR → AND",
+    "addButton": "フィルターを追加",
+    "emptyMessage": "フィルターを追加して検索を開始",
+    "countInfo": "{{count}}個のフィルターが適用されます。",
+    "executionOrder": "実行順序：除外 → OR → AND",
     "modal": {
-      "title": "Add Filter",
-      "cancel": "Cancel",
-      "back": "Back",
-      "next": "Next",
-      "add": "Add Filter",
+      "title": "フィルターを追加",
+      "cancel": "キャンセル",
+      "back": "戻る",
+      "next": "次へ",
+      "add": "フィルターを追加",
       "steps": {
-        "selectGroup": "Select Filter Group",
-        "selectCategory": "Select Category",
-        "configureCondition": "Configure Condition"
+        "selectGroup": "フィルターグループを選択",
+        "selectCategory": "カテゴリを選択",
+        "configureCondition": "条件を設定"
       },
       "step1": {
-        "description": "Choose how to apply the filter"
+        "description": "フィルターの適用方法を選択してください"
       },
       "step2": {
-        "description": "Select what information to search by"
+        "description": "検索する情報を選択してください"
       },
       "step3": {
-        "description": "Configure the condition. Filters cannot be edited after creation, you must delete and recreate them."
+        "description": "条件を設定してください。作成後はフィルターを編集できません。削除して再作成する必要があります。"
       }
     },
     "groupTypes": {
       "exclude": {
-        "label": "Exclude (NOT)",
-        "description": "Exclude images matching this condition from results"
+        "label": "除外 (NOT)",
+        "description": "この条件に一致する画像を結果から除外"
       },
       "or": {
-        "label": "OR Group",
-        "description": "Include images matching this condition in results"
+        "label": "ORグループ",
+        "description": "この条件に一致する画像を結果に含める"
       },
       "and": {
-        "label": "AND Group",
-        "description": "Only include images matching all conditions"
+        "label": "ANDグループ",
+        "description": "すべての条件に一致する画像のみ含める"
       }
     },
     "categories": {
       "positive_prompt": {
-        "label": "Positive Prompt",
-        "description": "Search positive prompts used in image generation"
+        "label": "ポジティブプロンプト",
+        "description": "画像生成で使用されたポジティブプロンプトを検索"
       },
       "negative_prompt": {
-        "label": "Negative Prompt",
-        "description": "Search negative prompts used in image generation"
+        "label": "ネガティブプロンプト",
+        "description": "画像生成で使用されたネガティブプロンプトを検索"
       },
       "auto_tag": {
-        "label": "Auto Tag (WD Tagger)",
-        "description": "Search auto-generated tags from WD v3 Tagger"
+        "label": "自動タグ (WD Tagger)",
+        "description": "WD v3 Taggerから自動生成されたタグを検索"
       },
       "basic": {
-        "label": "Basic Info",
-        "description": "Search basic metadata like AI tool and model name"
+        "label": "基本情報",
+        "description": "AIツールやモデル名などの基本メタデータを検索"
       }
     },
     "conditionTypes": {
-      "conditionType": "Condition Type",
-      "value": "Value",
-      "placeholder": "Enter value to search",
-      "scoreRange": "Score Range",
-      "weightRange": "Weight Range",
-      "tagName": "Tag/Character Name",
-      "tagPlaceholder": "e.g., 1girl, hatsune_miku",
-      "ratingType": "Rating Type",
-      "exists": "Present",
-      "notExists": "Absent"
+      "conditionType": "条件タイプ",
+      "value": "値",
+      "placeholder": "検索する値を入力",
+      "scoreRange": "スコア範囲",
+      "weightRange": "ウェイト範囲",
+      "tagName": "タグ/キャラクター名",
+      "tagPlaceholder": "例: 1girl, hatsune_miku",
+      "ratingType": "レーティングタイプ",
+      "exists": "存在する",
+      "notExists": "存在しない"
     }
   }
 }

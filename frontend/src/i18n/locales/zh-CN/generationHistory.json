@@ -47,13 +47,13 @@
     "createdAt": "创建时间",
     "completedAt": "完成时间"
   },
-  "cleanupFailed": "[zh-CN] Failed to cleanup",
-  "cleanupFailedTitle": "[zh-CN] Cleanup Failed Items",
-  "cleanupFailedConfirm": "[zh-CN] Are you sure you want to delete {{count}} failed generation histories?",
-  "cleanupFailedNote": "[zh-CN] Only database records will be deleted, files will be kept.",
-  "cleanup": "[zh-CN] Cleanup",
-  "cleaning": "[zh-CN] Cleaning...",
-  "cleanupSuccess": "[zh-CN] {{count}} failed items have been deleted",
-  "noFailedRecords": "[zh-CN] No failed items to clean up",
-  "bulkDeleteFailed": "[zh-CN] Failed to bulk delete"
+  "cleanupFailed": "清理失败",
+  "cleanupFailedTitle": "清理失败项目",
+  "cleanupFailedConfirm": "确定要删除{{count}}个失败的生成历史吗？",
+  "cleanupFailedNote": "仅删除数据库记录，文件将被保留。",
+  "cleanup": "清理",
+  "cleaning": "清理中...",
+  "cleanupSuccess": "已删除{{count}}个失败项目",
+  "noFailedRecords": "没有失败的项目需要清理",
+  "bulkDeleteFailed": "批量删除失败"
 }

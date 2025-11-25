@@ -20,6 +20,12 @@
       }
     },
 
+    "bulkActions": {
+      "selectedCount": "已選擇 {{count}} 個",
+      "assignSelected": "分配所選項目",
+      "bulkAssign": "批次分配"
+    },
+
     "table": {
       "headers": {
         "prompt": "提示詞",
@@ -68,6 +74,35 @@
     "actions": {
       "cancel": "取消",
       "assign": "分配"
+    }
+  },
+
+  "bulkAssignDialog": {
+    "title": "批量分配提示詞",
+    "groupSelect": {
+      "label": "目標群組",
+      "placeholder": "請選擇群組"
+    },
+    "textInput": {
+      "label": "輸入提示詞",
+      "placeholder": "請輸入提示詞（用逗號或換行分隔）",
+      "example": "範例: 提示詞1, 提示詞2, 提示詞3"
+    },
+    "preview": {
+      "title": "預覽 ({{count}}個)",
+      "empty": "未輸入提示詞"
+    },
+    "actions": {
+      "assign": "分配",
+      "cancel": "取消",
+      "close": "關閉"
+    },
+    "results": {
+      "title": "分配結果",
+      "created": "已建立: {{count}}個",
+      "updated": "已更新: {{count}}個",
+      "failed": "失敗: {{count}}個",
+      "total": "共處理 {{count}}個"
     }
   },
 

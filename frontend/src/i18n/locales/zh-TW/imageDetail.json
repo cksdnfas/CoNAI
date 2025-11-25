@@ -89,16 +89,16 @@
     }
   },
   "info": {
-    "title": "[zh-TW] Image Information"
+    "title": "圖像資訊"
   },
-  "copyHash": "[zh-TW] Copy hash",
-  "hashGenerating": "[zh-TW] Waiting for hash generation...",
-  "hashCopied": "[zh-TW] Hash copied",
-  "viewThumbnail": "[zh-TW] View Thumbnail (Fast Loading)",
-  "viewOriginal": "[zh-TW] View Original (High Quality)",
-  "originalNotFound": "[zh-TW] Original image not found. Showing thumbnail.",
+  "copyHash": "複製雜湊值",
+  "hashGenerating": "等待生成雜湊值...",
+  "hashCopied": "雜湊值已複製",
+  "viewThumbnail": "檢視縮圖（快速載入）",
+  "viewOriginal": "檢視原圖（高品質）",
+  "originalNotFound": "未找到原始圖像。顯示縮圖。",
   "groupModal": {
-    "title": "[zh-TW] Group: {{name}}",
-    "defaultTitle": "[zh-TW] Group Images"
+    "title": "群組：{{name}}",
+    "defaultTitle": "群組圖像"
   }
 }

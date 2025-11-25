@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Typography, IconButton, Tooltip } from '@mui/material';
 import { HelpOutline as HelpOutlineIcon } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import type { FilterCondition, FilterGroupType } from '@comfyui-image-manager/shared';
 import FilterBlockList, { type FilterBlockData } from '../FilterBuilder/FilterBlockList';
 import FilterBlockModal from '../FilterBuilder/FilterBlockModal';
@@ -20,6 +21,7 @@ const AdvancedSearchTab: React.FC<AdvancedSearchTabProps> = ({
   onEditBlock,
   showHeader = false,
 }) => {
+  const { t } = useTranslation();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   const [editingBlock, setEditingBlock] = useState<FilterBlockData | null>(null);
@@ -80,15 +82,15 @@ const AdvancedSearchTab: React.FC<AdvancedSearchTabProps> = ({
         >
           <Box>
             <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              복합 필터 검색
+              {t('search:advancedTab.title')}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               {filterBlocks.length > 0
-                ? `${filterBlocks.length}개의 필터 적용 중 · 실행 순서: 제외 → OR → AND`
-                : '필터를 추가하여 정교한 검색을 시작하세요'}
+                ? t('search:advancedTab.descriptionActive', { count: filterBlocks.length })
+                : t('search:advancedTab.descriptionEmpty')}
             </Typography>
           </Box>
-          <Tooltip title="필터 사용법 도움말" arrow>
+          <Tooltip title={t('search:advancedTab.helpTooltip')} arrow>
             <IconButton onClick={handleHelpClick} size="small" color="primary">
               <HelpOutlineIcon />
             </IconButton>

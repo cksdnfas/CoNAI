@@ -157,6 +157,11 @@
       "comingSoon": "This feature is coming soon.",
       "description": "View your previously generated images and settings."
     },
+    "groupSelector": {
+      "title": "Group Assignment",
+      "selectButton": "Select Group",
+      "description": "Generated images will be automatically added to the selected group"
+    },
     "resolution": {
       "mode": "Resolution Mode",
       "modeFixed": "Fixed Mode",

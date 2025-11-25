@@ -13,8 +13,8 @@
     "addItem": "新增項目",
     "preview": "預覽",
     "confirmDelete": "確定要刪除'{{name}}'萬用字元嗎?",
-    "copiedToClipboard": "[zh-TW] Copied to clipboard",
-    "copyFailed": "[zh-TW] Failed to copy"
+    "copiedToClipboard": "已複製到剪貼簿",
+    "copyFailed": "複製失敗"
   },
   "card": {
     "items": "{{count}}個項目",
@@ -51,7 +51,7 @@
     "nameRequired": "萬用字元名稱為必填項",
     "itemsRequired": "至少需要一個項目",
     "previewTextRequired": "請輸入要測試的提示詞",
-    "copyFailed": "[zh-TW] Failed to copy"
+    "copyFailed": "複製失敗"
   },
   "tabs": {
     "manual": "手動建立",
@@ -90,7 +90,7 @@
     "noAutoWildcards": "沒有自動收集的萬用字元",
     "noAutoWildcardsDesc": "掃描LORA資料夾以生成萬用字元",
     "autoCollectedBadge": "自動",
-    "viewDetail": "[zh-TW] View Details",
+    "viewDetail": "檢視詳情",
     "errors": {
       "folderPathRequired": "LORA資料夾路徑為必填項",
       "invalidWeight": "請輸入有效的權重值 (0.1 ~ 2.0)",
@@ -113,45 +113,49 @@
       "noResults": "未找到結果",
       "tryDifferentFilters": "請嘗試不同的搜尋詞或篩選器"
     },
-    "matchingMode": "[zh-TW] Text File Matching Mode",
-    "matchingModeFilename": "[zh-TW] Filename Matching (lora.txt)",
-    "matchingModeCommon": "[zh-TW] Use Common Text File",
-    "commonTextFilename": "[zh-TW] Common Text Filename",
-    "commonTextFilenameHelper": "[zh-TW] Common text filename to use within folders (e.g., add.txt, common.txt)",
-    "matchingPriority": "[zh-TW] Matching Priority",
-    "priorityFilename": "[zh-TW] Filename Matching First (fallback to common text)",
-    "priorityCommon": "[zh-TW] Common Text First (fallback to filename matching)"
+    "matchingMode": "文字檔案匹配模式",
+    "matchingModeFilename": "檔案名稱匹配 (lora.txt)",
+    "matchingModeCommon": "使用公共文字檔案",
+    "commonTextFilename": "公共文字檔案名稱",
+    "commonTextFilenameHelper": "在資料夾中使用的公共文字檔案名稱 (例如: add.txt, common.txt)",
+    "matchingPriority": "匹配優先順序",
+    "priorityFilename": "檔案名稱匹配優先 (回退到公共文字)",
+    "priorityCommon": "公共文字優先 (回退到檔案名稱匹配)"
   },
   "buttons": {
-    "openScanDialog": "[zh-TW] Scan LORA",
-    "openLogDialog": "[zh-TW] Last Scan Log"
+    "openScanDialog": "掃描LORA",
+    "openLogDialog": "最後掃描記錄"
   },
   "scanDialog": {
-    "title": "[zh-TW] LORA Wildcard Auto-Generation",
-    "infoMessage": "[zh-TW] Please select ComfyUI's loras folder or a folder containing LORA files.",
-    "scanButton": "[zh-TW] Collect LORA",
-    "warningTitle": "[zh-TW] Scan Information:",
-    "warning1": "[zh-TW] Automatically collects .safetensors files",
-    "warning2": "[zh-TW] Re-scanning the same folder will update the items",
-    "warning3": "[zh-TW] Auto-collected items can be found in this tab"
+    "title": "LORA萬用字元自動生成",
+    "infoMessage": "請選擇ComfyUI的loras資料夾或包含LORA檔案的資料夾。",
+    "scanButton": "收集LORA",
+    "warningTitle": "掃描資訊:",
+    "warning1": "自動收集.safetensors檔案",
+    "warning2": "重新掃描同一資料夾將更新項目",
+    "warning3": "自動收集的項目可以在此標籤中找到"
   },
   "logDialog": {
-    "title": "[zh-TW] Last LORA Scan Log"
+    "title": "最後LORA掃描記錄"
   },
   "detailDialog": {
-    "title": "[zh-TW] View List (Read-Only)",
-    "readOnlyInfo": "[zh-TW] Auto-collected items cannot be edited. You can only view the contents.",
-    "name": "[zh-TW] List Name",
-    "description": "[zh-TW] Description",
-    "path": "[zh-TW] Path",
-    "itemList": "[zh-TW] Item List ({{count}} items)"
+    "title": "檢視列表 (唯讀)",
+    "readOnlyInfo": "自動收集的項目無法編輯。您只能檢視內容。",
+    "name": "列表名稱",
+    "description": "描述",
+    "path": "路徑",
+    "itemList": "項目列表 ({{count}}個項目)"
   },
   "autocomplete": {
     "hint": "輸入 ++ 可顯示萬用字元列表",
     "manualTab": "手動",
     "autoTab": "自動 (LORA)",
+    "searchTab": "搜尋",
     "noResults": "無結果",
-    "selectTier": "請選擇層級"
+    "selectTier": "請選擇層級",
+    "root": "根目錄",
+    "searchPlaceholder": "搜尋萬用字元...",
+    "searchHint": "請輸入搜尋內容"
   },
   "deleteConfirm": {
     "title": "確認刪除萬用字元",

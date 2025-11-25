@@ -8,9 +8,9 @@
     "similarity": "圖像相似度搜尋",
     "prompts": "提示詞管理",
     "advanced": "進階設定",
-    "metadata": "[zh-TW] Metadata Extraction",
-    "folders": "[zh-TW] Folder Management",
-    "account": "[zh-TW] Account",
+    "metadata": "元數據提取",
+    "folders": "資料夾管理",
+    "account": "帳戶",
     "externalApi": "外部API認證"
   },
   "general": {
@@ -32,78 +32,83 @@
       "label": "關閉時自動清理Canvas資料夾",
       "tooltip": "伺服器關閉時自動刪除Canvas資料夾中的已編輯圖像。停用後將保留已編輯圖像。"
     },
+    "ratingBadges": {
+      "label": "顯示評分徽章",
+      "tooltip": "在圖像上顯示評分分數和等級徽章。停用後將隱藏評分資訊。"
+    },
     "deleteProtection": {
-      "title": "[zh-TW] Delete File Protection",
-      "description": "[zh-TW] Store deleted files in RecycleBin folder for recovery",
+      "title": "刪除檔案保護",
+      "description": "將刪除的檔案儲存在資源回收筒資料夾中以便復原",
+      "label": "將刪除的檔案儲存在資源回收筒中",
       "enabled": {
-        "label": "[zh-TW] Store deleted files in RecycleBin",
-        "description": "[zh-TW] When enabled, deleted files are backed up to RecycleBin folder instead of being permanently removed."
+        "label": "將刪除的檔案儲存在資源回收筒中",
+        "description": "啟用後,刪除的檔案將備份到資源回收筒資料夾而不是永久刪除。"
       },
-      "info": "[zh-TW] RecycleBin folder is created in the project root. Deleted files are stored with timestamps. You can manually copy files from RecycleBin if recovery is needed."
+      "info": "資源回收筒資料夾將在專案根目錄中建立。刪除的檔案將帶有時間戳記儲存。如需復原,您可以手動從資源回收筒複製檔案。"
     },
     "metadata": {
-      "title": "[zh-TW] Metadata Extraction Optimization",
+      "title": "元數據提取優化",
       "scanMode": {
-        "title": "[zh-TW] Stealth PNG Scan Mode",
+        "title": "Stealth PNG掃描模式",
         "fast": {
-          "label": "[zh-TW] Fast (Recommended)",
-          "description": "[zh-TW] Quick signature scan - checks first 200 pixels then exits early"
+          "label": "快速（推薦）",
+          "description": "快速簽名掃描 - 檢查前200像素後提前退出"
         },
         "full": {
-          "label": "[zh-TW] Full",
-          "description": "[zh-TW] Full file scan - checks all pixels (slow)"
+          "label": "完整",
+          "description": "完整檔案掃描 - 檢查所有像素（速度慢）"
         },
         "skip": {
-          "label": "[zh-TW] Skip",
-          "description": "[zh-TW] Skip scanning - disables secondary extraction"
+          "label": "跳過",
+          "description": "跳過掃描 - 停用二次提取"
         }
       },
       "limits": {
-        "title": "[zh-TW] File Size and Resolution Limits",
+        "title": "檔案大小和解析度限制",
         "fileSize": {
-          "label": "[zh-TW] Max File Size (MB)",
-          "helper": "[zh-TW] Files larger than this will skip Stealth PNG scanning"
+          "label": "最大檔案大小（MB）",
+          "helper": "大於此值的檔案將跳過Stealth PNG掃描"
         },
         "resolution": {
-          "label": "[zh-TW] Max Resolution (Megapixels)",
-          "helper": "[zh-TW] Images larger than this will skip Stealth PNG scanning"
+          "label": "最大解析度（百萬像素）",
+          "helper": "大於此值的圖像將跳過Stealth PNG掃描"
         }
       },
       "skipSettings": {
-        "title": "[zh-TW] AI Tool Skip Settings",
-        "description": "[zh-TW] Automatically skip Stealth PNG scanning for specific AI tool images.",
+        "title": "AI工具跳過設定",
+        "description": "自動跳過特定AI工具圖像的Stealth PNG掃描。",
         "comfyui": {
-          "label": "[zh-TW] Skip ComfyUI images (Recommended)",
-          "description": "[zh-TW] ComfyUI doesn't use Stealth PNG, scanning unnecessary"
+          "label": "跳過ComfyUI圖像（推薦）",
+          "description": "ComfyUI不使用Stealth PNG，掃描無意義"
         },
         "webui": {
-          "label": "[zh-TW] Skip WebUI images",
-          "description": "[zh-TW] WebUI may use Stealth PNG, enable only if needed"
+          "label": "跳過WebUI圖像",
+          "description": "WebUI可能使用Stealth PNG，僅在需要時啟用"
         }
       },
       "secondary": {
-        "label": "[zh-TW] Enable secondary extraction",
-        "description": "[zh-TW] Retry with Stealth PNG method if primary extraction fails."
+        "label": "啟用二次提取",
+        "description": "如果主要提取失敗，使用Stealth PNG方法重試。"
       },
-      "performanceNote": "[zh-TW] 💡 Tip: Default settings (Fast + ComfyUI skip) provide optimal performance for most cases. ComfyUI image processing time reduced from 2682ms → 4ms!"
+      "performanceNote": "💡 提示：預設設定（快速 + 跳過ComfyUI）在大多數情況下提供最佳效能。ComfyUI圖像處理時間從2682ms減少到4ms！"
     },
     "thumbnail": {
-      "title": "[zh-TW] Thumbnail Settings",
-      "description": "[zh-TW] Configure the size and quality used when generating thumbnails",
-      "saveFailed": "[zh-TW] Failed to save thumbnail settings",
+      "title": "縮圖設定",
+      "description": "設定生成縮圖時使用的大小和品質",
+      "saveFailed": "儲存縮圖設定失敗",
       "size": {
-        "label": "[zh-TW] Thumbnail Size",
-        "selectLabel": "[zh-TW] Thumbnail Size",
-        "original": "[zh-TW] Same as original",
-        "default": "[zh-TW] 1080px (default)"
+        "label": "縮圖大小",
+        "selectLabel": "縮圖大小",
+        "original": "與原始大小相同",
+        "default": "1080px（預設）"
       },
       "quality": {
-        "label": "[zh-TW] Thumbnail Quality",
-        "helperText": "[zh-TW] Higher quality increases file size (60-100%)"
+        "label": "縮圖品質",
+        "helperText": "更高的品質會增加檔案大小（60-100%）"
       },
       "regenerate": {
-        "button": "[zh-TW] Regenerate Thumbnails",
-        "description": "[zh-TW] Regenerate thumbnails for all images with current settings"
+        "button": "重新生成縮圖",
+        "description": "使用目前設定重新生成所有圖像的縮圖"
       }
     }
   },
@@ -232,10 +237,10 @@
       "result": "標記結果:",
       "failed": "測試失敗",
       "invalidId": "請輸入有效的圖像ID",
-      "imageHash": "[zh-TW] Image Hash",
-      "placeholderHash": "[zh-TW] e.g., abc123def456..."
+      "imageHash": "圖像雜湊",
+      "placeholderHash": "例如: abc123def456..."
     },
-    "enableAutoTagging": "[zh-TW] Enable Auto-Tagging"
+    "enableAutoTagging": "啟用自動標記"
   },
   "rating": {
     "title": "評分設定",
@@ -399,14 +404,14 @@
         "success": "已處理: {{processed}}個、失敗: {{failed}}個、剩餘: {{remaining}}個",
         "error": "錯誤: {{error}}"
       },
-      "imageHash": "[zh-TW] Image Hash",
-      "placeholderHash": "[zh-TW] e.g., abc123def456...",
-      "compositeHash": "[zh-TW] Image Hash",
-      "hashHelperText": "[zh-TW] Enter the image's composite_hash",
-      "button": "[zh-TW] Run Test",
-      "processing": "[zh-TW] Processing...",
-      "result": "[zh-TW] Tagging Result:",
-      "failed": "[zh-TW] Test failed"
+      "imageHash": "圖像雜湊",
+      "placeholderHash": "例如: abc123def456...",
+      "compositeHash": "圖像雜湊",
+      "hashHelperText": "輸入圖像的composite_hash",
+      "button": "執行測試",
+      "processing": "處理中...",
+      "result": "標記結果:",
+      "failed": "測試失敗"
     },
     "duplicateScan": {
       "title": "全域重複分析",
@@ -419,20 +424,20 @@
       "moreImages": "+{{count}}張更多",
       "noResults": "執行掃描後將顯示重複圖像組。",
       "id": "ID: {{id}}",
-      "selectAll": "[zh-TW] Select All",
-      "deselectAll": "[zh-TW] Deselect All",
-      "keepOne": "[zh-TW] Keep 1",
-      "keepOneDelete": "[zh-TW] Keep first image and select rest for deletion",
-      "deleteSelected": "[zh-TW] Delete {{count}} Selected",
-      "deleteConfirmTitle": "[zh-TW] Confirm Image Deletion",
-      "deleteConfirmMessage": "[zh-TW] Are you sure you want to delete {{count}} selected images?",
-      "deleteWarning": "[zh-TW] Deleted images cannot be recovered!",
-      "cancel": "[zh-TW] Cancel",
-      "confirmDelete": "[zh-TW] Delete",
-      "deleting": "[zh-TW] Deleting...",
-      "deleteSuccess": "[zh-TW] {{count}} images deleted successfully.",
-      "deletePartialSuccess": "[zh-TW] {{success}} succeeded, {{failed}} failed",
-      "deleteFailed": "[zh-TW] Failed to delete images."
+      "selectAll": "全選",
+      "deselectAll": "取消全選",
+      "keepOne": "保留1張",
+      "keepOneDelete": "保留第一張圖像並選擇其餘的刪除",
+      "deleteSelected": "刪除{{count}}張已選",
+      "deleteConfirmTitle": "確認刪除圖像",
+      "deleteConfirmMessage": "確定要刪除{{count}}張已選圖像嗎？",
+      "deleteWarning": "已刪除的圖像無法復原！",
+      "cancel": "取消",
+      "confirmDelete": "刪除",
+      "deleting": "刪除中...",
+      "deleteSuccess": "{{count}}張圖像刪除成功。",
+      "deletePartialSuccess": "{{success}}張成功，{{failed}}張失敗",
+      "deleteFailed": "刪除圖像失敗。"
     },
     "thresholds": {
       "title": "閾值設定",
@@ -469,8 +474,8 @@
       },
       "localStorageNote": "設定值僅本機儲存，搜尋時即時套用。"
     },
-    "autoGenerateHash": "[zh-TW] Auto-generate Hash on Upload",
-    "hashPlaceholder": "[zh-TW] e.g., a1b2c3d4e5f6..."
+    "autoGenerateHash": "上傳時自動產生雜湊",
+    "hashPlaceholder": "例如: a1b2c3d4e5f6..."
   },
   "messages": {
     "saveSuccess": "設定儲存成功",
@@ -690,123 +695,123 @@
     }
   },
   "thumbnail": {
-    "title": "[zh-TW] Thumbnail Settings",
-    "description": "[zh-TW] Configure size and quality used for thumbnail generation",
-    "saveFailed": "[zh-TW] Failed to save thumbnail settings",
+    "title": "縮圖設定",
+    "description": "設定生成縮圖時使用的大小和品質",
+    "saveFailed": "儲存縮圖設定失敗",
     "size": {
-      "label": "[zh-TW] Thumbnail Size",
-      "selectLabel": "[zh-TW] Thumbnail Size",
-      "original": "[zh-TW] Same as original size",
-      "default": "[zh-TW] 1080px (default)"
+      "label": "縮圖大小",
+      "selectLabel": "縮圖大小",
+      "original": "與原始大小相同",
+      "default": "1080px（預設）"
     },
     "quality": {
-      "label": "[zh-TW] Thumbnail Quality",
-      "helperText": "[zh-TW] Higher quality increases file size (60-100%)"
+      "label": "縮圖品質",
+      "helperText": "更高的品質會增加檔案大小（60-100%）"
     },
     "regenerate": {
-      "button": "[zh-TW] Regenerate Thumbnails",
-      "description": "[zh-TW] Regenerate all image thumbnails with current settings"
+      "button": "重新產生縮圖",
+      "description": "使用目前設定重新產生所有圖像的縮圖"
     }
   },
   "background": {
-    "title": "[zh-TW] Background Task Monitoring",
-    "loadFailed": "[zh-TW] Failed to load background task status",
-    "confirmReset": "[zh-TW] Reset background queue? All pending tasks will be cancelled.",
-    "resetFailed": "[zh-TW] Failed to reset queue",
-    "resetQueue": "[zh-TW] Reset Queue",
-    "autoTagFailed": "[zh-TW] Failed to trigger auto-tagging",
-    "confirmHashGen": "[zh-TW] Generate hash for {{count}} images?",
-    "hashGenComplete": "[zh-TW] Hash generation complete: {{processed}} succeeded, {{failed}} failed",
-    "hashGenFailed": "[zh-TW] Failed to regenerate hashes",
-    "confirmVerify": "[zh-TW] Verify {{count}} files?\\nThis may take time if there are many files.",
-    "verifyFailed": "[zh-TW] Failed to run file verification",
-    "verifyIntervalError": "[zh-TW] Verification interval must be between 300-86400 seconds",
-    "verifySaveFailed": "[zh-TW] Failed to save file verification settings",
-    "autoUpdate": "[zh-TW] Auto-updates every 5 seconds.",
-    "autoUpdateDisabled": "[zh-TW] Auto-update is disabled.",
+    "title": "後台任務監控",
+    "loadFailed": "載入後台任務狀態失敗",
+    "confirmReset": "重設後台佇列？所有待處理任務將被取消。",
+    "resetFailed": "重設佇列失敗",
+    "resetQueue": "重設佇列",
+    "autoTagFailed": "觸發自動標記失敗",
+    "confirmHashGen": "為{{count}}張圖像產生雜湊？",
+    "hashGenComplete": "雜湊產生完成: {{processed}}張成功，{{failed}}張失敗",
+    "hashGenFailed": "重新產生雜湊失敗",
+    "confirmVerify": "驗證{{count}}個檔案？\\n如果檔案數量較多可能需要一些時間。",
+    "verifyFailed": "執行檔案驗證失敗",
+    "verifyIntervalError": "驗證間隔必須在300-86400秒之間",
+    "verifySaveFailed": "儲存檔案驗證設定失敗",
+    "autoUpdate": "每5秒自動更新。",
+    "autoUpdateDisabled": "自動更新已停用。",
     "queue": {
-      "title": "[zh-TW] Background Queue",
-      "pending": "[zh-TW] Pending: {{count}}",
-      "processing": "[zh-TW] Processing",
-      "waiting": "[zh-TW] Waiting"
+      "title": "後台佇列",
+      "pending": "待處理: {{count}}個",
+      "processing": "處理中",
+      "waiting": "等待中"
     },
     "tasks": {
-      "metadata": "[zh-TW] Metadata Extraction",
-      "promptCollection": "[zh-TW] Prompt Collection",
-      "pendingCount": "[zh-TW] {{count}} pending"
+      "metadata": "元資料擷取",
+      "promptCollection": "提示詞收集",
+      "pendingCount": "{{count}}個待處理"
     },
     "autoTag": {
-      "title": "[zh-TW] Auto-Tagging Scheduler",
-      "manualTrigger": "[zh-TW] Manual Run",
-      "running": "[zh-TW] Running",
-      "stopped": "[zh-TW] Stopped",
-      "untaggedCount": "[zh-TW] Untagged images: {{count}}",
-      "pollingInterval": "[zh-TW] Polling interval: {{seconds}}s",
-      "batchSize": "[zh-TW] Batch size: {{size}}"
+      "title": "自動標記排程器",
+      "manualTrigger": "手動執行",
+      "running": "執行中",
+      "stopped": "已停止",
+      "untaggedCount": "未標記圖像: {{count}}張",
+      "pollingInterval": "輪詢間隔: {{seconds}}秒",
+      "batchSize": "批次處理大小: {{size}}張"
     },
     "hash": {
-      "title": "[zh-TW] Media Hash Status",
-      "generate": "[zh-TW] Generate Hash",
-      "total": "[zh-TW] Total: {{count}}",
-      "completed": "[zh-TW] Hash generated: {{count}}",
-      "pending": "[zh-TW] Not generated: {{count}}",
-      "completion": "[zh-TW] Completion: {{percent}}%"
+      "title": "媒體雜湊狀態",
+      "generate": "產生雜湊",
+      "total": "總計: {{count}}張",
+      "completed": "已產生雜湊: {{count}}張",
+      "pending": "未產生: {{count}}張",
+      "completion": "完成率: {{percent}}%"
     },
     "verify": {
-      "title": "[zh-TW] File Verification Status",
-      "viewLogs": "[zh-TW] View Logs",
-      "run": "[zh-TW] Run Verification",
-      "progress": "[zh-TW] File verification in progress: {{checked}}/{{total}}",
-      "missing": "[zh-TW] Missing: {{count}}",
-      "totalFiles": "[zh-TW] Total files: {{count}}",
-      "missingFiles": "[zh-TW] Missing files: {{count}}",
-      "lastVerification": "[zh-TW] Last verification: {{date}}",
-      "schedulerTitle": "[zh-TW] Verification Scheduler Settings",
-      "intervalLabel": "[zh-TW] Verification Interval (seconds)",
-      "intervalHelper": "[zh-TW] 300-86400 seconds (5 min - 24 hours)",
-      "intervalTooltip": "[zh-TW] May cause time consumption and system load if there are many files"
+      "title": "檔案驗證狀態",
+      "viewLogs": "檢視日誌",
+      "run": "執行驗證",
+      "progress": "檔案驗證進行中: {{checked}}/{{total}}",
+      "missing": "缺失: {{count}}個",
+      "totalFiles": "總檔案: {{count}}個",
+      "missingFiles": "缺失檔案: {{count}}個",
+      "lastVerification": "最後驗證: {{date}}",
+      "schedulerTitle": "驗證排程器設定",
+      "intervalLabel": "驗證間隔（秒）",
+      "intervalHelper": "300-86400秒（5分鐘 - 24小時）",
+      "intervalTooltip": "如果檔案數量較多可能導致時間消耗和系統負載"
     }
   },
   "auth": {
     "forgotAccount": {
-      "title": "[zh-TW] Forgot your account?",
-      "description": "[zh-TW] If you forgot your password, you can recover your account using the following method.",
-      "methodTitle": "[zh-TW] Recovery Method:",
-      "step1": "[zh-TW] Stop the server",
-      "step2": "[zh-TW] Delete the file below",
-      "step3": "[zh-TW] Restart the server",
-      "step4": "[zh-TW] Set up a new account",
-      "fileToDelete": "[zh-TW] File to delete:",
-      "warning": "[zh-TW] ⚠️ Warning: Deleting this file will invalidate all sessions and require re-login.",
-      "warningNote": "[zh-TW] Other data such as workflows and settings will not be affected."
+      "title": "忘記帳戶？",
+      "description": "如果您忘記了密碼，可以使用以下方法復原帳戶。",
+      "methodTitle": "復原方法：",
+      "step1": "停止伺服器",
+      "step2": "刪除下面的檔案",
+      "step3": "重新啟動伺服器",
+      "step4": "設定新帳戶",
+      "fileToDelete": "要刪除的檔案：",
+      "warning": "⚠️ 警告：刪除此檔案將使所有工作階段失效並需要重新登入。",
+      "warningNote": "其他資料（如工作流程和設定）不會受到影響。"
     },
     "setup": {
-      "title": "[zh-TW] Setup Authentication",
-      "description": "[zh-TW] Configure username and password to protect your image manager from unauthorized access. Once set, you will need to login to access the application.",
-      "username": "[zh-TW] Username",
-      "password": "[zh-TW] Password",
-      "confirmPassword": "[zh-TW] Confirm Password",
-      "button": "[zh-TW] Setup Authentication",
-      "success": "[zh-TW] Authentication configured successfully! You will need to login on your next visit.",
+      "title": "設定身分驗證",
+      "description": "設定使用者名稱和密碼以保護您的圖像管理器免受未經授權的存取。設定後，您需要登入才能存取應用程式。",
+      "username": "使用者名稱",
+      "password": "密碼",
+      "confirmPassword": "確認密碼",
+      "button": "設定身分驗證",
+      "success": "身分驗證設定成功！下次造訪時需要登入。",
       "errors": {
-        "required": "[zh-TW] Username and password are required",
-        "mismatch": "[zh-TW] Passwords do not match",
-        "failed": "[zh-TW] Failed to setup authentication"
+        "required": "使用者名稱和密碼是必需的",
+        "mismatch": "密碼不符",
+        "failed": "設定身分驗證失敗"
       }
     },
     "update": {
-      "title": "[zh-TW] Change Credentials",
-      "description": "[zh-TW] Changing your credentials will require you to login again with the new credentials.",
-      "currentPassword": "[zh-TW] Current Password",
-      "newUsername": "[zh-TW] New Username",
-      "newPassword": "[zh-TW] New Password",
-      "confirmNewPassword": "[zh-TW] Confirm New Password",
-      "button": "[zh-TW] Update Credentials",
-      "success": "[zh-TW] Credentials updated successfully!",
+      "title": "變更憑證",
+      "description": "變更憑證後需要使用新憑證重新登入。",
+      "currentPassword": "目前密碼",
+      "newUsername": "新使用者名稱",
+      "newPassword": "新密碼",
+      "confirmNewPassword": "確認新密碼",
+      "button": "更新憑證",
+      "success": "憑證更新成功！",
       "errors": {
-        "required": "[zh-TW] All fields are required",
-        "mismatch": "[zh-TW] New passwords do not match",
-        "failed": "[zh-TW] Failed to update credentials"
+        "required": "所有欄位都是必需的",
+        "mismatch": "新密碼不符",
+        "failed": "更新憑證失敗"
       }
     }
   },

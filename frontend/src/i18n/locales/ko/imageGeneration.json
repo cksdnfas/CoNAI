@@ -157,6 +157,11 @@
       "comingSoon": "이 기능은 곧 추가될 예정입니다.",
       "description": "과거 생성한 이미지와 설정을 확인할 수 있습니다."
     },
+    "groupSelector": {
+      "title": "그룹 할당",
+      "selectButton": "그룹 선택",
+      "description": "생성된 이미지가 선택한 그룹에 자동으로 추가됩니다"
+    },
     "resolution": {
       "mode": "해상도 모드",
       "modeFixed": "고정 모드",

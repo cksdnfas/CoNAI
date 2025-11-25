@@ -9,6 +9,16 @@
     "execute": "검색 실행"
   },
 
+  "simpleSearch": {
+    "description": "긍정 프롬프트와 자동태그에서 검색합니다.",
+    "placeholder": "검색어를 입력하세요 (예: girl, masterpiece, hatsune miku)",
+    "helpTooltip": {
+      "searchScope": "검색 범위: 긍정 프롬프트, 자동태그 General/Character",
+      "ignoreWeights": "가중치는 무시됩니다",
+      "advancedTip": "복잡한 조건은 \"고급 검색\" 사용"
+    }
+  },
+
   "results": {
     "title": "검색 결과",
     "searching": "검색 중...",
@@ -116,6 +126,33 @@
 
   "searchHistory": {
     "title": "최근 검색어"
+  },
+
+  "advancedTab": {
+    "title": "복합 필터 검색",
+    "descriptionActive": "{{count}}개의 필터 적용 중 · 실행 순서: 제외 → OR → AND",
+    "descriptionEmpty": "필터를 추가하여 정교한 검색을 시작하세요",
+    "helpTooltip": "필터 사용법 도움말"
+  },
+
+  "searchBar": {
+    "tabs": {
+      "simple": "일반 검색",
+      "advanced": "고급 검색"
+    },
+    "buttons": {
+      "search": "검색",
+      "searching": "검색 중...",
+      "reset": "초기화"
+    },
+    "validation": {
+      "searchTextRequired": "검색어를 입력해주세요",
+      "filterRequired": "조건을 하나 이상 추가해주세요",
+      "filterError": "필터 {{index}}: {{error}}",
+      "booleanRequired": "조건의 값은 예/아니오여야 합니다",
+      "valueRequired": "조건의 값을 입력해주세요",
+      "scoreRequired": "최소 점수 또는 최대 점수를 설정해주세요"
+    }
   },
 
   "filterBlock": {

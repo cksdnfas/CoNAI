@@ -32,33 +32,33 @@
   "chips": {
     "aiToolLabel": "AIツール: {{tool}}"
   },
-  "selectAllLabel": "Select All ({{selected}}/{{total}})",
-  "totalImages": "Total {{count}} images",
+  "selectAllLabel": "すべて選択 ({{selected}}/{{total}})",
+  "totalImages": "合計{{count}}枚の画像",
   "imageGridModal": {
-    "title": "Image Grid"
+    "title": "画像グリッド"
   },
   "selection": {
-    "toggleMode": "Deactivate Selection Mode",
-    "activateMode": "Activate Selection Mode",
-    "selectedImages": "Selected Images:",
-    "selectAll": "Select All",
-    "deselectAll": "Deselect All",
-    "selectAllWithCount": "Select All ({{selected}}/{{total}})",
+    "toggleMode": "選択モードを解除",
+    "activateMode": "選択モードを有効化",
+    "selectedImages": "選択された画像:",
+    "selectAll": "すべて選択",
+    "deselectAll": "選択解除",
+    "selectAllWithCount": "すべて選択 ({{selected}}/{{total}})",
     "methods": {
-      "title": "Selection Methods:",
-      "click": "Click: Select/deselect individual",
-      "drag": "Drag: Select multiple images",
-      "shiftClick": "Shift + Click: Range select",
-      "ctrlClick": "Ctrl/Cmd + Click: Toggle select",
-      "ctrlA": "Ctrl/Cmd + A: Select all",
-      "esc": "ESC: Deselect"
+      "title": "選択方法:",
+      "click": "• クリック: 個別選択/解除",
+      "drag": "• ドラッグ: 複数画像を選択",
+      "shiftClick": "• Shift + クリック: 範囲選択",
+      "ctrlClick": "• Ctrl/Cmd + クリック: 選択切り替え",
+      "ctrlA": "• Ctrl/Cmd + A: すべて選択",
+      "esc": "• ESC: 選択解除"
     }
   },
   "emptyState": {
-    "noImages": "No images",
-    "uploadPrompt": "Try uploading images.",
-    "uploadOrSearch": "Upload images or change search criteria."
+    "noImages": "画像がありません",
+    "uploadPrompt": "画像をアップロードしてみてください。",
+    "uploadOrSearch": "画像をアップロードするか、検索条件を変更してください。"
   },
-  "loading": "Loading images...",
-  "allImagesLoaded": "All images loaded"
+  "loading": "画像を読み込んでいます...",
+  "allImagesLoaded": "すべての画像を読み込みました"
 }

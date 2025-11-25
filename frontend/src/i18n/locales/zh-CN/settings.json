@@ -8,9 +8,9 @@
     "similarity": "图像相似度搜索",
     "prompts": "提示词管理",
     "advanced": "高级设置",
-    "metadata": "[zh-CN] Metadata Extraction",
-    "folders": "[zh-CN] Folder Management",
-    "account": "[zh-CN] Account",
+    "metadata": "元数据提取",
+    "folders": "文件夹管理",
+    "account": "账户",
     "externalApi": "外部API认证"
   },
   "general": {
@@ -32,78 +32,83 @@
       "label": "关闭时自动清理Canvas文件夹",
       "tooltip": "服务器关闭时自动删除Canvas文件夹中的已编辑图像。禁用后将保留已编辑图像。"
     },
+    "ratingBadges": {
+      "label": "显示评分徽章",
+      "tooltip": "在图像上显示评分分数和等级徽章。禁用后将隐藏评分信息。"
+    },
     "deleteProtection": {
-      "title": "[zh-CN] Delete File Protection",
-      "description": "[zh-CN] Store deleted files in RecycleBin folder for recovery",
+      "title": "删除文件保护",
+      "description": "将删除的文件存储在回收站文件夹中以便恢复",
+      "label": "将删除的文件存储在回收站中",
       "enabled": {
-        "label": "[zh-CN] Store deleted files in RecycleBin",
-        "description": "[zh-CN] When enabled, deleted files are backed up to RecycleBin folder instead of being permanently removed."
+        "label": "将删除的文件存储在回收站中",
+        "description": "启用后,删除的文件将备份到回收站文件夹而不是永久删除。"
       },
-      "info": "[zh-CN] RecycleBin folder is created in the project root. Deleted files are stored with timestamps. You can manually copy files from RecycleBin if recovery is needed."
+      "info": "回收站文件夹将在项目根目录中创建。删除的文件将带有时间戳存储。如需恢复,您可以手动从回收站复制文件。"
     },
     "metadata": {
-      "title": "[zh-CN] Metadata Extraction Optimization",
+      "title": "元数据提取优化",
       "scanMode": {
-        "title": "[zh-CN] Stealth PNG Scan Mode",
+        "title": "Stealth PNG扫描模式",
         "fast": {
-          "label": "[zh-CN] Fast (Recommended)",
-          "description": "[zh-CN] Quick signature scan - checks first 200 pixels then exits early"
+          "label": "快速（推荐）",
+          "description": "快速签名扫描 - 检查前200像素后提前退出"
         },
         "full": {
-          "label": "[zh-CN] Full",
-          "description": "[zh-CN] Full file scan - checks all pixels (slow)"
+          "label": "完整",
+          "description": "完整文件扫描 - 检查所有像素（速度慢）"
         },
         "skip": {
-          "label": "[zh-CN] Skip",
-          "description": "[zh-CN] Skip scanning - disables secondary extraction"
+          "label": "跳过",
+          "description": "跳过扫描 - 禁用二次提取"
         }
       },
       "limits": {
-        "title": "[zh-CN] File Size and Resolution Limits",
+        "title": "文件大小和分辨率限制",
         "fileSize": {
-          "label": "[zh-CN] Max File Size (MB)",
-          "helper": "[zh-CN] Files larger than this will skip Stealth PNG scanning"
+          "label": "最大文件大小（MB）",
+          "helper": "大于此值的文件将跳过Stealth PNG扫描"
         },
         "resolution": {
-          "label": "[zh-CN] Max Resolution (Megapixels)",
-          "helper": "[zh-CN] Images larger than this will skip Stealth PNG scanning"
+          "label": "最大分辨率（百万像素）",
+          "helper": "大于此值的图像将跳过Stealth PNG扫描"
         }
       },
       "skipSettings": {
-        "title": "[zh-CN] AI Tool Skip Settings",
-        "description": "[zh-CN] Automatically skip Stealth PNG scanning for specific AI tool images.",
+        "title": "AI工具跳过设置",
+        "description": "自动跳过特定AI工具图像的Stealth PNG扫描。",
         "comfyui": {
-          "label": "[zh-CN] Skip ComfyUI images (Recommended)",
-          "description": "[zh-CN] ComfyUI doesn't use Stealth PNG, scanning unnecessary"
+          "label": "跳过ComfyUI图像（推荐）",
+          "description": "ComfyUI不使用Stealth PNG，扫描无意义"
         },
         "webui": {
-          "label": "[zh-CN] Skip WebUI images",
-          "description": "[zh-CN] WebUI may use Stealth PNG, enable only if needed"
+          "label": "跳过WebUI图像",
+          "description": "WebUI可能使用Stealth PNG，仅在需要时启用"
         }
       },
       "secondary": {
-        "label": "[zh-CN] Enable secondary extraction",
-        "description": "[zh-CN] Retry with Stealth PNG method if primary extraction fails."
+        "label": "启用二次提取",
+        "description": "如果主要提取失败，使用Stealth PNG方法重试。"
       },
-      "performanceNote": "[zh-CN] 💡 Tip: Default settings (Fast + ComfyUI skip) provide optimal performance for most cases. ComfyUI image processing time reduced from 2682ms → 4ms!"
+      "performanceNote": "💡 提示：默认设置（快速 + 跳过ComfyUI）在大多数情况下提供最佳性能。ComfyUI图像处理时间从2682ms减少到4ms！"
     },
     "thumbnail": {
-      "title": "[zh-CN] Thumbnail Settings",
-      "description": "[zh-CN] Configure the size and quality used when generating thumbnails",
-      "saveFailed": "[zh-CN] Failed to save thumbnail settings",
+      "title": "缩略图设置",
+      "description": "配置生成缩略图时使用的大小和质量",
+      "saveFailed": "保存缩略图设置失败",
       "size": {
-        "label": "[zh-CN] Thumbnail Size",
-        "selectLabel": "[zh-CN] Thumbnail Size",
-        "original": "[zh-CN] Same as original",
-        "default": "[zh-CN] 1080px (default)"
+        "label": "缩略图大小",
+        "selectLabel": "缩略图大小",
+        "original": "与原始大小相同",
+        "default": "1080px（默认）"
       },
       "quality": {
-        "label": "[zh-CN] Thumbnail Quality",
-        "helperText": "[zh-CN] Higher quality increases file size (60-100%)"
+        "label": "缩略图质量",
+        "helperText": "更高的质量会增加文件大小（60-100%）"
       },
       "regenerate": {
-        "button": "[zh-CN] Regenerate Thumbnails",
-        "description": "[zh-CN] Regenerate thumbnails for all images with current settings"
+        "button": "重新生成缩略图",
+        "description": "使用当前设置重新生成所有图像的缩略图"
       }
     }
   },
@@ -232,10 +237,10 @@
       "result": "标记结果:",
       "failed": "测试失败",
       "invalidId": "请输入有效的图像ID",
-      "imageHash": "[zh-CN] Image Hash",
-      "placeholderHash": "[zh-CN] e.g., abc123def456..."
+      "imageHash": "图像哈希",
+      "placeholderHash": "例如: abc123def456..."
     },
-    "enableAutoTagging": "[zh-CN] Enable Auto-Tagging"
+    "enableAutoTagging": "启用自动标记"
   },
   "rating": {
     "title": "评分设置",
@@ -399,14 +404,14 @@
         "success": "已处理: {{processed}}个、失败: {{failed}}个、剩余: {{remaining}}个",
         "error": "错误: {{error}}"
       },
-      "imageHash": "[zh-CN] Image Hash",
-      "placeholderHash": "[zh-CN] e.g., abc123def456...",
-      "compositeHash": "[zh-CN] Image Hash",
-      "hashHelperText": "[zh-CN] Enter the image's composite_hash",
-      "button": "[zh-CN] Run Test",
-      "processing": "[zh-CN] Processing...",
-      "result": "[zh-CN] Tagging Result:",
-      "failed": "[zh-CN] Test failed"
+      "imageHash": "图像哈希",
+      "placeholderHash": "例如: abc123def456...",
+      "compositeHash": "图像哈希",
+      "hashHelperText": "输入图像的composite_hash",
+      "button": "运行测试",
+      "processing": "处理中...",
+      "result": "标记结果:",
+      "failed": "测试失败"
     },
     "duplicateScan": {
       "title": "全局重复分析",
@@ -419,20 +424,20 @@
       "moreImages": "+{{count}}张更多",
       "noResults": "执行扫描后将显示重复图像组。",
       "id": "ID: {{id}}",
-      "selectAll": "[zh-CN] Select All",
-      "deselectAll": "[zh-CN] Deselect All",
-      "keepOne": "[zh-CN] Keep 1",
-      "keepOneDelete": "[zh-CN] Keep first image and select rest for deletion",
-      "deleteSelected": "[zh-CN] Delete {{count}} Selected",
-      "deleteConfirmTitle": "[zh-CN] Confirm Image Deletion",
-      "deleteConfirmMessage": "[zh-CN] Are you sure you want to delete {{count}} selected images?",
-      "deleteWarning": "[zh-CN] Deleted images cannot be recovered!",
-      "cancel": "[zh-CN] Cancel",
-      "confirmDelete": "[zh-CN] Delete",
-      "deleting": "[zh-CN] Deleting...",
-      "deleteSuccess": "[zh-CN] {{count}} images deleted successfully.",
-      "deletePartialSuccess": "[zh-CN] {{success}} succeeded, {{failed}} failed",
-      "deleteFailed": "[zh-CN] Failed to delete images."
+      "selectAll": "全选",
+      "deselectAll": "取消全选",
+      "keepOne": "保留1张",
+      "keepOneDelete": "保留第一张图像并选择其余的删除",
+      "deleteSelected": "删除{{count}}张已选",
+      "deleteConfirmTitle": "确认删除图像",
+      "deleteConfirmMessage": "确定要删除{{count}}张已选图像吗？",
+      "deleteWarning": "已删除的图像无法恢复！",
+      "cancel": "取消",
+      "confirmDelete": "删除",
+      "deleting": "删除中...",
+      "deleteSuccess": "{{count}}张图像删除成功。",
+      "deletePartialSuccess": "{{success}}张成功，{{failed}}张失败",
+      "deleteFailed": "删除图像失败。"
     },
     "thresholds": {
       "title": "阈值设置",
@@ -469,8 +474,8 @@
       },
       "localStorageNote": "设置值仅本地保存，搜索时实时应用。"
     },
-    "autoGenerateHash": "[zh-CN] Auto-generate Hash on Upload",
-    "hashPlaceholder": "[zh-CN] e.g., a1b2c3d4e5f6..."
+    "autoGenerateHash": "上传时自动生成哈希",
+    "hashPlaceholder": "例如: a1b2c3d4e5f6..."
   },
   "messages": {
     "saveSuccess": "设置保存成功",
@@ -690,123 +695,123 @@
     }
   },
   "thumbnail": {
-    "title": "[zh-CN] Thumbnail Settings",
-    "description": "[zh-CN] Configure size and quality used for thumbnail generation",
-    "saveFailed": "[zh-CN] Failed to save thumbnail settings",
+    "title": "缩略图设置",
+    "description": "配置生成缩略图时使用的大小和质量",
+    "saveFailed": "保存缩略图设置失败",
     "size": {
-      "label": "[zh-CN] Thumbnail Size",
-      "selectLabel": "[zh-CN] Thumbnail Size",
-      "original": "[zh-CN] Same as original size",
-      "default": "[zh-CN] 1080px (default)"
+      "label": "缩略图大小",
+      "selectLabel": "缩略图大小",
+      "original": "与原始大小相同",
+      "default": "1080px（默认）"
     },
     "quality": {
-      "label": "[zh-CN] Thumbnail Quality",
-      "helperText": "[zh-CN] Higher quality increases file size (60-100%)"
+      "label": "缩略图质量",
+      "helperText": "更高的质量会增加文件大小（60-100%）"
     },
     "regenerate": {
-      "button": "[zh-CN] Regenerate Thumbnails",
-      "description": "[zh-CN] Regenerate all image thumbnails with current settings"
+      "button": "重新生成缩略图",
+      "description": "使用当前设置重新生成所有图像的缩略图"
     }
   },
   "background": {
-    "title": "[zh-CN] Background Task Monitoring",
-    "loadFailed": "[zh-CN] Failed to load background task status",
-    "confirmReset": "[zh-CN] Reset background queue? All pending tasks will be cancelled.",
-    "resetFailed": "[zh-CN] Failed to reset queue",
-    "resetQueue": "[zh-CN] Reset Queue",
-    "autoTagFailed": "[zh-CN] Failed to trigger auto-tagging",
-    "confirmHashGen": "[zh-CN] Generate hash for {{count}} images?",
-    "hashGenComplete": "[zh-CN] Hash generation complete: {{processed}} succeeded, {{failed}} failed",
-    "hashGenFailed": "[zh-CN] Failed to regenerate hashes",
-    "confirmVerify": "[zh-CN] Verify {{count}} files?\\nThis may take time if there are many files.",
-    "verifyFailed": "[zh-CN] Failed to run file verification",
-    "verifyIntervalError": "[zh-CN] Verification interval must be between 300-86400 seconds",
-    "verifySaveFailed": "[zh-CN] Failed to save file verification settings",
-    "autoUpdate": "[zh-CN] Auto-updates every 5 seconds.",
-    "autoUpdateDisabled": "[zh-CN] Auto-update is disabled.",
+    "title": "后台任务监控",
+    "loadFailed": "加载后台任务状态失败",
+    "confirmReset": "重置后台队列？所有待处理任务将被取消。",
+    "resetFailed": "重置队列失败",
+    "resetQueue": "重置队列",
+    "autoTagFailed": "触发自动标记失败",
+    "confirmHashGen": "为{{count}}张图像生成哈希？",
+    "hashGenComplete": "哈希生成完成: {{processed}}张成功，{{failed}}张失败",
+    "hashGenFailed": "重新生成哈希失败",
+    "confirmVerify": "验证{{count}}个文件？\\n如果文件数量较多可能需要一些时间。",
+    "verifyFailed": "运行文件验证失败",
+    "verifyIntervalError": "验证间隔必须在300-86400秒之间",
+    "verifySaveFailed": "保存文件验证设置失败",
+    "autoUpdate": "每5秒自动更新。",
+    "autoUpdateDisabled": "自动更新已禁用。",
     "queue": {
-      "title": "[zh-CN] Background Queue",
-      "pending": "[zh-CN] Pending: {{count}}",
-      "processing": "[zh-CN] Processing",
-      "waiting": "[zh-CN] Waiting"
+      "title": "后台队列",
+      "pending": "待处理: {{count}}个",
+      "processing": "处理中",
+      "waiting": "等待中"
     },
     "tasks": {
-      "metadata": "[zh-CN] Metadata Extraction",
-      "promptCollection": "[zh-CN] Prompt Collection",
-      "pendingCount": "[zh-CN] {{count}} pending"
+      "metadata": "元数据提取",
+      "promptCollection": "提示词收集",
+      "pendingCount": "{{count}}个待处理"
     },
     "autoTag": {
-      "title": "[zh-CN] Auto-Tagging Scheduler",
-      "manualTrigger": "[zh-CN] Manual Run",
-      "running": "[zh-CN] Running",
-      "stopped": "[zh-CN] Stopped",
-      "untaggedCount": "[zh-CN] Untagged images: {{count}}",
-      "pollingInterval": "[zh-CN] Polling interval: {{seconds}}s",
-      "batchSize": "[zh-CN] Batch size: {{size}}"
+      "title": "自动标记调度器",
+      "manualTrigger": "手动运行",
+      "running": "运行中",
+      "stopped": "已停止",
+      "untaggedCount": "未标记图像: {{count}}张",
+      "pollingInterval": "轮询间隔: {{seconds}}秒",
+      "batchSize": "批处理大小: {{size}}张"
     },
     "hash": {
-      "title": "[zh-CN] Media Hash Status",
-      "generate": "[zh-CN] Generate Hash",
-      "total": "[zh-CN] Total: {{count}}",
-      "completed": "[zh-CN] Hash generated: {{count}}",
-      "pending": "[zh-CN] Not generated: {{count}}",
-      "completion": "[zh-CN] Completion: {{percent}}%"
+      "title": "媒体哈希状态",
+      "generate": "生成哈希",
+      "total": "总计: {{count}}张",
+      "completed": "已生成哈希: {{count}}张",
+      "pending": "未生成: {{count}}张",
+      "completion": "完成率: {{percent}}%"
     },
     "verify": {
-      "title": "[zh-CN] File Verification Status",
-      "viewLogs": "[zh-CN] View Logs",
-      "run": "[zh-CN] Run Verification",
-      "progress": "[zh-CN] File verification in progress: {{checked}}/{{total}}",
-      "missing": "[zh-CN] Missing: {{count}}",
-      "totalFiles": "[zh-CN] Total files: {{count}}",
-      "missingFiles": "[zh-CN] Missing files: {{count}}",
-      "lastVerification": "[zh-CN] Last verification: {{date}}",
-      "schedulerTitle": "[zh-CN] Verification Scheduler Settings",
-      "intervalLabel": "[zh-CN] Verification Interval (seconds)",
-      "intervalHelper": "[zh-CN] 300-86400 seconds (5 min - 24 hours)",
-      "intervalTooltip": "[zh-CN] May cause time consumption and system load if there are many files"
+      "title": "文件验证状态",
+      "viewLogs": "查看日志",
+      "run": "运行验证",
+      "progress": "文件验证进行中: {{checked}}/{{total}}",
+      "missing": "缺失: {{count}}个",
+      "totalFiles": "总文件: {{count}}个",
+      "missingFiles": "缺失文件: {{count}}个",
+      "lastVerification": "最后验证: {{date}}",
+      "schedulerTitle": "验证调度器设置",
+      "intervalLabel": "验证间隔（秒）",
+      "intervalHelper": "300-86400秒（5分钟 - 24小时）",
+      "intervalTooltip": "如果文件数量较多可能导致时间消耗和系统负载"
     }
   },
   "auth": {
     "forgotAccount": {
-      "title": "[zh-CN] Forgot your account?",
-      "description": "[zh-CN] If you forgot your password, you can recover your account using the following method.",
-      "methodTitle": "[zh-CN] Recovery Method:",
-      "step1": "[zh-CN] Stop the server",
-      "step2": "[zh-CN] Delete the file below",
-      "step3": "[zh-CN] Restart the server",
-      "step4": "[zh-CN] Set up a new account",
-      "fileToDelete": "[zh-CN] File to delete:",
-      "warning": "[zh-CN] ⚠️ Warning: Deleting this file will invalidate all sessions and require re-login.",
-      "warningNote": "[zh-CN] Other data such as workflows and settings will not be affected."
+      "title": "忘记账户？",
+      "description": "如果您忘记了密码，可以使用以下方法恢复账户。",
+      "methodTitle": "恢复方法：",
+      "step1": "停止服务器",
+      "step2": "删除下面的文件",
+      "step3": "重启服务器",
+      "step4": "设置新账户",
+      "fileToDelete": "要删除的文件：",
+      "warning": "⚠️ 警告：删除此文件将使所有会话失效并需要重新登录。",
+      "warningNote": "其他数据（如工作流和设置）不会受到影响。"
     },
     "setup": {
-      "title": "[zh-CN] Setup Authentication",
-      "description": "[zh-CN] Configure username and password to protect your image manager from unauthorized access. Once set, you will need to login to access the application.",
-      "username": "[zh-CN] Username",
-      "password": "[zh-CN] Password",
-      "confirmPassword": "[zh-CN] Confirm Password",
-      "button": "[zh-CN] Setup Authentication",
-      "success": "[zh-CN] Authentication configured successfully! You will need to login on your next visit.",
+      "title": "设置身份验证",
+      "description": "配置用户名和密码以保护您的图像管理器免受未经授权的访问。设置后，您需要登录才能访问应用程序。",
+      "username": "用户名",
+      "password": "密码",
+      "confirmPassword": "确认密码",
+      "button": "设置身份验证",
+      "success": "身份验证配置成功！下次访问时需要登录。",
       "errors": {
-        "required": "[zh-CN] Username and password are required",
-        "mismatch": "[zh-CN] Passwords do not match",
-        "failed": "[zh-CN] Failed to setup authentication"
+        "required": "用户名和密码是必需的",
+        "mismatch": "密码不匹配",
+        "failed": "设置身份验证失败"
       }
     },
     "update": {
-      "title": "[zh-CN] Change Credentials",
-      "description": "[zh-CN] Changing your credentials will require you to login again with the new credentials.",
-      "currentPassword": "[zh-CN] Current Password",
-      "newUsername": "[zh-CN] New Username",
-      "newPassword": "[zh-CN] New Password",
-      "confirmNewPassword": "[zh-CN] Confirm New Password",
-      "button": "[zh-CN] Update Credentials",
-      "success": "[zh-CN] Credentials updated successfully!",
+      "title": "更改凭据",
+      "description": "更改凭据后需要使用新凭据重新登录。",
+      "currentPassword": "当前密码",
+      "newUsername": "新用户名",
+      "newPassword": "新密码",
+      "confirmNewPassword": "确认新密码",
+      "button": "更新凭据",
+      "success": "凭据更新成功！",
       "errors": {
-        "required": "[zh-CN] All fields are required",
-        "mismatch": "[zh-CN] New passwords do not match",
-        "failed": "[zh-CN] Failed to update credentials"
+        "required": "所有字段都是必需的",
+        "mismatch": "新密码不匹配",
+        "failed": "更新凭据失败"
       }
     }
   },

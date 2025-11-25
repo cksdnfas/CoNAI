@@ -20,6 +20,12 @@
       }
     },
 
+    "bulkActions": {
+      "selectedCount": "{{count}} selected",
+      "assignSelected": "Assign Selected",
+      "bulkAssign": "Bulk Assign"
+    },
+
     "table": {
       "headers": {
         "prompt": "Prompt",
@@ -68,6 +74,35 @@
     "actions": {
       "cancel": "Cancel",
       "assign": "Assign"
+    }
+  },
+
+  "bulkAssignDialog": {
+    "title": "Bulk Assign Prompts",
+    "groupSelect": {
+      "label": "Target Group",
+      "placeholder": "Select a group"
+    },
+    "textInput": {
+      "label": "Enter Prompts",
+      "placeholder": "Enter prompts (separated by comma or newline)",
+      "example": "Example: prompt1, prompt2, prompt3"
+    },
+    "preview": {
+      "title": "Preview ({{count}} items)",
+      "empty": "No prompts entered"
+    },
+    "actions": {
+      "assign": "Assign",
+      "cancel": "Cancel",
+      "close": "Close"
+    },
+    "results": {
+      "title": "Assignment Results",
+      "created": "Created: {{count}}",
+      "updated": "Updated: {{count}}",
+      "failed": "Failed: {{count}}",
+      "total": "Total {{count}} processed"
     }
   },
 

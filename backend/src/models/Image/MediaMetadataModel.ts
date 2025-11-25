@@ -540,9 +540,29 @@ export class MediaMetadataModel {
   /**
    * 랜덤 이미지 조회 (파일 경로 포함)
    * composite_hash가 있는 이미지만 조회
+   *
+   * Note: Using OFFSET with random index instead of ORDER BY RANDOM()
+   * to ensure true randomness on each call
    */
   static getRandomImage(): any | null {
-    const row = db.prepare(`
+    // First, get the total count of active images
+    const countStmt = db.prepare(`
+      SELECT COUNT(*) as total
+      FROM image_files if
+      WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
+    `);
+    const countRow = countStmt.get() as { total: number };
+
+    if (!countRow || countRow.total === 0) {
+      return null;
+    }
+
+    // Generate a random offset
+    const randomOffset = Math.floor(Math.random() * countRow.total);
+    console.log('[MediaMetadataModel] Random offset:', randomOffset, 'out of', countRow.total);
+
+    // Get the image at that offset
+    const stmt = db.prepare(`
       SELECT
         mm.composite_hash,
         mm.perceptual_hash,
@@ -584,9 +604,13 @@ export class MediaMetadataModel {
       FROM image_files if
       LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
       WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
-      ORDER BY RANDOM()
-      LIMIT 1
-    `).get();
+      LIMIT 1 OFFSET ?
+    `);
+
+    const row = stmt.get(randomOffset);
+
+    // Log to verify randomness
+    console.log('[MediaMetadataModel] Random image selected:', (row as any)?.composite_hash?.substring(0, 8));
 
     return row || null;
   }

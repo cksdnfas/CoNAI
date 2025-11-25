@@ -60,7 +60,7 @@ export const SimilaritySystemStatus: React.FC<SimilaritySystemStatusProps> = ({
         </Typography>
 
         <Stack spacing={2}>
-          <Stack direction="row" spacing={1} flexWrap="wrap">
+          <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
             <Chip
               label={t('similarity.systemStatus.totalImages', { count: stats.totalImages })}
               color="primary"

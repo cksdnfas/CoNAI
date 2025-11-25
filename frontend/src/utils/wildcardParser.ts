@@ -137,6 +137,35 @@ function removeInvalidWildcards(
 }
 
 /**
+ * 와일드카드의 모든 하위 항목(자식 포함)을 수집
+ */
+function collectAllItems(
+  wildcard: WildcardWithItems,
+  wildcardMap: Map<string, WildcardWithItems>,
+  tool: 'comfyui' | 'nai'
+): Array<{ content: string; tool: string }> {
+  const items: Array<{ content: string; tool: string }> = [];
+
+  // 현재 와일드카드의 항목 추가
+  if (wildcard.items) {
+    items.push(...wildcard.items.filter(item => item.tool === tool));
+  }
+
+  // include_children이 1이면 하위 와일드카드의 항목도 수집
+  if ((wildcard as any).include_children === 1) {
+    // 모든 와일드카드를 순회하며 parent_id가 현재 와일드카드 id인 것을 찾음
+    wildcardMap.forEach((child) => {
+      if (child.parent_id === wildcard.id) {
+        // 재귀적으로 하위 항목 수집
+        items.push(...collectAllItems(child, wildcardMap, tool));
+      }
+    });
+  }
+
+  return items;
+}
+
+/**
  * 재귀적 파싱 (중첩 지원)
  */
 function parseRecursive(
@@ -153,23 +182,23 @@ function parseRecursive(
     // 순환 참조 체크
     if (visited.has(name)) {
       console.warn(`[Wildcard] Circular reference detected: ${name}`);
-      return match;
+      return '';
     }
 
     // 와일드카드 조회
     const wildcard = wildcardMap.get(name);
-    if (!wildcard || !wildcard.items || wildcard.items.length === 0) {
-      console.warn(`[Wildcard] Not found or empty: ${name}`);
+    if (!wildcard) {
+      console.warn(`[Wildcard] Not found: ${name}`);
       emptyWildcards.add(name);
       return ''; // 빈 문자열로 치환
     }
 
-    // 해당 도구의 항목만 필터링
-    const toolItems = wildcard.items.filter(item => item.tool === tool);
+    // 해당 도구의 항목 수집 (include_children 고려)
+    const toolItems = collectAllItems(wildcard, wildcardMap, tool);
 
     if (toolItems.length === 0) {
       console.warn(`[Wildcard] No items for '${name}' with tool '${tool}'`);
-      emptyWildcards.add(`${name} (${tool})`);
+      emptyWildcards.add(name);
       return ''; // 빈 문자열로 치환
     }
 

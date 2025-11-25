@@ -598,6 +598,7 @@ export class ImageSearchModel {
 
   /**
    * 검색 조건에 맞는 랜덤 이미지 조회
+   * Using OFFSET with random index for true randomness
    */
   static async getRandomFromSearch(
     searchParams: {
@@ -683,6 +684,26 @@ export class ImageSearchModel {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
+    // First get the count
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM media_metadata im
+      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
+      ${groupJoinClause}
+      ${whereClause}
+    `;
+
+    const countRow = db.prepare(countQuery).get(...params) as { total: number };
+
+    if (!countRow || countRow.total === 0) {
+      return null;
+    }
+
+    // Generate random offset
+    const randomOffset = Math.floor(Math.random() * countRow.total);
+    console.log('[ImageSearchModel] Random offset:', randomOffset, 'out of', countRow.total);
+
+    // Get the image at that offset
     const query = `
       SELECT
         im.*,
@@ -691,16 +712,18 @@ export class ImageSearchModel {
         if.file_status,
         if.file_size,
         if.mime_type,
-        if.folder_id
+        if.folder_id,
+        if.file_type
       FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       ${groupJoinClause}
       ${whereClause}
-      ORDER BY RANDOM()
-      LIMIT 1
+      LIMIT 1 OFFSET ?
     `;
 
-    const row = db.prepare(query).get(...params);
+    const row = db.prepare(query).get(...params, randomOffset);
+    console.log('[ImageSearchModel] Random image selected:', (row as any)?.composite_hash?.substring(0, 8));
+
     return row || null;
   }
 }

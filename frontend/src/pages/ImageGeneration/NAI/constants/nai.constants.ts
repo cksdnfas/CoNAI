@@ -16,7 +16,7 @@ export const RESOLUTIONS = {
 export const RESOLUTION_KEYS = Object.keys(RESOLUTIONS) as Array<keyof typeof RESOLUTIONS>;
 
 export const MODELS = [
-  { value: 'nai-diffusion-4-5-curated', label: 'V4.5 Curated (권장)' },
+  { value: 'nai-diffusion-4-5-curated', label: 'V4.5 Curated' },
   { value: 'nai-diffusion-4-5-full', label: 'V4.5 Full' },
   { value: 'nai-diffusion-4-curated-preview', label: 'V4 Curated' },
   { value: 'nai-diffusion-4-full', label: 'V4 Full' },
@@ -35,7 +35,7 @@ export const SAMPLERS = [
 
 export const NOISE_SCHEDULES = [
   { value: 'native', label: 'Native' },
-  { value: 'karras', label: 'Karras (권장)' },
+  { value: 'karras', label: 'Karras' },
   { value: 'exponential', label: 'Exponential' },
   { value: 'polyexponential', label: 'Polyexponential' }
 ] as const;

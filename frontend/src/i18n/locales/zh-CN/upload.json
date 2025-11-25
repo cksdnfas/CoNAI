@@ -44,20 +44,20 @@
     "partialSuccess": "{{success}}个成功，{{failed}}个失败。"
   },
   "promptPreview": {
-    "title": "[zh-CN] Prompt Preview",
-    "description": "[zh-CN] Select an image to instantly view AI metadata without uploading to server.",
-    "dragOrClick": "[zh-CN] Drag or click to select an image",
-    "dropHere": "[zh-CN] Drop file here",
-    "noUpload": "[zh-CN] Images are analyzed in browser only, not uploaded to server",
-    "imagePreview": "[zh-CN] Image Preview",
-    "aiTool": "[zh-CN] AI Tool",
-    "positivePrompt": "[zh-CN] Prompt",
-    "negativePrompt": "[zh-CN] Negative Prompt",
-    "terms": "[zh-CN] Extracted Terms",
-    "loraModels": "[zh-CN] LoRA Models",
-    "parameters": "[zh-CN] Generation Parameters",
-    "rawMetadata": "[zh-CN] Raw Metadata (EXIF/PNG Chunks)",
-    "invalidFileType": "[zh-CN] Only image files are allowed",
-    "extractionFailed": "[zh-CN] Failed to extract metadata"
+    "title": "提示词预览",
+    "description": "选择图像即可立即查看AI元数据，无需上传到服务器。",
+    "dragOrClick": "拖放或点击选择图像",
+    "dropHere": "将文件拖放到此处",
+    "noUpload": "图像仅在浏览器中分析，不会上传到服务器",
+    "imagePreview": "图像预览",
+    "aiTool": "AI工具",
+    "positivePrompt": "提示词",
+    "negativePrompt": "负面提示词",
+    "terms": "提取的词条",
+    "loraModels": "LoRA模型",
+    "parameters": "生成参数",
+    "rawMetadata": "原始元数据（EXIF/PNG块）",
+    "invalidFileType": "仅允许图像文件",
+    "extractionFailed": "提取元数据失败"
   }
 }
