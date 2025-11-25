@@ -382,9 +382,9 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
         </Typography>
       </DialogTitle>
 
-      <DialogContent>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
         {/* 그룹 선택 */}
-        <Box sx={{ mb: 3 }}>
+        <Box>
           <Typography variant="subtitle2" gutterBottom fontWeight={500}>
             {t('filterModal.groupTypes.label')}
           </Typography>
@@ -412,7 +412,7 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
 
         {/* 카테고리 선택 */}
         {selectedGroup && (
-          <Box sx={{ mb: 3 }}>
+          <Box>
             <Typography variant="subtitle2" gutterBottom fontWeight={500}>
               {t('filterModal.categories.label')}
             </Typography>
@@ -465,14 +465,12 @@ const FilterBlockModal: React.FC<FilterBlockModalProps> = ({ open, onClose, onAd
           </Box>
         )}
 
-        {/* 구분선 */}
+        {/* 조건 설정 */}
         {selectedCategory && (
           <>
-            <Divider sx={{ my: 3 }} />
-
-            {/* 조건 설정 */}
+            <Divider />
             <Box>
-              <Typography variant="subtitle2" gutterBottom fontWeight={500} sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" gutterBottom fontWeight={500}>
                 {t('filterModal.conditionSettings.label')}
               </Typography>
               {renderConditionFields()}

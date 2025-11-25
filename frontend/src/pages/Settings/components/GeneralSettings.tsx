@@ -17,9 +17,11 @@ import {
   Divider,
   Tooltip,
   Button,
+  InputAdornment,
 } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useTranslation } from 'react-i18next';
+import { InfoTooltip } from '../../../components/common';
 import type {
   GeneralSettings as GeneralSettingsType,
   SupportedLanguage,
@@ -284,7 +286,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
           />
         </Box>
 
-        <Divider sx={{ my: 4 }} />
+        <Divider sx={{ my: 3 }} />
 
         {/* Thumbnail Settings */}
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
@@ -320,29 +322,36 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
           label={t('thumbnail.quality.label')}
           value={thumbnailSettings.quality}
           onChange={handleThumbnailQualityChange}
-          helperText={t('thumbnail.quality.helperText')}
           inputProps={{ min: 60, max: 100 }}
           disabled={updating}
           sx={{ mb: 3 }}
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <Tooltip title={t('thumbnail.quality.helperText')} arrow>
+                  <InfoOutlinedIcon fontSize="small" sx={{ color: 'text.secondary', cursor: 'help' }} />
+                </Tooltip>
+              </InputAdornment>
+            )
+          }}
         />
 
         {/* Thumbnail Regeneration Button */}
         <Box sx={{ mb: 3 }}>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={() => setIsRegenerationModalOpen(true)}
-            disabled={updating}
-            fullWidth
-          >
-            {t('thumbnail.regenerate.button')}
-          </Button>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            {t('thumbnail.regenerate.description')}
-          </Typography>
+          <Tooltip title={t('thumbnail.regenerate.description')} arrow placement="top">
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => setIsRegenerationModalOpen(true)}
+              disabled={updating}
+              fullWidth
+            >
+              {t('thumbnail.regenerate.button')}
+            </Button>
+          </Tooltip>
         </Box>
 
-        <Divider sx={{ my: 4 }} />
+        <Divider sx={{ my: 3 }} />
 
         {/* Metadata Extraction Optimization */}
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
@@ -369,11 +378,11 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
               value="fast"
               control={<Radio />}
               label={
-                <Box>
-                  <Typography variant="body1">{t('general.metadata.scanMode.fast.label')}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('general.metadata.scanMode.fast.description')}
-                  </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <span>{t('general.metadata.scanMode.fast.label')}</span>
+                  <Tooltip title={t('general.metadata.scanMode.fast.description')} arrow placement="right">
+                    <InfoOutlinedIcon fontSize="small" sx={{ color: 'text.secondary', cursor: 'help' }} />
+                  </Tooltip>
                 </Box>
               }
             />
@@ -381,11 +390,11 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
               value="full"
               control={<Radio />}
               label={
-                <Box>
-                  <Typography variant="body1">{t('general.metadata.scanMode.full.label')}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('general.metadata.scanMode.full.description')}
-                  </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <span>{t('general.metadata.scanMode.full.label')}</span>
+                  <Tooltip title={t('general.metadata.scanMode.full.description')} arrow placement="right">
+                    <InfoOutlinedIcon fontSize="small" sx={{ color: 'text.secondary', cursor: 'help' }} />
+                  </Tooltip>
                 </Box>
               }
             />
@@ -393,34 +402,44 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
               value="skip"
               control={<Radio />}
               label={
-                <Box>
-                  <Typography variant="body1">{t('general.metadata.scanMode.skip.label')}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('general.metadata.scanMode.skip.description')}
-                  </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <span>{t('general.metadata.scanMode.skip.label')}</span>
+                  <Tooltip title={t('general.metadata.scanMode.skip.description')} arrow placement="right">
+                    <InfoOutlinedIcon fontSize="small" sx={{ color: 'text.secondary', cursor: 'help' }} />
+                  </Tooltip>
                 </Box>
               }
             />
           </RadioGroup>
         </FormControl>
 
-        <Divider sx={{ my: 3 }} />
+        <Divider sx={{ mb: 3 }} />
 
         {/* File Size and Resolution Limits */}
         <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" gutterBottom>
-            {t('general.metadata.limits.title')}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <Typography variant="subtitle1">
+              {t('general.metadata.limits.title')}
+            </Typography>
+          </Box>
           <TextField
             fullWidth
             type="number"
             label={t('general.metadata.limits.fileSize.label')}
             value={metadataSettings.stealthMaxFileSizeMB}
             onChange={handleFileSizeChange}
-            helperText={t('general.metadata.limits.fileSize.helper')}
             inputProps={{ min: 1, step: 0.5 }}
             disabled={updating}
             sx={{ mb: 2 }}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Tooltip title={t('general.metadata.limits.fileSize.helper')} arrow>
+                    <InfoOutlinedIcon fontSize="small" sx={{ color: 'text.secondary', cursor: 'help' }} />
+                  </Tooltip>
+                </InputAdornment>
+              )
+            }}
           />
           <TextField
             fullWidth
@@ -428,9 +447,17 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
             label={t('general.metadata.limits.resolution.label')}
             value={metadataSettings.stealthMaxResolutionMP}
             onChange={handleResolutionChange}
-            helperText={t('general.metadata.limits.resolution.helper')}
             inputProps={{ min: 1, step: 0.5 }}
             disabled={updating}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Tooltip title={t('general.metadata.limits.resolution.helper')} arrow>
+                    <InfoOutlinedIcon fontSize="small" sx={{ color: 'text.secondary', cursor: 'help' }} />
+                  </Tooltip>
+                </InputAdornment>
+              )
+            }}
           />
         </Box>
 
@@ -438,69 +465,54 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
 
         {/* Skip Settings */}
         <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" gutterBottom>
-            {t('general.metadata.skipSettings.title')}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {t('general.metadata.skipSettings.description')}
-          </Typography>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={metadataSettings.skipStealthForComfyUI}
-                onChange={handleMetadataToggle('skipStealthForComfyUI')}
-                disabled={updating}
-              />
-            }
-            label={
-              <Box>
-                <Typography variant="body1">{t('general.metadata.skipSettings.comfyui.label')}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {t('general.metadata.skipSettings.comfyui.description')}
-                </Typography>
-              </Box>
-            }
-          />
-          <FormControlLabel
-            control={
-              <Switch
-                checked={metadataSettings.skipStealthForWebUI}
-                onChange={handleMetadataToggle('skipStealthForWebUI')}
-                disabled={updating}
-              />
-            }
-            label={
-              <Box>
-                <Typography variant="body1">{t('general.metadata.skipSettings.webui.label')}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {t('general.metadata.skipSettings.webui.description')}
-                </Typography>
-              </Box>
-            }
-          />
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <Typography variant="subtitle1">
+              {t('general.metadata.skipSettings.title')}
+            </Typography>
+            <InfoTooltip title={t('general.metadata.skipSettings.description')} />
+          </Box>
+          <Tooltip title={t('general.metadata.skipSettings.comfyui.description')} arrow placement="bottom-start">
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={metadataSettings.skipStealthForComfyUI}
+                  onChange={handleMetadataToggle('skipStealthForComfyUI')}
+                  disabled={updating}
+                />
+              }
+              label={t('general.metadata.skipSettings.comfyui.label')}
+            />
+          </Tooltip>
+          <Tooltip title={t('general.metadata.skipSettings.webui.description')} arrow placement="bottom-start">
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={metadataSettings.skipStealthForWebUI}
+                  onChange={handleMetadataToggle('skipStealthForWebUI')}
+                  disabled={updating}
+                />
+              }
+              label={t('general.metadata.skipSettings.webui.label')}
+            />
+          </Tooltip>
         </Box>
 
         <Divider sx={{ my: 3 }} />
 
         {/* Secondary Extraction */}
         <Box sx={{ mb: 3 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={metadataSettings.enableSecondaryExtraction}
-                onChange={handleMetadataToggle('enableSecondaryExtraction')}
-                disabled={updating}
-              />
-            }
-            label={
-              <Box>
-                <Typography variant="body1">{t('general.metadata.secondary.label')}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {t('general.metadata.secondary.description')}
-                </Typography>
-              </Box>
-            }
-          />
+          <Tooltip title={t('general.metadata.secondary.description')} arrow placement="right">
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={metadataSettings.enableSecondaryExtraction}
+                  onChange={handleMetadataToggle('enableSecondaryExtraction')}
+                  disabled={updating}
+                />
+              }
+              label={t('general.metadata.secondary.label')}
+            />
+          </Tooltip>
         </Box>
       </Paper>
 

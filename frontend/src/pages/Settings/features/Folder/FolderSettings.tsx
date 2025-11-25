@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Divider, Paper, TextField, Button, Alert, IconButton, Tooltip } from '@mui/material';
-import { InfoOutlined as InfoOutlinedIcon } from '@mui/icons-material';
+import { Box, Typography, Divider, Paper, TextField, Button, Alert, Tooltip } from '@mui/material';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
+import { InfoTooltip } from '../../../../components/common';
 import WatchedFoldersList from './components/WatchedFoldersList';
 import BackgroundStatusMonitor from './BackgroundStatusMonitor';
 
@@ -101,7 +101,7 @@ const FolderSettings: React.FC = () => {
       <Typography variant="h5" gutterBottom>
         {t('folderSettings.title')}
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         {t('folderSettings.subtitle')}
       </Typography>
 
@@ -112,19 +112,12 @@ const FolderSettings: React.FC = () => {
         </Typography>
 
         {/* 백그라운드 해시 감시 간격 */}
-        <Box sx={{ mb: 4 }}>
+        <Box sx={{ mb: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 2 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
               {t('folderSettings.scheduler.backgroundHash.title')}
             </Typography>
-            <Tooltip
-              title={t('folderSettings.scheduler.backgroundHash.tooltip')}
-              arrow
-            >
-              <IconButton size="small">
-                <InfoOutlinedIcon fontSize="small" color="action" />
-              </IconButton>
-            </Tooltip>
+            <InfoTooltip title={t('folderSettings.scheduler.backgroundHash.tooltip')} />
           </Box>
 
           {error && (
@@ -170,14 +163,7 @@ const FolderSettings: React.FC = () => {
             <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
               {t('folderSettings.scheduler.autoTagger.title')}
             </Typography>
-            <Tooltip
-              title={t('folderSettings.scheduler.autoTagger.tooltip')}
-              arrow
-            >
-              <IconButton size="small">
-                <InfoOutlinedIcon fontSize="small" color="action" />
-              </IconButton>
-            </Tooltip>
+            <InfoTooltip title={t('folderSettings.scheduler.autoTagger.tooltip')} />
           </Box>
 
           {autoTagError && (
@@ -228,11 +214,11 @@ const FolderSettings: React.FC = () => {
       </Paper>
 
       {/* 백그라운드 작업 모니터링 */}
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: 3 }}>
         <BackgroundStatusMonitor />
       </Box>
 
-      <Divider sx={{ my: 4 }} />
+      <Divider sx={{ my: 3 }} />
 
       {/* 감시 폴더 목록 */}
       <Box>

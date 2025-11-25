@@ -47,11 +47,7 @@ export const WeightConfiguration: React.FC<WeightConfigurationProps> = ({
         <Typography variant="h6" gutterBottom>
           {t('rating.weights.title')}
         </Typography>
-        <Typography variant="body2" color="text.secondary" paragraph>
-          {t('rating.weights.description')}
-        </Typography>
-
-        <Stack spacing={3} sx={{ mt: 3 }}>
+        <Stack spacing={2} sx={{ mt: 2 }}>
           <Box>
             <Typography gutterBottom>
               {t('rating.weights.general', { value: getCurrentWeight(weights, localWeights, 'general_weight') })}

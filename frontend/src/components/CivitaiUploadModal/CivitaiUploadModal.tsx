@@ -172,26 +172,26 @@ export const CivitaiUploadModal: React.FC<CivitaiUploadModalProps> = ({
           {t('civitai.upload.title')}
         </Box>
       </DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
+          <Alert severity="error" onClose={() => setError('')}>
             {error}
           </Alert>
         )}
         {success && (
-          <Alert severity="success" sx={{ mb: 2 }}>
+          <Alert severity="success" onClose={() => setSuccess('')}>
             {success}
           </Alert>
         )}
 
         {imageName && (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography variant="body2" color="text.secondary">
             {t('civitai.upload.selectedImage')}: {imageName}
           </Typography>
         )}
 
         {/* 업로드 방식 선택 */}
-        <Box sx={{ mb: 3 }}>
+        <Box>
           <Typography variant="subtitle2" gutterBottom>
             {t('civitai.upload.methodLabel')}
           </Typography>
@@ -215,12 +215,6 @@ export const CivitaiUploadModal: React.FC<CivitaiUploadModalProps> = ({
               </ToggleButton>
             </Tooltip>
           </ToggleButtonGroup>
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-            {uploadMethod === 'clipboard'
-              ? t('civitai.upload.downloadDescription')
-              : t('civitai.upload.intentDescription')
-            }
-          </Typography>
         </Box>
 
         {/* Intent 방식일 때만 추가 옵션 표시 */}
@@ -231,7 +225,6 @@ export const CivitaiUploadModal: React.FC<CivitaiUploadModalProps> = ({
               label={t('civitai.upload.postTitle')}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              sx={{ mb: 2 }}
               placeholder={t('civitai.upload.postTitlePlaceholder')}
             />
 
@@ -242,11 +235,10 @@ export const CivitaiUploadModal: React.FC<CivitaiUploadModalProps> = ({
               onChange={(e) => setDescription(e.target.value)}
               multiline
               rows={3}
-              sx={{ mb: 2 }}
               placeholder={t('civitai.upload.postDescriptionPlaceholder')}
             />
 
-            <Box sx={{ mb: 2 }}>
+            <Box>
               <TextField
                 fullWidth
                 label={t('civitai.upload.tags')}
@@ -270,18 +262,17 @@ export const CivitaiUploadModal: React.FC<CivitaiUploadModalProps> = ({
               )}
             </Box>
 
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={includeMetadata}
-                  onChange={(e) => setIncludeMetadata(e.target.checked)}
-                />
-              }
-              label={t('civitai.upload.includeMetadata')}
-            />
-            <Typography variant="caption" display="block" color="text.secondary" sx={{ ml: 4 }}>
-              {t('civitai.upload.includeMetadataDescription')}
-            </Typography>
+            <Tooltip title={t('civitai.upload.includeMetadataDescription')} arrow placement="right">
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={includeMetadata}
+                    onChange={(e) => setIncludeMetadata(e.target.checked)}
+                  />
+                }
+                label={t('civitai.upload.includeMetadata')}
+              />
+            </Tooltip>
           </>
         )}
       </DialogContent>

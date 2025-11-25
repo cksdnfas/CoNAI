@@ -12,6 +12,7 @@ import {
   Chip,
   IconButton,
   Tooltip,
+  Alert,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -244,17 +245,9 @@ const GalleryPage: React.FC = () => {
 
       {/* 에러 메시지 */}
       {error && (
-        <Box
-          sx={{
-            mb: { xs: 2, sm: 3 },
-            p: 2,
-            bgcolor: 'error.light',
-            color: 'error.contrastText',
-            borderRadius: 2,
-          }}
-        >
-          <Typography variant="body2">{error}</Typography>
-        </Box>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
       )}
 
       {/* 이미지 그리드 (상시 선택모드) */}

@@ -10,12 +10,11 @@ import {
   Stack,
   Divider,
   TextField,
-  Tooltip,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
-  Info as InfoIcon,
 } from '@mui/icons-material';
+import { InfoTooltip } from '../../../../components/common';
 import { useTranslation } from 'react-i18next';
 import type { TaggerSettings as TaggerSettingsType } from '../../../../services/settingsApi';
 
@@ -105,11 +104,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
           <Typography variant="h6" gutterBottom>
             {t('tagger.title')}
           </Typography>
-          <Typography variant="body2" color="text.secondary" paragraph>
-            {t('tagger.description')}
-          </Typography>
-
-          <Stack spacing={3} sx={{ mt: 3 }}>
+          <Stack spacing={2} sx={{ mt: 2 }}>
             {/* Model Status Section */}
             {localSettings.enabled && (
               <TaggerModelStatus
@@ -132,7 +127,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
               onUpdateSettings={updateSettings}
             />
 
-            <Divider sx={{ my: 2 }} />
+            <Divider sx={{ my: 3 }} />
 
             {/* Memory Management Settings */}
             {localSettings.enabled && (
@@ -142,17 +137,15 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
               />
             )}
 
-            <Divider sx={{ my: 2 }} />
+            <Divider sx={{ my: 3 }} />
 
             {/* Python Path & Dependency Check */}
             <Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 2 }}>
                 <Typography variant="subtitle1">
                   {t('tagger.pythonPath.label')}
                 </Typography>
-                <Tooltip title={t('tagger.pythonPath.helper')} arrow>
-                  <InfoIcon fontSize="small" sx={{ color: 'text.secondary', cursor: 'help' }} />
-                </Tooltip>
+                <InfoTooltip title={t('tagger.pythonPath.helper')} />
               </Box>
 
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
@@ -181,7 +174,7 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
               )}
             </Box>
 
-            <Divider sx={{ my: 2 }} />
+            <Divider sx={{ my: 3 }} />
 
             {/* Test Section */}
             {localSettings.enabled && (

@@ -253,23 +253,19 @@ export const ExternalApiSettings: React.FC = () => {
           <Typography variant="h6">{t('externalApi.title')}</Typography>
         </Box>
 
-        <Typography variant="body2" color="text.secondary" paragraph>
-          {t('externalApi.description')}
-        </Typography>
-
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={clearMessages}>
+          <Alert severity="error" sx={{ mb: 2, mt: 2 }} onClose={clearMessages}>
             {error}
           </Alert>
         )}
 
         {success && (
-          <Alert severity="success" sx={{ mb: 2 }} onClose={clearMessages}>
+          <Alert severity="success" sx={{ mb: 2, mt: 2 }} onClose={clearMessages}>
             {success}
           </Alert>
         )}
 
-        <Divider sx={{ my: 2 }} />
+        <Divider sx={{ my: 3 }} />
 
         {/* Provider Accordions */}
         {providers.map((provider) => {
@@ -416,7 +412,7 @@ export const ExternalApiSettings: React.FC = () => {
       {/* New Provider Dialog */}
       <Dialog open={showNewProviderDialog} onClose={() => setShowNewProviderDialog(false)}>
         <DialogTitle>{t('externalApi.addProvider')}</DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
           <DialogContentText>{t('externalApi.addProviderDescription')}</DialogContentText>
 
           <TextField
@@ -424,7 +420,6 @@ export const ExternalApiSettings: React.FC = () => {
             label={t('externalApi.providerName')}
             value={newProviderName}
             onChange={(e) => setNewProviderName(e.target.value)}
-            margin="normal"
             helperText={t('externalApi.providerNameHelper')}
           />
 
@@ -433,7 +428,6 @@ export const ExternalApiSettings: React.FC = () => {
             label={t('externalApi.providerDisplayName')}
             value={newProviderDisplayName}
             onChange={(e) => setNewProviderDisplayName(e.target.value)}
-            margin="normal"
           />
         </DialogContent>
         <DialogActions>

@@ -10,10 +10,9 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Tooltip,
 } from '@mui/material';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useTranslation } from 'react-i18next';
+import { InfoTooltip } from '../../../../../components/common';
 
 interface SimilarityThresholdsProps {
   duplicateThreshold: number;
@@ -41,28 +40,21 @@ export const SimilarityThresholds: React.FC<SimilarityThresholdsProps> = ({
   return (
     <Card>
       <CardContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
           <Typography variant="h6">
             {t('similarity.thresholds.title')}
           </Typography>
-          <Tooltip title={t('similarity.thresholds.localStorageNote')} arrow>
-            <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
-          </Tooltip>
+          <InfoTooltip title={t('similarity.thresholds.localStorageNote')} />
         </Box>
-        <Typography variant="body2" color="text.secondary" paragraph>
-          {t('similarity.thresholds.description')}
-        </Typography>
 
-        <Stack spacing={3}>
+        <Stack spacing={2}>
           {/* Duplicate Threshold */}
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
               <Typography>
                 {t('similarity.thresholds.duplicate.label', { value: duplicateThreshold })}
               </Typography>
-              <Tooltip title={t('similarity.thresholds.duplicate.description')} arrow>
-                <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
-              </Tooltip>
+              <InfoTooltip title={t('similarity.thresholds.duplicate.description')} />
             </Box>
             <Box sx={{ display: 'flex', justifyContent: 'center' }}>
               <Box sx={{ width: '90%' }}>
@@ -88,9 +80,7 @@ export const SimilarityThresholds: React.FC<SimilarityThresholdsProps> = ({
               <Typography>
                 {t('similarity.thresholds.similar.label', { value: similarThreshold })}
               </Typography>
-              <Tooltip title={t('similarity.thresholds.similar.description')} arrow>
-                <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
-              </Tooltip>
+              <InfoTooltip title={t('similarity.thresholds.similar.description')} />
             </Box>
             <Box sx={{ display: 'flex', justifyContent: 'center' }}>
               <Box sx={{ width: '90%' }}>
@@ -116,9 +106,7 @@ export const SimilarityThresholds: React.FC<SimilarityThresholdsProps> = ({
               <Typography>
                 {t('similarity.thresholds.color.label', { value: colorThreshold })}
               </Typography>
-              <Tooltip title={t('similarity.thresholds.color.description')} arrow>
-                <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
-              </Tooltip>
+              <InfoTooltip title={t('similarity.thresholds.color.description')} />
             </Box>
             <Box sx={{ display: 'flex', justifyContent: 'center' }}>
               <Box sx={{ width: '90%' }}>

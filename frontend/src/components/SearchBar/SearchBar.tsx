@@ -6,9 +6,9 @@ import {
   Tab,
   Button,
   Stack,
-  Typography,
   IconButton,
   Tooltip,
+  Alert,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -199,9 +199,9 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
     <Paper elevation={2} sx={{ p: 3 }}>
       {/* Validation Error Message */}
       {validationError && (
-        <Box sx={{ mb: 2, p: 2, bgcolor: 'error.light', color: 'error.contrastText', borderRadius: 1 }}>
-          <Typography variant="body2">{validationError}</Typography>
-        </Box>
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setValidationError(null)}>
+          {validationError}
+        </Alert>
       )}
 
       {/* Tabs */}

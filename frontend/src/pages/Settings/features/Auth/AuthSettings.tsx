@@ -212,7 +212,7 @@ export const AuthSettings: React.FC = () => {
             sx={{ mb: 2 }}
           />
 
-          <Divider sx={{ my: 2 }} />
+          <Divider sx={{ my: 3 }} />
 
           <TextField
             fullWidth
