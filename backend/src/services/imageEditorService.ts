@@ -214,4 +214,77 @@ export class ImageEditorService {
       .png()
       .toBuffer();
   }
+
+  /**
+   * Save edited image as WebP file to temp/canvas directory
+   * Creates a new file with original name + _edited suffix
+   */
+  static async saveAsWebP(
+    imageData: string,
+    imageId: number,
+    quality: number = 90
+  ): Promise<{
+    success: boolean;
+    filePath: string;
+    tempId: string;
+    width: number;
+    height: number;
+    fileSize: number;
+  }> {
+    // Get original image info
+    const imageFile = ImageFileModel.findById(imageId);
+    if (!imageFile) {
+      throw new Error(`Image file not found: ${imageId}`);
+    }
+
+    // Convert base64 to Buffer
+    const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '');
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+
+    // Get original file info for naming
+    const originalPath = imageFile.original_file_path;
+    const originalName = path.basename(originalPath, path.extname(originalPath));
+
+    // Generate unique filename with timestamp
+    const timestamp = Date.now();
+    const tempId = `edited_${imageId}_${timestamp}`;
+    const newFileName = `${originalName}_edited_${timestamp}.webp`;
+
+    // Save to temp/canvas directory instead of original directory
+    const canvasDir = path.join(runtimePaths.tempDir, 'canvas');
+
+    // Ensure canvas directory exists
+    await fs.promises.mkdir(canvasDir, { recursive: true });
+
+    const newFilePath = path.join(canvasDir, newFileName);
+
+    // Convert to WebP and get metadata in one pass (avoid file handle issues)
+    const webpBuffer = await sharp(imageBuffer)
+      .webp({ quality: Math.min(100, Math.max(1, quality)) })
+      .toBuffer();
+
+    // Get metadata from buffer (not file) to avoid file handle issues
+    const metadata = await sharp(webpBuffer).metadata();
+
+    // Write to file
+    await fs.promises.writeFile(newFilePath, webpBuffer);
+
+    // Register with TempImageService for cleanup tracking
+    TempImageService.registerTempFile(
+      tempId,
+      imageId,
+      newFilePath,
+      undefined,
+      60 // 60 minutes expiration
+    );
+
+    return {
+      success: true,
+      filePath: newFilePath,
+      tempId,
+      width: metadata.width || 0,
+      height: metadata.height || 0,
+      fileSize: webpBuffer.length
+    };
+  }
 }

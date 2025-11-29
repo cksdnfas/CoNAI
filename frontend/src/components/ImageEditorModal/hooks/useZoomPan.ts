@@ -92,6 +92,11 @@ export const useZoomPan = (initialZoom = 1) => {
     setZoom(newZoom);
   }, []);
 
+  const setInitialZoomAndPosition = useCallback((newZoom: number, newPos: Position) => {
+    setZoom(newZoom);
+    setStagePos(newPos);
+  }, []);
+
   return {
     zoom,
     stagePos,
@@ -109,5 +114,6 @@ export const useZoomPan = (initialZoom = 1) => {
     handleFlip,
     reset,
     setInitialZoom,
+    setInitialZoomAndPosition,
   };
 };

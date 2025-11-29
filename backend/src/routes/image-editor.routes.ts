@@ -2,10 +2,62 @@ import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import { ImageEditorService } from '../services/imageEditorService';
 import { TempImageService, EditOptions } from '../services/tempImageService';
+import { ImageFileModel } from '../models/Image/ImageFileModel';
+import { runtimePaths } from '../config/runtimePaths';
 import path from 'path';
 import fs from 'fs';
+import sharp from 'sharp';
 
 const router = Router();
+
+/**
+ * Get image as WebP for editing (original size, quality 100%)
+ * GET /api/image-editor/:id/webp
+ */
+router.get('/:id/webp', asyncHandler(async (req: Request, res: Response) => {
+  const imageId = parseInt(req.params.id);
+
+  if (isNaN(imageId)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid image ID'
+    });
+  }
+
+  try {
+    const imageFile = ImageFileModel.findById(imageId);
+    if (!imageFile) {
+      return res.status(404).json({
+        success: false,
+        error: 'Image file not found'
+      });
+    }
+
+    const originalPath = imageFile.original_file_path;
+
+    if (!fs.existsSync(originalPath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'Image file not found on disk'
+      });
+    }
+
+    // Convert to WebP with 100% quality (lossless-like)
+    const webpBuffer = await sharp(originalPath)
+      .webp({ quality: 100, lossless: false })
+      .toBuffer();
+
+    res.set('Content-Type', 'image/webp');
+    res.set('Cache-Control', 'private, max-age=300'); // 5분 캐시
+    return res.send(webpBuffer);
+  } catch (error) {
+    console.error('Error converting image to WebP:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to convert image'
+    });
+  }
+}));
 
 /**
  * Create temporary edited image (volatile - for API transmission)
@@ -95,6 +147,50 @@ router.post('/:id/save', asyncHandler(async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error saving edited image:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to save edited image'
+    });
+  }
+}));
+
+/**
+ * Save edited image as WebP (permanent save)
+ * POST /api/image-editor/:id/save-webp
+ * Body: { imageData: base64 string, quality?: number (default 90) }
+ */
+router.post('/:id/save-webp', asyncHandler(async (req: Request, res: Response) => {
+  const imageId = parseInt(req.params.id);
+
+  if (isNaN(imageId)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid image ID'
+    });
+  }
+
+  const { imageData, quality = 90 } = req.body;
+
+  if (!imageData) {
+    return res.status(400).json({
+      success: false,
+      error: 'Image data is required'
+    });
+  }
+
+  try {
+    const result = await ImageEditorService.saveAsWebP(
+      imageData,
+      imageId,
+      quality
+    );
+
+    return res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error saving edited image as WebP:', error);
     return res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to save edited image'
@@ -249,6 +345,252 @@ router.post('/mask/blank', asyncHandler(async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create blank mask'
+    });
+  }
+}));
+
+/**
+ * Get canvas image as WebP for editing
+ * GET /api/image-editor/canvas/:filename/webp
+ */
+router.get('/canvas/:filename/webp', asyncHandler(async (req: Request, res: Response) => {
+  const { filename } = req.params;
+
+  try {
+    const canvasDir = path.join(runtimePaths.tempDir, 'canvas');
+    const filePath = path.join(canvasDir, filename);
+
+    // Security check: ensure the file is within canvas directory
+    const resolvedPath = path.resolve(filePath);
+    const resolvedCanvasDir = path.resolve(canvasDir);
+
+    if (!resolvedPath.startsWith(resolvedCanvasDir)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'File not found'
+      });
+    }
+
+    // Convert to WebP with 100% quality
+    const webpBuffer = await sharp(filePath)
+      .webp({ quality: 100, lossless: false })
+      .toBuffer();
+
+    res.set('Content-Type', 'image/webp');
+    res.set('Cache-Control', 'private, max-age=300');
+    return res.send(webpBuffer);
+  } catch (error) {
+    console.error('Error converting canvas image to WebP:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to convert image'
+    });
+  }
+}));
+
+/**
+ * Save edited canvas image (overwrite or create new)
+ * POST /api/image-editor/canvas/:filename/save-webp
+ * Body: { imageData: base64 string, quality?: number, createNew?: boolean }
+ */
+router.post('/canvas/:filename/save-webp', asyncHandler(async (req: Request, res: Response) => {
+  const { filename } = req.params;
+  const { imageData, quality = 90, createNew = false } = req.body;
+
+  if (!imageData) {
+    return res.status(400).json({
+      success: false,
+      error: 'Image data is required'
+    });
+  }
+
+  try {
+    const canvasDir = path.join(runtimePaths.tempDir, 'canvas');
+
+    // Ensure canvas directory exists
+    await fs.promises.mkdir(canvasDir, { recursive: true });
+
+    // Convert base64 to Buffer
+    const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '');
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+
+    // Determine filename
+    let newFileName: string;
+    if (createNew) {
+      // Create new file with timestamp
+      const baseName = path.basename(filename, path.extname(filename));
+      const timestamp = Date.now();
+      newFileName = `${baseName}_${timestamp}.webp`;
+    } else {
+      // Overwrite existing file
+      newFileName = filename;
+    }
+
+    const filePath = path.join(canvasDir, newFileName);
+
+    // Security check
+    const resolvedPath = path.resolve(filePath);
+    const resolvedCanvasDir = path.resolve(canvasDir);
+
+    if (!resolvedPath.startsWith(resolvedCanvasDir)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
+
+    // Convert to WebP and save
+    const webpBuffer = await sharp(imageBuffer)
+      .webp({ quality: Math.min(100, Math.max(1, quality)) })
+      .toBuffer();
+
+    const metadata = await sharp(webpBuffer).metadata();
+
+    await fs.promises.writeFile(filePath, webpBuffer);
+
+    return res.json({
+      success: true,
+      data: {
+        filename: newFileName,
+        filePath,
+        url: `/temp/canvas/${newFileName}`,
+        width: metadata.width || 0,
+        height: metadata.height || 0,
+        fileSize: webpBuffer.length
+      }
+    });
+  } catch (error) {
+    console.error('Error saving canvas image:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to save canvas image'
+    });
+  }
+}));
+
+/**
+ * Get all canvas images (saved edited images)
+ * GET /api/image-editor/canvas
+ * Returns list of images in temp/canvas directory, sorted by modification time (newest first)
+ */
+router.get('/canvas', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const canvasDir = path.join(runtimePaths.tempDir, 'canvas');
+
+    // Ensure canvas directory exists
+    if (!fs.existsSync(canvasDir)) {
+      return res.json({
+        success: true,
+        data: {
+          images: [],
+          total: 0
+        }
+      });
+    }
+
+    // Read directory and get file stats
+    const files = await fs.promises.readdir(canvasDir);
+    const imageExtensions = ['.webp', '.png', '.jpg', '.jpeg'];
+
+    const imageFiles = await Promise.all(
+      files
+        .filter(file => imageExtensions.some(ext => file.toLowerCase().endsWith(ext)))
+        .map(async (file) => {
+          const filePath = path.join(canvasDir, file);
+          const stats = await fs.promises.stat(filePath);
+
+          // Try to get image dimensions
+          let width = 0;
+          let height = 0;
+          try {
+            const metadata = await sharp(filePath).metadata();
+            width = metadata.width || 0;
+            height = metadata.height || 0;
+          } catch (e) {
+            // Ignore metadata errors
+          }
+
+          return {
+            filename: file,
+            path: filePath,
+            url: `/temp/canvas/${file}`,
+            size: stats.size,
+            width,
+            height,
+            createdAt: stats.birthtime.toISOString(),
+            modifiedAt: stats.mtime.toISOString()
+          };
+        })
+    );
+
+    // Sort by modification time (newest first)
+    imageFiles.sort((a, b) =>
+      new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime()
+    );
+
+    return res.json({
+      success: true,
+      data: {
+        images: imageFiles,
+        total: imageFiles.length
+      }
+    });
+  } catch (error) {
+    console.error('Error listing canvas images:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to list canvas images'
+    });
+  }
+}));
+
+/**
+ * Delete a canvas image
+ * DELETE /api/image-editor/canvas/:filename
+ */
+router.delete('/canvas/:filename', asyncHandler(async (req: Request, res: Response) => {
+  const { filename } = req.params;
+
+  try {
+    const canvasDir = path.join(runtimePaths.tempDir, 'canvas');
+    const filePath = path.join(canvasDir, filename);
+
+    // Security check: ensure the file is within canvas directory
+    const resolvedPath = path.resolve(filePath);
+    const resolvedCanvasDir = path.resolve(canvasDir);
+
+    if (!resolvedPath.startsWith(resolvedCanvasDir)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'File not found'
+      });
+    }
+
+    await fs.promises.unlink(filePath);
+
+    return res.json({
+      success: true,
+      message: 'Canvas image deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting canvas image:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete canvas image'
     });
   }
 }));

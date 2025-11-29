@@ -39,6 +39,7 @@ import { ImageDisplay } from './components/ImageDisplay';
 import { ImageDetailSidebar } from './components/ImageDetailSidebar';
 import { ImageEditorModal } from '../ImageEditorModal';
 import { CivitaiUploadModal } from '../CivitaiUploadModal';
+import { CanvasGalleryModal } from '../CanvasGalleryModal';
 import { externalApiApi } from '../../services/externalApiApi';
 
 // ✅ composite_hash 기반으로 변경
@@ -57,6 +58,8 @@ interface ImageViewerModalProps {
   // 히스토리 컨텍스트
   isHistoryContext?: boolean;
   historyRecord?: GenerationHistoryRecord;
+  // 이미지 에디터 콜백 (상위 컴포넌트에서 에디터 모달을 관리할 때 사용)
+  onOpenEditor?: (imageId: number) => void;
 }
 
 const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
@@ -72,6 +75,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   groupId,
   allImageIds = [],
   isHistoryContext = false,
+  onOpenEditor,
 }) => {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -87,6 +91,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [showOriginal, setShowOriginal] = useState(false); // 원본 이미지 표시 여부 (기본: 썸네일)
   const [editorOpen, setEditorOpen] = useState(false); // 이미지 편집 모달
   const [civitaiUploadOpen, setCivitaiUploadOpen] = useState(false); // Civitai 업로드 모달
+  const [canvasGalleryOpen, setCanvasGalleryOpen] = useState(false); // 캔버스 갤러리 모달
+  const [canvasEditorFilename, setCanvasEditorFilename] = useState<string | null>(null); // 캔버스 이미지 편집용
   const [isCivitaiEnabled, setIsCivitaiEnabled] = useState(false); // Civitai 활성화 여부
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
@@ -143,40 +149,52 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     loadSettings();
   }, []);
 
+  // 모달이 닫힐 때 랜덤 모드와 currentImage 상태 리셋
+  useEffect(() => {
+    if (!open) {
+      // 모달이 닫힐 때 랜덤 모드 해제
+      setIsRandomMode(false);
+      // currentImage도 리셋하여 다음 열 때 props에서 새로 받도록 함
+      setCurrentImage(null);
+    }
+  }, [open]);
+
   // Update current image when prop changes (but only when not in random mode)
   // ✅ composite_hash 기반 메타데이터 조회 로직 추가
   // Optimized to prevent redundant fetches for the same composite_hash
   useEffect(() => {
-    // 랜덤 모드가 아닐 때만 prop 변경사항 반영
-    if (!isRandomMode && image) {
-      // 1단계: composite_hash 확인
-      if (!image.composite_hash) {
-        console.warn('[ImageViewerModal] No composite_hash, using props data');
-        setCurrentImage(image);
-        return;
-      }
-
-      // Skip fetching if the composite_hash hasn't changed
-      // This prevents redundant requests when only the image object reference changes
-      if (currentImage?.composite_hash === image.composite_hash) {
-        return;
-      }
-
-      // 2단계: DB에서 메타데이터 조회 (file_type 포함)
-      const fetchMetadata = async () => {
-        try {
-          const metadata = await imageApi.getMetadata(image.composite_hash!);
-          setCurrentImage(metadata);
-        } catch (error) {
-          // 4단계: 실패 시 props 데이터 사용 (안전장치)
-          console.error('[ImageViewerModal] Metadata fetch failed, using props data:', error);
-          setCurrentImage(image);
-        }
-      };
-
-      fetchMetadata();
+    // 모달이 열려있고, 랜덤 모드가 아닐 때만 prop 변경사항 반영
+    if (!open || isRandomMode || !image) {
+      return;
     }
-  }, [image?.composite_hash, isRandomMode, currentImage?.composite_hash]);
+
+    // 1단계: composite_hash 확인
+    if (!image.composite_hash) {
+      console.warn('[ImageViewerModal] No composite_hash, using props data');
+      setCurrentImage(image);
+      return;
+    }
+
+    // Skip fetching if the composite_hash hasn't changed (currentImage가 있을 때만)
+    // This prevents redundant requests when only the image object reference changes
+    if (currentImage && currentImage.composite_hash === image.composite_hash) {
+      return;
+    }
+
+    // 2단계: DB에서 메타데이터 조회 (file_type 포함)
+    const fetchMetadata = async () => {
+      try {
+        const metadata = await imageApi.getMetadata(image.composite_hash!);
+        setCurrentImage(metadata);
+      } catch (error) {
+        // 4단계: 실패 시 props 데이터 사용 (안전장치)
+        console.error('[ImageViewerModal] Metadata fetch failed, using props data:', error);
+        setCurrentImage(image);
+      }
+    };
+
+    fetchMetadata();
+  }, [open, image?.composite_hash, isRandomMode]);
 
   // ✅ Reload image after auto-tag generation (composite_hash)
   const handleAutoTagGenerated = async () => {
@@ -332,7 +350,15 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   };
 
   const handleEditorOpen = () => {
-    // Store currently focused element for restoration
+    if (!currentImage?.file_id) return;
+
+    // 외부에서 에디터를 관리하는 경우 (onOpenEditor prop이 있는 경우)
+    if (onOpenEditor) {
+      onOpenEditor(currentImage.file_id);
+      return;
+    }
+
+    // 내부 에디터 사용 (fallback - onOpenEditor가 없는 경우)
     setLastFocusedElement(document.activeElement as HTMLElement);
     setEditorOpen(true);
   };
@@ -589,14 +615,15 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         </Alert>
       </Snackbar>
 
-      {/* Image Editor Modal */}
-      {currentImage && currentImage.file_id && (
+      {/* Image Editor Modal (내부 에디터 - onOpenEditor가 없을 때만 사용) */}
+      {!onOpenEditor && currentImage && currentImage.file_id && (
         <ImageEditorModal
           open={editorOpen}
           onClose={handleEditorClose}
           imageId={currentImage.file_id}
-          imageUrl={buildUploadsUrl(showOriginal ? (currentImage.original_file_path || currentImage.thumbnail_path) : currentImage.thumbnail_path) || ''}
           onSaved={async () => {
+            // Open canvas gallery after save
+            setCanvasGalleryOpen(true);
             // Reload image metadata after save
             if (currentImage.composite_hash) {
               try {
@@ -608,6 +635,31 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 console.error('Failed to reload image after editing:', err);
               }
             }
+          }}
+        />
+      )}
+
+      {/* Canvas Gallery Modal */}
+      <CanvasGalleryModal
+        open={canvasGalleryOpen}
+        onClose={() => setCanvasGalleryOpen(false)}
+        onEditImage={(imagePath) => {
+          // Extract filename from path
+          const filename = imagePath.split(/[/\\]/).pop() || '';
+          setCanvasEditorFilename(filename);
+          setCanvasGalleryOpen(false);
+        }}
+      />
+
+      {/* Canvas Image Editor Modal */}
+      {canvasEditorFilename && (
+        <ImageEditorModal
+          open={!!canvasEditorFilename}
+          onClose={() => setCanvasEditorFilename(null)}
+          canvasFilename={canvasEditorFilename}
+          onSaved={() => {
+            // Reopen canvas gallery after saving
+            setCanvasGalleryOpen(true);
           }}
         />
       )}

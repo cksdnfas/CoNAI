@@ -197,6 +197,9 @@ export class GenerationHistoryService {
         compositeHash: processedPaths.compositeHash
       });
 
+      // Note: Group assignment is handled by BackgroundProcessorService after hash generation
+      // (due to foreign key constraint on image_groups table)
+
       // Step 4: Update status to completed (file save complete)
       GenerationHistoryModel.updateStatus(historyId, 'completed');
 

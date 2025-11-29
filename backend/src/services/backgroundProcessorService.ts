@@ -253,6 +253,9 @@ export class BackgroundProcessorService {
       );
     }
 
+    // Process pending API generation group assignments
+    await this.processApiGenerationGroupAssignment(hashes.compositeHash);
+
     // Queue metadata extraction task (AI metadata, prompts, etc.)
     try {
       BackgroundQueueService.addMetadataExtractionTask(
@@ -355,6 +358,9 @@ export class BackgroundProcessorService {
       );
     }
 
+    // Process pending API generation group assignments
+    await this.processApiGenerationGroupAssignment(fileHash);
+
     console.log(`  ✨ Processed video/animated: ${fileName} (${width}x${height})`);
   }
 
@@ -413,5 +419,48 @@ export class BackgroundProcessorService {
   static forceStop(): void {
     this.processing = false;
     console.log('⏹️  Background processor stopped');
+  }
+
+  /**
+   * Process pending API generation group assignments
+   * Checks if this composite_hash has a pending group assignment from NAI/ComfyUI generation
+   */
+  private static async processApiGenerationGroupAssignment(compositeHash: string): Promise<void> {
+    try {
+      // Import api-generation-history database
+      const { apiGenDb } = await import('../database/apiGenerationDb');
+      const { ImageGroupModel } = await import('../models/Group');
+
+      // Check if there's a pending group assignment for this hash
+      const pendingAssignment = apiGenDb.prepare(`
+        SELECT id, assigned_group_id
+        FROM api_generation_history
+        WHERE composite_hash = ?
+          AND assigned_group_id IS NOT NULL
+          AND generation_status = 'completed'
+      `).get(compositeHash) as { id: number; assigned_group_id: number } | undefined;
+
+      if (pendingAssignment) {
+        // Add image to the assigned group
+        const added = await ImageGroupModel.addImageToGroup(
+          pendingAssignment.assigned_group_id,
+          compositeHash,
+          'manual', // User-selected group = manual collection
+          0
+        );
+
+        if (added) {
+          console.log(`  📁 API generation image assigned to group ${pendingAssignment.assigned_group_id}`);
+        } else {
+          console.log(`  ℹ️  Image already in group ${pendingAssignment.assigned_group_id}`);
+        }
+      }
+    } catch (error) {
+      // Non-critical error - continue processing
+      console.warn(
+        `  ⚠️  API generation group assignment failed (non-critical):`,
+        error instanceof Error ? error.message : error
+      );
+    }
   }
 }

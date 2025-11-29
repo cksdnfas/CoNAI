@@ -193,6 +193,8 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
               });
 
               console.log(`✅ ComfyUI history ${historyId} updated with composite_hash: ${hashes.compositeHash.substring(0, 16)}...`);
+              // Note: Group assignment is handled by BackgroundProcessorService after file watcher detects the new file
+              // (due to foreign key constraint on image_groups table requiring media_metadata entry first)
             }
           } catch (error) {
             console.error(`❌ Failed to save ComfyUI image ${tempPath}:`, error);

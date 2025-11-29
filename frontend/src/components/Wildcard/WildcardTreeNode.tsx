@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   Box,
   IconButton,
@@ -23,6 +24,46 @@ interface WildcardTreeNodeProps {
   onSelect: (node: WildcardWithHierarchy) => void;
   onToggle: (id: number) => void;
   sortChildren?: (a: WildcardWithHierarchy, b: WildcardWithHierarchy) => number;
+  searchTerm?: string;
+}
+
+/**
+ * 검색어와 일치하는 부분을 하이라이트하는 컴포넌트
+ */
+function HighlightedText({ text, searchTerm }: { text: string; searchTerm?: string }) {
+  if (!searchTerm || !searchTerm.trim()) {
+    return <>{text}</>;
+  }
+
+  const lowerText = text.toLowerCase();
+  const lowerSearch = searchTerm.toLowerCase();
+  const index = lowerText.indexOf(lowerSearch);
+
+  if (index === -1) {
+    return <>{text}</>;
+  }
+
+  const before = text.slice(0, index);
+  const match = text.slice(index, index + searchTerm.length);
+  const after = text.slice(index + searchTerm.length);
+
+  return (
+    <>
+      {before}
+      <Box
+        component="span"
+        sx={{
+          bgcolor: 'warning.main',
+          color: 'warning.contrastText',
+          borderRadius: 0.5,
+          px: 0.25
+        }}
+      >
+        {match}
+      </Box>
+      {after}
+    </>
+  );
 }
 
 /**
@@ -36,7 +77,8 @@ export function WildcardTreeNode({
   expandedIds,
   onSelect,
   onToggle,
-  sortChildren
+  sortChildren,
+  searchTerm
 }: WildcardTreeNodeProps) {
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = expandedIds.has(node.id);
@@ -91,7 +133,7 @@ export function WildcardTreeNode({
           )}
         </ListItemIcon>
         <ListItemText
-          primary={node.name}
+          primary={<HighlightedText text={node.name} searchTerm={searchTerm} />}
           primaryTypographyProps={{
             variant: 'body2',
             noWrap: true,
@@ -111,6 +153,7 @@ export function WildcardTreeNode({
               onSelect={onSelect}
               onToggle={onToggle}
               sortChildren={sortChildren}
+              searchTerm={searchTerm}
             />
           ))}
         </Collapse>

@@ -1,3 +1,4 @@
+import { useState, useMemo, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -5,11 +6,16 @@ import {
   Tooltip,
   Typography,
   useMediaQuery,
-  useTheme
+  useTheme,
+  TextField,
+  InputAdornment,
+  IconButton
 } from '@mui/material';
 import {
   UnfoldMore as ExpandAllIcon,
-  UnfoldLess as CollapseAllIcon
+  UnfoldLess as CollapseAllIcon,
+  Search as SearchIcon,
+  Clear as ClearIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { WildcardTreeNode } from './WildcardTreeNode';
@@ -25,6 +31,66 @@ interface WildcardTreePanelProps {
   onCollapseAll: () => void;
   sortChildren?: (a: WildcardWithHierarchy, b: WildcardWithHierarchy) => number;
   emptyMessage?: string;
+}
+
+/**
+ * 노드와 그 자식들 중 검색어와 일치하는 항목이 있는지 확인
+ */
+function nodeMatchesSearch(node: WildcardWithHierarchy, searchTerm: string): boolean {
+  const lowerSearch = searchTerm.toLowerCase();
+
+  // 현재 노드의 이름이 검색어와 일치하는지 확인
+  if (node.name.toLowerCase().includes(lowerSearch)) {
+    return true;
+  }
+
+  // 자식 노드들 중 일치하는 항목이 있는지 재귀적으로 확인
+  if (node.children && node.children.length > 0) {
+    return node.children.some(child => nodeMatchesSearch(child, searchTerm));
+  }
+
+  return false;
+}
+
+/**
+ * 검색어에 맞게 트리를 필터링하고, 일치하는 노드의 부모들을 포함
+ */
+function filterTree(nodes: WildcardWithHierarchy[], searchTerm: string): WildcardWithHierarchy[] {
+  if (!searchTerm.trim()) {
+    return nodes;
+  }
+
+  return nodes.filter(node => nodeMatchesSearch(node, searchTerm)).map(node => {
+    // 자식 노드들도 필터링
+    if (node.children && node.children.length > 0) {
+      return {
+        ...node,
+        children: filterTree(node.children, searchTerm)
+      };
+    }
+    return node;
+  });
+}
+
+/**
+ * 검색 결과에서 일치하는 노드들의 부모 ID를 수집
+ */
+function collectMatchingParentIds(nodes: WildcardWithHierarchy[], searchTerm: string, parentIds: Set<number> = new Set()): Set<number> {
+  const lowerSearch = searchTerm.toLowerCase();
+
+  for (const node of nodes) {
+    if (node.children && node.children.length > 0) {
+      // 자식 중 검색어와 일치하는 항목이 있으면 현재 노드의 ID를 추가
+      const hasMatchingChild = node.children.some(child => nodeMatchesSearch(child, searchTerm));
+      if (hasMatchingChild || node.name.toLowerCase().includes(lowerSearch)) {
+        parentIds.add(node.id);
+      }
+      // 재귀적으로 자식들도 확인
+      collectMatchingParentIds(node.children, searchTerm, parentIds);
+    }
+  }
+
+  return parentIds;
 }
 
 /**
@@ -46,8 +112,37 @@ export function WildcardTreePanel({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
+  // 검색어 상태
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // 검색어로 필터링된 트리 데이터
+  const filteredData = useMemo(() => {
+    return filterTree(data, searchTerm);
+  }, [data, searchTerm]);
+
+  // 검색 시 자동으로 확장할 노드 ID들
+  const searchExpandedIds = useMemo(() => {
+    if (!searchTerm.trim()) {
+      return new Set<number>();
+    }
+    return collectMatchingParentIds(data, searchTerm);
+  }, [data, searchTerm]);
+
+  // 검색 중일 때는 검색 결과에 맞는 확장 상태 사용
+  const effectiveExpandedIds = useMemo(() => {
+    if (searchTerm.trim()) {
+      return new Set([...expandedIds, ...searchExpandedIds]);
+    }
+    return expandedIds;
+  }, [expandedIds, searchExpandedIds, searchTerm]);
+
+  // 검색어 지우기
+  const handleClearSearch = useCallback(() => {
+    setSearchTerm('');
+  }, []);
+
   // 루트 레벨 정렬
-  const sortedRootNodes = sortChildren ? [...data].sort(sortChildren) : data;
+  const sortedRootNodes = sortChildren ? [...filteredData].sort(sortChildren) : filteredData;
 
   return (
     <Paper
@@ -118,6 +213,44 @@ export function WildcardTreePanel({
         </Box>
       )}
 
+      {/* Search Field */}
+      {data.length > 0 && (
+        <Box sx={{ px: 1, py: 1, borderBottom: 1, borderColor: 'divider' }}>
+          <TextField
+            size="small"
+            fullWidth
+            placeholder={t('common:search') || 'Search...'}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                </InputAdornment>
+              ),
+              endAdornment: searchTerm && (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    onClick={handleClearSearch}
+                    edge="end"
+                    sx={{ p: 0.5 }}
+                  >
+                    <ClearIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ),
+              sx: {
+                '& .MuiInputBase-input': {
+                  py: 0.75,
+                  fontSize: '0.875rem'
+                }
+              }
+            }}
+          />
+        </Box>
+      )}
+
       {/* Tree List */}
       <List
         dense
@@ -137,16 +270,17 @@ export function WildcardTreePanel({
               node={node}
               level={0}
               selectedId={selectedId}
-              expandedIds={expandedIds}
+              expandedIds={effectiveExpandedIds}
               onSelect={onSelect}
               onToggle={onToggle}
               sortChildren={sortChildren}
+              searchTerm={searchTerm}
             />
           ))
         ) : (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400, p: 2 }}>
             <Typography variant="body2" color="text.secondary">
-              {emptyMessage || t('wildcards:page.noWildcards')}
+              {searchTerm ? t('common:noSearchResults') || 'No results found' : emptyMessage || t('wildcards:page.noWildcards')}
             </Typography>
           </Box>
         )}

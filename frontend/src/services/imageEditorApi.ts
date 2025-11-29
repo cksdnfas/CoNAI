@@ -39,6 +39,26 @@ export interface SaveImageResponse {
   error?: string;
 }
 
+export interface CanvasImage {
+  filename: string;
+  path: string;
+  url: string;
+  size: number;
+  width: number;
+  height: number;
+  createdAt: string;
+  modifiedAt: string;
+}
+
+export interface CanvasImagesResponse {
+  success: boolean;
+  data?: {
+    images: CanvasImage[];
+    total: number;
+  };
+  error?: string;
+}
+
 /**
  * Image Editor API Service
  */
@@ -118,6 +138,28 @@ export const imageEditorApi = {
    */
   async getTempFilesStats(): Promise<any> {
     const response = await axios.get(`${API_BASE_URL}/api/image-editor/temp`, { withCredentials: true });
+    return response.data;
+  },
+
+  /**
+   * Get all canvas images (saved edited images)
+   */
+  async getCanvasImages(): Promise<CanvasImagesResponse> {
+    const response = await axios.get<CanvasImagesResponse>(
+      `${API_BASE_URL}/api/image-editor/canvas`,
+      { withCredentials: true }
+    );
+    return response.data;
+  },
+
+  /**
+   * Delete a canvas image
+   */
+  async deleteCanvasImage(filename: string): Promise<{ success: boolean; message?: string; error?: string }> {
+    const response = await axios.delete(
+      `${API_BASE_URL}/api/image-editor/canvas/${encodeURIComponent(filename)}`,
+      { withCredentials: true }
+    );
     return response.data;
   }
 };

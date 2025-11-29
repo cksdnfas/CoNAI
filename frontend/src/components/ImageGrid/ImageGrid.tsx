@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Grid,
   Box,
@@ -15,6 +15,7 @@ import type { ImageRecord, PageSize, ImageSearchParams } from '../../types/image
 import ImageCard from '../ImageCard/ImageCard';
 import PageSizeSelector from '../PageSizeSelector/PageSizeSelector';
 import ImageViewerModal from '../ImageViewerModal';
+import { ImageEditorModal } from '../ImageEditorModal';
 import { imageApi, groupApi } from '../../services/api';
 import './ImageGrid.css';
 
@@ -61,6 +62,10 @@ const ImageGrid: React.FC<ImageGridProps> = ({
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [lastClickedIndex, setLastClickedIndex] = useState<number>(-1);
   const [internalAllImageIds, setInternalAllImageIds] = useState<number[]>([]);  // ✅ image_files.id[]
+
+  // 이미지 에디터 모달 상태 (ImageViewerModal과 독립적으로 관리)
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorImageId, setEditorImageId] = useState<number | null>(null);
 
   // images가 undefined일 경우 방어
   const safeImages = images || [];
@@ -208,6 +213,17 @@ const ImageGrid: React.FC<ImageGridProps> = ({
     };
   }, [selectable, onSelectionChange, safeImages]);
 
+  // 이미지 에디터 열기 핸들러 (ImageViewerModal에서 호출됨)
+  const handleOpenEditor = useCallback((imageId: number) => {
+    setEditorImageId(imageId);
+    setEditorOpen(true);
+  }, []);
+
+  // 이미지 에디터 닫기 핸들러
+  const handleCloseEditor = useCallback(() => {
+    setEditorOpen(false);
+    setEditorImageId(null);
+  }, []);
 
   if (loading) {
     return (
@@ -331,7 +347,18 @@ const ImageGrid: React.FC<ImageGridProps> = ({
         searchParams={searchParams}
         groupId={currentGroupId}
         allImageIds={allImageIds}
+        onOpenEditor={handleOpenEditor}
       />
+
+      {/* 이미지 에디터 모달 (ImageViewerModal과 독립적으로 관리) */}
+      {editorImageId && (
+        <ImageEditorModal
+          open={editorOpen}
+          onClose={handleCloseEditor}
+          imageId={editorImageId}
+          onSaved={handleCloseEditor}
+        />
+      )}
     </Box>
   );
 };

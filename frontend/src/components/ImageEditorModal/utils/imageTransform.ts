@@ -3,7 +3,8 @@ import type { ImageTransform, CanvasSize } from '../types/EditorTypes';
 export const getImageTransform = (
   image: HTMLImageElement | null,
   canvasSize: CanvasSize,
-  _rotation: number,
+  rotation: number,
+  scaleX: number,
   viewportWidth: number,
   viewportHeight: number
 ): ImageTransform => {
@@ -13,7 +14,17 @@ export const getImageTransform = (
   const x = viewportWidth / 2;
   const y = viewportHeight / 2;
 
-  return { x, y, width: canvasSize.width, height: canvasSize.height };
+  // For 90/270 degree rotation, swap width/height for display
+  const is90or270 = rotation === 90 || rotation === 270;
+  const displayWidth = is90or270 ? canvasSize.height : canvasSize.width;
+  const displayHeight = is90or270 ? canvasSize.width : canvasSize.height;
+
+  return {
+    x,
+    y,
+    width: displayWidth,
+    height: displayHeight
+  };
 };
 
 /**

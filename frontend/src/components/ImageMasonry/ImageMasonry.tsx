@@ -6,6 +6,7 @@ import InfiniteScroll from 'react-infinite-scroll-component';
 import type { ImageRecord } from '../../types/image';
 import MasonryImageCard from './MasonryImageCard';
 import ImageViewerModal from '../ImageViewerModal';
+import { ImageEditorModal } from '../ImageEditorModal';
 import './ImageMasonry.css';
 
 interface ImageMasonryProps {
@@ -31,6 +32,10 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [lastClickedIndex, setLastClickedIndex] = useState<number>(-1);
+
+  // 이미지 에디터 모달 상태 (ImageViewerModal과 독립적으로 관리)
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorImageId, setEditorImageId] = useState<number | null>(null);
 
   // 선택 상태를 Set으로 변환하여 O(1) 조회 성능 확보
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -136,6 +141,17 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
     };
   }, [selectable, onSelectionChange, images]);
 
+  // 이미지 에디터 열기 핸들러 (ImageViewerModal에서 호출됨)
+  const handleOpenEditor = useCallback((imageId: number) => {
+    setEditorImageId(imageId);
+    setEditorOpen(true);
+  }, []);
+
+  // 이미지 에디터 닫기 핸들러
+  const handleCloseEditor = useCallback(() => {
+    setEditorOpen(false);
+    setEditorImageId(null);
+  }, []);
 
   // 초기 로딩 중
   if (loading && images.length === 0) {
@@ -227,7 +243,18 @@ const ImageMasonry: React.FC<ImageMasonryProps> = ({
         images={images}
         currentIndex={currentImageIndex}
         onImageChange={handleImageChange}
+        onOpenEditor={handleOpenEditor}
       />
+
+      {/* 이미지 에디터 모달 (ImageViewerModal과 독립적으로 관리) */}
+      {editorImageId && (
+        <ImageEditorModal
+          open={editorOpen}
+          onClose={handleCloseEditor}
+          imageId={editorImageId}
+          onSaved={handleCloseEditor}
+        />
+      )}
     </Box>
   );
 };

@@ -56,7 +56,12 @@ export class TempImageService {
       console.log(`✅ Canvas directory initialized: ${this.canvasDir}`);
 
       // Cleanup any existing temp files on startup
-      await this.cleanupAll();
+      // Check user setting for canvas cleanup (same logic as shutdown)
+      const { settingsService } = await import('./settingsService');
+      const settings = settingsService.loadSettings();
+      const shouldCleanupCanvas = settings.general.autoCleanupCanvasOnShutdown ?? false;
+
+      await this.cleanupAll(!shouldCleanupCanvas);  // skipCanvas = !shouldCleanup
     } catch (error) {
       console.error('Failed to initialize temp directory:', error);
       throw error;
