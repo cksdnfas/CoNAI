@@ -209,6 +209,7 @@ function createTables(): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       provider_name TEXT NOT NULL UNIQUE,
       display_name TEXT NOT NULL,
+      provider_type TEXT NOT NULL DEFAULT 'general',
       api_key TEXT,
       api_secret TEXT,
       base_url TEXT,
@@ -258,6 +259,12 @@ function createTables(): void {
     userSettingsDb.exec('ALTER TABLE custom_dropdown_lists ADD COLUMN source_path TEXT');
   }
 
+  // Migrate external_api_providers table
+  if (!hasColumn('external_api_providers', 'provider_type')) {
+    console.log('  Migrating external_api_providers: adding provider_type column');
+    userSettingsDb.exec("ALTER TABLE external_api_providers ADD COLUMN provider_type TEXT NOT NULL DEFAULT 'general'");
+  }
+
   // Create indexes (now safe - all columns exist)
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows(name)',
@@ -277,7 +284,8 @@ function createTables(): void {
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_created_date ON custom_dropdown_lists(created_date)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_is_auto_collected ON custom_dropdown_lists(is_auto_collected)',
     'CREATE INDEX IF NOT EXISTS idx_external_api_providers_name ON external_api_providers(provider_name)',
-    'CREATE INDEX IF NOT EXISTS idx_external_api_providers_is_enabled ON external_api_providers(is_enabled)'
+    'CREATE INDEX IF NOT EXISTS idx_external_api_providers_is_enabled ON external_api_providers(is_enabled)',
+    'CREATE INDEX IF NOT EXISTS idx_external_api_providers_type ON external_api_providers(provider_type)'
   ];
 
   indexes.forEach(sql => userSettingsDb.exec(sql));

@@ -5,6 +5,7 @@ import type {
   ExternalApiProviderResponse,
   CreateExternalApiProviderInput,
   UpdateExternalApiProviderInput,
+  ProviderType,
 } from '../types/externalApi';
 
 /**
@@ -23,6 +24,27 @@ export class ExternalApiProvider {
     `).all() as ExternalApiProviderType[];
 
     return rows.map(row => this.toResponse(row));
+  }
+
+  /**
+   * Find all providers by type
+   */
+  static findByType(providerType: ProviderType): ExternalApiProviderResponse[] {
+    const db = getUserSettingsDb();
+    const rows = db.prepare(`
+      SELECT * FROM external_api_providers
+      WHERE provider_type = ?
+      ORDER BY created_at DESC
+    `).all(providerType) as ExternalApiProviderType[];
+
+    return rows.map(row => this.toResponse(row));
+  }
+
+  /**
+   * Find all LLM providers
+   */
+  static findAllLLM(): ExternalApiProviderResponse[] {
+    return this.findByType('llm');
   }
 
   /**
@@ -118,15 +140,17 @@ export class ExternalApiProvider {
       INSERT INTO external_api_providers (
         provider_name,
         display_name,
+        provider_type,
         api_key,
         api_secret,
         base_url,
         additional_config,
         is_enabled
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       input.provider_name,
       input.display_name,
+      input.provider_type || 'general',
       encryptedKey,
       encryptedSecret,
       input.base_url || null,
@@ -150,6 +174,11 @@ export class ExternalApiProvider {
     if (input.display_name !== undefined) {
       updates.push('display_name = ?');
       values.push(input.display_name);
+    }
+
+    if (input.provider_type !== undefined) {
+      updates.push('provider_type = ?');
+      values.push(input.provider_type);
     }
 
     if (input.api_key !== undefined) {
@@ -263,6 +292,7 @@ export class ExternalApiProvider {
       id: row.id,
       provider_name: row.provider_name,
       display_name: row.display_name,
+      provider_type: row.provider_type || 'general',
       api_key_masked: maskedKey,
       api_secret_masked: maskedSecret,
       base_url: row.base_url,

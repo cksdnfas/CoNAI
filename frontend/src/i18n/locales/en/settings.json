@@ -823,12 +823,39 @@
     "providerDisplayName": "Display Name",
     "deleteConfirmTitle": "Delete Provider",
     "deleteConfirmMessage": "Are you sure you want to delete {{provider}}?",
+    "providerType": "Provider Type",
+    "providerTypes": {
+      "general": "General",
+      "llm": "LLM"
+    },
+    "llm": {
+      "title": "LLM Settings",
+      "addLLMProvider": "Add LLM Provider",
+      "selectPreset": "Select Preset",
+      "model": "Model",
+      "modelPlaceholder": "Select a model",
+      "refreshModels": "Refresh model list",
+      "loadingModels": "Loading models...",
+      "noModels": "No models available",
+      "temperature": "Temperature",
+      "temperatureHelper": "Higher = more creative, Lower = more consistent (0-2)",
+      "maxTokens": "Max Tokens",
+      "maxTokensHelper": "Maximum response length",
+      "systemPrompt": "Default System Prompt",
+      "systemPromptPlaceholder": "Enter default system prompt",
+      "organizationId": "Organization ID (OpenAI)",
+      "organizationIdPlaceholder": "org-...",
+      "localServer": "Local Server",
+      "localServerHelper": "This is a local server. No API key required.",
+      "serverNotRunning": "Server is not running"
+    },
     "success": {
       "saved": "API key saved successfully",
       "deleted": "Provider deleted successfully",
       "created": "Provider created successfully",
       "connectionTest": "Connection test successful",
-      "toggled": "{{state}} successfully"
+      "toggled": "{{state}} successfully",
+      "modelSelected": "Model selected"
     },
     "errors": {
       "loadFailed": "Failed to load providers",
@@ -837,7 +864,8 @@
       "createFailed": "Failed to create",
       "connectionTestFailed": "Connection test failed",
       "nameRequired": "Please enter both name and display name",
-      "toggleFailed": "Failed to toggle status"
+      "toggleFailed": "Failed to toggle status",
+      "modelLoadFailed": "Failed to load model list"
     }
   }
 }
