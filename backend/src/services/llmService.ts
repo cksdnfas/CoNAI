@@ -19,7 +19,7 @@ export const LLM_PROVIDER_PRESETS: Record<LLMProviderName, LLMProviderPreset> = 
     default_base_url: 'https://api.openai.com/v1',
     requires_api_key: true,
     supports_model_list: true,
-    default_models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
+    default_models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini', 'o1', 'o1-mini', 'o1-pro', 'o3', 'o3-mini', 'o4-mini'],
   },
   anthropic: {
     provider_name: 'anthropic',
@@ -27,7 +27,7 @@ export const LLM_PROVIDER_PRESETS: Record<LLMProviderName, LLMProviderPreset> = 
     default_base_url: 'https://api.anthropic.com/v1',
     requires_api_key: true,
     supports_model_list: false,
-    default_models: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229'],
+    default_models: ['claude-sonnet-4-20250514', 'claude-opus-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229'],
   },
   google: {
     provider_name: 'google',
@@ -35,7 +35,7 @@ export const LLM_PROVIDER_PRESETS: Record<LLMProviderName, LLMProviderPreset> = 
     default_base_url: 'https://generativelanguage.googleapis.com/v1beta',
     requires_api_key: true,
     supports_model_list: true,
-    default_models: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro'],
+    default_models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
   },
   lmstudio: {
     provider_name: 'lmstudio',
@@ -90,6 +90,11 @@ export class LLMService {
       return { success: false, error: 'Base URL not configured' };
     }
 
+    const preset = LLM_PROVIDER_PRESETS[providerName as LLMProviderName];
+    if (preset?.requires_api_key && !apiKey) {
+      return { success: false, error: 'API key not configured or provider is disabled' };
+    }
+
     try {
       switch (providerName) {
         case 'openai':
@@ -120,16 +125,17 @@ export class LLMService {
       return { success: false, error: 'Provider not found' };
     }
 
-    if (!provider.is_enabled) {
-      return { success: false, error: 'Provider is disabled' };
-    }
-
     const apiKey = ExternalApiProvider.getDecryptedKey(providerName);
     const config = provider.additional_config as LLMConfig | null;
     const baseUrl = provider.base_url || LLM_PROVIDER_PRESETS[providerName as LLMProviderName]?.default_base_url;
 
     if (!baseUrl) {
       return { success: false, error: 'Base URL not configured' };
+    }
+
+    const preset = LLM_PROVIDER_PRESETS[providerName as LLMProviderName];
+    if (preset?.requires_api_key && !apiKey) {
+      return { success: false, error: 'API key not configured' };
     }
 
     const model = config?.model;
@@ -381,12 +387,15 @@ export class LLMService {
     const response = await fetch(`${baseUrl}/models?key=${apiKey}`);
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch models: ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({})) as any;
+      const errorMessage = errorData.error?.message || response.statusText;
+      console.error('Google API error:', errorData);
+      throw new Error(`Failed to fetch models: ${errorMessage}`);
     }
 
     const data = await response.json() as any;
-    const models: LLMModelInfo[] = data.models
-      .filter((m: any) => m.name.includes('gemini'))
+    const models: LLMModelInfo[] = (data.models || [])
+      .filter((m: any) => m.name?.includes('gemini') && m.supportedGenerationMethods?.includes('generateContent'))
       .map((m: any) => ({
         id: m.name.replace('models/', ''),
         name: m.displayName || m.name.replace('models/', ''),

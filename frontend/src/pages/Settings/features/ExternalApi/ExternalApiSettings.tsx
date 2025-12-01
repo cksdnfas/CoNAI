@@ -5,7 +5,6 @@ import {
   Typography,
   TextField,
   Button,
-  Alert,
   Divider,
   CircularProgress,
   Accordion,
@@ -27,7 +26,10 @@ import {
   Chip,
   Slider,
   Tooltip,
+  Autocomplete,
+  Collapse,
 } from '@mui/material';
+import { useSnackbar } from 'notistack';
 import {
   ExpandMore,
   Visibility,
@@ -40,6 +42,8 @@ import {
   Psychology,
   Refresh,
   Computer,
+  Send,
+  Chat,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import {
@@ -55,11 +59,10 @@ import {
 
 export const ExternalApiSettings: React.FC = () => {
   const { t } = useTranslation('settings');
+  const { enqueueSnackbar } = useSnackbar();
   const [providers, setProviders] = useState<ExternalApiProvider[]>([]);
   const [llmPresets, setLlmPresets] = useState<LLMProviderPreset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [expandedProvider, setExpandedProvider] = useState<string | false>(false);
 
   // Form states for each provider
@@ -85,10 +88,11 @@ export const ExternalApiSettings: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [providerToDelete, setProviderToDelete] = useState<string | null>(null);
 
-  const clearMessages = () => {
-    setError('');
-    setSuccess('');
-  };
+  // Test chat states
+  const [showTestChat, setShowTestChat] = useState<Record<string, boolean>>({});
+  const [testChatMessage, setTestChatMessage] = useState<Record<string, string>>({});
+  const [testChatResponse, setTestChatResponse] = useState<Record<string, string>>({});
+  const [testChatLoading, setTestChatLoading] = useState<Record<string, boolean>>({});
 
   const loadProviders = async () => {
     try {
@@ -113,7 +117,7 @@ export const ExternalApiSettings: React.FC = () => {
       setFormData(initialFormData);
     } catch (err) {
       console.error('Failed to load providers:', err);
-      setError(t('externalApi.errors.loadFailed'));
+      enqueueSnackbar(t('externalApi.errors.loadFailed'), { variant: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -138,7 +142,6 @@ export const ExternalApiSettings: React.FC = () => {
     isExpanded: boolean
   ) => {
     setExpandedProvider(isExpanded ? providerName : false);
-    clearMessages();
 
     // Load models for LLM providers when expanded
     const provider = providers.find(p => p.provider_name === providerName);
@@ -159,22 +162,21 @@ export const ExternalApiSettings: React.FC = () => {
 
   const handleToggleEnabled = async (providerName: string, currentState: boolean) => {
     try {
-      clearMessages();
       await externalApiApi.toggleProvider(providerName, !currentState);
       await loadProviders();
-      setSuccess(
+      enqueueSnackbar(
         t('externalApi.success.toggled', {
           state: !currentState ? t('common.enabled') : t('common.disabled'),
-        })
+        }),
+        { variant: 'success' }
       );
     } catch (err: any) {
-      setError(err.message || t('externalApi.errors.toggleFailed'));
+      enqueueSnackbar(err.message || t('externalApi.errors.toggleFailed'), { variant: 'error' });
     }
   };
 
   const handleSaveProvider = async (providerName: string) => {
     try {
-      clearMessages();
       const data = formData[providerName];
       const provider = providers.find(p => p.provider_name === providerName);
 
@@ -217,26 +219,25 @@ export const ExternalApiSettings: React.FC = () => {
         },
       }));
 
-      setSuccess(t('externalApi.success.saved'));
+      enqueueSnackbar(t('externalApi.success.saved'), { variant: 'success' });
     } catch (err: any) {
-      setError(err.message || t('externalApi.errors.saveFailed'));
+      enqueueSnackbar(err.message || t('externalApi.errors.saveFailed'), { variant: 'error' });
     }
   };
 
   const handleTestConnection = async (providerName: string) => {
     try {
-      clearMessages();
       setTestingConnection((prev) => ({ ...prev, [providerName]: true }));
 
       const result = await externalApiApi.testConnection(providerName);
 
       if (result.success) {
-        setSuccess(t('externalApi.success.connectionTest'));
+        enqueueSnackbar(t('externalApi.success.connectionTest'), { variant: 'success' });
       } else {
-        setError(result.message || t('externalApi.errors.connectionTestFailed'));
+        enqueueSnackbar(result.message || t('externalApi.errors.connectionTestFailed'), { variant: 'error' });
       }
     } catch (err: any) {
-      setError(err.message || t('externalApi.errors.connectionTestFailed'));
+      enqueueSnackbar(err.message || t('externalApi.errors.connectionTestFailed'), { variant: 'error' });
     } finally {
       setTestingConnection((prev) => ({ ...prev, [providerName]: false }));
     }
@@ -246,23 +247,20 @@ export const ExternalApiSettings: React.FC = () => {
     if (!providerToDelete) return;
 
     try {
-      clearMessages();
       await externalApiApi.deleteProvider(providerToDelete);
       await loadProviders();
-      setSuccess(t('externalApi.success.deleted'));
+      enqueueSnackbar(t('externalApi.success.deleted'), { variant: 'success' });
       setDeleteDialogOpen(false);
       setProviderToDelete(null);
     } catch (err: any) {
-      setError(err.message || t('externalApi.errors.deleteFailed'));
+      enqueueSnackbar(err.message || t('externalApi.errors.deleteFailed'), { variant: 'error' });
     }
   };
 
   const handleCreateProvider = async () => {
     try {
-      clearMessages();
-
       if (!newProviderName || !newProviderDisplayName) {
-        setError(t('externalApi.errors.nameRequired'));
+        enqueueSnackbar(t('externalApi.errors.nameRequired'), { variant: 'error' });
         return;
       }
 
@@ -274,20 +272,18 @@ export const ExternalApiSettings: React.FC = () => {
 
       await externalApiApi.createProvider(input);
       await loadProviders();
-      setSuccess(t('externalApi.success.created'));
+      enqueueSnackbar(t('externalApi.success.created'), { variant: 'success' });
       setShowNewProviderDialog(false);
       setNewProviderName('');
       setNewProviderDisplayName('');
       setNewProviderType('general');
     } catch (err: any) {
-      setError(err.message || t('externalApi.errors.createFailed'));
+      enqueueSnackbar(err.message || t('externalApi.errors.createFailed'), { variant: 'error' });
     }
   };
 
   const handleCreateLLMProvider = async () => {
     try {
-      clearMessages();
-
       if (!selectedLLMPreset) {
         return;
       }
@@ -298,7 +294,7 @@ export const ExternalApiSettings: React.FC = () => {
       // Check if provider already exists
       const existingProvider = providers.find(p => p.provider_name === preset.provider_name);
       if (existingProvider) {
-        setError(`${preset.display_name} is already configured`);
+        enqueueSnackbar(`${preset.display_name} is already configured`, { variant: 'error' });
         return;
       }
 
@@ -316,11 +312,11 @@ export const ExternalApiSettings: React.FC = () => {
 
       await externalApiApi.createProvider(input);
       await loadProviders();
-      setSuccess(t('externalApi.success.created'));
+      enqueueSnackbar(t('externalApi.success.created'), { variant: 'success' });
       setShowLLMProviderDialog(false);
       setSelectedLLMPreset('');
     } catch (err: any) {
-      setError(err.message || t('externalApi.errors.createFailed'));
+      enqueueSnackbar(err.message || t('externalApi.errors.createFailed'), { variant: 'error' });
     }
   };
 
@@ -354,6 +350,44 @@ export const ExternalApiSettings: React.FC = () => {
   const openDeleteDialog = (providerName: string) => {
     setProviderToDelete(providerName);
     setDeleteDialogOpen(true);
+  };
+
+  const toggleTestChat = (providerName: string) => {
+    setShowTestChat((prev) => ({
+      ...prev,
+      [providerName]: !prev[providerName],
+    }));
+  };
+
+  const handleTestChat = async (providerName: string) => {
+    const message = testChatMessage[providerName]?.trim();
+    if (!message) return;
+
+    const model = formData[providerName]?.model;
+    if (!model) {
+      enqueueSnackbar(t('externalApi.llm.testChatNoModel'), { variant: 'error' });
+      return;
+    }
+
+    try {
+      setTestChatLoading((prev) => ({ ...prev, [providerName]: true }));
+      setTestChatResponse((prev) => ({ ...prev, [providerName]: '' }));
+
+      const response = await externalApiApi.llmChat(providerName, {
+        messages: [{ role: 'user', content: message }],
+      });
+
+      if (response.success && response.content) {
+        setTestChatResponse((prev) => ({ ...prev, [providerName]: response.content || '' }));
+        enqueueSnackbar(t('externalApi.llm.testChatSuccess'), { variant: 'success' });
+      } else {
+        enqueueSnackbar(response.error || t('externalApi.llm.testChatError'), { variant: 'error' });
+      }
+    } catch (err: any) {
+      enqueueSnackbar(err.message || t('externalApi.llm.testChatError'), { variant: 'error' });
+    } finally {
+      setTestChatLoading((prev) => ({ ...prev, [providerName]: false }));
+    }
   };
 
   const getPresetForProvider = (providerName: string): LLMProviderPreset | undefined => {
@@ -511,52 +545,71 @@ export const ExternalApiSettings: React.FC = () => {
                   {t('externalApi.llm.title')}
                 </Typography>
 
-                {/* Model Selection */}
-                <FormControl fullWidth margin="normal" size="small">
-                  <InputLabel>{t('externalApi.llm.model')}</InputLabel>
-                  <Select
+                {/* Model Selection with Custom Input */}
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                  <Autocomplete
+                    freeSolo
+                    fullWidth
+                    size="small"
+                    options={models}
+                    getOptionLabel={(option) => {
+                      if (typeof option === 'string') return option;
+                      return option.id;
+                    }}
                     value={providerFormData.model || ''}
-                    label={t('externalApi.llm.model')}
-                    onChange={(e) =>
-                      handleFormChange(provider.provider_name, 'model', e.target.value)
-                    }
-                    endAdornment={
-                      <InputAdornment position="end" sx={{ mr: 2 }}>
-                        <Tooltip title={t('externalApi.llm.refreshModels')}>
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              loadModelsForProvider(provider.provider_name);
-                            }}
-                            disabled={loadingModels[provider.provider_name]}
-                          >
-                            {loadingModels[provider.provider_name] ? (
-                              <CircularProgress size={16} />
-                            ) : (
-                              <Refresh />
-                            )}
-                          </IconButton>
-                        </Tooltip>
-                      </InputAdornment>
-                    }
-                  >
-                    {models.length === 0 ? (
-                      <MenuItem disabled>{t('externalApi.llm.noModels')}</MenuItem>
-                    ) : (
-                      models.map((model) => (
-                        <MenuItem key={model.id} value={model.id}>
-                          {model.name}
-                          {model.description && (
-                            <Typography variant="caption" color="textSecondary" sx={{ ml: 1 }}>
-                              {model.description}
+                    onChange={(_, newValue) => {
+                      if (typeof newValue === 'string') {
+                        handleFormChange(provider.provider_name, 'model', newValue);
+                      } else if (newValue) {
+                        handleFormChange(provider.provider_name, 'model', newValue.id);
+                      } else {
+                        handleFormChange(provider.provider_name, 'model', '');
+                      }
+                    }}
+                    onInputChange={(_, newInputValue, reason) => {
+                      if (reason === 'input') {
+                        handleFormChange(provider.provider_name, 'model', newInputValue);
+                      }
+                    }}
+                    renderOption={(props, option) => (
+                      <li {...props} key={option.id}>
+                        <Box>
+                          <Typography>{option.name}</Typography>
+                          {option.description && (
+                            <Typography variant="caption" color="textSecondary">
+                              {option.description}
                             </Typography>
                           )}
-                        </MenuItem>
-                      ))
+                        </Box>
+                      </li>
                     )}
-                  </Select>
-                </FormControl>
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label={t('externalApi.llm.model')}
+                        placeholder={t('externalApi.llm.modelPlaceholder')}
+                        margin="normal"
+                        helperText={t('externalApi.llm.modelCustomHelper')}
+                      />
+                    )}
+                    loading={loadingModels[provider.provider_name]}
+                    noOptionsText={t('externalApi.llm.noModels')}
+                  />
+                  <Tooltip title={t('externalApi.llm.refreshModels')}>
+                    <IconButton
+                      size="small"
+                      onClick={() => loadModelsForProvider(provider.provider_name)}
+                      disabled={loadingModels[provider.provider_name]}
+                      sx={{ mt: 2.5 }}
+                    >
+                      {loadingModels[provider.provider_name] ? (
+                        <CircularProgress size={20} />
+                      ) : (
+                        <Refresh />
+                      )}
+                    </IconButton>
+                  </Tooltip>
+                </Box>
 
                 {/* Temperature */}
                 <Box sx={{ mt: 2 }}>
@@ -610,6 +663,76 @@ export const ExternalApiSettings: React.FC = () => {
                   rows={3}
                   placeholder={t('externalApi.llm.systemPromptPlaceholder')}
                 />
+
+                {/* Test Chat Section */}
+                <Box sx={{ mt: 2 }}>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    startIcon={<Chat />}
+                    onClick={() => toggleTestChat(provider.provider_name)}
+                    size="small"
+                  >
+                    {t('externalApi.llm.testChat')}
+                  </Button>
+
+                  <Collapse in={showTestChat[provider.provider_name]}>
+                    <Paper variant="outlined" sx={{ mt: 2, p: 2 }}>
+                      <Typography variant="subtitle2" gutterBottom>
+                        {t('externalApi.llm.testChatTitle')}
+                      </Typography>
+
+                      <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          placeholder={t('externalApi.llm.testChatPlaceholder')}
+                          value={testChatMessage[provider.provider_name] || ''}
+                          onChange={(e) => setTestChatMessage((prev) => ({
+                            ...prev,
+                            [provider.provider_name]: e.target.value,
+                          }))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleTestChat(provider.provider_name);
+                            }
+                          }}
+                          disabled={testChatLoading[provider.provider_name]}
+                        />
+                        <Button
+                          variant="contained"
+                          color="secondary"
+                          onClick={() => handleTestChat(provider.provider_name)}
+                          disabled={testChatLoading[provider.provider_name] || !testChatMessage[provider.provider_name]?.trim()}
+                        >
+                          {testChatLoading[provider.provider_name] ? (
+                            <CircularProgress size={20} />
+                          ) : (
+                            <Send />
+                          )}
+                        </Button>
+                      </Box>
+
+                      {testChatResponse[provider.provider_name] && (
+                        <Box sx={{
+                          p: 2,
+                          bgcolor: 'action.hover',
+                          borderRadius: 1,
+                          maxHeight: 200,
+                          overflow: 'auto',
+                        }}>
+                          <Typography variant="caption" color="textSecondary" gutterBottom display="block">
+                            {t('externalApi.llm.testChatResponse')}:
+                          </Typography>
+                          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                            {testChatResponse[provider.provider_name]}
+                          </Typography>
+                        </Box>
+                      )}
+                    </Paper>
+                  </Collapse>
+                </Box>
               </>
             )}
 
@@ -661,18 +784,6 @@ export const ExternalApiSettings: React.FC = () => {
           <VpnKey color="primary" />
           <Typography variant="h6">{t('externalApi.title')}</Typography>
         </Box>
-
-        {error && (
-          <Alert severity="error" sx={{ mb: 2, mt: 2 }} onClose={clearMessages}>
-            {error}
-          </Alert>
-        )}
-
-        {success && (
-          <Alert severity="success" sx={{ mb: 2, mt: 2 }} onClose={clearMessages}>
-            {success}
-          </Alert>
-        )}
 
         <Divider sx={{ my: 3 }} />
 

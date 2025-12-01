@@ -833,7 +833,8 @@
       "addLLMProvider": "Add LLM Provider",
       "selectPreset": "Select Preset",
       "model": "Model",
-      "modelPlaceholder": "Select a model",
+      "modelPlaceholder": "Select or type a model name",
+      "modelCustomHelper": "You can select from the list or type a custom model name",
       "refreshModels": "Refresh model list",
       "loadingModels": "Loading models...",
       "noModels": "No models available",
@@ -847,7 +848,15 @@
       "organizationIdPlaceholder": "org-...",
       "localServer": "Local Server",
       "localServerHelper": "This is a local server. No API key required.",
-      "serverNotRunning": "Server is not running"
+      "serverNotRunning": "Server is not running",
+      "testChat": "Test Chat",
+      "testChatTitle": "Test LLM Connection",
+      "testChatPlaceholder": "Type a message to test...",
+      "testChatSend": "Send",
+      "testChatResponse": "Response",
+      "testChatSuccess": "Test successful!",
+      "testChatError": "Test failed",
+      "testChatNoModel": "Please select a model first"
     },
     "success": {
       "saved": "API key saved successfully",

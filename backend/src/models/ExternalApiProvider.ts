@@ -67,16 +67,21 @@ export class ExternalApiProvider {
   /**
    * Get decrypted API key for a provider (for internal use only - NOT exposed via API)
    * @param providerName - Provider name
+   * @param requireEnabled - If true, only return key if provider is enabled (default: false)
    * @returns Decrypted API key or null
    */
-  static getDecryptedKey(providerName: string): string | null {
+  static getDecryptedKey(providerName: string, requireEnabled: boolean = false): string | null {
     const db = getUserSettingsDb();
     const row = db.prepare(`
       SELECT api_key, is_enabled FROM external_api_providers
       WHERE provider_name = ?
     `).get(providerName) as { api_key: string | null; is_enabled: number } | undefined;
 
-    if (!row || !row.is_enabled || !row.api_key) {
+    if (!row || !row.api_key) {
+      return null;
+    }
+
+    if (requireEnabled && !row.is_enabled) {
       return null;
     }
 

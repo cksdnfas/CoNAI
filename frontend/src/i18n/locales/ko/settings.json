@@ -941,7 +941,8 @@
       "addLLMProvider": "LLM Provider 추가",
       "selectPreset": "프리셋 선택",
       "model": "모델",
-      "modelPlaceholder": "모델을 선택하세요",
+      "modelPlaceholder": "모델을 선택하거나 직접 입력하세요",
+      "modelCustomHelper": "목록에서 선택하거나 사용자 지정 모델 이름을 직접 입력할 수 있습니다",
       "refreshModels": "모델 목록 새로고침",
       "loadingModels": "모델 목록 로딩 중...",
       "noModels": "사용 가능한 모델이 없습니다",
@@ -955,7 +956,15 @@
       "organizationIdPlaceholder": "org-...",
       "localServer": "로컬 서버",
       "localServerHelper": "로컬에서 실행되는 서버입니다. API 키가 필요하지 않습니다.",
-      "serverNotRunning": "서버가 실행 중이 아닙니다"
+      "serverNotRunning": "서버가 실행 중이 아닙니다",
+      "testChat": "테스트 대화",
+      "testChatTitle": "LLM 연결 테스트",
+      "testChatPlaceholder": "테스트 메시지를 입력하세요...",
+      "testChatSend": "전송",
+      "testChatResponse": "응답",
+      "testChatSuccess": "테스트 성공!",
+      "testChatError": "테스트 실패",
+      "testChatNoModel": "먼저 모델을 선택해주세요"
     },
     "success": {
       "saved": "API 키가 저장되었습니다",
