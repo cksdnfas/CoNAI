@@ -5,7 +5,7 @@
 export const PORTS = {
   BACKEND_DEFAULT: 1566,
   FRONTEND_DEFAULT: 1577,
-  VITE_DEV: 5173,
+  VITE_DEV: 5555,
 } as const;
 
 export const TIMEOUTS = {

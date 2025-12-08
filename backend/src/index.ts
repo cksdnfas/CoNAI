@@ -135,7 +135,7 @@ app.use(helmet({
 app.use(apiLimiter);
 
 const allowedOrigins = [
-  'http://localhost:5173',
+  'http://localhost:5555',
   'http://localhost:1577',
   process.env.FRONTEND_URL
 ].filter(Boolean) as string[];
