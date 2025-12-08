@@ -141,9 +141,9 @@
     },
     "conditionTypes": {
       "prompt_contains": "包含",
-      "prompt_regex": "正则表达式",
+      "prompt_regex": "模式匹配",
       "negative_prompt_contains": "包含",
-      "negative_prompt_regex": "正则表达式",
+      "negative_prompt_regex": "模式匹配",
       "auto_tag_exists": "自动标签存在",
       "auto_tag_has_character": "角色存在",
       "auto_tag_rating": "Rating类型",
@@ -196,9 +196,9 @@
     },
     "conditionTypes": {
       "prompt_contains": "包含",
-      "prompt_regex": "正则表达式",
+      "prompt_regex": "模式匹配",
       "negative_prompt_contains": "包含",
-      "negative_prompt_regex": "正则表达式",
+      "negative_prompt_regex": "模式匹配",
       "auto_tag_exists": "自动标签存在",
       "auto_tag_has_character": "角色存在",
       "auto_tag_rating": "分级类型",

@@ -283,19 +283,18 @@ export class ComplexFilterService {
     }
 
     // Rating score (weighted)
+    // Note: auto_tags.rating values are stored as 0-1 decimals
+    // UI displays as 0-1 range, so no conversion needed
     if (condition.type === 'auto_tag_rating_score') {
-      // This requires RatingScoreService, will implement similar to autoTagSearchService
-      // For now, basic implementation
       const conditions: string[] = [];
 
       if (condition.min_score !== undefined) {
         params.push(condition.min_score);
-        // Simplified: use general rating as proxy
-        conditions.push(`json_extract(im.auto_tags, '$.rating.general') * 100 >= ?`);
+        conditions.push(`json_extract(im.auto_tags, '$.rating.general') >= ?`);
       }
       if (condition.max_score !== undefined) {
         params.push(condition.max_score);
-        conditions.push(`json_extract(im.auto_tags, '$.rating.general') * 100 <= ?`);
+        conditions.push(`json_extract(im.auto_tags, '$.rating.general') <= ?`);
       }
 
       return conditions.length > 0 ? conditions.join(' AND ') : null;

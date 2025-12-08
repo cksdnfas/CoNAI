@@ -141,9 +141,9 @@
     },
     "conditionTypes": {
       "prompt_contains": "Contains",
-      "prompt_regex": "Regex",
+      "prompt_regex": "Pattern",
       "negative_prompt_contains": "Contains",
-      "negative_prompt_regex": "Regex",
+      "negative_prompt_regex": "Pattern",
       "auto_tag_exists": "Auto Tag Exists",
       "auto_tag_has_character": "Character Exists",
       "auto_tag_rating": "Rating Type",
@@ -196,9 +196,9 @@
     },
     "conditionTypes": {
       "prompt_contains": "Contains",
-      "prompt_regex": "Regex",
+      "prompt_regex": "Pattern",
       "negative_prompt_contains": "Contains",
-      "negative_prompt_regex": "Regex",
+      "negative_prompt_regex": "Pattern",
       "auto_tag_exists": "Auto Tag Exists",
       "auto_tag_has_character": "Character Exists",
       "auto_tag_rating": "Rating Type",

@@ -141,9 +141,9 @@
     },
     "conditionTypes": {
       "prompt_contains": "포함",
-      "prompt_regex": "정규식",
+      "prompt_regex": "패턴",
       "negative_prompt_contains": "포함",
-      "negative_prompt_regex": "정규식",
+      "negative_prompt_regex": "패턴",
       "auto_tag_exists": "자동태그 존재",
       "auto_tag_has_character": "캐릭터 존재",
       "auto_tag_rating": "Rating 타입",
@@ -196,9 +196,9 @@
     },
     "conditionTypes": {
       "prompt_contains": "포함",
-      "prompt_regex": "정규식",
+      "prompt_regex": "패턴",
       "negative_prompt_contains": "포함",
-      "negative_prompt_regex": "정규식",
+      "negative_prompt_regex": "패턴",
       "auto_tag_exists": "자동태그 존재",
       "auto_tag_has_character": "캐릭터 존재",
       "auto_tag_rating": "Rating 타입",

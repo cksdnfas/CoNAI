@@ -141,9 +141,9 @@
     },
     "conditionTypes": {
       "prompt_contains": "含む",
-      "prompt_regex": "正規表現",
+      "prompt_regex": "パターン",
       "negative_prompt_contains": "含む",
-      "negative_prompt_regex": "正規表現",
+      "negative_prompt_regex": "パターン",
       "auto_tag_exists": "自動タグが存在",
       "auto_tag_has_character": "キャラクターが存在",
       "auto_tag_rating": "Ratingタイプ",
@@ -196,9 +196,9 @@
     },
     "conditionTypes": {
       "prompt_contains": "含む",
-      "prompt_regex": "正規表現",
+      "prompt_regex": "パターン",
       "negative_prompt_contains": "含む",
-      "negative_prompt_regex": "正規表現",
+      "negative_prompt_regex": "パターン",
       "auto_tag_exists": "自動タグが存在",
       "auto_tag_has_character": "キャラクターが存在",
       "auto_tag_rating": "レーティングタイプ",
