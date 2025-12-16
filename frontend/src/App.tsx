@@ -9,7 +9,7 @@ import './i18n';
 // 페이지 컴포넌트들
 import HomePage from './pages/Home/HomePage';
 import UploadPage from './pages/Upload/UploadPage';
-import GalleryPage from './pages/Gallery/GalleryPage';
+
 import SearchPage from './pages/Search/SearchPage';
 import ImageGroupsPage from './pages/ImageGroups/ImageGroupsPage';
 import ImageDetailPage from './pages/ImageDetail/ImageDetailPage';
@@ -62,7 +62,7 @@ function App() {
                       <Layout>
                         <Routes>
                           <Route path="/" element={<HomePage />} />
-                          <Route path="/gallery" element={<GalleryPage />} />
+
                           <Route path="/image-groups" element={<ImageGroupsPage />} />
                           <Route path="/upload" element={<UploadPage />} />
                           <Route path="/search" element={<SearchPage />} />

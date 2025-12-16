@@ -50,6 +50,15 @@
   - ImageGroupsPage, ImageGenerationPage, SettingsPage의 불필요한 패딩 및 Container 제한 제거
   - 전체 화면 너비를 사용하는 일관된 디자인 적용
 
+### Refactoring: Unified Image List
+- **통합 ImageList 컴포넌트**: `ImageGrid`와 `ImageMasonry`를 통합하여 단일 `ImageList` 컴포넌트로 리팩토링
+  - 모든 리스트 뷰(홈, 검색, 그룹)에서 동일한 기능 제공
+- **사용자 경험 일관성**:
+  - 홈,검색, 그룹 등 컨텍스트별로 뷰 모드(Masonry/Grid), 컬럼 수, 이미지 크기 설정 저장
+  - Masonry 및 Grid 뷰 모드 자유 전환 가능
+- **Gallery 페이지 제거**: 중복되던 Gallery 페이지 삭제 및 기능을 ImageList 통합
+- **성능 최적화**: 무한 스크롤 및 페이지네이션 로직 통합 및 최적화
+
 ---
 
 ## Previous Releases

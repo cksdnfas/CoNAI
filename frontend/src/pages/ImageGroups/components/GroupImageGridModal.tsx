@@ -30,7 +30,7 @@ import {
 } from '@mui/icons-material';
 import type { ImageRecord, PageSize } from '../../../types/image';
 import type { GroupWithStats } from '@comfyui-image-manager/shared';
-import ImageGrid from '../../../components/ImageGrid/ImageGrid';
+import ImageList from '../../../components/ImageList/ImageList';
 import GroupAssignModal from '../../../components/GroupAssignModal';
 import { groupApi } from '../../../services/api/groupApi';
 import { autoFolderGroupsApi } from '../../../services/api/autoFolderGroupsApi';
@@ -366,20 +366,26 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
         >
           {getSelectionMessage()}
 
-          <ImageGrid
+          <ImageList
             images={images}
             loading={loading}
+            contextId="group_modal"
+            mode="pagination"
+            pagination={{
+              currentPage,
+              totalPages,
+              onPageChange: onPageChange || (() => { }),
+              pageSize: pageSize as number,
+              onPageSizeChange: (size) => onPageSizeChange?.(size as PageSize)
+            }}
             selectable={true}
-            selectedIds={selectedIds}
-            onSelectionChange={setSelectedIds}
-            pageSize={pageSize}
-            onPageSizeChange={onPageSizeChange}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            total={total}
-            onPageChange={onPageChange}
+            selection={{
+              selectedIds,
+              onSelectionChange: setSelectedIds,
+            }}
             showCollectionType={true}
             currentGroupId={currentGroup?.id}
+            total={total}
           />
         </DialogContent>
       </Dialog>

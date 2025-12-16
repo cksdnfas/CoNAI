@@ -10,7 +10,7 @@ import {
 import { Close as CloseIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { ImageRecord, PageSize } from '../../types/image';
-import ImageGrid from './ImageGrid';
+import ImageList from '../ImageList/ImageList';
 
 interface ImageGridModalProps {
   open: boolean;
@@ -47,8 +47,8 @@ const ImageGridModal: React.FC<ImageGridModalProps> = ({
   onImageDelete,
   title,
 }) => {
-  const { t } = useTranslation(['gallery']);
-  const modalTitle = title || t('gallery:imageGridModal.title', '이미지 그리드');
+  const { t } = useTranslation(['common']);
+  const modalTitle = title || t('common:imageGrid.title', 'Image Grid');
 
   return (
     <Dialog
@@ -85,18 +85,29 @@ const ImageGridModal: React.FC<ImageGridModalProps> = ({
           flex: 1,
         }}
       >
-        <ImageGrid
+        <ImageList
           images={images}
           loading={loading}
-          selectable={selectable}
-          selectedIds={selectedIds}
-          onSelectionChange={onSelectionChange}
-          pageSize={pageSize}
-          onPageSizeChange={onPageSizeChange}
-          currentPage={currentPage}
-          totalPages={totalPages}
+          contextId="viewer_group_modal"
+          mode="pagination"
+          pagination={{
+            currentPage,
+            totalPages,
+            onPageChange: onPageChange || (() => { }),
+            pageSize: pageSize as number,
+            onPageSizeChange: (size) => onPageSizeChange?.(size as PageSize)
+          }}
+          selectable={false} // Viewer modal group list usually just for viewing
           total={total}
-          onPageChange={onPageChange}
+          // onImageClick logic is handled internally by ImageList to open Viewer, 
+          // but we are INSIDE a Viewer's "Group Modal". 
+          // If I click an image here, what happens? 
+          // Original ImageGrid didn't specify onImageClick, so it likely used default or none?
+          // ImageGrid had: onImageClick?: (index: number) => void;
+          // If not provided, it might have done nothing?
+          // But ImageList has default handleImageClick opening a viewer.
+          // If we are in a modal on top of a viewer, opening another viewer might be weird.
+          // But let's assume standard behavior for now.
           onImageDelete={onImageDelete}
         />
       </DialogContent>

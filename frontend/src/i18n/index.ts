@@ -7,7 +7,7 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import koCommon from './locales/ko/common.json';
 import koSettings from './locales/ko/settings.json';
 import koNavigation from './locales/ko/navigation.json';
-import koGallery from './locales/ko/gallery.json';
+
 import koImageDetail from './locales/ko/imageDetail.json';
 import koUpload from './locales/ko/upload.json';
 import koImageGroups from './locales/ko/imageGroups.json';
@@ -25,7 +25,7 @@ import koWildcards from './locales/ko/wildcards.json';
 import enCommon from './locales/en/common.json';
 import enSettings from './locales/en/settings.json';
 import enNavigation from './locales/en/navigation.json';
-import enGallery from './locales/en/gallery.json';
+
 import enImageDetail from './locales/en/imageDetail.json';
 import enUpload from './locales/en/upload.json';
 import enImageGroups from './locales/en/imageGroups.json';
@@ -43,7 +43,7 @@ import enWildcards from './locales/en/wildcards.json';
 import jaCommon from './locales/ja/common.json';
 import jaSettings from './locales/ja/settings.json';
 import jaNavigation from './locales/ja/navigation.json';
-import jaGallery from './locales/ja/gallery.json';
+
 import jaImageDetail from './locales/ja/imageDetail.json';
 import jaUpload from './locales/ja/upload.json';
 import jaImageGroups from './locales/ja/imageGroups.json';
@@ -62,7 +62,7 @@ import jaAuth from './locales/ja/auth.json';
 import zhCNCommon from './locales/zh-CN/common.json';
 import zhCNSettings from './locales/zh-CN/settings.json';
 import zhCNNavigation from './locales/zh-CN/navigation.json';
-import zhCNGallery from './locales/zh-CN/gallery.json';
+
 import zhCNImageDetail from './locales/zh-CN/imageDetail.json';
 import zhCNUpload from './locales/zh-CN/upload.json';
 import zhCNImageGroups from './locales/zh-CN/imageGroups.json';
@@ -81,7 +81,7 @@ import zhCNAuth from './locales/zh-CN/auth.json';
 import zhTWCommon from './locales/zh-TW/common.json';
 import zhTWSettings from './locales/zh-TW/settings.json';
 import zhTWNavigation from './locales/zh-TW/navigation.json';
-import zhTWGallery from './locales/zh-TW/gallery.json';
+
 import zhTWImageDetail from './locales/zh-TW/imageDetail.json';
 import zhTWUpload from './locales/zh-TW/upload.json';
 import zhTWImageGroups from './locales/zh-TW/imageGroups.json';
@@ -102,7 +102,7 @@ const resources = {
     common: koCommon,
     settings: koSettings,
     navigation: koNavigation,
-    gallery: koGallery,
+
     imageDetail: koImageDetail,
     upload: koUpload,
     imageGroups: koImageGroups,
@@ -120,7 +120,7 @@ const resources = {
     common: enCommon,
     settings: enSettings,
     navigation: enNavigation,
-    gallery: enGallery,
+
     imageDetail: enImageDetail,
     upload: enUpload,
     imageGroups: enImageGroups,
@@ -138,7 +138,7 @@ const resources = {
     common: jaCommon,
     settings: jaSettings,
     navigation: jaNavigation,
-    gallery: jaGallery,
+
     imageDetail: jaImageDetail,
     upload: jaUpload,
     imageGroups: jaImageGroups,
@@ -157,7 +157,7 @@ const resources = {
     common: zhCNCommon,
     settings: zhCNSettings,
     navigation: zhCNNavigation,
-    gallery: zhCNGallery,
+
     imageDetail: zhCNImageDetail,
     upload: zhCNUpload,
     imageGroups: zhCNImageGroups,
@@ -176,7 +176,7 @@ const resources = {
     common: zhTWCommon,
     settings: zhTWSettings,
     navigation: zhTWNavigation,
-    gallery: zhTWGallery,
+
     imageDetail: zhTWImageDetail,
     upload: zhTWUpload,
     imageGroups: zhTWImageGroups,
@@ -205,7 +205,7 @@ i18n
       'common',
       'settings',
       'navigation',
-      'gallery',
+
       'imageDetail',
       'upload',
       'imageGroups',

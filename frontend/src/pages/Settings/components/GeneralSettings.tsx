@@ -160,35 +160,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
           </Select>
         </FormControl>
 
-        {/* Gallery Enable/Disable */}
-        <Box sx={{ mb: 2, mt: 3 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={settings.enableGallery ?? true}
-                onChange={async (e) => {
-                  try {
-                    await onUpdate({
-                      enableGallery: e.target.checked
-                    });
-                  } catch (err) {
-                    console.error('Failed to update gallery setting:', err);
-                    setError(t('messages.saveFailed'));
-                  }
-                }}
-                disabled={updating}
-              />
-            }
-            label={
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <Typography variant="body1">{t('general.gallery.label')}</Typography>
-                <Tooltip title={t('general.gallery.tooltip')} arrow>
-                  <InfoOutlinedIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary' }} />
-                </Tooltip>
-              </Box>
-            }
-          />
-        </Box>
+
 
         {/* Canvas Cleanup on Shutdown */}
         <Box sx={{ mb: 2 }}>

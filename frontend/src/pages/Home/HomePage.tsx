@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Box, Typography, IconButton, Tooltip } from '@mui/material';
 import { Refresh as RefreshIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { ImageMasonry } from '../../components/ImageMasonry';
+import ImageList from '../../components/ImageList/ImageList';
 import BulkActionBar from '../../components/BulkActionBar/BulkActionBar';
 import { useInfiniteImages } from '../../hooks/useInfiniteImages';
 
@@ -21,10 +21,6 @@ const HomePage: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   const handleSelectionChange = (newSelectedIds: number[]) => {
-    console.log('[HomePage] handleSelectionChange called:', {
-      newSelectedIds,
-      currentSelectedIds: selectedIds
-    });
     setSelectedIds(newSelectedIds);
   };
 
@@ -70,15 +66,6 @@ const HomePage: React.FC = () => {
           >
             Home
           </Typography>
-          {/* <Typography
-            variant="body1"
-            color="text.secondary"
-            sx={{
-              fontSize: { xs: '0.875rem', sm: '1rem' },
-            }}
-          >
-            최근 업로드된 이미지를 확인하세요.
-          </Typography> */}
         </Box>
 
         <Tooltip title={t('common:refresh')}>
@@ -105,15 +92,22 @@ const HomePage: React.FC = () => {
         </Box>
       )}
 
-      {/* 이미지 Masonry 그리드 (상시 선택모드) */}
-      <ImageMasonry
+      {/* 이미지 리스트 (Unified) */}
+      <ImageList
         images={images}
         loading={loading}
-        hasMore={hasMore}
-        onLoadMore={loadMore}
+        contextId="home"
+        mode="infinite"
+        infiniteScroll={{
+          hasMore,
+          loadMore,
+        }}
         selectable={true}
-        selectedIds={selectedIds}
-        onSelectionChange={handleSelectionChange}
+        selection={{
+          selectedIds,
+          onSelectionChange: handleSelectionChange,
+        }}
+        total={images.length}
       />
 
       {/* 일괄 작업 바 */}

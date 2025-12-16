@@ -63,19 +63,15 @@ const Header: React.FC = () => {
 
   const allNavItems = [
     { label: t('header.menu.home'), path: '/', icon: HomeIcon, tooltip: t('header.tooltip.home') },
-    { label: t('header.menu.gallery'), path: '/gallery', icon: GalleryIcon, tooltip: t('header.tooltip.gallery') },
     { label: t('header.menu.imageGroups'), path: '/image-groups', icon: FolderIcon, tooltip: t('header.tooltip.imageGroups') },
     { label: t('header.menu.search'), path: '/search', icon: SearchIcon, tooltip: t('header.tooltip.search') },
     { label: t('header.menu.upload'), path: '/upload', icon: UploadIcon, tooltip: t('header.tooltip.upload') },
     { label: t('header.menu.imageGeneration'), path: '/image-generation', icon: GenerationIcon, tooltip: t('header.tooltip.imageGeneration') },
     { label: t('header.menu.settings'), path: '/settings', icon: SettingsIcon, tooltip: t('header.tooltip.settings') },
-
   ];
 
-  // Filter out gallery if disabled
-  const navItems = enableGallery
-    ? allNavItems
-    : allNavItems.filter(item => item.path !== '/gallery');
+  // Logic simplified: no gallery option anymore
+  const navItems = allNavItems;
 
   const handleMobileMenuToggle = () => {
     setMobileMenuOpen(!mobileMenuOpen);
