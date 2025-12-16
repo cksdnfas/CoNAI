@@ -59,6 +59,15 @@
 - **Gallery 페이지 제거**: 중복되던 Gallery 페이지 삭제 및 기능을 ImageList 통합
 - **성능 최적화**: 무한 스크롤 및 페이지네이션 로직 통합 및 최적화
 
+### UI/UX Refinements
+- **반응형 Minimal Mode**: 
+  - 카드 크기(너비 200px 미만)에 따라 배지와 아이콘을 자동으로 숨김 처리
+  - 컬럼 수와 무관하게 화면 크기에 맞춰 가독성 최적화
+- **Masonry 레이아웃 개선**:
+  - **Fit to Screen**: 1컬럼 보기 시 이미지가 화면 높이를 초과하지 않도록 제한 (Grid와 동일)
+  - **UI 통일**: Masonry 모드에서도 Grid와 동일한 위치에 다운로드/삭제 버튼 및 툴 배지 배치
+- **ComfyUI 배지 수정**: Minimal 모드에서 올바르게 숨겨지도록 버그 수정
+
 ---
 
 ## Previous Releases

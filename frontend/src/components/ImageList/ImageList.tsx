@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
     Box,
-    Grid, // using MUI v6 Grid (Grid2)
     Pagination,
     Typography,
 } from '@mui/material';
@@ -10,13 +9,13 @@ import InfiniteScroll from 'react-infinite-scroll-component';
 import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../types/image';
 import { useImageListSettings } from '../../hooks/useImageListSettings';
-import ImageListToolbar from './ImageListToolbar';
-import MasonryImageCard from '../ImageMasonry/MasonryImageCard';
+import ImageListControls from './ImageListControls';
+import MasonryImageCard from './components/MasonryImageCard';
 import ImageCard from '../ImageCard/ImageCard';
 import ImageViewerModal from '../ImageViewerModal';
 import { ImageEditorModal } from '../ImageEditorModal';
 
-import '../ImageMasonry/ImageMasonry.css';
+import './components/MasonryImageCard.css';
 
 export interface ImageListProps {
     images: ImageRecord[];
@@ -51,6 +50,9 @@ export interface ImageListProps {
     showCollectionType?: boolean;
     currentGroupId?: number;
     total?: number;
+
+    // Control Props
+    onSearchClick?: () => void;
 }
 
 const ImageList: React.FC<ImageListProps> = ({
@@ -66,13 +68,18 @@ const ImageList: React.FC<ImageListProps> = ({
     showCollectionType,
     currentGroupId,
     total,
+    onSearchClick,
 }) => {
     const { t } = useTranslation(['common', 'gallery']);
     const {
         settings,
         setViewMode,
         setGridColumns,
+        setFitToScreen,
     } = useImageListSettings(contextId);
+
+    // isMinimal is now handled internally by components using useCardWidth
+    // const isMinimal = settings.gridColumns >= 8;
 
     const activeMode = propMode || settings.activeScrollMode;
 
@@ -133,10 +140,11 @@ const ImageList: React.FC<ImageListProps> = ({
     // View Mode Renderers
     const breakpointColumns = {
         default: settings.gridColumns,
-        1536: Math.max(2, settings.gridColumns - 1),
-        1200: Math.max(2, settings.gridColumns - 2),
-        900: Math.max(2, settings.gridColumns - 3),
-        600: Math.max(2, settings.gridColumns - 4),
+        1536: settings.gridColumns,
+        1200: Math.min(settings.gridColumns, 10),
+        900: Math.min(settings.gridColumns, 6),
+        600: Math.min(settings.gridColumns, 3),
+        0: Math.min(settings.gridColumns, 2),
     };
 
     const renderMasonry = () => (
@@ -153,41 +161,44 @@ const ImageList: React.FC<ImageListProps> = ({
                     selected={image.id ? selectedSet.has(image.id) : false}
                     selectable={selectable}
                     onSelectionChange={handleSelectionWrapper}
+                    // minimal={isMinimal} // Handled internally
+                    fitScreen={settings.fitToScreen && settings.gridColumns === 1}
                 />
             ))}
         </Masonry>
     );
 
     const renderGrid = () => (
-        <Grid container spacing={2}>
-            {images.map((image, index) => {
-                // Calculate Grid Size based on columns
-                // MUI Grid is 12 columns total.
-                const xl = Math.max(1, Math.floor(12 / settings.gridColumns));
-                const lg = Math.max(1, Math.floor(12 / Math.max(2, settings.gridColumns - 1)));
-                const md = Math.max(1, Math.floor(12 / Math.max(2, settings.gridColumns - 2)));
-                const sm = Math.max(1, Math.floor(12 / Math.max(2, settings.gridColumns - 3)));
-                const xs = 6;
-
-                return (
-                    <Grid
-                        size={{ xs, sm, md, lg, xl }}
-                        key={image.id ? `id-${image.id}` : `hash-${image.composite_hash}-${index}`}
-                    >
-                        <ImageCard
-                            image={image}
-                            selected={image.id ? selectedSet.has(image.id) : false}
-                            selectable={selectable}
-                            onSelectionChange={handleSelectionWrapper}
-                            onDelete={onImageDelete}
-                            onImageClick={() => handleImageClick(index)}
-                            showCollectionType={showCollectionType}
-                            currentGroupId={currentGroupId}
-                        />
-                    </Grid>
-                );
-            })}
-        </Grid>
+        <Box
+            sx={{
+                display: 'grid',
+                gap: 2,
+                gridTemplateColumns: {
+                    xs: `repeat(${Math.min(settings.gridColumns, 2)}, 1fr)`,
+                    sm: `repeat(${Math.min(settings.gridColumns, 3)}, 1fr)`,
+                    md: `repeat(${Math.min(settings.gridColumns, 6)}, 1fr)`,
+                    lg: `repeat(${Math.min(settings.gridColumns, 10)}, 1fr)`,
+                    xl: `repeat(${settings.gridColumns}, 1fr)`,
+                }
+            }}
+        >
+            {images.map((image, index) => (
+                <Box key={image.id ? `id-${image.id}` : `hash-${image.composite_hash}-${index}`}>
+                    <ImageCard
+                        image={image}
+                        selected={image.id ? selectedSet.has(image.id) : false}
+                        selectable={selectable}
+                        onSelectionChange={handleSelectionWrapper}
+                        onDelete={onImageDelete}
+                        onImageClick={() => handleImageClick(index)}
+                        showCollectionType={showCollectionType}
+                        currentGroupId={currentGroupId}
+                        // minimal={isMinimal} // Handled internally
+                        fitScreen={settings.fitToScreen}
+                    />
+                </Box>
+            ))}
+        </Box>
     );
 
     const renderContent = () => {
@@ -218,11 +229,12 @@ const ImageList: React.FC<ImageListProps> = ({
 
     return (
         <Box sx={{ width: '100%', position: 'relative' }}>
-            <ImageListToolbar
+            <ImageListControls
                 settings={settings}
                 onViewModeChange={setViewMode}
                 onColumnsChange={setGridColumns}
-                totalImages={total}
+                onFitToScreenChange={setFitToScreen}
+                onSearchClick={onSearchClick}
             />
 
             {activeMode === 'infinite' && infiniteScroll ? (

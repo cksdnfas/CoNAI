@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, memo } from 'react';
+import React, { useState, useCallback, useMemo, memo, useRef, useEffect } from 'react';
 import {
   Card,
   CardMedia,
@@ -21,6 +21,7 @@ import type { ImageRecord } from '../../types/image';
 import { getBackendOrigin } from '../../utils/backend';
 import RatingBadge from '../RatingBadge/RatingBadge';
 import { useRatingTiers } from '../../hooks/useRatingTiers';
+import { useCardWidth } from '../../hooks/useCardWidth';
 
 // ✅ composite_hash 기반으로 변경
 interface ImageCardProps {
@@ -32,6 +33,8 @@ interface ImageCardProps {
   onImageClick?: () => void;
   showCollectionType?: boolean; // 그룹 모달에서만 collection_type 표시
   currentGroupId?: number; // 현재 그룹 ID (collection_type 표시용)
+  minimal?: boolean; // Deprecated, using responsive logic
+  fitScreen?: boolean; // 화면 맞춤 모드 (1열 뷰용)
 }
 
 const ImageCard: React.FC<ImageCardProps> = ({
@@ -43,12 +46,26 @@ const ImageCard: React.FC<ImageCardProps> = ({
   onImageClick,
   showCollectionType = false,
   currentGroupId,
+  minimal = false,
+  fitScreen = false,
 }) => {
   const { t } = useTranslation(['common']);
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const backendOrigin = getBackendOrigin();
   const { getTierByScore } = useRatingTiers();
+
+  const { ref: resizeRef, isSmall } = useCardWidth(200);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const setRefs = useCallback((node: HTMLDivElement | null) => {
+    // We can use this to merge refs if we needed internal ref access, 
+    // but here we just need to attach the resize observer.
+    (resizeRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+    // If we needed cardRef locally we would set it here too
+    (cardRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+  }, [resizeRef]);
+
 
   // Get rating tier for this image
   const ratingTier = useMemo(() => {
@@ -145,9 +162,28 @@ const ImageCard: React.FC<ImageCardProps> = ({
     return `${backendOrigin}/api/images/${image.composite_hash}/file`;
   }, [isProcessing, isGif, isVideo, backendOrigin, image.composite_hash, image.original_file_path]);
 
+  // Image Style for fitScreen
+  const imageStyle = fitScreen ? {
+    width: 'auto',
+    maxWidth: '100%',
+    height: 'auto',
+    maxHeight: '85vh',
+    display: 'block',
+    margin: '0 auto',
+    objectFit: 'contain' as const,
+  } : {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover' as const,
+  };
+
   return (
     <>
       <Card
+        ref={setRefs}
         className={selectable ? 'selectable-image' : ''}
         data-image-id={image.composite_hash}
         data-selectable={selectable}
@@ -155,14 +191,14 @@ const ImageCard: React.FC<ImageCardProps> = ({
         onMouseLeave={() => setIsHovered(false)}
         sx={{
           position: 'relative',
-          aspectRatio: '5 / 7',
+          aspectRatio: fitScreen ? 'auto' : '5 / 7',
           overflow: 'hidden',
           border: selected ? 3 : (showCollectionType && isAutoCollected ? 3 : 1),
           borderColor: selected
             ? 'primary.main'
             : (showCollectionType && isAutoCollected
-                ? (theme) => theme.palette.mode === 'dark' ? '#42a5f5' : '#1976d2'
-                : 'divider'),
+              ? (theme) => theme.palette.mode === 'dark' ? '#42a5f5' : '#1976d2'
+              : 'divider'),
           borderStyle: (showCollectionType && isAutoCollected) ? 'dashed' : 'solid',
           borderRadius: 2,
           transition: 'all 0.3s ease',
@@ -175,13 +211,21 @@ const ImageCard: React.FC<ImageCardProps> = ({
               : 8,
             transform: 'translateY(-2px)',
           },
+          // Fit Screen Center Content
+          ...(fitScreen && {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: 'background.paper',
+            minHeight: '200px', // Prevents collapse if image not loaded yet
+          }),
         }}
       >
-        {/* 높이 제공용 spacer (aspect ratio 유지) */}
-        <Box sx={{ width: '100%', paddingTop: '140%' /* 7/5 = 140% */ }} />
+        {/* 높이 제공용 spacer (aspect ratio 유지) - fitScreen일 때는 제거 */}
+        {!fitScreen && <Box sx={{ width: '100%', paddingTop: '140%' /* 7/5 = 140% */ }} />}
 
-        {/* 선택 체크박스/아이콘 - selectable일 때 항상 표시 */}
-        {selectable && (
+        {/* 선택 체크박스/아이콘 - minimal mode에서는 선택된 경우에만 표시하거나 hover 시 표시 */}
+        {selectable && (!isSmall || isHovered || selected) && (
           <Box
             className="image-card-actions"
             sx={{
@@ -189,7 +233,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
               top: 8,
               left: 8,
               zIndex: 2,
-              opacity: isHovered || selected ? 1 : 0.3,
+              opacity: isHovered || selected ? 1 : (isSmall ? 0 : 0.3),
               transition: 'opacity 0.2s ease-in-out',
             }}
             onClick={handleSelectionClick}
@@ -197,7 +241,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
             {selected ? (
               <CheckCircleIcon
                 sx={{
-                  fontSize: 32,
+                  fontSize: isSmall ? 24 : 32,
                   color: 'primary.main',
                   bgcolor: 'white',
                   borderRadius: '50%',
@@ -207,8 +251,8 @@ const ImageCard: React.FC<ImageCardProps> = ({
             ) : (
               <Box
                 sx={{
-                  width: 32,
-                  height: 32,
+                  width: isSmall ? 24 : 32,
+                  height: isSmall ? 24 : 32,
                   borderRadius: '50%',
                   border: '2px solid white',
                   bgcolor: 'rgba(0, 0, 0, 0.5)',
@@ -243,8 +287,8 @@ const ImageCard: React.FC<ImageCardProps> = ({
           />
         )}
 
-        {/* Phase 1 처리 중 배지 */}
-        {image.is_processing && (
+        {/* Phase 1 처리 중 배지 - minimal에서도 보여줄지 고민, 중요하니 보여줌 (작게) */}
+        {image.is_processing && !isSmall && (
           <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
             <Chip
               icon={<HourglassIcon sx={{ fontSize: '0.8rem' }} />}
@@ -265,8 +309,8 @@ const ImageCard: React.FC<ImageCardProps> = ({
           </Box>
         )}
 
-        {/* 비디오 배지 (재생 시간 표시) */}
-        {image.mime_type?.startsWith('video/') && image.duration && (
+        {/* 비디오 배지 (재생 시간 표시) - Minimal Hide */}
+        {image.mime_type?.startsWith('video/') && image.duration && !isSmall && (
           <Box sx={{ position: 'absolute', bottom: 8, left: 8, zIndex: 1 }}>
             <Chip
               icon={<VideoLibraryIcon sx={{ fontSize: '0.8rem' }} />}
@@ -287,8 +331,8 @@ const ImageCard: React.FC<ImageCardProps> = ({
           </Box>
         )}
 
-        {/* Rating 배지 + 자동수집 배지 - 오른쪽 하단 flexbox로 정렬 */}
-        {(ratingTier || (showCollectionType && isAutoCollected)) && (
+        {/* Rating 배지 + 자동수집 배지 - Minimal Hide */}
+        {(ratingTier || (showCollectionType && isAutoCollected)) && !isSmall && (
           <Box sx={{
             position: 'absolute',
             bottom: 8,
@@ -329,32 +373,14 @@ const ImageCard: React.FC<ImageCardProps> = ({
           </Box>
         )}
 
-        <Box className="image-card-actions" sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
-          <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <Tooltip title={t('common:imageCard.tooltips.download')}>
-              <IconButton
-                size="small"
-                onClick={handleDownload}
-                sx={{
-                  bgcolor: (theme) => theme.palette.mode === 'dark'
-                    ? 'rgba(0, 0, 0, 0.6)'
-                    : 'rgba(255, 255, 255, 0.8)',
-                  borderRadius: 1,
-                  '&:hover': {
-                    bgcolor: (theme) => theme.palette.mode === 'dark'
-                      ? 'rgba(0, 0, 0, 0.8)'
-                      : 'rgba(255, 255, 255, 0.9)',
-                  },
-                }}
-              >
-                <DownloadIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            {onDelete && (
-              <Tooltip title={t('common:imageCard.tooltips.delete')}>
+        {/* Action Buttons (Download/Delete) - Minimal Hide */}
+        {!isSmall && (
+          <Box className="image-card-actions" sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
+              <Tooltip title={t('common:imageCard.tooltips.download')}>
                 <IconButton
                   size="small"
-                  onClick={handleDelete}
+                  onClick={handleDownload}
                   sx={{
                     bgcolor: (theme) => theme.palette.mode === 'dark'
                       ? 'rgba(0, 0, 0, 0.6)'
@@ -367,14 +393,35 @@ const ImageCard: React.FC<ImageCardProps> = ({
                     },
                   }}
                 >
-                  <DeleteIcon fontSize="small" />
+                  <DownloadIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
-            )}
+              {onDelete && (
+                <Tooltip title={t('common:imageCard.tooltips.delete')}>
+                  <IconButton
+                    size="small"
+                    onClick={handleDelete}
+                    sx={{
+                      bgcolor: (theme) => theme.palette.mode === 'dark'
+                        ? 'rgba(0, 0, 0, 0.6)'
+                        : 'rgba(255, 255, 255, 0.8)',
+                      borderRadius: 1,
+                      '&:hover': {
+                        bgcolor: (theme) => theme.palette.mode === 'dark'
+                          ? 'rgba(0, 0, 0, 0.8)'
+                          : 'rgba(255, 255, 255, 0.9)',
+                      },
+                    }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Box>
           </Box>
-        </Box>
+        )}
 
-        {/* 비디오인 경우 video 태그, GIF와 이미지는 img 태그 */}
+        {/* 비디오인 경우 video 태그, GIF와 이미지는 img 태그 - apply imageStyle */}
         {isVideo ? (
           <Box
             component="video"
@@ -388,12 +435,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
               setImageError(true);
             }}
             sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
+              ...imageStyle,
               cursor: 'pointer',
             }}
             onClick={onImageClick}
@@ -409,12 +451,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
               setImageError(true);
             }}
             sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
+              ...imageStyle,
               cursor: 'pointer',
             }}
             onClick={onImageClick}
@@ -430,12 +467,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
               setImageError(true);
             }}
             sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
+              ...imageStyle,
               cursor: 'pointer',
             }}
             onClick={onImageClick}
@@ -443,7 +475,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
         )}
 
         {/* 그룹 정보와 AI 도구 정보 - 메인 갤러리에서만 표시 */}
-        {!showCollectionType && (
+        {!showCollectionType && !isSmall && (
           <Box sx={{
             position: 'absolute',
             bottom: 8,

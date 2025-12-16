@@ -25,7 +25,6 @@ import {
   Home as HomeIcon,
   PhotoLibrary as GalleryIcon,
   Folder as FolderIcon,
-  Search as SearchIcon,
   CloudUpload as UploadIcon,
   AutoAwesome as GenerationIcon,
   Settings as SettingsIcon,
@@ -64,7 +63,6 @@ const Header: React.FC = () => {
   const allNavItems = [
     { label: t('header.menu.home'), path: '/', icon: HomeIcon, tooltip: t('header.tooltip.home') },
     { label: t('header.menu.imageGroups'), path: '/image-groups', icon: FolderIcon, tooltip: t('header.tooltip.imageGroups') },
-    { label: t('header.menu.search'), path: '/search', icon: SearchIcon, tooltip: t('header.tooltip.search') },
     { label: t('header.menu.upload'), path: '/upload', icon: UploadIcon, tooltip: t('header.tooltip.upload') },
     { label: t('header.menu.imageGeneration'), path: '/image-generation', icon: GenerationIcon, tooltip: t('header.tooltip.imageGeneration') },
     { label: t('header.menu.settings'), path: '/settings', icon: SettingsIcon, tooltip: t('header.tooltip.settings') },

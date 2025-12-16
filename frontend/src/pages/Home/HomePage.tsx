@@ -1,24 +1,58 @@
 import React, { useState } from 'react';
-import { Box, Typography, IconButton, Tooltip } from '@mui/material';
-import { Refresh as RefreshIcon } from '@mui/icons-material';
+import { Box, Typography, IconButton, Tooltip, Drawer } from '@mui/material';
+import { Refresh as RefreshIcon, Close as CloseIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import ImageList from '../../components/ImageList/ImageList';
 import BulkActionBar from '../../components/BulkActionBar/BulkActionBar';
+import SearchBar from '../../components/SearchBar/SearchBar';
 import { useInfiniteImages } from '../../hooks/useInfiniteImages';
+import { useSearch } from '../../hooks/useSearch';
+import type { ComplexSearchRequest } from '@comfyui-image-manager/shared';
+import type { PageSize } from '../../types/image';
 
 const HomePage: React.FC = () => {
-  const { t } = useTranslation(['common']);
-  const {
-    images,
-    loading,
-    error,
-    hasMore,
-    loadMore,
-    refreshImages,
-  } = useInfiniteImages();
+  const { t } = useTranslation(['common', 'search']);
 
-  // ✅ 선택 상태 관리 (상시 선택모드) - id 기반 (중복 이미지 개별 선택)
+  // Recent Images Hooks
+  const infiniteImages = useInfiniteImages();
+
+  // Search Hooks
+  const search = useSearch();
+
+  // State
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Selection State
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
+  // Toggle Modes
+  const handleOpenSearch = () => {
+    setSearchOpen(true);
+  };
+
+  const handleCloseSearchUI = () => {
+    setSearchOpen(false);
+  };
+
+  const handleExecuteSearch = (request: ComplexSearchRequest) => {
+    setIsSearchMode(true);
+    setSearchOpen(false);
+    setSelectedIds([]); // Clear selection
+    search.searchComplex(request);
+  };
+
+  const handleExitSearchMode = () => {
+    setIsSearchMode(false);
+    setSelectedIds([]); // Clear selection
+    // Optional: Refresh recent images?
+    // infiniteImages.refreshImages(); 
+  };
+
+  // Unified Props
+  const currentImages = isSearchMode ? search.images : infiniteImages.images;
+  const currentLoading = isSearchMode ? search.loading : infiniteImages.loading;
+  const currentError = isSearchMode ? search.error : infiniteImages.error;
 
   const handleSelectionChange = (newSelectedIds: number[]) => {
     setSelectedIds(newSelectedIds);
@@ -29,23 +63,48 @@ const HomePage: React.FC = () => {
   };
 
   const handleActionComplete = async (deletedHashes?: string[]) => {
-    // 삭제된 이미지가 있으면 선택에서 제거
     if (deletedHashes && deletedHashes.length > 0) {
-      // composite_hash로 이미지를 찾아서 id를 제거
-      const deletedImageIds = images
+      const deletedImageIds = currentImages
         .filter(img => img.composite_hash && deletedHashes.includes(img.composite_hash))
         .map(img => img.id)
         .filter((id): id is number => id !== undefined);
 
       setSelectedIds(prev => prev.filter(id => !deletedImageIds.includes(id)));
     }
-    // 이미지 목록 새로고침
-    await refreshImages();
+
+    // Refresh current view
+    if (isSearchMode) {
+      search.refreshSearch();
+    } else {
+      await infiniteImages.refreshImages();
+    }
+  };
+
+  // ImageList Props based on mode
+  const imageListProps = isSearchMode ? {
+    contextId: 'search',
+    mode: 'pagination' as const,
+    pagination: {
+      currentPage: search.currentPage,
+      totalPages: search.totalPages,
+      onPageChange: search.changePage,
+      pageSize: search.pageSize || 25,
+      onPageSizeChange: (size: number) => search.changePageSize(size as PageSize)
+    },
+    total: search.total
+  } : {
+    contextId: 'home',
+    mode: 'infinite' as const,
+    infiniteScroll: {
+      hasMore: infiniteImages.hasMore,
+      loadMore: infiniteImages.loadMore
+    },
+    total: infiniteImages.images.length // Approximate or N/A
   };
 
   return (
     <Box sx={{ width: '100%' }}>
-      {/* 헤더 */}
+      {/* Header */}
       <Box
         sx={{
           mb: { xs: 2, sm: 3 },
@@ -54,31 +113,39 @@ const HomePage: React.FC = () => {
           alignItems: 'center',
         }}
       >
-        <Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {isSearchMode && (
+            <IconButton onClick={handleExitSearchMode} color="primary">
+              <ArrowBackIcon />
+            </IconButton>
+          )}
           <Typography
             variant="h4"
             component="h1"
-            gutterBottom
             sx={{
               fontSize: { xs: '1.75rem', sm: '2rem', md: '2.25rem' },
               fontWeight: 600,
             }}
           >
-            Home
+            {isSearchMode ? t('search:title') : 'Home'}
           </Typography>
         </Box>
 
-        <Tooltip title={t('common:refresh')}>
-          <span>
-            <IconButton onClick={refreshImages} disabled={loading}>
-              <RefreshIcon />
-            </IconButton>
-          </span>
-        </Tooltip>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {!isSearchMode && (
+            <Tooltip title={t('common:refresh')}>
+              <span>
+                <IconButton onClick={infiniteImages.refreshImages} disabled={currentLoading}>
+                  <RefreshIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+          )}
+        </Box>
       </Box>
 
-      {/* 에러 메시지 */}
-      {error && (
+      {/* Error Message */}
+      {currentError && (
         <Box
           sx={{
             mb: { xs: 2, sm: 3 },
@@ -88,36 +155,61 @@ const HomePage: React.FC = () => {
             borderRadius: 2,
           }}
         >
-          <Typography variant="body2">{error}</Typography>
+          <Typography variant="body2">{currentError}</Typography>
         </Box>
       )}
 
-      {/* 이미지 리스트 (Unified) */}
+      {/* Image List (Unified) */}
       <ImageList
-        images={images}
-        loading={loading}
-        contextId="home"
-        mode="infinite"
-        infiniteScroll={{
-          hasMore,
-          loadMore,
-        }}
+        images={currentImages}
+        loading={currentLoading}
         selectable={true}
         selection={{
           selectedIds,
           onSelectionChange: handleSelectionChange,
         }}
-        total={images.length}
+        onSearchClick={handleOpenSearch}
+        {...imageListProps}
       />
 
-      {/* 일괄 작업 바 */}
+      {/* Bulk Action Bar */}
       <BulkActionBar
         selectedCount={selectedIds.length}
         selectedIds={selectedIds}
-        selectedImages={images.filter(img => img.id && selectedIds.includes(img.id))}
+        selectedImages={currentImages.filter(img => img.id && selectedIds.includes(img.id))}
         onSelectionClear={handleSelectionClear}
         onActionComplete={handleActionComplete}
       />
+
+      {/* Search Overlay Dialog */}
+      {/* Search Drawer */}
+      <Drawer
+        anchor={window.innerWidth < 600 ? 'bottom' : 'right'}
+        open={searchOpen}
+        onClose={handleCloseSearchUI}
+        PaperProps={{
+          sx: {
+            width: { xs: '100%', sm: 400 },
+            height: { xs: '100%', sm: '100%' },
+            bgcolor: 'background.default',
+            display: 'flex',
+            flexDirection: 'column',
+          }
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', p: 2, borderBottom: 1, borderColor: 'divider' }}>
+          <Typography variant="h6" sx={{ flex: 1 }}>
+            {t('common:search')}
+          </Typography>
+          <IconButton onClick={handleCloseSearchUI} edge="end">
+            <CloseIcon />
+          </IconButton>
+        </Box>
+
+        <Box sx={{ p: 2, overflowY: 'auto', flex: 1 }}>
+          <SearchBar onSearch={handleExecuteSearch} loading={search.loading} />
+        </Box>
+      </Drawer>
     </Box>
   );
 };

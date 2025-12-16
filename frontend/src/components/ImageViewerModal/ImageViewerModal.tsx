@@ -27,7 +27,7 @@ import { useTranslation } from 'react-i18next';
 import type { ImageRecord, ImageSearchParams } from '../../types/image';
 import type { GenerationHistoryRecord } from '@comfyui-image-manager/shared';
 import ImageNavigation from './ImageNavigation';
-import { ImageGridModal } from '../ImageGrid';
+import SimpleImageModal from './components/SimpleImageModal';
 import { getBackendOrigin, buildUploadsUrl } from '../../utils/backend';
 import { settingsApi } from '../../services/settingsApi';
 import { imageApi, generationHistoryApi } from '../../services/api';
@@ -562,7 +562,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
       {/* Group images modal */}
       {groupImages.groupModalOpen && (
-        <ImageGridModal
+        <SimpleImageModal
           open={groupImages.groupModalOpen}
           onClose={groupImages.handleGroupModalClose}
           images={groupImages.groupImages}

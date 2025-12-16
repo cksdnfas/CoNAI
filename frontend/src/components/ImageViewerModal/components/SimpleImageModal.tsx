@@ -9,10 +9,10 @@ import {
 } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import type { ImageRecord, PageSize } from '../../types/image';
-import ImageList from '../ImageList/ImageList';
+import type { ImageRecord, PageSize } from '../../../types/image';
+import ImageList from '../../ImageList/ImageList';
 
-interface ImageGridModalProps {
+interface SimpleImageModalProps {
   open: boolean;
   onClose: () => void;
   images: ImageRecord[];
@@ -30,7 +30,7 @@ interface ImageGridModalProps {
   title?: string;
 }
 
-const ImageGridModal: React.FC<ImageGridModalProps> = ({
+const SimpleImageModal: React.FC<SimpleImageModalProps> = ({
   open,
   onClose,
   images,
@@ -97,17 +97,12 @@ const ImageGridModal: React.FC<ImageGridModalProps> = ({
             pageSize: pageSize as number,
             onPageSizeChange: (size) => onPageSizeChange?.(size as PageSize)
           }}
-          selectable={false} // Viewer modal group list usually just for viewing
+          selectable={selectable}
+          selection={selectable ? {
+            selectedIds,
+            onSelectionChange: onSelectionChange || (() => { })
+          } : undefined}
           total={total}
-          // onImageClick logic is handled internally by ImageList to open Viewer, 
-          // but we are INSIDE a Viewer's "Group Modal". 
-          // If I click an image here, what happens? 
-          // Original ImageGrid didn't specify onImageClick, so it likely used default or none?
-          // ImageGrid had: onImageClick?: (index: number) => void;
-          // If not provided, it might have done nothing?
-          // But ImageList has default handleImageClick opening a viewer.
-          // If we are in a modal on top of a viewer, opening another viewer might be weird.
-          // But let's assume standard behavior for now.
           onImageDelete={onImageDelete}
         />
       </DialogContent>
@@ -115,4 +110,4 @@ const ImageGridModal: React.FC<ImageGridModalProps> = ({
   );
 };
 
-export default ImageGridModal;
+export default SimpleImageModal;

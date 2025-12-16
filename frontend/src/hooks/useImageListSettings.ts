@@ -8,13 +8,15 @@ export interface ImageListSettings {
     gridColumns: number;
     imageSize: ImageSize;
     activeScrollMode: 'infinite' | 'pagination';
+    fitToScreen?: boolean; // New option for single column view
 }
 
 const DEFAULT_SETTINGS: ImageListSettings = {
     viewMode: 'masonry',
-    gridColumns: 6,
+    gridColumns: 4,
     imageSize: 'medium',
     activeScrollMode: 'infinite',
+    fitToScreen: false,
 };
 
 const STORAGE_KEY = 'image-manager-list-settings';
@@ -65,11 +67,16 @@ export const useImageListSettings = (contextId: string) => {
         setSettings(prev => ({ ...prev, activeScrollMode: mode }));
     }, []);
 
+    const setFitToScreen = useCallback((fit: boolean) => {
+        setSettings(prev => ({ ...prev, fitToScreen: fit }));
+    }, []);
+
     return {
         settings,
         setViewMode,
         setGridColumns,
         setImageSize,
         setActiveScrollMode,
+        setFitToScreen,
     };
 };

@@ -10,7 +10,6 @@ import './i18n';
 import HomePage from './pages/Home/HomePage';
 import UploadPage from './pages/Upload/UploadPage';
 
-import SearchPage from './pages/Search/SearchPage';
 import ImageGroupsPage from './pages/ImageGroups/ImageGroupsPage';
 import ImageDetailPage from './pages/ImageDetail/ImageDetailPage';
 import SettingsPage from './pages/Settings/SettingsPage';
@@ -65,7 +64,6 @@ function App() {
 
                           <Route path="/image-groups" element={<ImageGroupsPage />} />
                           <Route path="/upload" element={<UploadPage />} />
-                          <Route path="/search" element={<SearchPage />} />
                           <Route path="/settings" element={<SettingsPage />} />
 
                           <Route path="/image/:compositeHash" element={<ImageDetailPage />} />
