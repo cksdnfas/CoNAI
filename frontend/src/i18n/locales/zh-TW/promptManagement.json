@@ -1,17 +1,15 @@
 {
   "title": "提示詞管理",
   "description": "管理和分析從AI生成圖像中提取的提示詞。",
-
   "tabs": {
     "positive": "正面",
-    "negative": "負面"
+    "negative": "負面",
+    "auto": "自動"
   },
-
   "promptList": {
     "search": {
       "placeholder": "搜尋{{type}}提示詞..."
     },
-
     "filters": {
       "groupFilter": {
         "label": "群組篩選",
@@ -19,13 +17,11 @@
         "unassigned": "未分類"
       }
     },
-
     "bulkActions": {
       "selectedCount": "已選擇 {{count}} 個",
       "assignSelected": "分配所選項目",
       "bulkAssign": "批次分配"
     },
-
     "table": {
       "headers": {
         "prompt": "提示詞",
@@ -38,24 +34,20 @@
         "more": "+{{count}}個"
       }
     },
-
     "actions": {
       "assignToGroup": "分配到群組",
       "delete": "刪除",
       "cannotDelete": "無法刪除正在使用的提示詞",
       "groupManagement": "群組管理"
     },
-
     "statistics": {
       "unclassified": "未分類",
       "unknown": "未知"
     },
-
     "pagination": {
       "rowsPerPage": "每頁行數:",
       "displayedRows": "{{from}}-{{to}} / {{count}}"
     },
-
     "messages": {
       "loadFailed": "載入提示詞清單失敗。",
       "deleteSuccess": "提示詞已刪除。",
@@ -64,7 +56,6 @@
       "assignFailed": "分配提示詞失敗。"
     }
   },
-
   "assignDialog": {
     "title": "分配到群組",
     "selectGroup": {
@@ -76,7 +67,6 @@
       "assign": "分配"
     }
   },
-
   "bulkAssignDialog": {
     "title": "批量分配提示詞",
     "groupSelect": {
@@ -105,11 +95,9 @@
       "total": "共處理 {{count}}個"
     }
   },
-
   "groupManagement": {
     "title": "{{type}}提示詞群組管理",
     "dragHint": "拖曳以更改順序",
-
     "editForm": {
       "titleAdd": "新增群組",
       "titleEdit": "編輯群組",
@@ -120,6 +108,10 @@
       "displayOrder": {
         "label": "顯示順序"
       },
+      "parentGroup": {
+        "label": "父群組",
+        "none": "無 (頂層)"
+      },
       "visibility": {
         "label": "顯示",
         "hidden": "隱藏"
@@ -129,7 +121,6 @@
         "cancel": "取消"
       }
     },
-
     "groupList": {
       "title": "群組清單 ({{count}}個)",
       "add": "新增群組",
@@ -137,7 +128,6 @@
       "promptCount": "{{count}}個",
       "displayOrder": "顯示順序: {{order}}"
     },
-
     "actions": {
       "toggleVisibility": "切換可見性",
       "edit": "編輯",
@@ -145,7 +135,6 @@
       "deleteConfirm": "確定要刪除此群組嗎？",
       "close": "關閉"
     },
-
     "messages": {
       "loadFailed": "載入群組清單失敗。",
       "createSuccess": "群組已建立。",
@@ -159,7 +148,6 @@
       "reorderFailed": "更新群組順序失敗。"
     }
   },
-
   "promptDisplay": {
     "tabs": {
       "positive": "正面",
@@ -174,13 +162,11 @@
     "loading": "載入中...",
     "loadFailed": "無法載入群組資訊。"
   },
-
   "autoTagDisplay": {
     "noTags": "此圖像尚未生成自動標籤。",
     "generateButton": "生成標籤",
     "generating": "生成中...",
     "generationError": "生成標籤時發生錯誤。",
-
     "sections": {
       "rating": "評級",
       "characters": "角色",
@@ -188,7 +174,6 @@
       "generalTags": "通用標籤 ({{count}}個)",
       "modelInfo": "模型資訊"
     },
-
     "modelInfo": {
       "model": "模型",
       "generalThreshold": "通用",

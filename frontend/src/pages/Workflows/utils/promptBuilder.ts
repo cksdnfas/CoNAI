@@ -15,7 +15,7 @@ async function imageToBase64(imagePath: string): Promise<string> {
 
   // 서버 경로인 경우 fetch로 가져와서 Base64로 변환
   try {
-    const response = await fetch(`http://localhost:1566${imagePath}`);
+    const response = await fetch(`http://localhost:1666${imagePath}`);
     const blob = await response.blob();
 
     return new Promise((resolve, reject) => {
@@ -78,9 +78,9 @@ export async function buildPromptData(
         // 원본 값이 백슬래시를 포함하는 경로라면, 새 값도 백슬래시로 변환
         const originalValue = current[lastKey];
         if (typeof originalValue === 'string' &&
-            typeof value === 'string' &&
-            originalValue.includes('\\') &&
-            value.includes('/')) {
+          typeof value === 'string' &&
+          originalValue.includes('\\') &&
+          value.includes('/')) {
           // 원본이 Windows 경로 형식(백슬래시)이고, 새 값이 Unix 경로 형식(슬래시)이면
           // 새 값의 슬래시를 백슬래시로 변환
           value = value.replace(/\//g, '\\');

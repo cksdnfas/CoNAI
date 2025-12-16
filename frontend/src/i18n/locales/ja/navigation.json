@@ -8,8 +8,7 @@
       "search": "検索",
       "upload": "アップロード",
       "imageGeneration": "画像生成",
-      "settings": "設定",
-      "help": "ヘルプ"
+      "settings": "設定"
     },
     "tooltip": {
       "home": "ホームページへ移動",
@@ -18,8 +17,7 @@
       "search": "画像を検索",
       "upload": "画像をアップロード",
       "imageGeneration": "AI画像生成",
-      "settings": "設定管理",
-      "help": "ヘルプを表示"
+      "settings": "設定管理"
     },
     "theme": {
       "light": "ライトモード",
@@ -34,16 +32,5 @@
   "footer": {
     "copyright": "© 2024 ComfyUI Image Manager. All rights reserved.",
     "version": "バージョン"
-  },
-  "help": {
-    "title": "ヘルプ",
-    "sections": {
-      "gettingStarted": "はじめに",
-      "imageManagement": "画像管理",
-      "autoCollection": "自動収集",
-      "promptSystem": "プロンプトシステム",
-      "settings": "設定",
-      "shortcuts": "ショートカット"
-    }
   }
 }

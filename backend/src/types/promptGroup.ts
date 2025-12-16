@@ -7,6 +7,7 @@ export interface PromptGroupRecord {
   group_name: string;
   display_order: number;
   is_visible: boolean;
+  parent_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -16,6 +17,7 @@ export interface NegativePromptGroupRecord {
   group_name: string;
   display_order: number;
   is_visible: boolean;
+  parent_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -24,6 +26,7 @@ export interface PromptGroupData {
   group_name: string;
   display_order?: number;
   is_visible?: boolean;
+  parent_id?: number | null;
 }
 
 export interface PromptGroupWithPrompts {
@@ -31,6 +34,7 @@ export interface PromptGroupWithPrompts {
   group_name: string;
   display_order: number;
   is_visible: boolean;
+  parent_id: number | null;
   prompt_count: number;
   created_at: string;
   updated_at: string;
@@ -48,6 +52,7 @@ export interface GroupImportData {
   group_name: string;
   display_order: number;
   is_visible: boolean;
+  parent_id: number | null;
 }
 
 export interface GroupExportData {
@@ -55,7 +60,7 @@ export interface GroupExportData {
   metadata: {
     export_date: string;
     total_groups: number;
-    type: 'positive' | 'negative';
+    type: 'positive' | 'negative' | 'auto';
   };
 }
 
@@ -71,6 +76,7 @@ export interface GroupedPrompts {
   group_name: string;
   display_order: number;
   is_visible: boolean;
+  parent_id: number | null;
   prompts: PromptItem[];
 }
 

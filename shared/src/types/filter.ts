@@ -23,16 +23,16 @@ export interface FilterCondition {
   // Condition type (세부 조건 타입)
   // Basic category
   type: 'ai_tool' | 'model_name' |
-        // Prompt category
-        'prompt_contains' | 'prompt_regex' |
-        'negative_prompt_contains' | 'negative_prompt_regex' |
-        // Auto-tag category
-        'auto_tag_exists' | 'auto_tag_has_character' |
-        'auto_tag_rating' | 'auto_tag_rating_score' |
-        'auto_tag_general' | 'auto_tag_character' |
-        'auto_tag_model' |
-        // Duplicate detection
-        'duplicate_exact' | 'duplicate_near' | 'duplicate_similar' | 'duplicate_custom';
+  // Prompt category
+  'prompt_contains' | 'prompt_regex' |
+  'negative_prompt_contains' | 'negative_prompt_regex' |
+  // Auto-tag category
+  'auto_tag_exists' | 'auto_tag_has_character' |
+  'auto_tag_rating' | 'auto_tag_rating_score' |
+  'auto_tag_general' | 'auto_tag_character' |
+  'auto_tag_model' | 'auto_tag_any' |
+  // Duplicate detection
+  'duplicate_exact' | 'duplicate_near' | 'duplicate_similar' | 'duplicate_custom';
 
   // Condition value
   value: string | number | boolean;

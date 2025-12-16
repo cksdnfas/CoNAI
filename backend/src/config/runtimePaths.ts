@@ -58,7 +58,7 @@ function ensureProtocol(url: string): string {
   return `http://${url}`;
 }
 
-const resolvedPort = process.env.PORT || '1566';
+const resolvedPort = process.env.PORT || '1666';
 const publicBaseUrl = (() => {
   const overrides = [process.env.PUBLIC_BASE_URL, process.env.BACKEND_ORIGIN];
   const explicit = overrides.find(value => value && value.trim().length > 0);

@@ -66,13 +66,10 @@ export default function ImageGenerationPage() {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ width: '100%' }}>
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4" gutterBottom>
           {t('imageGeneration:page.title')}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {t('imageGeneration:page.subtitle')}
         </Typography>
       </Box>
 

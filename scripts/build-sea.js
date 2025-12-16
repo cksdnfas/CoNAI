@@ -157,13 +157,13 @@ try {
         // Skip unnecessary files
         const relativePath = path.relative(sourceModule, src);
         return !relativePath.includes('.git') &&
-               !relativePath.includes('test') &&
-               !relativePath.includes('docs') &&
-               !relativePath.includes('example') &&
-               !relativePath.includes('benchmark') &&
-               !path.basename(src).startsWith('.') &&
-               !src.endsWith('.md') &&
-               !src.endsWith('.markdown');
+          !relativePath.includes('test') &&
+          !relativePath.includes('docs') &&
+          !relativePath.includes('example') &&
+          !relativePath.includes('benchmark') &&
+          !path.basename(src).startsWith('.') &&
+          !src.endsWith('.md') &&
+          !src.endsWith('.markdown');
       }
     });
     console.log(`   ✅ Copied ${moduleName}`);
@@ -253,7 +253,7 @@ To access from other devices:
 
 2. Set in \`.env\`:
    \`\`\`
-   PUBLIC_BASE_URL=http://YOUR_LOCAL_IP:1566
+   PUBLIC_BASE_URL=http://YOUR_LOCAL_IP:1666
    BACKEND_HOST=YOUR_LOCAL_IP
    \`\`\`
 

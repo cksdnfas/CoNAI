@@ -2,6 +2,7 @@
   "page": {
     "title": "通配符管理",
     "noWildcards": "没有注册的通配符",
+    "noChains": "没有注册的链",
     "noWildcardsDesc": "添加新的通配符以自动化提示词生成"
   },
   "filters": {
@@ -23,7 +24,9 @@
   },
   "dialog": {
     "createTitle": "创建通配符",
-    "editTitle": "编辑通配符"
+    "editTitle": "编辑通配符",
+    "createChainTitle": "创建链",
+    "editChainTitle": "编辑链"
   },
   "form": {
     "name": "名称",
@@ -34,6 +37,10 @@
     "noParent": "无 (根级别)",
     "includeChildren": "自动包含子通配符",
     "includeChildrenHelper": "启用后，使用此通配符时将自动包含直接子级的项目",
+    "chainOption": "链选项",
+    "chainOptionReplace": "替换 (Replace)",
+    "chainOptionAppend": "追加 (Append)",
+    "weight": "权重",
     "comfyuiItems": "ComfyUI提示词项目",
     "naiItems": "NovelAI提示词项目",
     "itemsHelper": "每个项目可以包含逗号分隔的词语。您可以使用++名称++格式嵌套其他通配符。",
@@ -54,7 +61,8 @@
     "copyFailed": "复制失败"
   },
   "tabs": {
-    "manual": "手动创建",
+    "manual": "通配符",
+    "chain": "预处理",
     "autoCollected": "自动收集 (LORA)"
   },
   "detail": {

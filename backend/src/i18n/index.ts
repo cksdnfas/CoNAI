@@ -46,7 +46,7 @@ function isValidLocale(locale: string): boolean {
 
 /**
  * Get translated string by key path
- * Example: t('server.started') or t('errors.port_in_use', { port: 1566 })
+ * Example: t('server.started') or t('errors.port_in_use', { port: 1666 })
  */
 export function t(keyPath: string, params?: Record<string, any>): string {
   const keys = keyPath.split('.');

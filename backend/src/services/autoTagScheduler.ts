@@ -4,6 +4,7 @@ import { settingsService } from './settingsService';
 import { imageTaggerService, ImageTaggerService } from './imageTaggerService';
 import { SystemSettingsService } from './systemSettingsService';
 import { RatingScoreService } from './ratingScoreService';
+import { PromptCollectionService } from './promptCollectionService';
 import path from 'path';
 
 /**
@@ -214,6 +215,19 @@ export class AutoTagScheduler {
       SET auto_tags = ?, rating_score = ?
       WHERE composite_hash = ?
     `).run(autoTags, ratingScore, compositeHash);
+
+    // Auto Prompt 수집
+    if (result.taglist) {
+      try {
+        const tags = result.taglist.split(',').map(t => t.trim()).filter(t => t.length > 0);
+        if (tags.length > 0) {
+          const autoPrompts = tags.map(tag => ({ prompt: tag }));
+          await PromptCollectionService.batchAddOrIncrementAuto(autoPrompts);
+        }
+      } catch (error) {
+        console.error('[AutoTagScheduler] Failed to collect auto prompts:', error);
+      }
+    }
 
     console.log(`[AutoTagScheduler] ✅ Tagged (${mediaType}): ${path.basename(filePath)}`);
   }

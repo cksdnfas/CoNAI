@@ -247,7 +247,7 @@ export default function ImageSelectionModal({
                       <CardMedia
                         component="img"
                         height="140"
-                        image={`http://localhost:1566${image.path}`}
+                        image={`http://localhost:1666${image.path}`}
                         alt={image.filename}
                         sx={{ objectFit: 'cover' }}
                       />

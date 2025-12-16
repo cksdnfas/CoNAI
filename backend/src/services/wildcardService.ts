@@ -22,7 +22,81 @@ export class WildcardService {
     wildcards.forEach(wc => wildcardMap.set(wc.name, wc));
 
     // 재귀 파싱 시작
-    return this.parseRecursive(text, wildcardMap, tool, new Set());
+    let result = text;
+
+    // 1. 체인 처리 (전역 토큰 변환)
+    result = this.parseChains(result, wildcardMap, tool);
+
+    // 2. 와일드카드 처리 (++name++)
+    return this.parseRecursive(result, wildcardMap, tool, new Set());
+  }
+
+  /**
+   * 체인 파싱 및 치환
+   * 쉼표로 구분된 토큰을 분석하여 체인이 있으면 치환
+   * 
+   * @param text 파싱할 텍스트
+   * @param wildcardMap 와일드카드 맵
+   * @param tool 사용할 도구
+   * @returns 파싱된 텍스트
+   */
+  private static parseChains(
+    text: string,
+    wildcardMap: Map<string, WildcardWithItems>,
+    tool: 'comfyui' | 'nai'
+  ): string {
+    // 쉼표로 분리 (이스케이프된 쉼표는 처리하지 않음 - 단순 구현)
+    // TODO: 복잡한 프롬프트(괄호 내부 쉼표 등)에 대한 정교한 처리가 필요할 수 있음
+    const tokens = text.split(',').map(t => t.trim());
+    const processedTokens = tokens.map(token => {
+      // 해당 이름의 체인이 있는지 확인
+      const chain = wildcardMap.get(token);
+
+      // 체인이 아니거나 타입이 체인이 아니면 원본 반환
+      if (!chain || chain.type !== 'chain') {
+        return token;
+      }
+
+      // 해당 도구의 항목 수집
+      const items = this.collectItemsWithChildren(chain, tool, wildcardMap);
+      if (items.length === 0) {
+        return token; // 항목이 없으면 원본 유지
+      }
+
+      // 가중치 기반 랜덤 선택
+      const selectedItem = this.selectRandomItemWithWeight(items);
+
+      // 옵션에 따른 치환
+      if (chain.chain_option === 'append') {
+        return `${token}, ${selectedItem.content}`;
+      } else {
+        // replace
+        return selectedItem.content;
+      }
+    });
+
+    return processedTokens.join(', ');
+  }
+
+  /**
+   * 가중치를 고려한 랜덤 항목 선택
+   */
+  private static selectRandomItemWithWeight(items: WildcardItem[]): WildcardItem {
+    if (items.length === 0) throw new Error('Items array is empty');
+
+    const totalWeight = items.reduce((sum, item) => sum + (item.weight || 1.0), 0);
+    let random = Math.random() * totalWeight;
+
+    for (const item of items) {
+      const weight = item.weight || 1.0;
+      if (random < weight) {
+        return item;
+      }
+      random -= weight;
+    }
+
+    // 부동소수점 오차 등으로 인해 선택되지 않은 경우 마지막 항목 반환
+    return items[items.length - 1];
   }
 
   /**
@@ -169,9 +243,8 @@ export class WildcardService {
         return ''; // 빈 문자열 반환
       }
 
-      // 랜덤 항목 선택
-      const randomIndex = Math.floor(Math.random() * toolItems.length);
-      const selectedItem = toolItems[randomIndex];
+      // 랜덤 항목 선택 (가중치 적용)
+      const selectedItem = this.selectRandomItemWithWeight(toolItems);
 
       // 방문 표시
       visited.add(name);

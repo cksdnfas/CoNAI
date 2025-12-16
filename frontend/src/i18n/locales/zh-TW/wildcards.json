@@ -2,6 +2,7 @@
   "page": {
     "title": "萬用字元管理",
     "noWildcards": "沒有註冊的萬用字元",
+    "noChains": "沒有註冊的鏈",
     "noWildcardsDesc": "新增萬用字元以自動化提示詞生成"
   },
   "filters": {
@@ -23,7 +24,9 @@
   },
   "dialog": {
     "createTitle": "建立萬用字元",
-    "editTitle": "編輯萬用字元"
+    "editTitle": "編輯萬用字元",
+    "createChainTitle": "建立鏈",
+    "editChainTitle": "編輯鏈"
   },
   "form": {
     "name": "名稱",
@@ -34,6 +37,10 @@
     "noParent": "無 (根層級)",
     "includeChildren": "自動包含子萬用字元",
     "includeChildrenHelper": "啟用後，使用此萬用字元時將自動包含直接子層級的項目",
+    "chainOption": "鏈選項",
+    "chainOptionReplace": "替換 (Replace)",
+    "chainOptionAppend": "追加 (Append)",
+    "weight": "權重",
     "comfyuiItems": "ComfyUI提示詞項目",
     "naiItems": "NovelAI提示詞項目",
     "itemsHelper": "每個項目可以包含逗號分隔的詞語。您可以使用++名稱++格式嵌套其他萬用字元。",
@@ -54,7 +61,8 @@
     "copyFailed": "複製失敗"
   },
   "tabs": {
-    "manual": "手動建立",
+    "manual": "萬用字元",
+    "chain": "預處理",
     "autoCollected": "自動收集 (LORA)"
   },
   "detail": {

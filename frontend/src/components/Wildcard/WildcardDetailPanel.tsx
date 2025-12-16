@@ -83,6 +83,19 @@ export function WildcardDetailPanel({
     }
   }, [selectedNode?.id, hasChildren, hasComfyuiItems, hasNaiItems]);
 
+  // 현재 렌더링 시점에 유효한 탭 값 계산
+  let activeTab = contentTab;
+  if (activeTab === 'children' && !hasChildren) {
+    if (hasComfyuiItems) activeTab = 'comfyui';
+    else if (hasNaiItems) activeTab = 'nai';
+  } else if (activeTab === 'comfyui' && !hasComfyuiItems) {
+    if (hasChildren) activeTab = 'children';
+    else if (hasNaiItems) activeTab = 'nai';
+  } else if (activeTab === 'nai' && !hasNaiItems) {
+    if (hasChildren) activeTab = 'children';
+    else if (hasComfyuiItems) activeTab = 'comfyui';
+  }
+
   return (
     <Paper
       variant="outlined"
@@ -101,11 +114,11 @@ export function WildcardDetailPanel({
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
             <Box
               sx={{ cursor: 'pointer', flex: 1, '&:hover': { opacity: 0.7 } }}
-              onClick={() => onCopy(`++${selectedNode.name}++`)}
+              onClick={() => onCopy(selectedNode.type === 'chain' ? selectedNode.name : `++${selectedNode.name}++`)}
               title={t('common:copy') || 'Copy'}
             >
               <Typography variant="h5" sx={{ fontFamily: 'monospace' }}>
-                ++{selectedNode.name}++
+                {selectedNode.type === 'chain' ? selectedNode.name : `++${selectedNode.name}++`}
               </Typography>
               {selectedNode.description && (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -115,7 +128,7 @@ export function WildcardDetailPanel({
             </Box>
             <Box sx={{ display: 'flex', gap: 0.5 }}>
               <IconButton
-                onClick={() => onCopy(`++${selectedNode.name}++`)}
+                onClick={() => onCopy(selectedNode.type === 'chain' ? selectedNode.name : `++${selectedNode.name}++`)}
                 title={t('common:copy') || 'Copy'}
               >
                 <CopyIcon />
@@ -141,7 +154,7 @@ export function WildcardDetailPanel({
               <>
                 {/* Multi-Content Tabs */}
                 <Tabs
-                  value={contentTab}
+                  value={activeTab}
                   onChange={(_, newValue) => setContentTab(newValue)}
                   sx={{
                     borderBottom: 1,
@@ -159,7 +172,7 @@ export function WildcardDetailPanel({
                       label={`${t('wildcards:detail.children') || '하위 항목'} (${sortedChildren.length})`}
                       sx={{
                         minHeight: 48,
-                        fontWeight: contentTab === 'children' ? 600 : 400,
+                        fontWeight: activeTab === 'children' ? 600 : 400,
                         '&.Mui-selected': {
                           color: 'warning.main'
                         }
@@ -172,7 +185,7 @@ export function WildcardDetailPanel({
                       label={`ComfyUI (${comfyuiItems.length})`}
                       sx={{
                         minHeight: 48,
-                        fontWeight: contentTab === 'comfyui' ? 600 : 400,
+                        fontWeight: activeTab === 'comfyui' ? 600 : 400,
                         '&.Mui-selected': {
                           color: 'primary.main'
                         }
@@ -185,7 +198,7 @@ export function WildcardDetailPanel({
                       label={`NAI (${naiItems.length})`}
                       sx={{
                         minHeight: 48,
-                        fontWeight: contentTab === 'nai' ? 600 : 400,
+                        fontWeight: activeTab === 'nai' ? 600 : 400,
                         '&.Mui-selected': {
                           color: 'secondary.main'
                         }
@@ -196,7 +209,7 @@ export function WildcardDetailPanel({
 
                 {/* Tab Content */}
                 <Box sx={{ flex: 1, overflow: 'auto', mt: 2 }}>
-                  {contentTab === 'children' && hasChildren && (
+                  {activeTab === 'children' && hasChildren && (
                     <Stack spacing={1}>
                       {sortedChildren.map((child) => (
                         <Card
@@ -220,7 +233,7 @@ export function WildcardDetailPanel({
                                 <FileIcon fontSize="small" color="info" />
                               )}
                               <Typography variant="body1" sx={{ flex: 1, fontFamily: 'monospace' }}>
-                                ++{child.name}++
+                                {child.type === 'chain' ? child.name : `++${child.name}++`}
                               </Typography>
                               {child.children && child.children.length > 0 && (
                                 <Chip
@@ -241,7 +254,7 @@ export function WildcardDetailPanel({
                                 size="small"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  onCopy(`++${child.name}++`);
+                                  onCopy(child.type === 'chain' ? child.name : `++${child.name}++`);
                                 }}
                                 title={t('common:copy') || 'Copy'}
                               >
@@ -254,7 +267,7 @@ export function WildcardDetailPanel({
                     </Stack>
                   )}
 
-                  {contentTab === 'comfyui' && hasComfyuiItems && (
+                  {activeTab === 'comfyui' && hasComfyuiItems && (
                     <Paper
                       variant="outlined"
                       sx={{
@@ -289,7 +302,7 @@ export function WildcardDetailPanel({
                     </Paper>
                   )}
 
-                  {contentTab === 'nai' && hasNaiItems && (
+                  {activeTab === 'nai' && hasNaiItems && (
                     <Paper
                       variant="outlined"
                       sx={{
@@ -352,7 +365,7 @@ export function WildcardDetailPanel({
                               <FileIcon fontSize="small" color="info" />
                             )}
                             <Typography variant="body1" sx={{ flex: 1, fontFamily: 'monospace' }}>
-                              ++{child.name}++
+                              {child.type === 'chain' ? child.name : `++${child.name}++`}
                             </Typography>
                             {child.children && child.children.length > 0 && (
                               <Chip
@@ -373,7 +386,7 @@ export function WildcardDetailPanel({
                               size="small"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onCopy(`++${child.name}++`);
+                                onCopy(child.type === 'chain' ? child.name : `++${child.name}++`);
                               }}
                               title={t('common:copy') || 'Copy'}
                             >

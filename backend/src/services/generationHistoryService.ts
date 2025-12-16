@@ -4,6 +4,7 @@ import { ImageGroupModel } from '../models/Group';
 import axios from 'axios';
 import FormData from 'form-data';
 import path from 'path';
+import { PORTS } from '@comfyui-image-manager/shared';
 
 /**
  * GenerationHistoryService
@@ -225,7 +226,8 @@ export class GenerationHistoryService {
   ): Promise<number> {
     try {
       // Get server port from environment
-      const port = process.env.PORT || 1566;
+      // Get server port from environment
+      const port = process.env.PORT || PORTS.BACKEND_DEFAULT;
       const uploadUrl = `http://localhost:${port}/api/images/upload`;
 
       // Create form data

@@ -131,9 +131,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, metadataSet
 
   return (
     <Box>
-      <Typography variant="h6" gutterBottom>
-        {t('general.title')}
-      </Typography>
+
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>

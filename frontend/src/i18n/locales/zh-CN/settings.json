@@ -11,7 +11,8 @@
     "metadata": "元数据提取",
     "folders": "文件夹管理",
     "account": "账户",
-    "externalApi": "外部API认证"
+    "externalApi": "外部API认证",
+    "auto": "自动提示词"
   },
   "general": {
     "title": "常规设置",

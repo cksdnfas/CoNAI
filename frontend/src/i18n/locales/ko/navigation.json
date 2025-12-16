@@ -8,8 +8,7 @@
       "search": "검색",
       "upload": "업로드",
       "imageGeneration": "이미지 생성",
-      "settings": "설정",
-      "help": "도움말"
+      "settings": "설정"
     },
     "tooltip": {
       "home": "홈 페이지로 이동",
@@ -18,8 +17,7 @@
       "search": "이미지 검색",
       "upload": "이미지 업로드",
       "imageGeneration": "AI 이미지 생성",
-      "settings": "설정 관리",
-      "help": "도움말 보기"
+      "settings": "설정 관리"
     },
     "theme": {
       "light": "라이트 모드",
@@ -34,12 +32,5 @@
   "footer": {
     "copyright": "© 2024 ComfyUI Image Manager. All rights reserved.",
     "version": "버전"
-  },
-  "help": {
-    "title": "도움말",
-    "sections": {
-      "setup": "설정 가이드",
-      "filters": "필터 가이드"
-    }
   }
 }

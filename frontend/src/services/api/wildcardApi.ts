@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:1566/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:1666/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -13,6 +13,8 @@ export interface Wildcard {
   description?: string;
   parent_id: number | null;
   include_children: number; // 0 or 1: 하위 와일드카드 자동 포함 여부
+  type: 'wildcard' | 'chain';
+  chain_option: 'replace' | 'append';
   created_date: string;
   updated_date: string;
 }
@@ -22,6 +24,7 @@ export interface WildcardItem {
   wildcard_id: number;
   tool: 'comfyui' | 'nai';
   content: string;
+  weight: number;
   order_index: number;
   created_date: string;
 }
@@ -31,8 +34,8 @@ export interface WildcardWithItems extends Wildcard {
 }
 
 export interface ToolItems {
-  comfyui: string[];
-  nai: string[];
+  comfyui: Array<{ content: string; weight: number }>;
+  nai: Array<{ content: string; weight: number }>;
 }
 
 export interface WildcardCreateData {
@@ -41,6 +44,8 @@ export interface WildcardCreateData {
   items: ToolItems;
   parent_id?: number | null;
   include_children?: number; // 하위 와일드카드 자동 포함 여부 (기본값 0)
+  type?: 'wildcard' | 'chain';
+  chain_option?: 'replace' | 'append';
 }
 
 export interface WildcardUpdateData {
@@ -49,6 +54,8 @@ export interface WildcardUpdateData {
   items?: ToolItems;
   parent_id?: number | null;
   include_children?: number; // 하위 와일드카드 자동 포함 여부
+  type?: 'wildcard' | 'chain';
+  chain_option?: 'replace' | 'append';
 }
 
 export interface WildcardWithHierarchy extends WildcardWithItems {

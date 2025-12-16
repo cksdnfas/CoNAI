@@ -41,12 +41,13 @@ export interface PromptSearchResult {
   usage_count: number;
   group_id: number | null;
   synonyms: string[];
-  type: 'positive' | 'negative';
+  type: 'positive' | 'negative' | 'auto';
 }
 
 export interface PromptStatistics {
   total_prompts: number;
   total_negative_prompts: number;
+  total_auto_prompts: number;
   most_used_prompts: PromptSearchResult[];
   recent_prompts: PromptSearchResult[];
 }
@@ -64,6 +65,7 @@ export interface PromptGroupRecord {
   description: string | null;
   is_visible: boolean;
   display_order: number;
+  parent_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -73,10 +75,12 @@ export interface PromptGroupData {
   description?: string;
   is_visible?: boolean;
   display_order?: number;
+  parent_id?: number | null;
 }
 
 export interface PromptGroupWithPrompts extends PromptGroupRecord {
   prompt_count: number;
+  children?: PromptGroupWithPrompts[];
 }
 
 export interface PromptGroupResponse {

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { enqueueSnackbar } from 'notistack';
 import { workflowApi, type Workflow, type MarkedField } from '../../../services/api/workflowApi';
@@ -36,6 +37,7 @@ export function useImageGeneration({
 }: UseImageGenerationProps) {
   const { t } = useTranslation(['workflows']);
   const [historyRefreshKey, setHistoryRefreshKey] = useState<number>(0);
+  const queryClient = useQueryClient();
 
   /**
    * 단일 서버에서 이미지 생성
@@ -172,6 +174,9 @@ export function useImageGeneration({
               setHistoryRefreshKey(prev => {
                 const newKey = prev + 1;
                 console.log(`[ComfyUI] historyRefreshKey: ${prev} → ${newKey}`);
+
+                // 갤러리 갱신을 위해 캐시 무효화
+                queryClient.invalidateQueries({ queryKey: ['images'] });
 
                 // setState는 비동기이므로 다음 틱에 resolve
                 setTimeout(() => resolve(), 0);

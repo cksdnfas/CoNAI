@@ -104,64 +104,13 @@ const SearchPage: React.FC = () => {
         >
           {t('search:title')}
         </Typography>
-        <Typography
-          variant="body1"
-          color="text.secondary"
-          sx={{
-            fontSize: { xs: '0.875rem', sm: '1rem' },
-          }}
-        >
-          {t('search:description')}
-        </Typography>
+
       </Box>
 
       {/* 검색 바 */}
       <Box sx={{ mb: { xs: 2, sm: 3 } }}>
         <SearchBar onSearch={handleSearch} loading={loading} />
       </Box>
-
-      {/* 검색 결과 헤더 */}
-      {hasSearched && (
-        <Box sx={{ mb: { xs: 2, sm: 3 } }}>
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            justifyContent="space-between"
-            alignItems={{ xs: 'stretch', sm: 'center' }}
-            spacing={2}
-          >
-            <Box>
-              <Typography variant="h6">
-                {t('search:results.title')}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {loading ? t('search:results.searching') : t('search:results.found', { count: total })}
-              </Typography>
-            </Box>
-
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={clearSearch}
-                startIcon={<ClearIcon />}
-              >
-                {t('search:results.reset')}
-              </Button>
-              {hasResults && (
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={refreshSearch}
-                  disabled={loading}
-                  startIcon={<RefreshIcon />}
-                >
-                  {t('search:results.refresh')}
-                </Button>
-              )}
-            </Box>
-          </Stack>
-        </Box>
-      )}
 
       {/* 에러 메시지 */}
       {error && (
@@ -181,9 +130,6 @@ const SearchPage: React.FC = () => {
         <Box sx={{ textAlign: 'center', py: 8 }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
             {t('search:results.initialMessage')}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {t('search:results.initialHint')}
           </Typography>
         </Box>
       ) : hasResults ? (

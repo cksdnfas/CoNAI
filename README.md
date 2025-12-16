@@ -41,7 +41,7 @@
    chmod +x start.sh
    ./start.sh
    ```
-3. **브라우저 접속**: http://localhost:1566
+3. **브라우저 접속**: http://localhost:1666
 
 #### 소스에서 빌드
 
@@ -114,7 +114,7 @@ MIT License - [LICENSE](LICENSE) 참조
    chmod +x start.sh
    ./start.sh
    ```
-3. **Open browser**: http://localhost:1566
+3. **Open browser**: http://localhost:1666
 
 #### Build from Source
 

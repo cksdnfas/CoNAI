@@ -352,6 +352,44 @@ export class ComplexFilterService {
       return `json_extract(im.auto_tags, '$.model') = ?`;
     }
 
+    // Any Tag (General + Character)
+    if (condition.type === 'auto_tag_any') {
+      const tag = String(condition.value).toLowerCase();
+      const variants = this.normalizeSearchTerm(tag);
+
+      const anyConditions: string[] = [];
+      for (const variant of variants) {
+        const generalCondition = `EXISTS (
+          SELECT 1 FROM json_each(im.auto_tags, '$.general')
+          WHERE LOWER(key) LIKE ?
+          ${condition.min_score !== undefined ? ' AND value >= ?' : ''}
+          ${condition.max_score !== undefined ? ' AND value <= ?' : ''}
+        )`;
+
+        const characterCondition = `EXISTS (
+          SELECT 1 FROM json_each(im.auto_tags, '$.character')
+          WHERE LOWER(key) LIKE ?
+          ${condition.min_score !== undefined ? ' AND value >= ?' : ''}
+          ${condition.max_score !== undefined ? ' AND value <= ?' : ''}
+        )`;
+
+        // OR condition for each variant
+        anyConditions.push(`(${generalCondition} OR ${characterCondition})`);
+
+        // Params for general
+        params.push(`%${variant}%`);
+        if (condition.min_score !== undefined) params.push(condition.min_score);
+        if (condition.max_score !== undefined) params.push(condition.max_score);
+
+        // Params for character
+        params.push(`%${variant}%`);
+        if (condition.min_score !== undefined) params.push(condition.min_score);
+        if (condition.max_score !== undefined) params.push(condition.max_score);
+      }
+
+      return anyConditions.length > 0 ? `(${anyConditions.join(' OR ')})` : null;
+    }
+
     return null;
   }
 
@@ -412,7 +450,11 @@ export class ComplexFilterService {
     const { query: baseQuery, params } = this.buildComplexQuery(filter, basicParams);
 
     // Count total results (composite_hash 기반)
-    const countQuery = baseQuery.replace(/SELECT im\.\*/g, 'SELECT COUNT(DISTINCT im.composite_hash) as total');
+    // Replace the main SELECT clause (im.*) with COUNT, handling whitespace and multi-line
+    const countQuery = baseQuery.replace(
+      /SELECT\s+im\.\*,[\s\S]+?FROM/i,
+      'SELECT COUNT(DISTINCT im.composite_hash) as total FROM'
+    );
     const countRow = db.prepare(countQuery).get(...params) as any;
     const total = countRow?.total || 0;
 
@@ -497,10 +539,10 @@ export class ComplexFilterService {
           errors.push(`${groupName} group, condition ${index + 1}: value must be boolean for ${condition.type}`);
         }
       } else if (condition.type === 'auto_tag_general' || condition.type === 'auto_tag_character' ||
-                 condition.type === 'prompt_contains' || condition.type === 'prompt_regex' ||
-                 condition.type === 'negative_prompt_contains' || condition.type === 'negative_prompt_regex' ||
-                 condition.type === 'ai_tool' || condition.type === 'model_name' ||
-                 condition.type === 'auto_tag_model') {
+        condition.type === 'prompt_contains' || condition.type === 'prompt_regex' ||
+        condition.type === 'negative_prompt_contains' || condition.type === 'negative_prompt_regex' ||
+        condition.type === 'ai_tool' || condition.type === 'model_name' ||
+        condition.type === 'auto_tag_model' || condition.type === 'auto_tag_any') {
         // String types: value must be non-empty string
         if (typeof condition.value !== 'string' || condition.value.trim() === '') {
           errors.push(`${groupName} group, condition ${index + 1}: value must be a non-empty string for ${condition.type}`);
@@ -560,7 +602,10 @@ export class ComplexFilterService {
     const { query: baseQuery, params } = this.buildComplexQuery(filter, basicParams);
 
     // Modify query to select only composite_hash
-    const hashesQuery = baseQuery.replace(/SELECT im\.\*/g, 'SELECT DISTINCT im.composite_hash');
+    const hashesQuery = baseQuery.replace(
+      /SELECT\s+im\.\*,[\s\S]+?FROM/i,
+      'SELECT DISTINCT im.composite_hash FROM'
+    );
 
     // Execute query
     const rows = db.prepare(hashesQuery).all(...params) as { composite_hash: string }[];

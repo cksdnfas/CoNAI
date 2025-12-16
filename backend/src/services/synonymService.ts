@@ -7,6 +7,12 @@ import {
 } from '@comfyui-image-manager/shared';
 
 export class SynonymService {
+  private static getTableName(type: 'positive' | 'negative' | 'auto'): string {
+    if (type === 'positive') return 'prompt_collection';
+    if (type === 'negative') return 'negative_prompt_collection';
+    return 'auto_prompt_collection';
+  }
+
   /**
    * 동의어 설정 및 병합 처리
    * 메인 프롬프트에 동의어들을 할당하고, 동의어 데이터를 메인 프롬프트로 병합
@@ -14,10 +20,10 @@ export class SynonymService {
   static async setSynonymsAndMerge(
     mainPrompt: string,
     synonyms: string[],
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<{ success: boolean; mergedCount: number; mainPromptId: number }> {
     try {
-      const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+      const tableName = this.getTableName(type);
       const normalizedMain = normalizeSearchTerm(mainPrompt);
 
       // 1. 메인 프롬프트가 존재하는지 확인, 없으면 생성
@@ -30,6 +36,8 @@ export class SynonymService {
         // 메인 프롬프트 생성
         if (type === 'positive') {
           mainPromptId = await PromptCollectionModel.addOrIncrement(normalizedMain);
+        } else if (type === 'auto') {
+          mainPromptId = await PromptCollectionModel.addOrIncrementAuto(normalizedMain);
         } else {
           mainPromptId = await PromptCollectionModel.addOrIncrementNegative(normalizedMain);
         }
@@ -86,11 +94,11 @@ export class SynonymService {
    */
   private static async findPromptByNormalizedText(
     normalizedText: string,
-    type: 'positive' | 'negative'
-  ): Promise<PromptCollectionRecord | NegativePromptCollectionRecord | null> {
-    const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+    type: 'positive' | 'negative' | 'auto'
+  ): Promise<any | null> {
+    const tableName = this.getTableName(type);
 
-    const row = db.prepare(`SELECT * FROM ${tableName} WHERE prompt = ? COLLATE NOCASE`).get(normalizedText) as PromptCollectionRecord | NegativePromptCollectionRecord | undefined;
+    const row = db.prepare(`SELECT * FROM ${tableName} WHERE prompt = ? COLLATE NOCASE`).get(normalizedText) as any | undefined;
     return row || null;
   }
 
@@ -100,9 +108,9 @@ export class SynonymService {
   private static async mergeUsageCount(
     mainPromptId: number,
     additionalCount: number,
-    type: 'positive' | 'negative'
+    type: 'positive' | 'negative' | 'auto'
   ): Promise<void> {
-    const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+    const tableName = this.getTableName(type);
 
     db.prepare(`UPDATE ${tableName}
        SET usage_count = usage_count + ?, updated_at = CURRENT_TIMESTAMP
@@ -115,21 +123,21 @@ export class SynonymService {
    */
   static async findInSynonymGroup(
     searchTerm: string,
-    type: 'positive' | 'negative' = 'positive'
-  ): Promise<PromptCollectionRecord | NegativePromptCollectionRecord | null> {
+    type: 'positive' | 'negative' | 'auto' = 'positive'
+  ): Promise<any | null> {
     try {
       const normalizedSearch = normalizeSearchTerm(searchTerm);
-      const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+      const tableName = this.getTableName(type);
 
       // 1. 메인 프롬프트에서 직접 검색
-      const directMatch = db.prepare(`SELECT * FROM ${tableName} WHERE prompt = ? COLLATE NOCASE`).get(normalizedSearch) as PromptCollectionRecord | NegativePromptCollectionRecord | undefined;
+      const directMatch = db.prepare(`SELECT * FROM ${tableName} WHERE prompt = ? COLLATE NOCASE`).get(normalizedSearch) as any | undefined;
 
       if (directMatch) {
         return directMatch;
       }
 
       // 2. 동의어에서 검색
-      const rows = db.prepare(`SELECT * FROM ${tableName} WHERE synonyms IS NOT NULL`).all() as (PromptCollectionRecord | NegativePromptCollectionRecord)[];
+      const rows = db.prepare(`SELECT * FROM ${tableName} WHERE synonyms IS NOT NULL`).all() as any[];
 
       for (const row of rows) {
         try {
@@ -159,10 +167,10 @@ export class SynonymService {
   static async removeSynonym(
     mainPromptId: number,
     synonymToRemove: string,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<boolean> {
     try {
-      const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+      const tableName = this.getTableName(type);
 
       // 현재 동의어 목록 가져오기
       const row = db.prepare(`SELECT synonyms FROM ${tableName} WHERE id = ?`).get(mainPromptId) as { synonyms: string } | undefined;
@@ -204,11 +212,11 @@ export class SynonymService {
    */
   static async getGroupPrompts(
     groupId: number,
-    type: 'positive' | 'negative' = 'positive'
-  ): Promise<(PromptCollectionRecord | NegativePromptCollectionRecord)[]> {
-    const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+    type: 'positive' | 'negative' | 'auto' = 'positive'
+  ): Promise<any[]> {
+    const tableName = this.getTableName(type);
 
-    const rows = db.prepare(`SELECT * FROM ${tableName} WHERE group_id = ? ORDER BY usage_count DESC`).all(groupId) as (PromptCollectionRecord | NegativePromptCollectionRecord)[];
+    const rows = db.prepare(`SELECT * FROM ${tableName} WHERE group_id = ? ORDER BY usage_count DESC`).all(groupId) as any[];
     return rows || [];
   }
 }

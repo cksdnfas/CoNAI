@@ -2,6 +2,7 @@
   "page": {
     "title": "와일드카드 관리",
     "noWildcards": "등록된 와일드카드가 없습니다",
+    "noChains": "등록된 체인이 없습니다",
     "noWildcardsDesc": "새로운 와일드카드를 추가하여 프롬프트 생성을 자동화하세요"
   },
   "filters": {
@@ -26,8 +27,10 @@
     "moreItems": "외 {{count}}개"
   },
   "dialog": {
-    "createTitle": "와일드카드 생성",
-    "editTitle": "와일드카드 수정"
+    "createTitle": "새 와일드카드 생성",
+    "editTitle": "와일드카드 수정",
+    "createChainTitle": "새 체인 생성",
+    "editChainTitle": "체인 수정"
   },
   "form": {
     "name": "이름",
@@ -37,7 +40,11 @@
     "parentHelper": "상위 와일드카드를 선택하여 계층 구조를 생성합니다",
     "noParent": "없음 (최상위)",
     "includeChildren": "하위 와일드카드 자동 포함",
-    "includeChildrenHelper": "활성화 시 이 와일드카드 사용 시 직계 자식의 항목들도 자동으로 포함됩니다",
+    "includeChildrenHelper": "하위 그룹의 모든 항목을 자동으로 포함합니다 (중첩 포함)",
+    "chainOption": "체인 옵션",
+    "chainOptionReplace": "교체 (Replace)",
+    "chainOptionAppend": "추가 (Append)",
+    "weight": "가중치",
     "comfyuiItems": "ComfyUI 프롬프트 항목",
     "naiItems": "NovelAI 프롬프트 항목",
     "itemsHelper": "각 항목은 쉼표로 구분된 단어들을 포함할 수 있습니다. 다른 와일드카드를 ++이름++ 형식으로 중첩할 수 있습니다.",
@@ -58,7 +65,8 @@
     "copyFailed": "복사에 실패했습니다"
   },
   "tabs": {
-    "manual": "수동 생성",
+    "manual": "와일드카드",
+    "chain": "전처리",
     "autoCollected": "자동 수집 (LORA)"
   },
   "detail": {

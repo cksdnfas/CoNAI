@@ -9,6 +9,8 @@ export interface Wildcard {
   description?: string;
   parent_id: number | null;
   include_children: number; // 0 or 1: 하위 와일드카드 자동 포함 여부
+  type: 'wildcard' | 'chain';
+  chain_option: 'replace' | 'append';
   created_date: string;
   updated_date: string;
 }
@@ -21,6 +23,7 @@ export interface WildcardItem {
   wildcard_id: number;
   tool: 'comfyui' | 'nai';
   content: string;
+  weight: number;
   order_index: number;
   created_date: string;
 }
@@ -29,8 +32,8 @@ export interface WildcardItem {
  * 도구별 항목 데이터
  */
 export interface ToolItems {
-  comfyui: string[];
-  nai: string[];
+  comfyui: Array<{ content: string; weight: number }>;
+  nai: Array<{ content: string; weight: number }>;
 }
 
 /**
@@ -43,6 +46,8 @@ export interface WildcardCreateData {
   customId?: number; // 자동 LORA용 커스텀 ID (선택적)
   parent_id?: number | null; // 부모 와일드카드 ID
   include_children?: number; // 하위 와일드카드 자동 포함 여부 (기본값 0)
+  type?: 'wildcard' | 'chain';
+  chain_option?: 'replace' | 'append';
 }
 
 /**
@@ -54,6 +59,8 @@ export interface WildcardUpdateData {
   items?: ToolItems; // 도구별 항목 배열
   parent_id?: number | null; // 부모 와일드카드 ID
   include_children?: number; // 하위 와일드카드 자동 포함 여부
+  type?: 'wildcard' | 'chain';
+  chain_option?: 'replace' | 'append';
 }
 
 /**
@@ -114,40 +121,55 @@ export class WildcardModel {
       if (data.customId) {
         // 커스텀 ID로 생성 (자동 LORA용)
         db.prepare(`
-          INSERT INTO wildcards (id, name, description, parent_id, include_children)
-          VALUES (?, ?, ?, ?, ?)
-        `).run(data.customId, data.name, data.description || null, data.parent_id ?? null, data.include_children ?? 0);
+          INSERT INTO wildcards (id, name, description, parent_id, include_children, type, chain_option)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          data.customId,
+          data.name,
+          data.description || null,
+          data.parent_id ?? null,
+          data.include_children ?? 0,
+          data.type || 'wildcard',
+          data.chain_option || 'replace'
+        );
         wildcardId = data.customId;
       } else {
         // 기본 자동 증가 ID
         const wildcardResult = db.prepare(`
-          INSERT INTO wildcards (name, description, parent_id, include_children)
-          VALUES (?, ?, ?, ?)
-        `).run(data.name, data.description || null, data.parent_id ?? null, data.include_children ?? 0);
+          INSERT INTO wildcards (name, description, parent_id, include_children, type, chain_option)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          data.name,
+          data.description || null,
+          data.parent_id ?? null,
+          data.include_children ?? 0,
+          data.type || 'wildcard',
+          data.chain_option || 'replace'
+        );
         wildcardId = wildcardResult.lastInsertRowid as number;
       }
 
       // ComfyUI 항목 생성
       if (data.items.comfyui && data.items.comfyui.length > 0) {
         const insertItem = db.prepare(`
-          INSERT INTO wildcard_items (wildcard_id, tool, content, order_index)
-          VALUES (?, ?, ?, ?)
+          INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index)
+          VALUES (?, ?, ?, ?, ?)
         `);
 
-        data.items.comfyui.forEach((content, index) => {
-          insertItem.run(wildcardId, 'comfyui', content, index);
+        data.items.comfyui.forEach((item, index) => {
+          insertItem.run(wildcardId, 'comfyui', item.content, item.weight, index);
         });
       }
 
       // NAI 항목 생성
       if (data.items.nai && data.items.nai.length > 0) {
         const insertItem = db.prepare(`
-          INSERT INTO wildcard_items (wildcard_id, tool, content, order_index)
-          VALUES (?, ?, ?, ?)
+          INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index)
+          VALUES (?, ?, ?, ?, ?)
         `);
 
-        data.items.nai.forEach((content, index) => {
-          insertItem.run(wildcardId, 'nai', content, index);
+        data.items.nai.forEach((item, index) => {
+          insertItem.run(wildcardId, 'nai', item.content, item.weight, index);
         });
       }
 
@@ -188,6 +210,14 @@ export class WildcardModel {
         updates.push('include_children = ?');
         params.push(data.include_children);
       }
+      if (data.type !== undefined) {
+        updates.push('type = ?');
+        params.push(data.type);
+      }
+      if (data.chain_option !== undefined) {
+        updates.push('chain_option = ?');
+        params.push(data.chain_option);
+      }
 
       updates.push('updated_date = CURRENT_TIMESTAMP');
       params.push(id);
@@ -208,24 +238,24 @@ export class WildcardModel {
         // ComfyUI 항목 삽입
         if (data.items.comfyui && data.items.comfyui.length > 0) {
           const insertItem = db.prepare(`
-            INSERT INTO wildcard_items (wildcard_id, tool, content, order_index)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index)
+            VALUES (?, ?, ?, ?, ?)
           `);
 
-          data.items.comfyui.forEach((content, index) => {
-            insertItem.run(id, 'comfyui', content, index);
+          data.items.comfyui.forEach((item, index) => {
+            insertItem.run(id, 'comfyui', item.content, item.weight, index);
           });
         }
 
         // NAI 항목 삽입
         if (data.items.nai && data.items.nai.length > 0) {
           const insertItem = db.prepare(`
-            INSERT INTO wildcard_items (wildcard_id, tool, content, order_index)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index)
+            VALUES (?, ?, ?, ?, ?)
           `);
 
-          data.items.nai.forEach((content, index) => {
-            insertItem.run(id, 'nai', content, index);
+          data.items.nai.forEach((item, index) => {
+            insertItem.run(id, 'nai', item.content, item.weight, index);
           });
         }
       }
@@ -411,12 +441,12 @@ export class WildcardItemModel {
   /**
    * 항목 생성
    */
-  static create(wildcardId: number, tool: 'comfyui' | 'nai', content: string, orderIndex: number): WildcardItem {
+  static create(wildcardId: number, tool: 'comfyui' | 'nai', content: string, weight: number, orderIndex: number): WildcardItem {
     const db = getUserSettingsDb();
     const result = db.prepare(`
-      INSERT INTO wildcard_items (wildcard_id, tool, content, order_index)
-      VALUES (?, ?, ?, ?)
-    `).run(wildcardId, tool, content, orderIndex);
+      INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(wildcardId, tool, content, weight, orderIndex);
 
     const item = WildcardItemModel.findById(result.lastInsertRowid as number);
     if (!item) {

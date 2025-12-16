@@ -39,6 +39,7 @@ import { WildcardDeleteConfirmDialog } from './components/WildcardDeleteConfirmD
 import { useWildcardTree } from '../../hooks/useWildcardTree';
 import { WildcardTreePanel } from '../../components/Wildcard/WildcardTreePanel';
 import { WildcardDetailPanel } from '../../components/Wildcard/WildcardDetailPanel';
+import ChainTab from './ChainTab';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -99,18 +100,20 @@ function ManualWildcardsTab() {
   const [openDialog, setOpenDialog] = useState(false);
   const [editingWildcard, setEditingWildcard] = useState<WildcardWithItems | null>(null);
   const [currentToolTab, setCurrentToolTab] = useState(0);
+  // Form Data Type
+  type WildcardItem = { content: string; weight: number };
   const [formData, setFormData] = useState<{
     name: string;
     description: string;
-    comfyuiItems: string[];
-    naiItems: string[];
+    comfyuiItems: WildcardItem[];
+    naiItems: WildcardItem[];
     parent_id: number | null;
     include_children: boolean;
   }>({
     name: '',
     description: '',
-    comfyuiItems: [''],
-    naiItems: [''],
+    comfyuiItems: [{ content: '', weight: 1.0 }],
+    naiItems: [{ content: '', weight: 1.0 }],
     parent_id: null,
     include_children: true
   });
@@ -137,7 +140,7 @@ function ManualWildcardsTab() {
       // 자동 수집된 와일드카드 제외
       const filterManual = (nodes: WildcardWithHierarchy[]): WildcardWithHierarchy[] => {
         return nodes
-          .filter((n: any) => n.is_auto_collected !== 1)
+          .filter((n: any) => n.is_auto_collected !== 1 && n.type !== 'chain')
           .map(n => ({
             ...n,
             children: n.children ? filterManual(n.children) : undefined
@@ -155,14 +158,20 @@ function ManualWildcardsTab() {
   const handleOpenDialog = (wildcard?: WildcardWithItems) => {
     if (wildcard) {
       setEditingWildcard(wildcard);
-      const comfyuiItems = wildcard.items.filter(item => item.tool === 'comfyui').map(item => item.content);
-      const naiItems = wildcard.items.filter(item => item.tool === 'nai').map(item => item.content);
+      // Map items to include weight
+      const comfyuiItems = wildcard.items
+        .filter(item => item.tool === 'comfyui')
+        .map(item => ({ content: item.content, weight: item.weight || 1.0 }));
+
+      const naiItems = wildcard.items
+        .filter(item => item.tool === 'nai')
+        .map(item => ({ content: item.content, weight: item.weight || 1.0 }));
 
       setFormData({
         name: wildcard.name,
         description: wildcard.description || '',
-        comfyuiItems: comfyuiItems.length > 0 ? comfyuiItems : [''],
-        naiItems: naiItems.length > 0 ? naiItems : [''],
+        comfyuiItems: comfyuiItems.length > 0 ? comfyuiItems : [{ content: '', weight: 1.0 }],
+        naiItems: naiItems.length > 0 ? naiItems : [{ content: '', weight: 1.0 }],
         parent_id: wildcard.parent_id ?? null,
         include_children: wildcard.include_children === 1
       });
@@ -171,8 +180,8 @@ function ManualWildcardsTab() {
       setFormData({
         name: '',
         description: '',
-        comfyuiItems: [''],
-        naiItems: [''],
+        comfyuiItems: [{ content: '', weight: 1.0 }],
+        naiItems: [{ content: '', weight: 1.0 }],
         parent_id: selectedNode?.id ?? null,
         include_children: true
       });
@@ -189,8 +198,8 @@ function ManualWildcardsTab() {
 
   const handleSave = async () => {
     try {
-      const filteredComfyuiItems = formData.comfyuiItems.filter(item => item.trim() !== '');
-      const filteredNaiItems = formData.naiItems.filter(item => item.trim() !== '');
+      const filteredComfyuiItems = formData.comfyuiItems.filter(item => item.content.trim() !== '');
+      const filteredNaiItems = formData.naiItems.filter(item => item.content.trim() !== '');
 
       if (!formData.name.trim()) {
         enqueueSnackbar(t('wildcards:errors.nameRequired'), { variant: 'error' });
@@ -271,7 +280,7 @@ function ManualWildcardsTab() {
       ...prev,
       [tool === 'comfyui' ? 'comfyuiItems' : 'naiItems']: [
         ...(tool === 'comfyui' ? prev.comfyuiItems : prev.naiItems),
-        ''
+        { content: '', weight: 1.0 }
       ]
     }));
   };
@@ -284,11 +293,24 @@ function ManualWildcardsTab() {
     }));
   };
 
-  const handleItemChange = (tool: 'comfyui' | 'nai', index: number, value: string) => {
+  const handleItemContentChange = (tool: 'comfyui' | 'nai', index: number, value: string) => {
     setFormData(prev => ({
       ...prev,
       [tool === 'comfyui' ? 'comfyuiItems' : 'naiItems']:
-        (tool === 'comfyui' ? prev.comfyuiItems : prev.naiItems).map((item, i) => i === index ? value : item)
+        (tool === 'comfyui' ? prev.comfyuiItems : prev.naiItems).map((item, i) =>
+          i === index ? { ...item, content: value } : item
+        )
+    }));
+  };
+
+  const handleItemWeightChange = (tool: 'comfyui' | 'nai', index: number, value: string) => {
+    const weight = parseFloat(value);
+    setFormData(prev => ({
+      ...prev,
+      [tool === 'comfyui' ? 'comfyuiItems' : 'naiItems']:
+        (tool === 'comfyui' ? prev.comfyuiItems : prev.naiItems).map((item, i) =>
+          i === index ? { ...item, weight: isNaN(weight) ? 0 : weight } : item
+        )
     }));
   };
 
@@ -463,11 +485,23 @@ function ManualWildcardsTab() {
                       <Box key={index} sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                         <Typography variant="body2" sx={{ minWidth: 30 }}>{index + 1}.</Typography>
                         <TextField
-                          value={item}
-                          onChange={(e) => handleItemChange('comfyui', index, e.target.value)}
+                          value={item.content}
+                          onChange={(e) => handleItemContentChange('comfyui', index, e.target.value)}
                           fullWidth
                           size="small"
                           placeholder={t('wildcards:form.itemPlaceholder')}
+                          sx={{ flex: 1 }}
+                        />
+                        <TextField
+                          label={t('wildcards:form.weight')}
+                          type="number"
+                          value={item.weight}
+                          onChange={(e) => handleItemWeightChange('comfyui', index, e.target.value)}
+                          size="small"
+                          sx={{ width: 100 }}
+                          InputProps={{
+                            inputProps: { min: 0, step: 0.1 }
+                          }}
                         />
                         <IconButton
                           size="small"
@@ -496,11 +530,23 @@ function ManualWildcardsTab() {
                       <Box key={index} sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                         <Typography variant="body2" sx={{ minWidth: 30 }}>{index + 1}.</Typography>
                         <TextField
-                          value={item}
-                          onChange={(e) => handleItemChange('nai', index, e.target.value)}
+                          value={item.content}
+                          onChange={(e) => handleItemContentChange('nai', index, e.target.value)}
                           fullWidth
                           size="small"
                           placeholder={t('wildcards:form.itemPlaceholder')}
+                          sx={{ flex: 1 }}
+                        />
+                        <TextField
+                          label={t('wildcards:form.weight')}
+                          type="number"
+                          value={item.weight}
+                          onChange={(e) => handleItemWeightChange('nai', index, e.target.value)}
+                          size="small"
+                          sx={{ width: 100 }}
+                          InputProps={{
+                            inputProps: { min: 0, step: 0.1 }
+                          }}
                         />
                         <IconButton
                           size="small"
@@ -604,6 +650,7 @@ export default function WildcardTab() {
     <Box>
       <Tabs value={mainTabValue} onChange={handleMainTabChange} sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Tab label={t('wildcards:tabs.manual')} />
+        <Tab label={t('wildcards:tabs.chain')} />
         <Tab label={t('wildcards:tabs.autoCollected')} />
       </Tabs>
 
@@ -612,6 +659,10 @@ export default function WildcardTab() {
       </TabPanel>
 
       <TabPanel value={mainTabValue} index={1}>
+        <ChainTab />
+      </TabPanel>
+
+      <TabPanel value={mainTabValue} index={2}>
         <AutoCollectedWildcardsTab />
       </TabPanel>
     </Box>

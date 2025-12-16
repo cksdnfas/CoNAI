@@ -21,7 +21,7 @@ export default defineConfig({
     port: 5555,
     proxy: {
       '/api': {
-        target: 'http://localhost:1566',
+        target: 'http://localhost:1666',
         changeOrigin: true,
         configure: (proxy, _options) => {
           proxy.on('proxyReq', (proxyReq, req, _res) => {
@@ -33,7 +33,7 @@ export default defineConfig({
         }
       },
       '/uploads': {
-        target: 'http://localhost:1566',
+        target: 'http://localhost:1666',
         changeOrigin: true,
       }
     }

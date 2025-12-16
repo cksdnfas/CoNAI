@@ -11,7 +11,8 @@
     "metadata": "メタデータ抽出",
     "folders": "フォルダ管理",
     "account": "アカウント",
-    "externalApi": "外部API認証"
+    "externalApi": "外部API認証",
+    "auto": "自動プロンプト"
   },
   "general": {
     "title": "一般設定",

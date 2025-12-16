@@ -672,7 +672,7 @@ router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response
         name: wildcardName,
         description: `Auto-generated from ${folder.folderName}`,
         items: {
-          comfyui: items,
+          comfyui: items.map(content => ({ content, weight: 1.0 })),
           nai: []
         },
         customId,

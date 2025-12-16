@@ -17,7 +17,7 @@ import SettingsPage from './pages/Settings/SettingsPage';
 import ImageGenerationPage from './pages/ImageGeneration/ImageGenerationPage';
 import WorkflowFormPage from './pages/Workflows/WorkflowFormPage';
 import WorkflowGeneratePage from './pages/Workflows/WorkflowGeneratePage';
-import HelpPage from './pages/Help/HelpPage';
+
 
 // Auth 컴포넌트들
 import { LoginPage } from './components/Auth/LoginPage';
@@ -48,39 +48,39 @@ function App() {
       <ThemeProvider>
         <CssBaseline />
         <SnackbarProvider maxSnack={3} autoHideDuration={3000}>
-        <Router>
-          <AuthProvider>
-            <Routes>
-              {/* Login page (no auth required) */}
-              <Route path="/login" element={<LoginPage />} />
+          <Router>
+            <AuthProvider>
+              <Routes>
+                {/* Login page (no auth required) */}
+                <Route path="/login" element={<LoginPage />} />
 
-              {/* Protected routes */}
-              <Route
-                path="/*"
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Routes>
-                        <Route path="/" element={<HomePage />} />
-                        <Route path="/gallery" element={<GalleryPage />} />
-                        <Route path="/image-groups" element={<ImageGroupsPage />} />
-                        <Route path="/upload" element={<UploadPage />} />
-                        <Route path="/search" element={<SearchPage />} />
-                        <Route path="/settings" element={<SettingsPage />} />
-                        <Route path="/help" element={<HelpPage />} />
-                        <Route path="/image/:compositeHash" element={<ImageDetailPage />} />
-                        <Route path="/image-generation" element={<ImageGenerationPage />} />
-                        <Route path="/image-generation/new" element={<WorkflowFormPage />} />
-                        <Route path="/image-generation/:id/edit" element={<WorkflowFormPage />} />
-                        <Route path="/image-generation/:id/generate" element={<WorkflowGeneratePage />} />
-                      </Routes>
-                    </Layout>
-                  </ProtectedRoute>
-                }
-              />
-            </Routes>
-          </AuthProvider>
-        </Router>
+                {/* Protected routes */}
+                <Route
+                  path="/*"
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <Routes>
+                          <Route path="/" element={<HomePage />} />
+                          <Route path="/gallery" element={<GalleryPage />} />
+                          <Route path="/image-groups" element={<ImageGroupsPage />} />
+                          <Route path="/upload" element={<UploadPage />} />
+                          <Route path="/search" element={<SearchPage />} />
+                          <Route path="/settings" element={<SettingsPage />} />
+
+                          <Route path="/image/:compositeHash" element={<ImageDetailPage />} />
+                          <Route path="/image-generation" element={<ImageGenerationPage />} />
+                          <Route path="/image-generation/new" element={<WorkflowFormPage />} />
+                          <Route path="/image-generation/:id/edit" element={<WorkflowFormPage />} />
+                          <Route path="/image-generation/:id/generate" element={<WorkflowGeneratePage />} />
+                        </Routes>
+                      </Layout>
+                    </ProtectedRoute>
+                  }
+                />
+              </Routes>
+            </AuthProvider>
+          </Router>
         </SnackbarProvider>
       </ThemeProvider>
     </QueryClientProvider>

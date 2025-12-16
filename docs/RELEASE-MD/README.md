@@ -144,7 +144,7 @@ ComfyUI Image Manager is a comprehensive image and video management solution des
 - OS: Windows 10+, Linux (Ubuntu 20.04+), macOS 11+
 - RAM: 2GB
 - Disk: 10GB+ (excluding image storage)
-- Port: 1566 available
+- Port: 1666 available
 
 **Recommended:**
 - RAM: 4GB+
@@ -177,12 +177,12 @@ The application will automatically:
 1. Create required directories (`uploads/`, `database/`, `models/`)
 2. Initialize SQLite database
 3. Install missing dependencies (Lite version only)
-4. Start the server on port 1566
+4. Start the server on port 1666
 
 **Access the Application:**
 ```
-Local:    http://localhost:1566
-Network:  http://YOUR_IP:1566
+Local:    http://localhost:1666
+Network:  http://YOUR_IP:1666
 ```
 
 #### Docker Deployment
@@ -205,7 +205,7 @@ docker-compose down
 **Docker Environment Variables:**
 Create a `.env` file in the docker directory:
 ```env
-PORT=1566
+PORT=1666
 RUNTIME_BASE_PATH=/data
 TAGGER_ENABLED=true
 TAGGER_MODEL=vit
@@ -223,7 +223,7 @@ The Docker container maps the following volumes:
 **Environment Variables (`.env` file):**
 ```env
 # Server Configuration
-PORT=1566
+PORT=1666
 NODE_ENV=production
 
 # Storage Paths
@@ -239,7 +239,7 @@ TAGGER_CHAR_THRESHOLD=0.75
 PYTHON_PATH=python
 
 # External Access
-PUBLIC_BASE_URL=http://YOUR_IP:1566
+PUBLIC_BASE_URL=http://YOUR_IP:1666
 ENABLE_EXTERNAL_IP=true
 ```
 
@@ -314,7 +314,7 @@ TAGGER_CHAR_THRESHOLD=0.75 # Character threshold (0.0-1.0)
 
 **Via API:**
 ```bash
-curl -X POST http://localhost:1566/api/images/upload \
+curl -X POST http://localhost:1666/api/images/upload \
   -F "file=@image.png" \
   -F "collection_type=comfyui"
 ```
@@ -350,7 +350,7 @@ curl -X POST http://localhost:1566/api/images/upload \
 
 **Tag All Untagged Images:**
 ```bash
-curl -X POST http://localhost:1566/api/images/batch-tag \
+curl -X POST http://localhost:1666/api/images/batch-tag \
   -H "Content-Type: application/json" \
   -d '{"image_ids": [1, 2, 3, 4, 5]}'
 ```
@@ -359,7 +359,7 @@ curl -X POST http://localhost:1566/api/images/batch-tag \
 
 **Add Watch Folder:**
 ```bash
-curl -X POST http://localhost:1566/api/folders/watch \
+curl -X POST http://localhost:1666/api/folders/watch \
   -H "Content-Type: application/json" \
   -d '{
     "path": "/path/to/comfyui/output",
@@ -377,8 +377,8 @@ curl -X POST http://localhost:1566/api/folders/watch \
 **Automatic Network Sharing:**
 When the server starts, it displays:
 ```
-🏠 Local:    http://localhost:1566
-🌐 Network:  http://192.168.1.100:1566
+🏠 Local:    http://localhost:1666
+🌐 Network:  http://192.168.1.100:1666
 ```
 
 Use the Network URL to access from other devices on the same Wi-Fi/LAN.
@@ -387,12 +387,12 @@ Use the Network URL to access from other devices on the same Wi-Fi/LAN.
 
 **1. Router Port Forwarding:**
 - Access your router admin page (usually http://192.168.1.1)
-- Forward port 1566 to your server's local IP
+- Forward port 1666 to your server's local IP
 - Protocol: TCP
 
 **2. Configure External Access:**
 ```env
-PUBLIC_BASE_URL=http://YOUR_EXTERNAL_IP:1566
+PUBLIC_BASE_URL=http://YOUR_EXTERNAL_IP:1666
 BACKEND_HOST=YOUR_EXTERNAL_IP
 ENABLE_EXTERNAL_IP=true
 ```
@@ -413,7 +413,7 @@ For dynamic IPs, use a DDNS service:
 
 Then update `.env`:
 ```env
-PUBLIC_BASE_URL=http://your-domain.ddns.net:1566
+PUBLIC_BASE_URL=http://your-domain.ddns.net:1666
 BACKEND_HOST=your-domain.ddns.net
 ```
 
@@ -430,7 +430,7 @@ BACKEND_HOST=your-domain.ddns.net
 ```bash
 # Caddyfile
 your-domain.ddns.net {
-  reverse_proxy localhost:1566
+  reverse_proxy localhost:1666
 }
 ```
 
@@ -506,11 +506,11 @@ sqlite3 database/images.db ".recover" | sqlite3 database/images_recovered.db
 **Port Already in Use:**
 ```bash
 # Windows
-netstat -ano | findstr :1566
+netstat -ano | findstr :1666
 taskkill /PID <PID> /F
 
 # Linux/Mac
-lsof -ti:1566 | xargs kill -9
+lsof -ti:1666 | xargs kill -9
 ```
 
 Solution: Change port in `.env` file:
@@ -543,7 +543,7 @@ pip install -r requirements.txt --force-reinstall
 
 Checklist:
 - [ ] Port forwarding configured on router
-- [ ] Firewall allows port 1566
+- [ ] Firewall allows port 1666
 - [ ] External IP is correct
 - [ ] Server is running
 - [ ] Router has been restarted

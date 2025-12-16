@@ -28,7 +28,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1566';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1666';
 
 interface ScanLog {
   id: number;

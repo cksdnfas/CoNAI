@@ -94,7 +94,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
           const parsedConditions = JSON.parse(group.auto_collect_conditions);
           // ComplexFilter 형식인지 확인
           if (parsedConditions && typeof parsedConditions === 'object' &&
-              ('exclude_group' in parsedConditions || 'or_group' in parsedConditions || 'and_group' in parsedConditions)) {
+            ('exclude_group' in parsedConditions || 'or_group' in parsedConditions || 'and_group' in parsedConditions)) {
             setConditions(parsedConditions);
           } else if (Array.isArray(parsedConditions)) {
             // 레거시 배열 형식을 ComplexFilter로 변환
@@ -131,9 +131,9 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   };
 
   // 조건 변경 핸들러 (ComplexFilter 지원)
-  const handleConditionsChange = (newConditions: ComplexFilter) => {
+  const handleConditionsChange = React.useCallback((newConditions: ComplexFilter) => {
     setConditions(newConditions);
-  };
+  }, []);
 
   // 폼 유효성 검사 (ComplexFilter 지원)
   const validateForm = (): boolean => {

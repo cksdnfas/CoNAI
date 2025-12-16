@@ -248,6 +248,14 @@ function createTables(): void {
     console.log('  Migrating wildcards: adding include_children column');
     userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN include_children INTEGER DEFAULT 0');
   }
+  if (!hasColumn('wildcards', 'type')) {
+    console.log('  Migrating wildcards: adding type column');
+    userSettingsDb.exec("ALTER TABLE wildcards ADD COLUMN type TEXT CHECK(type IN ('wildcard', 'chain')) DEFAULT 'wildcard'");
+  }
+  if (!hasColumn('wildcards', 'chain_option')) {
+    console.log('  Migrating wildcards: adding chain_option column');
+    userSettingsDb.exec("ALTER TABLE wildcards ADD COLUMN chain_option TEXT CHECK(chain_option IN ('replace', 'append')) DEFAULT 'replace'");
+  }
 
   // Migrate custom_dropdown_lists table
   if (!hasColumn('custom_dropdown_lists', 'is_auto_collected')) {
@@ -356,6 +364,12 @@ function migrateExistingTables(): void {
       console.log('  ✅ wildcard_items table migrated successfully');
     } else {
       console.log('  ✓ No complex migrations needed');
+    }
+
+    // Migrate wildcard_items table - add weight column if missing
+    if (!hasColumn('wildcard_items', 'weight')) {
+      console.log('  Migrating wildcard_items: adding weight column');
+      userSettingsDb.exec('ALTER TABLE wildcard_items ADD COLUMN weight REAL DEFAULT 1.0');
     }
 
     console.log('  ✅ Schema migration complete');

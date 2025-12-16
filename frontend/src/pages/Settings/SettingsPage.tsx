@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Container,
   Box,
   Typography,
   Tabs,
@@ -19,7 +18,7 @@ import FolderSettings from './features/Folder/FolderSettings';
 import { AuthSettings } from './features/Auth/AuthSettings';
 import { ExternalApiSettings } from './features/ExternalApi/ExternalApiSettings';
 import { CivitaiSettings } from './features/Civitai/CivitaiSettings';
-import PromptList from '../PromptManagement/components/PromptList';
+import { PromptExplorer } from '../../features/PromptExplorer/PromptExplorer';
 import { settingsApi, type AppSettings, type GeneralSettings as GeneralSettingsType, type TaggerSettings as TaggerSettingsType, type MetadataExtractionSettings, type ThumbnailSettings } from '../../services/settingsApi';
 
 interface TabPanelProps {
@@ -146,131 +145,128 @@ const SettingsPage: React.FC = () => {
 
   if (loading) {
     return (
-      <Container maxWidth="md">
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-          <CircularProgress />
-        </Box>
-      </Container>
+      <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+        <CircularProgress />
+      </Box>
     );
   }
 
   if (error || !settings) {
     return (
-      <Container maxWidth="md">
-        <Box sx={{ py: 4 }}>
-          <Alert severity="error">{error || t('messages.loadFailed')}</Alert>
-        </Box>
-      </Container>
+      <Box sx={{ width: '100%' }}>
+        <Alert severity="error">{error || t('messages.loadFailed')}</Alert>
+      </Box>
     );
   }
 
   return (
-    <Container maxWidth="md">
-      <Box sx={{ py: 4 }}>
-        {/* Header */}
-        <Box sx={{ mb: 4 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <SettingsIcon sx={{ mr: 1, fontSize: 32 }} />
-            <Typography variant="h4" component="h1">
-              {t('title')}
-            </Typography>
-          </Box>
-          <Typography variant="body1" color="text.secondary">
-            {t('subtitle')}
+    <Box sx={{ width: '100%' }}>
+      {/* Header */}
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <SettingsIcon sx={{ mr: 1, fontSize: 32 }} />
+          <Typography variant="h4" component="h1">
+            {t('title')}
           </Typography>
         </Box>
 
-        {/* Success Message */}
-        {successMessage && (
-          <Alert severity="success" sx={{ mb: 3 }}>
-            {successMessage}
-          </Alert>
-        )}
-
-        {/* Tabs */}
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-          <Tabs
-            value={tabValue}
-            onChange={handleTabChange}
-            variant="scrollable"
-            scrollButtons="auto"
-          >
-            <Tab label={t('tabs.general')} />
-            <Tab label={t('tabs.folders')} />
-            <Tab label={t('tabs.tagger')} />
-            <Tab label={t('tabs.prompts')} />
-            <Tab label={t('tabs.rating')} />
-            <Tab label={t('tabs.similarity')} />
-            <Tab label={t('tabs.account')} />
-            <Tab label={t('tabs.externalApi')} />
-            <Tab label="Civitai" />
-          </Tabs>
-        </Box>
-
-        {/* Tab Panels */}
-        <TabPanel value={tabValue} index={0}>
-          <GeneralSettings
-            settings={settings.general}
-            metadataSettings={settings.metadataExtraction}
-            thumbnailSettings={settings.thumbnail}
-            onUpdate={handleUpdateGeneralSettings}
-            onMetadataUpdate={handleUpdateMetadataSettings}
-            onThumbnailUpdate={handleUpdateThumbnailSettings}
-          />
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={1}>
-          <FolderSettings />
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={2}>
-          <TaggerSettings
-            settings={settings.tagger}
-            onUpdate={handleUpdateTaggerSettings}
-          />
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={3}>
-          <Paper sx={{ width: '100%' }}>
-            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-              <Tabs
-                value={promptTabValue}
-                onChange={(_event, newValue) => setPromptTabValue(newValue)}
-                aria-label="prompt management tabs"
-              >
-                <Tab label={tPrompt('tabs.positive')} />
-                <Tab label={tPrompt('tabs.negative')} />
-              </Tabs>
-            </Box>
-
-            <Box sx={{ p: 3 }}>
-              {promptTabValue === 0 && <PromptList type="positive" />}
-              {promptTabValue === 1 && <PromptList type="negative" />}
-            </Box>
-          </Paper>
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={4}>
-          <RatingScoreSettings />
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={5}>
-          <SimilaritySettings />
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={6}>
-          <AuthSettings />
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={7}>
-          <ExternalApiSettings />
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={8}>
-          <CivitaiSettings />
-        </TabPanel>
       </Box>
-    </Container>
+
+      {/* Success Message */}
+      {successMessage && (
+        <Alert severity="success" sx={{ mb: 3 }}>
+          {successMessage}
+        </Alert>
+      )}
+
+      {/* Tabs */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+        <Tabs
+          value={tabValue}
+          onChange={handleTabChange}
+          variant="scrollable"
+          scrollButtons="auto"
+        >
+          <Tab label={t('tabs.general')} />
+          <Tab label={t('tabs.folders')} />
+          <Tab label={t('tabs.tagger')} />
+          <Tab label={t('tabs.prompts')} />
+          <Tab label={t('tabs.rating')} />
+          <Tab label={t('tabs.similarity')} />
+          <Tab label={t('tabs.account')} />
+          <Tab label={t('tabs.externalApi')} />
+          <Tab label="Civitai" />
+        </Tabs>
+      </Box>
+
+      {/* Tab Panels */}
+      <TabPanel value={tabValue} index={0}>
+        <GeneralSettings
+          settings={settings.general}
+          metadataSettings={settings.metadataExtraction}
+          thumbnailSettings={settings.thumbnail}
+          onUpdate={handleUpdateGeneralSettings}
+          onMetadataUpdate={handleUpdateMetadataSettings}
+          onThumbnailUpdate={handleUpdateThumbnailSettings}
+        />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={1}>
+        <FolderSettings />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={2}>
+        <TaggerSettings
+          settings={settings.tagger}
+          onUpdate={handleUpdateTaggerSettings}
+        />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={3}>
+        <Box sx={{ width: '100%', mt: -2 }}>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+            <Tabs
+              value={promptTabValue}
+              onChange={(_event, newValue) => setPromptTabValue(newValue)}
+              aria-label="prompt management tabs"
+              variant="scrollable"
+              scrollButtons="auto"
+              sx={{ px: 2 }}
+            >
+              <Tab label={tPrompt('tabs.positive')} />
+              <Tab label={tPrompt('tabs.negative')} />
+              <Tab label={tPrompt('tabs.auto')} />
+            </Tabs>
+          </Box>
+
+          <Box>
+            {promptTabValue === 0 && <PromptExplorer type="positive" />}
+            {promptTabValue === 1 && <PromptExplorer type="negative" />}
+            {promptTabValue === 2 && <PromptExplorer type="auto" />}
+          </Box>
+        </Box>
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={4}>
+        <RatingScoreSettings />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={5}>
+        <SimilaritySettings />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={6}>
+        <AuthSettings />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={7}>
+        <ExternalApiSettings />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={8}>
+        <CivitaiSettings />
+      </TabPanel>
+    </Box>
   );
 };
 

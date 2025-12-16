@@ -108,7 +108,7 @@ async function buildDocker() {
     const dockerDir = path.join(BUILD_OUTPUT_DIR, 'docker');
     execSync('docker-compose up --build -d', { cwd: dockerDir, stdio: 'inherit' });
     console.log('\n✅ Deployment complete!');
-    console.log('🌐 Access at: http://localhost:1566\n');
+    console.log('🌐 Access at: http://localhost:1666\n');
   }
 }
 

@@ -72,6 +72,7 @@ export interface AutoTagSearchParams {
   rating?: RatingFilter;
   rating_score?: { min_score?: number; max_score?: number };  // 가중치 기반 점수 필터
   general_tags?: TagFilter[];
+  any_tags?: TagFilter[];
   character?: CharacterFilter;
   model?: string;
   has_auto_tags?: boolean; // true: 자동태그 있음, false: 없음, undefined: 상관없음

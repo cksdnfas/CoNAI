@@ -2,6 +2,7 @@
   "page": {
     "title": "ワイルドカード管理",
     "noWildcards": "登録されたワイルドカードがありません",
+    "noChains": "登録されたチェーンがありません",
     "noWildcardsDesc": "新しいワイルドカードを追加してプロンプト生成を自動化します"
   },
   "filters": {
@@ -23,7 +24,9 @@
   },
   "dialog": {
     "createTitle": "ワイルドカード作成",
-    "editTitle": "ワイルドカード編集"
+    "editTitle": "ワイルドカード編集",
+    "createChainTitle": "チェーンを作成",
+    "editChainTitle": "チェーンを編集"
   },
   "form": {
     "name": "名前",
@@ -34,6 +37,10 @@
     "noParent": "なし (ルートレベル)",
     "includeChildren": "子ワイルドカードを自動的に含める",
     "includeChildrenHelper": "有効にすると、このワイルドカードの使用時に直接の子の項目も自動的に含まれます",
+    "chainOption": "チェーンオプション",
+    "chainOptionReplace": "置換 (Replace)",
+    "chainOptionAppend": "追加 (Append)",
+    "weight": "重み",
     "comfyuiItems": "ComfyUIプロンプト項目",
     "naiItems": "NovelAIプロンプト項目",
     "itemsHelper": "各項目はカンマ区切りの単語を含めることができます。++名前++形式で他のワイルドカードをネストできます。",
@@ -54,7 +61,8 @@
     "copyFailed": "Failed to copy"
   },
   "tabs": {
-    "manual": "手動作成",
+    "manual": "ワイルドカード",
+    "chain": "前処理",
     "autoCollected": "自動収集 (LORA)"
   },
   "detail": {

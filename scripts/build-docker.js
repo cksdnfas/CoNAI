@@ -205,18 +205,18 @@ USER appuser
 
 # Environment variables
 ENV NODE_ENV=production \\
-    PORT=1566 \\
+    PORT=1666 \\
     HOST=0.0.0.0 \\
     DOCKER=true \\
     RUNTIME_BASE_PATH=/app/data \\
     PYTHON_PATH=python3
 
 # Expose port
-EXPOSE 1566
+EXPOSE 1666
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \\
-    CMD node -e "require('http').get('http://localhost:1566/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+    CMD node -e "require('http').get('http://localhost:1666/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Start application
 CMD ["node", "bundle.js"]
@@ -255,12 +255,12 @@ services:
     # Host 네트워크 모드 (네트워크 드라이브 접근 필요 시)
     # 주의: Windows/Mac에서는 제한적 지원, Linux에서만 완벽 작동
     # 활성화 시: 컨테이너가 호스트의 네트워크를 직접 사용 (포트 매핑 불필요)
-    # 접속: http://localhost:1566 (포트는 동일, 매핑만 생략)
+    # 접속: http://localhost:1666 (포트는 동일, 매핑만 생략)
     # network_mode: "host"
 
     # ports 섹션 (host 모드 사용 시 주석 처리)
     ports:
-      - "1566:1566"
+      - "1666:1666"
 
     # Single volume for all application data
     volumes:
@@ -284,7 +284,7 @@ services:
 
     environment:
       - NODE_ENV=production
-      - PORT=1566
+      - PORT=1666
       - HOST=0.0.0.0
       - LOCALE=en
       # All data paths are automatically configured via RUNTIME_BASE_PATH=/app/data
@@ -292,7 +292,7 @@ services:
     restart: unless-stopped
 
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:1566/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:1666/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -338,7 +338,7 @@ const dockerComposeExamples = `# ComfyUI Image Manager - Docker Compose Configur
 #     image: comfyui-image-manager:latest
 #     container_name: comfyui-manager
 #     ports:
-#       - "1566:1566"
+#       - "1666:1666"
 #     volumes:
 #       - comfyui-data:/app/data
 #     environment:
@@ -361,7 +361,7 @@ const dockerComposeExamples = `# ComfyUI Image Manager - Docker Compose Configur
 #     image: comfyui-image-manager:latest
 #     container_name: comfyui-manager
 #     ports:
-#       - "1566:1566"
+#       - "1666:1666"
 #     volumes:
 #       - /home/user/comfyui-data:/app/data
 #     environment:
@@ -374,7 +374,7 @@ const dockerComposeExamples = `# ComfyUI Image Manager - Docker Compose Configur
 #     image: comfyui-image-manager:latest
 #     container_name: comfyui-manager
 #     ports:
-#       - "1566:1566"
+#       - "1666:1666"
 #     volumes:
 #       - D:/comfyui-data:/app/data
 #     environment:
@@ -388,7 +388,7 @@ const dockerComposeExamples = `# ComfyUI Image Manager - Docker Compose Configur
 #     image: comfyui-image-manager:latest
 #     container_name: comfyui-manager
 #     ports:
-#       - "1566:1566"
+#       - "1666:1666"
 #     volumes:
 #       - /mnt/d/comfyui-data:/app/data
 #     environment:
@@ -407,7 +407,7 @@ const dockerComposeExamples = `# ComfyUI Image Manager - Docker Compose Configur
 #     image: comfyui-image-manager:latest
 #     container_name: comfyui-manager
 #     ports:
-#       - "1566:1566"
+#       - "1666:1666"
 #     volumes:
 #       # Application data in Docker volume
 #       - comfyui-app-data:/app/data
@@ -434,7 +434,7 @@ const dockerComposeExamples = `# ComfyUI Image Manager - Docker Compose Configur
 #     image: comfyui-image-manager:latest
 #     container_name: comfyui-manager
 #     ports:
-#       - "1566:1566"
+#       - "1666:1666"
 #     volumes:
 #       # Large files on external storage
 #       - /mnt/storage/images:/data/uploads
@@ -470,7 +470,7 @@ const dockerComposeExamples = `# ComfyUI Image Manager - Docker Compose Configur
 #     image: comfyui-image-manager:latest
 #     container_name: comfyui-manager
 #     ports:
-#       - "1566:1566"
+#       - "1666:1666"
 #     volumes:
 #       - nfs-storage:/app/data
 #     environment:
@@ -498,7 +498,7 @@ const dockerComposeExamples = `# ComfyUI Image Manager - Docker Compose Configur
 #       dockerfile: build-output/docker/Dockerfile
 #     container_name: comfyui-manager-dev
 #     ports:
-#       - "1566:1566"
+#       - "1666:1666"
 #     volumes:
 #       # Bind mount for development
 #       - ../../dev-data:/app/data
@@ -506,7 +506,7 @@ const dockerComposeExamples = `# ComfyUI Image Manager - Docker Compose Configur
 #       # - ../../backend/src:/app/src:ro
 #     environment:
 #       - NODE_ENV=development
-#       - PORT=1566
+#       - PORT=1666
 #       - LOCALE=ko
 #       - DEBUG=*
 #     restart: unless-stopped
@@ -524,12 +524,12 @@ const dockerComposeExamples = `# ComfyUI Image Manager - Docker Compose Configur
 #     image: comfyui-image-manager:latest
 #     container_name: comfyui-manager-8080
 #     ports:
-#       - "8080:1566"  # Expose on host port 8080
+#       - "8080:1666"  # Expose on host port 8080
 #     volumes:
 #       - comfyui-data-8080:/app/data
 #     environment:
 #       - NODE_ENV=production
-#       - PORT=1566  # Internal container port (don't change)
+#       - PORT=1666  # Internal container port (don't change)
 #       - HOST=0.0.0.0
 #       - LOCALE=ko
 #       # Add custom environment variables here
@@ -548,7 +548,7 @@ const dockerComposeExamples = `# ComfyUI Image Manager - Docker Compose Configur
 #     image: comfyui-image-manager:latest
 #     container_name: comfyui-manager-prod
 #     ports:
-#       - "1566:1566"
+#       - "1666:1666"
 #     volumes:
 #       - comfyui-data:/app/data
 #     environment:
@@ -641,7 +641,7 @@ docker-compose logs -f
 docker-compose down
 \`\`\`
 
-Access the application at: **http://localhost:1566**
+Access the application at: **http://localhost:1666**
 
 ## 📦 Image Details
 
@@ -708,7 +708,7 @@ Available environment variables (set in \`docker-compose.yml\`):
 \`\`\`yaml
 environment:
   - NODE_ENV=production       # Environment mode
-  - PORT=1566                 # Internal container port (don't change)
+  - PORT=1666                 # Internal container port (don't change)
   - HOST=0.0.0.0             # Listen address
   - LOCALE=en                # Interface language (en, ko)
 
@@ -723,11 +723,11 @@ environment:
 
 ### Port Configuration
 
-To change the host port (default 1566):
+To change the host port (default 1666):
 
 \`\`\`yaml
 ports:
-  - "8080:1566"  # Access via http://localhost:8080
+  - "8080:1666"  # Access via http://localhost:8080
 \`\`\`
 
 ## 🎥 Features
@@ -757,7 +757,7 @@ docker logs comfyui-image-manager
 \`\`\`yaml
 # In docker-compose.yml
 ports:
-  - "8080:1566"  # Use port 8080 instead of 1566
+  - "8080:1666"  # Use port 8080 instead of 1666
 \`\`\`
 
 ### Permission denied (bind mounts)
@@ -856,7 +856,7 @@ docker build -t comfyui-image-manager .
 # Run with named volume
 docker run -d \\
   --name comfyui-manager \\
-  -p 1566:1566 \\
+  -p 1666:1666 \\
   -v comfyui-data:/app/data \\
   --restart unless-stopped \\
   comfyui-image-manager
@@ -864,7 +864,7 @@ docker run -d \\
 # Run with bind mount
 docker run -d \\
   --name comfyui-manager \\
-  -p 1566:1566 \\
+  -p 1666:1666 \\
   -v /path/to/data:/app/data \\
   --restart unless-stopped \\
   comfyui-image-manager

@@ -11,7 +11,8 @@
     "metadata": "元數據提取",
     "folders": "資料夾管理",
     "account": "帳戶",
-    "externalApi": "外部API認證"
+    "externalApi": "外部API認證",
+    "auto": "自動提示詞"
   },
   "general": {
     "title": "一般設定",

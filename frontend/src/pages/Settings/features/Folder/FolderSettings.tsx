@@ -98,12 +98,7 @@ const FolderSettings: React.FC = () => {
 
   return (
     <Box>
-      <Typography variant="h5" gutterBottom>
-        {t('folderSettings.title')}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        {t('folderSettings.subtitle')}
-      </Typography>
+
 
       {/* 스케줄러 설정 */}
       <Paper sx={{ p: 3, mb: 4 }}>

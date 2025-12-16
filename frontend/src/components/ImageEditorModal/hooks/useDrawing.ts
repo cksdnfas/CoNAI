@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback, MutableRefObject } from 'react';
+import { useState, useRef, useCallback } from 'react';
+import type { MutableRefObject } from 'react';
 import type { DrawLine, Tool, Position, CanvasSize } from '../types/EditorTypes';
 
 interface UseDrawingProps {

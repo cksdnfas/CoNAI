@@ -120,7 +120,7 @@ pip3 install -r requirements.txt
 
 ### 포트 변경
 
-기본 포트는 1566입니다. 다른 프로그램과 충돌 시 변경이 필요합니다.
+기본 포트는 1666입니다. 다른 프로그램과 충돌 시 변경이 필요합니다.
 
 **변경 방법:**
 1. 프로그램 폴더의 `.env` 파일 열기 (없으면 생성)
@@ -148,8 +148,8 @@ pip3 install -r requirements.txt
 
 1. **프로그램 실행 후 콘솔 창에 표시되는 네트워크 주소 확인**
    ```
-   Local:   http://localhost:1566
-   Network: http://xxx.xxx.xxx.xxx:1566  ← 이 주소 사용
+   Local:   http://localhost:1666
+   Network: http://xxx.xxx.xxx.xxx:1666  ← 이 주소 사용
    ```
 
 2. **다른 기기에서 Network 주소로 접속**
@@ -159,16 +159,16 @@ pip3 install -r requirements.txt
 ### 외부 인터넷에서 접속
 
 1. **공유기 포트 포워딩 설정**
-   - 외부 포트: 1566
+   - 외부 포트: 1666
    - 내부 IP: PC의 로컬 IP
-   - 내부 포트: 1566
+   - 내부 포트: 1666
 
 2. **외부 IP 확인**
    - [내 IP 주소 확인](https://www.whatismyip.com/)
    - 외부 IP가 자주 바뀌면 DDNS 서비스 권장
 
 3. **방화벽 설정**
-   - Windows 방화벽에서 포트 1566 허용
+   - Windows 방화벽에서 포트 1666 허용
 
 ## ❓ 문제 해결
 
@@ -259,7 +259,7 @@ pip install -r requirements.txt --force-reinstall
 ### 일반 문제
 
 #### 포트가 이미 사용 중
-**오류 메시지**: "Port 1566 is already in use"
+**오류 메시지**: "Port 1666 is already in use"
 
 **해결방법:**
 1. 다른 프로그램 종료
@@ -281,7 +281,7 @@ npm run db:reset
 
 #### 브라우저가 자동으로 열리지 않음
 **해결방법:**
-- 수동으로 http://localhost:1566 접속
+- 수동으로 http://localhost:1666 접속
 - 다른 브라우저 시도 (Chrome, Firefox, Edge)
 
 ## 📊 성능 참고 사항

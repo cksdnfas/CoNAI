@@ -1,17 +1,15 @@
 {
   "title": "Prompt Management",
   "description": "Manage and analyze prompts extracted from AI-generated images.",
-
   "tabs": {
     "positive": "Positive",
-    "negative": "Negative"
+    "negative": "Negative",
+    "auto": "Auto"
   },
-
   "promptList": {
     "search": {
       "placeholder": "Search {{type}} prompts..."
     },
-
     "filters": {
       "groupFilter": {
         "label": "Group Filter",
@@ -19,13 +17,11 @@
         "unassigned": "Unassigned"
       }
     },
-
     "bulkActions": {
       "selectedCount": "{{count}} selected",
       "assignSelected": "Assign Selected",
       "bulkAssign": "Bulk Assign"
     },
-
     "table": {
       "headers": {
         "prompt": "Prompt",
@@ -38,24 +34,20 @@
         "more": "+{{count}} more"
       }
     },
-
     "actions": {
       "assignToGroup": "Assign to Group",
       "delete": "Delete",
       "cannotDelete": "Cannot delete prompts in use",
       "groupManagement": "Group Management"
     },
-
     "statistics": {
       "unclassified": "Unclassified",
       "unknown": "Unknown"
     },
-
     "pagination": {
       "rowsPerPage": "Rows per page:",
       "displayedRows": "{{from}}-{{to}} of {{count}}"
     },
-
     "messages": {
       "loadFailed": "Failed to load prompt list.",
       "deleteSuccess": "Prompt deleted successfully.",
@@ -64,7 +56,6 @@
       "assignFailed": "Failed to assign prompt."
     }
   },
-
   "assignDialog": {
     "title": "Assign to Group",
     "selectGroup": {
@@ -76,7 +67,6 @@
       "assign": "Assign"
     }
   },
-
   "bulkAssignDialog": {
     "title": "Bulk Assign Prompts",
     "groupSelect": {
@@ -105,11 +95,9 @@
       "total": "Total {{count}} processed"
     }
   },
-
   "groupManagement": {
     "title": "{{type}} Prompt Group Management",
     "dragHint": "Drag to reorder groups",
-
     "editForm": {
       "titleAdd": "Add New Group",
       "titleEdit": "Edit Group",
@@ -120,6 +108,10 @@
       "displayOrder": {
         "label": "Display Order"
       },
+      "parentGroup": {
+        "label": "Parent Group",
+        "none": "None (Top Level)"
+      },
       "visibility": {
         "label": "Visible",
         "hidden": "Hidden"
@@ -129,7 +121,6 @@
         "cancel": "Cancel"
       }
     },
-
     "groupList": {
       "title": "Group List ({{count}})",
       "add": "Add Group",
@@ -137,7 +128,6 @@
       "promptCount": "{{count}} prompts",
       "displayOrder": "Display Order: {{order}}"
     },
-
     "actions": {
       "toggleVisibility": "Toggle Visibility",
       "edit": "Edit",
@@ -145,7 +135,6 @@
       "deleteConfirm": "Are you sure you want to delete this group?",
       "close": "Close"
     },
-
     "messages": {
       "loadFailed": "Failed to load group list.",
       "createSuccess": "Group created successfully.",
@@ -159,7 +148,6 @@
       "reorderFailed": "Failed to update group order."
     }
   },
-
   "promptDisplay": {
     "tabs": {
       "positive": "Positive",
@@ -174,13 +162,11 @@
     "loading": "Loading...",
     "loadFailed": "Failed to load group information."
   },
-
   "autoTagDisplay": {
     "noTags": "Auto tagging has not been generated for this image yet.",
     "generateButton": "Generate Tags",
     "generating": "Generating...",
     "generationError": "An error occurred while generating tags.",
-
     "sections": {
       "rating": "Rating",
       "characters": "Characters",
@@ -188,7 +174,6 @@
       "generalTags": "General Tags ({{count}})",
       "modelInfo": "Model Information"
     },
-
     "modelInfo": {
       "model": "Model",
       "generalThreshold": "General",

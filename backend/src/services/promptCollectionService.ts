@@ -34,9 +34,9 @@ export class PromptCollectionService {
     positiveGroupId: number | null;
     negativeGroupId: number | null;
   } = {
-    positiveGroupId: null,
-    negativeGroupId: null
-  };
+      positiveGroupId: null,
+      negativeGroupId: null
+    };
 
   /**
    * Check if prompt is valid for collection
@@ -273,7 +273,7 @@ export class PromptCollectionService {
    */
   static async searchPrompts(
     query: string,
-    type: 'positive' | 'negative' | 'both' = 'both',
+    type: 'positive' | 'negative' | 'auto' | 'both' = 'both',
     page: number = 1,
     limit: number = 20,
     sortBy: 'usage_count' | 'created_at' | 'prompt' = 'usage_count',
@@ -312,6 +312,8 @@ export class PromptCollectionService {
         };
       } else if (type === 'positive') {
         return await PromptCollectionModel.searchPrompts(normalizedQuery, page, limit, sortBy, sortOrder);
+      } else if (type === 'auto') {
+        return await PromptCollectionModel.searchAutoPrompts(normalizedQuery, page, limit, sortBy, sortOrder);
       } else {
         return await PromptCollectionModel.searchNegativePrompts(normalizedQuery, page, limit, sortBy, sortOrder);
       }
@@ -326,7 +328,7 @@ export class PromptCollectionService {
    */
   static async searchInSynonymGroup(
     searchTerm: string,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<PromptSearchResult | null> {
     try {
       const result = await SynonymService.findInSynonymGroup(searchTerm, type);
@@ -350,6 +352,18 @@ export class PromptCollectionService {
   }
 
   /**
+   * Auto 프롬프트 배치 추가/증가
+   */
+  static async batchAddOrIncrementAuto(prompts: Array<{ prompt: string; group_id?: number }>): Promise<number> {
+    try {
+      return await PromptCollectionModel.batchAddOrIncrementAuto(prompts);
+    } catch (error) {
+      console.error('Error batch adding auto prompts:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 프롬프트 통계 조회
    */
   static async getStatistics(): Promise<PromptStatistics> {
@@ -359,7 +373,7 @@ export class PromptCollectionService {
       ]);
 
       // 총 개수 조회
-      const totalStats = await new Promise<{total_prompts: number, total_negative_prompts: number}>((resolve, reject) => {
+      const totalStats = await new Promise<{ total_prompts: number, total_negative_prompts: number, total_auto_prompts: number }>((resolve, reject) => {
         Promise.all([
           new Promise<number>((res, rej) => {
             const { db } = require('../database/init');
@@ -374,11 +388,19 @@ export class PromptCollectionService {
               if (err) rej(err);
               else res(row.count);
             });
-          })
-        ]).then(([positive, negative]) => {
+          }),
+          new Promise<number>((res, rej) => {
+            const { db } = require('../database/init');
+            db.get('SELECT COUNT(*) as count FROM auto_prompt_collection', (err: any, row: any) => {
+              if (err) rej(err);
+              else res(row.count);
+            });
+          }),
+        ]).then(([positive, negative, auto]) => {
           resolve({
             total_prompts: positive,
-            total_negative_prompts: negative
+            total_negative_prompts: negative,
+            total_auto_prompts: auto
           });
         }).catch(reject);
       });
@@ -389,6 +411,7 @@ export class PromptCollectionService {
       return {
         total_prompts: totalStats.total_prompts,
         total_negative_prompts: totalStats.total_negative_prompts,
+        total_auto_prompts: totalStats.total_auto_prompts,
         most_used_prompts: mostUsedPrompts,
         recent_prompts: recentPrompts.prompts
       };
@@ -404,7 +427,7 @@ export class PromptCollectionService {
   static async setSynonyms(
     mainPrompt: string,
     synonyms: string[],
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<{ success: boolean; mergedCount: number; mainPromptId: number }> {
     try {
       return await SynonymService.setSynonymsAndMerge(mainPrompt, synonyms, type);
@@ -420,7 +443,7 @@ export class PromptCollectionService {
   static async removeSynonym(
     mainPromptId: number,
     synonymToRemove: string,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<boolean> {
     try {
       return await SynonymService.removeSynonym(mainPromptId, synonymToRemove, type);
@@ -435,7 +458,7 @@ export class PromptCollectionService {
    */
   static async getGroupPrompts(
     groupId: number,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<PromptSearchResult[]> {
     try {
       const prompts = await SynonymService.getGroupPrompts(groupId, type);
@@ -460,7 +483,7 @@ export class PromptCollectionService {
   static async setGroupId(
     promptId: number,
     groupId: number | null,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<boolean> {
     try {
       return await PromptCollectionModel.setGroupId(promptId, groupId, type);
@@ -475,7 +498,7 @@ export class PromptCollectionService {
    */
   static async deletePrompt(
     id: number,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<boolean> {
     try {
       return await PromptCollectionModel.delete(id, type);
@@ -520,13 +543,16 @@ export class PromptCollectionService {
    */
   static async getTopPrompts(
     limit: number = 20,
-    type: 'positive' | 'negative' | 'both' = 'both'
+    type: 'positive' | 'negative' | 'auto' | 'both' = 'both'
   ): Promise<PromptSearchResult[]> {
     try {
       if (type === 'positive') {
         return await PromptCollectionModel.getMostUsedPrompts(limit);
       } else if (type === 'negative') {
         const result = await PromptCollectionModel.searchNegativePrompts('', 1, limit, 'usage_count', 'DESC');
+        return result.prompts;
+      } else if (type === 'auto') {
+        const result = await PromptCollectionModel.searchAutoPrompts('', 1, limit, 'usage_count', 'DESC');
         return result.prompts;
       } else {
         // both
@@ -551,7 +577,7 @@ export class PromptCollectionService {
    */
   static async searchPromptsWithGroups(
     query: string,
-    type: 'positive' | 'negative' | 'both' = 'both',
+    type: 'positive' | 'negative' | 'auto' | 'both' = 'both',
     page: number = 1,
     limit: number = 20,
     sortBy: 'usage_count' | 'created_at' | 'prompt' = 'usage_count',
@@ -564,10 +590,12 @@ export class PromptCollectionService {
 
       // 특정 그룹 내에서 검색
       if (groupId !== undefined) {
-        result = await PromptGroupService.getPromptsInGroup(groupId, type as 'positive' | 'negative', page, limit);
+        // @ts-ignore
+        result = await PromptGroupService.getPromptsInGroup(groupId, type as 'positive' | 'negative' | 'auto', page, limit);
 
         if (groupId !== null) {
-          groupInfo = await PromptGroupService.getGroupById(groupId, type as 'positive' | 'negative');
+          // @ts-ignore
+          groupInfo = await PromptGroupService.getGroupById(groupId, type as 'positive' | 'negative' | 'auto');
         } else {
           groupInfo = { id: 0, group_name: 'Unclassified' };
         }
@@ -613,7 +641,7 @@ export class PromptCollectionService {
   static async assignPromptToGroup(
     promptId: number,
     groupId: number | null,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<boolean> {
     try {
       return await PromptCollectionModel.setGroupId(promptId, groupId, type);
@@ -626,8 +654,9 @@ export class PromptCollectionService {
   /**
    * 그룹별 프롬프트 통계 조회
    */
-  static async getGroupStatistics(type: 'positive' | 'negative' = 'positive'): Promise<any[]> {
+  static async getGroupStatistics(type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<any[]> {
     try {
+      // @ts-ignore
       return await PromptGroupService.getAllGroups(false, type);
     } catch (error) {
       console.error('Error getting group statistics:', error);
@@ -645,16 +674,26 @@ export class PromptCollectionService {
   static async batchAssignPromptsToGroup(
     prompts: string[],
     groupId: number | null,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<{ created: number; updated: number; failed: string[] }> {
     try {
       let created = 0;
       let updated = 0;
       const failed: string[] = [];
 
-      const addMethod = type === 'positive'
-        ? PromptCollectionModel.addOrIncrement.bind(PromptCollectionModel)
-        : PromptCollectionModel.addOrIncrementNegative.bind(PromptCollectionModel);
+      let addMethod;
+      let tableName;
+
+      if (type === 'positive') {
+        addMethod = PromptCollectionModel.addOrIncrement.bind(PromptCollectionModel);
+        tableName = 'prompt_collection';
+      } else if (type === 'auto') {
+        addMethod = PromptCollectionModel.addOrIncrementAuto.bind(PromptCollectionModel);
+        tableName = 'auto_prompt_collection';
+      } else {
+        addMethod = PromptCollectionModel.addOrIncrementNegative.bind(PromptCollectionModel);
+        tableName = 'negative_prompt_collection';
+      }
 
       for (const promptText of prompts) {
         const trimmedPrompt = promptText.trim();
@@ -662,7 +701,6 @@ export class PromptCollectionService {
 
         try {
           // DB에서 해당 프롬프트 검색
-          const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
           const { db } = require('../database/init');
           const existing = db.prepare(`SELECT id FROM ${tableName} WHERE prompt = ?`).get(trimmedPrompt) as any;
 

@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, MutableRefObject } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import type { MutableRefObject } from 'react';
 import type { Selection, SelectionRect, Position, CanvasSize } from '../types/EditorTypes';
 
 interface UseSelectionProps {
@@ -242,7 +243,7 @@ export const useSelection = ({
         const xj = points[j], yj = points[j + 1];
 
         if (((yi > y) !== (yj > y)) &&
-            (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+          (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
           inside = !inside;
         }
       }

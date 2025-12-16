@@ -136,7 +136,7 @@ app.use(apiLimiter);
 
 const allowedOrigins = [
   'http://localhost:5555',
-  'http://localhost:1577',
+  'http://localhost:1677',
   process.env.FRONTEND_URL
 ].filter(Boolean) as string[];
 
@@ -520,10 +520,26 @@ ${divider}`);
 `);
     };
 
-    const startHttpServer = (): import('http').Server =>
-      app.listen(Number(PORT), bindHost, async () => {
+    const startHttpServer = (): import('http').Server => {
+      const httpServer = app.listen(Number(PORT), bindHost, async () => {
         await printBanner('http');
       });
+
+      httpServer.on('error', (error: NodeJS.ErrnoException) => {
+        if (error.code === 'EACCES') {
+          console.error(`\n❌ ERROR: Port ${PORT} requires elevated privileges or is blocked.`);
+          console.error(`   Please try running the terminal as Administrator or use a different port.`);
+          console.error(`   (Port settings: .env file or PORTS in shared/constants)`);
+        } else if (error.code === 'EADDRINUSE') {
+          console.error(`\n❌ ERROR: Port ${PORT} is already in use.`);
+          console.error(`   Please close the application using this port or choose a different one.`);
+        } else {
+          console.error('\n❌ Server error:', error);
+        }
+        process.exit(1);
+      });
+      return httpServer;
+    };
 
     let server: import('http').Server | import('https').Server;
 
@@ -543,6 +559,19 @@ ${divider}`);
         httpsServer.listen(Number(PORT), bindHost, async () => {
           await printBanner('https', extraLines);
         });
+
+        httpsServer.on('error', (error: NodeJS.ErrnoException) => {
+          if (error.code === 'EACCES') {
+            console.error(`\n❌ ERROR: Port ${PORT} requires elevated privileges or is blocked.`);
+            console.error(`   Please try running the terminal as Administrator or use a different port.`);
+          } else if (error.code === 'EADDRINUSE') {
+            console.error(`\n❌ ERROR: Port ${PORT} is already in use.`);
+          } else {
+            console.error('\n❌ Server error:', error);
+          }
+          process.exit(1);
+        });
+
         server = httpsServer;
       } else {
         console.warn('⚠️ HTTPS 초기화에 실패했습니다. HTTP로 폴백합니다.');
@@ -557,8 +586,15 @@ ${divider}`);
     (server as any).headersTimeout = 66000;
 
     // Graceful shutdown
-    const shutdown = async () => {
-      console.log('\n🛑 Shutting down gracefully...');
+    let isShuttingDown = false;
+
+    const shutdown = async (signal: string) => {
+      if (isShuttingDown) {
+        console.log(`Received ${signal}, but shutdown is already in progress...`);
+        return;
+      }
+      isShuttingDown = true;
+      console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
 
       // Stop file watcher service (first to prevent new events)
       try {
@@ -651,10 +687,20 @@ ${divider}`);
       }
 
       // Close server
-      server.close(() => {
-        console.log('✅ Server closed');
+      if (server) {
+        try {
+          server.close(() => {
+            console.log('✅ Server closed');
+            process.exit(0);
+          });
+        } catch (error) {
+          console.error('⚠️  Error closing server:', error);
+          process.exit(1);
+        }
+      } else {
+        console.log('✅ Server was not running or already closed');
         process.exit(0);
-      });
+      }
 
       // Force exit after 10 seconds
       setTimeout(() => {
@@ -663,8 +709,8 @@ ${divider}`);
       }, 10000);
     };
 
-    process.on('SIGTERM', shutdown);
-    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
 
   } catch (error) {
     console.error('❌ Failed to start server:', error);

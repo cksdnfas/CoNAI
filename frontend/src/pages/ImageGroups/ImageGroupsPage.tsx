@@ -14,7 +14,6 @@ import {
   Alert,
   Snackbar,
   CircularProgress,
-  Container,
   Tabs,
   Tab,
 } from '@mui/material';
@@ -442,7 +441,7 @@ const ImageGroupsPage: React.FC = () => {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 3 }}>
+    <Box sx={{ width: '100%' }}>
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4" component="h1" gutterBottom>
           {t('imageGroups:page.title')}
@@ -457,139 +456,135 @@ const ImageGroupsPage: React.FC = () => {
 
       {/* 커스텀 그룹 탭 */}
       <Box sx={{ display: tabValue === 0 ? 'block' : 'none' }}>
-      {/* 브레드크럼 네비게이션 (그룹 내부에서만 표시) */}
-      {!isGroupListView && (
-        <GroupBreadcrumb
-          breadcrumb={breadcrumb}
-          onNavigate={handleBreadcrumbNavigate}
-          showGroupListRoot={true}
-        />
-      )}
+        {/* 브레드크럼 네비게이션 (그룹 내부에서만 표시) */}
+        {!isGroupListView && (
+          <GroupBreadcrumb
+            breadcrumb={breadcrumb}
+            onNavigate={handleBreadcrumbNavigate}
+            showGroupListRoot={true}
+          />
+        )}
 
-      {/* 현재 그룹에 이미지가 있거나 하위 그룹이 있으면 그리드 표시 */}
-      {(() => {
-        console.log('[Render] isGroupListView:', isGroupListView);
-        console.log('[Render] currentParentId:', currentParentId);
-        console.log('[Render] currentGroupInfo:', currentGroupInfo);
-        console.log('[Render] groups.length:', groups.length);
-        return (!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0) || groups.length > 0;
-      })() ? (
-        <Grid container spacing={3}>
-          {/* 그룹 내부 뷰: 현재 그룹의 이미지 보기 카드를 가장 앞에 표시 */}
-          {!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0 && (
-            <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2, xl: 1.5 }} key={`image-view-${currentParentId}`}>
-              <ImageViewCard
-                group={currentGroupInfo}
-                onClick={() => {
-                  setSelectedGroupForImages(currentGroupInfo);
-                  setGroupImagesModalOpen(true);
-                  setGroupImagesPage(1);
-                  fetchGroupImages(currentGroupInfo.id, 1, groupImagesPageSize);
-                }}
-              />
-            </Grid>
-          )}
+        {/* 현재 그룹에 이미지가 있거나 하위 그룹이 있으면 그리드 표시 */}
+        {(() => {
+          return (!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0) || groups.length > 0;
+        })() ? (
+          <Grid container spacing={3}>
+            {/* 그룹 내부 뷰: 현재 그룹의 이미지 보기 카드를 가장 앞에 표시 */}
+            {!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0 && (
+              <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2, xl: 1.5 }} key={`image-view-${currentParentId}`}>
+                <ImageViewCard
+                  group={currentGroupInfo}
+                  onClick={() => {
+                    setSelectedGroupForImages(currentGroupInfo);
+                    setGroupImagesModalOpen(true);
+                    setGroupImagesPage(1);
+                    fetchGroupImages(currentGroupInfo.id, 1, groupImagesPageSize);
+                  }}
+                />
+              </Grid>
+            )}
 
-          {/* 하위 그룹 카드들 */}
-          {groups.map((group) => (
-            <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2, xl: 1.5 }} key={group.id}>
-              <GroupCard
-                group={group}
-                onClick={() => handleGroupClick(group)}
-                onSettingsClick={handleGroupSettings}
-              />
-            </Grid>
-          ))}
-        </Grid>
-      ) : (
-        <Box textAlign="center" py={8}>
-          <GroupIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            {isGroupListView ? t('imageGroups:emptyState.noGroups') : t('imageGroups:emptyState.noSubgroups')}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" mb={3}>
-            {isGroupListView
-              ? t('imageGroups:emptyState.createPrompt')
-              : t('imageGroups:emptyState.noSubgroupsHelp')}
-          </Typography>
-        </Box>
-      )}
+            {/* 하위 그룹 카드들 */}
+            {groups.map((group) => (
+              <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2, xl: 1.5 }} key={group.id}>
+                <GroupCard
+                  group={group}
+                  onClick={() => handleGroupClick(group)}
+                  onSettingsClick={handleGroupSettings}
+                />
+              </Grid>
+            ))}
+          </Grid>
+        ) : (
+          <Box textAlign="center" py={8}>
+            <GroupIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              {isGroupListView ? t('imageGroups:emptyState.noGroups') : t('imageGroups:emptyState.noSubgroups')}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" mb={3}>
+              {isGroupListView
+                ? t('imageGroups:emptyState.createPrompt')
+                : t('imageGroups:emptyState.noSubgroupsHelp')}
+            </Typography>
+          </Box>
+        )}
 
-      {/* 그룹 생성 FAB */}
-      <Fab
-        color="primary"
-        aria-label="add group"
-        sx={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-        }}
-        onClick={() => setIsCreateModalOpen(true)}
-      >
-        <AddIcon />
-      </Fab>
-
-      {/* 컨텍스트 메뉴 */}
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem onClick={handleEditGroup}>
-          <EditIcon sx={{ mr: 1 }} fontSize="small" />
-          {t('common:edit')}
-        </MenuItem>
-        {groups.find(g => g.id === menuGroupId)?.auto_collect_enabled ? (
-          <MenuItem onClick={handleRunAutoCollection}>
-            <PlayIcon sx={{ mr: 1 }} fontSize="small" />
-            {t('imageGroups:menu.runAutoCollection')}
-          </MenuItem>
-        ) : null}
-        <MenuItem onClick={handleDeleteGroup} sx={{ color: 'error.main' }}>
-          <DeleteIcon sx={{ mr: 1 }} fontSize="small" />
-          {t('common:delete')}
-        </MenuItem>
-      </Menu>
-
-      {/* 그룹 생성 모달 */}
-      <GroupCreateEditModal
-        open={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onSuccess={handleGroupCreated}
-      />
-
-      {/* 그룹 편집 모달 */}
-      {selectedGroup ? (
-        <GroupCreateEditModal
-          open={isEditModalOpen}
-          onClose={() => {
-            setIsEditModalOpen(false);
-            setSelectedGroup(null);
+        {/* 그룹 생성 FAB */}
+        <Fab
+          color="primary"
+          aria-label="add group"
+          sx={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
           }}
-          onSuccess={handleGroupUpdated}
-          group={selectedGroup}
-        />
-      ) : null}
+          onClick={() => setIsCreateModalOpen(true)}
+        >
+          <AddIcon />
+        </Fab>
 
-      {/* 그룹 이미지 모달 */}
-      <GroupImageGridModal
-        open={groupImagesModalOpen}
-        onClose={handleGroupImagesModalClose}
-        images={groupImages}
-        loading={groupImagesLoading}
-        currentGroup={selectedGroupForImages}
-        allGroups={groups}
-        pageSize={groupImagesPageSize}
-        onPageSizeChange={handleGroupImagesPageSizeChange}
-        currentPage={groupImagesPage}
-        totalPages={groupImagesTotalPages}
-        total={groupImagesTotal}
-        onPageChange={handleGroupImagesPageChange}
-        onImagesRemoved={handleImagesRemoved}
-        onImagesAssigned={handleImagesAssigned}
-        groupType="custom"
-        onShowSnackbar={showSnackbar}
-      />
+        {/* 컨텍스트 메뉴 */}
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleMenuClose}
+        >
+          <MenuItem onClick={handleEditGroup}>
+            <EditIcon sx={{ mr: 1 }} fontSize="small" />
+            {t('common:edit')}
+          </MenuItem>
+          {groups.find(g => g.id === menuGroupId)?.auto_collect_enabled ? (
+            <MenuItem onClick={handleRunAutoCollection}>
+              <PlayIcon sx={{ mr: 1 }} fontSize="small" />
+              {t('imageGroups:menu.runAutoCollection')}
+            </MenuItem>
+          ) : null}
+          <MenuItem onClick={handleDeleteGroup} sx={{ color: 'error.main' }}>
+            <DeleteIcon sx={{ mr: 1 }} fontSize="small" />
+            {t('common:delete')}
+          </MenuItem>
+        </Menu>
+
+        {/* 그룹 생성 모달 */}
+        <GroupCreateEditModal
+          open={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+          onSuccess={handleGroupCreated}
+        />
+
+        {/* 그룹 편집 모달 */}
+        {selectedGroup ? (
+          <GroupCreateEditModal
+            open={isEditModalOpen}
+            onClose={() => {
+              setIsEditModalOpen(false);
+              setSelectedGroup(null);
+            }}
+            onSuccess={handleGroupUpdated}
+            group={selectedGroup}
+          />
+        ) : null}
+
+        {/* 그룹 이미지 모달 */}
+        <GroupImageGridModal
+          open={groupImagesModalOpen}
+          onClose={handleGroupImagesModalClose}
+          images={groupImages}
+          loading={groupImagesLoading}
+          currentGroup={selectedGroupForImages}
+          allGroups={groups}
+          pageSize={groupImagesPageSize}
+          onPageSizeChange={handleGroupImagesPageSizeChange}
+          currentPage={groupImagesPage}
+          totalPages={groupImagesTotalPages}
+          total={groupImagesTotal}
+          onPageChange={handleGroupImagesPageChange}
+          onImagesRemoved={handleImagesRemoved}
+          onImagesAssigned={handleImagesAssigned}
+          groupType="custom"
+          onShowSnackbar={showSnackbar}
+        />
       </Box>
 
       {/* 자동폴더 그룹 탭 */}
@@ -611,7 +606,7 @@ const ImageGroupsPage: React.FC = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Container>
+    </Box>
   );
 };
 

@@ -8,8 +8,7 @@
       "search": "搜索",
       "upload": "上传",
       "imageGeneration": "图像生成",
-      "settings": "设置",
-      "help": "帮助"
+      "settings": "设置"
     },
     "tooltip": {
       "home": "前往首页",
@@ -18,8 +17,7 @@
       "search": "搜索图像",
       "upload": "上传图像",
       "imageGeneration": "生成AI图像",
-      "settings": "管理设置",
-      "help": "查看帮助"
+      "settings": "管理设置"
     },
     "theme": {
       "light": "浅色模式",
@@ -34,16 +32,5 @@
   "footer": {
     "copyright": "© 2024 ComfyUI Image Manager. 保留所有权利。",
     "version": "版本"
-  },
-  "help": {
-    "title": "帮助",
-    "sections": {
-      "gettingStarted": "入门指南",
-      "imageManagement": "图像管理",
-      "autoCollection": "自动收集",
-      "promptSystem": "提示词系统",
-      "settings": "设置",
-      "shortcuts": "快捷键"
-    }
   }
 }

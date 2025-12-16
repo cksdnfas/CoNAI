@@ -443,7 +443,7 @@ if errorlevel 1 (
     echo  ERROR: Server failed to start
     echo.
     echo  Please check:
-    echo  - Port 1566 is not in use
+    echo  - Port 1666 is not in use
     echo  - All files are present
     echo  - Check logs folder for errors
     echo ========================================================================
@@ -492,7 +492,7 @@ if [ $? -ne 0 ]; then
     echo "║  ❌ Error: Server failed to start                                     ║"
     echo "║                                                                        ║"
     echo "║  Please check:                                                         ║"
-    echo "║  - Port 1566 is not in use                                            ║"
+    echo "║  - Port 1666 is not in use                                            ║"
     echo "║  - All files are present                                              ║"
     echo "║  - Check logs folder for errors                                       ║"
     echo "╚════════════════════════════════════════════════════════════════════════╝"
@@ -626,7 +626,7 @@ To access from other devices on your network:
 
 For external internet access:
 - See the full deployment guide in DEPLOYMENT_GUIDE.md (if included)
-- Configure port forwarding on your router (port 1566)
+- Configure port forwarding on your router (port 1666)
 
 ## 📁 Data Storage
 
@@ -644,7 +644,7 @@ All data is stored in these folders (created automatically):
 Change PORT in \`.env\` file
 
 ### Server won't start
-- Check if port 1566 is available
+- Check if port 1666 is available
 - Check logs/ folder for error messages
 - Ensure all files are present (app/, node.exe/node)
 

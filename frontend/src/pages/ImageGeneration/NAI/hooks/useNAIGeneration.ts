@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { enqueueSnackbar } from 'notistack';
 import { naiApi, generationHistoryApi } from '../../../../services/api';
@@ -135,6 +136,7 @@ export function useNAIGeneration({ token, onLogout, onGenerationComplete }: UseN
   const [error, setError] = useState<string | null>(null);
   const [userData, setUserData] = useState<NAIUserData | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const queryClient = useQueryClient();
 
   const fetchUserData = async () => {
     if (!token) {
@@ -212,6 +214,9 @@ export function useNAIGeneration({ token, onLogout, onGenerationComplete }: UseN
             setHistoryRefreshKey(prev => {
               const newKey = prev + 1;
               console.log(`[NAI] historyRefreshKey: ${prev} → ${newKey}`);
+
+              // 갤러리 갱신을 위해 캐시 무효화
+              queryClient.invalidateQueries({ queryKey: ['images'] });
 
               // setState는 비동기이므로 다음 틱에 resolve
               setTimeout(() => resolve(), 0);

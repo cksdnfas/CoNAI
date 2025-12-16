@@ -101,6 +101,13 @@ export class AutoTagSearchService {
       params.push(...characterConditions.params);
     }
 
+    // 4.5 Any Tag 필터 (General + Character 통합 검색)
+    if (searchParams.any_tags && searchParams.any_tags.length > 0) {
+      const anyConditions = this.buildAnyTagConditions(searchParams.any_tags);
+      conditions.push(...anyConditions.conditions);
+      params.push(...anyConditions.params);
+    }
+
     // 5. Model 필터
     if (searchParams.model) {
       conditions.push(`json_extract(i.auto_tags, '$.model') = ?`);
@@ -242,6 +249,51 @@ export class AutoTagSearchService {
         // Score 조건이 없으면 존재 여부만 체크
         conditions.push(existsCondition);
       }
+    }
+
+    return { conditions, params };
+  }
+
+  /**
+   * Any 태그 조건 생성 (General + Character 통합 검색)
+   */
+  private static buildAnyTagConditions(tags: TagFilter[]): QueryBuilderResult {
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    for (const tagFilter of tags) {
+      const hasScoreFilter = tagFilter.min_score !== undefined || tagFilter.max_score !== undefined;
+      const searchVariants = this.normalizeSearchTerm(tagFilter.tag, hasScoreFilter);
+
+      // 검색 변형에 대한 통합 OR 조건 생성
+      const variantConditions: string[] = [];
+
+      for (const variant of searchVariants) {
+        // 1. General 태그 검색 조건
+        const generalCondition = `
+          EXISTS (
+            SELECT 1 FROM json_each(i.auto_tags, '$.general')
+            WHERE LOWER(key) LIKE ?
+          )
+        `.trim();
+
+        // 2. Character 태그 검색 조건
+        const characterCondition = `
+          EXISTS (
+            SELECT 1 FROM json_each(i.auto_tags, '$.character')
+            WHERE LOWER(key) LIKE ?
+          )
+        `.trim();
+
+        variantConditions.push(`(${generalCondition} OR ${characterCondition})`);
+
+        // 파라미터 2번 추가 (general용, character용)
+        params.push(`%${variant}%`);
+        params.push(`%${variant}%`);
+      }
+
+      const existsCondition = `(${variantConditions.join(' OR ')})`;
+      conditions.push(existsCondition);
     }
 
     return { conditions, params };
@@ -518,7 +570,7 @@ export class AutoTagSearchService {
         errors.push('character max_score must be between 0 and 1');
       }
       if (params.character.min_score !== undefined && params.character.max_score !== undefined &&
-          params.character.min_score > params.character.max_score) {
+        params.character.min_score > params.character.max_score) {
         errors.push('character min_score cannot be greater than max_score');
       }
     }

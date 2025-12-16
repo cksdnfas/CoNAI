@@ -205,13 +205,7 @@ export const CivitaiSettings: React.FC = () => {
 
   return (
     <Box>
-      <Typography variant="h5" gutterBottom>
-        <CloudSync sx={{ mr: 1, verticalAlign: 'middle' }} />
-        {t('civitai.title')}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        {t('civitai.description')}
-      </Typography>
+
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}

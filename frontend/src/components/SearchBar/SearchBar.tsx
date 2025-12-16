@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Box,
-  Paper,
   Tabs,
   Tab,
   Button,
@@ -16,9 +15,11 @@ import {
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { FilterCondition, ComplexSearchRequest, FilterGroupType } from '@comfyui-image-manager/shared';
-import SimpleSearchTab from './SimpleSearchTab';
+import SimpleSearchTab, { type SearchToken } from './SimpleSearchTab';
 import AdvancedSearchTab from './AdvancedSearchTab';
 import type { FilterBlockData } from '../FilterBuilder/FilterBlockList';
+import type { PromptSearchResult } from './SearchAutoComplete';
+import { promptCollectionApi } from '../../services/api/promptApi';
 
 interface SearchBarProps {
   onSearch: (request: ComplexSearchRequest) => void;
@@ -47,156 +48,161 @@ const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
 const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
   const { t } = useTranslation();
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState(0); // 0: Simple, 1: Advanced
-
-  // Simple search state
+  // Simple search state -> Token based state
   const [simpleSearchText, setSimpleSearchText] = useState('');
-
-  // Advanced search state - Unified filter blocks
-  const [filterBlocks, setFilterBlocks] = useState<FilterBlockData[]>([]);
+  const [searchTokens, setSearchTokens] = useState<SearchToken[]>([]);
 
   // Validation error state
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Filter block handlers
-  const handleAddBlock = (groupType: FilterGroupType, condition: FilterCondition) => {
-    const newBlock: FilterBlockData = {
-      id: `${Date.now()}-${Math.random()}`, // 간단한 unique ID 생성
-      groupType,
-      condition,
+  // Token Handlers for Simple Tab
+  const handleAddToken = (tag: PromptSearchResult) => {
+    if (searchTokens.some(t => t.value === tag.prompt && t.type === tag.type)) {
+      return;
+    }
+    const newToken: SearchToken = {
+      id: `${Date.now()}-${Math.random()}`,
+      type: tag.type,
+      label: tag.prompt,
+      value: tag.prompt,
+      logic: 'OR',
+      count: tag.usage_count
     };
-    setFilterBlocks([...filterBlocks, newBlock]);
+    setSearchTokens([...searchTokens, newToken]);
+    setSimpleSearchText('');
   };
 
-  const handleEditBlock = (id: string, groupType: FilterGroupType, condition: FilterCondition) => {
-    setFilterBlocks(
-      filterBlocks.map((block) =>
-        block.id === id ? { ...block, groupType, condition } : block
-      )
-    );
+  const handleRemoveToken = (id: string) => {
+    setSearchTokens(searchTokens.filter(t => t.id !== id));
   };
 
-  const handleRemoveBlock = (id: string) => {
-    setFilterBlocks(filterBlocks.filter((block) => block.id !== id));
-  };
-
-  // Validate condition has valid value
-  const validateCondition = (condition: FilterCondition): string | null => {
-    // Boolean types
-    if (condition.type === 'auto_tag_exists' || condition.type === 'auto_tag_has_character') {
-      if (typeof condition.value !== 'boolean') {
-        return t('search:searchBar.validation.booleanRequired');
-      }
-    }
-    // String types that require non-empty value
-    else if (
-      condition.type === 'auto_tag_general' ||
-      condition.type === 'auto_tag_character' ||
-      condition.type === 'prompt_contains' ||
-      condition.type === 'prompt_regex' ||
-      condition.type === 'negative_prompt_contains' ||
-      condition.type === 'negative_prompt_regex' ||
-      condition.type === 'ai_tool' ||
-      condition.type === 'model_name' ||
-      condition.type === 'auto_tag_model'
-    ) {
-      if (!condition.value || (typeof condition.value === 'string' && condition.value.trim() === '')) {
-        return t('search:searchBar.validation.valueRequired');
-      }
-    }
-    // Rating types
-    else if (condition.type === 'auto_tag_rating' || condition.type === 'auto_tag_rating_score') {
-      if (condition.min_score === undefined && condition.max_score === undefined) {
-        return t('search:searchBar.validation.scoreRequired');
-      }
-    }
-
-    return null;
+  const handleCycleLogic = (id: string) => {
+    setSearchTokens(searchTokens.map(t => {
+      if (t.id !== id) return t;
+      const map: Record<string, 'OR' | 'AND' | 'NOT'> = {
+        'OR': 'AND',
+        'AND': 'NOT',
+        'NOT': 'OR'
+      };
+      return { ...t, logic: map[t.logic] };
+    }));
   };
 
   // Search handlers
+  const handleUpdateToken = (id: string, updates: Partial<SearchToken>) => {
+    setSearchTokens(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+
+    // If type changed, fetch new count
+    if (updates.type) {
+      const token = searchTokens.find(t => t.id === id);
+      if (token) {
+        const newType = updates.type;
+        const query = token.value; // The raw prompt text
+
+        // Async fetch count for the new type
+        (async () => {
+          try {
+            // 'auto' type handling might need specific API support or just treat as 'auto' in search
+            const apiType = newType === 'auto' ? 'auto' : newType;
+            const res = await promptCollectionApi.searchPrompts(query, apiType, 1, 10); // fetch a few to ensure match
+
+            // The API returns { data: PromptSearchResult[], ... } or similar structure
+            // We need to check exact match for query
+            const results = (res as any).data || (res as any).prompts;
+
+            if (Array.isArray(results)) {
+              const match = results.find((p: any) => p.prompt === query);
+              if (match) {
+                setSearchTokens(current => current.map(t =>
+                  t.id === id ? { ...t, count: match.usage_count } : t
+                ));
+              } else {
+                // Not found in the new category -> count is effectively 0 (or we leave it undefined)
+                // Keeping it undefined is fine as we already cleared it
+              }
+            }
+          } catch (error) {
+            console.error('Failed to fetch stats for updated token:', error);
+          }
+        })();
+      }
+    }
+  };
+
   const handleSearch = () => {
     setValidationError(null);
 
-    if (activeTab === 0) {
-      // Simple search mode
-      if (!simpleSearchText.trim()) {
-        setValidationError(t('search:searchBar.validation.searchTextRequired'));
-        return;
-      }
+    // Simple Search (Token based)
+    const excludeGroup: FilterCondition[] = [];
+    const orGroup: FilterCondition[] = [];
+    const andGroup: FilterCondition[] = [];
 
-      const request: ComplexSearchRequest = {
-        simple_search: {
-          text: simpleSearchText.trim(),
-        },
-        page: 1,
-        limit: 25,
-      };
-
-      onSearch(request);
-    } else {
-      // Advanced search mode
-      if (filterBlocks.length === 0) {
-        setValidationError(t('search:searchBar.validation.filterRequired'));
-        return;
-      }
-
-      // Validate all conditions
-      for (let i = 0; i < filterBlocks.length; i++) {
-        const error = validateCondition(filterBlocks[i].condition);
-        if (error) {
-          setValidationError(t('search:searchBar.validation.filterError', { index: i + 1, error }));
-          return;
-        }
-      }
-
-      // 블록을 그룹별로 분리하여 API 요청 형식으로 변환
-      const excludeConditions = filterBlocks
-        .filter((block) => block.groupType === 'exclude')
-        .map((block) => block.condition);
-
-      const orConditions = filterBlocks
-        .filter((block) => block.groupType === 'or')
-        .map((block) => block.condition);
-
-      const andConditions = filterBlocks
-        .filter((block) => block.groupType === 'and')
-        .map((block) => block.condition);
-
-      const request: ComplexSearchRequest = {
-        complex_filter: {
-          exclude_group: excludeConditions.length > 0 ? excludeConditions : undefined,
-          or_group: orConditions.length > 0 ? orConditions : undefined,
-          and_group: andConditions.length > 0 ? andConditions : undefined,
-        },
-        page: 1,
-        limit: 25,
-      };
-
-      onSearch(request);
+    // Include text in input if any
+    const tokensToProcess = [...searchTokens];
+    if (simpleSearchText.trim()) {
+      tokensToProcess.push({
+        id: 'temp',
+        type: 'positive',
+        label: simpleSearchText.trim(),
+        value: simpleSearchText.trim(),
+        logic: 'OR'
+      });
     }
+
+    if (tokensToProcess.length === 0) {
+      onSearch({ page: 1, limit: 25 });
+      return;
+    }
+
+    tokensToProcess.forEach(token => {
+      let category: FilterCondition['category'] = 'positive_prompt';
+      let type: FilterCondition['type'] = 'prompt_contains';
+
+      if (token.type === 'auto') {
+        type = 'auto_tag_any';
+        category = 'auto_tag';
+      } else if (token.type === 'negative') {
+        type = 'negative_prompt_contains';
+        category = 'negative_prompt';
+      }
+
+      const condition: FilterCondition = {
+        category,
+        type,
+        value: token.value,
+        ...(token.type === 'auto' && {
+          min_score: token.minScore ?? 0,
+          max_score: token.maxScore ?? 1
+        })
+      };
+
+      if (token.logic === 'OR') orGroup.push(condition);
+      else if (token.logic === 'AND') andGroup.push(condition);
+      else if (token.logic === 'NOT') excludeGroup.push(condition);
+    });
+
+    const request: ComplexSearchRequest = {
+      complex_filter: {
+        exclude_group: excludeGroup.length > 0 ? excludeGroup : undefined,
+        or_group: orGroup.length > 0 ? orGroup : undefined,
+        and_group: andGroup.length > 0 ? andGroup : undefined,
+      },
+      page: 1,
+      limit: 25,
+    };
+
+    onSearch(request);
   };
 
   const handleClearSearch = () => {
-    if (activeTab === 0) {
-      setSimpleSearchText('');
-    } else {
-      setFilterBlocks([]);
-    }
+    setSimpleSearchText('');
+    setSearchTokens([]);
   };
 
-  const handleKeyPress = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter') {
-      handleSearch();
-    }
-  };
-
-  const hasConditions =
-    activeTab === 0 ? simpleSearchText.trim().length > 0 : filterBlocks.length > 0;
+  const hasConditions = simpleSearchText.trim().length > 0 || searchTokens.length > 0;
 
   return (
-    <Paper elevation={2} sx={{ p: 3 }}>
+    <Box sx={{ width: '100%' }}>
       {/* Validation Error Message */}
       {validationError && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setValidationError(null)}>
@@ -204,39 +210,16 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
         </Alert>
       )}
 
-      {/* Tabs */}
-      <Tabs
-        value={activeTab}
-        onChange={(_, newValue) => {
-          setActiveTab(newValue);
-          setValidationError(null);
-        }}
-        aria-label="search tabs"
-        sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
-      >
-        <Tab label={t('search:searchBar.tabs.simple')} id="search-tab-0" aria-controls="search-tabpanel-0" />
-        <Tab label={t('search:searchBar.tabs.advanced')} id="search-tab-1" aria-controls="search-tabpanel-1" />
-      </Tabs>
-
-      {/* Simple Search Tab */}
-      <TabPanel value={activeTab} index={0}>
-        <SimpleSearchTab
-          searchText={simpleSearchText}
-          onSearchTextChange={setSimpleSearchText}
-          onKeyPress={handleKeyPress}
-        />
-      </TabPanel>
-
-      {/* Advanced Search Tab */}
-      <TabPanel value={activeTab} index={1}>
-        <AdvancedSearchTab
-          filterBlocks={filterBlocks}
-          onAddBlock={handleAddBlock}
-          onRemoveBlock={handleRemoveBlock}
-          onEditBlock={handleEditBlock}
-          showHeader={true}
-        />
-      </TabPanel>
+      <SimpleSearchTab
+        searchText={simpleSearchText}
+        onSearchTextChange={setSimpleSearchText}
+        onSearch={handleSearch}
+        tokens={searchTokens}
+        onAddToken={handleAddToken}
+        onRemoveToken={handleRemoveToken}
+        onCycleLogic={handleCycleLogic}
+        onUpdateToken={handleUpdateToken}
+      />
 
       {/* Action Buttons */}
       <Stack direction="row" spacing={2} sx={{ mt: 3, alignItems: 'center' }}>
@@ -270,7 +253,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
           </span>
         </Tooltip>
       </Stack>
-    </Paper>
+    </Box>
   );
 };
 

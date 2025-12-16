@@ -13,13 +13,32 @@ import {
 } from '../types/promptGroup';
 import { db } from '../database/init';
 
+// Helper to get table name
+const getTableName = (type: 'positive' | 'negative' | 'auto'): string => {
+  switch (type) {
+    case 'auto': return 'auto_prompt_groups';
+    case 'negative': return 'negative_prompt_groups';
+    case 'positive':
+    default: return 'prompt_groups';
+  }
+};
+
+const getPromptTableName = (type: 'positive' | 'negative' | 'auto'): string => {
+  switch (type) {
+    case 'auto': return 'auto_prompt_collection';
+    case 'negative': return 'negative_prompt_collection';
+    case 'positive':
+    default: return 'prompt_collection';
+  }
+};
+
 export class PromptGroupService {
   /**
    * 모든 그룹 조회 (프롬프트 수 포함)
    */
   static async getAllGroups(
     includeHidden: boolean = false,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<PromptGroupWithPrompts[]> {
     try {
       const groups = await PromptGroupModel.findAllWithCounts(includeHidden, type);
@@ -32,6 +51,7 @@ export class PromptGroupService {
         group_name: 'Unclassified',
         display_order: -1, // 항상 맨 앞에 표시
         is_visible: true,
+        parent_id: null,
         prompt_count: unclassifiedCount,
         created_at: '',
         updated_at: ''
@@ -49,7 +69,7 @@ export class PromptGroupService {
    */
   static async getGroupById(
     id: number | null,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<PromptGroupRecord | { id: 0; group_name: 'Unclassified' } | null> {
     try {
       if (id === null || id === 0) {
@@ -71,7 +91,7 @@ export class PromptGroupService {
    */
   static async createGroup(
     data: PromptGroupData,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<number> {
     try {
       return await PromptGroupModel.create(data, type);
@@ -87,7 +107,7 @@ export class PromptGroupService {
   static async updateGroup(
     id: number,
     data: Partial<PromptGroupData>,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<boolean> {
     try {
       return await PromptGroupModel.update(id, data, type);
@@ -102,7 +122,7 @@ export class PromptGroupService {
    */
   static async deleteGroup(
     id: number,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<boolean> {
     try {
       // 먼저 해당 그룹의 프롬프트들을 NULL로 변경
@@ -119,7 +139,7 @@ export class PromptGroupService {
   /**
    * JSON으로 그룹 설정 내보내기
    */
-  static async exportToJSON(type: 'positive' | 'negative' = 'positive'): Promise<GroupExportData> {
+  static async exportToJSON(type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<GroupExportData> {
     try {
       const groups = await PromptGroupModel.exportForJSON(type);
 
@@ -142,7 +162,7 @@ export class PromptGroupService {
    */
   static async importFromJSON(
     importData: GroupExportData,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<GroupReassignmentResult> {
     try {
       // 1. 그룹 ID 재배치
@@ -181,7 +201,7 @@ export class PromptGroupService {
    */
   static async updateGroupOrders(
     groupOrders: { id: number; display_order: number }[],
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<number> {
     try {
       let updatedCount = 0;
@@ -208,9 +228,9 @@ export class PromptGroupService {
   private static async updatePromptGroupIds(
     oldGroupId: number | null,
     newGroupId: number | null,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<number> {
-    const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+    const tableName = getPromptTableName(type);
 
     let query: string;
     let params: any[];
@@ -230,8 +250,8 @@ export class PromptGroupService {
   /**
    * Unclassified 프롬프트 개수 조회 (내부 유틸리티)
    */
-  private static async getUnclassifiedPromptCount(type: 'positive' | 'negative' = 'positive'): Promise<number> {
-    const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+  private static async getUnclassifiedPromptCount(type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<number> {
+    const tableName = getPromptTableName(type);
 
     const row = db.prepare(`SELECT COUNT(*) as count FROM ${tableName} WHERE group_id IS NULL`).get() as { count: number };
     return row.count || 0;
@@ -242,12 +262,12 @@ export class PromptGroupService {
    */
   static async getPromptsInGroup(
     groupId: number | null,
-    type: 'positive' | 'negative' = 'positive',
+    type: 'positive' | 'negative' | 'auto' = 'positive',
     page: number = 1,
     limit: number = 20
   ): Promise<{ prompts: any[], total: number }> {
     try {
-      const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+      const tableName = getPromptTableName(type);
       const offset = (page - 1) * limit;
 
       // 총 개수 조회
@@ -295,7 +315,7 @@ export class PromptGroupService {
   static async movePromptToGroup(
     promptId: number,
     targetGroupId: number | null,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<boolean> {
     try {
       return await PromptCollectionModel.setGroupId(promptId, targetGroupId, type);
@@ -309,15 +329,15 @@ export class PromptGroupService {
    * 그룹별로 묶인 프롬프트 조회 (배지 표시용)
    */
   static async getGroupedPrompts(
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<GroupedPromptsResult> {
     try {
-      const tableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
-      const groupTableName = type === 'positive' ? 'prompt_groups' : 'negative_prompt_groups';
+      const tableName = getPromptTableName(type);
+      const groupTableName = getTableName(type);
 
       // 먼저 모든 visible한 그룹들을 조회
       const groupQuery = `
-        SELECT id, group_name, display_order, is_visible
+        SELECT id, group_name, display_order, is_visible, parent_id
         FROM ${groupTableName}
         WHERE is_visible = 1
         ORDER BY display_order ASC
@@ -350,6 +370,7 @@ export class PromptGroupService {
           group_name: group.group_name,
           display_order: group.display_order,
           is_visible: group.is_visible,
+          parent_id: group.parent_id,
           prompts
         });
       }

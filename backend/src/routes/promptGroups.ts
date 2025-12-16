@@ -32,6 +32,33 @@ router.get('/grouped-prompts', async (req: Request, res: Response) => {
 });
 
 /**
+ * JSON으로 그룹 설정 내보내기
+ * GET /api/prompt-groups/export
+ */
+router.get('/export', async (req: Request, res: Response) => {
+  try {
+    const { type = 'positive' } = req.query;
+
+    const exportData = await PromptGroupService.exportToJSON(type as 'positive' | 'negative');
+
+    // 파일 다운로드 헤더 설정
+    const filename = `prompt_groups_${type}_${new Date().toISOString().split('T')[0]}.json`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/json');
+
+    return res.json(exportData);
+
+  } catch (error) {
+    console.error('Error exporting groups:', error);
+    const response: PromptGroupResponse = {
+      success: false,
+      error: 'Failed to export groups'
+    };
+    return res.status(500).json(response);
+  }
+});
+
+/**
  * 모든 그룹 조회 (프롬프트 수 포함)
  * GET /api/prompt-groups
  */
@@ -59,6 +86,88 @@ router.get('/', async (req: Request, res: Response) => {
     const response: PromptGroupResponse = {
       success: false,
       error: 'Failed to get groups'
+    };
+    return res.status(500).json(response);
+  }
+});
+
+/**
+ * 그룹 순서 일괄 업데이트
+ * PUT /api/prompt-groups/reorder
+ */
+router.put('/reorder', async (req: Request, res: Response) => {
+  try {
+    const { group_orders, type = 'positive' } = req.body;
+
+    if (!Array.isArray(group_orders)) {
+      const response: PromptGroupResponse = {
+        success: false,
+        error: 'group_orders must be an array'
+      };
+      return res.status(400).json(response);
+    }
+
+    const updatedCount = await PromptGroupService.updateGroupOrders(group_orders, type);
+
+    const response: PromptGroupResponse = {
+      success: true,
+      data: {
+        updated_count: updatedCount,
+        message: `Successfully updated ${updatedCount} group orders`
+      }
+    };
+
+    return res.json(response);
+
+  } catch (error) {
+    console.error('Error updating group orders:', error);
+    const response: PromptGroupResponse = {
+      success: false,
+      error: 'Failed to update group orders'
+    };
+    return res.status(500).json(response);
+  }
+});
+
+/**
+ * 프롬프트를 다른 그룹으로 이동
+ * PUT /api/prompt-groups/move-prompt
+ */
+router.put('/move-prompt', async (req: Request, res: Response) => {
+  try {
+    const { prompt_id, target_group_id, type = 'positive' } = req.body;
+
+    if (prompt_id === undefined || prompt_id === null) {
+      const response: PromptGroupResponse = {
+        success: false,
+        error: 'prompt_id is required'
+      };
+      return res.status(400).json(response);
+    }
+
+    const result = await PromptGroupService.movePromptToGroup(
+      Number(prompt_id),
+      target_group_id ? Number(target_group_id) : null,
+      type
+    );
+
+    const success = result;
+
+    const response: PromptGroupResponse = {
+      success: true,
+      data: {
+        moved: success,
+        message: success ? 'Prompt moved successfully' : 'Prompt not found'
+      }
+    };
+
+    return res.json(response);
+
+  } catch (error) {
+    console.error('Error moving prompt:', error);
+    const response: PromptGroupResponse = {
+      success: false,
+      error: 'Failed to move prompt'
     };
     return res.status(500).json(response);
   }
@@ -171,7 +280,7 @@ router.get('/:id/prompts', async (req: Request, res: Response) => {
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { group_name, display_order, is_visible, type = 'positive' } = req.body;
+    const { group_name, display_order, is_visible, parent_id, type = 'positive' } = req.body;
 
     if (!group_name) {
       const response: PromptGroupResponse = {
@@ -185,7 +294,8 @@ router.post('/', async (req: Request, res: Response) => {
       {
         group_name,
         display_order,
-        is_visible
+        is_visible,
+        parent_id
       },
       type
     );
@@ -295,113 +405,6 @@ router.delete('/:id', async (req: Request, res: Response) => {
     const response: PromptGroupResponse = {
       success: false,
       error: 'Failed to delete group'
-    };
-    return res.status(500).json(response);
-  }
-});
-
-/**
- * 그룹 순서 일괄 업데이트
- * PUT /api/prompt-groups/reorder
- */
-router.put('/reorder', async (req: Request, res: Response) => {
-  try {
-    const { group_orders, type = 'positive' } = req.body;
-
-    if (!Array.isArray(group_orders)) {
-      const response: PromptGroupResponse = {
-        success: false,
-        error: 'group_orders must be an array'
-      };
-      return res.status(400).json(response);
-    }
-
-    const updatedCount = await PromptGroupService.updateGroupOrders(group_orders, type);
-
-    const response: PromptGroupResponse = {
-      success: true,
-      data: {
-        updated_count: updatedCount,
-        message: `Successfully updated ${updatedCount} group orders`
-      }
-    };
-
-    return res.json(response);
-
-  } catch (error) {
-    console.error('Error updating group orders:', error);
-    const response: PromptGroupResponse = {
-      success: false,
-      error: 'Failed to update group orders'
-    };
-    return res.status(500).json(response);
-  }
-});
-
-/**
- * 프롬프트를 다른 그룹으로 이동
- * PUT /api/prompt-groups/move-prompt
- */
-router.put('/move-prompt', async (req: Request, res: Response) => {
-  try {
-    const { prompt_id, target_group_id, type = 'positive' } = req.body;
-
-    if (!prompt_id) {
-      const response: PromptGroupResponse = {
-        success: false,
-        error: 'prompt_id is required'
-      };
-      return res.status(400).json(response);
-    }
-
-    const success = await PromptGroupService.movePromptToGroup(
-      parseInt(prompt_id),
-      target_group_id ? parseInt(target_group_id) : null,
-      type
-    );
-
-    const response: PromptGroupResponse = {
-      success: true,
-      data: {
-        moved: success,
-        message: success ? 'Prompt moved successfully' : 'Prompt not found'
-      }
-    };
-
-    return res.json(response);
-
-  } catch (error) {
-    console.error('Error moving prompt:', error);
-    const response: PromptGroupResponse = {
-      success: false,
-      error: 'Failed to move prompt'
-    };
-    return res.status(500).json(response);
-  }
-});
-
-/**
- * JSON으로 그룹 설정 내보내기
- * GET /api/prompt-groups/export
- */
-router.get('/export', async (req: Request, res: Response) => {
-  try {
-    const { type = 'positive' } = req.query;
-
-    const exportData = await PromptGroupService.exportToJSON(type as 'positive' | 'negative');
-
-    // 파일 다운로드 헤더 설정
-    const filename = `prompt_groups_${type}_${new Date().toISOString().split('T')[0]}.json`;
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Type', 'application/json');
-
-    return res.json(exportData);
-
-  } catch (error) {
-    console.error('Error exporting groups:', error);
-    const response: PromptGroupResponse = {
-      success: false,
-      error: 'Failed to export groups'
     };
     return res.status(500).json(response);
   }

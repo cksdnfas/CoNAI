@@ -8,8 +8,7 @@
       "search": "Search",
       "upload": "Upload",
       "imageGeneration": "Image Generation",
-      "settings": "Settings",
-      "help": "Help"
+      "settings": "Settings"
     },
     "tooltip": {
       "home": "Go to home page",
@@ -18,8 +17,7 @@
       "search": "Search images",
       "upload": "Upload images",
       "imageGeneration": "Generate AI images",
-      "settings": "Manage settings",
-      "help": "View help"
+      "settings": "Manage settings"
     },
     "theme": {
       "light": "Light Mode",
@@ -34,16 +32,5 @@
   "footer": {
     "copyright": "© 2024 ComfyUI Image Manager. All rights reserved.",
     "version": "Version"
-  },
-  "help": {
-    "title": "Help",
-    "sections": {
-      "gettingStarted": "Getting Started",
-      "imageManagement": "Image Management",
-      "autoCollection": "Auto Collection",
-      "promptSystem": "Prompt System",
-      "settings": "Settings",
-      "shortcuts": "Shortcuts"
-    }
   }
 }

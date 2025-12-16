@@ -3,7 +3,7 @@
   // 문자열 분리로 빌드 타임 평가 완전 방지
   const protocol = 'http';
   const host = 'localhost';
-  const port = '1566';
+  const port = '1666';
   return `${protocol}://${host}:${port}`;
 };
 

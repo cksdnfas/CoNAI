@@ -1,15 +1,20 @@
 import React from 'react';
 import { Box, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import UploadZone from '../../components/UploadZone/UploadZone';
 import PromptPreview from '../../components/PromptPreview/PromptPreview';
 
 const UploadPage: React.FC = () => {
   const { t } = useTranslation(['upload', 'common']);
 
+  const queryClient = useQueryClient();
+
   const handleUploadComplete = () => {
     // 업로드 완료 후 필요한 작업 (예: 갤러리 페이지로 이동)
     console.log('Upload completed');
+    // 갤러리 갱신을 위해 캐시 무효화
+    queryClient.invalidateQueries({ queryKey: ['images'] });
   };
 
   return (
@@ -25,16 +30,7 @@ const UploadPage: React.FC = () => {
       >
         {t('upload:page.title')}
       </Typography>
-      <Typography
-        variant="body1"
-        color="text.secondary"
-        sx={{
-          mb: { xs: 3, sm: 4 },
-          fontSize: { xs: '0.875rem', sm: '1rem' },
-        }}
-      >
-        {t('upload:page.description')}
-      </Typography>
+
 
       <UploadZone onUploadComplete={handleUploadComplete} />
 

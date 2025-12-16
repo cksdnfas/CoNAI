@@ -11,7 +11,8 @@
     "folders": "Folder Management",
     "account": "Account",
     "externalApi": "External API",
-    "advanced": "Advanced Settings"
+    "advanced": "Advanced Settings",
+    "auto": "Auto Prompts"
   },
   "general": {
     "title": "General Settings",

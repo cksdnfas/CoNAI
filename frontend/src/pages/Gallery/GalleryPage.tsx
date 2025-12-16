@@ -134,15 +134,6 @@ const GalleryPage: React.FC = () => {
         >
           {t('gallery:page.title')}
         </Typography>
-        <Typography
-          variant="body1"
-          color="text.secondary"
-          sx={{
-            fontSize: { xs: '0.875rem', sm: '1rem' },
-          }}
-        >
-          {t('gallery:page.description')}
-        </Typography>
       </Box>
 
       {/* 필터 및 정렬 컨트롤 */}

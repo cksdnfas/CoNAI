@@ -11,7 +11,8 @@
     "folders": "폴더 관리",
     "account": "계정",
     "externalApi": "외부 인증",
-    "advanced": "고급 설정"
+    "advanced": "고급 설정",
+    "auto": "자동 프롬프트"
   },
   "general": {
     "title": "일반 설정",

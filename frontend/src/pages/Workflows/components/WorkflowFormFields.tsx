@@ -206,7 +206,7 @@ export function WorkflowFormFields({
                 <CardMedia
                   component="img"
                   height="200"
-                  image={value.startsWith('data:') ? value : `http://localhost:1566${value}`}
+                  image={value.startsWith('data:') ? value : `http://localhost:1666${value}`}
                   alt={field.label}
                   sx={{ objectFit: 'contain' }}
                 />

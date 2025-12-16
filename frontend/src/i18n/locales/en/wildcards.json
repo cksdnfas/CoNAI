@@ -2,6 +2,7 @@
   "page": {
     "title": "Wildcard Management",
     "noWildcards": "No wildcards registered",
+    "noChains": "No chains registered",
     "noWildcardsDesc": "Add new wildcards to automate prompt generation"
   },
   "filters": {
@@ -27,7 +28,9 @@
   },
   "dialog": {
     "createTitle": "Create Wildcard",
-    "editTitle": "Edit Wildcard"
+    "editTitle": "Edit Wildcard",
+    "createChainTitle": "Create Chain",
+    "editChainTitle": "Edit Chain"
   },
   "form": {
     "name": "Name",
@@ -38,6 +41,10 @@
     "noParent": "None (Root Level)",
     "includeChildren": "Automatically Include Child Wildcards",
     "includeChildrenHelper": "When enabled, using this wildcard will automatically include items from direct children",
+    "chainOption": "Chain Option",
+    "chainOptionReplace": "Replace",
+    "chainOptionAppend": "Append",
+    "weight": "Weight",
     "comfyuiItems": "ComfyUI Prompt Items",
     "naiItems": "NovelAI Prompt Items",
     "itemsHelper": "Each item can contain comma-separated words. You can nest other wildcards using ++name++ format.",
@@ -58,7 +65,8 @@
     "copyFailed": "Failed to copy"
   },
   "tabs": {
-    "manual": "Manual Creation",
+    "manual": "Wildcard",
+    "chain": "Preprocessing",
     "autoCollected": "Auto-Collected (LORA)"
   },
   "detail": {

@@ -160,4 +160,4 @@ console.log('\n✨ Integrated build completed successfully!');
 console.log('\n🚀 Next steps:');
 console.log('   1. Test: cd backend && node dist/index.js');
 console.log('   2. Build SEA: npm run build:sea');
-console.log('   3. Open: http://localhost:1566\n');
+console.log('   3. Open: http://localhost:1666\n');

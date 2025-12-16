@@ -29,7 +29,7 @@ import {
   CloudUpload as UploadIcon,
   AutoAwesome as GenerationIcon,
   Settings as SettingsIcon,
-  Help as HelpIcon,
+
 } from '@mui/icons-material';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -69,7 +69,7 @@ const Header: React.FC = () => {
     { label: t('header.menu.upload'), path: '/upload', icon: UploadIcon, tooltip: t('header.tooltip.upload') },
     { label: t('header.menu.imageGeneration'), path: '/image-generation', icon: GenerationIcon, tooltip: t('header.tooltip.imageGeneration') },
     { label: t('header.menu.settings'), path: '/settings', icon: SettingsIcon, tooltip: t('header.tooltip.settings') },
-    { label: t('header.menu.help'), path: '/help', icon: HelpIcon, tooltip: t('header.tooltip.help') },
+
   ];
 
   // Filter out gallery if disabled

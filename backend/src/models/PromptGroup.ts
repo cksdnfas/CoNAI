@@ -8,12 +8,30 @@ import {
 } from '../types/promptGroup';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 
+const getTableName = (type: 'positive' | 'negative' | 'auto'): string => {
+  switch (type) {
+    case 'auto': return 'auto_prompt_groups';
+    case 'negative': return 'negative_prompt_groups';
+    case 'positive':
+    default: return 'prompt_groups';
+  }
+};
+
+const getPromptTableName = (type: 'positive' | 'negative' | 'auto'): string => {
+  switch (type) {
+    case 'auto': return 'auto_prompt_collection';
+    case 'negative': return 'negative_prompt_collection';
+    case 'positive':
+    default: return 'prompt_collection';
+  }
+};
+
 export class PromptGroupModel {
   /**
    * 새로운 그룹 생성
    */
-  static async create(data: PromptGroupData, type: 'positive' | 'negative' = 'positive'): Promise<number> {
-    const tableName = type === 'positive' ? 'prompt_groups' : 'negative_prompt_groups';
+  static async create(data: PromptGroupData, type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<number> {
+    const tableName = getTableName(type);
 
     // Check if group already exists
     const existing = await this.findByName(data.group_name, type);
@@ -36,12 +54,13 @@ export class PromptGroupModel {
     data: PromptGroupData
   ): number {
     const info = db.prepare(`
-      INSERT OR IGNORE INTO ${tableName} (group_name, display_order, is_visible)
-      VALUES (?, ?, ?)
+      INSERT OR IGNORE INTO ${tableName} (group_name, display_order, is_visible, parent_id)
+      VALUES (?, ?, ?, ?)
     `).run(
       data.group_name,
       data.display_order || 0,
-      data.is_visible !== undefined ? (data.is_visible ? 1 : 0) : 1
+      data.is_visible !== undefined ? (data.is_visible ? 1 : 0) : 1,
+      data.parent_id || null
     );
 
     // If insert was ignored (duplicate), fetch the existing group ID
@@ -62,9 +81,9 @@ export class PromptGroupModel {
    */
   static async findAll(
     includeHidden: boolean = false,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<PromptGroupRecord[]> {
-    const tableName = type === 'positive' ? 'prompt_groups' : 'negative_prompt_groups';
+    const tableName = getTableName(type);
     const visibilityFilter = includeHidden ? '' : 'WHERE is_visible = 1';
 
     const rows = db.prepare(`SELECT * FROM ${tableName} ${visibilityFilter} ORDER BY display_order ASC`).all() as PromptGroupRecord[];
@@ -76,10 +95,10 @@ export class PromptGroupModel {
    */
   static async findAllWithCounts(
     includeHidden: boolean = false,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<PromptGroupWithPrompts[]> {
-    const groupTableName = type === 'positive' ? 'prompt_groups' : 'negative_prompt_groups';
-    const promptTableName = type === 'positive' ? 'prompt_collection' : 'negative_prompt_collection';
+    const groupTableName = getTableName(type);
+    const promptTableName = getPromptTableName(type);
     const visibilityFilter = includeHidden ? '' : 'WHERE g.is_visible = 1';
 
     const rows = db.prepare(`SELECT
@@ -98,9 +117,9 @@ export class PromptGroupModel {
    */
   static async findById(
     id: number,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<PromptGroupRecord | null> {
-    const tableName = type === 'positive' ? 'prompt_groups' : 'negative_prompt_groups';
+    const tableName = getTableName(type);
 
     const row = db.prepare(`SELECT * FROM ${tableName} WHERE id = ?`).get(id) as PromptGroupRecord | undefined;
     return row || null;
@@ -111,9 +130,9 @@ export class PromptGroupModel {
    */
   static async findByName(
     groupName: string,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<PromptGroupRecord | null> {
-    const tableName = type === 'positive' ? 'prompt_groups' : 'negative_prompt_groups';
+    const tableName = getTableName(type);
 
     const row = db.prepare(`SELECT * FROM ${tableName} WHERE group_name = ?`).get(groupName) as PromptGroupRecord | undefined;
     return row || null;
@@ -125,9 +144,9 @@ export class PromptGroupModel {
   static async update(
     id: number,
     data: Partial<PromptGroupData>,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<boolean> {
-    const tableName = type === 'positive' ? 'prompt_groups' : 'negative_prompt_groups';
+    const tableName = getTableName(type);
 
     // is_visible을 boolean에서 number로 변환
     const cleanData: Record<string, any> = {
@@ -157,9 +176,9 @@ export class PromptGroupModel {
    */
   static async delete(
     id: number,
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<boolean> {
-    const tableName = type === 'positive' ? 'prompt_groups' : 'negative_prompt_groups';
+    const tableName = getTableName(type);
 
     const info = db.prepare(`DELETE FROM ${tableName} WHERE id = ?`).run(id);
     return info.changes > 0;
@@ -170,9 +189,9 @@ export class PromptGroupModel {
    */
   static async reassignGroupIds(
     groupData: GroupImportData[],
-    type: 'positive' | 'negative' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<{ old_id: number; new_id: number; group_name: string }[]> {
-    const tableName = type === 'positive' ? 'prompt_groups' : 'negative_prompt_groups';
+    const tableName = getTableName(type);
     const reassignments: { old_id: number; new_id: number; group_name: string }[] = [];
 
     // 1. 기존 그룹들 조회
@@ -186,11 +205,12 @@ export class PromptGroupModel {
 
     // 4. JSON 그룹들을 우선 삽입
     for (const group of groupData) {
-      const info = db.prepare(`INSERT INTO ${tableName} (group_name, display_order, is_visible, created_at, updated_at)
-           VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`).run(
+      const info = db.prepare(`INSERT INTO ${tableName} (group_name, display_order, is_visible, parent_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`).run(
         group.group_name,
         group.display_order,
-        group.is_visible ? 1 : 0
+        group.is_visible ? 1 : 0,
+        group.parent_id || null
       );
 
       const newId = info.lastInsertRowid as number;
@@ -209,11 +229,12 @@ export class PromptGroupModel {
     const existingNonDuplicate = existingGroups.filter(g => !jsonGroupNames.has(g.group_name));
 
     for (const existingGroup of existingNonDuplicate) {
-      const info = db.prepare(`INSERT INTO ${tableName} (group_name, display_order, is_visible, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?)`).run(
+      const info = db.prepare(`INSERT INTO ${tableName} (group_name, display_order, is_visible, parent_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`).run(
         existingGroup.group_name,
         existingGroup.display_order,
         existingGroup.is_visible ? 1 : 0,
+        existingGroup.parent_id || null,
         existingGroup.created_at,
         existingGroup.updated_at
       );
@@ -236,10 +257,10 @@ export class PromptGroupModel {
   /**
    * 그룹들을 JSON 내보내기용으로 조회
    */
-  static async exportForJSON(type: 'positive' | 'negative' = 'positive'): Promise<GroupImportData[]> {
-    const tableName = type === 'positive' ? 'prompt_groups' : 'negative_prompt_groups';
+  static async exportForJSON(type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<GroupImportData[]> {
+    const tableName = getTableName(type);
 
-    const rows = db.prepare(`SELECT id, group_name, display_order, is_visible
+    const rows = db.prepare(`SELECT id, group_name, display_order, is_visible, parent_id
      FROM ${tableName}
      ORDER BY display_order ASC`).all() as GroupImportData[];
     return rows || [];

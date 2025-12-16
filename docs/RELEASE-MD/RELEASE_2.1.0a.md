@@ -45,6 +45,11 @@
   - 원인: 외래 키 제약조건으로 인해 `media_metadata` 테이블에 해시가 등록되기 전에는 `image_groups`에 삽입 불가
   - 해결: `BackgroundProcessorService`에서 해시 생성 완료 후 `api_generation_history`의 `assigned_group_id`를 확인하여 그룹에 자동 할당
 
+### UI/UX Improvements
+- **페이지 레이아웃 일관성 개선**: 모든 주요 페이지(그룹, 생성, 설정, 갤러리)의 좌우 여백 및 레이아웃을 통일
+  - ImageGroupsPage, ImageGenerationPage, SettingsPage의 불필요한 패딩 및 Container 제한 제거
+  - 전체 화면 너비를 사용하는 일관된 디자인 적용
+
 ---
 
 ## Previous Releases

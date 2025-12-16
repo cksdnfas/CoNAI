@@ -7,7 +7,7 @@
  * API Base URL
  * 환경 변수 VITE_API_URL로 override 가능
  */
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1566';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1666';
 
 /**
  * API 요청 타임아웃 (밀리초)
