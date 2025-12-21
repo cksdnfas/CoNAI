@@ -97,6 +97,9 @@
   "states": {
     "loading": "加载中",
     "error": "错误",
+    "status": {
+      "noImages": "未找到图片"
+    },
     "empty": "空",
     "success": "成功",
     "pending": "待处理",
@@ -258,5 +261,11 @@
   "enabled": "启用",
   "disabled": "禁用",
   "save": "保存",
-  "refresh": "刷新"
+  "refresh": "刷新",
+  "viewSettings": "视图设置",
+  "layout": "布局",
+  "columns": "列数",
+  "masonry": "瀑布流",
+  "grid": "网格",
+  "fitToScreen": "适应屏幕"
 }

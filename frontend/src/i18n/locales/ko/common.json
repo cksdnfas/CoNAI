@@ -97,6 +97,9 @@
   "states": {
     "loading": "로딩 중",
     "error": "오류",
+    "status": {
+      "noImages": "이미지가 없습니다"
+    },
     "empty": "비어있음",
     "success": "성공",
     "pending": "대기 중",
@@ -258,5 +261,11 @@
   "enabled": "활성화",
   "disabled": "비활성화",
   "save": "저장",
-  "refresh": "새로고침"
+  "refresh": "새로고침",
+  "viewSettings": "보기 설정",
+  "layout": "레이아웃",
+  "columns": "열",
+  "masonry": "메이슨리",
+  "grid": "그리드",
+  "fitToScreen": "화면에 맞춤"
 }

@@ -97,6 +97,9 @@
   "states": {
     "loading": "Loading",
     "error": "Error",
+    "status": {
+      "noImages": "No images found"
+    },
     "empty": "Empty",
     "success": "Success",
     "pending": "Pending",
@@ -258,5 +261,11 @@
   "enabled": "Enabled",
   "disabled": "Disabled",
   "save": "Save",
-  "refresh": "Refresh"
+  "refresh": "Refresh",
+  "viewSettings": "View Settings",
+  "layout": "Layout",
+  "columns": "Columns",
+  "masonry": "Masonry",
+  "grid": "Grid",
+  "fitToScreen": "Fit to Screen"
 }

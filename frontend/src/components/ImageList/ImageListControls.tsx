@@ -150,11 +150,11 @@ const ImageListControls: React.FC<ImageListControlsProps> = ({
                             >
                                 <ToggleButton value="masonry">
                                     <MasonryIcon sx={{ mr: 1 }} />
-                                    Masonry
+                                    {t('common:masonry')}
                                 </ToggleButton>
                                 <ToggleButton value="grid">
                                     <GridIcon sx={{ mr: 1 }} />
-                                    Grid
+                                    {t('common:grid')}
                                 </ToggleButton>
                             </ToggleButtonGroup>
                         </Box>
@@ -174,7 +174,7 @@ const ImageListControls: React.FC<ImageListControlsProps> = ({
                             {settings.gridColumns === 1 && onFitToScreenChange && (
                                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                                     <Typography variant="caption" color="text.secondary">
-                                        Fit to Screen
+                                        {t('common:fitToScreen')}
                                     </Typography>
                                     <Switch
                                         size="small"

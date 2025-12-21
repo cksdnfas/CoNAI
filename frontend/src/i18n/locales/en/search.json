@@ -1,14 +1,12 @@
 {
   "title": "Image Search",
   "description": "Search for images by prompts, AI tools, model names, auto tags, and more.",
-
   "searchInput": {
     "placeholder": "Search by prompt keywords...",
     "button": "Search",
     "clear": "Reset All",
     "execute": "Execute Search"
   },
-
   "simpleSearch": {
     "description": "Search in positive prompts and auto tags.",
     "placeholder": "Enter search terms (e.g., girl, masterpiece, hatsune miku)",
@@ -16,9 +14,12 @@
       "searchScope": "Search scope: Positive prompts, Auto tags General/Character",
       "ignoreWeights": "Weights are ignored",
       "advancedTip": "Use \"Advanced Search\" for complex conditions"
+    },
+    "tooltips": {
+      "logic": "Logic Mode (Click to toggle: OR/AND/NOT)",
+      "type": "Token Type (Click to toggle: Positive/Negative/Auto)"
     }
   },
-
   "results": {
     "title": "Search Results",
     "searching": "Searching...",
@@ -30,7 +31,6 @@
     "reset": "Reset Search",
     "refresh": "Refresh"
   },
-
   "filters": {
     "basic": {
       "aiTool": {
@@ -48,7 +48,6 @@
         "label": "End Date"
       }
     },
-
     "quickDate": {
       "today": "Today",
       "todayTooltip": "Images uploaded today",
@@ -59,7 +58,6 @@
       "90days": "90 Days",
       "90daysTooltip": "Last 90 days"
     },
-
     "advanced": {
       "title": "Advanced Filters",
       "active": "Active",
@@ -68,18 +66,15 @@
         "placeholder": "Enter keywords to exclude (e.g., ugly, blurry)"
       }
     },
-
     "autoTag": {
       "title": "Auto Tag Filters",
       "subtitle": "(WD v3 Tagger)",
       "active": "Active",
-
       "tabs": {
         "rating": "Rating",
         "character": "Character",
         "generalTags": "General Tags"
       },
-
       "rating": {
         "typeMode": "Filter by Type",
         "scoreMode": "Filter by Score",
@@ -96,7 +91,6 @@
         "confidenceRange": "Confidence Range",
         "scoreRange": "Score Range"
       },
-
       "character": {
         "description": "Filter images by character tags",
         "existence": {
@@ -111,7 +105,6 @@
         },
         "confidenceRange": "Confidence Range"
       },
-
       "generalTags": {
         "description": "Filter by general tags and confidence range",
         "tagName": {
@@ -123,18 +116,15 @@
       }
     }
   },
-
   "searchHistory": {
     "title": "Recent Searches"
   },
-
   "advancedTab": {
     "title": "Advanced Filter Search",
     "descriptionActive": "{{count}} filter(s) active · Execution order: Exclude → OR → AND",
     "descriptionEmpty": "Add filters to start advanced searching",
     "helpTooltip": "Filter usage help"
   },
-
   "searchBar": {
     "tabs": {
       "simple": "Simple Search",
@@ -154,39 +144,32 @@
       "scoreRequired": "Please set minimum or maximum score"
     }
   },
-
   "filterBlock": {
     "addButton": "Add Filter",
     "emptyMessage": "Add filters to start searching",
     "countInfo": "{{count}} filter(s) will be applied.",
     "executionOrder": "Execution order: Exclude → OR → AND",
-
     "modal": {
       "title": "Add Filter",
       "cancel": "Cancel",
       "back": "Back",
       "next": "Next",
       "add": "Add Filter",
-
       "steps": {
         "selectGroup": "Select Filter Group",
         "selectCategory": "Select Category",
         "configureCondition": "Configure Condition"
       },
-
       "step1": {
         "description": "Choose how to apply the filter"
       },
-
       "step2": {
         "description": "Select what information to search by"
       },
-
       "step3": {
         "description": "Configure the condition. Filters cannot be edited after creation, you must delete and recreate them."
       }
     },
-
     "groupTypes": {
       "exclude": {
         "label": "Exclude (NOT)",
@@ -201,7 +184,6 @@
         "description": "Only include images matching all conditions"
       }
     },
-
     "categories": {
       "positive_prompt": {
         "label": "Positive Prompt",
@@ -220,7 +202,6 @@
         "description": "Search basic metadata like AI tool and model name"
       }
     },
-
     "conditionTypes": {
       "conditionType": "Condition Type",
       "value": "Value",

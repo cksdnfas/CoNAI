@@ -14,6 +14,10 @@
       "searchScope": "搜尋範圍: 正面提示詞、自動標籤 General/Character",
       "ignoreWeights": "權重將被忽略",
       "advancedTip": "複雜條件請使用 \"進階搜尋\""
+    },
+    "tooltips": {
+      "logic": "邏輯模式 (點擊切換: OR/AND/NOT)",
+      "type": "Token類型 (點擊切換: 正向/負向/自動)"
     }
   },
   "results": {
@@ -121,7 +125,6 @@
     "descriptionEmpty": "新增篩選器以開始精細搜尋",
     "helpTooltip": "篩選器使用說明"
   },
-
   "searchBar": {
     "tabs": {
       "simple": "一般搜尋",
@@ -141,7 +144,6 @@
       "scoreRequired": "請設定最小分數或最大分數"
     }
   },
-
   "filterBlock": {
     "addButton": "新增篩選器",
     "emptyMessage": "新增篩選器以開始搜尋",

@@ -98,6 +98,9 @@
     "loading": "載入中",
     "error": "錯誤",
     "empty": "空",
+    "status": {
+      "noImages": "未找到圖片"
+    },
     "success": "成功",
     "pending": "待處理",
     "completed": "已完成",
@@ -258,5 +261,11 @@
   "enabled": "啟用",
   "disabled": "停用",
   "save": "儲存",
-  "refresh": "重新整理"
+  "refresh": "重新整理",
+  "viewSettings": "檢視設定",
+  "layout": "版面配置",
+  "columns": "欄數",
+  "masonry": "瀑布流",
+  "grid": "網格",
+  "fitToScreen": "適應螢幕"
 }

@@ -14,6 +14,10 @@
       "searchScope": "検索範囲: ポジティブプロンプト、自動タグ General/Character",
       "ignoreWeights": "ウェイトは無視されます",
       "advancedTip": "複雑な条件は\\\"高度な検索\\\"を使用"
+    },
+    "tooltips": {
+      "logic": "論理モード (クリックで切り替え: OR/AND/NOT)",
+      "type": "トークンタイプ (クリックで切り替え: ポジティブ/ネガティブ/自動)"
     }
   },
   "results": {
@@ -121,7 +125,6 @@
     "descriptionEmpty": "フィルターを追加して詳細な検索を開始してください",
     "helpTooltip": "フィルター使用方法ヘルプ"
   },
-
   "searchBar": {
     "tabs": {
       "simple": "一般検索",
@@ -141,7 +144,6 @@
       "scoreRequired": "最小スコアまたは最大スコアを設定してください"
     }
   },
-
   "filterBlock": {
     "addButton": "フィルターを追加",
     "emptyMessage": "フィルターを追加して検索を開始",

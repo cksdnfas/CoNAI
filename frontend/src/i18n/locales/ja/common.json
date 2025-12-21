@@ -98,6 +98,9 @@
     "loading": "読み込み中",
     "error": "エラー",
     "empty": "空",
+    "status": {
+      "noImages": "画像が見つかりません"
+    },
     "success": "成功",
     "pending": "保留中",
     "completed": "完了",
@@ -258,5 +261,11 @@
   "enabled": "有効",
   "disabled": "無効",
   "save": "保存",
-  "refresh": "更新"
+  "refresh": "更新",
+  "viewSettings": "表示設定",
+  "layout": "レイアウト",
+  "columns": "列",
+  "masonry": "メーソンリー",
+  "grid": "グリッド",
+  "fitToScreen": "画面に合わせる"
 }

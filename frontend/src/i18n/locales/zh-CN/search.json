@@ -14,6 +14,10 @@
       "searchScope": "搜索范围: 正面提示词、自动标签 General/Character",
       "ignoreWeights": "权重将被忽略",
       "advancedTip": "复杂条件请使用 \"高级搜索\""
+    },
+    "tooltips": {
+      "logic": "逻辑模式 (点击切换: OR/AND/NOT)",
+      "type": "Token类型 (点击切换: 正向/负向/自动)"
     }
   },
   "results": {
@@ -121,7 +125,6 @@
     "descriptionEmpty": "添加过滤器以开始精细搜索",
     "helpTooltip": "过滤器使用帮助"
   },
-
   "searchBar": {
     "tabs": {
       "simple": "普通搜索",
@@ -141,7 +144,6 @@
       "scoreRequired": "请设置最小分数或最大分数"
     }
   },
-
   "filterBlock": {
     "addButton": "添加过滤器",
     "emptyMessage": "添加过滤器以开始搜索",

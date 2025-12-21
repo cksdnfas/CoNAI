@@ -214,7 +214,7 @@ const ImageList: React.FC<ImageListProps> = ({
             return (
                 <Box sx={{ textAlign: 'center', py: 8 }}>
                     <Typography variant="h6" color="text.secondary">
-                        {t('gallery:status.noImages')}
+                        {t('common:states.status.noImages')}
                     </Typography>
                 </Box>
             );

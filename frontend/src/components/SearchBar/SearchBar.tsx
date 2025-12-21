@@ -12,6 +12,8 @@ import {
 import {
   Search as SearchIcon,
   Clear as ClearIcon,
+  History as HistoryIcon,
+  Restore as RestoreIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { FilterCondition, ComplexSearchRequest, FilterGroupType } from '@comfyui-image-manager/shared';
@@ -20,6 +22,8 @@ import AdvancedSearchTab from './AdvancedSearchTab';
 import type { FilterBlockData } from '../FilterBuilder/FilterBlockList';
 import type { PromptSearchResult } from './SearchAutoComplete';
 import { promptCollectionApi } from '../../services/api/promptApi';
+import { useSearchHistory, type SearchHistoryItem } from '../../hooks/useSearchHistory';
+import { Chip, Typography, Divider, Paper } from '@mui/material';
 
 interface SearchBarProps {
   onSearch: (request: ComplexSearchRequest) => void;
@@ -47,10 +51,38 @@ const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
 
 const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
   const { t } = useTranslation();
+  const { history, addHistoryItem, removeHistoryItem, clearHistory } = useSearchHistory();
 
   // Simple search state -> Token based state
-  const [simpleSearchText, setSimpleSearchText] = useState('');
-  const [searchTokens, setSearchTokens] = useState<SearchToken[]>([]);
+  const [simpleSearchText, setSimpleSearchText] = useState(() => {
+    try {
+      return sessionStorage.getItem('search_simpleSearchText') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [searchTokens, setSearchTokens] = useState<SearchToken[]>(() => {
+    try {
+      const saved = sessionStorage.getItem('search_searchTokens');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Remove the useEffect that loads state, as we now initialize lazily
+  // The save effect below will handle future updates
+
+  // Save state to sessionStorage on change
+  React.useEffect(() => {
+    try {
+      sessionStorage.setItem('search_simpleSearchText', simpleSearchText);
+      sessionStorage.setItem('search_searchTokens', JSON.stringify(searchTokens));
+    } catch (e) {
+      console.error('Failed to save search state into sessionStorage', e);
+    }
+  }, [simpleSearchText, searchTokens]);
 
   // Validation error state
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -129,8 +161,12 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
     }
   };
 
-  const handleSearch = () => {
+  const performSearch = (text: string, tokens: SearchToken[]) => {
     setValidationError(null);
+
+    // Save to history (if initiated by user action that should save)
+    // We might want to avoid saving duplicates if we just restored it, but addHistoryItem handles deduplication roughly.
+    addHistoryItem(text, tokens);
 
     // Simple Search (Token based)
     const excludeGroup: FilterCondition[] = [];
@@ -138,13 +174,13 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
     const andGroup: FilterCondition[] = [];
 
     // Include text in input if any
-    const tokensToProcess = [...searchTokens];
-    if (simpleSearchText.trim()) {
+    const tokensToProcess = [...tokens];
+    if (text.trim()) {
       tokensToProcess.push({
         id: 'temp',
         type: 'positive',
-        label: simpleSearchText.trim(),
-        value: simpleSearchText.trim(),
+        label: text.trim(),
+        value: text.trim(),
         logic: 'OR'
       });
     }
@@ -194,9 +230,29 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
     onSearch(request);
   };
 
+  const handleSearch = () => {
+    performSearch(simpleSearchText, searchTokens);
+  };
+
   const handleClearSearch = () => {
     setSimpleSearchText('');
     setSearchTokens([]);
+    sessionStorage.removeItem('search_simpleSearchText');
+    sessionStorage.removeItem('search_searchTokens');
+  };
+
+  const handleRestoreHistory = (item: SearchHistoryItem) => {
+    // Manually update session storage to ensure persistence even if component remounts immediately
+    try {
+      sessionStorage.setItem('search_simpleSearchText', item.text);
+      sessionStorage.setItem('search_searchTokens', JSON.stringify(item.tokens));
+    } catch (e) {
+      console.error('Failed to save search state to sessionStorage during restore', e);
+    }
+
+    setSimpleSearchText(item.text);
+    setSearchTokens(item.tokens);
+    performSearch(item.text, item.tokens);
   };
 
   const hasConditions = simpleSearchText.trim().length > 0 || searchTokens.length > 0;
@@ -253,6 +309,73 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
           </span>
         </Tooltip>
       </Stack>
+
+      {/* Recent Search History */}
+      {history.length > 0 && (
+        <Box sx={{ mt: 4 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+            <Typography variant="subtitle2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <HistoryIcon fontSize="small" />
+              {t('Recent Searches', 'Recent Searches')}
+            </Typography>
+            <Button size="small" onClick={clearHistory} color="inherit" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+              {t('Clear History', 'Clear History')}
+            </Button>
+          </Stack>
+
+          <Stack spacing={1}>
+            {history.map((item) => (
+              <Paper
+                key={item.id}
+                variant="outlined"
+                sx={{
+                  p: 1.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  cursor: 'pointer',
+                  transition: '0.2s',
+                  '&:hover': {
+                    bgcolor: 'action.hover',
+                    borderColor: 'primary.main'
+                  }
+                }}
+                onClick={() => handleRestoreHistory(item)}
+              >
+                <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', overflow: 'hidden' }}>
+                  {item.text && (
+                    <Typography variant="body2" fontWeight={500}>{item.text}</Typography>
+                  )}
+                  {item.tokens.map((token) => (
+                    <Chip
+                      key={token.id}
+                      label={token.label}
+                      size="small"
+                      color={token.type === 'positive' ? 'success' : token.type === 'negative' ? 'error' : 'warning'}
+                      variant="outlined"
+                      sx={{ height: 20, fontSize: '0.7rem' }}
+                    />
+                  ))}
+                  {item.tokens.length === 0 && !item.text && (
+                    <Typography variant="caption" color="text.disabled">Empty Search</Typography>
+                  )}
+                </Box>
+                <Tooltip title={t('Remove', 'Remove')}>
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeHistoryItem(item.id);
+                    }}
+                  >
+                    <ClearIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Paper>
+            ))}
+          </Stack>
+        </Box>
+      )}
     </Box>
   );
 };

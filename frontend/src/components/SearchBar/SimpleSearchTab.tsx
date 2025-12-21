@@ -99,6 +99,7 @@ const TokenBadge: React.FC<{
   onCycleLogic: (id: string) => void;
   onUpdate: (id: string, updates: Partial<SearchToken>) => void;
 }> = ({ token, onRemove, onCycleLogic, onUpdate }) => {
+  const { t } = useTranslation(['search']);
   const [anchorEl, setAnchorEl] = React.useState<HTMLDivElement | null>(null);
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -175,39 +176,43 @@ const TokenBadge: React.FC<{
         }}
       >
         {/* Logic Toggle */}
-        <Box
-          onClick={(e) => {
-            e.stopPropagation();
-            onCycleLogic(token.id);
-          }}
-          sx={{
-            p: 1,
-            bgcolor: `${getLogicColor(token.logic)}.main`,
-            color: `${getLogicColor(token.logic)}.contrastText`,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            '&:hover': { opacity: 0.9 }
-          }}
-        >
-          {getLogicIcon(token.logic)}
-        </Box>
+        <Tooltip title={t('search:simpleSearch.tooltips.logic')}>
+          <Box
+            onClick={(e) => {
+              e.stopPropagation();
+              onCycleLogic(token.id);
+            }}
+            sx={{
+              p: 1,
+              bgcolor: `${getLogicColor(token.logic)}.main`,
+              color: `${getLogicColor(token.logic)}.contrastText`,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              '&:hover': { opacity: 0.9 }
+            }}
+          >
+            {getLogicIcon(token.logic)}
+          </Box>
+        </Tooltip>
 
         {/* Type Toggle */}
-        <Box
-          onClick={handleCycleType}
-          sx={{
-            p: 1,
-            bgcolor: `${getTypeColor(token.type)}.main`,
-            color: `${getTypeColor(token.type)}.contrastText`,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            '&:hover': { opacity: 0.9 }
-          }}
-        >
-          {getSourceIcon(token.type)}
-        </Box>
+        <Tooltip title={t('search:simpleSearch.tooltips.type')}>
+          <Box
+            onClick={handleCycleType}
+            sx={{
+              p: 1,
+              bgcolor: `${getTypeColor(token.type)}.main`,
+              color: `${getTypeColor(token.type)}.contrastText`,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              '&:hover': { opacity: 0.9 }
+            }}
+          >
+            {getSourceIcon(token.type)}
+          </Box>
+        </Tooltip>
 
         {/* Label (and Slider trigger for auto tags) */}
         <Box
