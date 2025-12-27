@@ -8,6 +8,7 @@ export interface ImageListSettings {
     gridColumns: number;
     imageSize: ImageSize;
     activeScrollMode: 'infinite' | 'pagination';
+    pageSize: number;
     fitToScreen?: boolean; // New option for single column view
 }
 
@@ -16,6 +17,7 @@ const DEFAULT_SETTINGS: ImageListSettings = {
     gridColumns: 4,
     imageSize: 'medium',
     activeScrollMode: 'infinite',
+    pageSize: 50,
     fitToScreen: false,
 };
 
@@ -28,6 +30,7 @@ export const useImageListSettings = (contextId: string) => {
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
                 const parsed = JSON.parse(stored);
+                // Ensure default values for new properties
                 return { ...DEFAULT_SETTINGS, ...parsed[contextId] };
             }
         } catch (error) {
@@ -36,40 +39,81 @@ export const useImageListSettings = (contextId: string) => {
         return DEFAULT_SETTINGS;
     };
 
+    // Event name for syncing settings across hooks
+    const EVENT_NAME = 'image_list_settings_changed';
+
     const [settings, setSettings] = useState<ImageListSettings>(loadSettings);
 
-    // Persist settings whenever they change
-    useEffect(() => {
+    // Persist settings and notify others whenever they change
+    const updateSettings = useCallback((newSettings: ImageListSettings) => {
         try {
             const stored = localStorage.getItem(STORAGE_KEY);
             const allSettings = stored ? JSON.parse(stored) : {};
 
-            allSettings[contextId] = settings;
+            allSettings[contextId] = newSettings;
             localStorage.setItem(STORAGE_KEY, JSON.stringify(allSettings));
+
+            // Notify other instances
+            window.dispatchEvent(new CustomEvent(EVENT_NAME, {
+                detail: { contextId, settings: newSettings }
+            }));
+
+            setSettings(newSettings);
         } catch (error) {
             console.error('Failed to save image list settings:', error);
         }
-    }, [contextId, settings]);
+    }, [contextId]);
+
+    // Reload settings when contextId changes
+    useEffect(() => {
+        setSettings(loadSettings());
+    }, [contextId]);
+
+    // Listen for changes from other instances
+    useEffect(() => {
+        const handleSettingsChange = (event: Event) => {
+            const customEvent = event as CustomEvent;
+            if (customEvent.detail.contextId === contextId) {
+                // Only update if the settings are actually different to avoid loops/unnecessary renders
+                setSettings(prev => {
+                    const newSettings = customEvent.detail.settings;
+                    if (JSON.stringify(prev) !== JSON.stringify(newSettings)) {
+                        return newSettings;
+                    }
+                    return prev;
+                });
+            }
+        };
+
+        window.addEventListener(EVENT_NAME, handleSettingsChange);
+        return () => {
+            window.removeEventListener(EVENT_NAME, handleSettingsChange);
+        };
+    }, [contextId]);
 
     const setViewMode = useCallback((mode: ViewMode) => {
-        setSettings(prev => ({ ...prev, viewMode: mode }));
-    }, []);
+        updateSettings({ ...settings, viewMode: mode });
+    }, [settings, updateSettings]);
 
     const setGridColumns = useCallback((columns: number) => {
-        setSettings(prev => ({ ...prev, gridColumns: columns }));
-    }, []);
+        updateSettings({ ...settings, gridColumns: columns });
+    }, [settings, updateSettings]);
 
     const setImageSize = useCallback((size: ImageSize) => {
-        setSettings(prev => ({ ...prev, imageSize: size }));
-    }, []);
+        updateSettings({ ...settings, imageSize: size });
+    }, [settings, updateSettings]);
 
     const setActiveScrollMode = useCallback((mode: 'infinite' | 'pagination') => {
-        setSettings(prev => ({ ...prev, activeScrollMode: mode }));
-    }, []);
+        updateSettings({ ...settings, activeScrollMode: mode });
+    }, [settings, updateSettings]);
+
+    const setPageSize = useCallback((size: number) => {
+        updateSettings({ ...settings, pageSize: size });
+    }, [settings, updateSettings]);
 
     const setFitToScreen = useCallback((fit: boolean) => {
-        setSettings(prev => ({ ...prev, fitToScreen: fit }));
-    }, []);
+        updateSettings({ ...settings, fitToScreen: fit });
+    }, [settings, updateSettings]);
 
     return {
         settings,
@@ -77,6 +121,7 @@ export const useImageListSettings = (contextId: string) => {
         setGridColumns,
         setImageSize,
         setActiveScrollMode,
+        setPageSize,
         setFitToScreen,
     };
 };

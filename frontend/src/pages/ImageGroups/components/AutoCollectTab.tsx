@@ -157,7 +157,7 @@ const AutoCollectTab: React.FC<AutoCollectTabProps> = ({
       type: tag.type,
       label: tag.prompt,
       value: tag.prompt,
-      logic: 'OR',
+      logic: 'AND',
       count: tag.usage_count
     };
     setSearchTokens([...searchTokens, newToken]);
@@ -172,9 +172,9 @@ const AutoCollectTab: React.FC<AutoCollectTabProps> = ({
     setSearchTokens(searchTokens.map(t => {
       if (t.id !== id) return t;
       const map: Record<string, 'OR' | 'AND' | 'NOT'> = {
-        'OR': 'AND',
-        'AND': 'NOT',
-        'NOT': 'OR'
+        'AND': 'OR',
+        'OR': 'NOT',
+        'NOT': 'AND'
       };
       return { ...t, logic: map[t.logic] };
     }));
@@ -185,6 +185,9 @@ const AutoCollectTab: React.FC<AutoCollectTabProps> = ({
 
     // Async update count if type changed
     if (updates.type) {
+      // Skip for rating type
+      if (updates.type === 'rating') return;
+
       const token = searchTokens.find(t => t.id === id);
       if (token) {
         const newType = updates.type;

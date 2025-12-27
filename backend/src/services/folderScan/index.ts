@@ -226,27 +226,79 @@ export class FolderScanService {
   /**
    * 스캔 로그 저장
    */
+  /**
+   * 스캔 로그 저장
+   * - 최근 로그와 상태(성공여부, 스캔/신규/기존 수량)가 동일하면 시간만 업데이트
+   * - 다르면 신규 기록
+   * - 폴더별 최대 300개 유지
+   */
   private static saveScanLog(folderId: number, result: ScanResult): void {
     try {
+      const scanDate = new Date().toISOString();
+      const scanStatus = result.errors.length > 0 ? 'error' : 'success';
+      const errorDetails = result.errors.length > 0 ? JSON.stringify(result.errors) : null;
+
+      // 1. 최근 로그 조회
+      const lastLog = db.prepare(`
+        SELECT id, scan_status, total_scanned, new_images, existing_images 
+        FROM scan_logs 
+        WHERE folder_id = ? 
+        ORDER BY scan_date DESC 
+        LIMIT 1
+      `).get(folderId) as any;
+
+      // 2. 상태 비교 (성공여부, 스캔, 신규, 기존)
+      const isIdentical = lastLog &&
+        lastLog.scan_status === scanStatus &&
+        lastLog.total_scanned === result.totalScanned &&
+        lastLog.new_images === result.newImages &&
+        lastLog.existing_images === result.existingImages;
+
+      if (isIdentical) {
+        // 3a. 동일하면 업데이트 (시간, 소요시간만)
+        db.prepare(`
+          UPDATE scan_logs 
+          SET scan_date = ?, duration_ms = ?
+          WHERE id = ?
+        `).run(scanDate, result.duration, lastLog.id);
+        // console.log(`  📝 스캔 로그 통합: ID ${lastLog.id} (변동 없음)`);
+      } else {
+        // 3b. 다르면 신규 추가
+        db.prepare(`
+          INSERT INTO scan_logs (
+            folder_id, scan_date, scan_status,
+            total_scanned, new_images, existing_images, updated_paths, missing_images,
+            errors_count, duration_ms, error_details
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          folderId,
+          scanDate,
+          scanStatus,
+          result.totalScanned,
+          result.newImages,
+          result.existingImages,
+          result.updatedPaths,
+          result.missingImages,
+          result.errors.length,
+          result.duration,
+          errorDetails
+        );
+      }
+
+      // 4. 로그 제한 (300개)
+      // 간단한 방법: ID 역순 정렬 후 300번째 이후 삭제
+      // 좀 더 안전한 방법: 서브쿼리 이용
       db.prepare(`
-        INSERT INTO scan_logs (
-          folder_id, scan_date, scan_status,
-          total_scanned, new_images, existing_images, updated_paths, missing_images,
-          errors_count, duration_ms, error_details
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        folderId,
-        new Date().toISOString(),
-        result.errors.length > 0 ? 'error' : 'success',
-        result.totalScanned,
-        result.newImages,
-        result.existingImages,
-        result.updatedPaths,
-        result.missingImages,
-        result.errors.length,
-        result.duration,
-        result.errors.length > 0 ? JSON.stringify(result.errors) : null
-      );
+        DELETE FROM scan_logs 
+        WHERE folder_id = ? 
+        AND id NOT IN (
+          SELECT id FROM scan_logs 
+          WHERE folder_id = ? 
+          ORDER BY scan_date DESC 
+          LIMIT 300
+        )
+      `).run(folderId, folderId);
+
     } catch (error) {
       console.error('스캔 로그 저장 실패:', error);
     }

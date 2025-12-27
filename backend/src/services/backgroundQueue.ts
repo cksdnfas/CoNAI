@@ -1,4 +1,5 @@
 import { db } from '../database/init';
+import { logger } from '../utils/logger';
 import { MetadataExtractor } from './metadata';
 import { settingsService } from './settingsService';
 import path from 'path';
@@ -65,7 +66,7 @@ export class BackgroundQueueService {
     };
 
     this.queue.push(task);
-    console.log(`  📋 백그라운드 작업 추가: 메타데이터 추출 - ${path.basename(filePath)}`);
+    logger.debug(`  📋 백그라운드 작업 추가: 메타데이터 추출 - ${path.basename(filePath)}`);
 
     // 큐 처리 시작
     if (!this.processing) {
@@ -90,7 +91,7 @@ export class BackgroundQueueService {
     };
 
     this.queue.push(task);
-    console.log(`  📋 백그라운드 작업 추가: 프롬프트 수집 - ${path.basename(filePath)}`);
+    logger.debug(`  📋 백그라운드 작업 추가: 프롬프트 수집 - ${path.basename(filePath)}`);
 
     // 큐 처리 시작
     if (!this.processing) {
@@ -119,7 +120,7 @@ export class BackgroundQueueService {
     };
 
     this.queue.push(task);
-    console.log(`  📋 백그라운드 작업 추가: Civitai 모델 조회 (${refsWithHash.length}개)`);
+    logger.debug(`  📋 백그라운드 작업 추가: Civitai 모델 조회 (${refsWithHash.length}개)`);
 
     // 큐 처리 시작
     if (!this.processing) {
@@ -136,7 +137,7 @@ export class BackgroundQueueService {
     }
 
     this.processing = true;
-    console.log(`\n🔄 백그라운드 큐 처리 시작: ${this.queue.length}개 작업`);
+    logger.info(`\n🔄 백그라운드 큐 처리 시작: ${this.queue.length}개 작업`);
 
     while (this.queue.length > 0) {
       // 우선순위 정렬
@@ -157,10 +158,10 @@ export class BackgroundQueueService {
           task.retries++;
 
           if (task.retries < task.maxRetries) {
-            console.log(`  ⚠️  작업 재시도 (${task.retries}/${task.maxRetries}): ${task.id}`);
+            logger.warn(`  ⚠️  작업 재시도 (${task.retries}/${task.maxRetries}): ${task.id}`);
             this.queue.push(task);
           } else {
-            console.error(`  ❌ 작업 최종 실패: ${task.id}`, result.reason);
+            logger.error(`  ❌ 작업 최종 실패: ${task.id}`, result.reason);
           }
         }
       });
@@ -170,7 +171,7 @@ export class BackgroundQueueService {
     }
 
     this.processing = false;
-    console.log('✅ 백그라운드 큐 처리 완료\n');
+    logger.info('✅ 백그라운드 큐 처리 완료\n');
   }
 
   /**
@@ -192,18 +193,18 @@ export class BackgroundQueueService {
           break;
 
         default:
-          console.warn(`  ⚠️  알 수 없는 작업 타입: ${task.type}`);
+          logger.warn(`  ⚠️  알 수 없는 작업 타입: ${task.type}`);
       }
     } catch (error) {
       // MetadataExtractionError인 경우 재시도 여부 판단
       if (error instanceof MetadataExtractionError) {
         if (!error.retryable) {
-          console.log(`  ⏭️  재시도 불필요한 오류: ${error.type} - ${error.message}`);
+          logger.debug(`  ⏭️  재시도 불필요한 오류: ${error.type} - ${error.message}`);
           return; // 재시도하지 않음 (성공으로 간주)
         }
-        console.error(`  ❌ 재시도 가능한 오류: ${error.type} - ${error.message}`);
+        logger.error(`  ❌ 재시도 가능한 오류: ${error.type} - ${error.message}`);
       } else {
-        console.error(`  ❌ 작업 처리 실패: ${task.id}`, error);
+        logger.error(`  ❌ 작업 처리 실패: ${task.id}`, error);
       }
       throw error; // 재시도를 위해 throw
     }
@@ -222,57 +223,66 @@ export class BackgroundQueueService {
       : null;
 
     // media_metadata 업데이트
-    db.prepare(`
-      UPDATE media_metadata
-      SET
-        ai_tool = ?,
-        model_name = ?,
-        steps = ?,
-        cfg_scale = ?,
-        sampler = ?,
-        seed = ?,
-        scheduler = ?,
-        prompt = ?,
-        negative_prompt = ?,
-        denoise_strength = ?,
-        generation_time = ?,
-        batch_size = ?,
-        batch_index = ?,
-        model_references = ?
-      WHERE composite_hash = ?
-    `).run(
-      aiInfo.ai_tool || null,
-      aiInfo.model || null,
-      aiInfo.steps || null,
-      aiInfo.cfg_scale || null,
-      aiInfo.sampler || null,
-      aiInfo.seed || null,
-      aiInfo.scheduler || null,
-      aiInfo.prompt || null,
-      aiInfo.negative_prompt || null,
-      aiInfo.denoise_strength || null,
-      aiInfo.generation_time || null,
-      aiInfo.batch_size || null,
-      aiInfo.batch_index || null,
-      modelReferencesJson,
-      task.compositeHash
-    );
+    try {
+      db.prepare(`
+        UPDATE media_metadata
+        SET
+          ai_tool = ?,
+          model_name = ?,
+          steps = ?,
+          cfg_scale = ?,
+          sampler = ?,
+          seed = ?,
+          scheduler = ?,
+          prompt = ?,
+          negative_prompt = ?,
+          denoise_strength = ?,
+          generation_time = ?,
+          batch_size = ?,
+          batch_index = ?,
+          model_references = ?
+        WHERE composite_hash = ?
+      `).run(
+        aiInfo.ai_tool || null,
+        aiInfo.model || null,
+        aiInfo.steps || null,
+        aiInfo.cfg_scale || null,
+        aiInfo.sampler || null,
+        aiInfo.seed || null,
+        aiInfo.scheduler || null,
+        aiInfo.prompt || null,
+        aiInfo.negative_prompt || null,
+        aiInfo.denoise_strength || null,
+        aiInfo.generation_time || null,
+        aiInfo.batch_size || null,
+        aiInfo.batch_index || null,
+        modelReferencesJson,
+        task.compositeHash
+      );
+    } catch (error) {
+      if (error instanceof RangeError) {
+        logger.error(`  ❌ RangeError during metadata update (skipping): ${path.basename(task.filePath)}`);
+        // RangeError는 재시도해도 해결되지 않으므로 throw하지 않고 스킵
+        return;
+      }
+      throw error;
+    }
 
-    console.log(`  ✅ 메타데이터 추출 완료: ${path.basename(task.filePath)}`);
+    logger.debug(`  ✅ 메타데이터 추출 완료: ${path.basename(task.filePath)}`);
 
     // Run auto-collection after metadata extraction (Option B)
     // This allows conditions based on AI metadata (prompts, model, sampler, etc.)
     try {
-      console.log(`  🔍 Running auto-collection (after metadata extraction)...`);
+      logger.debug(`  🔍 Running auto-collection (after metadata extraction)...`);
       const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(
         task.compositeHash
       );
       if (autoCollectResults.length > 0) {
-        console.log(`  ✅ Auto-assigned to ${autoCollectResults.length} additional group(s) based on AI metadata`);
+        logger.debug(`  ✅ Auto-assigned to ${autoCollectResults.length} additional group(s) based on AI metadata`);
       }
     } catch (autoCollectError) {
       // Non-critical error - continue processing
-      console.warn(
+      logger.warn(
         `  ⚠️  Auto-collection failed (non-critical) for ${path.basename(task.filePath)}:`,
         autoCollectError instanceof Error ? autoCollectError.message : autoCollectError
       );
@@ -283,7 +293,7 @@ export class BackgroundQueueService {
       try {
         this.addPromptCollectionTask(task.filePath, task.compositeHash);
       } catch (error) {
-        console.warn(`  ⚠️  프롬프트 수집 작업 추가 실패: ${path.basename(task.filePath)}`, error);
+        logger.warn(`  ⚠️  프롬프트 수집 작업 추가 실패: ${path.basename(task.filePath)}`, error);
       }
     }
 
@@ -292,7 +302,7 @@ export class BackgroundQueueService {
       try {
         this.addCivitaiModelLookupTask(task.compositeHash, aiInfo.model_references);
       } catch (error) {
-        console.warn(`  ⚠️  Civitai 조회 작업 추가 실패: ${path.basename(task.filePath)}`, error);
+        logger.warn(`  ⚠️  Civitai 조회 작업 추가 실패: ${path.basename(task.filePath)}`, error);
       }
     }
 
@@ -311,7 +321,7 @@ export class BackgroundQueueService {
     ).get(task.compositeHash) as any;
 
     if (!metadata || !metadata.prompt) {
-      console.log(`  ⏭️  프롬프트 없음: ${path.basename(task.filePath)}`);
+      logger.debug(`  ⏭️  프롬프트 없음: ${path.basename(task.filePath)}`);
       return;
     }
 
@@ -321,7 +331,7 @@ export class BackgroundQueueService {
       metadata.negative_prompt
     );
 
-    console.log(`  ✅ 프롬프트 수집 완료: ${path.basename(task.filePath)}`);
+    logger.debug(`  ✅ 프롬프트 수집 완료: ${path.basename(task.filePath)}`);
   }
 
   /**
@@ -330,7 +340,7 @@ export class BackgroundQueueService {
   private static async processCivitaiModelLookup(task: BackgroundTask): Promise<void> {
     const settings = CivitaiSettings.get();
     if (!settings.enabled) {
-      console.log(`  ⏭️  Civitai 기능 비활성화`);
+      logger.debug(`  ⏭️  Civitai 기능 비활성화`);
       return;
     }
 
@@ -358,12 +368,12 @@ export class BackgroundQueueService {
         const success = await CivitaiService.lookupAndCacheModel(ref.hash);
 
         if (success) {
-          console.log(`  ✅ Civitai 모델 정보 캐싱: ${ref.name} (${ref.hash})`);
+          logger.debug(`  ✅ Civitai 모델 정보 캐싱: ${ref.name} (${ref.hash})`);
         } else {
-          console.log(`  ⏭️  Civitai에서 모델 찾지 못함: ${ref.name} (${ref.hash})`);
+          logger.debug(`  ⏭️  Civitai에서 모델 찾지 못함: ${ref.name} (${ref.hash})`);
         }
       } catch (error) {
-        console.error(`  ❌ Civitai 조회 실패: ${ref.hash}`, error);
+        logger.error(`  ❌ Civitai 조회 실패: ${ref.hash}`, error);
         // 개별 모델 실패는 전체 작업 실패로 처리하지 않음
       }
     }
@@ -399,6 +409,6 @@ export class BackgroundQueueService {
    */
   static clearQueue(): void {
     this.queue = [];
-    console.log('🗑️  백그라운드 큐 초기화');
+    logger.info('🗑️  백그라운드 큐 초기화');
   }
 }

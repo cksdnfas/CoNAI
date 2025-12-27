@@ -14,6 +14,8 @@ import { AutoTagSearchService } from '../../services/autoTagSearchService';
 import { AutoTagSearchParams } from '../../types/autoTag';
 import { enrichImageRecord } from './utils';
 import { RatingScoreService } from '../../services/ratingScoreService';
+import { logger } from '../../utils/logger';
+import { QueryCacheService } from '../../services/QueryCacheService';
 
 const router = Router();
 
@@ -24,12 +26,13 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
   const compositeHash = req.params.id;
 
   console.log('[TagRoute] POST /:id/tag hit!');
-  console.log('[TagRoute] req.params.id:', compositeHash);
-  console.log('[TagRoute] req.url:', req.url);
-  console.log('[TagRoute] req.path:', req.path);
+  logger.debug('[TagRoute] POST /:id/tag hit!');
+  logger.debug(`[TagRoute] req.params.id: ${compositeHash}`);
+  logger.debug(`[TagRoute] req.url: ${req.url}`);
+  logger.debug(`[TagRoute] req.path: ${req.path}`);
 
   if (!compositeHash || typeof compositeHash !== 'string') {
-    console.log('[TagRoute] Invalid composite hash:', compositeHash);
+    logger.debug(`[TagRoute] Invalid composite hash: ${compositeHash}`);
     return res.status(400).json({
       success: false,
       error: 'Invalid composite hash'
@@ -37,7 +40,7 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    console.log('[TagRoute] Querying database for composite_hash:', compositeHash);
+    logger.debug(`[TagRoute] Querying database for composite_hash: ${compositeHash}`);
 
     // 통합 media_metadata 테이블에서 메타데이터 및 파일 정보 조회
     const imageData = db.prepare(`
@@ -52,14 +55,14 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
     `).get(compositeHash) as any;
 
     if (!imageData) {
-      console.log('[TagRoute] Media not found in database');
+      logger.debug('[TagRoute] Media not found in database');
       return res.status(404).json({
         success: false,
         error: 'Image or video not found'
       });
     }
 
-    console.log('[TagRoute] Image data retrieved, file_path:', imageData.original_file_path);
+    logger.debug(`[TagRoute] Image data retrieved, file_path: ${imageData.original_file_path}`);
 
     if (!imageData.original_file_path) {
       return res.status(404).json({
@@ -71,31 +74,32 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
     // 원본 이미지 경로
     const imagePath = resolveUploadsPath(imageData.original_file_path);
 
-    console.log('[TagRoute] original_file_path from DB:', imageData.original_file_path);
-    console.log('[TagRoute] Calculated imagePath:', imagePath);
-    console.log('[TagRoute] File exists?', fs.existsSync(imagePath));
+    logger.debug(`[TagRoute] original_file_path from DB: ${imageData.original_file_path}`);
+    logger.debug(`[TagRoute] Calculated imagePath: ${imagePath}`);
+    logger.debug(`[TagRoute] File exists? ${fs.existsSync(imagePath)}`);
 
     if (!fs.existsSync(imagePath)) {
-      console.log('[TagRoute] Image file not found on disk');
+      logger.debug('[TagRoute] Image file not found on disk');
       return res.status(404).json({
         success: false,
         error: 'Image file not found on disk'
       });
     }
 
-    console.log(`[ImageTag] Tagging file ${compositeHash}: ${imagePath}`);
+    logger.debug(`[ImageTag] Tagging file ${compositeHash}: ${imagePath}`);
 
     // 동영상 또는 이미지 태깅 실행
     const mimeType = imageData.file_mime_type || imageData.mime_type;
     let taggerResult;
     if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
-      console.log('[ImageTag] Detected video file, extracting frames...');
+      logger.debug('[ImageTag] Detected video file, extracting frames...');
       taggerResult = await imageTaggerService.tagVideo(imagePath);
     } else {
       taggerResult = await imageTaggerService.tagImage(imagePath);
     }
 
-    console.log('[ImageTag] Tagger result:', {
+    logger.debug('[ImageTag] Tagger result details logged to file');
+    logger.verbose('[ImageTag] Tagger result:', {
       success: taggerResult.success,
       hasCaption: !!taggerResult.caption,
       hasGeneral: !!taggerResult.general,
@@ -114,8 +118,10 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
 
     // 데이터베이터에 저장 (통합 media_metadata 테이블 업데이트)
     const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
-    console.log('[ImageTag] Formatted JSON length:', autoTagsJson?.length || 0);
-    console.log('[ImageTag] Formatted JSON preview:', autoTagsJson?.substring(0, 100));
+    logger.debug(`[ImageTag] Formatted JSON length: ${autoTagsJson?.length || 0}`);
+    if (autoTagsJson) {
+      logger.verbose(`[ImageTag] Formatted JSON preview: ${autoTagsJson.substring(0, 100)}`);
+    }
 
     // Calculate rating_score if rating data is available
     let ratingScore = 0;
@@ -123,9 +129,9 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
       try {
         const scoreResult = await RatingScoreService.calculateScore(taggerResult.rating as any);
         ratingScore = scoreResult.score;
-        console.log('[ImageTag] Calculated rating_score:', ratingScore);
+        logger.debug(`[ImageTag] Calculated rating_score: ${ratingScore}`);
       } catch (error) {
-        console.error('[ImageTag] Failed to calculate rating_score:', error);
+        logger.error('[ImageTag] Failed to calculate rating_score:', error);
       }
     }
 
@@ -134,7 +140,10 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
       rating_score: ratingScore
     });
 
-    console.log(`[ImageTag] Successfully tagged ${compositeHash}`);
+    logger.info(`[ImageTag] Successfully tagged ${compositeHash}`);
+
+    // Invalidate cache for this image
+    QueryCacheService.invalidateImageCache(compositeHash, false);
 
     res.json({
       success: true,
@@ -145,7 +154,7 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
     });
     return;
   } catch (error) {
-    console.error('[ImageTag] Error:', error);
+    logger.error('[ImageTag] Error:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to tag image'
@@ -168,11 +177,12 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    const results = [];
     let successCount = 0;
     let failCount = 0;
 
-    console.log(`[BatchTag] Starting batch tagging for ${image_ids.length} images`);
+    logger.debug(`[BatchTag] Starting batch tagging for ${image_ids.length} images`);
+
+    const results: any[] = [];
 
     for (const compositeHash of image_ids) {
       try {
@@ -250,7 +260,7 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
             const scoreResult = await RatingScoreService.calculateScore(taggerResult.rating as any);
             ratingScore = scoreResult.score;
           } catch (error) {
-            console.error('[BatchTag] Failed to calculate rating_score:', error);
+            logger.error('[BatchTag] Failed to calculate rating_score:', error);
           }
         }
 
@@ -266,7 +276,7 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
         });
         successCount++;
 
-        console.log(`[BatchTag] Tagged image ${compositeHash} (${successCount}/${image_ids.length})`);
+        logger.debug(`[BatchTag] Tagged image ${compositeHash} (${successCount}/${image_ids.length})`);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         results.push({
@@ -278,7 +288,10 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
       }
     }
 
-    console.log(`[BatchTag] Completed: ${successCount} success, ${failCount} failed`);
+    logger.info(`[BatchTag] Completed: ${successCount} success, ${failCount} failed`);
+
+    // Invalidate all caches after batch operation
+    QueryCacheService.invalidateImageCache(undefined, true);
 
     res.json({
       success: true,
@@ -291,7 +304,7 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
     });
     return;
   } catch (error) {
-    console.error('[BatchTag] Error:', error);
+    logger.error('[BatchTag] Error:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to batch tag images'
@@ -325,7 +338,7 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
       return;
     }
 
-    console.log(`[BatchTagUnprocessed] Processing ${untaggedImages.length} untagged images`);
+    logger.debug(`[BatchTagUnprocessed] Processing ${untaggedImages.length} untagged images`);
 
     const results = [];
     let successCount = 0;
@@ -386,7 +399,7 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
             const scoreResult = await RatingScoreService.calculateScore(taggerResult.rating as any);
             ratingScore = scoreResult.score;
           } catch (error) {
-            console.error('[BatchTagUnprocessed] Failed to calculate rating_score:', error);
+            logger.error('[BatchTagUnprocessed] Failed to calculate rating_score:', error);
           }
         }
 
@@ -402,7 +415,9 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
         });
         successCount++;
 
-        console.log(`[BatchTagUnprocessed] Tagged file ${compositeHash} (${successCount}/${untaggedImages.length})`);
+
+
+        logger.debug(`[BatchTagUnprocessed] Tagged file ${compositeHash} (${successCount}/${untaggedImages.length})`);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         const compositeHash = image.composite_hash || image.id;
@@ -415,7 +430,10 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
       }
     }
 
-    console.log(`[BatchTagUnprocessed] Completed: ${successCount} success, ${failCount} failed`);
+    logger.info(`[BatchTagUnprocessed] Completed: ${successCount} success, ${failCount} failed`);
+
+    // Invalidate all caches after batch operation
+    QueryCacheService.invalidateImageCache(undefined, true);
 
     res.json({
       success: true,
@@ -428,7 +446,7 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
     });
     return;
   } catch (error) {
-    console.error('[BatchTagUnprocessed] Error:', error);
+    logger.error('[BatchTagUnprocessed] Error:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to batch tag unprocessed images'
@@ -471,7 +489,7 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
       return;
     }
 
-    console.log(`[BatchTagAll] Processing ${compositeHashes.length} images (force=${forceRetag})`);
+    logger.debug(`[BatchTagAll] Processing ${compositeHashes.length} images (force=${forceRetag})`);
 
     const results = [];
     let successCount = 0;
@@ -551,7 +569,7 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
             const scoreResult = await RatingScoreService.calculateScore(taggerResult.rating as any);
             ratingScore = scoreResult.score;
           } catch (error) {
-            console.error('[BatchTagAll] Failed to calculate rating_score:', error);
+            logger.error('[BatchTagAll] Failed to calculate rating_score:', error);
           }
         }
 
@@ -567,7 +585,9 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
         });
         successCount++;
 
-        console.log(`[BatchTagAll] Tagged file ${compositeHash} (${successCount}/${compositeHashes.length})`);
+
+
+        logger.debug(`[BatchTagAll] Tagged file ${compositeHash} (${successCount}/${compositeHashes.length})`);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         results.push({
@@ -579,7 +599,10 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
       }
     }
 
-    console.log(`[BatchTagAll] Completed: ${successCount} success, ${failCount} failed`);
+    logger.info(`[BatchTagAll] Completed: ${successCount} success, ${failCount} failed`);
+
+    // Invalidate all caches after batch operation
+    QueryCacheService.invalidateImageCache(undefined, true);
 
     res.json({
       success: true,
@@ -592,12 +615,46 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
     });
     return;
   } catch (error) {
-    console.error('[BatchTagAll] Error:', error);
+    logger.error('[BatchTagAll] Error:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to batch tag all images'
     });
     return;
+  }
+}));
+
+/**
+ * 모든 이미지의 auto_tags 초기화 (재태깅 유도)
+ * POST /api/images/reset-auto-tags
+ */
+router.post('/reset-auto-tags', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    logger.info('[ResetAutoTags] Resetting all auto_tags to NULL');
+
+    const result = db.prepare(`
+      UPDATE media_metadata
+      SET auto_tags = NULL
+    `).run();
+
+    logger.info(`[ResetAutoTags] Reset complete. Changes: ${result.changes}`);
+
+    // Invalidate all caches
+    QueryCacheService.invalidateImageCache(undefined, true);
+
+    res.json({
+      success: true,
+      data: {
+        changes: result.changes,
+        message: 'All auto tags have been reset. The scheduler will pick them up shortly.'
+      }
+    });
+  } catch (error) {
+    logger.error('[ResetAutoTags] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to reset auto tags'
+    });
   }
 }));
 
@@ -709,7 +766,7 @@ router.post('/search-by-autotags', asyncHandler(async (req: Request, res: Respon
 
     return res.json(response);
   } catch (error) {
-    console.error('[AutoTagSearch] Error:', error);
+    logger.error('[AutoTagSearch] Error:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to search by auto tags'
@@ -732,7 +789,7 @@ router.get('/autotag-stats', asyncHandler(async (req: Request, res: Response) =>
     });
     return;
   } catch (error) {
-    console.error('[AutoTagStats] Error:', error);
+    logger.error('[AutoTagStats] Error:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get auto tag statistics'
@@ -747,7 +804,7 @@ router.get('/autotag-stats', asyncHandler(async (req: Request, res: Response) =>
  */
 router.post('/recalculate-rating-scores', asyncHandler(async (req: Request, res: Response) => {
   try {
-    console.log('[RecalculateRatingScores] Starting rating score recalculation for all images');
+    logger.info('[RecalculateRatingScores] Starting rating score recalculation for all images');
 
     // Get all media_metadata with auto_tags
     const imagesWithTags = db.prepare(`
@@ -811,13 +868,15 @@ router.post('/recalculate-rating-scores', asyncHandler(async (req: Request, res:
       }
     }
 
-    console.log(`[RecalculateRatingScores] Completed: ${successCount} success, ${failCount} failed`);
+    logger.info(`[RecalculateRatingScores] Completed: ${successCount} updated, ${failCount} errors`);
+
+    // Invalidate all caches after recalculation
+    QueryCacheService.invalidateImageCache(undefined, true);
 
     res.json({
       success: true,
       data: {
         total: imagesWithTags.length,
-        success_count: successCount,
         fail_count: failCount,
         results
       }

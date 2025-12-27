@@ -5,6 +5,7 @@ import { ImageMetadata, AITool, LoRAModel } from '../types/image';
 import { ImageSimilarityService } from './imageSimilarity';
 import { settingsService } from './settingsService';
 import { MetadataExtractor } from './metadata';
+import { logger } from '../utils/logger';
 
 export interface ProcessedImage {
   filename: string;
@@ -159,7 +160,7 @@ export class ImageProcessor {
     baseUploadPath: string
   ): Promise<ProcessedImage> {
     const startTime = Date.now();
-    console.log(`⏱️ [ImageProcessor] Starting image upload: ${file.originalname}`);
+    logger.debug(`⏱️ [ImageProcessor] Starting image upload: ${file.originalname}`);
 
     let tempFilePath: string | undefined;
 
@@ -167,7 +168,7 @@ export class ImageProcessor {
       // 폴더 구조 생성
       const folderStart = Date.now();
       const folders = await this.createUploadFolders(baseUploadPath);
-      console.log(`⏱️ [ImageProcessor] Folder creation: ${Date.now() - folderStart}ms`);
+      logger.debug(`⏱️ [ImageProcessor] Folder creation: ${Date.now() - folderStart}ms`);
 
       // 고유한 파일명 생성
       const filename = this.generateUniqueFilename(file.originalname);
@@ -186,17 +187,17 @@ export class ImageProcessor {
       } else {
         throw new Error('No file data available (neither path nor buffer)');
       }
-      console.log(`⏱️ [ImageProcessor] File copy: ${Date.now() - copyStart}ms`);
+      logger.debug(`⏱️ [ImageProcessor] File copy: ${Date.now() - copyStart}ms`);
 
       // 이미지 기본 정보만 추출 (width, height)
       const infoStart = Date.now();
       const imageInfo = await this.getImageInfo(originalPath);
-      console.log(`⏱️ [ImageProcessor] Image info extraction: ${Date.now() - infoStart}ms`);
+      logger.debug(`⏱️ [ImageProcessor] Image info extraction: ${Date.now() - infoStart}ms`);
 
       const relativeOriginal = this.normalizeRelativePath(originalPath, baseUploadPath);
 
       const totalTime = Date.now() - startTime;
-      console.log(`⏱️ [ImageProcessor] ✅ Total upload time: ${totalTime}ms`);
+      logger.debug(`⏱️ [ImageProcessor] ✅ Total upload time: ${totalTime}ms`);
 
       // 단순화된 반환값 (파일 저장 정보만)
       return {
@@ -211,7 +212,7 @@ export class ImageProcessor {
         colorHistogram: undefined // 스캔 시 생성
       };
     } catch (error) {
-      console.error(`⏱️ [ImageProcessor] ❌ Failed after ${Date.now() - startTime}ms:`, error);
+      logger.error(`⏱️ [ImageProcessor] ❌ Failed after ${Date.now() - startTime}ms:`, error);
       const message = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Image upload failed: ${message}`);
     } finally {
@@ -220,7 +221,7 @@ export class ImageProcessor {
         try {
           await fs.promises.unlink(tempFilePath);
         } catch (cleanupError) {
-          console.warn('Failed to cleanup temp file:', tempFilePath, cleanupError);
+          logger.warn('Failed to cleanup temp file:', tempFilePath, cleanupError);
         }
       }
     }
@@ -319,7 +320,7 @@ export class ImageProcessor {
 
       return imageId;
     } catch (error) {
-      console.error('Failed to process existing image:', error);
+      logger.error('Failed to process existing image:', error);
       throw error instanceof Error ? error : new Error('Unknown error occurred while processing existing image');
     }
   }

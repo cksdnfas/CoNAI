@@ -363,7 +363,7 @@ export class TaggerDaemon {
       // Update last used time
       this.lastUsedAt = new Date();
 
-      console.log('[TaggerDaemon] Sending tag command for:', imagePath);
+      // console.log('[TaggerDaemon] Sending tag command for:', imagePath);
 
       // Send tag command
       const response = await this.sendCommand({
@@ -373,11 +373,13 @@ export class TaggerDaemon {
         char_threshold: settings.tagger.characterThreshold
       });
 
+      /*
       console.log('[TaggerDaemon] Tag command response:', {
         success: response.success,
         hasError: !!response.error,
         errorType: response.error_type
       });
+      */
 
       // Reset auto-unload timer
       this.resetAutoUnloadTimer();
@@ -461,7 +463,7 @@ export class TaggerDaemon {
 
     if (settings.tagger.autoUnloadMinutes > 0) {
       const timeoutMs = settings.tagger.autoUnloadMinutes * 60 * 1000;
-      console.log(`[TaggerDaemon] Setting auto-unload timer for ${settings.tagger.autoUnloadMinutes} minutes`);
+      // console.log(`[TaggerDaemon] Setting auto-unload timer for ${settings.tagger.autoUnloadMinutes} minutes`);
 
       this.autoUnloadTimer = setTimeout(async () => {
         console.log('[TaggerDaemon] Auto-unload timer triggered');

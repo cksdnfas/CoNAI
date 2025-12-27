@@ -8,6 +8,7 @@
  */
 
 import LRU = require('lru-cache');
+import { logger } from '../utils/logger';
 
 interface CacheOptions {
   ttl: number; // Time to live in milliseconds
@@ -58,7 +59,7 @@ export class QueryCacheService {
       length: (value: Buffer) => value.length,
     });
 
-    console.log('✅ Query cache service initialized');
+    logger.info('✅ Query cache service initialized');
   }
 
   /**
@@ -94,7 +95,7 @@ export class QueryCacheService {
       this.stats.gallery.misses++;
       return null;
     } catch (error) {
-      console.warn('⚠️ Gallery cache get error:', error instanceof Error ? error.message : error);
+      logger.warn('⚠️ Gallery cache get error:', error instanceof Error ? error.message : error);
       this.stats.gallery.misses++;
       return null;
     }
@@ -125,9 +126,9 @@ export class QueryCacheService {
   static invalidateGalleryCache(): void {
     try {
       this.galleryCache.reset();
-      console.log('🗑️ Gallery cache invalidated');
+      logger.debug('🗑️ Gallery cache invalidated');
     } catch (error) {
-      console.warn('⚠️ Gallery cache invalidate error:', error instanceof Error ? error.message : error);
+      logger.warn('⚠️ Gallery cache invalidate error:', error instanceof Error ? error.message : error);
     }
   }
 
@@ -237,7 +238,7 @@ export class QueryCacheService {
         this.invalidateGalleryCache();
         this.metadataCache.reset();
         this.thumbnailCache.reset();
-        console.log('🗑️ All image caches invalidated (bulk operation)');
+        logger.debug('🗑️ All image caches invalidated (bulk operation)');
       } else {
         // 단일 이미지 변경: 첫 페이지만 무효화 (성능 최적화)
         // 새로 업로드된 이미지는 first_seen_date DESC 정렬로 첫 페이지에 나타남
@@ -259,10 +260,10 @@ export class QueryCacheService {
         this.invalidateMetadataCache(compositeHash);
         this.invalidateThumbnailCache(compositeHash);
 
-        console.log(`🔄 First page cache invalidated for image: ${compositeHash}`);
+        logger.debug(`🔄 First page cache invalidated for image: ${compositeHash}`);
       }
     } catch (error) {
-      console.warn('⚠️ Image cache invalidate error:', error instanceof Error ? error.message : error);
+      logger.warn('⚠️ Image cache invalidate error:', error instanceof Error ? error.message : error);
     }
   }
 

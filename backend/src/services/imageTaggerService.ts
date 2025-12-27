@@ -1,4 +1,5 @@
 import { taggerDaemon, TaggerResult, TaggerServerStatus } from './taggerDaemon';
+import { logger } from '../utils/logger';
 import { TaggerModel } from '../types/settings';
 import { VideoFrameExtractor } from './videoFrameExtractor';
 import { TagMergeService } from './tagMergeService';
@@ -18,13 +19,13 @@ export class ImageTaggerService {
    */
   async tagImage(imagePath: string): Promise<TaggerResult> {
     try {
-      console.log(`[ImageTagger] Tagging image via daemon: ${imagePath}`);
+      logger.debug(`[ImageTagger] Tagging image via daemon: ${imagePath}`);
       const result = await taggerDaemon.tagImage(imagePath);
 
       if (result.success) {
-        console.log('[ImageTagger] Tagging succeeded');
+        logger.debug('[ImageTagger] Tagging succeeded');
       } else {
-        console.error('[ImageTagger] Tagging failed:', {
+        logger.error('[ImageTagger] Tagging failed:', {
           error: result.error,
           error_type: result.error_type
         });
@@ -34,8 +35,8 @@ export class ImageTaggerService {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       const stack = error instanceof Error ? error.stack : undefined;
-      console.error('[ImageTagger] Tagging exception:', message);
-      if (stack) console.error('[ImageTagger] Stack:', stack);
+      logger.error('[ImageTagger] Tagging exception:', message);
+      if (stack) logger.error('[ImageTagger] Stack:', stack);
 
       return {
         success: false,
@@ -53,31 +54,31 @@ export class ImageTaggerService {
     let framePaths: string[] = [];
 
     try {
-      console.log(`[ImageTagger] Tagging video: ${videoPath}`);
+      logger.debug(`[ImageTagger] Tagging video: ${videoPath}`);
 
       // 1. Extract 7 frames from video
-      console.log('[ImageTagger] Extracting frames from video...');
+      logger.debug('[ImageTagger] Extracting frames from video...');
       framePaths = await VideoFrameExtractor.extractFramesForTagging(videoPath);
-      console.log(`[ImageTagger] Extracted ${framePaths.length} frames`);
+      logger.debug(`[ImageTagger] Extracted ${framePaths.length} frames`);
 
       // 2. Tag each frame
-      console.log('[ImageTagger] Tagging extracted frames...');
+      logger.debug('[ImageTagger] Tagging extracted frames...');
       const frameResults: TaggerResult[] = [];
 
       for (let i = 0; i < framePaths.length; i++) {
         const framePath = framePaths[i];
-        console.log(`[ImageTagger] Tagging frame ${i + 1}/${framePaths.length}`);
+        logger.debug(`[ImageTagger] Tagging frame ${i + 1}/${framePaths.length}`);
 
         try {
           const result = await this.tagImage(framePath);
           frameResults.push(result);
 
           if (!result.success) {
-            console.warn(`[ImageTagger] Frame ${i + 1} tagging failed:`, result.error);
+            logger.warn(`[ImageTagger] Frame ${i + 1} tagging failed:`, result.error);
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
-          console.error(`[ImageTagger] Frame ${i + 1} tagging exception:`, message);
+          logger.error(`[ImageTagger] Frame ${i + 1} tagging exception:`, message);
           frameResults.push({
             success: false,
             error: message,
@@ -87,19 +88,19 @@ export class ImageTaggerService {
       }
 
       // 3. Merge frame results
-      console.log('[ImageTagger] Merging frame results...');
+      logger.debug('[ImageTagger] Merging frame results...');
       const mergedResult = TagMergeService.mergeVideoTagResults(frameResults);
 
       const stats = TagMergeService.getMergeStatistics(frameResults);
-      console.log(`[ImageTagger] Video tagging complete: ${stats.successful}/${stats.total} frames successful`);
+      logger.debug(`[ImageTagger] Video tagging complete: ${stats.successful}/${stats.total} frames successful`);
 
       return mergedResult;
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       const stack = error instanceof Error ? error.stack : undefined;
-      console.error('[ImageTagger] Video tagging exception:', message);
-      if (stack) console.error('[ImageTagger] Stack:', stack);
+      logger.error('[ImageTagger] Video tagging exception:', message);
+      if (stack) logger.error('[ImageTagger] Stack:', stack);
 
       return {
         success: false,
@@ -113,7 +114,7 @@ export class ImageTaggerService {
         try {
           await VideoFrameExtractor.cleanupTempFrames(framePaths);
         } catch (cleanupError) {
-          console.warn('[ImageTagger] Frame cleanup failed (non-critical):', cleanupError);
+          logger.warn('[ImageTagger] Frame cleanup failed (non-critical):', cleanupError);
         }
       }
     }
@@ -126,7 +127,7 @@ export class ImageTaggerService {
   async tagImageBatch(imagePaths: string[]): Promise<TaggerResult[]> {
     const results: TaggerResult[] = [];
 
-    console.log(`[ImageTagger] Batch tagging ${imagePaths.length} images`);
+    logger.debug(`[ImageTagger] Batch tagging ${imagePaths.length} images`);
 
     // Process sequentially through daemon
     // Daemon keeps model loaded, so this is fast
@@ -136,7 +137,7 @@ export class ImageTaggerService {
         results.push(result);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error(`[ImageTagger] Batch error for ${imagePath}:`, message);
+        logger.error(`[ImageTagger] Batch error for ${imagePath}:`, message);
         results.push({
           success: false,
           error: message,
@@ -169,7 +170,7 @@ export class ImageTaggerService {
    */
   async checkPythonDependencies(): Promise<{ available: boolean; message: string }> {
     try {
-      console.log('[ImageTagger] Checking Python dependencies via daemon...');
+      logger.debug('[ImageTagger] Checking Python dependencies via daemon...');
 
       // Try to start daemon - if it starts, dependencies are OK
       await taggerDaemon.start();
@@ -190,7 +191,7 @@ export class ImageTaggerService {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[ImageTagger] Dependency check failed:', message);
+      logger.error('[ImageTagger] Dependency check failed:', message);
       return {
         available: false,
         message: `Python dependencies check failed: ${message}`
@@ -209,7 +210,7 @@ export class ImageTaggerService {
    * Load model manually
    */
   async loadModel(model?: TaggerModel): Promise<void> {
-    console.log('[ImageTagger] Loading model manually:', model || 'default');
+    logger.info('[ImageTagger] Loading model manually:', model || 'default');
     await taggerDaemon.loadModel(model);
   }
 
@@ -217,7 +218,7 @@ export class ImageTaggerService {
    * Unload model manually
    */
   async unloadModel(): Promise<void> {
-    console.log('[ImageTagger] Unloading model manually');
+    logger.info('[ImageTagger] Unloading model manually');
     await taggerDaemon.unloadModel();
   }
 
@@ -225,7 +226,7 @@ export class ImageTaggerService {
    * Start daemon
    */
   async startDaemon(): Promise<void> {
-    console.log('[ImageTagger] Starting daemon');
+    logger.info('[ImageTagger] Starting daemon');
     await taggerDaemon.start();
   }
 
@@ -233,7 +234,7 @@ export class ImageTaggerService {
    * Stop daemon
    */
   async stopDaemon(): Promise<void> {
-    console.log('[ImageTagger] Stopping daemon');
+    logger.info('[ImageTagger] Stopping daemon');
     await taggerDaemon.stop();
   }
 
@@ -242,7 +243,7 @@ export class ImageTaggerService {
    * Restarts daemon with new settings
    */
   async reloadConfig(): Promise<void> {
-    console.log('[ImageTagger] Reloading configuration...');
+    logger.info('[ImageTagger] Reloading configuration...');
 
     // Stop existing daemon
     if (taggerDaemon.isRunning()) {
@@ -250,7 +251,7 @@ export class ImageTaggerService {
     }
 
     // Daemon will be restarted on next use with new settings
-    console.log('[ImageTagger] Configuration reloaded - daemon will restart on next use');
+    logger.info('[ImageTagger] Configuration reloaded - daemon will restart on next use');
   }
 
   /**

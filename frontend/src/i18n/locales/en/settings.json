@@ -177,6 +177,15 @@
       "result": "Tagging Result:",
       "failed": "Test failed"
     },
+    "batch": {
+      "confirmDialog": {
+        "resetMessage": "Are you sure you want to reset ALL auto tags? This will clear active tags and queue images for background processing."
+      },
+      "alerts": {
+        "resetComplete": "Reset complete. Queued for background processing.",
+        "resetFailed": "Failed to reset tags"
+      }
+    },
     "buttons": {
       "save": "Save",
       "cancel": "Cancel",

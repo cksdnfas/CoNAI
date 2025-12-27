@@ -2,12 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Grid,
-  Card,
-  CardMedia,
-  CardContent,
   Typography,
-  Chip,
-  IconButton,
   Button,
   Menu,
   MenuItem,
@@ -15,9 +10,7 @@ import {
   Alert,
 } from '@mui/material';
 import {
-  MoreVert as MoreVertIcon,
   Refresh as RefreshIcon,
-  Folder as FolderIcon,
   FolderOpen as FolderOpenIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
@@ -30,6 +23,7 @@ import GroupImageGridModal from './GroupImageGridModal';
 import { AutoFolderGroupCard } from './AutoFolderGroupCard';
 import { AutoFolderImageViewCard } from './AutoFolderImageViewCard';
 import { useAutoFolderRootGroups, useAutoFolderChildGroups, useRebuildAutoFolderGroups } from '../../../hooks/useAutoFolderGroups';
+import { useImageListSettings } from '../../../hooks/useImageListSettings';
 
 interface AutoFolderGroupsContentProps {
   onShowSnackbar: (message: string, severity: 'success' | 'error' | 'info' | 'warning') => void;
@@ -37,6 +31,9 @@ interface AutoFolderGroupsContentProps {
 
 const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onShowSnackbar }) => {
   const { t } = useTranslation(['imageGroups', 'common']);
+  // Settings for Group Modal context
+  const { settings: groupModalSettings } = useImageListSettings('group_modal');
+
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [menuGroupId, setMenuGroupId] = useState<number | null>(null);
 
@@ -78,7 +75,16 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
   const [groupImagesPage, setGroupImagesPage] = useState(1);
   const [groupImagesTotalPages, setGroupImagesTotalPages] = useState(1);
   const [groupImagesTotal, setGroupImagesTotal] = useState(0);
-  const [groupImagesPageSize, setGroupImagesPageSize] = useState<25 | 50 | 100>(25);
+  const [groupImagesPageSize, setGroupImagesPageSize] = useState<25 | 50 | 100>(
+    (groupModalSettings.pageSize as 25 | 50 | 100) || 25
+  );
+
+  // Sync page size with settings
+  useEffect(() => {
+    if (groupModalSettings.pageSize && groupModalSettings.pageSize !== groupImagesPageSize) {
+      setGroupImagesPageSize(groupModalSettings.pageSize as 25 | 50 | 100);
+    }
+  }, [groupModalSettings.pageSize]);
 
   // 브레드크럼 로드
   const loadBreadcrumb = async (groupId: number) => {
@@ -186,19 +192,25 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
     if (group) {
       setSelectedGroupForImages(group);
       setGroupImagesModalOpen(true);
-      loadGroupImages(group.id, 1);
+      // Reset logic: always replace
+      loadGroupImages(group.id, 1, false);
     }
     handleMenuClose();
   };
 
   // 그룹 이미지 로드
-  const loadGroupImages = async (groupId: number, page: number) => {
+  const loadGroupImages = async (groupId: number, page: number, append: boolean = false) => {
     try {
       setGroupImagesLoading(true);
       const response = await autoFolderGroupsApi.getGroupImages(groupId, page, groupImagesPageSize);
 
       if (response.success && response.data) {
-        setGroupImages(response.data.items);
+        if (append) {
+          const newItems = response.data.items || [];
+          setGroupImages(prev => [...prev, ...newItems]);
+        } else {
+          setGroupImages(response.data.items);
+        }
         setGroupImagesPage(response.data.pagination.page);
         setGroupImagesTotalPages(response.data.pagination.totalPages);
         setGroupImagesTotal(response.data.pagination.total);
@@ -206,6 +218,7 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
     } catch (error) {
       console.error('Error loading group images:', error);
       onShowSnackbar(t('imageGroups:messages.imageLoadFailed'), 'error');
+      if (!append) setGroupImages([]);
     } finally {
       setGroupImagesLoading(false);
     }
@@ -219,40 +232,24 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
     setGroupImagesPage(1);
   };
 
+  const handleGroupImagesLoadMore = () => {
+    if (selectedGroupForImages && groupImagesPage < groupImagesTotalPages) {
+      const nextPage = groupImagesPage + 1;
+      loadGroupImages(selectedGroupForImages.id, nextPage, true);
+    }
+  };
+
   const handleGroupImagesPageChange = (newPage: number) => {
     if (selectedGroupForImages) {
-      loadGroupImages(selectedGroupForImages.id, newPage);
+      loadGroupImages(selectedGroupForImages.id, newPage, false);
     }
   };
 
   const handleGroupImagesPageSizeChange = (newSize: 25 | 50 | 100) => {
     setGroupImagesPageSize(newSize);
     if (selectedGroupForImages) {
-      loadGroupImages(selectedGroupForImages.id, 1);
+      loadGroupImages(selectedGroupForImages.id, 1, false);
     }
-  };
-
-  // 대표 이미지 URL
-  const getRepresentativeImageUrl = (group: AutoFolderGroupWithStats): string => {
-    if (group.image_count > 0) {
-      return autoFolderGroupsApi.getThumbnailUrl(group.id);
-    }
-
-    // 이미지 없는 폴더 플레이스홀더
-    const svgContent = `
-      <svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
-        <rect width="100%" height="100%" fill="#424242"/>
-        <text x="50%" y="50%" text-anchor="middle" dy=".3em" font-family="Arial, sans-serif" font-size="16" fill="#bbb">
-          📁 ${group.display_name.replace(/[<>&"']/g, (char) => {
-            const entities: Record<string, string> = {
-              '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;'
-            };
-            return entities[char] || char;
-          })}
-        </text>
-      </svg>
-    `;
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgContent)}`;
   };
 
   if (loading && groups.length === 0) {
@@ -316,7 +313,7 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
                 onClick={() => {
                   setSelectedGroupForImages(currentGroupInfo);
                   setGroupImagesModalOpen(true);
-                  loadGroupImages(currentGroupInfo.id, 1);
+                  loadGroupImages(currentGroupInfo.id, 1, false);
                 }}
               />
             </Grid>
@@ -342,7 +339,7 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
                   } else if (group.image_count > 0) {
                     setSelectedGroupForImages(group);
                     setGroupImagesModalOpen(true);
-                    loadGroupImages(group.id, 1);
+                    loadGroupImages(group.id, 1, false);
                   }
                 }}
               />
@@ -376,8 +373,12 @@ const AutoFolderGroupsContent: React.FC<AutoFolderGroupsContentProps> = ({ onSho
         totalPages={groupImagesTotalPages}
         total={groupImagesTotal}
         onPageChange={handleGroupImagesPageChange}
-        onImagesRemoved={() => {}}
-        onImagesAssigned={() => {}}
+        infiniteScroll={{
+          hasMore: groupImagesPage < groupImagesTotalPages,
+          loadMore: handleGroupImagesLoadMore
+        }}
+        onImagesRemoved={() => { }}
+        onImagesAssigned={() => { }}
         readOnly={true}
         groupType="auto-folder"
         onShowSnackbar={onShowSnackbar}

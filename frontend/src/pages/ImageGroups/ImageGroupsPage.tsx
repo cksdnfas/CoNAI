@@ -39,9 +39,13 @@ import AutoFolderGroupsContent from './components/AutoFolderGroupsContent';
 import { GroupCard } from './components/GroupCard';
 import { ImageViewCard } from './components/ImageViewCard';
 import { useRootGroups, useChildGroups, useDeleteGroup, useRunAutoCollection } from '../../hooks/useGroups';
+import { useImageListSettings } from '../../hooks/useImageListSettings';
 
 const ImageGroupsPage: React.FC = () => {
   const { t } = useTranslation(['imageGroups', 'common']);
+  // Settings for Group Modal context
+  const { settings: groupModalSettings } = useImageListSettings('group_modal');
+
   const [tabValue, setTabValue] = useState(0);
   const [selectedGroup, setSelectedGroup] = useState<GroupWithHierarchy | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -83,7 +87,27 @@ const ImageGroupsPage: React.FC = () => {
   const [groupImagesPage, setGroupImagesPage] = useState(1);
   const [groupImagesTotalPages, setGroupImagesTotalPages] = useState(1);
   const [groupImagesTotal, setGroupImagesTotal] = useState(0);
-  const [groupImagesPageSize, setGroupImagesPageSize] = useState<PageSize>(25);
+  const [groupImagesPageSize, setGroupImagesPageSize] = useState<PageSize>(
+    (groupModalSettings.pageSize as PageSize) || 25
+  );
+
+  // Sync page size with settings
+  useEffect(() => {
+    if (groupModalSettings.pageSize && groupModalSettings.pageSize !== groupImagesPageSize) {
+      setGroupImagesPageSize(groupModalSettings.pageSize as PageSize);
+      // Optional: Refetch if modal is open? 
+      // The ImageList control change will trigger onPageSizeChange which handles refetch.
+      // This effect handles external updates (e.g. cross-tab).
+    }
+  }, [groupModalSettings.pageSize]);
+
+  // Handle mode transitions (Infinite -> Pagination)
+  useEffect(() => {
+    if (groupModalSettings.activeScrollMode === 'pagination' && selectedGroupForImages) {
+      // Reset accumulated images when switching to pagination
+      fetchGroupImages(selectedGroupForImages.id, groupImagesPage, groupImagesPageSize, false);
+    }
+  }, [groupModalSettings.activeScrollMode]);
 
   // 브레드크럼 로드
   const loadBreadcrumb = async (groupId: number) => {
@@ -119,9 +143,6 @@ const ImageGroupsPage: React.FC = () => {
         console.error('Error loading current group info:', error);
       }
     }
-
-    // React Query will automatically fetch the groups based on currentParentId
-    // Auto-navigation logic will be handled by useEffect watching groups data
   };
 
   // 하위 그룹 열기
@@ -129,7 +150,7 @@ const ImageGroupsPage: React.FC = () => {
     navigateToGroup(group.id);
   };
 
-  // 브레드크럼 클릭 핸들러 (자동 진입 비활성화)
+  // 브레드크럼 클릭 핸들러
   const handleBreadcrumbNavigate = (groupId: number | null) => {
     if (groupId === null) {
       // 그룹 목록으로 돌아가기
@@ -156,25 +177,29 @@ const ImageGroupsPage: React.FC = () => {
   }, [groups, currentParentId]);
 
   // 그룹 이미지 조회
-  const fetchGroupImages = async (groupId: number, page: number = 1, pageSize?: PageSize) => {
+  const fetchGroupImages = async (groupId: number, page: number = 1, pageSize?: PageSize, append: boolean = false) => {
     try {
       setGroupImagesLoading(true);
       const actualPageSize = pageSize || groupImagesPageSize;
       const response = await groupApi.getGroupImages(groupId, page, actualPageSize);
 
       if (response.success && response.data) {
-        setGroupImages(response.data.images || []);
+        if (append) {
+          setGroupImages(prev => [...prev, ...response.data.images]);
+        } else {
+          setGroupImages(response.data.images || []);
+        }
         setGroupImagesPage(response.data.pagination?.page || 1);
         setGroupImagesTotalPages(response.data.pagination?.totalPages || 1);
         setGroupImagesTotal(response.data.pagination?.total || 0);
       } else {
         showSnackbar(t('imageGroups:messages.imageLoadFailed'), 'error');
-        setGroupImages([]);
+        if (!append) setGroupImages([]);
       }
     } catch (error) {
       console.error('Error fetching group images:', error);
       showSnackbar(t('imageGroups:messages.imageLoadFailed'), 'error');
-      setGroupImages([]);
+      if (!append) setGroupImages([]);
     } finally {
       setGroupImagesLoading(false);
     }
@@ -259,7 +284,6 @@ const ImageGroupsPage: React.FC = () => {
   const handleGroupCreated = () => {
     setIsCreateModalOpen(false);
     showSnackbar(t('imageGroups:created'), 'info');
-    // Cache will be automatically invalidated by the mutation hook
   };
 
   // 그룹 수정 성공 핸들러
@@ -267,7 +291,6 @@ const ImageGroupsPage: React.FC = () => {
     setIsEditModalOpen(false);
     setSelectedGroup(null);
     showSnackbar(t('imageGroups:updated'), 'info');
-    // Cache will be automatically invalidated by the mutation hook
   };
 
   // 그룹 카드 클릭 핸들러
@@ -290,7 +313,8 @@ const ImageGroupsPage: React.FC = () => {
       setSelectedGroupForImages(group);
       setGroupImagesModalOpen(true);
       setGroupImagesPage(1); // 페이지 초기화
-      fetchGroupImages(group.id, 1, groupImagesPageSize);
+      // Always replace when opening new group
+      fetchGroupImages(group.id, 1, groupImagesPageSize, false);
     } else {
       // 둘 다 없으면 빈 그룹 메시지 표시
       showSnackbar(t('imageGroups:messages.emptyGroup'), 'info');
@@ -309,7 +333,15 @@ const ImageGroupsPage: React.FC = () => {
   const handleGroupImagesPageChange = (page: number) => {
     if (selectedGroupForImages) {
       setGroupImagesPage(page);
-      fetchGroupImages(selectedGroupForImages.id, page, groupImagesPageSize);
+      fetchGroupImages(selectedGroupForImages.id, page, groupImagesPageSize, false);
+    }
+  };
+
+  // 그룹 이미지 무한 스크롤 로드 모어
+  const handleGroupImagesLoadMore = () => {
+    if (selectedGroupForImages && groupImagesPage < groupImagesTotalPages) {
+      const nextPage = groupImagesPage + 1;
+      fetchGroupImages(selectedGroupForImages.id, nextPage, groupImagesPageSize, true);
     }
   };
 
@@ -318,7 +350,8 @@ const ImageGroupsPage: React.FC = () => {
     setGroupImagesPageSize(size);
     if (selectedGroupForImages) {
       setGroupImagesPage(1);
-      fetchGroupImages(selectedGroupForImages.id, 1, size);
+      // Reset logic for page size change - essentially replace
+      fetchGroupImages(selectedGroupForImages.id, 1, size, false);
     }
   };
 
@@ -346,32 +379,36 @@ const ImageGroupsPage: React.FC = () => {
         );
       }
 
-      // 제거 후 그룹 이미지 목록 다시 조회하여 페이지 확인
-      const updatedResult = await groupApi.getGroupImages(
-        selectedGroupForImages.id,
-        groupImagesPage,
-        groupImagesPageSize
-      );
+      // 제거 후 동작
+      const isInfinite = groupModalSettings.activeScrollMode === 'infinite';
 
-      // 현재 페이지가 비어있고, 이전 페이지가 존재하면 이전 페이지로 이동
-      if (updatedResult.success && updatedResult.data) {
-        const hasImages = updatedResult.data.images && updatedResult.data.images.length > 0;
-        const hasPreviousPage = groupImagesPage > 1;
-
-        if (!hasImages && hasPreviousPage) {
-          // 빈 페이지이고 이전 페이지가 있으면 이전 페이지로 이동
-          setGroupImagesPage(groupImagesPage - 1);
-          fetchGroupImages(selectedGroupForImages.id, groupImagesPage - 1, groupImagesPageSize);
-        } else {
-          // 현재 페이지에 이미지가 있거나 첫 페이지면 현재 페이지 유지
-          fetchGroupImages(selectedGroupForImages.id, groupImagesPage, groupImagesPageSize);
-        }
+      if (isInfinite) {
+        // Infinite mode: reload from start to ensure consistency
+        setGroupImagesPage(1);
+        fetchGroupImages(selectedGroupForImages.id, 1, groupImagesPageSize, false);
       } else {
-        // 조회 실패 시 현재 페이지 새로고침
-        fetchGroupImages(selectedGroupForImages.id, groupImagesPage, groupImagesPageSize);
+        // Pagination logic
+        const updatedResult = await groupApi.getGroupImages(
+          selectedGroupForImages.id,
+          groupImagesPage,
+          groupImagesPageSize
+        );
+
+        if (updatedResult.success && updatedResult.data) {
+          const hasImages = updatedResult.data.images && updatedResult.data.images.length > 0;
+          const hasPreviousPage = groupImagesPage > 1;
+
+          if (!hasImages && hasPreviousPage) {
+            setGroupImagesPage(groupImagesPage - 1);
+            fetchGroupImages(selectedGroupForImages.id, groupImagesPage - 1, groupImagesPageSize, false);
+          } else {
+            setGroupImages(updatedResult.data.images || []);
+          }
+        } else {
+          fetchGroupImages(selectedGroupForImages.id, groupImagesPage, groupImagesPageSize, false);
+        }
       }
 
-      // Cache will be automatically invalidated by the mutation hook
     } catch (error) {
       console.error('Error removing images:', error);
       showSnackbar(t('imageGroups:messages.removeError'), 'error');
@@ -396,49 +433,11 @@ const ImageGroupsPage: React.FC = () => {
       } else {
         showSnackbar(response.error || t('imageGroups:messages.assignFailed'), 'error');
       }
-
-      // Cache will be automatically invalidated by the mutation hook
     } catch (error) {
       console.error('Error assigning images:', error);
       showSnackbar(t('imageGroups:messages.assignError'), 'error');
     }
   };
-
-  // 대표 이미지 URL 생성
-  const getRepresentativeImageUrl = (group: GroupWithStats): string => {
-    // 그룹에 이미지가 있으면 랜덤 썸네일을 사용, 없으면 플레이스홀더
-    if (group.image_count > 0) {
-      return groupApi.getThumbnailUrl(group.id);
-    }
-
-    // 이미지가 없을 때 플레이스홀더 SVG
-    const svgContent = `
-      <svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
-        <rect width="100%" height="100%" fill="#f5f5f5"/>
-        <text x="50%" y="50%" text-anchor="middle" dy=".3em" font-family="Arial, sans-serif" font-size="16" fill="#666">
-          ${group.name.replace(/[<>&"']/g, (char) => {
-      const entities: Record<string, string> = {
-        '<': '&lt;',
-        '>': '&gt;',
-        '&': '&amp;',
-        '"': '&quot;',
-        "'": '&#39;'
-      };
-      return entities[char] || char;
-    })}
-        </text>
-      </svg>
-    `;
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgContent)}`;
-  };
-
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
-    );
-  }
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -447,7 +446,6 @@ const ImageGroupsPage: React.FC = () => {
           {t('imageGroups:page.title')}
         </Typography>
 
-        {/* 탭 네비게이션 */}
         <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mt: 2, borderBottom: 1, borderColor: 'divider' }}>
           <Tab label={t('imageGroups:page.customGroupsTab')} />
           <Tab label={t('imageGroups:page.autoFolderGroupsTab')} />
@@ -456,7 +454,6 @@ const ImageGroupsPage: React.FC = () => {
 
       {/* 커스텀 그룹 탭 */}
       <Box sx={{ display: tabValue === 0 ? 'block' : 'none' }}>
-        {/* 브레드크럼 네비게이션 (그룹 내부에서만 표시) */}
         {!isGroupListView && (
           <GroupBreadcrumb
             breadcrumb={breadcrumb}
@@ -465,12 +462,10 @@ const ImageGroupsPage: React.FC = () => {
           />
         )}
 
-        {/* 현재 그룹에 이미지가 있거나 하위 그룹이 있으면 그리드 표시 */}
         {(() => {
           return (!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0) || groups.length > 0;
         })() ? (
           <Grid container spacing={3}>
-            {/* 그룹 내부 뷰: 현재 그룹의 이미지 보기 카드를 가장 앞에 표시 */}
             {!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0 && (
               <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2, xl: 1.5 }} key={`image-view-${currentParentId}`}>
                 <ImageViewCard
@@ -479,13 +474,12 @@ const ImageGroupsPage: React.FC = () => {
                     setSelectedGroupForImages(currentGroupInfo);
                     setGroupImagesModalOpen(true);
                     setGroupImagesPage(1);
-                    fetchGroupImages(currentGroupInfo.id, 1, groupImagesPageSize);
+                    fetchGroupImages(currentGroupInfo.id, 1, groupImagesPageSize, false);
                   }}
                 />
               </Grid>
             )}
 
-            {/* 하위 그룹 카드들 */}
             {groups.map((group) => (
               <Grid size={{ xs: 6, sm: 4, md: 3, lg: 2, xl: 1.5 }} key={group.id}>
                 <GroupCard
@@ -510,7 +504,6 @@ const ImageGroupsPage: React.FC = () => {
           </Box>
         )}
 
-        {/* 그룹 생성 FAB */}
         <Fab
           color="primary"
           aria-label="add group"
@@ -524,7 +517,6 @@ const ImageGroupsPage: React.FC = () => {
           <AddIcon />
         </Fab>
 
-        {/* 컨텍스트 메뉴 */}
         <Menu
           anchorEl={anchorEl}
           open={Boolean(anchorEl)}
@@ -546,14 +538,12 @@ const ImageGroupsPage: React.FC = () => {
           </MenuItem>
         </Menu>
 
-        {/* 그룹 생성 모달 */}
         <GroupCreateEditModal
           open={isCreateModalOpen}
           onClose={() => setIsCreateModalOpen(false)}
           onSuccess={handleGroupCreated}
         />
 
-        {/* 그룹 편집 모달 */}
         {selectedGroup ? (
           <GroupCreateEditModal
             open={isEditModalOpen}
@@ -566,7 +556,6 @@ const ImageGroupsPage: React.FC = () => {
           />
         ) : null}
 
-        {/* 그룹 이미지 모달 */}
         <GroupImageGridModal
           open={groupImagesModalOpen}
           onClose={handleGroupImagesModalClose}
@@ -580,6 +569,10 @@ const ImageGroupsPage: React.FC = () => {
           totalPages={groupImagesTotalPages}
           total={groupImagesTotal}
           onPageChange={handleGroupImagesPageChange}
+          infiniteScroll={{
+            hasMore: groupImagesPage < groupImagesTotalPages,
+            loadMore: handleGroupImagesLoadMore
+          }}
           onImagesRemoved={handleImagesRemoved}
           onImagesAssigned={handleImagesAssigned}
           groupType="custom"
@@ -592,7 +585,6 @@ const ImageGroupsPage: React.FC = () => {
         <AutoFolderGroupsContent onShowSnackbar={showSnackbar} />
       </Box>
 
-      {/* 스낵바 */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={2000}

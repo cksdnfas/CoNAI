@@ -6,7 +6,8 @@
       "recycleBinPath": "RecycleBin"
     },
     "enableGallery": false,
-    "autoCleanupCanvasOnShutdown": false
+    "autoCleanupCanvasOnShutdown": false,
+    "showRatingBadges": true
   },
   "tagger": {
     "enabled": true,
@@ -29,5 +30,9 @@
     "stealthMaxResolutionMP": 10,
     "skipStealthForComfyUI": true,
     "skipStealthForWebUI": false
+  },
+  "thumbnail": {
+    "size": "1080",
+    "quality": 80
   }
 }

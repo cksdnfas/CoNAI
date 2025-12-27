@@ -133,7 +133,8 @@
     "buttons": {
       "search": "Search",
       "searching": "Searching...",
-      "reset": "Reset"
+      "reset": "Reset",
+      "createGroupWithFilter": "Create Group with Filter"
     },
     "validation": {
       "searchTextRequired": "Please enter search text",

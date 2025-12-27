@@ -35,6 +35,8 @@ import GroupAssignModal from '../../../components/GroupAssignModal';
 import { groupApi } from '../../../services/api/groupApi';
 import { autoFolderGroupsApi } from '../../../services/api/autoFolderGroupsApi';
 
+import { useImageListSettings } from '../../../hooks/useImageListSettings';
+
 interface GroupImageGridModalProps {
   open: boolean;
   onClose: () => void;
@@ -48,6 +50,10 @@ interface GroupImageGridModalProps {
   totalPages?: number;
   total?: number;
   onPageChange?: (page: number) => void;
+  infiniteScroll?: {
+    hasMore: boolean;
+    loadMore: () => void;
+  };
   onImagesRemoved?: (selectedImageIds: string[]) => void;
   onImagesAssigned?: (targetGroupId: number, selectedImageIds: string[]) => void;
   readOnly?: boolean;
@@ -68,6 +74,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   totalPages = 1,
   total = 0,
   onPageChange,
+  infiniteScroll,
   readOnly = false,
   onImagesRemoved,
   onImagesAssigned,
@@ -75,6 +82,9 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   onShowSnackbar,
 }) => {
   const { t } = useTranslation(['imageGroups', 'common']);
+  const { settings } = useImageListSettings('group_modal');
+  const activeMode = settings.activeScrollMode || 'pagination';
+
   const [selectedIds, setSelectedIds] = useState<number[]>([]);  // ✅ id 기반 (중복 이미지 개별 선택)
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
@@ -370,7 +380,8 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
             images={images}
             loading={loading}
             contextId="group_modal"
-            mode="pagination"
+            mode={activeMode}
+            infiniteScroll={infiniteScroll}
             pagination={{
               currentPage,
               totalPages,
@@ -386,6 +397,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
             showCollectionType={true}
             currentGroupId={currentGroup?.id}
             total={total}
+            isModal={true}
           />
         </DialogContent>
       </Dialog>

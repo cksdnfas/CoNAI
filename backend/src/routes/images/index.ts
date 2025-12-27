@@ -7,12 +7,13 @@ import { similarityRoutes } from './similarity.routes';
 import complexSearchRoutes from './complex-search.routes';
 import metadataRoutes from './metadata.routes';
 import hashRoutes from './hash.routes';
+import { logger } from '../../utils/logger';
 
 const router = Router();
 
 // Debug middleware - log all requests to /api/images
 router.use((req: Request, res: Response, next: NextFunction) => {
-  console.log('[ImageRoutes] Incoming request:', req.method, req.path);
+  logger.debug('[ImageRoutes] Incoming request:', req.method, req.path);
   next();
 });
 

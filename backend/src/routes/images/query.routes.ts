@@ -10,6 +10,8 @@ import { ImageListResponse } from '../../types/image';
 import { runtimePaths, resolveUploadsPath } from '../../config/runtimePaths';
 import { enrichImageWithFileView } from './utils';
 import { QueryCacheService } from '../../services/QueryCacheService';
+import { ThumbnailGenerator } from '../../utils/thumbnailGenerator';
+import { logger } from '../../utils/logger';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
@@ -49,23 +51,23 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     });
 
     // 🔍 Debug: Log query result
-    console.log('🔍 [QueryRoutes] Query result - first 3 records:');
+    logger.debug('🔍 [QueryRoutes] Query result - first 3 records:');
     result.items.slice(0, 3).forEach((item, idx) => {
-      console.log(`  [${idx}] file_id=${item.id}, hash=${item.composite_hash?.substring(0, 8)}, path=${item.original_file_path}`);
+      logger.debug(`  [${idx}] file_id=${item.id}, hash=${item.composite_hash?.substring(0, 8)}, path=${item.original_file_path}`);
     });
 
     // URL 추가
     const enrichedImages = result.items.map(enrichImageWithFileView);
 
     // 🔍 Debug: Log enriched result
-    console.log('🔍 [QueryRoutes] Enriched result - first 3 records:');
+    logger.debug('🔍 [QueryRoutes] Enriched result - first 3 records:');
     enrichedImages.slice(0, 3).forEach((item, idx) => {
-      console.log(`  [${idx}] file_id=${item.id}, hash=${item.composite_hash?.substring(0, 8)}, path=${item.original_file_path}`);
+      logger.debug(`  [${idx}] file_id=${item.id}, hash=${item.composite_hash?.substring(0, 8)}, path=${item.original_file_path}`);
     });
 
     // Debug: Log first image's rating_score
     if (enrichedImages.length > 0) {
-      console.log('[QueryRoutes] Sample image rating_score:', {
+      logger.debug('[QueryRoutes] Sample image rating_score:', {
         composite_hash: enrichedImages[0].composite_hash,
         rating_score: enrichedImages[0].rating_score,
         has_rating_score: 'rating_score' in enrichedImages[0],
@@ -535,6 +537,10 @@ router.get('/:compositeHash/file', asyncHandler(async (req: Request, res: Respon
     const originalPath = resolveUploadsPath(files[0].original_file_path);
 
     if (!fs.existsSync(originalPath)) {
+      console.warn(`[ImageServe] File missing on disk during raw file access: ${originalPath}`);
+      // DB 상태 업데이트: missing
+      ImageFileModel.updateStatus(files[0].id, 'missing');
+
       return res.status(404).json({
         success: false,
         error: 'File not found on disk'
@@ -647,6 +653,10 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
       const originalPath = resolveUploadsPath(files[0].original_file_path);
 
       if (!fs.existsSync(originalPath)) {
+        console.warn(`[ImageServe] Video file missing on disk: ${originalPath}`);
+        // DB 상태 업데이트: missing
+        ImageFileModel.updateStatus(files[0].id, 'missing');
+
         return res.status(404).json({
           success: false,
           error: 'Video file not found'
@@ -693,17 +703,56 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
     // 이미지인 경우 썸네일 제공
     // thumbnail_path가 없거나 파일이 존재하지 않으면 원본 이미지 사용
     // 썸네일은 tempDir에 저장됨 (thumbnails/{date}/{hash}.webp)
-    const thumbnailPath = metadata.thumbnail_path
+    let thumbnailPath = metadata.thumbnail_path
       ? path.join(runtimePaths.tempDir, metadata.thumbnail_path)
       : null;
 
+    let serveOriginal = false;
+
     if (!thumbnailPath || !fs.existsSync(thumbnailPath)) {
-      // 썸네일이 없으면 원본 이미지로 폴백
+      // 썸네일이 없으면 원본 확인 및 썸네일 재생성 시도
       const originalPath = resolveUploadsPath(files[0].original_file_path);
+
       if (!fs.existsSync(originalPath)) {
+        console.warn(`[ImageServe] Both thumbnail and original missing: ${files[0].original_file_path}`);
+        // DB 상태 업데이트: missing
+        ImageFileModel.updateStatus(files[0].id, 'missing');
+
         return res.status(404).json({
           success: false,
           error: 'Thumbnail and original file not found'
+        });
+      }
+
+      // 썸네일은 없지만 원본은 있는 경우 -> 썸네일 재생성 시도
+      try {
+        console.log(`[ImageServe] Regenerating missing thumbnail for ${compositeHash}`);
+        const relativeThumbPath = await ThumbnailGenerator.generateThumbnail(originalPath, compositeHash);
+
+        // DB 업데이트
+        MediaMetadataModel.update(compositeHash, { thumbnail_path: relativeThumbPath });
+
+        thumbnailPath = path.join(runtimePaths.tempDir, relativeThumbPath);
+
+        // 재생성된 썸네일이 실제로 존재하는지 확인
+        if (!fs.existsSync(thumbnailPath)) {
+          // 재생성했으나 파일이 안보이는 특이 케이스 -> 원본 제공으로 폴백
+          serveOriginal = true;
+        }
+      } catch (err) {
+        console.error(`[ImageServe] Failed to regenerate thumbnail: ${err}`);
+        // 재생성 실패 시 원본 제공 시도
+        serveOriginal = true;
+      }
+    }
+
+    if (serveOriginal) {
+      const originalPath = resolveUploadsPath(files[0].original_file_path);
+      // 위에서 이미 존재 확인 했지만, 안전을 위해 더블 체크
+      if (!fs.existsSync(originalPath)) {
+        return res.status(404).json({
+          success: false,
+          error: 'Original file not found'
         });
       }
 
@@ -724,7 +773,13 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
       return;
     }
 
-    // 썸네일 제공 with ETag
+    // 썸네일 제공 with ETag (thumbnailPath는 여기서 반드시 유효한 경로여야 함)
+    // TypeScript check
+    if (!thumbnailPath) {
+      // Fallback (Should typically not reach here due to logic above)
+      return res.status(404).json({ success: false, error: "Thumbnail path error" });
+    }
+
     const stats = await fs.promises.stat(thumbnailPath);
     const etag = generateETag(stats);
 

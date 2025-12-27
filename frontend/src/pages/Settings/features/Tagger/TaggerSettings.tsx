@@ -22,12 +22,14 @@ import type { TaggerSettings as TaggerSettingsType } from '../../../../services/
 import { useTaggerSettings } from './hooks/useTaggerSettings';
 import { useTaggerModels } from './hooks/useTaggerModels';
 import { useTaggerTest } from './hooks/useTaggerTest';
+import { useTaggerBatch } from './hooks/useTaggerBatch';
 
 // Components
 import { TaggerModelStatus } from './components/TaggerModelStatus';
 import { TaggerConfigForm } from './components/TaggerConfigForm';
 import { TaggerMemoryManagement } from './components/TaggerMemoryManagement';
 import { TaggerTestSection } from './components/TaggerTestSection';
+import { TaggerBatchOperations } from './components/TaggerBatchOperations';
 
 interface TaggerSettingsProps {
   settings: TaggerSettingsType;
@@ -69,6 +71,12 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
     setTestImageId,
     handleTestImage,
   } = useTaggerTest();
+
+  // Batch hook
+  const {
+    batchProcessing,
+    handleResetAutoTags,
+  } = useTaggerBatch();
 
   // Dependency checking state
   const [checking, setChecking] = useState(false);
@@ -134,6 +142,16 @@ const TaggerSettings: React.FC<TaggerSettingsProps> = ({ settings, onUpdate }) =
               <TaggerMemoryManagement
                 localSettings={localSettings}
                 onUpdateSettings={updateSettings}
+              />
+            )}
+
+            <Divider sx={{ my: 3 }} />
+
+            {/* Batch Operations */}
+            {localSettings.enabled && (
+              <TaggerBatchOperations
+                batchProcessing={batchProcessing}
+                onResetAutoTags={() => handleResetAutoTags(t)}
               />
             )}
 

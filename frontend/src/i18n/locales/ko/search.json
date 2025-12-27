@@ -133,7 +133,8 @@
     "buttons": {
       "search": "검색",
       "searching": "검색 중...",
-      "reset": "초기화"
+      "reset": "초기화",
+      "createGroupWithFilter": "현재 필터로 그룹만들기"
     },
     "validation": {
       "searchTextRequired": "검색어를 입력해주세요",

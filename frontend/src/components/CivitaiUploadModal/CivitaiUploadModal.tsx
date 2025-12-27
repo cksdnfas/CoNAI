@@ -278,7 +278,7 @@ export const CivitaiUploadModal: React.FC<CivitaiUploadModalProps> = ({
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose} disabled={isLoading}>
-          {t('civitai.cancel')}
+          {t('common.cancel')}
         </Button>
         <Tooltip
           title={uploadMethod === 'clipboard'
@@ -296,9 +296,9 @@ export const CivitaiUploadModal: React.FC<CivitaiUploadModalProps> = ({
             {isLoading
               ? t('civitai.upload.uploading')
               : (uploadMethod === 'clipboard'
-                  ? t('civitai.upload.downloadAndOpen')
-                  : t('civitai.upload.uploadButton')
-                )
+                ? t('civitai.upload.downloadAndOpen')
+                : t('civitai.upload.uploadButton')
+              )
             }
           </Button>
         </Tooltip>

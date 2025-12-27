@@ -14,16 +14,18 @@ import {
   Clear as ClearIcon,
   History as HistoryIcon,
   Restore as RestoreIcon,
+  CreateNewFolder as CreateGroupIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import type { FilterCondition, ComplexSearchRequest, FilterGroupType } from '@comfyui-image-manager/shared';
+import type { FilterCondition, ComplexSearchRequest, FilterGroupType, ComplexFilter } from '@comfyui-image-manager/shared';
 import SimpleSearchTab, { type SearchToken } from './SimpleSearchTab';
-import AdvancedSearchTab from './AdvancedSearchTab';
+// import AdvancedSearchTab from './AdvancedSearchTab'; // Unused in this file according to read content, keeping if it was there? It was in read content.
 import type { FilterBlockData } from '../FilterBuilder/FilterBlockList';
 import type { PromptSearchResult } from './SearchAutoComplete';
 import { promptCollectionApi } from '../../services/api/promptApi';
 import { useSearchHistory, type SearchHistoryItem } from '../../hooks/useSearchHistory';
 import { Chip, Typography, Divider, Paper } from '@mui/material';
+import GroupCreateEditModal from '../../pages/ImageGroups/components/GroupCreateEditModal';
 
 interface SearchBarProps {
   onSearch: (request: ComplexSearchRequest) => void;
@@ -71,9 +73,6 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
     }
   });
 
-  // Remove the useEffect that loads state, as we now initialize lazily
-  // The save effect below will handle future updates
-
   // Save state to sessionStorage on change
   React.useEffect(() => {
     try {
@@ -87,6 +86,10 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
   // Validation error state
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // Group Create Modal State
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [groupInitialConditions, setGroupInitialConditions] = useState<ComplexFilter | undefined>(undefined);
+
   // Token Handlers for Simple Tab
   const handleAddToken = (tag: PromptSearchResult) => {
     if (searchTokens.some(t => t.value === tag.prompt && t.type === tag.type)) {
@@ -97,8 +100,11 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
       type: tag.type,
       label: tag.prompt,
       value: tag.prompt,
-      logic: 'OR',
-      count: tag.usage_count
+      logic: 'AND',
+      count: tag.usage_count,
+      minScore: tag.min_score,
+      maxScore: tag.max_score,
+      color: tag.color
     };
     setSearchTokens([...searchTokens, newToken]);
     setSimpleSearchText('');
@@ -112,9 +118,9 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
     setSearchTokens(searchTokens.map(t => {
       if (t.id !== id) return t;
       const map: Record<string, 'OR' | 'AND' | 'NOT'> = {
-        'OR': 'AND',
-        'AND': 'NOT',
-        'NOT': 'OR'
+        'AND': 'OR',
+        'OR': 'NOT',
+        'NOT': 'AND'
       };
       return { ...t, logic: map[t.logic] };
     }));
@@ -124,11 +130,11 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
   const handleUpdateToken = (id: string, updates: Partial<SearchToken>) => {
     setSearchTokens(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
 
-    // If type changed, fetch new count
-    if (updates.type) {
+    // If type changed, fetch new count (Skip for rating)
+    if (updates.type && updates.type !== 'rating') {
       const token = searchTokens.find(t => t.id === id);
       if (token) {
-        const newType = updates.type;
+        const newType = updates.type!;
         const query = token.value; // The raw prompt text
 
         // Async fetch count for the new type
@@ -161,14 +167,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
     }
   };
 
-  const performSearch = (text: string, tokens: SearchToken[]) => {
-    setValidationError(null);
-
-    // Save to history (if initiated by user action that should save)
-    // We might want to avoid saving duplicates if we just restored it, but addHistoryItem handles deduplication roughly.
-    addHistoryItem(text, tokens);
-
-    // Simple Search (Token based)
+  const buildComplexFilter = (text: string, tokens: SearchToken[]) => {
     const excludeGroup: FilterCondition[] = [];
     const orGroup: FilterCondition[] = [];
     const andGroup: FilterCondition[] = [];
@@ -186,8 +185,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
     }
 
     if (tokensToProcess.length === 0) {
-      onSearch({ page: 1, limit: 25 });
-      return;
+      return null;
     }
 
     tokensToProcess.forEach(token => {
@@ -200,15 +198,18 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
       } else if (token.type === 'negative') {
         type = 'negative_prompt_contains';
         category = 'negative_prompt';
+      } else if (token.type === 'rating') {
+        type = 'auto_tag_rating_score';
+        category = 'auto_tag';
       }
 
       const condition: FilterCondition = {
         category,
         type,
         value: token.value,
-        ...(token.type === 'auto' && {
+        ...((token.type === 'auto' || token.type === 'rating') && {
           min_score: token.minScore ?? 0,
-          max_score: token.maxScore ?? 1
+          max_score: token.maxScore ?? (token.type === 'rating' ? undefined : 1)
         })
       };
 
@@ -217,17 +218,41 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
       else if (token.logic === 'NOT') excludeGroup.push(condition);
     });
 
+    return {
+      exclude_group: excludeGroup.length > 0 ? excludeGroup : undefined,
+      or_group: orGroup.length > 0 ? orGroup : undefined,
+      and_group: andGroup.length > 0 ? andGroup : undefined,
+    };
+  };
+
+  const performSearch = (text: string, tokens: SearchToken[]) => {
+    setValidationError(null);
+
+    // Save to history (if initiated by user action that should save)
+    addHistoryItem(text, tokens);
+
+    const complexFilter = buildComplexFilter(text, tokens);
+
+    if (!complexFilter) {
+      onSearch({ page: 1, limit: 25 });
+      return;
+    }
+
     const request: ComplexSearchRequest = {
-      complex_filter: {
-        exclude_group: excludeGroup.length > 0 ? excludeGroup : undefined,
-        or_group: orGroup.length > 0 ? orGroup : undefined,
-        and_group: andGroup.length > 0 ? andGroup : undefined,
-      },
+      complex_filter: complexFilter,
       page: 1,
       limit: 25,
     };
 
     onSearch(request);
+  };
+
+  const handleCreateGroupWithFilter = () => {
+    const complexFilter = buildComplexFilter(simpleSearchText, searchTokens);
+    if (complexFilter) {
+      setGroupInitialConditions(complexFilter);
+      setGroupModalOpen(true);
+    }
   };
 
   const handleSearch = () => {
@@ -278,36 +303,53 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
       />
 
       {/* Action Buttons */}
-      <Stack direction="row" spacing={2} sx={{ mt: 3, alignItems: 'center' }}>
+      <Stack direction="column" spacing={1} sx={{ mt: 3 }}>
+        <Stack direction="row" spacing={1} sx={{ width: '100%' }}>
+          <Button
+            variant="contained"
+            size="medium"
+            startIcon={<SearchIcon />}
+            onClick={handleSearch}
+            disabled={loading || !hasConditions}
+            fullWidth
+            sx={{ py: 1 }}
+          >
+            {loading ? t('search:searchBar.buttons.searching') : t('search:searchBar.buttons.search')}
+          </Button>
+          <Tooltip title={t('search:searchBar.buttons.reset')} arrow>
+            <span>
+              <IconButton
+                onClick={handleClearSearch}
+                disabled={loading || !hasConditions}
+                color="default"
+                sx={{
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  '&:hover': {
+                    backgroundColor: 'action.hover',
+                  },
+                  height: '100%',
+                  aspectRatio: '1/1',
+                  borderRadius: 1
+                }}
+              >
+                <ClearIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Stack>
+
         <Button
-          variant="contained"
+          variant="outlined"
           size="medium"
-          startIcon={<SearchIcon />}
-          onClick={handleSearch}
+          startIcon={<CreateGroupIcon />}
+          onClick={handleCreateGroupWithFilter}
           disabled={loading || !hasConditions}
           fullWidth
           sx={{ py: 1 }}
         >
-          {loading ? t('search:searchBar.buttons.searching') : t('search:searchBar.buttons.search')}
+          {t('search:searchBar.buttons.createGroupWithFilter')}
         </Button>
-        <Tooltip title={t('search:searchBar.buttons.reset')} arrow>
-          <span>
-            <IconButton
-              onClick={handleClearSearch}
-              disabled={loading || !hasConditions}
-              color="default"
-              sx={{
-                border: '1px solid',
-                borderColor: 'divider',
-                '&:hover': {
-                  backgroundColor: 'action.hover',
-                },
-              }}
-            >
-              <ClearIcon />
-            </IconButton>
-          </span>
-        </Tooltip>
       </Stack>
 
       {/* Recent Search History */}
@@ -374,6 +416,13 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
               </Paper>
             ))}
           </Stack>
+
+          <GroupCreateEditModal
+            open={groupModalOpen}
+            onClose={() => setGroupModalOpen(false)}
+            onSuccess={() => setGroupModalOpen(false)}
+            initialAutoCollectConditions={groupInitialConditions}
+          />
         </Box>
       )}
     </Box>

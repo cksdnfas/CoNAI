@@ -1,11 +1,10 @@
 import React, { useState, useRef, useCallback, useMemo, memo, useEffect } from 'react';
-import { Card, CardMedia, Box, Skeleton, Chip, Typography, IconButton, Tooltip } from '@mui/material';
+import { Card, CardMedia, Box, Skeleton, Chip, Typography, IconButton, Tooltip, Snackbar, Alert } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
   VideoLibrary as VideoLibraryIcon,
   HourglassEmpty as HourglassIcon,
-  Download as DownloadIcon,
-  Delete as DeleteIcon,
+  AutoAwesome as AutoAwesomeIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../../types/image';
@@ -13,9 +12,12 @@ import { getBackendOrigin } from '../../../utils/backend';
 import RatingBadge from '../../RatingBadge/RatingBadge';
 import { useRatingTiers } from '../../../hooks/useRatingTiers';
 import { useCardWidth } from '../../../hooks/useCardWidth';
+import { useImageCardActions } from '../../ImageCard/useImageCardActions';
+import ImageCardActionStack from '../../ImageCard/ImageCardActionStack';
 
 // ✅ composite_hash 기반으로 변경
 interface MasonryImageCardProps {
+  id?: string;
   image: ImageRecord;
   onClick: () => void;
   selected?: boolean;
@@ -24,9 +26,13 @@ interface MasonryImageCardProps {
   onDelete?: (compositeHash: string) => void;
   minimal?: boolean; // Deprecated but kept for compatibility logic if needed, usually ignored now
   fitScreen?: boolean;
+  isModal?: boolean;
+  showCollectionType?: boolean;
+  currentGroupId?: number;
 }
 
 const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
+  id,
   image,
   onClick,
   selected = false,
@@ -35,6 +41,9 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
   onDelete,
   minimal = false, // We use responsive logic now, but can use this as a hint or override if needed
   fitScreen = false,
+  isModal = false,
+  showCollectionType = false,
+  currentGroupId,
 }) => {
   const { t } = useTranslation(['common']);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -55,11 +64,27 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
   const backendOrigin = getBackendOrigin();
   const { getTierByScore } = useRatingTiers();
 
+  // Use shared hooks for actions
+  const {
+    handleDownload,
+    handleDelete,
+    handleCopy,
+    toastOpen,
+    toastMessage,
+    closeToast
+  } = useImageCardActions(image, onDelete);
+
   // Get rating tier for this image
   const ratingTier = useMemo(() => {
     const tier = getTierByScore(image.rating_score);
     return tier;
   }, [image.rating_score, image.composite_hash, image.auto_tags, getTierByScore]);
+
+  // 현재 그룹의 collection_type 찾기
+  const currentGroupInfo = currentGroupId
+    ? image.groups?.find(g => g.id === currentGroupId)
+    : null;
+  const isAutoCollected = currentGroupInfo?.collection_type === 'auto';
   // ✅ composite_hash 사용 - API 엔드포인트를 통해 썸네일 제공 (외부 네트워크 접근 보장)
   // GIF는 애니메이션 보존을 위해 원본 사용 (file_type='animated')
   const isGif = image.file_type === 'animated';
@@ -96,33 +121,7 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
     onClick();
   }, [onClick]);
 
-  const handleDownload = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation(); // 이벤트 전파 방지
-    const link = document.createElement('a');
 
-    // Phase 1: composite_hash가 없으면 경로 기반 다운로드
-    if (image.is_processing || !image.composite_hash) {
-      link.href = `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path || '')}`;
-    } else {
-      link.href = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
-    }
-
-    link.download = image.original_file_path || `image_${image.composite_hash?.substring(0, 8) || 'unknown'}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }, [backendOrigin, image.is_processing, image.composite_hash, image.original_file_path]);
-
-  const handleDelete = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation(); // 이벤트 전파 방지
-    const isVideo = image.mime_type?.startsWith('video/');
-    const confirmMessage = isVideo
-      ? t('common:imageCard.confirmDelete.video')
-      : t('common:imageCard.confirmDelete.image');
-    if (onDelete && image.composite_hash && window.confirm(confirmMessage)) {
-      onDelete(image.composite_hash);
-    }
-  }, [onDelete, image.composite_hash, image.mime_type, t]);
 
   // 이미지 aspect ratio 계산 (레이아웃 시프트 방지)
   const aspectRatio = useMemo(() => {
@@ -160,11 +159,17 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
     };
   }, []);
 
+  // Image Style for fitScreen
+  // Landscape (width >= height) -> Width 100%, Height Auto (removes letterboxing)
+  // Portrait (width < height) -> Height 85vh, Width Auto (maximizes height)
+  const isLandscape = (image.width || 0) >= (image.height || 0);
+  const maxVh = isModal ? '70vh' : '85vh';
+
   const imageStyle = fitScreen ? {
-    width: 'auto',
-    maxWidth: '100%',
-    height: 'auto',
-    maxHeight: '85vh',
+    width: isLandscape ? '100%' : 'auto',
+    height: isLandscape ? 'auto' : maxVh,
+    maxHeight: maxVh, // Ensure landscape images don't exceed screen height either
+    maxWidth: '100%',  // Ensure portrait images don't exceed screen width
     display: 'block',
     margin: '0 auto',
     objectFit: 'contain' as const,
@@ -176,252 +181,194 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
   };
 
   return (
-    <Card
-      ref={setRefs}
-      onClick={handleCardClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      sx={{
-        cursor: 'pointer',
-        transition: 'all 0.2s ease-in-out',
-        position: 'relative',
-        border: selected ? 3 : 1,
-        borderColor: selected ? 'primary.main' : 'divider',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: 6,
-        },
-        // Fit Screen Center Content
-        ...(fitScreen && {
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          bgcolor: 'background.paper',
-          minHeight: '200px', // Minimum height just in case
-        }),
-      }}
-    >
-      {/* 선택 체크박스/아이콘 - minimal mode에서는 선택된 경우에만 표시하거나 hover 시 표시 */}
-      {selectable && (!isSmall || isHovered || selected) && (
-        <Box
-          className="image-card-actions"
-          sx={{
-            position: 'absolute',
-            top: 8,
-            left: 8,
-            zIndex: 2,
-            opacity: isHovered || selected ? 1 : (isSmall ? 0 : 0.3),
-            transition: 'opacity 0.2s ease-in-out',
-          }}
-          onClick={handleSelectionChange}
-        >
-          {selected ? (
-            <CheckCircleIcon
-              sx={{
-                fontSize: isSmall ? 24 : 32,
-                color: 'primary.main',
-                bgcolor: 'white',
-                borderRadius: '50%',
-                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
-              }}
-            />
-          ) : (
-            <Box
-              sx={{
-                width: isSmall ? 24 : 32,
-                height: isSmall ? 24 : 32,
-                borderRadius: '50%',
-                border: '2px solid white',
-                bgcolor: 'rgba(0, 0, 0, 0.5)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease-in-out',
-                '&:hover': {
-                  bgcolor: 'rgba(0, 0, 0, 0.7)',
-                  transform: 'scale(1.1)',
-                },
-              }}
-            />
-          )}
-        </Box>
-      )}
-
-      {/* 선택 오버레이 */}
-      {selected && (
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            bgcolor: 'rgba(33, 150, 243, 0.15)',
-            zIndex: 1,
-            pointerEvents: 'none',
-          }}
-        />
-      )}
-
-      <Box
+    <>
+      <Card
+        id={id}
+        ref={setRefs}
+        onClick={handleCardClick}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         sx={{
+          cursor: 'pointer',
+          transition: 'all 0.2s ease-in-out',
           position: 'relative',
-          width: '100%',
-          overflow: 'hidden',
-          bgcolor: 'transparent',
+          border: selected ? 3 : (showCollectionType && isAutoCollected ? 3 : 1),
+          borderColor: selected
+            ? 'primary.main'
+            : (showCollectionType && isAutoCollected
+              ? (theme) => theme.palette.mode === 'dark' ? '#42a5f5' : '#1976d2'
+              : 'divider'),
+          borderStyle: (showCollectionType && isAutoCollected) ? 'dashed' : 'solid',
+          boxShadow: (showCollectionType && isAutoCollected)
+            ? (theme) => `0 0 8px ${theme.palette.mode === 'dark' ? 'rgba(66, 165, 245, 0.4)' : 'rgba(25, 118, 210, 0.3)'}`
+            : (selected ? 0 : 1),
+          '&:hover': {
+            transform: 'translateY(-4px)',
+            boxShadow: (showCollectionType && isAutoCollected)
+              ? (theme) => `0 4px 12px ${theme.palette.mode === 'dark' ? 'rgba(66, 165, 245, 0.5)' : 'rgba(25, 118, 210, 0.4)'}, 0 8px 24px rgba(0,0,0,0.2)`
+              : 6,
+          },
+          // Fit Screen Center Content
+          ...(fitScreen && {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: 'background.paper',
+            minHeight: imageLoaded ? 'auto' : '200px', // Minimum height just in case, collapse when loaded
+          }),
         }}
       >
-        {/* Skeleton 로딩 표시 */}
-        {!imageLoaded && (
-          <Skeleton
-            variant="rectangular"
+        {/* 선택 체크박스/아이콘 - minimal mode에서는 선택된 경우에만 표시하거나 hover 시 표시 */}
+        {selectable && (!isSmall || isHovered || selected) && (
+          <Box
+            className="image-card-actions"
+            sx={{
+              position: 'absolute',
+              top: 8,
+              left: 8,
+              zIndex: 2,
+              opacity: isHovered || selected ? 1 : (isSmall ? 0 : 0.3),
+              transition: 'opacity 0.2s ease-in-out',
+            }}
+            onClick={handleSelectionChange}
+          >
+            {selected ? (
+              <CheckCircleIcon
+                sx={{
+                  fontSize: isSmall ? 24 : 32,
+                  color: 'primary.main',
+                  bgcolor: 'white',
+                  borderRadius: '50%',
+                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+                }}
+              />
+            ) : (
+              <Box
+                sx={{
+                  width: isSmall ? 24 : 32,
+                  height: isSmall ? 24 : 32,
+                  borderRadius: '50%',
+                  border: '2px solid white',
+                  bgcolor: 'rgba(0, 0, 0, 0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease-in-out',
+                  '&:hover': {
+                    bgcolor: 'rgba(0, 0, 0, 0.7)',
+                    transform: 'scale(1.1)',
+                  },
+                }}
+              />
+            )}
+          </Box>
+        )}
+
+        {/* 선택 오버레이 */}
+        {selected && (
+          <Box
             sx={{
               position: 'absolute',
               top: 0,
               left: 0,
-              width: '100%',
-              height: '100%',
-              minHeight: '200px',
+              right: 0,
+              bottom: 0,
+              bgcolor: 'rgba(33, 150, 243, 0.15)',
+              zIndex: 1,
+              pointerEvents: 'none',
             }}
           />
         )}
 
-        {/* 이미지/비디오 - 뷰포트에 들어왔을 때만 로드 */}
-        {isVisible && (
-          isVideo ? (
-            <Box
-              component="video"
-              src={imageUrl}
-              muted
-              loop
-              autoPlay
-              playsInline
-              onLoadedData={handleImageLoad}
-              sx={{
-                ...imageStyle,
-                opacity: imageLoaded ? 1 : 0,
-                transition: 'opacity 0.15s ease-in-out',
-              }}
-            />
-          ) : isGif ? (
-            <CardMedia
-              component="img"
-              image={imageUrl}
-              alt={image.original_file_path || 'Image'}
-              loading="lazy"
-              decoding="async"
-              draggable={false}
-              onLoad={handleImageLoad}
-              sx={{
-                ...imageStyle,
-                opacity: imageLoaded ? 1 : 0,
-                transition: 'opacity 0.15s ease-in-out',
-              }}
-            />
-          ) : (
-            <CardMedia
-              component="img"
-              image={imageUrl}
-              alt={image.original_file_path || 'Image'}
-              loading="lazy"
-              decoding="async"
-              draggable={false}
-              onLoad={handleImageLoad}
-              sx={{
-                ...imageStyle,
-                opacity: imageLoaded ? 1 : 0,
-                transition: 'opacity 0.15s ease-in-out',
-              }}
-            />
-          )
-        )}
-      </Box>
-
-      {/* Prrompt Overlay - Hide in small mode */}
-      {image.prompt && isHovered && !isSmall && (
         <Box
           sx={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            zIndex: 1,
-            bgcolor: 'rgba(0, 0, 0, 0.85)',
-            backdropFilter: 'blur(4px)',
-            p: 1,
-            maxHeight: '80px',
+            position: 'relative',
+            width: '100%',
             overflow: 'hidden',
+            bgcolor: 'transparent',
           }}
         >
-          <Typography
-            variant="caption"
-            sx={{
-              color: 'white',
-              fontSize: '0.7rem',
-              display: '-webkit-box',
-              WebkitLineClamp: 3,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {image.prompt}
-          </Typography>
-        </Box>
-      )}
+          {/* Skeleton 로딩 표시 */}
+          {!imageLoaded && (
+            <Skeleton
+              variant="rectangular"
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                minHeight: '200px',
+              }}
+            />
+          )}
 
-      {/* Badges Container - Top Right - Hide in small mode */}
-      {!isSmall && (
-        <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1, display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'flex-end' }}>
-          {/* Action Buttons (Download/Delete) - Moved to Top Right (Unified) */}
-          <Box className="image-card-actions" sx={{ display: 'flex', gap: 0.5 }}>
-            <Tooltip title={t('common:imageCard.tooltips.download')}>
-              <IconButton
-                size="small"
-                onClick={handleDownload}
+          {/* 이미지/비디오 - 뷰포트에 들어왔을 때만 로드 */}
+          {isVisible && (
+            isVideo ? (
+              <Box
+                component="video"
+                src={imageUrl}
+                muted
+                loop
+                autoPlay
+                playsInline
+                onLoadedData={handleImageLoad}
                 sx={{
-                  bgcolor: (theme) => theme.palette.mode === 'dark'
-                    ? 'rgba(0, 0, 0, 0.6)'
-                    : 'rgba(255, 255, 255, 0.8)',
-                  borderRadius: 1,
-                  display: isHovered || selected ? 'flex' : 'none',
-                  '&:hover': {
-                    bgcolor: (theme) => theme.palette.mode === 'dark'
-                      ? 'rgba(0, 0, 0, 0.8)'
-                      : 'rgba(255, 255, 255, 0.9)',
-                  },
+                  ...imageStyle,
+                  opacity: imageLoaded ? 1 : 0,
+                  transition: 'opacity 0.15s ease-in-out',
                 }}
-              >
-                <DownloadIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            {onDelete && (
-              <Tooltip title={t('common:imageCard.tooltips.delete')}>
-                <IconButton
-                  size="small"
-                  onClick={handleDelete}
-                  sx={{
-                    bgcolor: (theme) => theme.palette.mode === 'dark'
-                      ? 'rgba(0, 0, 0, 0.6)'
-                      : 'rgba(255, 255, 255, 0.8)',
-                    borderRadius: 1,
-                    display: isHovered || selected ? 'flex' : 'none',
-                    '&:hover': {
-                      bgcolor: (theme) => theme.palette.mode === 'dark'
-                        ? 'rgba(0, 0, 0, 0.8)'
-                        : 'rgba(255, 255, 255, 0.9)',
-                    },
-                  }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-          </Box>
+              />
+            ) : isGif ? (
+              <CardMedia
+                component="img"
+                image={imageUrl}
+                alt={image.original_file_path || 'Image'}
+                loading="lazy"
+                decoding="async"
+                draggable={false}
+                onLoad={handleImageLoad}
+                sx={{
+                  ...imageStyle,
+                  opacity: imageLoaded ? 1 : 0,
+                  transition: 'opacity 0.15s ease-in-out',
+                }}
+              />
+            ) : (
+              <CardMedia
+                component="img"
+                image={imageUrl}
+                alt={image.original_file_path || 'Image'}
+                loading="lazy"
+                decoding="async"
+                draggable={false}
+                onLoad={handleImageLoad}
+                sx={{
+                  ...imageStyle,
+                  opacity: imageLoaded ? 1 : 0,
+                  transition: 'opacity 0.15s ease-in-out',
+                }}
+              />
+            )
+          )}
+        </Box>
 
-          {/* Processing Badge */}
-          {image.is_processing && (
+        {/* Action Buttons & Prompt Icons - Right Vertical Stack */}
+        <ImageCardActionStack
+          image={image}
+          isHovered={isHovered}
+          selected={selected}
+          isSmall={isSmall}
+          onDownload={handleDownload}
+          onDelete={onDelete ? handleDelete : undefined}
+          onCopy={handleCopy}
+        />
+
+        {/* Processing Badge */}
+        {image.is_processing && !isSmall && (
+          <Box sx={{ position: 'absolute', top: 8, left: 48, zIndex: 1 }}>
             <Chip
               icon={<HourglassIcon sx={{ fontSize: '0.8rem' }} />}
               label="Processing"
@@ -438,57 +385,104 @@ const MasonryImageCard: React.FC<MasonryImageCardProps> = ({
                 },
               }}
             />
-          )}
-        </Box>
-      )}
+          </Box>
+        )}
 
-      {/* Video Duration Badge - Bottom Left - Hide in small mode */}
-      {isVideo && image.duration && !isSmall && (
-        <Box sx={{ position: 'absolute', bottom: 8, left: 8, zIndex: 1 }}>
-          <Chip
-            icon={<VideoLibraryIcon sx={{ fontSize: '0.8rem' }} />}
-            label={`${Math.floor(image.duration / 60)}:${String(Math.floor(image.duration % 60)).padStart(2, '0')}`}
-            size="small"
-            sx={{
-              fontSize: '0.7rem',
-              height: '22px',
-              fontWeight: 600,
-              bgcolor: 'rgba(0, 0, 0, 0.75)',
-              color: 'white',
-              backdropFilter: 'blur(4px)',
-              '& .MuiChip-icon': {
+        {/* Video Duration Badge - Bottom Left - Hide in small mode */}
+        {isVideo && image.duration && !isSmall && (
+          <Box sx={{ position: 'absolute', bottom: 8, left: 8, zIndex: 1 }}>
+            <Chip
+              icon={<VideoLibraryIcon sx={{ fontSize: '0.8rem' }} />}
+              label={`${Math.floor(image.duration / 60)}:${String(Math.floor(image.duration % 60)).padStart(2, '0')}`}
+              size="small"
+              sx={{
+                fontSize: '0.7rem',
+                height: '22px',
+                fontWeight: 600,
+                bgcolor: 'rgba(0, 0, 0, 0.75)',
                 color: 'white',
-              },
-            }}
-          />
-        </Box>
-      )}
+                backdropFilter: 'blur(4px)',
+                '& .MuiChip-icon': {
+                  color: 'white',
+                },
+              }}
+            />
+          </Box>
+        )}
 
-      {/* AI Tool Badge - Moved to Bottom Left to match Grid */}
-      {image.ai_tool && !isSmall && !isVideo && (
-        <Box sx={{ position: 'absolute', bottom: 8, left: 8, zIndex: 1 }}>
-          <Chip
-            label={image.ai_tool}
-            size="small"
-            sx={{
-              fontSize: '0.7rem',
-              height: '22px',
-              fontWeight: 600,
-              bgcolor: 'rgba(25, 118, 210, 0.9)',
-              color: 'white',
-              backdropFilter: 'blur(4px)',
-            }}
-          />
-        </Box>
-      )}
+        {/* AI Tool Badge - Moved to Bottom Left to match Grid */}
+        {image.ai_tool && !isSmall && !isVideo && (
+          <Box sx={{ position: 'absolute', bottom: 8, left: 8, zIndex: 1 }}>
+            <Chip
+              label={image.ai_tool}
+              size="small"
+              sx={{
+                fontSize: '0.7rem',
+                height: '22px',
+                fontWeight: 600,
+                bgcolor: 'rgba(25, 118, 210, 0.9)',
+                color: 'white',
+                backdropFilter: 'blur(4px)',
+              }}
+            />
+          </Box>
+        )}
 
-      {/* Rating Badge - Bottom Right - Hide in small mode */}
-      {ratingTier && image.rating_score !== null && image.rating_score !== undefined && !isSmall && (
-        <Box sx={{ position: 'absolute', bottom: 8, right: 8, zIndex: 1 }}>
-          <RatingBadge tier={ratingTier} score={image.rating_score} />
-        </Box>
-      )}
-    </Card>
+        {/* Rating Badge - Bottom Right - Hide in small mode */}
+        {(ratingTier || (showCollectionType && isAutoCollected)) && !isSmall && (
+          <Box sx={{
+            position: 'absolute',
+            bottom: 8,
+            right: 8,
+            display: 'flex',
+            gap: 0.5,
+            alignItems: 'center',
+            zIndex: 1,
+          }}>
+            {/* 자동수집 배지 - 왼쪽에 위치 */}
+            {showCollectionType && isAutoCollected && (
+              <Chip
+                icon={<AutoAwesomeIcon sx={{ fontSize: '0.85rem', color: 'white !important' }} />}
+                size="small"
+                sx={{
+                  height: '26px',
+                  minWidth: '26px',
+                  width: '26px',
+                  padding: 0,
+                  bgcolor: (theme) => theme.palette.mode === 'dark'
+                    ? 'rgba(33, 150, 243, 0.9)'
+                    : 'rgba(33, 150, 243, 0.95)',
+                  backdropFilter: 'blur(4px)',
+                  '& .MuiChip-icon': {
+                    margin: 0,
+                    side: 'left',
+                  },
+                  '& .MuiChip-label': {
+                    display: 'none',
+                  },
+                }}
+              />
+            )}
+
+            {/* Rating 배지 - 오른쪽에 위치 */}
+            {ratingTier && image.rating_score !== null && image.rating_score !== undefined && (
+              <RatingBadge tier={ratingTier} score={image.rating_score} />
+            )}
+          </Box>
+        )}
+      </Card>
+
+      <Snackbar
+        open={toastOpen}
+        autoHideDuration={2000}
+        onClose={closeToast}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success" sx={{ width: '100%' }}>
+          {toastMessage}
+        </Alert>
+      </Snackbar>
+    </>
   );
 };
 

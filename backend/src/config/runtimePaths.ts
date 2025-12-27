@@ -4,30 +4,49 @@ import path from 'path';
 const overrideBasePath = process.env.RUNTIME_BASE_PATH;
 
 const basePath = (() => {
+  // 1. Environment variable override (Highest priority)
   if (overrideBasePath && overrideBasePath.trim().length > 0) {
-    return path.resolve(overrideBasePath);
+    // Remove inline comments (anything after #) to prevent malformed paths
+    const cleaned = overrideBasePath.trim().split('#')[0].trim();
+    if (cleaned.length > 0) {
+      const resolved = path.resolve(cleaned);
+      console.log(`[Config] Base path overridden by RUNTIME_BASE_PATH: ${resolved}`);
+      return resolved;
+    }
   }
 
+  // 2. Portable mode executable directory
+  // This is set when running from the packaged executable
   const portableDir = process.env.PORTABLE_EXECUTABLE_DIR;
   if (portableDir && portableDir.trim().length > 0) {
-    return path.resolve(portableDir);
+    const resolved = path.resolve(portableDir);
+    console.log(`[Config] Base path set from PORTABLE_EXECUTABLE_DIR: ${resolved}`);
+    return resolved;
   }
 
-  if (process.env.NODE_ENV === 'development') {
-    // In development the backend runs from the backend workspace directory
-    // Move one level up so data lives in the project root for easier inspection
-    return path.resolve(process.cwd(), '..');
+  // 3. Development/Standard Node detection
+  const currentCwd = process.cwd();
+  const cwdBasename = path.basename(currentCwd);
+
+  // If running from inside 'backend' or 'dist' (common in dev/build),
+  // assume the true root is one level up.
+  if (cwdBasename === 'backend' || cwdBasename === 'dist') {
+    const resolved = path.resolve(currentCwd, '..');
+    console.log(`[Config] Base path resolved from subdirectory '${cwdBasename}': ${resolved}`);
+    return resolved;
   }
 
-  // Fallback: keep data next to the current working directory (e.g. packaged resources)
-  return path.resolve(process.cwd());
+  // 4. Default: Current working directory is the root
+  // This is the standard behavior for Docker volumes and correct production runs
+  const resolved = path.resolve(currentCwd);
+  console.log(`[Config] Base path defaulting to CWD: ${resolved}`);
+  return resolved;
 })();
 
 // Helper function to resolve individual paths with environment variable support
 function resolvePath(envVar: string | undefined, defaultPath: string): string {
   if (envVar && envVar.trim().length > 0) {
     // Remove inline comments (anything after #) to prevent malformed paths
-    // This handles cases like: RUNTIME_UPLOADS_DIR=E:/img/Images # comment
     const cleaned = envVar.trim().split('#')[0].trim();
 
     if (cleaned.length > 0) {
@@ -39,12 +58,15 @@ function resolvePath(envVar: string | undefined, defaultPath: string): string {
   return defaultPath;
 }
 
+// Define data directories relative to basePath
+// This ensures they are always grouped together in the root unless specifically overridden
 const uploadsDir = resolvePath(process.env.RUNTIME_UPLOADS_DIR, path.join(basePath, 'uploads'));
 const databaseDir = resolvePath(process.env.RUNTIME_DATABASE_DIR, path.join(basePath, 'database'));
 const logsDir = resolvePath(process.env.RUNTIME_LOGS_DIR, path.join(basePath, 'logs'));
 const tempDir = resolvePath(process.env.RUNTIME_TEMP_DIR, path.join(basePath, 'temp'));
 const modelsDir = resolvePath(process.env.RUNTIME_MODELS_DIR, path.join(basePath, 'models'));
 const recycleBinDir = resolvePath(process.env.RUNTIME_RECYCLE_BIN_DIR, path.join(basePath, 'RecycleBin'));
+
 const databaseFile = path.join(databaseDir, 'images.db');
 
 function stripTrailingSlash(url: string): string {
@@ -92,10 +114,22 @@ export const publicUrls = {
 };
 
 export function ensureRuntimeDirectories(): void {
+  console.log('fyp [Config] Data Root Configuration:');
+  console.log(`   - Base Path:   ${basePath}`);
+  console.log(`   - Uploads:     ${uploadsDir}`);
+  console.log(`   - Database:    ${databaseDir}`);
+  console.log(`   - Logs:        ${logsDir}`);
+  console.log(`   - Models:      ${modelsDir}`);
+  console.log(`   - Temp:        ${tempDir}`);
+
   [uploadsDir, databaseDir, logsDir, tempDir, modelsDir, recycleBinDir].forEach(dir => {
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-      console.log(`✅ Created directory: ${path.basename(dir)}`);
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+        console.log(`✅ Created directory: ${path.basename(dir)}`);
+      } catch (error) {
+        console.error(`❌ Failed to create directory: ${dir}`, error);
+      }
     }
   });
 
@@ -108,8 +142,12 @@ export function ensureRuntimeDirectories(): void {
 
   subdirectories.forEach(dir => {
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-      console.log(`✅ Created subdirectory: ${path.relative(basePath, dir)}`);
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+        console.log(`✅ Created subdirectory: ${path.relative(basePath, dir)}`);
+      } catch (error) {
+        console.error(`❌ Failed to create subdirectory: ${dir}`, error);
+      }
     }
   });
 }

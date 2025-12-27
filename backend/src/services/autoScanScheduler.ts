@@ -18,6 +18,7 @@ export class AutoScanScheduler {
   private static phase2Timer: NodeJS.Timeout | null = null;
   private static phase3Timer: NodeJS.Timeout | null = null;
   private static isRunning = false;
+  private static isPhase2Running = false;
 
   /**
    * 스케줄러 시작
@@ -50,18 +51,30 @@ export class AutoScanScheduler {
     });
 
     // Phase 2 백그라운드 처리 스케줄러 (초 단위로 동작)
-    const phase2IntervalSeconds = SystemSettingsService.getPhase2Interval();
-    const phase2IntervalMs = phase2IntervalSeconds * 1000;
+    // 사용자 설정 제거 -> 1초로 고정
+    const phase2IntervalMs = 1000;
 
     const runPhase2 = async () => {
-      const unprocessedCount = BackgroundProcessorService.getUnprocessedCount();
-      if (unprocessedCount > 0) {
-        console.log(`🔨 백그라운드 처리 시작: ${unprocessedCount}개 대기 중`);
-        try {
-          await BackgroundProcessorService.processUnhashedImages();
-        } catch (error) {
-          console.error('❌ 백그라운드 처리 중 오류 발생:', error);
+      // 중복 실행 방지 락
+      if (this.isPhase2Running) {
+        // console.log('  ⏳ Phase 2 백그라운드 처리가 이미 진행 중입니다. 건너뜁니다.');
+        return;
+      }
+
+      this.isPhase2Running = true;
+
+      try {
+        const unprocessedCount = BackgroundProcessorService.getUnprocessedCount();
+        if (unprocessedCount > 0) {
+          // console.log(`🔨 백그라운드 처리 시작: ${unprocessedCount}개 대기 중`);
+          try {
+            await BackgroundProcessorService.processUnhashedImages();
+          } catch (error) {
+            console.error('❌ 백그라운드 처리 중 오류 발생:', error);
+          }
         }
+      } finally {
+        this.isPhase2Running = false;
       }
     };
 
@@ -109,7 +122,7 @@ export class AutoScanScheduler {
     // 파일 검증 스케줄러 시작
     startFileVerification();
 
-    console.log(`✅ 자동 스캔 스케줄러 시작됨 (Phase 1: 1분마다, Phase 2: ${phase2IntervalSeconds}초마다)`);
+    console.log(`✅ 자동 스캔 스케줄러 시작됨 (Phase 1: 1분마다, Phase 2: 1초마다, Phase 3: 파일 검증 활성화시)`);
   }
 
   /**

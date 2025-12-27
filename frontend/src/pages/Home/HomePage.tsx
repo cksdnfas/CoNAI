@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Box, Typography, IconButton, Tooltip, Drawer } from '@mui/material';
+import { Box, Typography, IconButton, Tooltip, Drawer, Snackbar, Alert } from '@mui/material';
 import { Refresh as RefreshIcon, Close as CloseIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import ImageList from '../../components/ImageList/ImageList';
 import BulkActionBar from '../../components/BulkActionBar/BulkActionBar';
 import SearchBar from '../../components/SearchBar/SearchBar';
 import { useInfiniteImages } from '../../hooks/useInfiniteImages';
+import { usePaginatedImages } from '../../hooks/usePaginatedImages';
+import { useImageListSettings } from '../../hooks/useImageListSettings';
 import { useSearch } from '../../hooks/useSearch';
 import type { ComplexSearchRequest } from '@comfyui-image-manager/shared';
 import type { PageSize } from '../../types/image';
@@ -13,15 +15,37 @@ import type { PageSize } from '../../types/image';
 const HomePage: React.FC = () => {
   const { t } = useTranslation(['common', 'search']);
 
-  // Recent Images Hooks
-  const infiniteImages = useInfiniteImages();
-
-  // Search Hooks
-  const search = useSearch();
-
   // State
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  // Feedback State
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'info' | 'error'>('info');
+
+  const handleSnackbarClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setSnackbarOpen(false);
+  };
+
+  // Settings
+  const { settings: homeSettings } = useImageListSettings('home');
+  const { settings: searchSettings } = useImageListSettings('search');
+
+  const activeSettings = isSearchMode ? searchSettings : homeSettings;
+  const activeMode = activeSettings.activeScrollMode;
+
+  // Recent Images Hooks
+  const infiniteImages = useInfiniteImages();
+  const paginatedImages = usePaginatedImages({
+    pageSize: homeSettings.pageSize || 50
+  });
+
+  // Search Hooks
+  const search = useSearch();
 
   // Selection State
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -46,13 +70,57 @@ const HomePage: React.FC = () => {
     setIsSearchMode(false);
     setSelectedIds([]); // Clear selection
     // Optional: Refresh recent images?
-    // infiniteImages.refreshImages(); 
+    if (activeMode === 'pagination') {
+      paginatedImages.refreshImages();
+    } else {
+      // infiniteImages.refreshImages(); 
+    }
   };
 
+  // Refresh Handler
+  const handleRefresh = async () => {
+    setSnackbarMessage(t('common:messages.processing'));
+    setSnackbarSeverity('info');
+    setSnackbarOpen(true);
+
+    try {
+      if (activeMode === 'pagination') {
+        await paginatedImages.refreshImages();
+      } else {
+        await infiniteImages.refreshImages();
+      }
+
+      setSnackbarMessage(t('common:messages.success'));
+      setSnackbarSeverity('success');
+    } catch (error) {
+      console.error('Refresh failed:', error);
+      setSnackbarMessage(t('common:messages.error'));
+      setSnackbarSeverity('error');
+    }
+  };
+
+  // Sync mode transitions
+  React.useEffect(() => {
+    if (isSearchMode && activeMode === 'pagination') {
+      // When switching to pagination in search mode, reset accumulated infinite results
+      search.refreshSearch();
+    }
+  }, [activeMode, isSearchMode, search.refreshSearch]);
+
   // Unified Props
-  const currentImages = isSearchMode ? search.images : infiniteImages.images;
-  const currentLoading = isSearchMode ? search.loading : infiniteImages.loading;
-  const currentError = isSearchMode ? search.error : infiniteImages.error;
+  let currentImages = infiniteImages.images;
+  let currentLoading = infiniteImages.loading;
+  let currentError = infiniteImages.error;
+
+  if (isSearchMode) {
+    currentImages = search.images;
+    currentLoading = search.loading;
+    currentError = search.error;
+  } else if (activeMode === 'pagination') {
+    currentImages = paginatedImages.images;
+    currentLoading = paginatedImages.loading;
+    currentError = paginatedImages.error;
+  }
 
   const handleSelectionChange = (newSelectedIds: number[]) => {
     setSelectedIds(newSelectedIds);
@@ -75,32 +143,55 @@ const HomePage: React.FC = () => {
     // Refresh current view
     if (isSearchMode) {
       search.refreshSearch();
+    } else if (activeMode === 'pagination') {
+      paginatedImages.refreshImages();
     } else {
       await infiniteImages.refreshImages();
     }
   };
 
   // ImageList Props based on mode
-  const imageListProps = isSearchMode ? {
-    contextId: 'search',
-    mode: 'pagination' as const,
-    pagination: {
-      currentPage: search.currentPage,
-      totalPages: search.totalPages,
-      onPageChange: search.changePage,
-      pageSize: search.pageSize || 25,
-      onPageSizeChange: (size: number) => search.changePageSize(size as PageSize)
-    },
-    total: search.total
-  } : {
-    contextId: 'home',
-    mode: 'infinite' as const,
-    infiniteScroll: {
-      hasMore: infiniteImages.hasMore,
-      loadMore: infiniteImages.loadMore
-    },
-    total: infiniteImages.images.length // Approximate or N/A
-  };
+  const imageListProps = isSearchMode
+    ? (activeMode === 'pagination' ? {
+      contextId: 'search',
+      mode: 'pagination' as const,
+      pagination: {
+        currentPage: search.currentPage,
+        totalPages: search.totalPages,
+        onPageChange: search.changePage,
+        pageSize: search.pageSize || 25,
+        onPageSizeChange: (size: number) => search.changePageSize(size as PageSize)
+      },
+      total: search.total
+    } : {
+      contextId: 'search',
+      mode: 'infinite' as const,
+      infiniteScroll: {
+        hasMore: search.hasMore,
+        loadMore: search.loadMore
+      },
+      total: search.total
+    })
+    : activeMode === 'pagination' ? {
+      contextId: 'home', // This was correctly 'home' before? Yes.
+      mode: 'pagination' as const,
+      pagination: {
+        currentPage: paginatedImages.page,
+        totalPages: paginatedImages.totalPages,
+        onPageChange: paginatedImages.setPage,
+        pageSize: paginatedImages.pageSize,
+        onPageSizeChange: paginatedImages.setPageSize
+      },
+      total: paginatedImages.total
+    } : {
+      contextId: 'home',
+      mode: 'infinite' as const,
+      infiniteScroll: {
+        hasMore: infiniteImages.hasMore,
+        loadMore: infiniteImages.loadMore
+      },
+      total: infiniteImages.images.length // Approximate or N/A
+    };
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -135,7 +226,7 @@ const HomePage: React.FC = () => {
           {!isSearchMode && (
             <Tooltip title={t('common:refresh')}>
               <span>
-                <IconButton onClick={infiniteImages.refreshImages} disabled={currentLoading}>
+                <IconButton onClick={handleRefresh} disabled={currentLoading}>
                   <RefreshIcon />
                 </IconButton>
               </span>
@@ -209,8 +300,21 @@ const HomePage: React.FC = () => {
         <Box sx={{ p: 2, overflowY: 'auto', flex: 1 }}>
           <SearchBar onSearch={handleExecuteSearch} loading={search.loading} />
         </Box>
+
       </Drawer>
-    </Box>
+
+      {/* Feedback Snackbar */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+    </Box >
   );
 };
 

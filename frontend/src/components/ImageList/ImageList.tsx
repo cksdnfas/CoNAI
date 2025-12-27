@@ -3,10 +3,22 @@ import {
     Box,
     Pagination,
     Typography,
+    Fab,
+    Tooltip,
 } from '@mui/material';
 import Masonry from 'react-masonry-css';
 import InfiniteScroll from 'react-infinite-scroll-component';
 import { useTranslation } from 'react-i18next';
+import {
+    Settings as SettingsIcon,
+    Search as SearchIcon,
+    GridView as GridIcon,
+    ViewModule as MasonryIcon,
+    Close as CloseIcon,
+    Tune as TuneIcon,
+    KeyboardArrowUp,
+    KeyboardArrowDown,
+} from '@mui/icons-material';
 import type { ImageRecord } from '../../types/image';
 import { useImageListSettings } from '../../hooks/useImageListSettings';
 import ImageListControls from './ImageListControls';
@@ -53,6 +65,7 @@ export interface ImageListProps {
 
     // Control Props
     onSearchClick?: () => void;
+    isModal?: boolean;
 }
 
 const ImageList: React.FC<ImageListProps> = ({
@@ -69,6 +82,7 @@ const ImageList: React.FC<ImageListProps> = ({
     currentGroupId,
     total,
     onSearchClick,
+    isModal = false,
 }) => {
     const { t } = useTranslation(['common', 'gallery']);
     const {
@@ -76,12 +90,41 @@ const ImageList: React.FC<ImageListProps> = ({
         setViewMode,
         setGridColumns,
         setFitToScreen,
+        setActiveScrollMode,
+        setPageSize,
     } = useImageListSettings(contextId);
 
     // isMinimal is now handled internally by components using useCardWidth
     // const isMinimal = settings.gridColumns >= 8;
 
     const activeMode = propMode || settings.activeScrollMode;
+
+    // Fix for infinite scroll stalling when content fits on screen
+    React.useEffect(() => {
+        if (
+            activeMode === 'infinite' &&
+            infiniteScroll?.hasMore &&
+            !loading &&
+            images.length > 0
+        ) {
+            const scrollHeight = document.documentElement.scrollHeight;
+            const clientHeight = document.documentElement.clientHeight;
+
+            // If content is shorter than viewport (plus buffer), load more
+            if (scrollHeight <= clientHeight + 100) {
+                infiniteScroll.loadMore();
+            }
+        }
+    }, [
+        activeMode,
+        infiniteScroll?.hasMore,
+        infiniteScroll?.loadMore,
+        loading,
+        images.length,
+        settings.gridColumns,
+        settings.viewMode,
+        settings.fitToScreen
+    ]);
 
     const [viewerOpen, setViewerOpen] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -95,6 +138,8 @@ const ImageList: React.FC<ImageListProps> = ({
     const onSelectionChange = selection?.onSelectionChange;
     const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
     const [lastClickedIndex, setLastClickedIndex] = useState<number>(-1);
+
+    const containerRef = React.useRef<HTMLDivElement>(null);
 
     const handleImageClick = useCallback((index: number) => {
         setCurrentImageIndex(index);
@@ -155,6 +200,7 @@ const ImageList: React.FC<ImageListProps> = ({
         >
             {images.map((image, index) => (
                 <MasonryImageCard
+                    id={`image-card-${index}`}
                     key={image.id ? `id-${image.id}` : `hash-${image.composite_hash}-${index}`}
                     image={image}
                     onClick={() => handleImageClick(index)}
@@ -163,6 +209,9 @@ const ImageList: React.FC<ImageListProps> = ({
                     onSelectionChange={handleSelectionWrapper}
                     // minimal={isMinimal} // Handled internally
                     fitScreen={settings.fitToScreen && settings.gridColumns === 1}
+                    isModal={isModal}
+                    showCollectionType={showCollectionType}
+                    currentGroupId={currentGroupId}
                 />
             ))}
         </Masonry>
@@ -183,7 +232,10 @@ const ImageList: React.FC<ImageListProps> = ({
             }}
         >
             {images.map((image, index) => (
-                <Box key={image.id ? `id-${image.id}` : `hash-${image.composite_hash}-${index}`}>
+                <Box
+                    key={image.id ? `id-${image.id}` : `hash-${image.composite_hash}-${index}`}
+                    id={`image-card-${index}`}
+                >
                     <ImageCard
                         image={image}
                         selected={image.id ? selectedSet.has(image.id) : false}
@@ -194,7 +246,8 @@ const ImageList: React.FC<ImageListProps> = ({
                         showCollectionType={showCollectionType}
                         currentGroupId={currentGroupId}
                         // minimal={isMinimal} // Handled internally
-                        fitScreen={settings.fitToScreen}
+                        fitScreen={settings.fitToScreen && settings.gridColumns === 1}
+                        isModal={isModal}
                     />
                 </Box>
             ))}
@@ -227,13 +280,97 @@ const ImageList: React.FC<ImageListProps> = ({
         }
     };
 
+    // Navigation Logic for 1-Column Mode
+    const handleScrollNavigation = useCallback((direction: 'prev' | 'next') => {
+        // Find the image closest to the center of the viewport
+        // Use window.innerHeight/2 because rect.top is relative to the viewport.
+        const viewportCenter = window.innerHeight / 2;
+
+        let closestIndex = -1;
+        let minDistance = Infinity;
+
+        images.forEach((_, index) => {
+            const el = document.getElementById(`image-card-${index}`);
+            if (el) {
+                const rect = el.getBoundingClientRect();
+                const elementCenter = rect.top + rect.height / 2;
+
+                const distance = Math.abs(elementCenter - viewportCenter);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestIndex = index;
+                }
+            }
+        });
+
+        if (closestIndex === -1) return;
+
+        // 2. Determine target index
+        let targetIndex = direction === 'next' ? closestIndex + 1 : closestIndex - 1;
+
+        // Boundary checks
+        if (targetIndex < 0) targetIndex = 0;
+        if (targetIndex >= images.length) targetIndex = images.length - 1;
+
+        // 3. Scroll to target
+        const targetEl = document.getElementById(`image-card-${targetIndex}`);
+        if (targetEl) {
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, [images]);
+
+    const renderNavigationButtons = () => {
+        if (settings.gridColumns !== 1) return null;
+
+        return (
+            <Box
+                sx={{
+                    position: 'fixed',
+                    left: { xs: 16, sm: 32 },
+                    bottom: { xs: 16, sm: 32 },
+                    zIndex: 2000, // Ensure it's above modals (MUI Dialog is 1300)
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                }}
+            >
+                <Tooltip title={t('common:previous')} placement="right">
+                    <Fab
+                        color="primary"
+                        size="medium"
+                        onClick={() => handleScrollNavigation('prev')}
+                        sx={{ opacity: 0.7, '&:hover': { opacity: 1 } }}
+                    >
+                        <KeyboardArrowUp />
+                    </Fab>
+                </Tooltip>
+                <Tooltip title={t('common:next')} placement="right">
+                    <Fab
+                        color="primary"
+                        size="medium"
+                        onClick={() => handleScrollNavigation('next')}
+                        sx={{ opacity: 0.7, '&:hover': { opacity: 1 } }}
+                    >
+                        <KeyboardArrowDown />
+                    </Fab>
+                </Tooltip>
+            </Box>
+        );
+    };
+
     return (
-        <Box sx={{ width: '100%', position: 'relative' }}>
+        <Box ref={containerRef} sx={{ width: '100%', position: 'relative' }}>
+            {renderNavigationButtons()}
             <ImageListControls
                 settings={settings}
                 onViewModeChange={setViewMode}
                 onColumnsChange={setGridColumns}
                 onFitToScreenChange={setFitToScreen}
+                onScrollModeChange={setActiveScrollMode}
+                onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    pagination?.onPageSizeChange(size);
+                }}
                 onSearchClick={onSearchClick}
             />
 

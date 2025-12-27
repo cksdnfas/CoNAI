@@ -26,6 +26,7 @@ interface GroupCreateEditModalProps {
   onClose: () => void;
   onSuccess: () => void;
   group?: GroupWithHierarchy;
+  initialAutoCollectConditions?: ComplexFilter;
 }
 
 interface TabPanelProps {
@@ -51,7 +52,9 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   open,
   onClose,
   onSuccess,
-  group
+
+  group,
+  initialAutoCollectConditions
 }) => {
   const { t } = useTranslation(['imageGroups', 'common']);
   const [activeTab, setActiveTab] = useState(0);
@@ -114,13 +117,13 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
         description: '',
         color: '#2196f3',
         parent_id: null,
-        auto_collect_enabled: false,
+        auto_collect_enabled: !!initialAutoCollectConditions,
       });
-      setConditions({});
+      setConditions(initialAutoCollectConditions || {});
     }
     setError(null);
     setActiveTab(0);
-  }, [group, open]);
+  }, [group, open, initialAutoCollectConditions]);
 
   // 폼 데이터 변경
   const handleFormChange = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
@@ -185,6 +188,8 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
           : undefined,
       };
 
+      console.log('Submitting group data:', requestData);
+
       if (isEditMode) {
         await updateGroupMutation.mutateAsync({ id: group.id, data: requestData });
       } else {
@@ -192,9 +197,12 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
       }
 
       onSuccess();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving group:', error);
-      setError(t(`imageGroups:messages.${isEditMode ? 'updateFailed' : 'createFailed'}`));
+      const errorMessage = error.response?.data?.error ||
+        error.message ||
+        t(`imageGroups:messages.${isEditMode ? 'updateFailed' : 'createFailed'}`);
+      setError(errorMessage);
     }
   };
 

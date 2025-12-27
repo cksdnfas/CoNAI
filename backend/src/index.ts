@@ -1,11 +1,17 @@
-// Load environment variables from .env file FIRST
+// Load environment variables from ROOT .env file
 // This must be done before any other imports that depend on process.env
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Resolve path to root .env file (assuming we are in backend/src or backend/dist)
+// Root is two levels up from backend/ directory
+const rootEnvPath = path.resolve(__dirname, '../../.env');
+dotenv.config({ path: rootEnvPath });
 
 // Configure NODE_PATH for native modules in SEA (Single Executable Application)
 // This must be done before any imports that depend on native modules
 if (process.env.NODE_ENV === 'production' || process.execPath.includes('comfyui-image-manager')) {
-  const nativeModulesPath = require('path').join(__dirname, '..', 'node_modules');
+  const nativeModulesPath = path.join(__dirname, '..', 'node_modules');
   if (require('fs').existsSync(nativeModulesPath)) {
     process.env.NODE_PATH = nativeModulesPath;
     require('module').Module._initPaths();
@@ -19,7 +25,6 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import BetterSqlite3Store from 'better-sqlite3-session-store';
-import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { runtimePaths, ensureRuntimeDirectories } from './config/runtimePaths';
@@ -151,12 +156,12 @@ app.use(express.urlencoded({ extended: true, limit: `${IMAGE_PROCESSING.MAX_FILE
 
 // .env 파일 자동 생성
 const createEnvFileIfNotExists = () => {
-  const envPath = path.join(__dirname, '../.env');
+  const envPath = path.resolve(__dirname, '../../.env');
   const envExamplePath = path.join(__dirname, '../.env.example');
 
   if (!fs.existsSync(envPath) && fs.existsSync(envExamplePath)) {
     fs.copyFileSync(envExamplePath, envPath);
-    console.log('📝 Created .env file from .env.example');
+    console.log('📝 Created root .env file from backend/.env.example');
   }
 };
 

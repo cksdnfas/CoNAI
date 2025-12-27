@@ -9,8 +9,11 @@ import {
   Button,
   CircularProgress,
   Alert,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { useTranslation } from 'react-i18next';
 import type { AutoTagsData } from '../../types/image';
 import { taggerBatchApi } from '../../services/settingsApi';
@@ -30,7 +33,8 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleGenerateTag = async () => {
+  const handleGenerateTag = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation(); // Prevent accordion from toggling if button is inside header
     setIsGenerating(true);
     setError(null);
     try {
@@ -60,7 +64,7 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
         </Typography>
         <Button
           variant="contained"
-          onClick={handleGenerateTag}
+          onClick={() => handleGenerateTag()}
           disabled={isGenerating}
           startIcon={isGenerating ? <CircularProgress size={20} /> : undefined}
         >
@@ -106,9 +110,22 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
 
     return (
       <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-          {t('autoTagDisplay.sections.rating')}
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            {t('autoTagDisplay.sections.rating')}
+          </Typography>
+          <Tooltip title={t('autoTagDisplay.regenerate', 'Regenerate Tags')}>
+            <span>
+              <IconButton
+                size="small"
+                onClick={handleGenerateTag}
+                disabled={isGenerating}
+              >
+                {isGenerating ? <CircularProgress size={16} /> : <RefreshIcon fontSize="small" />}
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
         <Box
           sx={{
             display: 'flex',

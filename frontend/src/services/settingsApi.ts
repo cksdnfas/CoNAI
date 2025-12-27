@@ -278,6 +278,16 @@ export const taggerBatchApi = {
     );
     return response.data.data.count;
   },
+
+  /**
+   * Reset all auto tags (set to NULL)
+   */
+  resetAutoTags: async (): Promise<{ changes: number; message: string }> => {
+    const response = await imageApi.post<{ success: boolean; data: { changes: number; message: string } }>(
+      '/reset-auto-tags'
+    );
+    return response.data.data;
+  },
 };
 
 const thumbnailApiClient = axios.create({

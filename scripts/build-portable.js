@@ -515,13 +515,13 @@ console.log('✅ Startup scripts created\n');
 console.log('Step 9: Creating environment template...');
 
 // Read the source .env.example from backend
-const sourceEnvPath = path.join(__dirname, '..', 'backend', '.env.example');
+const sourceEnvPath = path.join(ROOT_DIR, '.env.example');
 let envContent = fs.readFileSync(sourceEnvPath, 'utf8');
 
 // Add portable-specific header
 const portableHeader = `# ComfyUI Image Manager Configuration
 #
-# This file was auto-generated from backend/.env.example
+# This file was auto-generated from .env.example
 # Rename to .env to use.
 
 `;

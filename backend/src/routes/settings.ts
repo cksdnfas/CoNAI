@@ -5,8 +5,10 @@ import { imageTaggerService } from '../services/imageTaggerService';
 import { RatingScoreService } from '../services/ratingScoreService';
 import { SystemSettingsService } from '../services/systemSettingsService';
 import { AutoScanScheduler } from '../services/autoScanScheduler';
+import { autoTagScheduler } from '../services/autoTagScheduler';
 import { GeneralSettings, TaggerSettings, SimilaritySettings, MetadataExtractionSettings, ThumbnailSettings, SupportedLanguage } from '../types/settings';
 import { RatingWeightsUpdate, RatingTierInput, RatingData } from '../types/rating';
+import { MaintenanceService } from '../services/maintenanceService';
 
 const router = Router();
 
@@ -125,6 +127,9 @@ router.put(
 
     // Reload tagger service configuration
     await imageTaggerService.reloadConfig();
+
+    // Restart auto-tag scheduler to apply new settings (e.g. enabled/disabled)
+    autoTagScheduler.restart();
 
     res.json({
       success: true,
@@ -744,6 +749,32 @@ router.put(
       data: updatedConfig,
       message: '자동 태깅 스케줄러 설정이 업데이트되었습니다',
     });
+    return;
+  })
+);
+
+// ==================== Maintenance Routes ====================
+
+/**
+ * POST /api/settings/maintenance/sync-tags
+ * Sync auto-tags from media_metadata to auto_prompt_collection
+ */
+router.post(
+  '/maintenance/sync-tags',
+  asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const result = await MaintenanceService.syncAutoTags();
+      res.json({
+        success: true,
+        data: result,
+        message: `Sync complete. Processed ${result.processed} images, collected ${result.collected} tags.`,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error during sync',
+      });
+    }
     return;
   })
 );

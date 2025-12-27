@@ -17,20 +17,22 @@ import {
   Close as CloseIcon,
   CheckCircle as CheckCircleIcon,
   Block as BlockIcon,
-  AutoAwesome as AutoAwesomeIcon
+  AutoAwesome as AutoAwesomeIcon,
+  Star as RatingIcon
 } from '@mui/icons-material';
 import SearchAutoComplete, { type PromptSearchResult } from './SearchAutoComplete';
 import { useTranslation } from 'react-i18next';
 
 export interface SearchToken {
   id: string;
-  type: 'positive' | 'negative' | 'auto';
+  type: 'positive' | 'negative' | 'auto' | 'rating';
   label: string;
   value: string;
   logic: 'OR' | 'AND' | 'NOT';
   count?: number;
   minScore?: number;
-  maxScore?: number;
+  maxScore?: number | null; // Can be null for infinite
+  color?: string | null;
 }
 
 interface SimpleSearchTabProps {
@@ -56,8 +58,6 @@ const SimpleSearchTab: React.FC<SimpleSearchTabProps> = ({
 }) => {
   const { t } = useTranslation(['search']);
 
-
-
   const handleKeyPress = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter') {
       onSearch();
@@ -66,8 +66,6 @@ const SimpleSearchTab: React.FC<SimpleSearchTabProps> = ({
 
   return (
     <Box sx={{ py: 2 }}>
-
-
       <SearchAutoComplete
         value={searchText}
         onChange={onSearchTextChange}
@@ -103,7 +101,9 @@ const TokenBadge: React.FC<{
   const [anchorEl, setAnchorEl] = React.useState<HTMLDivElement | null>(null);
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    // Only open slider for auto tags
+    // Only open slider for auto tags. Ratings also have scores but are usually fixed tiers.
+    // If we want to allow editing rating range, we could enable it.
+    // But typically user selects a tier. Let's disable for rating for now.
     if (token.type === 'auto') {
       setAnchorEl(event.currentTarget);
     }
@@ -111,6 +111,9 @@ const TokenBadge: React.FC<{
 
   const handleCycleType = (e: React.MouseEvent) => {
     e.stopPropagation();
+    // Disable type cycling for 'rating' as it's a special category
+    if (token.type === 'rating') return;
+
     const types: SearchToken['type'][] = ['positive', 'negative', 'auto'];
     const currentIndex = types.indexOf(token.type);
     const nextType = types[(currentIndex + 1) % types.length];
@@ -143,6 +146,7 @@ const TokenBadge: React.FC<{
       case 'positive': return 'success';
       case 'negative': return 'error';
       case 'auto': return 'warning';
+      case 'rating': return 'warning'; // Fallback if no custom color
     }
   };
 
@@ -151,6 +155,7 @@ const TokenBadge: React.FC<{
       case 'positive': return <CheckCircleIcon fontSize="small" color="inherit" />;
       case 'negative': return <BlockIcon fontSize="small" color="inherit" />;
       case 'auto': return <AutoAwesomeIcon fontSize="small" color="inherit" />;
+      case 'rating': return <RatingIcon fontSize="small" color="inherit" />;
     }
   };
 
@@ -158,8 +163,25 @@ const TokenBadge: React.FC<{
 
   // Score display logic
   const minScore = token.minScore ?? 0;
-  const maxScore = token.maxScore ?? 1;
-  const showScore = token.type === 'auto';
+  const maxScore = token.maxScore ?? 1; // For rating, can be null (infinity)
+
+  // Show score for auto tags and ratings
+  const showScore = token.type === 'auto' || token.type === 'rating';
+
+  // Custom style for rating if color provided
+  const typeBoxStyle = token.type === 'rating' && token.color ? {
+    bgcolor: token.color,
+    color: '#fff', // Assuming dark text might be hard to read on some colors, enforcing white text or need contrast check.
+    // Actually most user defined colors in screenshots were vivid.
+    // Let's rely on theme or just set bg. 
+    // Material UI palette colors have main and contrastText.
+    // Here we have hex string.
+    '&:hover': { opacity: 0.9 }
+  } : {
+    bgcolor: `${getTypeColor(token.type)}.main`,
+    color: `${getTypeColor(token.type)}.contrastText`,
+    '&:hover': { opacity: 0.9 }
+  };
 
   return (
     <>
@@ -196,18 +218,16 @@ const TokenBadge: React.FC<{
           </Box>
         </Tooltip>
 
-        {/* Type Toggle */}
-        <Tooltip title={t('search:simpleSearch.tooltips.type')}>
+        {/* Type Toggle / Indicator */}
+        <Tooltip title={token.type === 'rating' ? 'Rating' : t('search:simpleSearch.tooltips.type')}>
           <Box
             onClick={handleCycleType}
             sx={{
               p: 1,
-              bgcolor: `${getTypeColor(token.type)}.main`,
-              color: `${getTypeColor(token.type)}.contrastText`,
-              cursor: 'pointer',
+              cursor: token.type === 'rating' ? 'default' : 'pointer',
               display: 'flex',
               alignItems: 'center',
-              '&:hover': { opacity: 0.9 }
+              ...typeBoxStyle
             }}
           >
             {getSourceIcon(token.type)}
@@ -229,13 +249,13 @@ const TokenBadge: React.FC<{
         >
           <Typography variant="body2">{token.label}</Typography>
 
-          {token.count !== undefined && token.count > 0 && (
+          {token.count !== undefined && token.count > 0 && token.type !== 'rating' && (
             <Typography variant="caption" color="text.secondary">({token.count})</Typography>
           )}
 
           {showScore && (
             <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 'bold' }}>
-              ({minScore.toFixed(1)}~{maxScore.toFixed(1)})
+              ({minScore}~{token.maxScore === null ? '∞' : (token.maxScore ?? maxScore)})
             </Typography>
           )}
         </Box>
@@ -245,6 +265,7 @@ const TokenBadge: React.FC<{
         </IconButton>
       </Paper>
 
+      {/* Slider Popover (only for auto tags currently) */}
       <Popover
         open={open}
         anchorEl={anchorEl}
@@ -259,10 +280,10 @@ const TokenBadge: React.FC<{
             Confidence Score Range
           </Typography>
           <Slider
-            value={[minScore, maxScore]}
+            value={[minScore, typeof maxScore === 'number' ? maxScore : 100]} // Handle null maxScore
             onChange={(_: Event, newValue: number | number[]) => {
               const [min, max] = newValue as number[];
-              onUpdate(token.id, { minScore: min, maxScore: max });
+              onUpdate(token.id, { minScore: min, maxScore: max > 1 ? null : max }); // Crude handling for infinity
             }}
             valueLabelDisplay="auto"
             min={0}
@@ -273,7 +294,7 @@ const TokenBadge: React.FC<{
           />
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
             <Typography variant="caption">{minScore.toFixed(1)}</Typography>
-            <Typography variant="caption">{maxScore.toFixed(1)}</Typography>
+            <Typography variant="caption">{typeof maxScore === 'number' ? maxScore.toFixed(1) : '∞'}</Typography>
           </Box>
         </Box>
       </Popover>

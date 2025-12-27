@@ -7,14 +7,15 @@ import {
   Chip,
   IconButton,
   Tooltip,
+  Skeleton,
+  Snackbar,
+  Alert
 } from '@mui/material';
 import {
-  Download as DownloadIcon,
-  Delete as DeleteIcon,
+  HourglassEmpty as HourglassIcon,
+  VideoLibrary as VideoLibraryIcon,
   AutoAwesome as AutoAwesomeIcon,
   CheckCircle as CheckCircleIcon,
-  VideoLibrary as VideoLibraryIcon,
-  HourglassEmpty as HourglassIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../types/image';
@@ -22,6 +23,8 @@ import { getBackendOrigin } from '../../utils/backend';
 import RatingBadge from '../RatingBadge/RatingBadge';
 import { useRatingTiers } from '../../hooks/useRatingTiers';
 import { useCardWidth } from '../../hooks/useCardWidth';
+import { useImageCardActions } from './useImageCardActions';
+import ImageCardActionStack from './ImageCardActionStack';
 
 // ✅ composite_hash 기반으로 변경
 interface ImageCardProps {
@@ -35,6 +38,7 @@ interface ImageCardProps {
   currentGroupId?: number; // 현재 그룹 ID (collection_type 표시용)
   minimal?: boolean; // Deprecated, using responsive logic
   fitScreen?: boolean; // 화면 맞춤 모드 (1열 뷰용)
+  isModal?: boolean;
 }
 
 const ImageCard: React.FC<ImageCardProps> = ({
@@ -48,21 +52,35 @@ const ImageCard: React.FC<ImageCardProps> = ({
   currentGroupId,
   minimal = false,
   fitScreen = false,
+  isModal = false,
 }) => {
   const { t } = useTranslation(['common']);
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+
   const backendOrigin = getBackendOrigin();
   const { getTierByScore } = useRatingTiers();
+
+  // Use shared hooks for actions
+  const {
+    handleDownload,
+    handleDelete,
+    handleCopy,
+    toastOpen,
+    toastMessage,
+    closeToast
+  } = useImageCardActions(image, onDelete);
 
   const { ref: resizeRef, isSmall } = useCardWidth(200);
   const cardRef = useRef<HTMLDivElement>(null);
 
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const handleImageLoad = useCallback(() => {
+    setImageLoaded(true);
+  }, []);
+
   const setRefs = useCallback((node: HTMLDivElement | null) => {
-    // We can use this to merge refs if we needed internal ref access, 
-    // but here we just need to attach the resize observer.
     (resizeRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
-    // If we needed cardRef locally we would set it here too
     (cardRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
   }, [resizeRef]);
 
@@ -70,15 +88,6 @@ const ImageCard: React.FC<ImageCardProps> = ({
   // Get rating tier for this image
   const ratingTier = useMemo(() => {
     const tier = getTierByScore(image.rating_score);
-    // Debug: Log first image only to avoid spam
-    if (image.composite_hash && Math.random() < 0.1) {
-      console.log('[ImageCard] Rating debug:', {
-        has_rating_score: image.rating_score !== null,
-        rating_score: image.rating_score,
-        tier_found: !!tier,
-        tier_name: tier?.tier_name
-      });
-    }
     return tier;
   }, [image.rating_score, getTierByScore, image.composite_hash]);
 
@@ -96,33 +105,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
     }
   }, [onSelectionChange, image.id]);
 
-  const handleDownload = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation(); // 이벤트 전파 방지
-    const link = document.createElement('a');
 
-    // Phase 1: composite_hash가 없으면 경로 기반 다운로드
-    if (image.is_processing || !image.composite_hash) {
-      link.href = `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path || '')}`;
-    } else {
-      link.href = `${backendOrigin}/api/images/${image.composite_hash}/download/original`;
-    }
-
-    link.download = image.original_file_path || `image_${image.composite_hash?.substring(0, 8) || 'unknown'}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }, [backendOrigin, image.is_processing, image.composite_hash, image.original_file_path]);
-
-  const handleDelete = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation(); // 이벤트 전파 방지
-    const isVideo = image.mime_type?.startsWith('video/');
-    const confirmMessage = isVideo
-      ? t('common:imageCard.confirmDelete.video')
-      : t('common:imageCard.confirmDelete.image');
-    if (onDelete && image.composite_hash && window.confirm(confirmMessage)) {
-      onDelete(image.composite_hash);
-    }
-  }, [onDelete, image.composite_hash, image.mime_type, t]);
 
   // ✅ composite_hash 사용 - API 엔드포인트를 통해 썸네일 및 원본 이미지 제공
   // Phase 1: composite_hash가 NULL이면 경로 기반 URL 사용
@@ -139,7 +122,6 @@ const ImageCard: React.FC<ImageCardProps> = ({
     // 모든 파일 타입이 composite_hash를 사용
     if (isGif || isVideo) {
       const url = `${backendOrigin}/api/images/${image.composite_hash}/file`;
-      // console.log('[ImageCard] GIF/Video URL:', url, 'mime_type:', image.mime_type, 'composite_hash:', image.composite_hash, 'isGif:', isGif, 'isVideo:', isVideo);
       return url;
     }
     // 일반 이미지는 썸네일 사용
@@ -163,11 +145,16 @@ const ImageCard: React.FC<ImageCardProps> = ({
   }, [isProcessing, isGif, isVideo, backendOrigin, image.composite_hash, image.original_file_path]);
 
   // Image Style for fitScreen
+  // Landscape (width >= height) -> Width 100%, Height Auto (removes letterboxing)
+  // Portrait (width < height) -> Height 85vh, Width Auto (maximizes height)
+  const isLandscape = (image.width || 0) >= (image.height || 0);
+  const maxVh = isModal ? '70vh' : '85vh';
+
   const imageStyle = fitScreen ? {
-    width: 'auto',
+    width: isLandscape ? '100%' : 'auto',
+    height: isLandscape ? 'auto' : maxVh,
+    maxHeight: maxVh,
     maxWidth: '100%',
-    height: 'auto',
-    maxHeight: '85vh',
     display: 'block',
     margin: '0 auto',
     objectFit: 'contain' as const,
@@ -201,7 +188,8 @@ const ImageCard: React.FC<ImageCardProps> = ({
               : 'divider'),
           borderStyle: (showCollectionType && isAutoCollected) ? 'dashed' : 'solid',
           borderRadius: 2,
-          transition: 'all 0.3s ease',
+          transition: 'transform 0.2s, box-shadow 0.2s',
+          willChange: 'transform',
           boxShadow: (showCollectionType && isAutoCollected)
             ? (theme) => `0 0 8px ${theme.palette.mode === 'dark' ? 'rgba(66, 165, 245, 0.4)' : 'rgba(25, 118, 210, 0.3)'}`
             : 'none',
@@ -217,7 +205,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
             alignItems: 'center',
             justifyContent: 'center',
             bgcolor: 'background.paper',
-            minHeight: '200px', // Prevents collapse if image not loaded yet
+            minHeight: imageLoaded ? 'auto' : '200px', // Collapse to content when loaded
           }),
         }}
       >
@@ -289,7 +277,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
 
         {/* Phase 1 처리 중 배지 - minimal에서도 보여줄지 고민, 중요하니 보여줌 (작게) */}
         {image.is_processing && !isSmall && (
-          <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
+          <Box sx={{ position: 'absolute', top: 8, left: 48, zIndex: 1 }}>
             <Chip
               icon={<HourglassIcon sx={{ fontSize: '0.8rem' }} />}
               label="Processing"
@@ -309,7 +297,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
           </Box>
         )}
 
-        {/* 비디오 배지 (재생 시간 표시) - Minimal Hide */}
+        {/* Video Duration Badge - Bottom Left - Hide in small mode */}
         {image.mime_type?.startsWith('video/') && image.duration && !isSmall && (
           <Box sx={{ position: 'absolute', bottom: 8, left: 8, zIndex: 1 }}>
             <Chip
@@ -358,6 +346,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
                   backdropFilter: 'blur(4px)',
                   '& .MuiChip-icon': {
                     margin: 0,
+                    side: 'left',
                   },
                   '& .MuiChip-label': {
                     display: 'none',
@@ -373,53 +362,16 @@ const ImageCard: React.FC<ImageCardProps> = ({
           </Box>
         )}
 
-        {/* Action Buttons (Download/Delete) - Minimal Hide */}
-        {!isSmall && (
-          <Box className="image-card-actions" sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
-            <Box sx={{ display: 'flex', gap: 0.5 }}>
-              <Tooltip title={t('common:imageCard.tooltips.download')}>
-                <IconButton
-                  size="small"
-                  onClick={handleDownload}
-                  sx={{
-                    bgcolor: (theme) => theme.palette.mode === 'dark'
-                      ? 'rgba(0, 0, 0, 0.6)'
-                      : 'rgba(255, 255, 255, 0.8)',
-                    borderRadius: 1,
-                    '&:hover': {
-                      bgcolor: (theme) => theme.palette.mode === 'dark'
-                        ? 'rgba(0, 0, 0, 0.8)'
-                        : 'rgba(255, 255, 255, 0.9)',
-                    },
-                  }}
-                >
-                  <DownloadIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              {onDelete && (
-                <Tooltip title={t('common:imageCard.tooltips.delete')}>
-                  <IconButton
-                    size="small"
-                    onClick={handleDelete}
-                    sx={{
-                      bgcolor: (theme) => theme.palette.mode === 'dark'
-                        ? 'rgba(0, 0, 0, 0.6)'
-                        : 'rgba(255, 255, 255, 0.8)',
-                      borderRadius: 1,
-                      '&:hover': {
-                        bgcolor: (theme) => theme.palette.mode === 'dark'
-                          ? 'rgba(0, 0, 0, 0.8)'
-                          : 'rgba(255, 255, 255, 0.9)',
-                      },
-                    }}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              )}
-            </Box>
-          </Box>
-        )}
+        {/* Action Buttons & Prompt Icons - Right Vertical Stack */}
+        <ImageCardActionStack
+          image={image}
+          isHovered={isHovered}
+          selected={selected}
+          isSmall={isSmall}
+          onDownload={handleDownload}
+          onDelete={onDelete ? handleDelete : undefined}
+          onCopy={handleCopy}
+        />
 
         {/* 비디오인 경우 video 태그, GIF와 이미지는 img 태그 - apply imageStyle */}
         {isVideo ? (
@@ -437,8 +389,11 @@ const ImageCard: React.FC<ImageCardProps> = ({
             sx={{
               ...imageStyle,
               cursor: 'pointer',
+              opacity: imageLoaded ? 1 : 0,
+              transition: 'opacity 0.2s ease-in-out',
             }}
             onClick={onImageClick}
+            onLoadedData={handleImageLoad}
           />
         ) : isGif ? (
           <CardMedia
@@ -446,13 +401,18 @@ const ImageCard: React.FC<ImageCardProps> = ({
             image={imageError ? fallbackUrl : thumbnailUrl}
             alt={image.original_file_path ?? ''}
             draggable={false}
+            loading="lazy"
+            decoding="async"
             onError={(e) => {
               console.error('[ImageCard] Image load error:', imageError ? fallbackUrl : thumbnailUrl, 'isGif:', isGif, 'mime_type:', image.mime_type, e);
               setImageError(true);
             }}
+            onLoad={handleImageLoad}
             sx={{
               ...imageStyle,
               cursor: 'pointer',
+              opacity: imageLoaded ? 1 : 0,
+              transition: 'opacity 0.2s ease-in-out',
             }}
             onClick={onImageClick}
           />
@@ -462,19 +422,24 @@ const ImageCard: React.FC<ImageCardProps> = ({
             image={imageError ? fallbackUrl : thumbnailUrl}
             alt={image.original_file_path ?? ''}
             draggable={false}
+            loading="lazy"
+            decoding="async"
             onError={(e) => {
               console.error('[ImageCard] Image load error:', imageError ? fallbackUrl : thumbnailUrl, 'isGif:', isGif, 'mime_type:', image.mime_type, e);
               setImageError(true);
             }}
+            onLoad={handleImageLoad}
             sx={{
               ...imageStyle,
               cursor: 'pointer',
+              opacity: imageLoaded ? 1 : 0,
+              transition: 'opacity 0.2s ease-in-out',
             }}
             onClick={onImageClick}
           />
         )}
 
-        {/* 그룹 정보와 AI 도구 정보 - 메인 갤러리에서만 표시 */}
+        {/* 그룹 정보 - 메인 갤러리에서만 표시 */}
         {!showCollectionType && !isSmall && (
           <Box sx={{
             position: 'absolute',
@@ -529,27 +494,20 @@ const ImageCard: React.FC<ImageCardProps> = ({
                 )}
               </>
             )}
-
-            {/* AI 도구 정보 */}
-            {image.ai_tool && (
-              <Chip
-                label={image.ai_tool}
-                size="small"
-                variant="outlined"
-                sx={{
-                  fontSize: { xs: '0.65rem', sm: '0.75rem' },
-                  height: { xs: '20px', sm: '22px' },
-                  bgcolor: 'rgba(25, 118, 210, 0.9)',
-                  color: 'white',
-                  borderColor: 'rgba(255, 255, 255, 0.3)',
-                  backdropFilter: 'blur(4px)',
-                }}
-              />
-            )}
           </Box>
         )}
       </Card>
 
+      <Snackbar
+        open={toastOpen}
+        autoHideDuration={2000}
+        onClose={closeToast}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success" sx={{ width: '100%' }}>
+          {toastMessage}
+        </Alert>
+      </Snackbar>
     </>
   );
 };

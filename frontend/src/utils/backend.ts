@@ -1,10 +1,15 @@
 ﻿const resolveDefaultBackendOrigin = (): string => {
-  // 백엔드 기본 포트 반환 (프론트엔드와 백엔드 포트가 다를 수 있음)
-  // 문자열 분리로 빌드 타임 평가 완전 방지
-  const protocol = 'http';
-  const host = 'localhost';
-  const port = '1666';
-  return `${protocol}://${host}:${port}`;
+  // 개발 환경: Vite 프록시가 아닌 직접 연결이 필요한 경우를 위해 명시적 URL 반환
+  // 프로덕션: 빈 문자열을 반환하여 Axios가 상대 경로(예: /api/...)를 사용하게 함
+  // 이를 통해 앱이 서빙되는 호스트(localhost, 192.168.x.x 등)에 관계없이 올바르게 요청함
+  if (import.meta.env.DEV) {
+    const protocol = 'http';
+    const host = 'localhost';
+    const port = '1666';
+    return `${protocol}://${host}:${port}`;
+  }
+
+  return '';
 };
 
 const stripTrailingSlash = (value: string): string => value.replace(/\/+$/, '');

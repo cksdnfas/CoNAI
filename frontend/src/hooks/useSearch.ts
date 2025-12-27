@@ -107,8 +107,8 @@ export const useSearch = () => {
     } catch (err: any) {
       // Extract detailed error message from backend response
       const errorMessage = err.response?.data?.error ||
-                          err.message ||
-                          '검색 중 오류가 발생했습니다.';
+        err.message ||
+        '검색 중 오류가 발생했습니다.';
       setError(errorMessage);
       setImages([]);
       setTotal(0);
@@ -197,6 +197,64 @@ export const useSearch = () => {
     }
   }, []);
 
+  // Infinite scroll load more
+  const loadMore = useCallback(async () => {
+    if (loading || currentPage >= totalPages) return;
+
+    const nextPage = currentPage + 1;
+    setLoading(true);
+
+    try {
+      let response;
+
+      if (lastComplexRequest) {
+        const request = {
+          ...lastComplexRequest,
+          page: nextPage,
+          limit: lastComplexRequest.limit || pageSize,
+        };
+        response = await imageApi.searchComplex(request);
+      } else if (lastSearchParams) {
+        if (lastAutoTagParams) {
+          const autoTagParams = {
+            ...lastAutoTagParams,
+            page: nextPage,
+            limit: lastSearchParams.limit || pageSize,
+          };
+          response = await imageApi.searchByAutoTags(autoTagParams);
+        } else {
+          const searchParams = {
+            ...lastSearchParams,
+            page: nextPage,
+            limit: lastSearchParams.limit || pageSize,
+          };
+          response = await imageApi.searchImages(searchParams);
+        }
+      }
+
+      if (response && response.success && response.data) {
+        setImages((prev) => [...prev, ...response.data.images]);
+        setCurrentPage(response.data.page);
+        // Update totals to ensure consistency
+        setTotalPages(response.data.totalPages);
+        setTotal(response.data.total);
+      }
+    } catch (err) {
+      console.error('Load more error:', err);
+      // We might want to set a transient error state here vs full error
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    loading,
+    currentPage,
+    totalPages,
+    lastComplexRequest,
+    lastSearchParams,
+    lastAutoTagParams,
+    pageSize,
+  ]);
+
   return {
     images,
     loading,
@@ -215,5 +273,7 @@ export const useSearch = () => {
     deleteImages,
     refreshSearch,
     clearSearch,
+    loadMore,
+    hasMore: currentPage < totalPages,
   };
 };

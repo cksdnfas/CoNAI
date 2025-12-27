@@ -15,6 +15,7 @@ import { ComfyUIParser } from './parsers/comfyuiParser';
 import { WorkflowDetector } from './parsers/workflowDetector';
 import { MetadataExtractionError } from '../../types/errors';
 import { assertFileReadable } from '../../utils/fileAccess';
+import { logger } from '../../utils/logger';
 
 export class MetadataExtractor {
   /**
@@ -25,7 +26,7 @@ export class MetadataExtractor {
   static async extractMetadata(filePath: string): Promise<ImageMetadata> {
     const startTime = Date.now();
     const fileName = path.basename(filePath);
-    console.log(`⏱️ [MetadataExtractor] Starting extraction: ${fileName}`);
+    logger.debug(`⏱️ [MetadataExtractor] Starting extraction: ${fileName}`);
 
     try {
       // 파일 접근 권한 체크 (존재 여부 + 읽기 권한)
@@ -46,12 +47,12 @@ export class MetadataExtractor {
         // 파일 읽기 오류 - 권한 또는 접근 오류
         throw MetadataExtractionError.fromNodeError(filePath, error as NodeJS.ErrnoException);
       }
-      console.log(`⏱️ [MetadataExtractor] File read (${(buffer.length / 1024).toFixed(1)}KB): ${Date.now() - readStart}ms`);
+      logger.debug(`⏱️ [MetadataExtractor] File read (${(buffer.length / 1024).toFixed(1)}KB): ${Date.now() - readStart}ms`);
 
       // 1차 추출 (Primary extraction)
       const primaryStart = Date.now();
       let aiInfo = await this.primaryExtraction(buffer, filePath, fileExt);
-      console.log(`⏱️ [MetadataExtractor] Primary extraction: ${Date.now() - primaryStart}ms`);
+      logger.debug(`⏱️ [MetadataExtractor] Primary extraction: ${Date.now() - primaryStart}ms`);
 
       // 프롬프트 추출 실패 여부 확인 (빈 문자열과 공백만 있는 경우도 실패로 처리)
       const hasPrompt = Boolean(
@@ -59,11 +60,16 @@ export class MetadataExtractor {
         (aiInfo.positive_prompt && typeof aiInfo.positive_prompt === 'string' && aiInfo.positive_prompt.trim())
       );
 
-      console.log(`🔍 [MetadataExtractor] Primary extraction result:`, {
+      const promptPreviewRaw = aiInfo.prompt || aiInfo.positive_prompt;
+      const promptPreview = typeof promptPreviewRaw === 'string'
+        ? promptPreviewRaw.substring(0, 50)
+        : (promptPreviewRaw ? String(promptPreviewRaw).substring(0, 50) : undefined);
+
+      logger.debug(`🔍 [MetadataExtractor] Primary extraction result:`, {
         hasPrompt,
         promptLength: aiInfo.prompt?.length || 0,
         positivePromptLength: aiInfo.positive_prompt?.length || 0,
-        promptPreview: (aiInfo.prompt || aiInfo.positive_prompt)?.substring(0, 50)
+        promptPreview
       });
 
       if (!hasPrompt && fileExt === '.png') {
@@ -78,9 +84,9 @@ export class MetadataExtractor {
           // Skip secondary extraction - proceed with primary result
         } else if (aiInfo.ai_tool === 'ComfyUI' && metadataSettings.skipStealthForComfyUI) {
           // AI 도구 기반 스킵
-          console.log('⚡ [MetadataExtractor] Skipping Stealth PNG for ComfyUI (setting enabled)');
+          logger.debug('⚡ [MetadataExtractor] Skipping Stealth PNG for ComfyUI (setting enabled)');
         } else if ((aiInfo.ai_tool === 'Automatic1111' || aiInfo.ai_tool === 'Stable Diffusion') && metadataSettings.skipStealthForWebUI) {
-          console.log('⚡ [MetadataExtractor] Skipping Stealth PNG for WebUI (setting enabled)');
+          logger.debug('⚡ [MetadataExtractor] Skipping Stealth PNG for WebUI (setting enabled)');
         } else {
           // 파일 크기 체크
           const fileSizeMB = buffer.length / (1024 * 1024);
@@ -102,7 +108,7 @@ export class MetadataExtractor {
                 // 2차 추출 (Secondary extraction - Stealth PNG Info)
                 const secondaryStart = Date.now();
                 aiInfo = await this.secondaryExtraction(buffer, aiInfo, metadataSettings.stealthScanMode);
-                console.log(`⏱️ [MetadataExtractor] Secondary extraction: ${Date.now() - secondaryStart}ms`);
+                logger.debug(`⏱️ [MetadataExtractor] Secondary extraction: ${Date.now() - secondaryStart}ms`);
               }
             } else {
               // width/height가 없으면 Secondary extraction 실행
@@ -110,7 +116,7 @@ export class MetadataExtractor {
 
               const secondaryStart = Date.now();
               aiInfo = await this.secondaryExtraction(buffer, aiInfo, metadataSettings.stealthScanMode);
-              console.log(`⏱️ [MetadataExtractor] Secondary extraction: ${Date.now() - secondaryStart}ms`);
+              logger.debug(`⏱️ [MetadataExtractor] Secondary extraction: ${Date.now() - secondaryStart}ms`);
             }
           }
         }
@@ -131,7 +137,7 @@ export class MetadataExtractor {
       // Negative prompt도 검증
       if (aiInfo.negative_prompt) {
         if (WorkflowDetector.isWorkflowJSON(aiInfo.negative_prompt)) {
-          console.warn(`⚠️ [MetadataExtractor] Workflow JSON in negative prompt - invalidating`);
+          logger.warn(`⚠️ [MetadataExtractor] Workflow JSON in negative prompt - invalidating`);
           aiInfo.negative_prompt = undefined;
         }
       }
@@ -139,12 +145,12 @@ export class MetadataExtractor {
       // AI 도구 자동 감지
       const detectStart = Date.now();
       this.detectAITool(aiInfo);
-      console.log(`⏱️ [MetadataExtractor] AI tool detection: ${Date.now() - detectStart}ms`);
+      logger.debug(`⏱️ [MetadataExtractor] AI tool detection: ${Date.now() - detectStart}ms`);
 
       // LoRA 모델 정보 처리
       const loraStart = Date.now();
       this.processLoRAModels(aiInfo);
-      console.log(`⏱️ [MetadataExtractor] LoRA processing: ${Date.now() - loraStart}ms`);
+      logger.debug(`⏱️ [MetadataExtractor] LoRA processing: ${Date.now() - loraStart}ms`);
 
       // AI 정보가 없어도 기본값 설정하지 않음
       // 프롬프트가 없으면 prompt 필드를 undefined로 유지
@@ -156,14 +162,14 @@ export class MetadataExtractor {
       }
 
       const totalTime = Date.now() - startTime;
-      console.log(`⏱️ [MetadataExtractor] ✅ Total extraction time: ${totalTime}ms`);
+      logger.debug(`⏱️ [MetadataExtractor] ✅ Total extraction time: ${totalTime}ms`);
 
       return {
         extractedAt: new Date().toISOString(),
         ai_info: aiInfo
       };
     } catch (error) {
-      console.error(`⏱️ [MetadataExtractor] ❌ Failed after ${Date.now() - startTime}ms:`, error);
+      logger.error(`⏱️ [MetadataExtractor] ❌ Failed after ${Date.now() - startTime}ms:`, error);
 
       // MetadataExtractionError인 경우 재throw (재시도 가능 오류)
       if (error instanceof MetadataExtractionError) {
@@ -218,14 +224,14 @@ export class MetadataExtractor {
     scanMode: import('../../types/settings').StealthScanMode = 'fast'
   ): Promise<AIMetadata> {
     try {
-      console.log(`🔍 [secondaryExtraction] Starting Stealth PNG Info extraction (mode: ${scanMode})...`);
-      console.log('📊 [secondaryExtraction] Buffer size:', buffer.length, 'bytes');
+      logger.debug(`🔍 [secondaryExtraction] Starting Stealth PNG Info extraction (mode: ${scanMode})...`);
+      logger.debug(`📊 [secondaryExtraction] Buffer size: ${buffer.length} bytes`);
 
       const stealthData = await StealthPngExtractor.extractStealthPngInfo(buffer, scanMode);
 
       if (!stealthData) {
-        console.log('❌ [secondaryExtraction] Stealth PNG Info not found - keeping original');
-        console.log('📋 [secondaryExtraction] Original aiInfo:', {
+        logger.debug('❌ [secondaryExtraction] Stealth PNG Info not found - keeping original');
+        logger.debug('📋 [secondaryExtraction] Original aiInfo:', {
           hasPrompt: !!existingAiInfo.prompt,
           hasPositivePrompt: !!existingAiInfo.positive_prompt,
           aiTool: existingAiInfo.ai_tool
@@ -233,15 +239,15 @@ export class MetadataExtractor {
         return existingAiInfo;
       }
 
-      console.log('✅ [secondaryExtraction] Stealth PNG Info extracted successfully!');
-      console.log(`📊 [secondaryExtraction] Stealth data length: ${stealthData.length} characters`);
-      console.log('📄 [secondaryExtraction] First 200 chars:', stealthData.substring(0, 200));
-      console.log('📄 [secondaryExtraction] Last 100 chars:', stealthData.substring(Math.max(0, stealthData.length - 100)));
+      logger.debug('✅ [secondaryExtraction] Stealth PNG Info extracted successfully!');
+      logger.debug(`📊 [secondaryExtraction] Stealth data length: ${stealthData.length} characters`);
+      logger.debug('📄 [secondaryExtraction] First 200 chars:', stealthData.substring(0, 200));
+      logger.debug('📄 [secondaryExtraction] Last 100 chars:', stealthData.substring(Math.max(0, stealthData.length - 100)));
 
       // Check if stealth data looks like JSON or WebUI format
       const looksLikeJSON = stealthData.trim().startsWith('{') || stealthData.trim().startsWith('[');
       const looksLikeWebUI = stealthData.includes('Steps:') || stealthData.includes('parameters');
-      console.log('🔍 [secondaryExtraction] Data format hints:', {
+      logger.debug('🔍 [secondaryExtraction] Data format hints:', {
         looksLikeJSON,
         looksLikeWebUI,
         startsWithBrace: stealthData.trim()[0],
@@ -250,15 +256,15 @@ export class MetadataExtractor {
       });
 
       // Parse Stealth data
-      console.log('🔄 [secondaryExtraction] Calling parseRawData...');
+      logger.debug('🔄 [secondaryExtraction] Calling parseRawData...');
       const parsedData = this.parseRawData({ stealthData });
 
-      console.log('📦 [secondaryExtraction] Parse result:', {
+      logger.debug('📦 [secondaryExtraction] Parse result:', {
         hasPrompt: !!parsedData.prompt,
         hasPositivePrompt: !!parsedData.positive_prompt,
         hasNegativePrompt: !!parsedData.negative_prompt,
         aiTool: parsedData.ai_tool,
-        promptPreview: (parsedData.prompt || parsedData.positive_prompt)?.substring(0, 50)
+        promptPreview: String(parsedData.prompt || parsedData.positive_prompt || '').substring(0, 50)
       });
 
       if (parsedData && (parsedData.prompt || parsedData.positive_prompt)) {
@@ -266,22 +272,22 @@ export class MetadataExtractor {
         const trimmedPrompt = finalPrompt?.trim();
 
         if (trimmedPrompt && trimmedPrompt.length > 0) {
-          console.log('✅ [secondaryExtraction] Successfully parsed Stealth PNG Info with valid prompts');
-          console.log('📝 [secondaryExtraction] Extracted prompt length:', trimmedPrompt.length);
+          logger.debug('✅ [secondaryExtraction] Successfully parsed Stealth PNG Info with valid prompts');
+          logger.debug('📝 [secondaryExtraction] Extracted prompt length:', trimmedPrompt.length);
           return parsedData;
         } else {
-          console.log('⚠️ [secondaryExtraction] Prompt exists but is empty or whitespace only');
+          logger.debug('⚠️ [secondaryExtraction] Prompt exists but is empty or whitespace only');
         }
       }
 
       // Parsing failed - keep original
-      console.log('❌ [secondaryExtraction] Stealth data parsing failed - no valid prompts found');
-      console.log('📋 [secondaryExtraction] Reverting to original aiInfo');
+      logger.debug('❌ [secondaryExtraction] Stealth data parsing failed - no valid prompts found');
+      logger.debug('📋 [secondaryExtraction] Reverting to original aiInfo');
       return existingAiInfo;
     } catch (error) {
-      console.error('❌ [secondaryExtraction] Exception occurred:', error);
+      logger.error('❌ [secondaryExtraction] Exception occurred:', error);
       if (error instanceof Error) {
-        console.error('📋 [secondaryExtraction] Error stack:', error.stack);
+        logger.error('📋 [secondaryExtraction] Error stack:', error.stack);
       }
       return existingAiInfo;
     }
@@ -291,28 +297,28 @@ export class MetadataExtractor {
    * Parse raw data using appropriate parser
    */
   private static parseRawData(rawData: any): AIMetadata {
-    console.log('🔍 [parseRawData] Input type:', typeof rawData, {
+    logger.debug('🔍 [parseRawData] Input type:', typeof rawData, {
       hasStealthData: !!rawData.stealthData,
       stealthDataLength: rawData.stealthData?.length || 0,
-      stealthDataPreview: rawData.stealthData?.substring(0, 100),
+      stealthDataPreview: rawData.stealthData ? String(rawData.stealthData).substring(0, 100) : undefined,
       hasComfyUIWorkflow: !!rawData.comfyui_workflow,
       hasParameters: !!rawData.parameters
     });
 
     // PRIORITY 1: Try NovelAI parser (most specific format)
     if (NovelAIParser.isNovelAIFormat(rawData)) {
-      console.log('📦 [MetadataExtractor] Parsing as NovelAI format');
+      logger.debug('📦 [MetadataExtractor] Parsing as NovelAI format');
       return NovelAIParser.parse(rawData);
     }
 
     // PRIORITY 2: Try WebUI parser (reliable prompt extraction)
     if (WebUIParser.isWebUIFormat(rawData)) {
-      console.log('📦 [MetadataExtractor] Parsing as WebUI format');
+      logger.debug('📦 [MetadataExtractor] Parsing as WebUI format');
       const result = WebUIParser.parse(rawData);
 
       // If ComfyUI workflow exists, use it for AI tool detection
       if (rawData.comfyui_workflow && !result.ai_tool) {
-        console.log('ℹ️ [MetadataExtractor] ComfyUI workflow detected - marking as ComfyUI');
+        logger.debug('ℹ️ [MetadataExtractor] ComfyUI workflow detected - marking as ComfyUI');
         result.ai_tool = 'ComfyUI';
       }
 
@@ -321,22 +327,22 @@ export class MetadataExtractor {
 
     // PRIORITY 3: Try ComfyUI workflow parser (fallback, less reliable for prompts)
     if (rawData.comfyui_workflow) {
-      console.log('📦 [MetadataExtractor] Parsing as ComfyUI workflow format (fallback)');
+      logger.debug('📦 [MetadataExtractor] Parsing as ComfyUI workflow format (fallback)');
       return ComfyUIParser.parse(rawData);
     }
 
     // Try parsing stealth data if present
     if (rawData.stealthData) {
-      console.log('🔍 [parseRawData] Attempting to parse stealth data...');
+      logger.debug('🔍 [parseRawData] Attempting to parse stealth data...');
 
       // Try NovelAI
       const isNovelAI = NovelAIParser.isNovelAIFormat(rawData.stealthData);
-      console.log('🔍 [parseRawData] Is NovelAI format?', isNovelAI);
+      logger.debug('🔍 [parseRawData] Is NovelAI format?', isNovelAI);
 
       if (isNovelAI) {
-        console.log('📦 [MetadataExtractor] Parsing stealth data as NovelAI format');
+        logger.debug('📦 [MetadataExtractor] Parsing stealth data as NovelAI format');
         const result = NovelAIParser.parse(rawData.stealthData);
-        console.log('✅ [parseRawData] NovelAI parse result:', {
+        logger.debug('✅ [parseRawData] NovelAI parse result:', {
           hasPrompt: !!result.prompt,
           hasPositivePrompt: !!result.positive_prompt,
           hasNegativePrompt: !!result.negative_prompt
@@ -346,12 +352,12 @@ export class MetadataExtractor {
 
       // Try WebUI
       const isWebUI = WebUIParser.isWebUIFormat(rawData.stealthData);
-      console.log('🔍 [parseRawData] Is WebUI format?', isWebUI);
+      logger.debug('🔍 [parseRawData] Is WebUI format?', isWebUI);
 
       if (isWebUI) {
-        console.log('📦 [MetadataExtractor] Parsing stealth data as WebUI format');
+        logger.debug('📦 [MetadataExtractor] Parsing stealth data as WebUI format');
         const result = WebUIParser.parse(rawData.stealthData);
-        console.log('✅ [parseRawData] WebUI parse result:', {
+        logger.debug('✅ [parseRawData] WebUI parse result:', {
           hasPrompt: !!result.prompt,
           hasPositivePrompt: !!result.positive_prompt,
           hasNegativePrompt: !!result.negative_prompt
@@ -359,12 +365,12 @@ export class MetadataExtractor {
         return result;
       }
 
-      console.log('❌ [parseRawData] Stealth data found but format not recognized');
-      console.log('📄 [parseRawData] Raw stealth data sample:', rawData.stealthData.substring(0, 200));
+      logger.debug('❌ [parseRawData] Stealth data found but format not recognized');
+      logger.debug('📄 [parseRawData] Raw stealth data sample:', typeof rawData.stealthData === 'string' ? rawData.stealthData.substring(0, 200) : rawData.stealthData);
     }
 
     // No recognized format - return empty
-    console.log('⚠️ [MetadataExtractor] No recognized format found');
+    logger.debug('⚠️ [MetadataExtractor] No recognized format found');
     return {};
   }
 

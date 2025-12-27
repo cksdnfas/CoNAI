@@ -14,16 +14,16 @@ import path from 'path';
  * - 주기적으로 반복 실행
  */
 export class AutoTagScheduler {
-  private isRunning = false;
+  private isRunning = false; // Overall scheduler status
+  private isProcessing = false; // Flag to prevent concurrent processing
   private pollingTimer: NodeJS.Timeout | null = null;
-  private processingTimer: NodeJS.Timeout | null = null;
   private readonly PROCESSING_DELAY_MS = 1000; // 이미지 간 처리 간격 (1초)
 
   /**
-   * 폴링 간격 조회 (밀리초)
+   * 폴링 간격 조회 (밀리초) - 1초 고정
    */
   private getPollingIntervalMs(): number {
-    return SystemSettingsService.getAutoTagPollingInterval() * 1000;
+    return 1000;
   }
 
   /**
@@ -53,14 +53,16 @@ export class AutoTagScheduler {
 
     console.log('[AutoTagScheduler] Starting auto-tag scheduler...');
     console.log(`[AutoTagScheduler] Polling interval: ${pollingIntervalMs / 1000}s`);
-    console.log(`[AutoTagScheduler] Batch size: ${batchSize}`);
+    // console.log(`[AutoTagScheduler] Batch size: ${batchSize}`); // Removed this log
 
     this.isRunning = true;
 
     // 즉시 한 번 실행
     this.processUntaggedImages();
 
-    // 주기적 실행 시작
+    // 주기적 실행 시작 (기존 타이머 제거 후 새로 설정)
+    if (this.pollingTimer) clearInterval(this.pollingTimer);
+
     this.pollingTimer = setInterval(() => {
       this.processUntaggedImages();
     }, pollingIntervalMs);
@@ -79,10 +81,7 @@ export class AutoTagScheduler {
       this.pollingTimer = null;
     }
 
-    if (this.processingTimer) {
-      clearTimeout(this.processingTimer);
-      this.processingTimer = null;
-    }
+    // processingTimer 제거됨
 
     console.log('[AutoTagScheduler] Stopped');
   }
@@ -91,14 +90,21 @@ export class AutoTagScheduler {
    * 태깅되지 않은 이미지 처리
    */
   private async processUntaggedImages(): Promise<void> {
-    // 설정 재확인 (실행 중 설정 변경 가능)
-    const settings = settingsService.loadSettings();
-    if (!settings.tagger.enabled) {
-      // 설정 꺼짐 (로그 줄임)
+    if (this.isProcessing) {
       return;
     }
 
+    // 설정 재확인 (실행 중 설정 변경 가능)
+    const settings = settingsService.loadSettings();
+    if (!settings.tagger.enabled) {
+      return;
+    }
+
+    this.isProcessing = true;
+
     try {
+      // 배치 크기만큼 반복 처리 (한 번에 다 가져오지 않고, 하나씩 처리하거나 배치로 가져와서 순차 처리)
+      // 여기서는 배치로 가져와서 처리
       const batchSize = this.getBatchSize();
 
       // 태깅되지 않은 이미지/비디오 조회 (image_files에서 active한 파일 경로 가져오기)
@@ -116,25 +122,29 @@ export class AutoTagScheduler {
         LIMIT ?
       `).all(batchSize) as Array<{ composite_hash: string; original_file_path: string; media_type: string }>;
 
-      // 총 미태깅 개수도 확인
-      const totalUntagged = db.prepare(`
-        SELECT COUNT(*) as count
-        FROM media_metadata mm
-        LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
-        WHERE mm.auto_tags IS NULL
-          AND if_.original_file_path IS NOT NULL
-          AND if_.file_status = 'active'
-      `).get() as { count: number };
+      // 총 미태깅 개수도 확인 (Removed this part)
+      // const totalUntagged = db.prepare(`
+      //   SELECT COUNT(*) as count
+      //   FROM media_metadata mm
+      //   LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
+      //   WHERE mm.auto_tags IS NULL
+      //     AND if_.original_file_path IS NOT NULL
+      //     AND if_.file_status = 'active'
+      // `).get() as { count: number };
 
       if (untaggedImages.length === 0) {
         // 처리할 항목 없음 (조용히 대기)
         return;
       }
 
-      console.log(`[AutoTagScheduler] Found ${untaggedImages.length} untagged images (total: ${totalUntagged.count})`);
+      // 로그 레벨 조정: 매번 발견했다는 로그는 불필요할 수 있음. 정말 필요하면 debug 레벨로.
+      // console.log(`[AutoTagScheduler] Found ${untaggedImages.length} untagged images (total: ${totalUntagged.count})`);
 
       // 순차적으로 처리
       for (let i = 0; i < untaggedImages.length; i++) {
+        // 중간에 중지 요청이 들어오면 중단
+        if (!this.isRunning) break;
+
         const image = untaggedImages[i];
 
         try {
@@ -155,13 +165,15 @@ export class AutoTagScheduler {
 
       console.log(`[AutoTagScheduler] Batch processing completed (${untaggedImages.length} images)`);
 
-      // 처리 완료 후 즉시 다시 확인 (남은 항목이 있을 수 있음)
-      this.processingTimer = setTimeout(() => {
-        this.processUntaggedImages();
-      }, 2000); // 2초 후 재확인
+      // 재귀 호출 제거 -> setInterval에 의존
+      // this.processingTimer = setTimeout(() => {
+      //   this.processUntaggedImages();
+      // }, 2000); // 2초 후 재확인
 
     } catch (error) {
       console.error('[AutoTagScheduler] Error in processUntaggedImages:', error);
+    } finally {
+      this.isProcessing = false;
     }
   }
 
@@ -229,7 +241,8 @@ export class AutoTagScheduler {
       }
     }
 
-    console.log(`[AutoTagScheduler] ✅ Tagged (${mediaType}): ${path.basename(filePath)}`);
+    // 성공 로그는 남김 (사용자가 진행상황을 알 수 있도록)
+    // console.log(`[AutoTagScheduler] ✅ Tagged (${mediaType}): ${path.basename(filePath)}`);
   }
 
   /**
@@ -279,9 +292,9 @@ export class AutoTagScheduler {
   restart(): void {
     if (this.isRunning) {
       this.stop();
-      // 약간의 지연 후 재시작
-      setTimeout(() => this.start(), 100);
     }
+    // 약간의 지연 후 재시작 (또는 시작)
+    setTimeout(() => this.start(), 100);
   }
 
   /**

@@ -219,11 +219,14 @@
       "alerts": {
         "complete": "完成: 成功{{success}}张，失败{{failed}}张",
         "failed": "未处理图像标记失败",
-        "tagAllFailed": "全部重新标记失败"
+        "tagAllFailed": "全部重新标记失败",
+        "resetComplete": "重置完成。已加入后台处理队列。",
+        "resetFailed": "重置标签失败"
       },
       "confirmDialog": {
         "title": "确认重新标记全部",
         "message": "是否覆盖所有图像的标签？此操作无法撤销。\n（最多处理100张）",
+        "resetMessage": "您确定要重置所有自动标签吗？这将清除活动标签并将图像加入后台处理队列。",
         "confirm": "确认",
         "cancel": "取消"
       }

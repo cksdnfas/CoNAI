@@ -5,6 +5,8 @@ import {
   FilterValidationResult,
   FilterExecutionStats
 } from '@comfyui-image-manager/shared';
+import { RatingScoreService } from './ratingScoreService';
+import { RatingWeights } from '../types/rating';
 
 /**
  * Complex Filter Service
@@ -28,6 +30,7 @@ export class ComplexFilterService {
    */
   static buildComplexQuery(
     filter: ComplexFilter,
+    weights: RatingWeights | null,
     basicParams?: {
       ai_tool?: string;
       model_name?: string;
@@ -63,7 +66,7 @@ export class ComplexFilterService {
 
     // 1. Build EXCLUDE (NOT) CTE - highest priority
     if (filter.exclude_group && filter.exclude_group.length > 0) {
-      const excludeResult = this.buildGroupQuery(filter.exclude_group, 'OR', params);
+      const excludeResult = this.buildGroupQuery(filter.exclude_group, 'OR', params, weights);
       ctes.push(`
         excluded AS (
           SELECT DISTINCT im.composite_hash
@@ -77,7 +80,7 @@ export class ComplexFilterService {
     // 2. Build OR CTE
     let hasOrGroup = false;
     if (filter.or_group && filter.or_group.length > 0) {
-      const orResult = this.buildGroupQuery(filter.or_group, 'OR', params);
+      const orResult = this.buildGroupQuery(filter.or_group, 'OR', params, weights);
       if (orResult.conditions.length > 0) {
         hasOrGroup = true;
         ctes.push(`
@@ -94,7 +97,7 @@ export class ComplexFilterService {
     // 3. Build AND CTE
     let hasAndGroup = false;
     if (filter.and_group && filter.and_group.length > 0) {
-      const andResult = this.buildGroupQuery(filter.and_group, 'AND', params);
+      const andResult = this.buildGroupQuery(filter.and_group, 'AND', params, weights);
       if (andResult.conditions.length > 0) {
         hasAndGroup = true;
         ctes.push(`
@@ -153,12 +156,13 @@ export class ComplexFilterService {
   private static buildGroupQuery(
     conditions: FilterCondition[],
     operator: 'OR' | 'AND',
-    params: any[]
+    params: any[],
+    weights: RatingWeights | null
   ): { conditions: string[]; params: any[] } {
     const sqlConditions: string[] = [];
 
     for (const condition of conditions) {
-      const conditionSql = this.buildConditionSQL(condition, params);
+      const conditionSql = this.buildConditionSQL(condition, params, weights);
       if (conditionSql) {
         sqlConditions.push(conditionSql);
       }
@@ -170,7 +174,7 @@ export class ComplexFilterService {
   /**
    * Build SQL for individual condition
    */
-  private static buildConditionSQL(condition: FilterCondition, params: any[]): string | null {
+  private static buildConditionSQL(condition: FilterCondition, params: any[], weights: RatingWeights | null): string | null {
     switch (condition.category) {
       case 'basic':
         return this.buildBasicConditionSQL(condition, params);
@@ -179,7 +183,7 @@ export class ComplexFilterService {
       case 'negative_prompt':
         return this.buildPromptConditionSQL(condition, params, true);
       case 'auto_tag':
-        return this.buildAutoTagConditionSQL(condition, params);
+        return this.buildAutoTagConditionSQL(condition, params, weights);
       default:
         return null;
     }
@@ -238,7 +242,7 @@ export class ComplexFilterService {
    * Build SQL for auto-tag conditions
    * 새 구조: media_metadata 테이블 사용 (im 별칭)
    */
-  private static buildAutoTagConditionSQL(condition: FilterCondition, params: any[]): string | null {
+  private static buildAutoTagConditionSQL(condition: FilterCondition, params: any[], weights: RatingWeights | null): string | null {
     // Auto-tag exists
     if (condition.type === 'auto_tag_exists') {
       return condition.value === true
@@ -283,18 +287,24 @@ export class ComplexFilterService {
     }
 
     // Rating score (weighted)
-    // Note: auto_tags.rating values are stored as 0-1 decimals
-    // UI displays as 0-1 range, so no conversion needed
-    if (condition.type === 'auto_tag_rating_score') {
+    if (condition.type === 'auto_tag_rating_score' && weights) {
       const conditions: string[] = [];
+
+      // 점수 계산 식 생성
+      const scoreExpression = `
+        (ROUND(json_extract(im.auto_tags, '$.rating.general') * 1000) / 1000 * ${weights.general_weight} +
+         ROUND(json_extract(im.auto_tags, '$.rating.sensitive') * 1000) / 1000 * ${weights.sensitive_weight} +
+         ROUND(json_extract(im.auto_tags, '$.rating.questionable') * 1000) / 1000 * ${weights.questionable_weight} +
+         ROUND(json_extract(im.auto_tags, '$.rating.explicit') * 1000) / 1000 * ${weights.explicit_weight})
+      `.trim();
 
       if (condition.min_score !== undefined) {
         params.push(condition.min_score);
-        conditions.push(`json_extract(im.auto_tags, '$.rating.general') >= ?`);
+        conditions.push(`${scoreExpression} >= ?`);
       }
       if (condition.max_score !== undefined) {
         params.push(condition.max_score);
-        conditions.push(`json_extract(im.auto_tags, '$.rating.general') <= ?`);
+        conditions.push(`${scoreExpression} < ?`);
       }
 
       return conditions.length > 0 ? conditions.join(' AND ') : null;
@@ -446,8 +456,11 @@ export class ComplexFilterService {
   ): Promise<{ images: any[]; total: number; stats?: FilterExecutionStats }> {
     const startTime = Date.now();
 
+    // Fetch rating weights
+    const weights = await RatingScoreService.getWeights();
+
     // Build query
-    const { query: baseQuery, params } = this.buildComplexQuery(filter, basicParams);
+    const { query: baseQuery, params } = this.buildComplexQuery(filter, weights, basicParams);
 
     // Count total results (composite_hash 기반)
     // Replace the main SELECT clause (im.*) with COUNT, handling whitespace and multi-line
@@ -560,16 +573,19 @@ export class ComplexFilterService {
       }
 
       // Validate score ranges
-      if (condition.min_score !== undefined) {
-        if (condition.min_score < 0 || condition.min_score > 1) {
-          errors.push(`${groupName} group, condition ${index + 1}: min_score must be between 0 and 1`);
+      if (condition.type !== 'auto_tag_rating_score') {
+        if (condition.min_score !== undefined) {
+          if (condition.min_score < 0 || condition.min_score > 1) {
+            errors.push(`${groupName} group, condition ${index + 1}: min_score must be between 0 and 1`);
+          }
+        }
+        if (condition.max_score !== undefined) {
+          if (condition.max_score < 0 || condition.max_score > 1) {
+            errors.push(`${groupName} group, condition ${index + 1}: max_score must be between 0 and 1`);
+          }
         }
       }
-      if (condition.max_score !== undefined) {
-        if (condition.max_score < 0 || condition.max_score > 1) {
-          errors.push(`${groupName} group, condition ${index + 1}: max_score must be between 0 and 1`);
-        }
-      }
+
       if (condition.min_score !== undefined && condition.max_score !== undefined) {
         if (condition.min_score > condition.max_score) {
           errors.push(`${groupName} group, condition ${index + 1}: min_score cannot be greater than max_score`);
@@ -598,8 +614,11 @@ export class ComplexFilterService {
       end_date?: string;
     }
   ): Promise<string[]> {
+    // Fetch rating weights
+    const weights = await RatingScoreService.getWeights();
+
     // Build query
-    const { query: baseQuery, params } = this.buildComplexQuery(filter, basicParams);
+    const { query: baseQuery, params } = this.buildComplexQuery(filter, weights, basicParams);
 
     // Modify query to select only composite_hash
     const hashesQuery = baseQuery.replace(

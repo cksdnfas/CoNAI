@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { groupApi } from '../services/api/groupApi';
+import { cacheControl } from '../services/api/apiClient';
 import type {
   GroupCreateData,
   GroupUpdateData,
@@ -75,6 +76,8 @@ export function useCreateGroup() {
       return response.data;
     },
     onSuccess: () => {
+      // Clear API cache
+      cacheControl.clear();
       // Invalidate all group-related queries
       queryClient.invalidateQueries({ queryKey: groupKeys.all });
       // Also invalidate preview images for custom groups only
@@ -96,6 +99,8 @@ export function useUpdateGroup() {
       return response.data;
     },
     onSuccess: (data) => {
+      // Clear API cache
+      cacheControl.clear();
       // Invalidate all group-related queries
       queryClient.invalidateQueries({ queryKey: groupKeys.all });
       // Invalidate specific group detail
@@ -119,6 +124,8 @@ export function useDeleteGroup() {
       return id;
     },
     onSuccess: () => {
+      // Clear API cache
+      cacheControl.clear();
       // Invalidate all group-related queries
       queryClient.invalidateQueries({ queryKey: groupKeys.all });
       // Also invalidate preview images for custom groups only
@@ -140,6 +147,8 @@ export function useAssignImagesToGroup() {
       return response.data;
     },
     onSuccess: () => {
+      // Clear API cache
+      cacheControl.clear();
       // Invalidate group queries to update image counts
       queryClient.invalidateQueries({ queryKey: groupKeys.all });
       // Also invalidate preview images
@@ -161,6 +170,8 @@ export function useRemoveImagesFromGroup() {
       return { removed: response.removed, errors: response.errors };
     },
     onSuccess: () => {
+      // Clear API cache
+      cacheControl.clear();
       // Invalidate group queries to update image counts
       queryClient.invalidateQueries({ queryKey: groupKeys.all });
       // Also invalidate preview images
@@ -182,6 +193,8 @@ export function useRunAutoCollection() {
       return response.data;
     },
     onSuccess: () => {
+      // Clear API cache
+      cacheControl.clear();
       // Invalidate group queries to update image counts
       queryClient.invalidateQueries({ queryKey: groupKeys.all });
       // Also invalidate preview images
@@ -189,3 +202,4 @@ export function useRunAutoCollection() {
     },
   });
 }
+

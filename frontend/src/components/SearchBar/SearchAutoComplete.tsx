@@ -22,10 +22,12 @@ import {
     Search as SearchIcon,
     CheckCircle as PositiveIcon,
     AutoAwesome as AutoIcon,
-    Block as NegativeIcon
+    Block as NegativeIcon,
+    Star as RatingIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import apiClient from '../../services/api/apiClient';
+import type { RatingTier } from '../../types/rating';
 
 export interface PromptSearchResult {
     id: number;
@@ -33,7 +35,10 @@ export interface PromptSearchResult {
     usage_count: number;
     group_id: number | null;
     synonyms: string[];
-    type: 'positive' | 'negative' | 'auto';
+    type: 'positive' | 'negative' | 'auto' | 'rating';
+    min_score?: number;
+    max_score?: number | null;
+    color?: string | null;
 }
 
 interface SearchAutoCompleteProps {
@@ -45,7 +50,7 @@ interface SearchAutoCompleteProps {
     autoFocus?: boolean;
 }
 
-type TabType = 'positive' | 'auto' | 'negative';
+type TabType = 'positive' | 'auto' | 'negative' | 'rating';
 
 const SearchAutoComplete: React.FC<SearchAutoCompleteProps> = ({
     value,
@@ -71,7 +76,8 @@ const SearchAutoComplete: React.FC<SearchAutoCompleteProps> = ({
         positive: number;
         auto: number;
         negative: number;
-    }>({ positive: 0, auto: 0, negative: 0 });
+        rating: number;
+    }>({ positive: 0, auto: 0, negative: 0, rating: 0 });
 
     const anchorRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -102,52 +108,72 @@ const SearchAutoComplete: React.FC<SearchAutoCompleteProps> = ({
 
     // Fetch suggestions when current term changes or tab changes
     useEffect(() => {
-        if (!currentTerm && !open) return;
+        if (!currentTerm && !open && activeTab !== 'rating') return;
 
         const fetchSuggestions = async () => {
             setLoading(true);
             try {
-                // Fetch suggestions for current tab
-                const response = await apiClient.get('/api/prompt-collection/search', {
-                    params: {
-                        q: currentTerm,
-                        type: activeTab,
-                        limit: 20
+                if (activeTab === 'rating') {
+                    // Fetch Rating Tiers
+                    const response = await apiClient.get('/api/settings/rating/tiers');
+                    if (response.data.success) {
+                        let tiers = response.data.data as RatingTier[];
+
+                        // Filter by term if present
+                        if (currentTerm) {
+                            tiers = tiers.filter(tier =>
+                                tier.tier_name.toLowerCase().includes(currentTerm.toLowerCase())
+                            );
+                        }
+
+                        const ratingResults: PromptSearchResult[] = tiers.map(tier => ({
+                            id: tier.id,
+                            prompt: tier.tier_name,
+                            usage_count: 0, // Not applicable for static tiers
+                            group_id: null,
+                            synonyms: [],
+                            type: 'rating',
+                            min_score: tier.min_score,
+                            max_score: tier.max_score,
+                            color: tier.color
+                        }));
+
+                        setSuggestions(ratingResults);
+                        setStats(prev => ({ ...prev, rating: tiers.length }));
                     }
-                });
+                } else {
+                    // Fetch suggestions for current tab
+                    const response = await apiClient.get('/api/prompt-collection/search', {
+                        params: {
+                            q: currentTerm,
+                            type: activeTab,
+                            limit: 20
+                        }
+                    });
 
-                if (response.data.success) {
-                    setSuggestions(response.data.data);
+                    if (response.data.success) {
+                        setSuggestions(response.data.data);
 
-                    // Also fetch counts for all types if term is present, to update tab badges
-                    // This might be expensive on every keystroke, optimize if needed
-                    // specific API for just counts would be better or getting counts in one go
-                    // For now, we simulate counts or use total from response if possible
-                    // The search API returns total for the requested type.
+                        setStats(prev => ({
+                            ...prev,
+                            [activeTab]: response.data.pagination.total
+                        }));
 
-                    // TODO: Ideally we want counts for ALL tabs to show (9) (12) (0).
-                    // We can make parallel requests or add a 'counts_only' endpoint.
-                    // For now, let's just update the current tab's count from response
-                    setStats(prev => ({
-                        ...prev,
-                        [activeTab]: response.data.pagination.total
-                    }));
+                        // If we want valid counts for other tabs, we need to fetch them
+                        if (currentTerm.length >= 2) {
+                            const types: TabType[] = ['positive', 'auto', 'negative'];
+                            const otherTypes = types.filter(t => t !== activeTab);
 
-                    // If we want accurate counts for other tabs, we need to fetch them too
-                    // Let's do it only if term is long enough to avoid spamming
-                    if (currentTerm.length >= 2) {
-                        const types: TabType[] = ['positive', 'auto', 'negative'];
-                        const otherTypes = types.filter(t => t !== activeTab);
-
-                        otherTypes.forEach(type => {
-                            apiClient.get('/api/prompt-collection/search', {
-                                params: { q: currentTerm, type, limit: 1 }
-                            }).then(res => {
-                                if (res.data.success) {
-                                    setStats(prev => ({ ...prev, [type]: res.data.pagination.total }));
-                                }
+                            otherTypes.forEach(type => {
+                                apiClient.get('/api/prompt-collection/search', {
+                                    params: { q: currentTerm, type, limit: 1 }
+                                }).then(res => {
+                                    if (res.data.success) {
+                                        setStats(prev => ({ ...prev, [type]: res.data.pagination.total }));
+                                    }
+                                });
                             });
-                        });
+                        }
                     }
                 }
             } catch (error) {
@@ -162,7 +188,7 @@ const SearchAutoComplete: React.FC<SearchAutoCompleteProps> = ({
         }, 300);
 
         return () => clearTimeout(timer);
-    }, [currentTerm, activeTab]);
+    }, [currentTerm, activeTab, open]);
 
     const handleTabChange = (_event: React.SyntheticEvent, newValue: TabType) => {
         setActiveTab(newValue);
@@ -176,7 +202,6 @@ const SearchAutoComplete: React.FC<SearchAutoCompleteProps> = ({
             onSelectTag(tag);
         } else {
             // Fallback: Replace current term
-            // (Logic from previous implementation if needed, but we encourage using onSelectTag)
             const textBeforeCursor = value.slice(0, cursorPosition);
             const textAfterCursor = value.slice(cursorPosition);
 
@@ -204,27 +229,19 @@ const SearchAutoComplete: React.FC<SearchAutoCompleteProps> = ({
         }
     };
 
-    const getTagColor = (type: string) => {
-        switch (type) {
-            case 'positive': return theme.palette.success.main; // Greenish
-            case 'negative': return theme.palette.error.main;   // Reddish
-            case 'auto': return theme.palette.info.main;        // Blueish (or generic)
+    const getTagColor = (option: PromptSearchResult) => {
+        if (option.type === 'rating' && option.color) {
+            return option.color;
+        }
+
+        switch (option.type) {
+            case 'positive': return theme.palette.success.main;
+            case 'negative': return theme.palette.error.main;
+            case 'auto': return theme.palette.info.main;
+            case 'rating': return theme.palette.warning.main;
             default: return theme.palette.text.primary;
         }
     };
-
-    // Danbooru Colors reference (approximate)
-    // General: Blue (#0075f8)
-    // Character: Green (#00ab2c)
-    // Copyright: Purple (#a800aa)
-    // Artist: Red (#c00004)
-    // Meta: Orange (#fd9200)
-
-    // We have Positive (User defined?), Automatic (Detected?), Negative
-    // Let's stick to:
-    // Positive: Green or Blue
-    // Automatic: Orange or Purple (distinct)
-    // Negative: Red
 
     return (
         <Box sx={{ position: 'relative' }}>
@@ -253,7 +270,7 @@ const SearchAutoComplete: React.FC<SearchAutoCompleteProps> = ({
             />
 
             <Popper
-                open={open && (suggestions.length > 0 || currentTerm.length > 0)}
+                open={open && (suggestions.length > 0 || currentTerm.length > 0 || activeTab === 'rating')}
                 anchorEl={anchorRef.current}
                 placement="bottom-start"
                 transition
@@ -285,6 +302,11 @@ const SearchAutoComplete: React.FC<SearchAutoCompleteProps> = ({
                                             value="negative"
                                             sx={{ minHeight: 40, py: 1, color: activeTab === 'negative' ? 'error.main' : 'text.secondary' }}
                                         />
+                                        <Tab
+                                            icon={<Tooltip title={`${t('search:tabs.rating', 'Rating')}`}><RatingIcon /></Tooltip>}
+                                            value="rating"
+                                            sx={{ minHeight: 40, py: 1, color: activeTab === 'rating' ? 'warning.main' : 'text.secondary' }}
+                                        />
                                     </Tabs>
 
                                     {loading ? (
@@ -312,14 +334,20 @@ const SearchAutoComplete: React.FC<SearchAutoCompleteProps> = ({
                                                                     component="span"
                                                                     sx={{
                                                                         fontWeight: 'bold',
-                                                                        color: getTagColor(option.type)
+                                                                        color: getTagColor(option)
                                                                     }}
                                                                 >
                                                                     {option.prompt}
                                                                 </Typography>
-                                                                <Typography variant="caption" color="text.secondary">
-                                                                    {option.usage_count > 0 ? `${option.usage_count}` : ''}
-                                                                </Typography>
+                                                                {option.type === 'rating' ? (
+                                                                    <Typography variant="caption" color="text.secondary">
+                                                                        {option.min_score}~{option.max_score || '∞'}
+                                                                    </Typography>
+                                                                ) : (
+                                                                    <Typography variant="caption" color="text.secondary">
+                                                                        {option.usage_count > 0 ? `${option.usage_count}` : ''}
+                                                                    </Typography>
+                                                                )}
                                                             </Box>
                                                         }
                                                         secondary={

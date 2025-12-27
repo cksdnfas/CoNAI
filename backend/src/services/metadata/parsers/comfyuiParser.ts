@@ -4,6 +4,7 @@
  */
 
 import { AIMetadata, ModelReference } from '../types';
+import { logger } from '../../../utils/logger';
 
 export class ComfyUIParser {
   /**
@@ -86,7 +87,7 @@ export class ComfyUIParser {
       const workflow = JSON.parse(sanitizedJSON);
       return this.parseWorkflowObject(workflow);
     } catch (error) {
-      console.warn('ComfyUI workflow parsing error:', error);
+      logger.warn('ComfyUI workflow parsing error:', error);
       return {};
     }
   }
@@ -146,7 +147,7 @@ export class ComfyUIParser {
         aiInfo.negative_prompt = clipTextEncodeNodes[1].text;
       }
 
-      console.log(`✅ [ComfyUIParser] Extracted ${clipTextEncodeNodes.length} prompts from CLIPTextEncode nodes`);
+      logger.debug(`✅ [ComfyUIParser] Extracted ${clipTextEncodeNodes.length} prompts from CLIPTextEncode nodes`);
     }
 
     // Process sampler parameters
