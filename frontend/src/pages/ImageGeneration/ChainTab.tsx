@@ -110,6 +110,7 @@ export default function ChainTab() {
         naiItems: ChainItem[];
         parent_id: number | null;
         include_children: boolean;
+        only_children: boolean;
         chain_option: 'replace' | 'append';
     }>({
         name: '',
@@ -118,6 +119,7 @@ export default function ChainTab() {
         naiItems: [{ content: '', weight: 1.0 }],
         parent_id: null,
         include_children: false,
+        only_children: false,
         chain_option: 'replace'
     });
 
@@ -177,7 +179,8 @@ export default function ChainTab() {
                 comfyuiItems: comfyuiItems.length > 0 ? comfyuiItems : [{ content: '', weight: 1.0 }],
                 naiItems: naiItems.length > 0 ? naiItems : [{ content: '', weight: 1.0 }],
                 parent_id: chain.parent_id ?? null,
-                include_children: false,
+                include_children: chain.include_children === 1,
+                only_children: chain.only_children === 1,
                 chain_option: chain.chain_option || 'replace'
             });
         } else {
@@ -189,6 +192,7 @@ export default function ChainTab() {
                 naiItems: [{ content: '', weight: 1.0 }],
                 parent_id: selectedNode?.id ?? null,
                 include_children: false,
+                only_children: false,
                 chain_option: 'replace'
             });
         }
@@ -229,6 +233,7 @@ export default function ChainTab() {
                     items,
                     parent_id: formData.parent_id,
                     include_children: formData.include_children ? 1 : 0,
+                    only_children: formData.only_children ? 1 : 0,
                     type: 'chain',
                     chain_option: formData.chain_option
                 };
@@ -243,6 +248,7 @@ export default function ChainTab() {
                     items,
                     parent_id: formData.parent_id,
                     include_children: formData.include_children ? 1 : 0,
+                    only_children: formData.only_children ? 1 : 0,
                     type: 'chain',
                     chain_option: formData.chain_option
                 };
@@ -510,19 +516,43 @@ export default function ChainTab() {
                             showItemCount={true}
                         />
 
-                        {/* 하위 와일드카드 자동 포함 옵션 */}
-                        <Tooltip title={t('wildcards:form.includeChildrenHelper')} arrow placement="bottom">
-                            <FormControlLabel
-                                control={
-                                    <Checkbox
-                                        checked={false}
-                                        disabled={true}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, include_children: e.target.checked }))}
-                                    />
-                                }
-                                label={t('wildcards:form.includeChildren')}
-                            />
-                        </Tooltip>
+                        {/* 하위 와일드카드 자동 포함 옵션 & 하위 와일드카드만 사용 옵션 */}
+                        <Stack direction="row" spacing={2}>
+                            <Tooltip title={t('wildcards:form.includeChildrenHelper')} arrow placement="bottom">
+                                <FormControlLabel
+                                    control={
+                                        <Checkbox
+                                            checked={formData.include_children}
+                                            onChange={(e) => setFormData(prev => ({
+                                                ...prev,
+                                                include_children: e.target.checked
+                                            }))}
+                                        />
+                                    }
+                                    label={t('wildcards:form.includeChildren')}
+                                />
+                            </Tooltip>
+
+                            <Tooltip title="자신의 항목은 무시하고 하위 와일드카드 항목만 사용합니다. 폴더 정리용으로 유용합니다." arrow placement="bottom">
+                                <FormControlLabel
+                                    control={
+                                        <Checkbox
+                                            checked={formData.only_children}
+                                            onChange={(e) => {
+                                                const checked = e.target.checked;
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    only_children: checked,
+                                                    // only_children 활성화 시 include_children은 자동으로 켜지는게 자연스러움
+                                                    include_children: checked ? true : prev.include_children
+                                                }));
+                                            }}
+                                        />
+                                    }
+                                    label="하위 와일드카드만 사용 (그룹용)"
+                                />
+                            </Tooltip>
+                        </Stack>
 
                         <Divider />
 
