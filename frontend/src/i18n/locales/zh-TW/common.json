@@ -20,7 +20,8 @@
     "selectAll": "全選",
     "deselectAll": "取消全選",
     "apply": "套用",
-    "clear": "清除"
+    "clear": "清除",
+    "copy": "複製"
   },
   "messages": {
     "loading": "載入中...",
@@ -116,7 +117,8 @@
     "cancel": "取消",
     "confirm": "確認",
     "retry": "重試",
-    "refresh": "重新整理"
+    "refresh": "重新整理",
+    "copy": "複製"
   },
   "filterModal": {
     "title": {

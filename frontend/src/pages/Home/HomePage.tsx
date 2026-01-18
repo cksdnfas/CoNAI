@@ -59,11 +59,11 @@ const HomePage: React.FC = () => {
     setSearchOpen(false);
   };
 
-  const handleExecuteSearch = (request: ComplexSearchRequest) => {
+  const handleExecuteSearch = (request: ComplexSearchRequest, options?: { shuffle?: boolean }) => {
     setIsSearchMode(true);
     setSearchOpen(false);
     setSelectedIds([]); // Clear selection
-    search.searchComplex(request);
+    search.searchComplex(request, options);
   };
 
   const handleExitSearchMode = () => {
@@ -106,6 +106,16 @@ const HomePage: React.FC = () => {
       search.refreshSearch();
     }
   }, [activeMode, isSearchMode, search.refreshSearch]);
+
+  // Listen for global tag add events to open search drawer
+  React.useEffect(() => {
+    const handleAddTagEvent = () => {
+      setSearchOpen(true);
+    };
+
+    window.addEventListener('add-search-tag', handleAddTagEvent);
+    return () => window.removeEventListener('add-search-tag', handleAddTagEvent);
+  }, []);
 
   // Unified Props
   let currentImages = infiniteImages.images;
@@ -286,6 +296,9 @@ const HomePage: React.FC = () => {
             display: 'flex',
             flexDirection: 'column',
           }
+        }}
+        ModalProps={{
+          keepMounted: true // Keep SearchBar mounted to receive events
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', p: 2, borderBottom: 1, borderColor: 'divider' }}>

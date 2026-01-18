@@ -185,11 +185,16 @@ export class WildcardService {
     }
     visited.add(wildcard.id);
 
-    // 1. 자기 자신의 항목 수집
-    const items = wildcard.items.filter(item => item.tool === tool);
+    // 1. 자기 자신의 항목 수집 (only_children이 1이면 제외)
+    // only_children: 자신은 제외하고 자식만 포함하는 그룹용 옵션
+    const items = (wildcard.only_children === 1)
+      ? []
+      : wildcard.items.filter(item => item.tool === tool);
 
     // 2. include_children이 활성화된 경우 하위 항목 재귀적으로 수집
-    if (wildcard.include_children === 1) {
+    // only_children이 활성화된 경우, include_children 설정과 관계없이(혹은 함께) 자식을 포함하는 것이 의도에 부합
+    // 보통 only_children=1이면 include_children=1이어야 의미가 있음
+    if (wildcard.include_children === 1 || wildcard.only_children === 1) {
       // 모든 와일드카드를 순회하며 직계 자식 찾기
       for (const [, wc] of wildcardMap) {
         if (wc.parent_id === wildcard.id) {

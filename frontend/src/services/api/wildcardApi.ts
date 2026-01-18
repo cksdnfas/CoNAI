@@ -13,6 +13,7 @@ export interface Wildcard {
   description?: string;
   parent_id: number | null;
   include_children: number; // 0 or 1: 하위 와일드카드 자동 포함 여부
+  only_children: number; // 0 or 1: 하위 와일드카드만 사용 여부 (자신 제외)
   type: 'wildcard' | 'chain';
   chain_option: 'replace' | 'append';
   created_date: string;
@@ -44,6 +45,7 @@ export interface WildcardCreateData {
   items: ToolItems;
   parent_id?: number | null;
   include_children?: number; // 하위 와일드카드 자동 포함 여부 (기본값 0)
+  only_children?: number; // 하위 와일드카드만 사용 여부 (기본값 0)
   type?: 'wildcard' | 'chain';
   chain_option?: 'replace' | 'append';
 }
@@ -54,6 +56,7 @@ export interface WildcardUpdateData {
   items?: ToolItems;
   parent_id?: number | null;
   include_children?: number; // 하위 와일드카드 자동 포함 여부
+  only_children?: number; // 하위 와일드카드만 사용 여부
   type?: 'wildcard' | 'chain';
   chain_option?: 'replace' | 'append';
 }

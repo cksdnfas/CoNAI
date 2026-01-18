@@ -11,6 +11,8 @@
   },
   "actions": {
     "add": "新增萬用字元",
+    "edit": "編輯萬用字元",
+    "delete": "刪除萬用字元",
     "addItem": "新增項目",
     "preview": "預覽",
     "confirmDelete": "確定要刪除'{{name}}'萬用字元嗎?",

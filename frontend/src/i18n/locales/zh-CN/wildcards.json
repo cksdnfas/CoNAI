@@ -11,6 +11,8 @@
   },
   "actions": {
     "add": "添加通配符",
+    "edit": "编辑通配符",
+    "delete": "删除通配符",
     "addItem": "添加项目",
     "preview": "预览",
     "confirmDelete": "确定要删除'{{name}}'通配符吗?",

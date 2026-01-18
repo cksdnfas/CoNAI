@@ -20,7 +20,8 @@
     "selectAll": "全选",
     "deselectAll": "取消全选",
     "apply": "应用",
-    "clear": "清除"
+    "clear": "清除",
+    "copy": "复制"
   },
   "messages": {
     "loading": "加载中...",
@@ -116,7 +117,8 @@
     "cancel": "取消",
     "confirm": "确认",
     "retry": "重试",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "copy": "复制"
   },
   "filterModal": {
     "title": {

@@ -403,6 +403,70 @@ router.get('/date/:startDate/:endDate', asyncHandler(async (req: Request, res: R
 }));
 
 /**
+ * 배치 이미지 조회 (composite_hash 목록으로 상세 정보 조회)
+ * POST /api/images/batch
+ */
+router.post('/batch', asyncHandler(async (req: Request, res: Response) => {
+  const { composite_hashes } = req.body;
+
+  if (!composite_hashes || !Array.isArray(composite_hashes)) {
+    return res.status(400).json({
+      success: false,
+      error: 'composite_hashes must be an array'
+    });
+  }
+
+  if (composite_hashes.length === 0) {
+    return res.json({
+      success: true,
+      data: {
+        images: [],
+        total: 0,
+        page: 1,
+        limit: 0,
+        totalPages: 0
+      }
+    });
+  }
+
+  if (composite_hashes.length > 500) {
+    return res.status(400).json({
+      success: false,
+      error: 'Too many items requested (max 500)'
+    });
+  }
+
+  try {
+    const images = MediaMetadataModel.findByHashesWithFiles(composite_hashes);
+
+    // URL 추가
+    const enrichedImages = images.map(enrichImageWithFileView);
+
+    // 요청 순서대로 정렬 (SQL IN은 순서 보장 안 함)
+    const sortedImages = composite_hashes
+      .map(hash => enrichedImages.find(img => img.composite_hash === hash))
+      .filter((img): img is any => !!img);
+
+    res.json({
+      success: true,
+      data: {
+        images: sortedImages,
+        total: sortedImages.length,
+        page: 1,
+        limit: sortedImages.length,
+        totalPages: 1
+      }
+    });
+  } catch (error) {
+    console.error('Batch fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch batch images'
+    });
+  }
+}));
+
+/**
  * 배치 썸네일 조회 (여러 이미지의 썸네일을 한 번에 조회)
  * GET /api/images/batch/thumbnails?hashes=hash1,hash2,hash3
  */

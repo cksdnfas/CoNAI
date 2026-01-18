@@ -129,7 +129,7 @@ export function WildcardDetailPanel({
             <Box sx={{ display: 'flex', gap: 0.5 }}>
               <IconButton
                 onClick={() => onCopy(selectedNode.type === 'chain' ? selectedNode.name : `++${selectedNode.name}++`)}
-                title={t('common:copy') || 'Copy'}
+                title={t('common:copy')}
               >
                 <CopyIcon />
               </IconButton>

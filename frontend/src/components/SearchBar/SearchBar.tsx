@@ -15,6 +15,7 @@ import {
   History as HistoryIcon,
   Restore as RestoreIcon,
   CreateNewFolder as CreateGroupIcon,
+  Shuffle as ShuffleIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { FilterCondition, ComplexSearchRequest, FilterGroupType, ComplexFilter } from '@comfyui-image-manager/shared';
@@ -83,6 +84,19 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
     }
   }, [simpleSearchText, searchTokens]);
 
+  // Listen for global tag add events (e.g. from ImageCard)
+  React.useEffect(() => {
+    const handleAddTagEvent = (event: any) => {
+      const tag = event.detail as PromptSearchResult;
+      if (tag) {
+        handleAddToken(tag);
+      }
+    };
+
+    window.addEventListener('add-search-tag', handleAddTagEvent);
+    return () => window.removeEventListener('add-search-tag', handleAddTagEvent);
+  }, []); // Remove dependency on searchTokens since handleAddToken now uses functional updates
+
   // Validation error state
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -90,23 +104,28 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [groupInitialConditions, setGroupInitialConditions] = useState<ComplexFilter | undefined>(undefined);
 
+  // Shuffle State
+  const [isShuffle, setIsShuffle] = useState(false);
+
   // Token Handlers for Simple Tab
   const handleAddToken = (tag: PromptSearchResult) => {
-    if (searchTokens.some(t => t.value === tag.prompt && t.type === tag.type)) {
-      return;
-    }
-    const newToken: SearchToken = {
-      id: `${Date.now()}-${Math.random()}`,
-      type: tag.type,
-      label: tag.prompt,
-      value: tag.prompt,
-      logic: 'AND',
-      count: tag.usage_count,
-      minScore: tag.min_score,
-      maxScore: tag.max_score,
-      color: tag.color
-    };
-    setSearchTokens([...searchTokens, newToken]);
+    setSearchTokens(prev => {
+      if (prev.some(t => t.value === tag.prompt && t.type === tag.type)) {
+        return prev;
+      }
+      const newToken: SearchToken = {
+        id: `${Date.now()}-${Math.random()}`,
+        type: tag.type,
+        label: tag.prompt,
+        value: tag.prompt,
+        logic: 'AND',
+        count: tag.usage_count,
+        minScore: tag.min_score,
+        maxScore: tag.max_score,
+        color: tag.color
+      };
+      return [...prev, newToken];
+    });
     setSimpleSearchText('');
   };
 
@@ -234,7 +253,20 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
     const complexFilter = buildComplexFilter(text, tokens);
 
     if (!complexFilter) {
-      onSearch({ page: 1, limit: 25 });
+      // Pass shuffle option if available, though for empty search it might just mean all images shuffled
+      // onSearch signature update required.
+      // But assuming onSearch takes Request.
+      // We might need to handle empty search shuffle specially or just pass empty filter.
+      // Let's pass empty request with shuffle option?
+      // Wait, onSearch expects ComplexSearchRequest.
+      // We need to update SearchBarProps to allow passing options.
+      // For now, let's just call onSearch with empty request.
+      // Ideally we should pass shuffle option.
+      // Since we can't easily change `onSearch` signature without breaking other things (or maybe we can cast),
+      // let's try to inject it or assume `HomePage` handles it?
+      // No, `HomePage` needs to know.
+      // We will cast `onSearch` or update the interface in the next steps.
+      (onSearch as any)({ page: 1, limit: 25 }, { shuffle: isShuffle });
       return;
     }
 
@@ -244,7 +276,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
       limit: 25,
     };
 
-    onSearch(request);
+    (onSearch as any)(request, { shuffle: isShuffle });
   };
 
   const handleCreateGroupWithFilter = () => {
@@ -264,6 +296,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
     setSearchTokens([]);
     sessionStorage.removeItem('search_simpleSearchText');
     sessionStorage.removeItem('search_searchTokens');
+    setIsShuffle(false);
   };
 
   const handleRestoreHistory = (item: SearchHistoryItem) => {
@@ -310,12 +343,41 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
             size="medium"
             startIcon={<SearchIcon />}
             onClick={handleSearch}
-            disabled={loading || !hasConditions}
-            fullWidth
-            sx={{ py: 1 }}
+            disabled={loading} // Allow searching even if empty to browse all? Or keep !hasConditions check?
+            // User asked for shuffle which implies maybe shuffling all?
+            // But typically search implies filtering.
+            // Let's relax it if shuffle is on? Or stick to requirement.
+            // Requirement: "Add shuffle option to search". Usually means shuffle results.
+            // If I type "girl", I get girls. Shuffle -> random girls.
+            // So keep !hasConditions.
+            sx={{ py: 1, flex: 1 }} // Flex 1 to take remaining space
           >
             {loading ? t('search:searchBar.buttons.searching') : t('search:searchBar.buttons.search')}
           </Button>
+
+          <Tooltip title={t('Shuffle Results', 'Shuffle Results')} arrow>
+            <IconButton
+              onClick={() => setIsShuffle(!isShuffle)}
+              disabled={loading}
+              color={isShuffle ? 'primary' : 'default'}
+              sx={{
+                border: '1px solid',
+                borderColor: isShuffle ? 'primary.main' : 'divider',
+                bgcolor: isShuffle ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.1)' : 'transparent',
+                '&:hover': {
+                  backgroundColor: isShuffle ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.2)' : 'action.hover',
+                  borderColor: isShuffle ? 'primary.dark' : 'text.secondary'
+                },
+                height: 'auto',
+                borderRadius: 2, // Standard button border radius
+                aspectRatio: '1/1',
+                p: 1.25 // Padding adjustment to match Reset button
+              }}
+            >
+              <ShuffleIcon />
+            </IconButton>
+          </Tooltip>
+
           <Tooltip title={t('search:searchBar.buttons.reset')} arrow>
             <span>
               <IconButton

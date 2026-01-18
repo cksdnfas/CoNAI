@@ -256,6 +256,10 @@ function createTables(): void {
     console.log('  Migrating wildcards: adding chain_option column');
     userSettingsDb.exec("ALTER TABLE wildcards ADD COLUMN chain_option TEXT CHECK(chain_option IN ('replace', 'append')) DEFAULT 'replace'");
   }
+  if (!hasColumn('wildcards', 'only_children')) {
+    console.log('  Migrating wildcards: adding only_children column');
+    userSettingsDb.exec('ALTER TABLE wildcards ADD COLUMN only_children INTEGER DEFAULT 0');
+  }
 
   // Migrate custom_dropdown_lists table
   if (!hasColumn('custom_dropdown_lists', 'is_auto_collected')) {

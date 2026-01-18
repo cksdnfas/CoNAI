@@ -11,6 +11,8 @@
   },
   "actions": {
     "add": "Add Wildcard",
+    "edit": "Edit Wildcard",
+    "delete": "Delete Wildcard",
     "addItem": "Add Item",
     "preview": "Preview",
     "confirmDelete": "Are you sure you want to delete the '{{name}}' wildcard?",

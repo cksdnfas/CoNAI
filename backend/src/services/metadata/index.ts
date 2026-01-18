@@ -108,7 +108,22 @@ export class MetadataExtractor {
                 // 2차 추출 (Secondary extraction - Stealth PNG Info)
                 const secondaryStart = Date.now();
                 aiInfo = await this.secondaryExtraction(buffer, aiInfo, metadataSettings.stealthScanMode);
+
+                // Fast Scan 실패 시 Full Scan 자동 재시도
+                // 프론트엔드는 항상 Full Scan을 수행하므로, 백엔드도 동일한 정확도를 보장해야 함
+                const hasStealthPrompt = Boolean(aiInfo.prompt || aiInfo.positive_prompt);
+
+                if (!hasStealthPrompt && metadataSettings.stealthScanMode === 'fast') {
+                  console.log('⚠️ [MetadataExtractor] Fast scan failed to find prompt - retrying with FULL scan');
+                  aiInfo = await this.secondaryExtraction(buffer, aiInfo, 'full');
+                }
+
                 logger.debug(`⏱️ [MetadataExtractor] Secondary extraction: ${Date.now() - secondaryStart}ms`);
+
+                // 최종 결과 확인
+                if (aiInfo.prompt || aiInfo.positive_prompt) {
+                  logger.info('✅ [MetadataExtractor] Prompt successfully extracted via Stealth PNG');
+                }
               }
             } else {
               // width/height가 없으면 Secondary extraction 실행
@@ -116,6 +131,14 @@ export class MetadataExtractor {
 
               const secondaryStart = Date.now();
               aiInfo = await this.secondaryExtraction(buffer, aiInfo, metadataSettings.stealthScanMode);
+
+              // Fast Scan 실패 시 Full Scan 자동 재시도
+              const hasStealthPrompt = Boolean(aiInfo.prompt || aiInfo.positive_prompt);
+              if (!hasStealthPrompt && metadataSettings.stealthScanMode === 'fast') {
+                console.log('⚠️ [MetadataExtractor] Fast scan failed to find prompt - retrying with FULL scan');
+                aiInfo = await this.secondaryExtraction(buffer, aiInfo, 'full');
+              }
+
               logger.debug(`⏱️ [MetadataExtractor] Secondary extraction: ${Date.now() - secondaryStart}ms`);
             }
           }

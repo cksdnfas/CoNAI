@@ -109,13 +109,15 @@ function ManualWildcardsTab() {
     naiItems: WildcardItem[];
     parent_id: number | null;
     include_children: boolean;
+    only_children: boolean;
   }>({
     name: '',
     description: '',
     comfyuiItems: [{ content: '', weight: 1.0 }],
     naiItems: [{ content: '', weight: 1.0 }],
     parent_id: null,
-    include_children: true
+    include_children: true,
+    only_children: false
   });
 
   // Preview states
@@ -173,7 +175,8 @@ function ManualWildcardsTab() {
         comfyuiItems: comfyuiItems.length > 0 ? comfyuiItems : [{ content: '', weight: 1.0 }],
         naiItems: naiItems.length > 0 ? naiItems : [{ content: '', weight: 1.0 }],
         parent_id: wildcard.parent_id ?? null,
-        include_children: wildcard.include_children === 1
+        include_children: wildcard.include_children === 1,
+        only_children: wildcard.only_children === 1
       });
     } else {
       setEditingWildcard(null);
@@ -183,7 +186,8 @@ function ManualWildcardsTab() {
         comfyuiItems: [{ content: '', weight: 1.0 }],
         naiItems: [{ content: '', weight: 1.0 }],
         parent_id: selectedNode?.id ?? null,
-        include_children: true
+        include_children: true,
+        only_children: false
       });
     }
     setCurrentToolTab(0);
@@ -206,7 +210,9 @@ function ManualWildcardsTab() {
         return;
       }
 
-      if (filteredComfyuiItems.length === 0 && filteredNaiItems.length === 0) {
+      // only_children이 1이면 항목이 없어도 됨
+      // 단, items 배열 자체는 필요하므로 빈 배열이라도 전달
+      if (!formData.only_children && filteredComfyuiItems.length === 0 && filteredNaiItems.length === 0) {
         enqueueSnackbar(t('wildcards:errors.itemsRequired'), { variant: 'error' });
         return;
       }
@@ -222,7 +228,8 @@ function ManualWildcardsTab() {
           description: formData.description.trim() || undefined,
           items,
           parent_id: formData.parent_id,
-          include_children: formData.include_children ? 1 : 0
+          include_children: formData.include_children ? 1 : 0,
+          only_children: formData.only_children ? 1 : 0
         };
         const response = await wildcardApi.updateWildcard(editingWildcard.id, updateData);
         if (response.warning) {
@@ -234,7 +241,8 @@ function ManualWildcardsTab() {
           description: formData.description.trim() || undefined,
           items,
           parent_id: formData.parent_id,
-          include_children: formData.include_children ? 1 : 0
+          include_children: formData.include_children ? 1 : 0,
+          only_children: formData.only_children ? 1 : 0
         };
         const response = await wildcardApi.createWildcard(createData);
         if (response.warning) {
@@ -449,18 +457,43 @@ function ManualWildcardsTab() {
               showItemCount={true}
             />
 
-            {/* 하위 와일드카드 자동 포함 옵션 */}
-            <Tooltip title={t('wildcards:form.includeChildrenHelper')} arrow placement="bottom">
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={formData.include_children}
-                    onChange={(e) => setFormData(prev => ({ ...prev, include_children: e.target.checked }))}
-                  />
-                }
-                label={t('wildcards:form.includeChildren')}
-              />
-            </Tooltip>
+            {/* 하위 와일드카드 자동 포함 옵션 & 하위 와일드카드만 사용 옵션 */}
+            <Stack direction="row" spacing={2}>
+              <Tooltip title={t('wildcards:form.includeChildrenHelper')} arrow placement="bottom">
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={formData.include_children}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        include_children: e.target.checked
+                      }))}
+                    />
+                  }
+                  label={t('wildcards:form.includeChildren')}
+                />
+              </Tooltip>
+
+              <Tooltip title="자신의 항목은 무시하고 하위 와일드카드 항목만 사용합니다. 폴더 정리용으로 유용합니다." arrow placement="bottom">
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={formData.only_children}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setFormData(prev => ({
+                          ...prev,
+                          only_children: checked,
+                          // only_children 활성화 시 include_children은 자동으로 켜지는게 자연스러움
+                          include_children: checked ? true : prev.include_children
+                        }));
+                      }}
+                    />
+                  }
+                  label="하위 와일드카드만 사용 (그룹용)"
+                />
+              </Tooltip>
+            </Stack>
 
             <Divider />
 

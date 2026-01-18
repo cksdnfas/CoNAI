@@ -9,6 +9,7 @@ export interface Wildcard {
   description?: string;
   parent_id: number | null;
   include_children: number; // 0 or 1: 하위 와일드카드 자동 포함 여부
+  only_children: number; // 0 or 1: 하위 와일드카드만 사용 여부 (자신 제외)
   type: 'wildcard' | 'chain';
   chain_option: 'replace' | 'append';
   created_date: string;
@@ -46,6 +47,7 @@ export interface WildcardCreateData {
   customId?: number; // 자동 LORA용 커스텀 ID (선택적)
   parent_id?: number | null; // 부모 와일드카드 ID
   include_children?: number; // 하위 와일드카드 자동 포함 여부 (기본값 0)
+  only_children?: number; // 하위 와일드카드만 사용 여부 (기본값 0)
   type?: 'wildcard' | 'chain';
   chain_option?: 'replace' | 'append';
 }
@@ -59,6 +61,7 @@ export interface WildcardUpdateData {
   items?: ToolItems; // 도구별 항목 배열
   parent_id?: number | null; // 부모 와일드카드 ID
   include_children?: number; // 하위 와일드카드 자동 포함 여부
+  only_children?: number; // 하위 와일드카드만 사용 여부
   type?: 'wildcard' | 'chain';
   chain_option?: 'replace' | 'append';
 }
@@ -121,14 +124,15 @@ export class WildcardModel {
       if (data.customId) {
         // 커스텀 ID로 생성 (자동 LORA용)
         db.prepare(`
-          INSERT INTO wildcards (id, name, description, parent_id, include_children, type, chain_option)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO wildcards (id, name, description, parent_id, include_children, only_children, type, chain_option)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           data.customId,
           data.name,
           data.description || null,
           data.parent_id ?? null,
           data.include_children ?? 0,
+          data.only_children ?? 0,
           data.type || 'wildcard',
           data.chain_option || 'replace'
         );
@@ -136,13 +140,14 @@ export class WildcardModel {
       } else {
         // 기본 자동 증가 ID
         const wildcardResult = db.prepare(`
-          INSERT INTO wildcards (name, description, parent_id, include_children, type, chain_option)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT INTO wildcards (name, description, parent_id, include_children, only_children, type, chain_option)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
         `).run(
           data.name,
           data.description || null,
           data.parent_id ?? null,
           data.include_children ?? 0,
+          data.only_children ?? 0,
           data.type || 'wildcard',
           data.chain_option || 'replace'
         );
@@ -209,6 +214,10 @@ export class WildcardModel {
       if (data.include_children !== undefined) {
         updates.push('include_children = ?');
         params.push(data.include_children);
+      }
+      if (data.only_children !== undefined) {
+        updates.push('only_children = ?');
+        params.push(data.only_children);
       }
       if (data.type !== undefined) {
         updates.push('type = ?');

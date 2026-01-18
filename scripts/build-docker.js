@@ -217,7 +217,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY python/requirements.txt ./python/requirements.txt
 
 # Install Python dependencies (CPU)
-RUN pip3 install --no-cache-dir --break-system-packages \\
+RUN pip3 install --no-cache-dir \\
     --extra-index-url https://download.pytorch.org/whl/cpu \\
     -r python/requirements.txt && \\
     find /usr/local/lib/python3* -name '*.pyc' -delete && \\
@@ -264,9 +264,11 @@ RUN npm install --production --no-package-lock && \\
 # ============================================================================
 # Runtime Stage (CUDA)
 # ============================================================================
-FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \\
+    NVIDIA_VISIBLE_DEVICES=all \\
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \\
@@ -291,9 +293,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY python/requirements.txt ./python/requirements.txt
 
 # Install Python dependencies (GPU)
+# Using --extra-index-url to allow PyPI access for non-torch packages
 RUN pip3 install --no-cache-dir \\
-    -r python/requirements.txt \\
-    --extra-index-url https://download.pytorch.org/whl/cu121 && \\
+    --extra-index-url https://download.pytorch.org/whl/cu121 \\
+    -r python/requirements.txt && \\
     rm -rf /root/.cache/pip
 
 # Create data directories
@@ -403,6 +406,7 @@ services:
     restart: unless-stopped
     
     # GPU Access (Uncomment if using GPU base image)
+    # IMPORTANT: Requires "NVIDIA Container Toolkit" on host
     # deploy:
     #   resources:
     #     reservations:
@@ -891,12 +895,24 @@ ports:
 - ✅ Image processing (Sharp)
 - ✅ Video processing (FFmpeg)
 - ✅ SQLite database
-- ✅ WD v3 Tagger (Python + PyTorch CPU)
+- ✅ WD v3 Tagger (Python + PyTorch)
+- ✅ **GPU Acceleration support** (NVIDIA CUDA)
 - ✅ Health checks
 - ✅ Auto-restart
 - ✅ Persistent data storage
 
 ## 🐛 Troubleshooting
+
+### GPU (CUDA) not available
+
+If you've built the GPU image but still see "CUDA is not available":
+
+1.  **Check Hardware**: Do you have an NVIDIA GPU?
+2.  **Check Host Drivers**: Install latest NVIDIA drivers on your host machine.
+3.  **Check NVIDIA Container Toolkit**: You **MUST** install this on the host to expose GPU to containers. 
+    - [Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+4.  **WSL2 Users**: Ensure you have latest Windows NVIDIA drivers and [support for WSL2](https://docs.nvidia.com/cuda/wsl-user-guide/index.html).
+5.  **Docker Compose**: Ensure the \`deploy\` section in \`docker-compose.yml\` is uncommented.
 
 ### Container won't start
 

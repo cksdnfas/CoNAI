@@ -538,6 +538,63 @@ export class MediaMetadataModel {
   }
 
   /**
+   * 지정된 composite_hash 목록에 해당하는 파일 포함 상세 정보 조회
+   */
+  static findByHashesWithFiles(compositeHashes: string[]): any[] {
+    if (compositeHashes.length === 0) return [];
+
+    const placeholders = compositeHashes.map(() => '?').join(',');
+    const query = `
+      SELECT
+        mm.composite_hash,
+        mm.perceptual_hash,
+        mm.dhash,
+        mm.ahash,
+        mm.color_histogram,
+        mm.width,
+        mm.height,
+        mm.thumbnail_path,
+        mm.ai_tool,
+        mm.model_name,
+        mm.lora_models,
+        mm.steps,
+        mm.cfg_scale,
+        mm.sampler,
+        mm.seed,
+        mm.scheduler,
+        mm.prompt,
+        mm.negative_prompt,
+        mm.denoise_strength,
+        mm.generation_time,
+        mm.batch_size,
+        mm.batch_index,
+        mm.auto_tags,
+        mm.duration,
+        mm.fps,
+        mm.video_codec,
+        mm.audio_codec,
+        mm.bitrate,
+        mm.rating_score,
+        mm.first_seen_date,
+        mm.metadata_updated_date,
+        if.id,
+        if.original_file_path,
+        if.file_size,
+        if.mime_type,
+        if.file_status,
+        if.scan_date,
+        if.file_type
+      FROM image_files if
+      LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
+      WHERE if.file_status = 'active'
+        AND if.composite_hash IN (${placeholders})
+    `;
+
+    const items = db.prepare(query).all(...compositeHashes);
+    return items;
+  }
+
+  /**
    * 랜덤 이미지 조회 (파일 경로 포함)
    * composite_hash가 있는 이미지만 조회
    *

@@ -11,11 +11,13 @@
   },
   "actions": {
     "add": "ワイルドカードを追加",
+    "edit": "ワイルドカード編集",
+    "delete": "ワイルドカード削除",
     "addItem": "項目を追加",
     "preview": "プレビュー",
     "confirmDelete": "\"{{name}}\"ワイルドカードを削除してもよろしいですか?",
-    "copiedToClipboard": "Copied to clipboard",
-    "copyFailed": "Failed to copy"
+    "copiedToClipboard": "クリップボードにコピーされました",
+    "copyFailed": "コピーに失敗しました"
   },
   "card": {
     "items": "{{count}}個の項目",

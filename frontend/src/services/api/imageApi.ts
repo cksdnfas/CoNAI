@@ -59,11 +59,24 @@ export const imageApi = {
   },
 
   /**
+   * Get multiple images by composite_hash list
+   */
+  getImagesBulk: async (
+    compositeHashes: string[]
+  ): Promise<ImageListResponse> => {
+    const response = await apiClient.post('/api/images/batch', { composite_hashes: compositeHashes });
+    return response.data;
+  },
+
+  /**
+   * Get composite_hash list for complex search (for random selection)
+   */
+  /**
    * Get composite_hash list for complex search (for random selection)
    */
   searchComplexIds: async (
     request: ComplexSearchRequest
-  ): Promise<{ success: boolean; data?: { composite_hashes: string[]; total: number }; error?: string }> => {
+  ): Promise<{ success: boolean; data?: { ids: string[]; total: number }; error?: string }> => {
     const response = await apiClient.post('/api/images/search/complex/ids', request);
     return response.data;
   },

@@ -3,10 +3,29 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Resolve path to root .env file (assuming we are in backend/src or backend/dist)
-// Root is two levels up from backend/ directory
-const rootEnvPath = path.resolve(__dirname, '../../.env');
+// Resolve path to root .env file
+// Robust path resolution for Dev, Portable, and SEA (Single Executable Application)
+const getEnvPath = () => {
+  // 1. Portable mode executable directory
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    return path.join(process.env.PORTABLE_EXECUTABLE_DIR, '.env');
+  }
+
+  // 2. SEA / Packaged Executable detection
+  // In SEA, __dirname is inside the blob, but .env should be next to the executable
+  if (process.execPath.includes('comfyui-image-manager') || process.env.NODE_ENV === 'production') {
+    return path.join(path.dirname(process.execPath), '.env');
+  }
+
+  // 3. Development/Standard Node detection (assuming we are in backend/src or backend/dist)
+  // Root is two levels up from backend/src or backend/dist
+  return path.resolve(__dirname, '../../.env');
+};
+
+const rootEnvPath = getEnvPath();
 dotenv.config({ path: rootEnvPath });
+console.log(`[Config] Initialized with .env from: ${rootEnvPath}`);
+
 
 // Configure NODE_PATH for native modules in SEA (Single Executable Application)
 // This must be done before any imports that depend on native modules
@@ -156,12 +175,16 @@ app.use(express.urlencoded({ extended: true, limit: `${IMAGE_PROCESSING.MAX_FILE
 
 // .env 파일 자동 생성
 const createEnvFileIfNotExists = () => {
-  const envPath = path.resolve(__dirname, '../../.env');
-  const envExamplePath = path.join(__dirname, '../.env.example');
+  const envPath = rootEnvPath;
+  // Assume .env.example is always in the same directory as the executable in portable/prod,
+  // or in backend/ directory in dev
+  const envExamplePath = process.env.NODE_ENV === 'production' || process.env.PORTABLE_EXECUTABLE_DIR
+    ? path.join(path.dirname(rootEnvPath), '.env.example')
+    : path.join(__dirname, '../.env.example');
 
   if (!fs.existsSync(envPath) && fs.existsSync(envExamplePath)) {
     fs.copyFileSync(envExamplePath, envPath);
-    console.log('📝 Created root .env file from backend/.env.example');
+    console.log(`📝 Created .env file from ${path.basename(envExamplePath)} at ${envPath}`);
   }
 };
 

@@ -133,12 +133,11 @@ def load_model_command(model_name: str, cache_dir: Optional[str] = None, device:
         elif device == "cpu":
             # Force CPU
             torch_device = torch.device("cpu")
-        elif device == "cuda":
             # Force CUDA, error if not available
             if not torch.cuda.is_available():
                 return {
                     "success": False,
-                    "error": "CUDA is not available on this system",
+                    "error": f"CUDA is not available on this system. (Torch: {torch.__version__}, CUDA: {torch.version.cuda if hasattr(torch.version, 'cuda') else 'N/A'})",
                     "error_type": "DeviceError"
                 }
             torch_device = torch.device("cuda")
@@ -308,7 +307,11 @@ def send_response(response: dict):
 
 def main():
     """Main daemon loop"""
-    # Signal ready
+    # Signal ready and log system info
+    print(f"# Tagger Daemon starting (Torch: {torch.__version__}, CUDA: {torch.cuda.is_available()})", file=sys.stderr)
+    if torch.cuda.is_available():
+        print(f"# CUDA Device: {torch.cuda.get_device_name(0)} (Count: {torch.cuda.device_count()})", file=sys.stderr)
+    
     send_response({"success": True, "status": "ready"})
 
     # Process commands from stdin

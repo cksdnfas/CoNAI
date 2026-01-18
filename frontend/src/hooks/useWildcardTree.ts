@@ -75,10 +75,40 @@ export function useWildcardTree(initialData: WildcardWithHierarchy[] = []) {
    */
   const handleCopy = useCallback(async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
-      enqueueSnackbar(`"${text}" ${t('wildcards:actions.copiedToClipboard') || '클립보드에 복사됨!'}`, { variant: 'success' });
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        enqueueSnackbar(`"${text}" ${t('wildcards:actions.copiedToClipboard') || '클립보드에 복사됨!'}`, { variant: 'success' });
+      } else {
+        throw new Error('Insecure context');
+      }
     } catch (err) {
-      enqueueSnackbar(t('wildcards:errors.copyFailed') || '복사 실패', { variant: 'error' });
+      // Fallback for insecure context or if clipboard API fails
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+
+        // Ensure textarea is not visible but part of the DOM
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        textArea.setAttribute("readonly", "");
+
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+
+        if (successful) {
+          enqueueSnackbar(`"${text}" ${t('wildcards:actions.copiedToClipboard') || '클립보드에 복사됨!'}`, { variant: 'success' });
+        } else {
+          throw new Error('Fallback copy failed');
+        }
+      } catch (fallbackErr) {
+        console.error('Copy failed:', err, fallbackErr);
+        enqueueSnackbar(t('wildcards:errors.copyFailed') || '복사 실패', { variant: 'error' });
+      }
     }
   }, [enqueueSnackbar, t]);
 

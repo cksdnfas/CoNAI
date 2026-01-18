@@ -3,6 +3,7 @@ import {
     Box,
     Tooltip,
     IconButton,
+    Chip,
 } from '@mui/material';
 import {
     Download as DownloadIcon,
@@ -36,6 +37,47 @@ const ImageCardActionStack: React.FC<ImageCardActionStackProps> = ({
     onCopy,
 }) => {
     const { t } = useTranslation(['common']);
+
+    const handleTagClick = (tag: string, type: 'positive' | 'negative' | 'auto') => (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const event = new CustomEvent('add-search-tag', {
+            detail: {
+                id: Date.now(),
+                prompt: tag,
+                usage_count: 0,
+                group_id: null,
+                synonyms: [],
+                type: type
+            }
+        });
+        window.dispatchEvent(event);
+    };
+
+    const renderClickableTags = (tagString: string, type: 'positive' | 'negative' | 'auto') => {
+        const tags = tagString.split(',').map(t => t.trim()).filter(t => t !== '');
+        return (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, p: 0.5, maxWidth: '300px' }}>
+                {tags.map((tag, index) => (
+                    <Chip
+                        key={`${tag}-${index}`}
+                        label={tag}
+                        size="small"
+                        onClick={handleTagClick(tag, type)}
+                        sx={{
+                            height: '20px',
+                            fontSize: '0.65rem',
+                            cursor: 'pointer',
+                            bgcolor: 'rgba(255, 255, 255, 0.15)',
+                            color: 'white',
+                            '&:hover': {
+                                bgcolor: 'rgba(255, 255, 255, 0.3)',
+                            },
+                        }}
+                    />
+                ))}
+            </Box>
+        );
+    };
 
     if (isSmall || (!isHovered && !selected)) {
         return null;
@@ -102,12 +144,9 @@ const ImageCardActionStack: React.FC<ImageCardActionStackProps> = ({
             {/* Positive Prompt */}
             {image.prompt && (
                 <Tooltip
-                    title={
-                        <Box sx={{ maxHeight: '200px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 10, WebkitBoxOrient: 'vertical' }}>
-                            {image.prompt}
-                        </Box>
-                    }
+                    title={renderClickableTags(image.prompt, 'positive')}
                     placement="left"
+                    disableInteractive={false}
                 >
                     <IconButton
                         size="small"
@@ -132,12 +171,9 @@ const ImageCardActionStack: React.FC<ImageCardActionStackProps> = ({
             {/* Negative Prompt */}
             {image.negative_prompt && (
                 <Tooltip
-                    title={
-                        <Box sx={{ maxHeight: '200px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 10, WebkitBoxOrient: 'vertical' }}>
-                            {image.negative_prompt}
-                        </Box>
-                    }
+                    title={renderClickableTags(image.negative_prompt, 'negative')}
                     placement="left"
+                    disableInteractive={false}
                 >
                     <IconButton
                         size="small"
@@ -162,12 +198,9 @@ const ImageCardActionStack: React.FC<ImageCardActionStackProps> = ({
             {/* Auto Tags */}
             {image.auto_tags && image.auto_tags.taglist && (
                 <Tooltip
-                    title={
-                        <Box sx={{ maxHeight: '200px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 10, WebkitBoxOrient: 'vertical' }}>
-                            {image.auto_tags.taglist}
-                        </Box>
-                    }
+                    title={renderClickableTags(image.auto_tags.taglist, 'auto')}
                     placement="left"
+                    disableInteractive={false}
                 >
                     <IconButton
                         size="small"

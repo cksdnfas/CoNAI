@@ -20,7 +20,8 @@
     "selectAll": "Select All",
     "deselectAll": "Deselect All",
     "apply": "Apply",
-    "clear": "Clear"
+    "clear": "Clear",
+    "copy": "Copy"
   },
   "messages": {
     "loading": "Loading...",
@@ -116,7 +117,8 @@
     "cancel": "Cancel",
     "confirm": "Confirm",
     "retry": "Retry",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "copy": "Copy"
   },
   "filterModal": {
     "title": {

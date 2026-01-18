@@ -20,7 +20,8 @@
     "selectAll": "전체 선택",
     "deselectAll": "전체 해제",
     "apply": "적용",
-    "clear": "지우기"
+    "clear": "지우기",
+    "copy": "복사"
   },
   "messages": {
     "loading": "로딩 중...",
@@ -116,7 +117,8 @@
     "cancel": "취소",
     "confirm": "확인",
     "retry": "재시도",
-    "refresh": "새로고침"
+    "refresh": "새로고침",
+    "copy": "복사"
   },
   "filterModal": {
     "title": {
