@@ -143,8 +143,8 @@ const Header: React.FC = () => {
 
   return (
     <>
-      <AppBar position="static" elevation={1}>
-        <Toolbar sx={{ width: '100%', px: { xs: 2, sm: 3, md: 4 } }}>
+      <AppBar position="static" elevation={1} sx={{ transition: 'all 0.3s ease' }}>
+        <Toolbar sx={{ width: '100%', px: { xs: 1.5, sm: 3, md: 4 }, py: 1 }}>
           {/* 모바일 메뉴 버튼 */}
           {isMobile && (
             <IconButton
@@ -152,7 +152,7 @@ const Header: React.FC = () => {
               color="inherit"
               aria-label="menu"
               onClick={handleMobileMenuToggle}
-              sx={{ mr: 2 }}
+              sx={{ mr: 1.5 }}
             >
               <MenuIcon />
             </IconButton>
@@ -164,8 +164,9 @@ const Header: React.FC = () => {
             component="div"
             sx={{
               flexGrow: 1,
-              fontWeight: 600,
-              fontSize: { xs: '1.1rem', sm: '1.25rem' },
+              fontWeight: 700,
+              fontSize: { xs: '0.95rem', sm: '1.15rem' },
+              letterSpacing: '0.5px',
             }}
           >
             {t('header.title')}
@@ -173,48 +174,53 @@ const Header: React.FC = () => {
 
           {/* 데스크톱 네비게이션 */}
           {!isMobile && (
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', ml: 2 }}>
               {navItems.map((item) => {
                 const IconComponent = item.icon;
-                const showIconOnly = isNarrow && !isMobile;
+                const isActive = location.pathname === item.path;
 
                 return (
-                  <Tooltip key={item.path} title={item.tooltip} arrow>
-                    <Button
+                  <Tooltip key={item.path} title={item.tooltip} arrow placement="bottom">
+                    <IconButton
                       color="inherit"
                       component={RouterLink}
                       to={item.path}
-                      variant={location.pathname === item.path ? 'outlined' : 'text'}
                       sx={{
                         color: 'inherit',
-                        borderColor: location.pathname === item.path ? 'currentColor' : 'transparent',
-                        minWidth: 'auto',
-                        px: showIconOnly ? 1.5 : 2,
+                        fontSize: '1.5rem',
+                        p: 1,
+                        borderRadius: '8px',
+                        transition: 'all 0.2s ease',
+                        backgroundColor: isActive ? 'rgba(255, 255, 255, 0.15)' : 'transparent',
+                        border: isActive ? '1px solid rgba(255, 255, 255, 0.3)' : 'none',
                         '&:hover': {
-                          backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                          backgroundColor: 'rgba(255, 255, 255, 0.2)',
                         },
                       }}
                     >
-                      <IconComponent sx={{ fontSize: 20, mr: showIconOnly ? 0 : 1 }} />
-                      {!showIconOnly && item.label}
-                    </Button>
+                      <IconComponent sx={{ fontSize: 22 }} />
+                    </IconButton>
                   </Tooltip>
                 );
               })}
 
               {/* 테마 토글 버튼 */}
-              <Tooltip title={t('header.theme.toggle')} arrow>
+              <Tooltip title={t('header.theme.toggle')} arrow placement="bottom">
                 <IconButton
                   color="inherit"
                   onClick={toggleMode}
                   sx={{
+                    fontSize: '1.5rem',
+                    p: 1,
+                    borderRadius: '8px',
+                    transition: 'all 0.2s ease',
                     ml: 1,
                     '&:hover': {
-                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.2)',
                     },
                   }}
                 >
-                  {mode === 'dark' ? <LightIcon /> : <DarkIcon />}
+                  {mode === 'dark' ? <LightIcon sx={{ fontSize: 22 }} /> : <DarkIcon sx={{ fontSize: 22 }} />}
                 </IconButton>
               </Tooltip>
             </Box>

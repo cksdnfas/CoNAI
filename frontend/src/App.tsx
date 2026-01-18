@@ -2,6 +2,7 @@ import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import CssBaseline from '@mui/material/CssBaseline';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SnackbarProvider } from 'notistack';
+import { memo, useMemo } from 'react';
 
 // i18n
 import './i18n';
@@ -29,7 +30,7 @@ import { Layout } from './components/Layout';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 
-// React Query 클라이언트 설정
+// React Query 클라이언트 설정 (싱글톤 패턴으로 재생성 방지)
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -41,9 +42,18 @@ const queryClient = new QueryClient({
   },
 });
 
+// 라우트 컴포넌트 최적화
+const MemoizedLoginPage = memo(LoginPage);
+const MemoizedLayout = memo(Layout);
+
 function App() {
+  // Memoize providers to prevent unnecessary re-renders
+  const providers = useMemo(() => ({
+    queryClient,
+  }), []);
+
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={providers.queryClient}>
       <ThemeProvider>
         <CssBaseline />
         <SnackbarProvider maxSnack={3} autoHideDuration={3000}>
@@ -51,14 +61,14 @@ function App() {
             <AuthProvider>
               <Routes>
                 {/* Login page (no auth required) */}
-                <Route path="/login" element={<LoginPage />} />
+                <Route path="/login" element={<MemoizedLoginPage />} />
 
                 {/* Protected routes */}
                 <Route
                   path="/*"
                   element={
                     <ProtectedRoute>
-                      <Layout>
+                      <MemoizedLayout>
                         <Routes>
                           <Route path="/" element={<HomePage />} />
 
@@ -72,7 +82,7 @@ function App() {
                           <Route path="/image-generation/:id/edit" element={<WorkflowFormPage />} />
                           <Route path="/image-generation/:id/generate" element={<WorkflowGeneratePage />} />
                         </Routes>
-                      </Layout>
+                      </MemoizedLayout>
                     </ProtectedRoute>
                   }
                 />
@@ -85,4 +95,4 @@ function App() {
   );
 }
 
-export default App;
+export default memo(App);
