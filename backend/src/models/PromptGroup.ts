@@ -30,11 +30,11 @@ export class PromptGroupModel {
   /**
    * 새로운 그룹 생성
    */
-  static async create(data: PromptGroupData, type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<number> {
+  static create(data: PromptGroupData, type: 'positive' | 'negative' | 'auto' = 'positive'): number {
     const tableName = getTableName(type);
 
     // Check if group already exists
-    const existing = await this.findByName(data.group_name, type);
+    const existing = this.findByName(data.group_name, type);
     if (existing) {
       return existing.id;
     }
@@ -79,10 +79,10 @@ export class PromptGroupModel {
   /**
    * 모든 그룹 조회 (display_order 순)
    */
-  static async findAll(
+  static findAll(
     includeHidden: boolean = false,
     type: 'positive' | 'negative' | 'auto' = 'positive'
-  ): Promise<PromptGroupRecord[]> {
+  ): PromptGroupRecord[] {
     const tableName = getTableName(type);
     const visibilityFilter = includeHidden ? '' : 'WHERE is_visible = 1';
 
@@ -93,10 +93,10 @@ export class PromptGroupModel {
   /**
    * 프롬프트 수와 함께 그룹 조회
    */
-  static async findAllWithCounts(
+  static findAllWithCounts(
     includeHidden: boolean = false,
     type: 'positive' | 'negative' | 'auto' = 'positive'
-  ): Promise<PromptGroupWithPrompts[]> {
+  ): PromptGroupWithPrompts[] {
     const groupTableName = getTableName(type);
     const promptTableName = getPromptTableName(type);
     const visibilityFilter = includeHidden ? '' : 'WHERE g.is_visible = 1';
@@ -115,10 +115,10 @@ export class PromptGroupModel {
   /**
    * 특정 그룹 조회
    */
-  static async findById(
+  static findById(
     id: number,
     type: 'positive' | 'negative' | 'auto' = 'positive'
-  ): Promise<PromptGroupRecord | null> {
+  ): PromptGroupRecord | null {
     const tableName = getTableName(type);
 
     const row = db.prepare(`SELECT * FROM ${tableName} WHERE id = ?`).get(id) as PromptGroupRecord | undefined;
@@ -128,10 +128,10 @@ export class PromptGroupModel {
   /**
    * 그룹명으로 조회
    */
-  static async findByName(
+  static findByName(
     groupName: string,
     type: 'positive' | 'negative' | 'auto' = 'positive'
-  ): Promise<PromptGroupRecord | null> {
+  ): PromptGroupRecord | null {
     const tableName = getTableName(type);
 
     const row = db.prepare(`SELECT * FROM ${tableName} WHERE group_name = ?`).get(groupName) as PromptGroupRecord | undefined;
@@ -141,11 +141,11 @@ export class PromptGroupModel {
   /**
    * 그룹 정보 업데이트
    */
-  static async update(
+  static update(
     id: number,
     data: Partial<PromptGroupData>,
     type: 'positive' | 'negative' | 'auto' = 'positive'
-  ): Promise<boolean> {
+  ): boolean {
     const tableName = getTableName(type);
 
     // is_visible을 boolean에서 number로 변환
@@ -174,10 +174,10 @@ export class PromptGroupModel {
   /**
    * 그룹 삭제
    */
-  static async delete(
+  static delete(
     id: number,
     type: 'positive' | 'negative' | 'auto' = 'positive'
-  ): Promise<boolean> {
+  ): boolean {
     const tableName = getTableName(type);
 
     const info = db.prepare(`DELETE FROM ${tableName} WHERE id = ?`).run(id);
@@ -187,15 +187,15 @@ export class PromptGroupModel {
   /**
    * 그룹들의 ID 일괄 재배치 (JSON 가져오기용)
    */
-  static async reassignGroupIds(
+  static reassignGroupIds(
     groupData: GroupImportData[],
     type: 'positive' | 'negative' | 'auto' = 'positive'
-  ): Promise<{ old_id: number; new_id: number; group_name: string }[]> {
+  ): { old_id: number; new_id: number; group_name: string }[] {
     const tableName = getTableName(type);
     const reassignments: { old_id: number; new_id: number; group_name: string }[] = [];
 
     // 1. 기존 그룹들 조회
-    const existingGroups = await this.findAll(true, type);
+    const existingGroups = this.findAll(true, type);
 
     // 2. 임시 테이블 생성 및 기존 데이터 백업
     db.prepare(`CREATE TEMPORARY TABLE temp_${tableName} AS SELECT * FROM ${tableName}`).run();
@@ -257,7 +257,7 @@ export class PromptGroupModel {
   /**
    * 그룹들을 JSON 내보내기용으로 조회
    */
-  static async exportForJSON(type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<GroupImportData[]> {
+  static exportForJSON(type: 'positive' | 'negative' | 'auto' = 'positive'): GroupImportData[] {
     const tableName = getTableName(type);
 
     const rows = db.prepare(`SELECT id, group_name, display_order, is_visible, parent_id

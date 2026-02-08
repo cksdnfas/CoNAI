@@ -8,7 +8,7 @@ export class GroupModel {
   /**
    * 새 그룹 생성
    */
-  static async create(groupData: GroupCreateData): Promise<number> {
+  static create(groupData: GroupCreateData): number {
     const conditionsJson = groupData.auto_collect_conditions ?
       JSON.stringify(groupData.auto_collect_conditions) : null;
 
@@ -32,7 +32,7 @@ export class GroupModel {
   /**
    * 그룹 조회 (ID)
    */
-  static async findById(id: number): Promise<GroupRecord | null> {
+  static findById(id: number): GroupRecord | null {
     const row = db.prepare('SELECT * FROM groups WHERE id = ?').get(id) as GroupRecord | undefined;
     return row || null;
   }
@@ -40,7 +40,7 @@ export class GroupModel {
   /**
    * 모든 그룹 조회 (통계 포함)
    */
-  static async findAllWithStats(): Promise<GroupWithStats[]> {
+  static findAllWithStats(): GroupWithStats[] {
     const query = `
       SELECT
         g.*,
@@ -60,7 +60,7 @@ export class GroupModel {
   /**
    * 자동수집이 활성화된 그룹들 조회
    */
-  static async findAutoCollectEnabled(): Promise<GroupRecord[]> {
+  static findAutoCollectEnabled(): GroupRecord[] {
     const rows = db.prepare(
       'SELECT * FROM groups WHERE auto_collect_enabled = 1 ORDER BY id'
     ).all() as GroupRecord[];
@@ -70,7 +70,7 @@ export class GroupModel {
   /**
    * 그룹 업데이트
    */
-  static async update(id: number, groupData: GroupUpdateData): Promise<boolean> {
+  static update(id: number, groupData: GroupUpdateData): boolean {
     // undefined 값 제거 및 데이터 변환
     const updates = filterDefined({
       name: groupData.name,
@@ -100,7 +100,7 @@ export class GroupModel {
    * @param id 삭제할 그룹 ID
    * @param cascade true면 하위 그룹도 재귀적으로 삭제, false면 부모만 삭제 (하위 그룹은 루트로 이동)
    */
-  static async delete(id: number, cascade: boolean = false): Promise<boolean> {
+  static delete(id: number, cascade: boolean = false): boolean {
     if (cascade) {
       // 캐스케이드 삭제: 모든 하위 그룹도 재귀적으로 삭제
       const hierarchyService = getGroupHierarchyService();
@@ -125,7 +125,7 @@ export class GroupModel {
   /**
    * 자동수집 마지막 실행 시간 업데이트
    */
-  static async updateAutoCollectLastRun(id: number): Promise<boolean> {
+  static updateAutoCollectLastRun(id: number): boolean {
     const info = db.prepare(
       'UPDATE groups SET auto_collect_last_run = CURRENT_TIMESTAMP WHERE id = ?'
     ).run(id);
@@ -137,7 +137,7 @@ export class GroupModel {
   /**
    * 루트 그룹들 조회 (parent_id가 NULL인 그룹들)
    */
-  static async findRoots(): Promise<GroupWithStats[]> {
+  static findRoots(): GroupWithStats[] {
     const query = `
       SELECT
         g.*,
@@ -158,7 +158,7 @@ export class GroupModel {
   /**
    * 특정 부모의 자식 그룹들 조회
    */
-  static async findChildren(parentId: number): Promise<GroupWithStats[]> {
+  static findChildren(parentId: number): GroupWithStats[] {
     const query = `
       SELECT
         g.*,
@@ -179,7 +179,7 @@ export class GroupModel {
   /**
    * 브레드크럼 경로 조회 (현재 그룹에서 루트까지)
    */
-  static async getBreadcrumbPath(groupId: number): Promise<Array<{ id: number; name: string; color: string | null }>> {
+  static getBreadcrumbPath(groupId: number): Array<{ id: number; name: string; color: string | null }> {
     const hierarchyService = getGroupHierarchyService();
     const ancestors = hierarchyService.getAncestorPath(groupId);
 
@@ -194,8 +194,8 @@ export class GroupModel {
   /**
    * 모든 그룹 조회 (자식 개수 포함)
    */
-  static async findAllWithHierarchy(): Promise<Array<GroupWithStats & { child_count: number; has_children: boolean }>> {
-    const groups = await this.findAllWithStats();
+  static findAllWithHierarchy(): Array<GroupWithStats & { child_count: number; has_children: boolean }> {
+    const groups = this.findAllWithStats();
     const hierarchyService = getGroupHierarchyService();
 
     const groupIds = groups.map(g => g.id);
@@ -211,10 +211,10 @@ export class GroupModel {
   /**
    * 특정 부모의 자식 그룹들 조회 (자식 개수 포함)
    */
-  static async findChildrenWithHierarchy(parentId: number | null): Promise<Array<GroupWithStats & { child_count: number; has_children: boolean }>> {
+  static findChildrenWithHierarchy(parentId: number | null): Array<GroupWithStats & { child_count: number; has_children: boolean }> {
     const groups = parentId === null
-      ? await this.findRoots()
-      : await this.findChildren(parentId);
+      ? this.findRoots()
+      : this.findChildren(parentId);
 
     const hierarchyService = getGroupHierarchyService();
     const groupIds = groups.map(g => g.id);
@@ -232,12 +232,12 @@ export class ImageGroupModel {
   /**
    * 이미지를 그룹에 추가 (composite_hash 기반)
    */
-  static async addImageToGroup(
+  static addImageToGroup(
     groupId: number,
     compositeHash: string,
     collectionType: 'manual' | 'auto' = 'manual',
     orderIndex: number = 0
-  ): Promise<boolean> {
+  ): boolean {
     try {
       db.prepare(`
         INSERT INTO image_groups (
@@ -255,7 +255,7 @@ export class ImageGroupModel {
   /**
    * 그룹에서 이미지 제거 (composite_hash 기반)
    */
-  static async removeImageFromGroup(groupId: number, compositeHash: string): Promise<boolean> {
+  static removeImageFromGroup(groupId: number, compositeHash: string): boolean {
     const info = db.prepare(
       'DELETE FROM image_groups WHERE group_id = ? AND composite_hash = ?'
     ).run(groupId, compositeHash);
@@ -266,7 +266,7 @@ export class ImageGroupModel {
   /**
    * 특정 그룹의 모든 자동수집 이미지 제거
    */
-  static async removeAutoCollectedImages(groupId: number): Promise<number> {
+  static removeAutoCollectedImages(groupId: number): number {
     const info = db.prepare(
       'DELETE FROM image_groups WHERE group_id = ? AND collection_type = ?'
     ).run(groupId, 'auto');
@@ -276,12 +276,12 @@ export class ImageGroupModel {
   /**
    * 특정 그룹의 이미지 목록 조회 (메타데이터만)
    */
-  static async findImagesByGroup(
+  static findImagesByGroup(
     groupId: number,
     page: number = 1,
     limit: number = 20,
     collectionType?: 'manual' | 'auto'
-  ): Promise<{ images: ImageWithFileView[], total: number }> {
+  ): { images: ImageWithFileView[], total: number } {
     const offset = (page - 1) * limit;
     let whereClause = 'WHERE ig.group_id = ? AND ig.composite_hash IS NOT NULL';
     let queryParams: (number | string)[] = [groupId];
@@ -350,12 +350,12 @@ export class ImageGroupModel {
    * 특정 그룹의 이미지 목록 조회 (파일 경로 포함)
    * 다운로드 기능 등에서 사용
    */
-  static async findImagesByGroupWithFiles(
+  static findImagesByGroupWithFiles(
     groupId: number,
     page: number = 1,
     limit: number = 20,
     collectionType?: 'manual' | 'auto'
-  ): Promise<{ images: ImageWithFileView[], total: number }> {
+  ): { images: ImageWithFileView[], total: number } {
     const offset = (page - 1) * limit;
     let whereClause = 'WHERE ig.group_id = ? AND ig.composite_hash IS NOT NULL';
     let queryParams: (number | string)[] = [groupId];
@@ -397,7 +397,7 @@ export class ImageGroupModel {
   /**
    * 특정 이미지가 속한 그룹들 조회 (composite_hash 기반)
    */
-  static async findGroupsByImage(compositeHash: string): Promise<ImageGroupRecord[]> {
+  static findGroupsByImage(compositeHash: string): ImageGroupRecord[] {
     const query = `
       SELECT ig.*, g.name as group_name
       FROM image_groups ig
@@ -413,7 +413,7 @@ export class ImageGroupModel {
   /**
    * 이미지가 특정 그룹에 속해있는지 확인 (composite_hash 기반)
    */
-  static async isImageInGroup(groupId: number, compositeHash: string): Promise<boolean> {
+  static isImageInGroup(groupId: number, compositeHash: string): boolean {
     const row = db.prepare(
       'SELECT 1 FROM image_groups WHERE group_id = ? AND composite_hash = ?'
     ).get(groupId, compositeHash);
@@ -423,7 +423,7 @@ export class ImageGroupModel {
   /**
    * 이미지의 collection_type 조회 (composite_hash 기반)
    */
-  static async getCollectionType(groupId: number, compositeHash: string): Promise<'manual' | 'auto' | null> {
+  static getCollectionType(groupId: number, compositeHash: string): 'manual' | 'auto' | null {
     const row = db.prepare(
       'SELECT collection_type FROM image_groups WHERE group_id = ? AND composite_hash = ?'
     ).get(groupId, compositeHash) as any;
@@ -433,7 +433,7 @@ export class ImageGroupModel {
   /**
    * 자동수집 이미지를 수동 수집으로 변환 (composite_hash 기반)
    */
-  static async convertToManual(groupId: number, compositeHash: string): Promise<boolean> {
+  static convertToManual(groupId: number, compositeHash: string): boolean {
     const info = db.prepare(`
       UPDATE image_groups
       SET collection_type = 'manual'
@@ -445,7 +445,7 @@ export class ImageGroupModel {
   /**
    * 그룹의 랜덤 이미지 조회 (썸네일용)
    */
-  static async findRandomImageForGroup(groupId: number): Promise<ImageMetadataRecord | null> {
+  static findRandomImageForGroup(groupId: number): ImageMetadataRecord | null {
     // ✅ LEFT JOIN으로 비디오 파일도 포함
     const query = `
       SELECT
@@ -484,11 +484,11 @@ export class ImageGroupModel {
    * 그룹의 미리보기 이미지들 조회 (회전 표시용, 최대 N개)
    * 현재 그룹에 이미지가 없으면 자식 그룹에서 검색 (재귀)
    */
-  static async findPreviewImages(
+  static findPreviewImages(
     groupId: number,
     count: number = 8,
     includeChildren: boolean = true
-  ): Promise<ImageWithFileView[]> {
+  ): ImageWithFileView[] {
     // 1. 현재 그룹에서 랜덤 이미지 조회
     // ✅ image_files 테이블과 JOIN하여 파일 정보 포함
     const query = `
@@ -549,7 +549,7 @@ export class ImageGroupModel {
     }
 
     // 2. 이미지가 없으면 자식 그룹에서 검색 (재귀)
-    const children = await GroupModel.findChildren(groupId);
+    const children = GroupModel.findChildren(groupId);
 
     // 자식이 없으면 빈 배열 반환
     if (children.length === 0) {
@@ -558,7 +558,7 @@ export class ImageGroupModel {
 
     // 첫 번째 이미지를 가진 자식 그룹 찾기
     for (const child of children) {
-      const childImages = await this.findPreviewImages(child.id, count, true);
+      const childImages = this.findPreviewImages(child.id, count, true);
       if (childImages.length > 0) {
         return childImages;
       }
@@ -571,7 +571,7 @@ export class ImageGroupModel {
   /**
    * 그룹에 속한 모든 composite_hash 조회
    */
-  static async getCompositeHashesForGroup(groupId: number): Promise<string[]> {
+  static getCompositeHashesForGroup(groupId: number): string[] {
     const query = `
       SELECT composite_hash
       FROM image_groups
@@ -587,7 +587,7 @@ export class ImageGroupModel {
    * 그룹에 속한 모든 image_files.id 조회 (선택 기능용)
    * composite_hash가 같아도 서로 다른 파일로 구분됨
    */
-  static async getImageFileIdsForGroup(groupId: number): Promise<number[]> {
+  static getImageFileIdsForGroup(groupId: number): number[] {
     const query = `
       SELECT if.id
       FROM image_groups ig

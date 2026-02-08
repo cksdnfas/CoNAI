@@ -35,7 +35,7 @@ export class CustomDropdownListModel {
   /**
    * 새 커스텀 드롭다운 목록 생성
    */
-  static async create(listData: CustomDropdownListCreateData): Promise<number> {
+  static create(listData: CustomDropdownListCreateData): number {
     const itemsJson = JSON.stringify(listData.items);
 
     const info = userSettingsDb.prepare(`
@@ -56,7 +56,7 @@ export class CustomDropdownListModel {
   /**
    * 커스텀 드롭다운 목록 조회 (ID)
    */
-  static async findById(id: number): Promise<CustomDropdownListWithParsedItems | null> {
+  static findById(id: number): CustomDropdownListWithParsedItems | null {
     const row = userSettingsDb.prepare(
       'SELECT * FROM custom_dropdown_lists WHERE id = ?'
     ).get(id) as CustomDropdownListRecord | undefined;
@@ -73,7 +73,7 @@ export class CustomDropdownListModel {
   /**
    * 커스텀 드롭다운 목록 조회 (이름)
    */
-  static async findByName(name: string): Promise<CustomDropdownListWithParsedItems | null> {
+  static findByName(name: string): CustomDropdownListWithParsedItems | null {
     const row = userSettingsDb.prepare(
       'SELECT * FROM custom_dropdown_lists WHERE name = ?'
     ).get(name) as CustomDropdownListRecord | undefined;
@@ -90,7 +90,7 @@ export class CustomDropdownListModel {
   /**
    * 모든 커스텀 드롭다운 목록 조회
    */
-  static async findAll(): Promise<CustomDropdownListWithParsedItems[]> {
+  static findAll(): CustomDropdownListWithParsedItems[] {
     const rows = userSettingsDb.prepare(
       'SELECT * FROM custom_dropdown_lists ORDER BY created_date DESC'
     ).all() as CustomDropdownListRecord[];
@@ -105,7 +105,7 @@ export class CustomDropdownListModel {
   /**
    * 커스텀 드롭다운 목록 업데이트
    */
-  static async update(id: number, listData: CustomDropdownListUpdateData): Promise<boolean> {
+  static update(id: number, listData: CustomDropdownListUpdateData): boolean {
     // items는 JSON.stringify 처리
     const cleanData: Record<string, any> = {
       ...listData,
@@ -132,7 +132,7 @@ export class CustomDropdownListModel {
   /**
    * 커스텀 드롭다운 목록 삭제
    */
-  static async delete(id: number): Promise<boolean> {
+  static delete(id: number): boolean {
     const info = userSettingsDb.prepare(
       'DELETE FROM custom_dropdown_lists WHERE id = ?'
     ).run(id);
@@ -142,7 +142,7 @@ export class CustomDropdownListModel {
   /**
    * 이름 중복 확인
    */
-  static async existsByName(name: string, excludeId?: number): Promise<boolean> {
+  static existsByName(name: string, excludeId?: number): boolean {
     let query = 'SELECT 1 FROM custom_dropdown_lists WHERE name = ?';
     const params: any[] = [name];
 
@@ -158,7 +158,7 @@ export class CustomDropdownListModel {
   /**
    * 목록 개수 조회
    */
-  static async count(): Promise<number> {
+  static count(): number {
     const result = userSettingsDb.prepare(
       'SELECT COUNT(*) as count FROM custom_dropdown_lists'
     ).get() as { count: number };
@@ -168,7 +168,7 @@ export class CustomDropdownListModel {
   /**
    * 특정 소스 경로로 수집된 목록 조회
    */
-  static async findBySourcePath(sourcePath: string): Promise<CustomDropdownListWithParsedItems[]> {
+  static findBySourcePath(sourcePath: string): CustomDropdownListWithParsedItems[] {
     const rows = userSettingsDb.prepare(
       'SELECT * FROM custom_dropdown_lists WHERE source_path = ?'
     ).all(sourcePath) as CustomDropdownListRecord[];
@@ -183,7 +183,7 @@ export class CustomDropdownListModel {
   /**
    * 특정 소스 경로로 수집된 모든 목록 삭제 (재스캔용)
    */
-  static async deleteBySourcePath(sourcePath: string): Promise<number> {
+  static deleteBySourcePath(sourcePath: string): number {
     const info = userSettingsDb.prepare(
       'DELETE FROM custom_dropdown_lists WHERE source_path = ?'
     ).run(sourcePath);

@@ -20,7 +20,7 @@ export class PromptCollectionModel {
   /**
    * 프롬프트 추가 또는 사용 횟수 증가
    */
-  static async addOrIncrement(prompt: string, group_id?: number): Promise<number> {
+  static addOrIncrement(prompt: string, group_id?: number): number {
     const row = db.prepare('SELECT id, usage_count FROM prompt_collection WHERE prompt = ?').get(prompt) as PromptCollectionRecord | undefined;
 
     if (row) {
@@ -38,7 +38,7 @@ export class PromptCollectionModel {
   /**
    * 네거티브 프롬프트 추가 또는 사용 횟수 증가
    */
-  static async addOrIncrementNegative(prompt: string, group_id?: number): Promise<number> {
+  static addOrIncrementNegative(prompt: string, group_id?: number): number {
     const row = db.prepare('SELECT id, usage_count FROM negative_prompt_collection WHERE prompt = ?').get(prompt) as NegativePromptCollectionRecord | undefined;
 
     if (row) {
@@ -56,7 +56,7 @@ export class PromptCollectionModel {
   /**
    * 자동 프롬프트(태그) 추가 또는 사용 횟수 증가
    */
-  static async addOrIncrementAuto(prompt: string, group_id?: number): Promise<number> {
+  static addOrIncrementAuto(prompt: string, group_id?: number): number {
     const row = db.prepare('SELECT id, usage_count FROM auto_prompt_collection WHERE prompt = ?').get(prompt) as PromptCollectionRecord | undefined;
 
     if (row) {
@@ -76,7 +76,7 @@ export class PromptCollectionModel {
    * @param prompts - 프롬프트와 그룹 ID 배열
    * @returns 처리된 프롬프트 수
    */
-  static async batchAddOrIncrement(prompts: Array<{ prompt: string; group_id?: number }>): Promise<number> {
+  static batchAddOrIncrement(prompts: Array<{ prompt: string; group_id?: number }>): number {
     if (!prompts || prompts.length === 0) {
       return 0;
     }
@@ -110,7 +110,7 @@ export class PromptCollectionModel {
    * @param prompts - 프롬프트와 그룹 ID 배열
    * @returns 처리된 프롬프트 수
    */
-  static async batchAddOrIncrementNegative(prompts: Array<{ prompt: string; group_id?: number }>): Promise<number> {
+  static batchAddOrIncrementNegative(prompts: Array<{ prompt: string; group_id?: number }>): number {
     if (!prompts || prompts.length === 0) {
       return 0;
     }
@@ -142,7 +142,7 @@ export class PromptCollectionModel {
   /**
    * 배치 자동 프롬프트 추가 또는 사용 횟수 증가
    */
-  static async batchAddOrIncrementAuto(prompts: Array<{ prompt: string; group_id?: number }>): Promise<number> {
+  static batchAddOrIncrementAuto(prompts: Array<{ prompt: string; group_id?: number }>): number {
     if (!prompts || prompts.length === 0) {
       return 0;
     }
@@ -173,13 +173,13 @@ export class PromptCollectionModel {
   /**
    * 프롬프트 검색 (포지티브)
    */
-  static async searchPrompts(
+  static searchPrompts(
     query: string,
     page: number = 1,
     limit: number = 20,
     sortBy: 'usage_count' | 'created_at' | 'prompt' = 'usage_count',
     sortOrder: 'ASC' | 'DESC' = 'DESC'
-  ): Promise<{ prompts: PromptSearchResult[], total: number }> {
+  ): { prompts: PromptSearchResult[], total: number } {
     const searchPattern = `%${query}%`;
     const offset = (page - 1) * limit;
 
@@ -209,13 +209,13 @@ export class PromptCollectionModel {
   /**
    * 자동 프롬프트 검색
    */
-  static async searchAutoPrompts(
+  static searchAutoPrompts(
     query: string,
     page: number = 1,
     limit: number = 20,
     sortBy: 'usage_count' | 'created_at' | 'prompt' = 'usage_count',
     sortOrder: 'ASC' | 'DESC' = 'DESC'
-  ): Promise<{ prompts: PromptSearchResult[], total: number }> {
+  ): { prompts: PromptSearchResult[], total: number } {
     const searchPattern = `%${query}%`;
     const offset = (page - 1) * limit;
 
@@ -245,13 +245,13 @@ export class PromptCollectionModel {
   /**
    * 네거티브 프롬프트 검색
    */
-  static async searchNegativePrompts(
+  static searchNegativePrompts(
     query: string,
     page: number = 1,
     limit: number = 20,
     sortBy: 'usage_count' | 'created_at' | 'prompt' = 'usage_count',
     sortOrder: 'ASC' | 'DESC' = 'DESC'
-  ): Promise<{ prompts: PromptSearchResult[], total: number }> {
+  ): { prompts: PromptSearchResult[], total: number } {
     const searchPattern = `%${query}%`;
     const offset = (page - 1) * limit;
 
@@ -281,7 +281,7 @@ export class PromptCollectionModel {
   /**
    * 가장 많이 사용된 프롬프트 조회
    */
-  static async getMostUsedPrompts(limit: number = 10): Promise<PromptSearchResult[]> {
+  static getMostUsedPrompts(limit: number = 10): PromptSearchResult[] {
     const rows = db.prepare(
       `SELECT id, prompt, usage_count, group_id, synonyms, 'positive' as type
        FROM prompt_collection
@@ -304,7 +304,7 @@ export class PromptCollectionModel {
   /**
    * 동의어 설정
    */
-  static async setSynonyms(id: number, synonyms: string[], type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<boolean> {
+  static setSynonyms(id: number, synonyms: string[], type: 'positive' | 'negative' | 'auto' = 'positive'): boolean {
     const tableName = getTableName(type);
     const synonymsJson = JSON.stringify(synonyms);
 
@@ -315,7 +315,7 @@ export class PromptCollectionModel {
   /**
    * 그룹 ID 설정
    */
-  static async setGroupId(id: number, group_id: number | null, type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<boolean> {
+  static setGroupId(id: number, group_id: number | null, type: 'positive' | 'negative' | 'auto' = 'positive'): boolean {
     const tableName = getTableName(type);
 
     const info = db.prepare(`UPDATE ${tableName} SET group_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(group_id, id);
@@ -326,7 +326,7 @@ export class PromptCollectionModel {
    * 프롬프트 사용 횟수 감소 (삭제 시)
    * 사용 횟수가 0이 되어도 그룹 정보와 사용자 설정 보존을 위해 레코드 삭제하지 않음
    */
-  static async decrementUsage(prompt: string, type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<boolean> {
+  static decrementUsage(prompt: string, type: 'positive' | 'negative' | 'auto' = 'positive'): boolean {
     const tableName = getTableName(type);
 
     const row = db.prepare(`SELECT id, usage_count FROM ${tableName} WHERE prompt = ?`).get(prompt) as any;
@@ -346,7 +346,7 @@ export class PromptCollectionModel {
   /**
    * 프롬프트 삭제 (사용자에 의한 수동 삭제만 허용)
    */
-  static async delete(id: number, type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<boolean> {
+  static delete(id: number, type: 'positive' | 'negative' | 'auto' = 'positive'): boolean {
     const tableName = getTableName(type);
 
     const info = db.prepare(`DELETE FROM ${tableName} WHERE id = ?`).run(id);
@@ -356,7 +356,7 @@ export class PromptCollectionModel {
   /**
    * 모든 프롬프트 설정 내보내기 (JSON 공유용)
    */
-  static async exportAllSettings(type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<any[]> {
+  static exportAllSettings(type: 'positive' | 'negative' | 'auto' = 'positive'): any[] {
     const tableName = getTableName(type);
 
     const rows = db.prepare(
@@ -377,7 +377,7 @@ export class PromptCollectionModel {
   /**
    * 프롬프트 설정 일괄 가져오기 (JSON 공유용)
    */
-  static async importSettings(settings: any[], type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<number> {
+  static importSettings(settings: any[], type: 'positive' | 'negative' | 'auto' = 'positive'): number {
     const tableName = getTableName(type);
     let updatedCount = 0;
 

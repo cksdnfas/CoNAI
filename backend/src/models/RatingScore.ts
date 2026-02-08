@@ -10,7 +10,7 @@ export class RatingScoreModel {
   /**
    * 가중치 설정 조회
    */
-  static async getWeights(): Promise<RatingWeights | null> {
+  static getWeights(): RatingWeights | null {
     const row = db.prepare('SELECT * FROM rating_weights WHERE id = 1').get() as RatingWeights | undefined;
     return row || null;
   }
@@ -18,7 +18,7 @@ export class RatingScoreModel {
   /**
    * 가중치 설정 업데이트
    */
-  static async updateWeights(weights: RatingWeightsUpdate): Promise<RatingWeights> {
+  static updateWeights(weights: RatingWeightsUpdate): RatingWeights {
     const fields: string[] = [];
     const values: number[] = [];
 
@@ -48,7 +48,7 @@ export class RatingScoreModel {
     const sql = `UPDATE rating_weights SET ${fields.join(', ')} WHERE id = 1`;
     db.prepare(sql).run(...values);
 
-    const result = await this.getWeights();
+    const result = this.getWeights();
     if (!result) {
       throw new Error('Failed to retrieve updated weights');
     }
@@ -58,7 +58,7 @@ export class RatingScoreModel {
   /**
    * 모든 등급 조회 (tier_order 순서대로)
    */
-  static async getAllTiers(): Promise<RatingTier[]> {
+  static getAllTiers(): RatingTier[] {
     const rows = db.prepare('SELECT * FROM rating_tiers ORDER BY tier_order ASC').all() as RatingTier[];
     return rows || [];
   }
@@ -66,7 +66,7 @@ export class RatingScoreModel {
   /**
    * 특정 등급 조회
    */
-  static async getTierById(id: number): Promise<RatingTier | null> {
+  static getTierById(id: number): RatingTier | null {
     const row = db.prepare('SELECT * FROM rating_tiers WHERE id = ?').get(id) as RatingTier | undefined;
     return row || null;
   }
@@ -76,7 +76,7 @@ export class RatingScoreModel {
    * @param score 계산된 점수
    * @returns 해당하는 등급 (없으면 null)
    */
-  static async getTierByScore(score: number): Promise<RatingTier | null> {
+  static getTierByScore(score: number): RatingTier | null {
     const row = db.prepare(`
       SELECT * FROM rating_tiers
       WHERE min_score <= ?
@@ -90,7 +90,7 @@ export class RatingScoreModel {
   /**
    * 등급 생성
    */
-  static async createTier(tierData: RatingTierInput): Promise<RatingTier> {
+  static createTier(tierData: RatingTierInput): RatingTier {
     const info = db.prepare(`
       INSERT INTO rating_tiers (tier_name, min_score, max_score, tier_order, color)
       VALUES (?, ?, ?, ?, ?)
@@ -102,7 +102,7 @@ export class RatingScoreModel {
       tierData.color || null
     );
 
-    const result = await this.getTierById(info.lastInsertRowid as number);
+    const result = this.getTierById(info.lastInsertRowid as number);
     if (!result) {
       throw new Error('Failed to retrieve created tier');
     }
@@ -112,7 +112,7 @@ export class RatingScoreModel {
   /**
    * 등급 수정
    */
-  static async updateTier(id: number, tierData: Partial<RatingTierInput>): Promise<RatingTier> {
+  static updateTier(id: number, tierData: Partial<RatingTierInput>): RatingTier {
     const updates = filterDefined(tierData);
 
     if (Object.keys(updates).length === 0) {
@@ -128,7 +128,7 @@ export class RatingScoreModel {
     const { sql, values } = buildUpdateQuery('rating_tiers', finalUpdates, { id });
     db.prepare(sql).run(...values);
 
-    const result = await this.getTierById(id);
+    const result = this.getTierById(id);
     if (!result) {
       throw new Error('Failed to retrieve updated tier');
     }
@@ -138,7 +138,7 @@ export class RatingScoreModel {
   /**
    * 등급 삭제
    */
-  static async deleteTier(id: number): Promise<void> {
+  static deleteTier(id: number): void {
     const info = db.prepare('DELETE FROM rating_tiers WHERE id = ?').run(id);
     if (info.changes === 0) {
       throw new Error('Tier not found');
@@ -148,7 +148,7 @@ export class RatingScoreModel {
   /**
    * 모든 등급 일괄 업데이트 (트랜잭션)
    */
-  static async updateAllTiers(tiers: RatingTierInput[]): Promise<RatingTier[]> {
+  static updateAllTiers(tiers: RatingTierInput[]): RatingTier[] {
     const transaction = db.transaction(() => {
       // 기존 등급 모두 삭제
       db.prepare('DELETE FROM rating_tiers').run();

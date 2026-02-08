@@ -14,7 +14,7 @@ export class AutoFolderGroupModel {
   /**
    * 새 자동 폴더 그룹 생성
    */
-  static async create(data: CreateAutoFolderGroupData): Promise<AutoFolderGroup> {
+  static create(data: CreateAutoFolderGroupData): AutoFolderGroup {
     const info = db.prepare(`
       INSERT INTO auto_folder_groups (
         folder_path, absolute_path, display_name, parent_id,
@@ -32,7 +32,7 @@ export class AutoFolderGroupModel {
     );
 
     const id = info.lastInsertRowid as number;
-    const group = await this.findById(id);
+    const group = this.findById(id);
     if (!group) {
       throw new Error('Failed to create auto folder group');
     }
@@ -42,7 +42,7 @@ export class AutoFolderGroupModel {
   /**
    * 그룹 조회 (ID)
    */
-  static async findById(id: number): Promise<AutoFolderGroup | null> {
+  static findById(id: number): AutoFolderGroup | null {
     const row = db.prepare('SELECT * FROM auto_folder_groups WHERE id = ?')
       .get(id) as AutoFolderGroup | undefined;
     return row || null;
@@ -51,7 +51,7 @@ export class AutoFolderGroupModel {
   /**
    * 그룹 조회 (folder_path)
    */
-  static async findByFolderPath(folderPath: string): Promise<AutoFolderGroup | null> {
+  static findByFolderPath(folderPath: string): AutoFolderGroup | null {
     const row = db.prepare('SELECT * FROM auto_folder_groups WHERE folder_path = ?')
       .get(folderPath) as AutoFolderGroup | undefined;
     return row || null;
@@ -60,7 +60,7 @@ export class AutoFolderGroupModel {
   /**
    * 루트 그룹들 조회 (parent_id가 NULL)
    */
-  static async findRoots(): Promise<AutoFolderGroupWithStats[]> {
+  static findRoots(): AutoFolderGroupWithStats[] {
     const query = `
       SELECT
         afg.*,
@@ -77,7 +77,7 @@ export class AutoFolderGroupModel {
   /**
    * 특정 부모의 자식 그룹들 조회
    */
-  static async findChildren(parentId: number): Promise<AutoFolderGroupWithStats[]> {
+  static findChildren(parentId: number): AutoFolderGroupWithStats[] {
     const query = `
       SELECT
         afg.*,
@@ -94,7 +94,7 @@ export class AutoFolderGroupModel {
   /**
    * 모든 그룹 조회 (통계 포함)
    */
-  static async findAllWithStats(): Promise<AutoFolderGroupWithStats[]> {
+  static findAllWithStats(): AutoFolderGroupWithStats[] {
     const query = `
       SELECT
         afg.*,
@@ -110,7 +110,7 @@ export class AutoFolderGroupModel {
   /**
    * 모든 그룹 삭제 (rebuild 전용)
    */
-  static async deleteAll(): Promise<void> {
+  static deleteAll(): void {
     // CASCADE로 인해 auto_folder_group_images도 자동 삭제됨
     db.prepare('DELETE FROM auto_folder_groups').run();
   }
@@ -118,7 +118,7 @@ export class AutoFolderGroupModel {
   /**
    * 그룹 삭제
    */
-  static async delete(id: number): Promise<boolean> {
+  static delete(id: number): boolean {
     const info = db.prepare('DELETE FROM auto_folder_groups WHERE id = ?').run(id);
     return info.changes > 0;
   }
@@ -126,7 +126,7 @@ export class AutoFolderGroupModel {
   /**
    * 그룹의 이미지 개수 업데이트
    */
-  static async updateImageCount(id: number, count: number): Promise<boolean> {
+  static updateImageCount(id: number, count: number): boolean {
     const info = db.prepare(`
       UPDATE auto_folder_groups
       SET image_count = ?, last_updated = CURRENT_TIMESTAMP
@@ -138,12 +138,12 @@ export class AutoFolderGroupModel {
   /**
    * 브레드크럼 경로 조회 (현재 그룹에서 루트까지)
    */
-  static async getBreadcrumbPath(groupId: number): Promise<Array<{ id: number; name: string; folder_path: string }>> {
+  static getBreadcrumbPath(groupId: number): Array<{ id: number; name: string; folder_path: string }> {
     const path: Array<{ id: number; name: string; folder_path: string }> = [];
     let currentId: number | null = groupId;
 
     while (currentId !== null) {
-      const group = await this.findById(currentId);
+      const group = this.findById(currentId);
       if (!group) break;
 
       path.unshift({
@@ -166,7 +166,7 @@ export class AutoFolderGroupImageModel {
   /**
    * 이미지를 폴더 그룹에 추가 (composite_hash 기반)
    */
-  static async addImageToGroup(groupId: number, compositeHash: string): Promise<boolean> {
+  static addImageToGroup(groupId: number, compositeHash: string): boolean {
     try {
       db.prepare(`
         INSERT INTO auto_folder_group_images (group_id, composite_hash)
@@ -182,18 +182,18 @@ export class AutoFolderGroupImageModel {
   /**
    * 그룹의 모든 이미지 제거
    */
-  static async removeAllImagesFromGroup(groupId: number): Promise<void> {
+  static removeAllImagesFromGroup(groupId: number): void {
     db.prepare('DELETE FROM auto_folder_group_images WHERE group_id = ?').run(groupId);
   }
 
   /**
    * 그룹의 이미지 조회 (페이징 지원, 메타데이터 포함)
    */
-  static async findImagesByGroup(
+  static findImagesByGroup(
     groupId: number,
     page: number = 1,
     pageSize: number = 50
-  ): Promise<ImageMetadataRecord[]> {
+  ): ImageMetadataRecord[] {
     const offset = Math.floor((page - 1) * pageSize);
 
     try {
@@ -240,7 +240,7 @@ export class AutoFolderGroupImageModel {
   /**
    * 그룹의 총 이미지 개수
    */
-  static async getImageCount(groupId: number): Promise<number> {
+  static getImageCount(groupId: number): number {
     const result = db.prepare(`
       SELECT COUNT(*) as count
       FROM auto_folder_group_images
@@ -253,7 +253,7 @@ export class AutoFolderGroupImageModel {
   /**
    * 그룹의 랜덤 이미지 조회 (썸네일용)
    */
-  static async findRandomImageForGroup(groupId: number): Promise<ImageMetadataRecord | null> {
+  static findRandomImageForGroup(groupId: number): ImageMetadataRecord | null {
     const query = `
       SELECT m.*
       FROM auto_folder_group_images afgi
@@ -271,11 +271,11 @@ export class AutoFolderGroupImageModel {
    * 그룹의 미리보기 이미지들 조회 (회전 표시용, 최대 N개)
    * 현재 그룹에 이미지가 없으면 자식 그룹에서 검색 (재귀)
    */
-  static async findPreviewImages(
+  static findPreviewImages(
     groupId: number,
     count: number = 8,
     includeChildren: boolean = true
-  ): Promise<ImageWithFileView[]> {
+  ): ImageWithFileView[] {
     // 1. 현재 그룹에서 랜덤 이미지 조회
     const query = `
       SELECT DISTINCT
@@ -335,7 +335,7 @@ export class AutoFolderGroupImageModel {
     }
 
     // 2. 이미지가 없으면 자식 그룹에서 검색 (재귀)
-    const children = await AutoFolderGroupModel.findChildren(groupId);
+    const children = AutoFolderGroupModel.findChildren(groupId);
 
     // 자식이 없으면 빈 배열 반환
     if (children.length === 0) {
@@ -344,7 +344,7 @@ export class AutoFolderGroupImageModel {
 
     // 첫 번째 이미지를 가진 자식 그룹 찾기
     for (const child of children) {
-      const childImages = await this.findPreviewImages(child.id, count, true);
+      const childImages = this.findPreviewImages(child.id, count, true);
       if (childImages.length > 0) {
         return childImages;
       }
@@ -357,7 +357,7 @@ export class AutoFolderGroupImageModel {
   /**
    * 그룹의 모든 composite_hash 조회
    */
-  static async getCompositeHashesForGroup(groupId: number): Promise<string[]> {
+  static getCompositeHashesForGroup(groupId: number): string[] {
     const rows = db.prepare(`
       SELECT composite_hash
       FROM auto_folder_group_images
@@ -370,7 +370,7 @@ export class AutoFolderGroupImageModel {
   /**
    * 특정 이미지가 속한 모든 폴더 그룹 조회
    */
-  static async findGroupsByImage(compositeHash: string): Promise<AutoFolderGroup[]> {
+  static findGroupsByImage(compositeHash: string): AutoFolderGroup[] {
     const query = `
       SELECT afg.*
       FROM auto_folder_groups afg

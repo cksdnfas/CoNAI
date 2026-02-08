@@ -11,7 +11,7 @@ export class WorkflowModel {
   /**
    * 새 워크플로우 생성
    */
-  static async create(workflowData: WorkflowCreateData): Promise<number> {
+  static create(workflowData: WorkflowCreateData): number {
     const markedFieldsJson = workflowData.marked_fields ?
       JSON.stringify(workflowData.marked_fields) : null;
 
@@ -35,7 +35,7 @@ export class WorkflowModel {
   /**
    * 워크플로우 조회 (ID)
    */
-  static async findById(id: number): Promise<WorkflowRecord | null> {
+  static findById(id: number): WorkflowRecord | null {
     const row = userSettingsDb.prepare('SELECT * FROM workflows WHERE id = ?').get(id) as WorkflowRecord | undefined;
     return row || null;
   }
@@ -43,7 +43,7 @@ export class WorkflowModel {
   /**
    * 모든 워크플로우 조회
    */
-  static async findAll(activeOnly: boolean = false): Promise<WorkflowRecord[]> {
+  static findAll(activeOnly: boolean = false): WorkflowRecord[] {
     let query = 'SELECT * FROM workflows';
     if (activeOnly) {
       query += ' WHERE is_active = 1';
@@ -57,7 +57,7 @@ export class WorkflowModel {
   /**
    * 워크플로우 업데이트
    */
-  static async update(id: number, workflowData: WorkflowUpdateData): Promise<boolean> {
+  static update(id: number, workflowData: WorkflowUpdateData): boolean {
     // 특수 처리가 필요한 필드들 변환
     const cleanData: Record<string, any> = {
       ...workflowData,
@@ -87,7 +87,7 @@ export class WorkflowModel {
   /**
    * 워크플로우 삭제
    */
-  static async delete(id: number): Promise<boolean> {
+  static delete(id: number): boolean {
     const info = userSettingsDb.prepare('DELETE FROM workflows WHERE id = ?').run(id);
     return info.changes > 0;
   }
@@ -95,7 +95,7 @@ export class WorkflowModel {
   /**
    * 워크플로우 이름 중복 확인
    */
-  static async existsByName(name: string, excludeId?: number): Promise<boolean> {
+  static existsByName(name: string, excludeId?: number): boolean {
     let query = 'SELECT 1 FROM workflows WHERE name = ?';
     const params: any[] = [name];
 
