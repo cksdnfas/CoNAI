@@ -1,14 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { ExternalApiProvider } from '../models/ExternalApiProvider';
 import { ExternalApiService } from '../services/externalApiService';
-import { LLMService } from '../services/llmService';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { optionalAuth } from '../middleware/authMiddleware';
 import type {
   CreateExternalApiProviderInput,
   UpdateExternalApiProviderInput,
-  LLMChatRequest,
-  ProviderType,
 } from '../types/externalApi';
 
 const router = Router();
@@ -224,19 +221,6 @@ router.post('/providers/:name/test', asyncHandler(async (req: Request, res: Resp
     return;
   }
 
-  // For LLM providers that don't require API key (local servers)
-  const preset = LLMService.getPreset(name);
-  if (provider.provider_type === 'llm' && preset && !preset.requires_api_key) {
-    const success = await LLMService.testConnection(name);
-    res.json({
-      success,
-      message: success
-        ? 'Connection test successful'
-        : 'Connection test failed - please check if the server is running'
-    });
-    return;
-  }
-
   // Get decrypted API key
   const apiKey = ExternalApiProvider.getDecryptedKey(name);
 
@@ -257,78 +241,6 @@ router.post('/providers/:name/test', asyncHandler(async (req: Request, res: Resp
       ? 'Connection test successful'
       : 'Connection test failed - please check your API key'
   });
-}));
-
-// ===== LLM-specific routes =====
-
-/**
- * Get LLM provider presets
- * GET /api/external-api/llm/presets
- */
-router.get('/llm/presets', asyncHandler(async (req: Request, res: Response) => {
-  const presets = LLMService.getPresets();
-
-  res.json({
-    success: true,
-    data: presets
-  });
-}));
-
-/**
- * Get all LLM providers
- * GET /api/external-api/llm/providers
- */
-router.get('/llm/providers', asyncHandler(async (req: Request, res: Response) => {
-  const providers = ExternalApiProvider.findAllLLM();
-
-  res.json({
-    success: true,
-    data: providers
-  });
-}));
-
-/**
- * Get available models for an LLM provider
- * GET /api/external-api/llm/providers/:name/models
- */
-router.get('/llm/providers/:name/models', asyncHandler(async (req: Request, res: Response) => {
-  const { name } = req.params;
-
-  const result = await LLMService.getModels(name);
-
-  if (!result.success) {
-    res.status(400).json(result);
-    return;
-  }
-
-  res.json(result);
-}));
-
-/**
- * Send a chat request to an LLM provider
- * POST /api/external-api/llm/providers/:name/chat
- * Body: { messages, max_tokens?, temperature? }
- */
-router.post('/llm/providers/:name/chat', asyncHandler(async (req: Request, res: Response) => {
-  const { name } = req.params;
-  const chatRequest: LLMChatRequest = req.body;
-
-  if (!chatRequest.messages || !Array.isArray(chatRequest.messages)) {
-    res.status(400).json({
-      success: false,
-      error: 'messages array is required'
-    });
-    return;
-  }
-
-  const result = await LLMService.chat(name, chatRequest);
-
-  if (!result.success) {
-    res.status(400).json(result);
-    return;
-  }
-
-  res.json(result);
 }));
 
 export default router;

@@ -120,16 +120,10 @@ export class ExternalApiService {
    * Test API connection based on provider type
    * @param providerName - The provider name (e.g., 'civitai')
    * @param apiKey - The decrypted API key
-   * @param providerType - The provider type ('general' or 'llm')
+   * @param providerType - The provider type (currently only 'general' is supported)
    * @returns True if connection is successful
    */
   static async testConnection(providerName: string, apiKey: string, providerType?: string): Promise<boolean> {
-    // Handle LLM providers
-    if (providerType === 'llm') {
-      const { LLMService } = await import('./llmService');
-      return LLMService.testConnection(providerName);
-    }
-
     // Handle general providers
     switch (providerName) {
       case 'civitai':

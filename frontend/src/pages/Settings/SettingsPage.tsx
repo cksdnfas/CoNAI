@@ -194,7 +194,6 @@ const SettingsPage: React.FC = () => {
           <Tab label={t('tabs.rating')} />
           <Tab label={t('tabs.similarity')} />
           <Tab label={t('tabs.account')} />
-          <Tab label={t('tabs.externalApi')} />
           <Tab label="Civitai" />
         </Tabs>
       </Box>
@@ -260,11 +259,11 @@ const SettingsPage: React.FC = () => {
       </TabPanel>
 
       <TabPanel value={tabValue} index={7}>
+        {/* Civitai Integration: External API + Civitai Settings */}
         <ExternalApiSettings />
-      </TabPanel>
-
-      <TabPanel value={tabValue} index={8}>
-        <CivitaiSettings />
+        <Box sx={{ mt: 3 }}>
+          <CivitaiSettings />
+        </Box>
       </TabPanel>
     </Box>
   );

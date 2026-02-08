@@ -40,12 +40,6 @@ export class ExternalApiProvider {
     return rows.map(row => this.toResponse(row));
   }
 
-  /**
-   * Find all LLM providers
-   */
-  static findAllLLM(): ExternalApiProviderResponse[] {
-    return this.findByType('llm');
-  }
 
   /**
    * Find provider by name (returns masked API key)

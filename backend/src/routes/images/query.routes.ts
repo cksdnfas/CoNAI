@@ -447,7 +447,7 @@ router.post('/batch', asyncHandler(async (req: Request, res: Response) => {
       .map(hash => enrichedImages.find(img => img.composite_hash === hash))
       .filter((img): img is any => !!img);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         images: sortedImages,
@@ -459,7 +459,7 @@ router.post('/batch', asyncHandler(async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Batch fetch error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to fetch batch images'
     });
