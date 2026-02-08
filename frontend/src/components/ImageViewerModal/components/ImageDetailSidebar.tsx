@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Typography, IconButton, Tooltip, Snackbar, Alert, Button } from '@mui/material';
+import { Box, Typography, IconButton, Tooltip, Snackbar, Alert, Button, Grid } from '@mui/material';
 import { ContentCopy as CopyIcon, HourglassEmpty as WaitingIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../../types/image';
@@ -52,85 +52,106 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
   };
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 }, height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box 
+      sx={{ 
+        p: { xs: 2, sm: 3 }, 
+        height: '100%', 
+        display: 'flex', 
+        flexDirection: 'column',
+        bgcolor: (theme) => 
+          theme.palette.mode === 'light' 
+            ? 'rgba(0, 0, 0, 0.02)' 
+            : 'background.paper'
+      }}
+    >
       {/* Top info section - scrollable */}
       <Box sx={{ flexShrink: 0, overflowY: 'auto', mb: 2 }}>
         <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
           {t('imageDetail:info.title')}
         </Typography>
 
-        {/* Hash copy button */}
-        <Box sx={{ mb: 2 }}>
-          {image.composite_hash ? (
-            <Button
-              fullWidth
-              variant="outlined"
-              startIcon={<CopyIcon />}
-              onClick={handleCopyHash}
-              sx={{
-                justifyContent: 'flex-start',
-                py: 1,
-                px: 2,
-                borderColor: (theme) =>
-                  theme.palette.mode === 'dark'
-                    ? 'rgba(255, 255, 255, 0.23)'
-                    : 'rgba(0, 0, 0, 0.23)',
-                bgcolor: (theme) =>
-                  theme.palette.mode === 'dark'
-                    ? 'rgba(255, 255, 255, 0.05)'
-                    : 'rgba(0, 0, 0, 0.02)',
-                color: 'text.primary',
-                transition: 'all 0.2s ease-in-out',
-                '&:hover': {
+        {/* Hash copy and File Info side by side */}
+        <Grid container spacing={1} sx={{ mb: 2 }}>
+          <Grid size={6}>
+            {image.composite_hash ? (
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<CopyIcon />}
+                onClick={handleCopyHash}
+                sx={{
+                  justifyContent: 'flex-start',
+                  py: 1,
+                  px: 2,
+                  borderColor: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? 'rgba(255, 255, 255, 0.23)'
+                      : 'rgba(0, 0, 0, 0.23)',
                   bgcolor: (theme) =>
                     theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.08)'
-                      : 'rgba(0, 0, 0, 0.04)',
-                  borderColor: 'primary.main',
-                  transform: 'translateY(-1px)',
-                  boxShadow: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? '0 2px 8px rgba(0, 0, 0, 0.4)'
-                      : '0 2px 8px rgba(0, 0, 0, 0.15)',
-                },
-              }}
-            >
-              <Typography
-                variant="body2"
-                sx={{
-                  fontWeight: 500,
+                      ? 'rgba(255, 255, 255, 0.05)'
+                      : 'rgba(0, 0, 0, 0.02)',
+                  color: 'text.primary',
+                  transition: 'all 0.2s ease-in-out',
+                  '&:hover': {
+                    bgcolor: (theme) =>
+                      theme.palette.mode === 'dark'
+                        ? 'rgba(255, 255, 255, 0.08)'
+                        : 'rgba(0, 0, 0, 0.04)',
+                    borderColor: 'primary.main',
+                    transform: 'translateY(-1px)',
+                    boxShadow: (theme) =>
+                      theme.palette.mode === 'dark'
+                        ? '0 2px 8px rgba(0, 0, 0, 0.4)'
+                        : '0 2px 8px rgba(0, 0, 0, 0.15)',
+                  },
                 }}
               >
-                {t('imageDetail:copyHashButton')}
-              </Typography>
-            </Button>
-          ) : (
-            <Button
-              fullWidth
-              variant="outlined"
-              disabled
-              startIcon={<WaitingIcon />}
-              sx={{
-                justifyContent: 'flex-start',
-                py: 1,
-                px: 2,
-                borderColor: 'divider',
-                color: 'text.disabled',
-              }}
-            >
-              <Typography
-                variant="body2"
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 500,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {t('imageDetail:copyHashButton')}
+                </Typography>
+              </Button>
+            ) : (
+              <Button
+                fullWidth
+                variant="outlined"
+                disabled
+                startIcon={<WaitingIcon />}
                 sx={{
-                  fontStyle: 'italic',
+                  justifyContent: 'flex-start',
+                  py: 1,
+                  px: 2,
+                  borderColor: 'divider',
+                  color: 'text.disabled',
                 }}
               >
-                {t('imageDetail:hashGenerating')}
-              </Typography>
-            </Button>
-          )}
-        </Box>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontStyle: 'italic',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {t('imageDetail:hashGenerating')}
+                </Typography>
+              </Button>
+            )}
+          </Grid>
+          <Grid size={6}>
+            <FileInfoSection image={image} />
+          </Grid>
+        </Grid>
 
-        <FileInfoSection image={image} />
         <GroupInfoSection groups={image.groups} onGroupClick={onGroupClick} />
         <AIInfoSection image={image} />
       </Box>

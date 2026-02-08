@@ -467,6 +467,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               display: 'flex',
               flexDirection: 'column',
               borderRadius: 0,
+              bgcolor: (theme) => 
+                theme.palette.mode === 'light' 
+                  ? 'rgba(0, 0, 0, 0.02)' 
+                  : 'background.paper'
             }}
             elevation={0}
           >
@@ -496,6 +500,10 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 sx: {
                   width: '80vw',
                   maxWidth: 400,
+                  bgcolor: (theme) => 
+                    theme.palette.mode === 'light' 
+                      ? 'rgba(0, 0, 0, 0.02)' 
+                      : 'background.paper'
                 },
               },
             }}
@@ -516,8 +524,8 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         sx={{
           flexShrink: 0,
           justifyContent: 'space-between',
-          px: 2,
-          py: 1,
+          px: { xs: 1, sm: 2 },
+          py: { xs: 0.5, sm: 1 },
           borderTop: 1,
           borderColor: 'divider',
         }}
@@ -532,7 +540,7 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           currentImage={currentImage}
         />
 
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', gap: { xs: 0.25, sm: 0.5 }, flexWrap: 'wrap' }}>
           {!isHistoryContext && (
             <Tooltip title={t('imageDetail:actions.goToDetail')}>
               <IconButton size="small" onClick={handleGoToDetail}>

@@ -1,12 +1,7 @@
 import React, { useState } from 'react';
-import { Box, Typography, IconButton, Collapse, Chip, Tooltip, useMediaQuery, useTheme } from '@mui/material';
+import { Button, Tooltip, Box, Typography, useMediaQuery, useTheme } from '@mui/material';
 import {
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
-  InsertDriveFile as FileIcon,
-  AspectRatio as DimensionsIcon,
-  Storage as SizeIcon,
-  Schedule as DateIcon,
+  InfoOutlined as InfoIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../../types/image';
@@ -17,161 +12,94 @@ interface FileInfoSectionProps {
 }
 
 /**
- * Collapsible file information section with tooltip-based info display
+ * Compact file information button with tooltip display
  */
 export const FileInfoSection: React.FC<FileInfoSectionProps> = ({ image }) => {
   const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const [expanded, setExpanded] = useState(false);
-  const [mobileTooltipOpen, setMobileTooltipOpen] = useState<string | null>(null);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
 
-  const fileInfoItems = [
-    {
-      id: 'filename',
-      icon: <FileIcon sx={{ fontSize: 16 }} />,
-      label: t('imageDetail:fileInfo.filenameLabel'),
-      value: truncateFilename(image.original_file_path || '', 20),
-      fullValue: image.original_file_path || '',
-    },
-    {
-      id: 'dimensions',
-      icon: <DimensionsIcon sx={{ fontSize: 16 }} />,
-      label: t('imageDetail:fileInfo.dimensionsLabel'),
-      value: `${image.width} × ${image.height}`,
-      fullValue: `${t('imageDetail:imageInfo.dimensions')}: ${image.width} × ${image.height}`,
-    },
-    {
-      id: 'fileSize',
-      icon: <SizeIcon sx={{ fontSize: 16 }} />,
-      label: t('imageDetail:fileInfo.fileSizeLabel'),
-      value: formatFileSize(image.file_size ?? 0),
-      fullValue: `${t('imageDetail:fileInfo.fileSize')}: ${formatFileSize(image.file_size ?? 0)}`,
-    },
-    {
-      id: 'uploadDate',
-      icon: <DateIcon sx={{ fontSize: 16 }} />,
-      label: t('imageDetail:fileInfo.uploadDateLabel'),
-      value: formatDate(image.first_seen_date).split(' ')[0], // Show only date part
-      fullValue: `${t('imageDetail:fileInfo.uploadDate')}: ${formatDate(image.first_seen_date)}`,
-    },
-  ];
+  const fileInfoText = [
+    `${t('imageDetail:fileInfo.filenameLabel')}: ${truncateFilename(image.original_file_path || '', 40)}`,
+    `${t('imageDetail:fileInfo.dimensionsLabel')}: ${image.width} × ${image.height}`,
+    `${t('imageDetail:fileInfo.fileSizeLabel')}: ${formatFileSize(image.file_size ?? 0)}`,
+    `${t('imageDetail:fileInfo.uploadDateLabel')}: ${formatDate(image.first_seen_date)}`,
+  ].join('\n');
 
-  const handleMobileClick = (id: string) => {
+  const handleClick = () => {
     if (isMobile) {
-      setMobileTooltipOpen(mobileTooltipOpen === id ? null : id);
+      setTooltipOpen(!tooltipOpen);
+    }
+  };
+
+  const handleClose = () => {
+    if (isMobile) {
+      setTooltipOpen(false);
     }
   };
 
   return (
-    <Box sx={{ mb: 3 }}>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          cursor: 'pointer',
-          '&:hover': { bgcolor: 'action.hover' },
-          px: 1,
-          py: 0.5,
-          borderRadius: 1,
-          mb: 1,
-        }}
-        onClick={() => setExpanded(!expanded)}
-      >
-        <Typography variant="subtitle2" color="primary">
-          {t('imageDetail:sections.fileInfo')}
-        </Typography>
-        <IconButton size="small" sx={{ p: 0 }}>
-          {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-        </IconButton>
-      </Box>
-      <Collapse in={expanded}>
-        <Box
-          sx={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 1,
-            pl: 1,
-          }}
-        >
-          {fileInfoItems.map((item) => (
-            <Tooltip
-              key={item.id}
-              title={item.fullValue}
-              placement="top"
-              arrow
-              open={isMobile ? mobileTooltipOpen === item.id : undefined}
-              disableHoverListener={isMobile}
-              disableFocusListener={isMobile}
-              disableTouchListener={isMobile}
-            >
-              <Chip
-                icon={item.icon}
-                label={
-                  <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Typography
-                      component="span"
-                      variant="caption"
-                      sx={{
-                        fontWeight: 600,
-                        color: 'text.secondary',
-                      }}
-                    >
-                      {item.label}:
-                    </Typography>
-                    <Typography
-                      component="span"
-                      variant="caption"
-                      sx={{
-                        fontWeight: 500,
-                        color: 'text.primary',
-                      }}
-                    >
-                      {item.value}
-                    </Typography>
-                  </Box>
-                }
-                onClick={() => handleMobileClick(item.id)}
-                sx={{
-                  height: 'auto',
-                  py: 0.5,
-                  px: 1,
-                  bgcolor: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.05)'
-                      : 'rgba(0, 0, 0, 0.04)',
-                  border: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? '1px solid rgba(255, 255, 255, 0.15)'
-                      : '1px solid rgba(0, 0, 0, 0.15)',
-                  cursor: isMobile ? 'pointer' : 'default',
-                  transition: 'all 0.2s ease-in-out',
-                  '&:hover': {
-                    bgcolor: (theme) =>
-                      theme.palette.mode === 'dark'
-                        ? 'rgba(255, 255, 255, 0.08)'
-                        : 'rgba(0, 0, 0, 0.08)',
-                    borderColor: (theme) =>
-                      theme.palette.mode === 'dark'
-                        ? 'rgba(255, 255, 255, 0.25)'
-                        : 'rgba(0, 0, 0, 0.25)',
-                    transform: 'translateY(-1px)',
-                    boxShadow: (theme) =>
-                      theme.palette.mode === 'dark'
-                        ? '0 2px 8px rgba(0, 0, 0, 0.4)'
-                        : '0 2px 8px rgba(0, 0, 0, 0.15)',
-                  },
-                  '& .MuiChip-icon': {
-                    color: 'text.secondary',
-                    marginLeft: 0.5,
-                  },
-                }}
-              />
-            </Tooltip>
+    <Tooltip
+      title={
+        <Box sx={{ whiteSpace: 'pre-line', p: 0.5 }}>
+          {fileInfoText.split('\n').map((line, index) => (
+            <Typography key={index} variant="caption" sx={{ display: 'block', lineHeight: 1.6 }}>
+              {line}
+            </Typography>
           ))}
         </Box>
-      </Collapse>
-    </Box>
+      }
+      placement="top"
+      arrow
+      open={isMobile ? tooltipOpen : undefined}
+      onClose={handleClose}
+      disableHoverListener={isMobile}
+      disableFocusListener={isMobile}
+      disableTouchListener={isMobile}
+    >
+      <Button
+        fullWidth
+        variant="outlined"
+        startIcon={<InfoIcon />}
+        onClick={handleClick}
+        sx={{
+          justifyContent: 'flex-start',
+          py: 1,
+          px: 2,
+          borderColor: (theme) =>
+            theme.palette.mode === 'dark'
+              ? 'rgba(255, 255, 255, 0.23)'
+              : 'rgba(0, 0, 0, 0.23)',
+          bgcolor: (theme) =>
+            theme.palette.mode === 'dark'
+              ? 'rgba(255, 255, 255, 0.05)'
+              : 'rgba(0, 0, 0, 0.02)',
+          color: 'text.primary',
+          transition: 'all 0.2s ease-in-out',
+          '&:hover': {
+            bgcolor: (theme) =>
+              theme.palette.mode === 'dark'
+                ? 'rgba(255, 255, 255, 0.08)'
+                : 'rgba(0, 0, 0, 0.04)',
+            borderColor: 'primary.main',
+            transform: 'translateY(-1px)',
+            boxShadow: (theme) =>
+              theme.palette.mode === 'dark'
+                ? '0 2px 8px rgba(0, 0, 0, 0.4)'
+                : '0 2px 8px rgba(0, 0, 0, 0.15)',
+          },
+        }}
+      >
+        <Typography
+          variant="body2"
+          sx={{
+            fontWeight: 500,
+          }}
+        >
+          {t('imageDetail:sections.fileInfo')}
+        </Typography>
+      </Button>
+    </Tooltip>
   );
 };

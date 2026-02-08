@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, IconButton, Typography } from '@mui/material';
+import { Box, IconButton, Typography, useMediaQuery } from '@mui/material';
 import {
   Close as CloseIcon,
   Info as InfoIcon,
@@ -19,9 +19,9 @@ import { useTranslation } from 'react-i18next';
 interface ImageControlsProps {
   scale: number;
   isMobile: boolean;
-  showOriginal: boolean; // 원본 이미지 표시 여부
-  isGif: boolean; // GIF 파일 여부 (GIF는 원본 전환 버튼 숨김)
-  isVideo: boolean; // 비디오 파일 여부 (비디오는 원본 전환 및 편집 버튼 숨김)
+  showOriginal: boolean;
+  isGif: boolean;
+  isVideo: boolean;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onRotateLeft: () => void;
@@ -29,14 +29,14 @@ interface ImageControlsProps {
   onFlipHorizontal: () => void;
   onFlipVertical: () => void;
   onReset: () => void;
-  onToggleOriginal: () => void; // 원본/썸네일 전환
-  onEdit?: () => void; // 편집 모드 열기
+  onToggleOriginal: () => void;
+  onEdit?: () => void;
   onOpenDrawer?: () => void;
   onClose: () => void;
 }
 
 /**
- * Image transformation controls toolbar
+ * Image transformation controls toolbar with mobile optimization
  */
 export const ImageControls: React.FC<ImageControlsProps> = ({
   scale,
@@ -57,6 +57,9 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
   onClose,
 }) => {
   const { t } = useTranslation();
+  const isVeryNarrow = useMediaQuery('(max-width:420px)');
+  const buttonSize = isVeryNarrow ? 'small' : 'medium';
+  const iconFontSize = isVeryNarrow ? 'small' : 'medium';
 
   return (
     <Box
@@ -69,73 +72,85 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        p: 1,
+        p: { xs: 0.5, sm: 1 },
         background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)',
       }}
     >
       {/* Left side - Transformation controls */}
-      <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+      <Box sx={{ display: 'flex', gap: { xs: 0.25, sm: 0.5 }, alignItems: 'center', flexWrap: 'nowrap', overflow: 'hidden' }}>
         <IconButton
           onClick={onZoomOut}
-          sx={{ color: 'white' }}
-          size="small"
+          sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
+          size={buttonSize}
           title={t('imageDetail:controls.zoomOut')}
         >
-          <ZoomOutIcon />
+          <ZoomOutIcon fontSize={iconFontSize} />
         </IconButton>
-        <Typography variant="caption" sx={{ color: 'white', minWidth: '50px', textAlign: 'center' }}>
+        <Typography 
+          variant="caption" 
+          sx={{ 
+            color: 'white', 
+            minWidth: { xs: '40px', sm: '50px' }, 
+            textAlign: 'center',
+            fontSize: { xs: '0.65rem', sm: '0.75rem' }
+          }}
+        >
           {Math.round(scale * 100)}%
         </Typography>
         <IconButton
           onClick={onZoomIn}
-          sx={{ color: 'white' }}
-          size="small"
+          sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
+          size={buttonSize}
           title={t('imageDetail:controls.zoomIn')}
         >
-          <ZoomInIcon />
+          <ZoomInIcon fontSize={iconFontSize} />
         </IconButton>
         <IconButton
           onClick={onRotateLeft}
-          sx={{ color: 'white' }}
-          size="small"
+          sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
+          size={buttonSize}
           title={t('imageDetail:controls.rotateLeft')}
         >
-          <RotateLeftIcon />
+          <RotateLeftIcon fontSize={iconFontSize} />
         </IconButton>
         <IconButton
           onClick={onRotateRight}
-          sx={{ color: 'white' }}
-          size="small"
+          sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
+          size={buttonSize}
           title={t('imageDetail:controls.rotateRight')}
         >
-          <RotateRightIcon />
+          <RotateRightIcon fontSize={iconFontSize} />
         </IconButton>
-        <IconButton
-          onClick={onFlipHorizontal}
-          sx={{ color: 'white' }}
-          size="small"
-          title={t('imageDetail:controls.flipHorizontal')}
-        >
-          <FlipIcon />
-        </IconButton>
-        <IconButton
-          onClick={onFlipVertical}
-          sx={{ color: 'white' }}
-          size="small"
-          title={t('imageDetail:controls.flipVertical')}
-        >
-          <FlipVerticalIcon />
-        </IconButton>
+        {!isVeryNarrow && (
+          <>
+            <IconButton
+              onClick={onFlipHorizontal}
+              sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
+              size={buttonSize}
+              title={t('imageDetail:controls.flipHorizontal')}
+            >
+              <FlipIcon fontSize={iconFontSize} />
+            </IconButton>
+            <IconButton
+              onClick={onFlipVertical}
+              sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
+              size={buttonSize}
+              title={t('imageDetail:controls.flipVertical')}
+            >
+              <FlipVerticalIcon fontSize={iconFontSize} />
+            </IconButton>
+          </>
+        )}
         <IconButton
           onClick={onReset}
-          sx={{ color: 'white' }}
-          size="small"
+          sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
+          size={buttonSize}
           title={t('imageDetail:controls.reset')}
         >
-          <ResetIcon />
+          <ResetIcon fontSize={iconFontSize} />
         </IconButton>
 
-        {/* 원본/썸네일 전환 버튼 (GIF와 비디오는 제외) */}
+        {/* Original/Thumbnail toggle (not for GIF/Video) */}
         {!isGif && !isVideo && (
           <IconButton
             onClick={onToggleOriginal}
@@ -144,47 +159,48 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
               bgcolor: showOriginal ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
               '&:hover': {
                 bgcolor: showOriginal ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)',
-              }
+              },
+              p: { xs: 0.5, sm: 1 }
             }}
-            size="small"
+            size={buttonSize}
             title={showOriginal ? t('imageDetail:viewThumbnail') : t('imageDetail:viewOriginal')}
           >
-            {showOriginal ? <ThumbnailIcon /> : <HighQualityIcon />}
+            {showOriginal ? <ThumbnailIcon fontSize={iconFontSize} /> : <HighQualityIcon fontSize={iconFontSize} />}
           </IconButton>
         )}
 
-        {/* Edit button for img2img (이미지 파일만) */}
+        {/* Edit button for img2img (images only) */}
         {onEdit && !isGif && !isVideo && (
           <IconButton
             onClick={onEdit}
-            sx={{ color: 'white' }}
-            size="small"
+            sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
+            size={buttonSize}
             title="Edit for img2img"
           >
-            <EditIcon />
+            <EditIcon fontSize={iconFontSize} />
           </IconButton>
         )}
       </Box>
 
       {/* Right side - Action buttons */}
-      <Box sx={{ display: 'flex', gap: 0.5 }}>
+      <Box sx={{ display: 'flex', gap: { xs: 0.25, sm: 0.5 } }}>
         {isMobile && onOpenDrawer && (
           <IconButton
             onClick={onOpenDrawer}
-            sx={{ color: 'white' }}
-            size="small"
+            sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
+            size={buttonSize}
             title={t('imageDetail:controls.info')}
           >
-            <InfoIcon />
+            <InfoIcon fontSize={iconFontSize} />
           </IconButton>
         )}
         <IconButton
           onClick={onClose}
-          sx={{ color: 'white' }}
-          size="small"
+          sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
+          size={buttonSize}
           title={t('imageDetail:controls.close')}
         >
-          <CloseIcon />
+          <CloseIcon fontSize={iconFontSize} />
         </IconButton>
       </Box>
     </Box>

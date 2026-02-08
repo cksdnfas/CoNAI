@@ -14,11 +14,11 @@ interface AIInfoItem {
 }
 
 /**
- * Collapsible AI generation information section with improved label-value distinction
+ * Compact AI generation information section
  */
 export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(true); // 기본 펼쳐진 상태
+  const [expanded, setExpanded] = useState(true);
 
   // Build AI info items array
   const aiInfoItems: AIInfoItem[] = [];
@@ -63,7 +63,7 @@ export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
   if (aiInfoItems.length === 0) return null;
 
   return (
-    <Box sx={{ mb: 3 }}>
+    <Box sx={{ mb: 2 }}>
       <Box
         sx={{
           display: 'flex',
@@ -74,7 +74,7 @@ export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
           px: 1,
           py: 0.5,
           borderRadius: 1,
-          mb: 1,
+          mb: 0.5,
         }}
         onClick={() => setExpanded(!expanded)}
       >
@@ -90,7 +90,7 @@ export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
           sx={{
             display: 'flex',
             flexDirection: 'column',
-            gap: 1,
+            gap: 0.5,
             pl: 1,
           }}
         >
@@ -102,26 +102,27 @@ export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: 1,
-                p: 1,
-                borderRadius: 1,
+                px: 1,
+                py: 0.5,
+                borderRadius: 0.5,
                 bgcolor: (theme) =>
                   theme.palette.mode === 'dark'
                     ? 'rgba(255, 255, 255, 0.04)'
-                    : 'rgba(0, 0, 0, 0.03)',
+                    : 'rgba(0, 0, 0, 0.025)',
                 border: (theme) =>
                   theme.palette.mode === 'dark'
-                    ? '1px solid rgba(255, 255, 255, 0.12)'
-                    : '1px solid rgba(0, 0, 0, 0.12)',
+                    ? '1px solid rgba(255, 255, 255, 0.1)'
+                    : '1px solid rgba(0, 0, 0, 0.1)',
                 transition: 'all 0.15s ease-in-out',
                 '&:hover': {
                   bgcolor: (theme) =>
                     theme.palette.mode === 'dark'
                       ? 'rgba(255, 255, 255, 0.06)'
-                      : 'rgba(0, 0, 0, 0.05)',
+                      : 'rgba(0, 0, 0, 0.04)',
                   borderColor: (theme) =>
                     theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.2)'
-                      : 'rgba(0, 0, 0, 0.2)',
+                      ? 'rgba(255, 255, 255, 0.15)'
+                      : 'rgba(0, 0, 0, 0.15)',
                 },
               }}
             >
@@ -131,8 +132,8 @@ export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
                   fontWeight: 600,
                   color: 'text.secondary',
                   textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  fontSize: '0.7rem',
+                  letterSpacing: '0.03em',
+                  fontSize: '0.65rem',
                   minWidth: 'fit-content',
                 }}
               >
@@ -144,19 +145,20 @@ export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
                   height: '1px',
                   bgcolor: (theme) =>
                     theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.1)'
-                      : 'rgba(0, 0, 0, 0.1)',
-                  mx: 1,
+                      ? 'rgba(255, 255, 255, 0.08)'
+                      : 'rgba(0, 0, 0, 0.08)',
+                  mx: 0.75,
                 }}
               />
               <Typography
-                variant="body2"
+                variant="caption"
                 sx={{
                   fontWeight: 500,
                   color: 'text.primary',
                   fontFamily: typeof item.value === 'number' ? 'monospace' : 'inherit',
                   textAlign: 'right',
                   wordBreak: 'break-word',
+                  fontSize: '0.75rem',
                 }}
               >
                 {item.value}
