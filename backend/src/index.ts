@@ -73,6 +73,7 @@ import fileVerificationRoutes from './routes/fileVerification';
 import { thumbnailRoutes } from './routes/thumbnails';
 import externalApiRoutes from './routes/externalApi.routes';
 import civitaiRoutes from './routes/civitai.routes';
+import { mcpRoutes } from './mcp';
 import { initializeDatabase } from './database/init';
 import { initializeUserSettingsDb } from './database/userSettingsDb';
 import { initializeAuthDb, getAuthDb } from './database/authDb';
@@ -305,6 +306,10 @@ async function registerRoutes() {
   app.use('/api/image-editor', uploadLimiter, optionalAuth, imageEditorRoutes); // Upload endpoint
   app.use('/api/file-verification', optionalAuth, fileVerificationRoutes);
   app.use('/api/thumbnails', optionalAuth, thumbnailRoutes);
+
+  // MCP (Model Context Protocol) endpoint - no auth required for MCP clients
+  app.use('/', mcpRoutes);
+  console.log('🔌 MCP endpoint registered at /mcp');
 
   console.log('✅ All API routes registered successfully');
 
