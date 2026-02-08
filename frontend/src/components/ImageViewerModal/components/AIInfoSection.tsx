@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { Box, Typography, IconButton, Collapse } from '@mui/material';
-import { ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon } from '@mui/icons-material';
+import React from 'react';
+import { Box, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../../types/image';
 
@@ -14,11 +13,10 @@ interface AIInfoItem {
 }
 
 /**
- * Compact AI generation information section
+ * Compact AI generation information section - always visible
  */
 export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(true);
 
   // Build AI info items array
   const aiInfoItems: AIInfoItem[] = [];
@@ -67,106 +65,82 @@ export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
       <Box
         sx={{
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          cursor: 'pointer',
-          '&:hover': { bgcolor: 'action.hover' },
-          px: 1,
-          py: 0.5,
-          borderRadius: 1,
-          mb: 0.5,
+          flexDirection: 'column',
+          gap: 0.5,
         }}
-        onClick={() => setExpanded(!expanded)}
       >
-        <Typography variant="subtitle2" color="primary">
-          {t('imageDetail:sections.aiInfo')}
-        </Typography>
-        <IconButton size="small" sx={{ p: 0 }}>
-          {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-        </IconButton>
-      </Box>
-      <Collapse in={expanded}>
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 0.5,
-            pl: 1,
-          }}
-        >
-          {aiInfoItems.map((item, index) => (
-            <Box
-              key={index}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 1,
-                px: 1,
-                py: 0.5,
-                borderRadius: 0.5,
+        {aiInfoItems.map((item, index) => (
+          <Box
+            key={index}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 1,
+              px: 1,
+              py: 0.5,
+              borderRadius: 0.5,
+              bgcolor: (theme) =>
+                theme.palette.mode === 'dark'
+                  ? 'rgba(255, 255, 255, 0.04)'
+                  : 'rgba(0, 0, 0, 0.025)',
+              border: (theme) =>
+                theme.palette.mode === 'dark'
+                  ? '1px solid rgba(255, 255, 255, 0.1)'
+                  : '1px solid rgba(0, 0, 0, 0.1)',
+              transition: 'all 0.15s ease-in-out',
+              '&:hover': {
                 bgcolor: (theme) =>
                   theme.palette.mode === 'dark'
-                    ? 'rgba(255, 255, 255, 0.04)'
-                    : 'rgba(0, 0, 0, 0.025)',
-                border: (theme) =>
+                    ? 'rgba(255, 255, 255, 0.06)'
+                    : 'rgba(0, 0, 0, 0.04)',
+                borderColor: (theme) =>
                   theme.palette.mode === 'dark'
-                    ? '1px solid rgba(255, 255, 255, 0.1)'
-                    : '1px solid rgba(0, 0, 0, 0.1)',
-                transition: 'all 0.15s ease-in-out',
-                '&:hover': {
-                  bgcolor: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.06)'
-                      : 'rgba(0, 0, 0, 0.04)',
-                  borderColor: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.15)'
-                      : 'rgba(0, 0, 0, 0.15)',
-                },
+                    ? 'rgba(255, 255, 255, 0.15)'
+                    : 'rgba(0, 0, 0, 0.15)',
+              },
+            }}
+          >
+            <Typography
+              variant="caption"
+              sx={{
+                fontWeight: 600,
+                color: 'text.secondary',
+                textTransform: 'uppercase',
+                letterSpacing: '0.03em',
+                fontSize: '0.65rem',
+                minWidth: 'fit-content',
               }}
             >
-              <Typography
-                variant="caption"
-                sx={{
-                  fontWeight: 600,
-                  color: 'text.secondary',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.03em',
-                  fontSize: '0.65rem',
-                  minWidth: 'fit-content',
-                }}
-              >
-                {item.label}
-              </Typography>
-              <Box
-                sx={{
-                  flex: 1,
-                  height: '1px',
-                  bgcolor: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.08)'
-                      : 'rgba(0, 0, 0, 0.08)',
-                  mx: 0.75,
-                }}
-              />
-              <Typography
-                variant="caption"
-                sx={{
-                  fontWeight: 500,
-                  color: 'text.primary',
-                  fontFamily: typeof item.value === 'number' ? 'monospace' : 'inherit',
-                  textAlign: 'right',
-                  wordBreak: 'break-word',
-                  fontSize: '0.75rem',
-                }}
-              >
-                {item.value}
-              </Typography>
-            </Box>
-          ))}
-        </Box>
-      </Collapse>
+              {item.label}
+            </Typography>
+            <Box
+              sx={{
+                flex: 1,
+                height: '1px',
+                bgcolor: (theme) =>
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.08)'
+                    : 'rgba(0, 0, 0, 0.08)',
+                mx: 0.75,
+              }}
+            />
+            <Typography
+              variant="caption"
+              sx={{
+                fontWeight: 500,
+                color: 'text.primary',
+                fontFamily: typeof item.value === 'number' ? 'monospace' : 'inherit',
+                textAlign: 'right',
+                wordBreak: 'break-word',
+                fontSize: '0.75rem',
+              }}
+            >
+              {item.value}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
     </Box>
   );
 };

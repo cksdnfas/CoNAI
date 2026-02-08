@@ -66,9 +66,9 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
     >
       {/* Top info section - scrollable */}
       <Box sx={{ flexShrink: 0, overflowY: 'auto', mb: 2 }}>
-        <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
+        {/* <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
           {t('imageDetail:info.title')}
-        </Typography>
+        </Typography> */}
 
         {/* Hash copy and File Info side by side */}
         <Grid container spacing={1} sx={{ mb: 2 }}>
