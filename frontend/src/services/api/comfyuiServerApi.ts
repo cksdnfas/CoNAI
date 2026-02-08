@@ -22,7 +22,7 @@ export interface ServerStatus {
 export const comfyuiServerApi = {
   // 서버 목록 조회
   getAllServers: async (activeOnly: boolean = false) => {
-    const response = await apiClient.get('/comfyui-servers', {
+    const response = await apiClient.get('/api/comfyui-servers', {
       params: { active: activeOnly }
     });
     return response.data;
@@ -30,7 +30,7 @@ export const comfyuiServerApi = {
 
   // 서버 상세 조회
   getServer: async (id: number) => {
-    const response = await apiClient.get(`/comfyui-servers/${id}`);
+    const response = await apiClient.get(`/api/comfyui-servers/${id}`);
     return response.data;
   },
 
@@ -41,37 +41,37 @@ export const comfyuiServerApi = {
     description?: string;
     is_active?: boolean;
   }) => {
-    const response = await apiClient.post('/comfyui-servers', data);
+    const response = await apiClient.post('/api/comfyui-servers', data);
     return response.data;
   },
 
   // 서버 수정
   updateServer: async (id: number, data: Partial<ComfyUIServer>) => {
-    const response = await apiClient.put(`/comfyui-servers/${id}`, data);
+    const response = await apiClient.put(`/api/comfyui-servers/${id}`, data);
     return response.data;
   },
 
   // 서버 삭제
   deleteServer: async (id: number) => {
-    const response = await apiClient.delete(`/comfyui-servers/${id}`);
+    const response = await apiClient.delete(`/api/comfyui-servers/${id}`);
     return response.data;
   },
 
   // 서버 연결 테스트
   testConnection: async (id: number) => {
-    const response = await apiClient.get(`/comfyui-servers/${id}/test-connection`);
+    const response = await apiClient.get(`/api/comfyui-servers/${id}/test-connection`);
     return response.data;
   },
 
   // 모든 서버 연결 테스트
   testAllConnections: async () => {
-    const response = await apiClient.get('/comfyui-servers/test-all-connections');
+    const response = await apiClient.get('/api/comfyui-servers/test-all-connections');
     return response.data;
   },
 
   // 서버를 사용하는 워크플로우 목록
   getServerWorkflows: async (id: number) => {
-    const response = await apiClient.get(`/comfyui-servers/${id}/workflows`);
+    const response = await apiClient.get(`/api/comfyui-servers/${id}/workflows`);
     return response.data;
   }
 };

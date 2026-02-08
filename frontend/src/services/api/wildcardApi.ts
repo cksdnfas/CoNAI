@@ -126,7 +126,7 @@ export const wildcardApi = {
    */
   getAllWildcards: async (withItems: boolean = true) => {
     const response = await apiClient.get<{ success: boolean; data: WildcardWithItems[] }>(
-      '/wildcards',
+      '/api/wildcards',
       { params: { withItems } }
     );
     return response.data;
@@ -137,7 +137,7 @@ export const wildcardApi = {
    */
   getWildcardsHierarchical: async () => {
     const response = await apiClient.get<{ success: boolean; data: WildcardWithHierarchy[] }>(
-      '/wildcards',
+      '/api/wildcards',
       { params: { hierarchical: true } }
     );
     return response.data;
@@ -148,7 +148,7 @@ export const wildcardApi = {
    */
   getRootWildcards: async () => {
     const response = await apiClient.get<{ success: boolean; data: Wildcard[] }>(
-      '/wildcards',
+      '/api/wildcards',
       { params: { rootsOnly: true } }
     );
     return response.data;
@@ -159,7 +159,7 @@ export const wildcardApi = {
    */
   getWildcardChildren: async (parentId: number) => {
     const response = await apiClient.get<{ success: boolean; data: Wildcard[] }>(
-      `/wildcards/${parentId}/children`
+      `/api/wildcards/${parentId}/children`
     );
     return response.data;
   },
@@ -169,7 +169,7 @@ export const wildcardApi = {
    */
   getWildcardPath: async (id: number) => {
     const response = await apiClient.get<{ success: boolean; data: Wildcard[] }>(
-      `/wildcards/${id}/path`
+      `/api/wildcards/${id}/path`
     );
     return response.data;
   },
@@ -179,7 +179,7 @@ export const wildcardApi = {
    */
   getWildcard: async (id: number) => {
     const response = await apiClient.get<{ success: boolean; data: WildcardWithItems }>(
-      `/wildcards/${id}`
+      `/api/wildcards/${id}`
     );
     return response.data;
   },
@@ -193,7 +193,7 @@ export const wildcardApi = {
       data: WildcardWithItems;
       warning?: string;
     }>(
-      '/wildcards',
+      '/api/wildcards',
       data
     );
     return response.data;
@@ -208,7 +208,7 @@ export const wildcardApi = {
       data: WildcardWithItems;
       warning?: string;
     }>(
-      `/wildcards/${id}`,
+      `/api/wildcards/${id}`,
       data
     );
     return response.data;
@@ -221,7 +221,7 @@ export const wildcardApi = {
    */
   deleteWildcard: async (id: number, cascade: boolean = false) => {
     const response = await apiClient.delete<{ success: boolean; message: string }>(
-      `/wildcards/${id}?cascade=${cascade}`
+      `/api/wildcards/${id}?cascade=${cascade}`
     );
     return response.data;
   },
@@ -231,7 +231,7 @@ export const wildcardApi = {
    */
   parseWildcards: async (parseRequest: ParseRequest) => {
     const response = await apiClient.post<{ success: boolean; data: ParseResponse }>(
-      '/wildcards/parse',
+      '/api/wildcards/parse',
       parseRequest
     );
     return response.data;
@@ -242,7 +242,7 @@ export const wildcardApi = {
    */
   getStatistics: async () => {
     const response = await apiClient.get<{ success: boolean; data: WildcardStatistics }>(
-      '/wildcards/stats/summary'
+      '/api/wildcards/stats/summary'
     );
     return response.data;
   },
@@ -252,7 +252,7 @@ export const wildcardApi = {
    */
   checkCircularReference: async (id: number) => {
     const response = await apiClient.get<{ success: boolean; data: CircularCheckResponse }>(
-      `/wildcards/${id}/circular-check`
+      `/api/wildcards/${id}/circular-check`
     );
     return response.data;
   },
@@ -262,7 +262,7 @@ export const wildcardApi = {
    */
   scanLoraFolder: async (scanRequest: LoraScanRequest) => {
     const response = await apiClient.post<{ success: boolean; data: LoraScanResponse }>(
-      '/wildcards/scan-lora-folder',
+      '/api/wildcards/scan-lora-folder',
       scanRequest
     );
     return response.data;
@@ -273,7 +273,7 @@ export const wildcardApi = {
    */
   getLastScanLog: async () => {
     const response = await apiClient.get<{ success: boolean; data: LoraScanLog | null }>(
-      '/wildcards/last-scan-log'
+      '/api/wildcards/last-scan-log'
     );
     return response.data;
   }

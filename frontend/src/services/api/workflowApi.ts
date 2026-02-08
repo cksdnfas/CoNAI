@@ -44,7 +44,7 @@ export interface GenerationHistory {
 export const workflowApi = {
   // 워크플로우 목록 조회
   getAllWorkflows: async (activeOnly: boolean = false) => {
-    const response = await apiClient.get('/workflows', {
+    const response = await apiClient.get('/api/workflows', {
       params: { active: activeOnly }
     });
     return response.data;
@@ -52,7 +52,7 @@ export const workflowApi = {
 
   // 워크플로우 상세 조회
   getWorkflow: async (id: number) => {
-    const response = await apiClient.get(`/workflows/${id}`);
+    const response = await apiClient.get(`/api/workflows/${id}`);
     return response.data;
   },
 
@@ -64,25 +64,25 @@ export const workflowApi = {
     marked_fields?: MarkedField[];
     is_active?: boolean;
   }) => {
-    const response = await apiClient.post('/workflows', data);
+    const response = await apiClient.post('/api/workflows', data);
     return response.data;
   },
 
   // 워크플로우 수정
   updateWorkflow: async (id: number, data: Partial<Workflow>) => {
-    const response = await apiClient.put(`/workflows/${id}`, data);
+    const response = await apiClient.put(`/api/workflows/${id}`, data);
     return response.data;
   },
 
   // 워크플로우 삭제
   deleteWorkflow: async (id: number) => {
-    const response = await apiClient.delete(`/workflows/${id}`);
+    const response = await apiClient.delete(`/api/workflows/${id}`);
     return response.data;
   },
 
   // 이미지 생성 (단일 서버)
   generateImage: async (id: number, promptData: Record<string, any>) => {
-    const response = await apiClient.post(`/workflows/${id}/generate`, {
+    const response = await apiClient.post(`/api/workflows/${id}/generate`, {
       prompt_data: promptData
     });
     return response.data;
@@ -90,7 +90,7 @@ export const workflowApi = {
 
   // 특정 서버로 이미지 생성
   generateImageOnServer: async (id: number, serverId: number, promptData: Record<string, any>, groupId?: number) => {
-    const response = await apiClient.post(`/workflows/${id}/generate`, {
+    const response = await apiClient.post(`/api/workflows/${id}/generate`, {
       prompt_data: promptData,
       server_id: serverId,
       groupId: groupId
@@ -100,7 +100,7 @@ export const workflowApi = {
 
   // 이미지 생성 (병렬 - 멀티 서버)
   generateImageParallel: async (id: number, promptData: Record<string, any>) => {
-    const response = await apiClient.post(`/workflows/${id}/generate-parallel`, {
+    const response = await apiClient.post(`/api/workflows/${id}/generate-parallel`, {
       prompt_data: promptData
     });
     return response.data;
@@ -108,7 +108,7 @@ export const workflowApi = {
 
   // 생성 히스토리 조회
   getHistory: async (id: number, page: number = 1, limit: number = 20) => {
-    const response = await apiClient.get(`/workflows/${id}/history`, {
+    const response = await apiClient.get(`/api/workflows/${id}/history`, {
       params: { page, limit }
     });
     return response.data;
@@ -116,19 +116,19 @@ export const workflowApi = {
 
   // 생성 상태 조회
   getGenerationStatus: async (historyId: number) => {
-    const response = await apiClient.get(`/workflows/history/${historyId}`);
+    const response = await apiClient.get(`/api/workflows/history/${historyId}`);
     return response.data;
   },
 
   // 연결된 서버 목록 조회
   getWorkflowServers: async (id: number) => {
-    const response = await apiClient.get(`/workflows/${id}/servers`);
+    const response = await apiClient.get(`/api/workflows/${id}/servers`);
     return response.data;
   },
 
   // 서버 연결
   linkServers: async (id: number, serverIds: number[]) => {
-    const response = await apiClient.post(`/workflows/${id}/servers`, {
+    const response = await apiClient.post(`/api/workflows/${id}/servers`, {
       server_ids: serverIds
     });
     return response.data;
@@ -136,13 +136,13 @@ export const workflowApi = {
 
   // 서버 연결 해제
   unlinkServer: async (id: number, serverId: number) => {
-    const response = await apiClient.delete(`/workflows/${id}/servers/${serverId}`);
+    const response = await apiClient.delete(`/api/workflows/${id}/servers/${serverId}`);
     return response.data;
   },
 
   // Canvas 폴더 이미지 목록 조회
   getCanvasImages: async () => {
-    const response = await apiClient.get('/workflows/canvas-images');
+    const response = await apiClient.get('/api/workflows/canvas-images');
     return response.data;
   }
 };
