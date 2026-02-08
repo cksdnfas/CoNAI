@@ -8,16 +8,59 @@ interface AIInfoSectionProps {
   image: ImageRecord;
 }
 
+interface AIInfoItem {
+  label: string;
+  value: string | number;
+}
+
 /**
- * Collapsible AI generation information section
+ * Collapsible AI generation information section with improved label-value distinction
  */
 export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true); // 기본 펼쳐진 상태
-  const hasAIInfo = image.ai_tool || image.model_name || image.steps ||
-                    image.cfg_scale || image.sampler || image.seed;
 
-  if (!hasAIInfo) return null;
+  // Build AI info items array
+  const aiInfoItems: AIInfoItem[] = [];
+
+  if (image.ai_tool) {
+    aiInfoItems.push({
+      label: t('imageDetail:aiInfo.toolShort'),
+      value: image.ai_tool,
+    });
+  }
+  if (image.model_name) {
+    aiInfoItems.push({
+      label: t('imageDetail:aiInfo.model'),
+      value: image.model_name,
+    });
+  }
+  if (image.steps) {
+    aiInfoItems.push({
+      label: t('imageDetail:aiInfo.steps'),
+      value: image.steps,
+    });
+  }
+  if (image.cfg_scale) {
+    aiInfoItems.push({
+      label: t('imageDetail:aiInfo.cfgShort'),
+      value: image.cfg_scale,
+    });
+  }
+  if (image.sampler) {
+    aiInfoItems.push({
+      label: t('imageDetail:aiInfo.sampler'),
+      value: image.sampler,
+    });
+  }
+  if (image.seed) {
+    aiInfoItems.push({
+      label: t('imageDetail:aiInfo.seed'),
+      value: image.seed,
+    });
+  }
+
+  if (aiInfoItems.length === 0) return null;
 
   return (
     <Box sx={{ mb: 3 }}>
@@ -43,37 +86,83 @@ export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
         </IconButton>
       </Box>
       <Collapse in={expanded}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, pl: 1 }}>
-          {image.ai_tool && (
-            <Typography variant="body2">
-              {t('imageDetail:aiInfo.toolShort')}: {image.ai_tool}
-            </Typography>
-          )}
-          {image.model_name && (
-            <Typography variant="body2">
-              {t('imageDetail:aiInfo.model')}: {image.model_name}
-            </Typography>
-          )}
-          {image.steps && (
-            <Typography variant="body2">
-              {t('imageDetail:aiInfo.steps')}: {image.steps}
-            </Typography>
-          )}
-          {image.cfg_scale && (
-            <Typography variant="body2">
-              {t('imageDetail:aiInfo.cfgShort')}: {image.cfg_scale}
-            </Typography>
-          )}
-          {image.sampler && (
-            <Typography variant="body2">
-              {t('imageDetail:aiInfo.sampler')}: {image.sampler}
-            </Typography>
-          )}
-          {image.seed && (
-            <Typography variant="body2">
-              {t('imageDetail:aiInfo.seed')}: {image.seed}
-            </Typography>
-          )}
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1,
+            pl: 1,
+          }}
+        >
+          {aiInfoItems.map((item, index) => (
+            <Box
+              key={index}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1,
+                p: 1,
+                borderRadius: 1,
+                bgcolor: (theme) =>
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.03)'
+                    : 'rgba(0, 0, 0, 0.02)',
+                border: (theme) =>
+                  theme.palette.mode === 'dark'
+                    ? '1px solid rgba(255, 255, 255, 0.08)'
+                    : '1px solid rgba(0, 0, 0, 0.08)',
+                transition: 'all 0.15s ease-in-out',
+                '&:hover': {
+                  bgcolor: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? 'rgba(255, 255, 255, 0.05)'
+                      : 'rgba(0, 0, 0, 0.04)',
+                  borderColor: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? 'rgba(255, 255, 255, 0.15)'
+                      : 'rgba(0, 0, 0, 0.15)',
+                },
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{
+                  fontWeight: 600,
+                  color: 'text.secondary',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  fontSize: '0.7rem',
+                  minWidth: 'fit-content',
+                }}
+              >
+                {item.label}
+              </Typography>
+              <Box
+                sx={{
+                  flex: 1,
+                  height: '1px',
+                  bgcolor: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? 'rgba(255, 255, 255, 0.1)'
+                      : 'rgba(0, 0, 0, 0.1)',
+                  mx: 1,
+                }}
+              />
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 500,
+                  color: 'text.primary',
+                  fontFamily: typeof item.value === 'number' ? 'monospace' : 'inherit',
+                  textAlign: 'right',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {item.value}
+              </Typography>
+            </Box>
+          ))}
         </Box>
       </Collapse>
     </Box>
