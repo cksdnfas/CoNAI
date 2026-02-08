@@ -31,7 +31,11 @@
     "size": "大小",
     "fileSize": "文件大小",
     "mimeType": "MIME 类型",
-    "uploadDate": "上传日期"
+    "uploadDate": "上传日期",
+    "filenameLabel": "文件",
+    "dimensionsLabel": "尺寸",
+    "fileSizeLabel": "大小",
+    "uploadDateLabel": "日期"
   },
   "imageInfo": {
     "dimensions": "尺寸",

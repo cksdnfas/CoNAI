@@ -31,7 +31,11 @@
     "size": "サイズ",
     "fileSize": "ファイルサイズ",
     "mimeType": "MIMEタイプ",
-    "uploadDate": "アップロード日"
+    "uploadDate": "アップロード日",
+    "filenameLabel": "ファイル",
+    "dimensionsLabel": "サイズ",
+    "fileSizeLabel": "容量",
+    "uploadDateLabel": "日付"
   },
   "imageInfo": {
     "dimensions": "サイズ",

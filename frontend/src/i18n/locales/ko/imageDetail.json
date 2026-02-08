@@ -40,7 +40,11 @@
     "size": "크기",
     "fileSize": "파일 크기",
     "mimeType": "MIME 타입",
-    "uploadDate": "업로드 날짜"
+    "uploadDate": "업로드 날짜",
+    "filenameLabel": "파일",
+    "dimensionsLabel": "크기",
+    "fileSizeLabel": "용량",
+    "uploadDateLabel": "날짜"
   },
   "imageInfo": {
     "dimensions": "크기",

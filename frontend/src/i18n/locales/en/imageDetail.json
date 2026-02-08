@@ -40,7 +40,11 @@
     "size": "Size",
     "fileSize": "File Size",
     "mimeType": "MIME Type",
-    "uploadDate": "Upload Date"
+    "uploadDate": "Upload Date",
+    "filenameLabel": "File",
+    "dimensionsLabel": "Size",
+    "fileSizeLabel": "Size",
+    "uploadDateLabel": "Date"
   },
   "imageInfo": {
     "dimensions": "Dimensions",
