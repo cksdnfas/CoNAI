@@ -44,6 +44,7 @@ export class ImageUploadService {
       videoCodec: string | null;
       audioCodec: string | null;
       bitrate: number | null;
+      rawNaiParameters?: string | null;
     },
     folderId: number = 1
   ): Promise<string> {
@@ -95,7 +96,8 @@ export class ImageUploadService {
         audio_codec: imageData.audioCodec,
         bitrate: imageData.bitrate,
         rating_score: 0,
-        model_references: null
+        model_references: null,
+        raw_nai_parameters: imageData.rawNaiParameters || null
       };
 
       MediaMetadataModel.create(metadataRecord);

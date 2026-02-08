@@ -46,6 +46,9 @@ export interface AIMetadata {
   description?: string;
   software?: string;
 
+  // NovelAI 원본 생성 파라미터 (JSON 문자열)
+  raw_nai_parameters?: string;
+
   // Raw data fields (for intermediate processing)
   Comment?: string;
   Source?: string;

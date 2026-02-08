@@ -46,6 +46,9 @@ export interface ImageMetadataRecord {
   // [{"name":"model", "hash":"abc123", "type":"checkpoint"}, ...]
   model_references: string | null;
 
+  // NovelAI 원본 생성 파라미터 (JSON)
+  raw_nai_parameters: string | null;
+
   // 비디오 메타데이터
   duration: number | null;
   fps: number | null;

@@ -181,6 +181,13 @@ export class NovelAIParser {
       // Mark as NovelAI
       aiInfo.ai_tool = 'NovelAI';
 
+      // 원본 NAI 생성 파라미터 전체를 JSON으로 보존
+      try {
+        aiInfo.raw_nai_parameters = JSON.stringify(naiData);
+      } catch (e) {
+        console.warn('[NovelAIParser] Failed to serialize raw NAI parameters:', e);
+      }
+
       console.log('✅ [NovelAIParser] Successfully parsed:', {
         hasPrompt: !!aiInfo.prompt,
         hasNegativePrompt: !!aiInfo.negative_prompt,

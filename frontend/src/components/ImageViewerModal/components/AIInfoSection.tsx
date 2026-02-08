@@ -5,6 +5,7 @@ import type { ImageRecord } from '../../../types/image';
 
 interface AIInfoSectionProps {
   image: ImageRecord;
+  onCopy?: (text: string) => void;
 }
 
 interface AIInfoItem {
@@ -13,9 +14,9 @@ interface AIInfoItem {
 }
 
 /**
- * Compact AI generation information section - always visible
+ * Compact AI generation information section with copy functionality
  */
-export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
+export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image, onCopy }) => {
   const { t } = useTranslation();
 
   // Build AI info items array
@@ -60,6 +61,12 @@ export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
 
   if (aiInfoItems.length === 0) return null;
 
+  const handleItemClick = (value: string | number) => {
+    if (onCopy) {
+      onCopy(String(value));
+    }
+  };
+
   return (
     <Box sx={{ mb: 2 }}>
       <Box
@@ -72,6 +79,7 @@ export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
         {aiInfoItems.map((item, index) => (
           <Box
             key={index}
+            onClick={() => handleItemClick(item.value)}
             sx={{
               display: 'flex',
               alignItems: 'center',
@@ -88,6 +96,7 @@ export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
                 theme.palette.mode === 'dark'
                   ? '1px solid rgba(255, 255, 255, 0.1)'
                   : '1px solid rgba(0, 0, 0, 0.1)',
+              cursor: 'pointer',
               transition: 'all 0.15s ease-in-out',
               '&:hover': {
                 bgcolor: (theme) =>
@@ -98,6 +107,12 @@ export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
                   theme.palette.mode === 'dark'
                     ? 'rgba(255, 255, 255, 0.15)'
                     : 'rgba(0, 0, 0, 0.15)',
+              },
+              '&:active': {
+                bgcolor: (theme) =>
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.08)'
+                    : 'rgba(0, 0, 0, 0.06)',
               },
             }}
           >

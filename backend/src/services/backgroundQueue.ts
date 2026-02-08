@@ -240,7 +240,8 @@ export class BackgroundQueueService {
           generation_time = ?,
           batch_size = ?,
           batch_index = ?,
-          model_references = ?
+          model_references = ?,
+          raw_nai_parameters = ?
         WHERE composite_hash = ?
       `).run(
         aiInfo.ai_tool || null,
@@ -257,6 +258,7 @@ export class BackgroundQueueService {
         aiInfo.batch_size || null,
         aiInfo.batch_index || null,
         modelReferencesJson,
+        aiInfo.raw_nai_parameters || null,
         task.compositeHash
       );
     } catch (error) {

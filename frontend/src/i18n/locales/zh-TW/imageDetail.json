@@ -99,6 +99,7 @@
   "copyHashButton": "複製雜湊值",
   "hashGenerating": "等待生成雜湊值...",
   "hashCopied": "雜湊值已複製",
+  "aiInfoCopied": "已複製",
   "viewThumbnail": "檢視縮圖（快速載入）",
   "viewOriginal": "檢視原圖（高品質）",
   "originalNotFound": "未找到原始圖像。顯示縮圖。",

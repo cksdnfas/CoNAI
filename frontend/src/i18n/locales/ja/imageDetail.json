@@ -99,6 +99,7 @@
   "copyHashButton": "ハッシュをコピー",
   "hashGenerating": "ハッシュ生成待機中...",
   "hashCopied": "ハッシュをコピーしました",
+  "aiInfoCopied": "コピーしました",
   "viewThumbnail": "サムネイルを表示（高速読み込み）",
   "viewOriginal": "オリジナルを表示（高品質）",
   "originalNotFound": "オリジナル画像が見つかりません。サムネイルを表示します。",

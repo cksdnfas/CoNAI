@@ -30,6 +30,7 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
 }) => {
   const { t } = useTranslation(['imageDetail', 'common']);
   const [copySnackbarOpen, setCopySnackbarOpen] = useState(false);
+  const [copySnackbarMessage, setCopySnackbarMessage] = useState('');
 
   // 프롬프트 표시 여부 결정
   const hasPrompts = image.ai_metadata &&
@@ -44,10 +45,22 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
     if (image.composite_hash) {
       try {
         await navigator.clipboard.writeText(image.composite_hash);
+        setCopySnackbarMessage(t('imageDetail:hashCopied'));
         setCopySnackbarOpen(true);
       } catch (err) {
         console.error('Failed to copy hash:', err);
       }
+    }
+  };
+
+  // Handle AI info copy
+  const handleAIInfoCopy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopySnackbarMessage(t('imageDetail:aiInfoCopied'));
+      setCopySnackbarOpen(true);
+    } catch (err) {
+      console.error('Failed to copy AI info:', err);
     }
   };
 
@@ -65,13 +78,13 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
       }}
     >
       {/* Top info section - scrollable */}
-      <Box sx={{ flexShrink: 0, overflowY: 'auto', mb: 2 }}>
+      <Box sx={{ flexShrink: 0, overflowY: 'auto', overflowX: 'visible', mb: 2 }}>
         {/* <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
           {t('imageDetail:info.title')}
         </Typography> */}
 
         {/* Hash copy and File Info side by side */}
-        <Grid container spacing={1} sx={{ mb: 2 }}>
+        <Grid container spacing={1} sx={{ mb: 2, overflow: 'visible' }}>
           <Grid size={6}>
             {image.composite_hash ? (
               <Button
@@ -153,7 +166,7 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
         </Grid>
 
         <GroupInfoSection groups={image.groups} onGroupClick={onGroupClick} />
-        <AIInfoSection image={image} />
+        <AIInfoSection image={image} onCopy={handleAIInfoCopy} />
       </Box>
 
       {/* Prompt section - takes remaining space */}
@@ -181,7 +194,7 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert onClose={() => setCopySnackbarOpen(false)} severity="success" variant="filled">
-          {t('imageDetail:hashCopied')}
+          {copySnackbarMessage}
         </Alert>
       </Snackbar>
     </Box>

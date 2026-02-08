@@ -109,6 +109,8 @@ export interface ImageRecord {
       prompt: string | null;
       negative_prompt: string | null;
     };
+    // NovelAI 원본 생성 파라미터 (전체 JSON)
+    raw_nai_parameters: Record<string, any> | null;
   };
 
   // ❌ REMOVED LEGACY FIELDS:

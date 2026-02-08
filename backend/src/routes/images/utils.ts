@@ -32,7 +32,8 @@ export function enrichImageRecord(image: any) {
       prompts: {
         prompt: image.prompt,
         negative_prompt: image.negative_prompt
-      }
+      },
+      raw_nai_parameters: image.raw_nai_parameters ? JSON.parse(image.raw_nai_parameters) : null
     },
 
     // 원본 메타데이터는 그대로 유지
@@ -118,7 +119,10 @@ export function enrichImageWithFileView(image: any) {
       prompts: {
         prompt: image.prompt,
         negative_prompt: image.negative_prompt
-      }
+      },
+      raw_nai_parameters: image.raw_nai_parameters
+        ? (typeof image.raw_nai_parameters === 'string' ? JSON.parse(image.raw_nai_parameters) : image.raw_nai_parameters)
+        : null
     },
 
     // 자동 태그 정보 추가

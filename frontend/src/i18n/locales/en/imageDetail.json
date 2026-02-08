@@ -12,6 +12,7 @@
   "copyHashButton": "Copy Hash",
   "hashGenerating": "Waiting for hash generation...",
   "hashCopied": "Hash copied",
+  "aiInfoCopied": "Copied",
   "viewThumbnail": "View Thumbnail (Fast Loading)",
   "viewOriginal": "View Original (High Quality)",
   "originalNotFound": "Original image not found. Showing thumbnail.",
