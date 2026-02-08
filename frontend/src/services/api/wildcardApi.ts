@@ -1,11 +1,4 @@
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:1666/api';
-
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  withCredentials: true,
-});
+import apiClient from './apiClient';
 
 export interface Wildcard {
   id: number;
@@ -132,7 +125,7 @@ export const wildcardApi = {
    * 모든 와일드카드 조회
    */
   getAllWildcards: async (withItems: boolean = true) => {
-    const response = await api.get<{ success: boolean; data: WildcardWithItems[] }>(
+    const response = await apiClient.get<{ success: boolean; data: WildcardWithItems[] }>(
       '/wildcards',
       { params: { withItems } }
     );
@@ -143,7 +136,7 @@ export const wildcardApi = {
    * 계층 구조로 와일드카드 조회
    */
   getWildcardsHierarchical: async () => {
-    const response = await api.get<{ success: boolean; data: WildcardWithHierarchy[] }>(
+    const response = await apiClient.get<{ success: boolean; data: WildcardWithHierarchy[] }>(
       '/wildcards',
       { params: { hierarchical: true } }
     );
@@ -154,7 +147,7 @@ export const wildcardApi = {
    * 루트 와일드카드만 조회
    */
   getRootWildcards: async () => {
-    const response = await api.get<{ success: boolean; data: Wildcard[] }>(
+    const response = await apiClient.get<{ success: boolean; data: Wildcard[] }>(
       '/wildcards',
       { params: { rootsOnly: true } }
     );
@@ -165,7 +158,7 @@ export const wildcardApi = {
    * 특정 와일드카드의 자식 조회
    */
   getWildcardChildren: async (parentId: number) => {
-    const response = await api.get<{ success: boolean; data: Wildcard[] }>(
+    const response = await apiClient.get<{ success: boolean; data: Wildcard[] }>(
       `/wildcards/${parentId}/children`
     );
     return response.data;
@@ -175,7 +168,7 @@ export const wildcardApi = {
    * 특정 와일드카드의 전체 경로 조회
    */
   getWildcardPath: async (id: number) => {
-    const response = await api.get<{ success: boolean; data: Wildcard[] }>(
+    const response = await apiClient.get<{ success: boolean; data: Wildcard[] }>(
       `/wildcards/${id}/path`
     );
     return response.data;
@@ -185,7 +178,7 @@ export const wildcardApi = {
    * 특정 와일드카드 조회
    */
   getWildcard: async (id: number) => {
-    const response = await api.get<{ success: boolean; data: WildcardWithItems }>(
+    const response = await apiClient.get<{ success: boolean; data: WildcardWithItems }>(
       `/wildcards/${id}`
     );
     return response.data;
@@ -195,7 +188,7 @@ export const wildcardApi = {
    * 와일드카드 생성
    */
   createWildcard: async (data: WildcardCreateData) => {
-    const response = await api.post<{
+    const response = await apiClient.post<{
       success: boolean;
       data: WildcardWithItems;
       warning?: string;
@@ -210,7 +203,7 @@ export const wildcardApi = {
    * 와일드카드 수정
    */
   updateWildcard: async (id: number, data: WildcardUpdateData) => {
-    const response = await api.put<{
+    const response = await apiClient.put<{
       success: boolean;
       data: WildcardWithItems;
       warning?: string;
@@ -227,7 +220,7 @@ export const wildcardApi = {
    * @param cascade true인 경우 모든 하위 와일드카드도 함께 삭제, false인 경우 자식들을 한 단계 위로 이동
    */
   deleteWildcard: async (id: number, cascade: boolean = false) => {
-    const response = await api.delete<{ success: boolean; message: string }>(
+    const response = await apiClient.delete<{ success: boolean; message: string }>(
       `/wildcards/${id}?cascade=${cascade}`
     );
     return response.data;
@@ -237,7 +230,7 @@ export const wildcardApi = {
    * 와일드카드 파싱 (프리뷰용)
    */
   parseWildcards: async (parseRequest: ParseRequest) => {
-    const response = await api.post<{ success: boolean; data: ParseResponse }>(
+    const response = await apiClient.post<{ success: boolean; data: ParseResponse }>(
       '/wildcards/parse',
       parseRequest
     );
@@ -248,7 +241,7 @@ export const wildcardApi = {
    * 와일드카드 통계
    */
   getStatistics: async () => {
-    const response = await api.get<{ success: boolean; data: WildcardStatistics }>(
+    const response = await apiClient.get<{ success: boolean; data: WildcardStatistics }>(
       '/wildcards/stats/summary'
     );
     return response.data;
@@ -258,7 +251,7 @@ export const wildcardApi = {
    * 순환 참조 검사
    */
   checkCircularReference: async (id: number) => {
-    const response = await api.get<{ success: boolean; data: CircularCheckResponse }>(
+    const response = await apiClient.get<{ success: boolean; data: CircularCheckResponse }>(
       `/wildcards/${id}/circular-check`
     );
     return response.data;
@@ -268,7 +261,7 @@ export const wildcardApi = {
    * LORA 폴더 스캔하여 와일드카드 자동 생성
    */
   scanLoraFolder: async (scanRequest: LoraScanRequest) => {
-    const response = await api.post<{ success: boolean; data: LoraScanResponse }>(
+    const response = await apiClient.post<{ success: boolean; data: LoraScanResponse }>(
       '/wildcards/scan-lora-folder',
       scanRequest
     );
@@ -279,7 +272,7 @@ export const wildcardApi = {
    * 마지막 LORA 스캔 로그 조회
    */
   getLastScanLog: async () => {
-    const response = await api.get<{ success: boolean; data: LoraScanLog | null }>(
+    const response = await apiClient.get<{ success: boolean; data: LoraScanLog | null }>(
       '/wildcards/last-scan-log'
     );
     return response.data;

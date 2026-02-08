@@ -1,6 +1,4 @@
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:1666';
+import apiClient from './api/apiClient';
 
 /**
  * Authentication status response
@@ -64,9 +62,7 @@ export const authApi = {
    * Check authentication status
    */
   async checkStatus(): Promise<AuthStatus> {
-    const response = await axios.get<AuthStatus>(`${API_BASE_URL}/api/auth/status`, {
-      withCredentials: true
-    });
+    const response = await apiClient.get<AuthStatus>('/api/auth/status');
     return response.data;
   },
 
@@ -74,10 +70,9 @@ export const authApi = {
    * Login with username and password
    */
   async login(username: string, password: string): Promise<LoginResponse> {
-    const response = await axios.post<LoginResponse>(
-      `${API_BASE_URL}/api/auth/login`,
-      { username, password },
-      { withCredentials: true }
+    const response = await apiClient.post<LoginResponse>(
+      '/api/auth/login',
+      { username, password }
     );
     return response.data;
   },
@@ -86,10 +81,9 @@ export const authApi = {
    * Logout
    */
   async logout(): Promise<LogoutResponse> {
-    const response = await axios.post<LogoutResponse>(
-      `${API_BASE_URL}/api/auth/logout`,
-      {},
-      { withCredentials: true }
+    const response = await apiClient.post<LogoutResponse>(
+      '/api/auth/logout',
+      {}
     );
     return response.data;
   },
@@ -98,10 +92,9 @@ export const authApi = {
    * Setup initial authentication credentials
    */
   async setup(username: string, password: string): Promise<SetupResponse> {
-    const response = await axios.post<SetupResponse>(
-      `${API_BASE_URL}/api/auth/setup`,
-      { username, password },
-      { withCredentials: true }
+    const response = await apiClient.post<SetupResponse>(
+      '/api/auth/setup',
+      { username, password }
     );
     return response.data;
   },
@@ -114,10 +107,9 @@ export const authApi = {
     newUsername: string,
     newPassword: string
   ): Promise<UpdateCredentialsResponse> {
-    const response = await axios.put<UpdateCredentialsResponse>(
-      `${API_BASE_URL}/api/auth/credentials`,
-      { currentPassword, newUsername, newPassword },
-      { withCredentials: true }
+    const response = await apiClient.put<UpdateCredentialsResponse>(
+      '/api/auth/credentials',
+      { currentPassword, newUsername, newPassword }
     );
     return response.data;
   },
@@ -127,8 +119,8 @@ export const authApi = {
    * Used for account recovery
    */
   async getDatabaseInfo(): Promise<DatabaseInfoResponse> {
-    const response = await axios.get<DatabaseInfoResponse>(
-      `${API_BASE_URL}/api/auth/database-info`
+    const response = await apiClient.get<DatabaseInfoResponse>(
+      '/api/auth/database-info'
     );
     return response.data;
   }

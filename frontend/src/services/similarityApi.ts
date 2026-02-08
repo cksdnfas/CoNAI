@@ -1,5 +1,4 @@
-import axios from 'axios';
-import { API_BASE_URL } from './api';
+import apiClient from './api/apiClient';
 import type { ImageRecord } from '../types/image';
 
 /**
@@ -69,13 +68,7 @@ export interface HashRebuildResult {
   errors?: Array<{ imageId: number; error: string }>;
 }
 
-const api = axios.create({
-  baseURL: `${API_BASE_URL}/api/images`,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  withCredentials: true,
-});
+// Using centralized apiClient - all similarity API calls will use /api/images prefix
 
 /**
  * 이미지 유사도 검색 API
@@ -89,8 +82,8 @@ export const similarityApi = {
     threshold: number = 5,
     includeMetadata: boolean = true
   ): Promise<SimilarImage[]> => {
-    const response = await api.get<{ success: boolean; data: { similar: SimilarImage[] } }>(
-      `/${imageId}/duplicates`,
+    const response = await apiClient.get<{ success: boolean; data: { similar: SimilarImage[] } }>(
+      `/api/images/${imageId}/duplicates`,
       {
         params: { threshold, includeMetadata }
       }
@@ -113,8 +106,8 @@ export const similarityApi = {
       sortOrder = 'DESC'
     } = options;
 
-    const response = await api.get<{ success: boolean; data: { similar: SimilarImage[] } }>(
-      `/${imageId}/similar`,
+    const response = await apiClient.get<{ success: boolean; data: { similar: SimilarImage[] } }>(
+      `/api/images/${imageId}/similar`,
       {
         params: { threshold, limit, includeColorSimilarity, sortBy, sortOrder }
       }
@@ -130,8 +123,8 @@ export const similarityApi = {
     threshold: number = 85,
     limit: number = 20
   ): Promise<SimilarImage[]> => {
-    const response = await api.get<{ success: boolean; data: { similar: SimilarImage[] } }>(
-      `/${imageId}/similar-color`,
+    const response = await apiClient.get<{ success: boolean; data: { similar: SimilarImage[] } }>(
+      `/api/images/${imageId}/similar-color`,
       {
         params: { threshold, limit }
       }
@@ -147,8 +140,8 @@ export const similarityApi = {
   ): Promise<DuplicateGroup[]> => {
     const { threshold = 5, minGroupSize = 2 } = options;
 
-    const response = await api.get<{ success: boolean; data: { groups: DuplicateGroup[] } }>(
-      '/duplicates/all',
+    const response = await apiClient.get<{ success: boolean; data: { groups: DuplicateGroup[] } }>(
+      '/api/images/duplicates/all',
       {
         params: { threshold, minGroupSize }
       }
@@ -160,8 +153,8 @@ export const similarityApi = {
    * 기존 이미지들의 해시 재생성 (배치 처리)
    */
   rebuildHashes: async (limit: number = 50): Promise<HashRebuildResult> => {
-    const response = await api.post<{ success: boolean; data: HashRebuildResult }>(
-      '/similarity/rebuild',
+    const response = await apiClient.post<{ success: boolean; data: HashRebuildResult }>(
+      '/api/images/similarity/rebuild',
       null,
       { params: { limit } }
     );
@@ -172,8 +165,8 @@ export const similarityApi = {
    * 유사도 검색 통계 조회
    */
   getStats: async (): Promise<SimilarityStats> => {
-    const response = await api.get<{ success: boolean; data: SimilarityStats }>(
-      '/similarity/stats'
+    const response = await apiClient.get<{ success: boolean; data: SimilarityStats }>(
+      '/api/images/similarity/stats'
     );
     return response.data.data;
   },

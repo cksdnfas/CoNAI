@@ -1,5 +1,4 @@
-import axios from 'axios';
-import { API_BASE_URL } from './api';
+import apiClient, { API_BASE_URL } from './api/apiClient';
 
 export type SupportedLanguage = 'ko' | 'en' | 'ja' | 'zh-CN' | 'zh-TW';
 
@@ -89,20 +88,14 @@ export interface DependencyCheckResult {
   };
 }
 
-const api = axios.create({
-  baseURL: `${API_BASE_URL}/api/settings`,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  withCredentials: true,
-});
+// Using centralized apiClient - all settings API calls will use /api/settings prefix
 
 export const settingsApi = {
   /**
    * Get current application settings
    */
   getSettings: async (): Promise<AppSettings> => {
-    const response = await api.get<{ success: boolean; data: AppSettings }>('/');
+    const response = await apiClient.get<{ success: boolean; data: AppSettings }>('/api/settings/');
     return response.data.data;
   },
 
@@ -110,8 +103,8 @@ export const settingsApi = {
    * Update general settings
    */
   updateGeneralSettings: async (settings: Partial<GeneralSettings>): Promise<AppSettings> => {
-    const response = await api.put<{ success: boolean; data: AppSettings; message: string }>(
-      '/general',
+    const response = await apiClient.put<{ success: boolean; data: AppSettings; message: string }>(
+      '/api/settings/general',
       settings
     );
     return response.data.data;
@@ -121,8 +114,8 @@ export const settingsApi = {
    * Update tagger settings
    */
   updateTaggerSettings: async (settings: Partial<TaggerSettings>): Promise<AppSettings> => {
-    const response = await api.put<{ success: boolean; data: AppSettings; message: string }>(
-      '/tagger',
+    const response = await apiClient.put<{ success: boolean; data: AppSettings; message: string }>(
+      '/api/settings/tagger',
       settings
     );
     return response.data.data;
@@ -132,7 +125,7 @@ export const settingsApi = {
    * Get list of available tagger models with download status
    */
   getModelsList: async (): Promise<TaggerModel[]> => {
-    const response = await api.get<{ success: boolean; data: TaggerModel[] }>('/tagger/models');
+    const response = await apiClient.get<{ success: boolean; data: TaggerModel[] }>('/api/settings/tagger/models');
     return response.data.data;
   },
 
@@ -140,8 +133,8 @@ export const settingsApi = {
    * Check Python dependencies
    */
   checkDependencies: async (): Promise<DependencyCheckResult> => {
-    const response = await api.post<{ success: boolean; data: DependencyCheckResult }>(
-      '/tagger/check-dependencies'
+    const response = await apiClient.post<{ success: boolean; data: DependencyCheckResult }>(
+      '/api/settings/tagger/check-dependencies'
     );
     return response.data.data;
   },
@@ -150,8 +143,8 @@ export const settingsApi = {
    * Download a tagger model
    */
   downloadModel: async (model: 'vit' | 'swinv2' | 'convnext'): Promise<{ downloaded: boolean; message: string }> => {
-    const response = await api.post<{ success: boolean; data: any; message: string }>(
-      '/tagger/download',
+    const response = await apiClient.post<{ success: boolean; data: any; message: string }>(
+      '/api/settings/tagger/download',
       { model }
     );
     return {
@@ -164,7 +157,7 @@ export const settingsApi = {
    * Get tagger daemon status
    */
   getTaggerStatus: async (): Promise<TaggerServerStatus> => {
-    const response = await api.get<{ success: boolean; data: TaggerServerStatus }>('/tagger/status');
+    const response = await apiClient.get<{ success: boolean; data: TaggerServerStatus }>('/api/settings/tagger/status');
     return response.data.data;
   },
 
@@ -172,22 +165,22 @@ export const settingsApi = {
    * Load model into memory
    */
   loadModel: async (model?: 'vit' | 'swinv2' | 'convnext'): Promise<void> => {
-    await api.post('/tagger/load-model', { model });
+    await apiClient.post('/api/settings/tagger/load-model', { model });
   },
 
   /**
    * Unload model from memory
    */
   unloadModel: async (): Promise<void> => {
-    await api.post('/tagger/unload-model');
+    await apiClient.post('/api/settings/tagger/unload-model');
   },
 
   /**
    * Update similarity settings
    */
   updateSimilaritySettings: async (settings: Partial<SimilaritySettings>): Promise<AppSettings> => {
-    const response = await api.put<{ success: boolean; data: AppSettings; message: string }>(
-      '/similarity',
+    const response = await apiClient.put<{ success: boolean; data: AppSettings; message: string }>(
+      '/api/settings/similarity',
       settings
     );
     return response.data.data;
@@ -197,8 +190,8 @@ export const settingsApi = {
    * Update metadata extraction settings
    */
   updateMetadataSettings: async (settings: Partial<MetadataExtractionSettings>): Promise<AppSettings> => {
-    const response = await api.put<{ success: boolean; data: AppSettings; message: string }>(
-      '/metadata',
+    const response = await apiClient.put<{ success: boolean; data: AppSettings; message: string }>(
+      '/api/settings/metadata',
       settings
     );
     return response.data.data;
@@ -208,21 +201,15 @@ export const settingsApi = {
    * Update thumbnail settings
    */
   updateThumbnailSettings: async (settings: Partial<ThumbnailSettings>): Promise<AppSettings> => {
-    const response = await api.put<{ success: boolean; data: AppSettings; message: string }>(
-      '/thumbnail',
+    const response = await apiClient.put<{ success: boolean; data: AppSettings; message: string }>(
+      '/api/settings/thumbnail',
       settings
     );
     return response.data.data;
   },
 };
 
-const imageApi = axios.create({
-  baseURL: '/api/images',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  withCredentials: true,
-});
+// Using centralized apiClient for images API
 
 export interface BatchTagResult {
   total: number;
@@ -241,8 +228,8 @@ export const taggerBatchApi = {
    * Tag unprocessed images (auto_tags IS NULL)
    */
   tagUnprocessed: async (limit?: number): Promise<BatchTagResult> => {
-    const response = await imageApi.post<{ success: boolean; data: BatchTagResult }>(
-      '/batch-tag-unprocessed',
+    const response = await apiClient.post<{ success: boolean; data: BatchTagResult }>(
+      '/api/images/batch-tag-unprocessed',
       { limit }
     );
     return response.data.data;
@@ -252,8 +239,8 @@ export const taggerBatchApi = {
    * Tag all images (force retag)
    */
   tagAll: async (limit?: number, force?: boolean): Promise<BatchTagResult> => {
-    const response = await imageApi.post<{ success: boolean; data: BatchTagResult }>(
-      '/batch-tag-all',
+    const response = await apiClient.post<{ success: boolean; data: BatchTagResult }>(
+      '/api/images/batch-tag-all',
       { limit, force }
     );
     return response.data.data;
@@ -263,8 +250,8 @@ export const taggerBatchApi = {
    * Test tagging on a single image
    */
   testImage: async (imageId: string): Promise<any> => {
-    const response = await imageApi.post<{ success: boolean; data: any }>(
-      `/${imageId}/tag`
+    const response = await apiClient.post<{ success: boolean; data: any }>(
+      `/api/images/${imageId}/tag`
     );
     return response.data.data;
   },
@@ -273,8 +260,8 @@ export const taggerBatchApi = {
    * Get untagged images count
    */
   getUntaggedCount: async (): Promise<number> => {
-    const response = await imageApi.get<{ success: boolean; data: { count: number } }>(
-      '/untagged-count'
+    const response = await apiClient.get<{ success: boolean; data: { count: number } }>(
+      '/api/images/untagged-count'
     );
     return response.data.data.count;
   },
@@ -283,20 +270,14 @@ export const taggerBatchApi = {
    * Reset all auto tags (set to NULL)
    */
   resetAutoTags: async (): Promise<{ changes: number; message: string }> => {
-    const response = await imageApi.post<{ success: boolean; data: { changes: number; message: string } }>(
-      '/reset-auto-tags'
+    const response = await apiClient.post<{ success: boolean; data: { changes: number; message: string } }>(
+      '/api/images/reset-auto-tags'
     );
     return response.data.data;
   },
 };
 
-const thumbnailApiClient = axios.create({
-  baseURL: `${API_BASE_URL}/api/thumbnails`,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  withCredentials: true,
-});
+// Using centralized apiClient for thumbnails API
 
 export interface ThumbnailRegenerationProgress {
   totalFiles: number;
@@ -319,14 +300,14 @@ export const thumbnailApi = {
    * Start thumbnail regeneration
    */
   regenerate: async (): Promise<void> => {
-    await thumbnailApiClient.post('/regenerate');
+    await apiClient.post('/api/thumbnails/regenerate');
   },
 
   /**
    * Get regeneration progress
    */
   getProgress: async (): Promise<ThumbnailRegenerationProgress> => {
-    const response = await thumbnailApiClient.get<{ success: boolean; data: ThumbnailRegenerationProgress }>('/progress');
+    const response = await apiClient.get<{ success: boolean; data: ThumbnailRegenerationProgress }>('/api/thumbnails/progress');
     return response.data.data;
   },
 
@@ -334,7 +315,7 @@ export const thumbnailApi = {
    * Get thumbnail statistics
    */
   getStats: async (): Promise<ThumbnailStats> => {
-    const response = await thumbnailApiClient.get<{ success: boolean; data: ThumbnailStats }>('/stats');
+    const response = await apiClient.get<{ success: boolean; data: ThumbnailStats }>('/api/thumbnails/stats');
     return response.data.data;
   },
 };

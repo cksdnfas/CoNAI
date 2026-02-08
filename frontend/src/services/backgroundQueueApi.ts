@@ -1,12 +1,11 @@
-import axios from 'axios';
+import apiClient from './api/apiClient';
 import type { BackgroundQueueStatus } from '../types/folder';
-import { API_BASE_URL } from './api/apiClient';
 
 /**
  * 백그라운드 큐 상태 조회
  */
 export const getQueueStatus = async (): Promise<BackgroundQueueStatus> => {
-  const response = await axios.get(`${API_BASE_URL}/api/background-queue/status`, { withCredentials: true });
+  const response = await apiClient.get('/api/background-queue/status');
   return response.data.data;
 };
 
@@ -14,7 +13,7 @@ export const getQueueStatus = async (): Promise<BackgroundQueueStatus> => {
  * 백그라운드 큐 초기화
  */
 export const clearQueue = async (): Promise<{ message: string }> => {
-  const response = await axios.post(`${API_BASE_URL}/api/background-queue/clear`, null, { withCredentials: true });
+  const response = await apiClient.post('/api/background-queue/clear', null);
   return response.data.data;
 };
 
@@ -22,7 +21,7 @@ export const clearQueue = async (): Promise<{ message: string }> => {
  * 자동 태깅 수동 트리거
  */
 export const triggerAutoTag = async (): Promise<{ message: string }> => {
-  const response = await axios.post(`${API_BASE_URL}/api/background-queue/trigger-auto-tag`, null, { withCredentials: true });
+  const response = await apiClient.post('/api/background-queue/trigger-auto-tag', null);
   return response.data.data;
 };
 
@@ -35,7 +34,7 @@ export const getHashStats = async (): Promise<{
   imagesWithHash: number;
   completionPercentage: number;
 }> => {
-  const response = await axios.get(`${API_BASE_URL}/api/images/similarity/stats`, { withCredentials: true });
+  const response = await apiClient.get('/api/images/similarity/stats');
   return response.data.data;
 };
 
@@ -49,7 +48,7 @@ export const rebuildHashes = async (): Promise<{
   total: number;
   remaining: number;
 }> => {
-  const response = await axios.post(`${API_BASE_URL}/api/images/similarity/rebuild-hashes`, null, { withCredentials: true });
+  const response = await apiClient.post('/api/images/similarity/rebuild-hashes', null);
   return response.data.data;
 };
 

@@ -1,6 +1,4 @@
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:1666';
+import apiClient from './api/apiClient';
 
 /**
  * Provider type classification
@@ -77,9 +75,8 @@ export const externalApiApi = {
    * Get all external API providers
    */
   async getProviders(): Promise<ExternalApiProvider[]> {
-    const response = await axios.get<ApiResponse<ExternalApiProvider[]>>(
-      `${API_BASE_URL}/api/external-api/providers`,
-      { withCredentials: true }
+    const response = await apiClient.get<ApiResponse<ExternalApiProvider[]>>(
+      '/api/external-api/providers'
     );
 
     if (!response.data.success) {
@@ -93,9 +90,8 @@ export const externalApiApi = {
    * Get a specific provider by name
    */
   async getProvider(name: string): Promise<ExternalApiProvider> {
-    const response = await axios.get<ApiResponse<ExternalApiProvider>>(
-      `${API_BASE_URL}/api/external-api/providers/${encodeURIComponent(name)}`,
-      { withCredentials: true }
+    const response = await apiClient.get<ApiResponse<ExternalApiProvider>>(
+      `/api/external-api/providers/${encodeURIComponent(name)}`
     );
 
     if (!response.data.success || !response.data.data) {
@@ -109,10 +105,9 @@ export const externalApiApi = {
    * Create a new provider
    */
   async createProvider(input: CreateExternalApiProviderInput): Promise<ExternalApiProvider> {
-    const response = await axios.post<ApiResponse<ExternalApiProvider>>(
-      `${API_BASE_URL}/api/external-api/providers`,
-      input,
-      { withCredentials: true }
+    const response = await apiClient.post<ApiResponse<ExternalApiProvider>>(
+      '/api/external-api/providers',
+      input
     );
 
     if (!response.data.success || !response.data.data) {
@@ -129,10 +124,9 @@ export const externalApiApi = {
     name: string,
     input: UpdateExternalApiProviderInput
   ): Promise<ExternalApiProvider> {
-    const response = await axios.put<ApiResponse<ExternalApiProvider>>(
-      `${API_BASE_URL}/api/external-api/providers/${encodeURIComponent(name)}`,
-      input,
-      { withCredentials: true }
+    const response = await apiClient.put<ApiResponse<ExternalApiProvider>>(
+      `/api/external-api/providers/${encodeURIComponent(name)}`,
+      input
     );
 
     if (!response.data.success || !response.data.data) {
@@ -146,9 +140,8 @@ export const externalApiApi = {
    * Delete a provider
    */
   async deleteProvider(name: string): Promise<void> {
-    const response = await axios.delete<ApiResponse<void>>(
-      `${API_BASE_URL}/api/external-api/providers/${encodeURIComponent(name)}`,
-      { withCredentials: true }
+    const response = await apiClient.delete<ApiResponse<void>>(
+      `/api/external-api/providers/${encodeURIComponent(name)}`
     );
 
     if (!response.data.success) {
@@ -160,10 +153,9 @@ export const externalApiApi = {
    * Toggle provider enabled status
    */
   async toggleProvider(name: string, isEnabled: boolean): Promise<ExternalApiProvider> {
-    const response = await axios.patch<ApiResponse<ExternalApiProvider>>(
-      `${API_BASE_URL}/api/external-api/providers/${encodeURIComponent(name)}/toggle`,
-      { is_enabled: isEnabled },
-      { withCredentials: true }
+    const response = await apiClient.patch<ApiResponse<ExternalApiProvider>>(
+      `/api/external-api/providers/${encodeURIComponent(name)}/toggle`,
+      { is_enabled: isEnabled }
     );
 
     if (!response.data.success || !response.data.data) {
@@ -177,10 +169,9 @@ export const externalApiApi = {
    * Test API connection
    */
   async testConnection(name: string): Promise<TestConnectionResult> {
-    const response = await axios.post<TestConnectionResult>(
-      `${API_BASE_URL}/api/external-api/providers/${encodeURIComponent(name)}/test`,
-      {},
-      { withCredentials: true }
+    const response = await apiClient.post<TestConnectionResult>(
+      `/api/external-api/providers/${encodeURIComponent(name)}/test`,
+      {}
     );
 
     return response.data;

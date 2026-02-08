@@ -1,5 +1,4 @@
-import axios from 'axios';
-import { API_BASE_URL } from './api/apiClient';
+import apiClient, { API_BASE_URL } from './api/apiClient';
 
 export interface EditOptions {
   crop?: {
@@ -70,10 +69,9 @@ export const imageEditorApi = {
     imageId: number,
     editOptions: EditOptions
   ): Promise<TempImageResponse> {
-    const response = await axios.post<TempImageResponse>(
-      `${API_BASE_URL}/api/image-editor/${imageId}/temp`,
-      editOptions,
-      { withCredentials: true }
+    const response = await apiClient.post<TempImageResponse>(
+      `/api/image-editor/${imageId}/temp`,
+      editOptions
     );
     return response.data;
   },
@@ -86,10 +84,9 @@ export const imageEditorApi = {
     imageData: string,
     maskData?: string
   ): Promise<SaveImageResponse> {
-    const response = await axios.post<SaveImageResponse>(
-      `${API_BASE_URL}/api/image-editor/${imageId}/save`,
-      { imageData, maskData },
-      { withCredentials: true }
+    const response = await apiClient.post<SaveImageResponse>(
+      `/api/image-editor/${imageId}/save`,
+      { imageData, maskData }
     );
     return response.data;
   },
@@ -98,9 +95,8 @@ export const imageEditorApi = {
    * Delete temporary file
    */
   async deleteTempFile(tempId: string): Promise<{ success: boolean; message: string }> {
-    const response = await axios.delete(
-      `${API_BASE_URL}/api/image-editor/temp/${tempId}`,
-      { withCredentials: true }
+    const response = await apiClient.delete(
+      `/api/image-editor/temp/${tempId}`
     );
     return response.data;
   },
@@ -126,10 +122,10 @@ export const imageEditorApi = {
     width: number,
     height: number
   ): Promise<{ success: boolean; data?: { mask: string; width: number; height: number } }> {
-    const response = await axios.post(`${API_BASE_URL}/api/image-editor/mask/blank`, {
+    const response = await apiClient.post('/api/image-editor/mask/blank', {
       width,
       height
-    }, { withCredentials: true });
+    });
     return response.data;
   },
 
@@ -137,7 +133,7 @@ export const imageEditorApi = {
    * Get temp files stats (for debugging)
    */
   async getTempFilesStats(): Promise<any> {
-    const response = await axios.get(`${API_BASE_URL}/api/image-editor/temp`, { withCredentials: true });
+    const response = await apiClient.get('/api/image-editor/temp');
     return response.data;
   },
 
@@ -145,9 +141,8 @@ export const imageEditorApi = {
    * Get all canvas images (saved edited images)
    */
   async getCanvasImages(): Promise<CanvasImagesResponse> {
-    const response = await axios.get<CanvasImagesResponse>(
-      `${API_BASE_URL}/api/image-editor/canvas`,
-      { withCredentials: true }
+    const response = await apiClient.get<CanvasImagesResponse>(
+      '/api/image-editor/canvas'
     );
     return response.data;
   },
@@ -156,9 +151,8 @@ export const imageEditorApi = {
    * Delete a canvas image
    */
   async deleteCanvasImage(filename: string): Promise<{ success: boolean; message?: string; error?: string }> {
-    const response = await axios.delete(
-      `${API_BASE_URL}/api/image-editor/canvas/${encodeURIComponent(filename)}`,
-      { withCredentials: true }
+    const response = await apiClient.delete(
+      `/api/image-editor/canvas/${encodeURIComponent(filename)}`
     );
     return response.data;
   }

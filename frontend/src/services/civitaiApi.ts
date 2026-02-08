@@ -1,6 +1,4 @@
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:1666';
+import apiClient from './api/apiClient';
 
 // Types
 export interface CivitaiSettings {
@@ -64,8 +62,8 @@ interface ApiResponse<T> {
 export const civitaiApi = {
   // Settings
   async getSettings(): Promise<CivitaiSettings> {
-    const response = await axios.get<ApiResponse<CivitaiSettings>>(
-      `${API_BASE_URL}/api/civitai/settings`
+    const response = await apiClient.get<ApiResponse<CivitaiSettings>>(
+      '/api/civitai/settings'
     );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Failed to get settings');
@@ -74,8 +72,8 @@ export const civitaiApi = {
   },
 
   async updateSettings(settings: Partial<Pick<CivitaiSettings, 'enabled' | 'apiCallInterval'>>): Promise<CivitaiSettings> {
-    const response = await axios.put<ApiResponse<CivitaiSettings>>(
-      `${API_BASE_URL}/api/civitai/settings`,
+    const response = await apiClient.put<ApiResponse<CivitaiSettings>>(
+      '/api/civitai/settings',
       settings
     );
     if (!response.data.success || !response.data.data) {
@@ -86,8 +84,8 @@ export const civitaiApi = {
 
   // Statistics
   async getStats(): Promise<CivitaiStats> {
-    const response = await axios.get<ApiResponse<CivitaiStats>>(
-      `${API_BASE_URL}/api/civitai/stats`
+    const response = await apiClient.get<ApiResponse<CivitaiStats>>(
+      '/api/civitai/stats'
     );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Failed to get stats');
@@ -96,8 +94,8 @@ export const civitaiApi = {
   },
 
   async resetStats(): Promise<void> {
-    const response = await axios.post<ApiResponse<void>>(
-      `${API_BASE_URL}/api/civitai/stats/reset`
+    const response = await apiClient.post<ApiResponse<void>>(
+      '/api/civitai/stats/reset'
     );
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to reset stats');
@@ -106,8 +104,8 @@ export const civitaiApi = {
 
   // Models
   async getModels(limit = 100, offset = 0): Promise<ModelInfo[]> {
-    const response = await axios.get<ApiResponse<ModelInfo[]>>(
-      `${API_BASE_URL}/api/civitai/models`,
+    const response = await apiClient.get<ApiResponse<ModelInfo[]>>(
+      '/api/civitai/models',
       { params: { limit, offset } }
     );
     if (!response.data.success || !response.data.data) {
@@ -117,8 +115,8 @@ export const civitaiApi = {
   },
 
   async getModelByHash(hash: string): Promise<ModelInfo> {
-    const response = await axios.get<ApiResponse<ModelInfo>>(
-      `${API_BASE_URL}/api/civitai/models/${hash}`
+    const response = await apiClient.get<ApiResponse<ModelInfo>>(
+      `/api/civitai/models/${hash}`
     );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Failed to get model');
@@ -127,8 +125,8 @@ export const civitaiApi = {
   },
 
   async getImageModels(compositeHash: string): Promise<ImageModelInfo[]> {
-    const response = await axios.get<ApiResponse<ImageModelInfo[]>>(
-      `${API_BASE_URL}/api/civitai/images/${compositeHash}/models`
+    const response = await apiClient.get<ApiResponse<ImageModelInfo[]>>(
+      `/api/civitai/images/${compositeHash}/models`
     );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Failed to get image models');
@@ -138,8 +136,8 @@ export const civitaiApi = {
 
   // Manual lookup
   async lookupModel(hash: string): Promise<ModelInfo> {
-    const response = await axios.post<ApiResponse<ModelInfo>>(
-      `${API_BASE_URL}/api/civitai/lookup/${hash}`
+    const response = await apiClient.post<ApiResponse<ModelInfo>>(
+      `/api/civitai/lookup/${hash}`
     );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Model not found on Civitai');
@@ -149,8 +147,8 @@ export const civitaiApi = {
 
   // Reset failed
   async resetFailed(): Promise<string> {
-    const response = await axios.post<ApiResponse<void>>(
-      `${API_BASE_URL}/api/civitai/reset-failed`
+    const response = await apiClient.post<ApiResponse<void>>(
+      '/api/civitai/reset-failed'
     );
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to reset');
@@ -160,8 +158,8 @@ export const civitaiApi = {
 
   // Clear cache
   async clearModelCache(): Promise<string> {
-    const response = await axios.delete<ApiResponse<void>>(
-      `${API_BASE_URL}/api/civitai/models`
+    const response = await apiClient.delete<ApiResponse<void>>(
+      '/api/civitai/models'
     );
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to clear cache');
@@ -177,8 +175,8 @@ export const civitaiApi = {
     description?: string;
     tags?: string[];
   }): Promise<IntentUrlResult> {
-    const response = await axios.post<ApiResponse<IntentUrlResult>>(
-      `${API_BASE_URL}/api/civitai/create-intent`,
+    const response = await apiClient.post<ApiResponse<IntentUrlResult>>(
+      '/api/civitai/create-intent',
       params
     );
     if (!response.data.success || !response.data.data) {
@@ -189,8 +187,8 @@ export const civitaiApi = {
 
   // Cleanup
   async cleanupTempUrls(): Promise<string> {
-    const response = await axios.post<ApiResponse<void>>(
-      `${API_BASE_URL}/api/civitai/cleanup-temp-urls`
+    const response = await apiClient.post<ApiResponse<void>>(
+      '/api/civitai/cleanup-temp-urls'
     );
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to cleanup');
@@ -200,8 +198,8 @@ export const civitaiApi = {
 
   // Rescan
   async startRescan(): Promise<{ message: string; total: number }> {
-    const response = await axios.post<ApiResponse<void> & { total?: number }>(
-      `${API_BASE_URL}/api/civitai/rescan-all`
+    const response = await apiClient.post<ApiResponse<void> & { total?: number }>(
+      '/api/civitai/rescan-all'
     );
     if (!response.data.success) {
       const error = response.data as any;
@@ -221,14 +219,14 @@ export const civitaiApi = {
     percentage: number;
     startedAt: string | null;
   }> {
-    const response = await axios.get<ApiResponse<{
+    const response = await apiClient.get<ApiResponse<{
       isRunning: boolean;
       total: number;
       processed: number;
       added: number;
       percentage: number;
       startedAt: string | null;
-    }>>(`${API_BASE_URL}/api/civitai/rescan-progress`);
+    }>>('/api/civitai/rescan-progress');
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Failed to get rescan progress');
     }
@@ -236,8 +234,8 @@ export const civitaiApi = {
   },
 
   async getUncheckedCount(): Promise<number> {
-    const response = await axios.get<ApiResponse<{ uncheckedCount: number }>>(
-      `${API_BASE_URL}/api/civitai/unchecked-count`
+    const response = await apiClient.get<ApiResponse<{ uncheckedCount: number }>>(
+      '/api/civitai/unchecked-count'
     );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Failed to get unchecked count');
