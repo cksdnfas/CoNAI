@@ -370,34 +370,77 @@ export class WildcardModel {
 
   /**
    * 특정 와일드카드의 전체 경로 조회 (루트부터 현재까지)
+   * CTE 재귀 쿼리로 O(1) 성능 - N+1 문제 해결
    */
   static getFullPath(wildcardId: number): Wildcard[] {
-    const path: Wildcard[] = [];
-    let currentId: number | null = wildcardId;
+    const db = getUserSettingsDb();
 
-    while (currentId !== null) {
-      const wildcard = WildcardModel.findById(currentId);
-      if (!wildcard) break;
-      path.unshift(wildcard);
-      currentId = wildcard.parent_id;
-    }
+    const query = `
+      WITH RECURSIVE ancestor_path AS (
+        -- Base case: 시작 노드 (현재 와일드카드)
+        SELECT
+          id, name, description, parent_id, include_children,
+          only_children, type, chain_option, created_date, updated_date,
+          0 as depth
+        FROM wildcards
+        WHERE id = ?
 
-    return path;
+        UNION ALL
+
+        -- Recursive case: 부모 노드들
+        SELECT
+          w.id, w.name, w.description, w.parent_id, w.include_children,
+          w.only_children, w.type, w.chain_option, w.created_date, w.updated_date,
+          ap.depth + 1
+        FROM wildcards w
+        INNER JOIN ancestor_path ap ON w.id = ap.parent_id
+      )
+      SELECT
+        id, name, description, parent_id, include_children,
+        only_children, type, chain_option, created_date, updated_date
+      FROM ancestor_path
+      ORDER BY depth DESC
+    `;
+
+    return db.prepare(query).all(wildcardId) as Wildcard[];
   }
 
   /**
    * 모든 자식 와일드카드 재귀 조회 (자기 자신 미포함)
+   * CTE 재귀 쿼리로 O(1) 성능 - N+1 문제 해결
    */
   static getAllDescendants(wildcardId: number): Wildcard[] {
-    const descendants: Wildcard[] = [];
-    const directChildren = WildcardModel.findByParentId(wildcardId);
+    const db = getUserSettingsDb();
 
-    for (const child of directChildren) {
-      descendants.push(child);
-      descendants.push(...WildcardModel.getAllDescendants(child.id));
-    }
+    const query = `
+      WITH RECURSIVE descendants AS (
+        -- Base case: 시작 노드 (현재 와일드카드)
+        SELECT
+          id, name, description, parent_id, include_children,
+          only_children, type, chain_option, created_date, updated_date,
+          0 as depth
+        FROM wildcards
+        WHERE id = ?
 
-    return descendants;
+        UNION ALL
+
+        -- Recursive case: 자식 노드들
+        SELECT
+          w.id, w.name, w.description, w.parent_id, w.include_children,
+          w.only_children, w.type, w.chain_option, w.created_date, w.updated_date,
+          d.depth + 1
+        FROM wildcards w
+        INNER JOIN descendants d ON w.parent_id = d.id
+      )
+      SELECT
+        id, name, description, parent_id, include_children,
+        only_children, type, chain_option, created_date, updated_date
+      FROM descendants
+      WHERE id != ?
+      ORDER BY depth ASC
+    `;
+
+    return db.prepare(query).all(wildcardId, wildcardId) as Wildcard[];
   }
 
   /**

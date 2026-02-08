@@ -137,25 +137,30 @@ export class AutoFolderGroupModel {
 
   /**
    * 브레드크럼 경로 조회 (현재 그룹에서 루트까지)
+   * CTE 재귀 쿼리로 O(1) 성능 - N+1 문제 해결
    */
   static getBreadcrumbPath(groupId: number): Array<{ id: number; name: string; folder_path: string }> {
-    const path: Array<{ id: number; name: string; folder_path: string }> = [];
-    let currentId: number | null = groupId;
+    const query = `
+      WITH RECURSIVE ancestor_path AS (
+        -- Base case: 시작 노드 (현재 그룹)
+        SELECT id, display_name, folder_path, parent_id, 0 as depth
+        FROM auto_folder_groups
+        WHERE id = ?
 
-    while (currentId !== null) {
-      const group = this.findById(currentId);
-      if (!group) break;
+        UNION ALL
 
-      path.unshift({
-        id: group.id,
-        name: group.display_name,
-        folder_path: group.folder_path
-      });
+        -- Recursive case: 부모 노드들
+        SELECT g.id, g.display_name, g.folder_path, g.parent_id, ap.depth + 1
+        FROM auto_folder_groups g
+        INNER JOIN ancestor_path ap ON g.id = ap.parent_id
+      )
+      SELECT id, display_name as name, folder_path
+      FROM ancestor_path
+      ORDER BY depth DESC
+    `;
 
-      currentId = group.parent_id;
-    }
-
-    return path;
+    const rows = db.prepare(query).all(groupId) as Array<{ id: number; name: string; folder_path: string }>;
+    return rows;
   }
 }
 
