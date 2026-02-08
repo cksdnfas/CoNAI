@@ -106,22 +106,22 @@ export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image }) => {
                 borderRadius: 1,
                 bgcolor: (theme) =>
                   theme.palette.mode === 'dark'
-                    ? 'rgba(255, 255, 255, 0.03)'
-                    : 'rgba(0, 0, 0, 0.02)',
+                    ? 'rgba(255, 255, 255, 0.04)'
+                    : 'rgba(0, 0, 0, 0.03)',
                 border: (theme) =>
                   theme.palette.mode === 'dark'
-                    ? '1px solid rgba(255, 255, 255, 0.08)'
-                    : '1px solid rgba(0, 0, 0, 0.08)',
+                    ? '1px solid rgba(255, 255, 255, 0.12)'
+                    : '1px solid rgba(0, 0, 0, 0.12)',
                 transition: 'all 0.15s ease-in-out',
                 '&:hover': {
                   bgcolor: (theme) =>
                     theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.05)'
-                      : 'rgba(0, 0, 0, 0.04)',
+                      ? 'rgba(255, 255, 255, 0.06)'
+                      : 'rgba(0, 0, 0, 0.05)',
                   borderColor: (theme) =>
                     theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.15)'
-                      : 'rgba(0, 0, 0, 0.15)',
+                      ? 'rgba(255, 255, 255, 0.2)'
+                      : 'rgba(0, 0, 0, 0.2)',
                 },
               }}
             >

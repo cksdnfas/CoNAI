@@ -143,8 +143,8 @@ export const FileInfoSection: React.FC<FileInfoSectionProps> = ({ image }) => {
                       : 'rgba(0, 0, 0, 0.04)',
                   border: (theme) =>
                     theme.palette.mode === 'dark'
-                      ? '1px solid rgba(255, 255, 255, 0.12)'
-                      : '1px solid rgba(0, 0, 0, 0.12)',
+                      ? '1px solid rgba(255, 255, 255, 0.15)'
+                      : '1px solid rgba(0, 0, 0, 0.15)',
                   cursor: isMobile ? 'pointer' : 'default',
                   transition: 'all 0.2s ease-in-out',
                   '&:hover': {
@@ -152,6 +152,10 @@ export const FileInfoSection: React.FC<FileInfoSectionProps> = ({ image }) => {
                       theme.palette.mode === 'dark'
                         ? 'rgba(255, 255, 255, 0.08)'
                         : 'rgba(0, 0, 0, 0.08)',
+                    borderColor: (theme) =>
+                      theme.palette.mode === 'dark'
+                        ? 'rgba(255, 255, 255, 0.25)'
+                        : 'rgba(0, 0, 0, 0.25)',
                     transform: 'translateY(-1px)',
                     boxShadow: (theme) =>
                       theme.palette.mode === 'dark'
