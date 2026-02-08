@@ -9,6 +9,7 @@
     "title": "Image Information"
   },
   "copyHash": "Copy hash",
+  "copyHashButton": "Copy Hash",
   "hashGenerating": "Waiting for hash generation...",
   "hashCopied": "Hash copied",
   "viewThumbnail": "View Thumbnail (Fast Loading)",

@@ -96,6 +96,7 @@
     "title": "圖像資訊"
   },
   "copyHash": "複製雜湊值",
+  "copyHashButton": "複製雜湊值",
   "hashGenerating": "等待生成雜湊值...",
   "hashCopied": "雜湊值已複製",
   "viewThumbnail": "檢視縮圖（快速載入）",

@@ -9,6 +9,7 @@
     "title": "이미지 정보"
   },
   "copyHash": "해시 복사",
+  "copyHashButton": "해시 복사",
   "hashGenerating": "해시 생성 대기 중...",
   "hashCopied": "해시가 복사되었습니다",
   "viewThumbnail": "썸네일 보기 (빠른 로딩)",

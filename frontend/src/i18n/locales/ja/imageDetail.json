@@ -96,6 +96,7 @@
     "title": "画像情報"
   },
   "copyHash": "ハッシュをコピー",
+  "copyHashButton": "ハッシュをコピー",
   "hashGenerating": "ハッシュ生成待機中...",
   "hashCopied": "ハッシュをコピーしました",
   "viewThumbnail": "サムネイルを表示（高速読み込み）",

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Typography, IconButton, Tooltip, Snackbar, Alert } from '@mui/material';
+import { Box, Typography, IconButton, Tooltip, Snackbar, Alert, Button } from '@mui/material';
 import { ContentCopy as CopyIcon, HourglassEmpty as WaitingIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../../types/image';
@@ -59,61 +59,74 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
           {t('imageDetail:info.title')}
         </Typography>
 
-        {/* Hash display section */}
-        <Box
-          sx={{
-            mb: 2,
-            p: 1.5,
-            bgcolor: 'action.hover',
-            borderRadius: 1,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-          }}
-        >
+        {/* Hash copy button */}
+        <Box sx={{ mb: 2 }}>
           {image.composite_hash ? (
-            <>
-              <Tooltip title={t('common:clickToCopy')}>
-                <Box
-                  onClick={handleCopyHash}
-                  sx={{
-                    flex: 1,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    cursor: 'pointer',
-                    fontFamily: 'monospace',
-                    fontSize: '0.75rem',
-                    color: 'text.secondary',
-                    '&:hover': {
-                      color: 'primary.main',
-                    },
-                  }}
-                >
-                  {image.composite_hash}
-                </Box>
-              </Tooltip>
-              <Tooltip title={t('imageDetail:copyHash')}>
-                <IconButton
-                  size="small"
-                  onClick={handleCopyHash}
-                  sx={{ flexShrink: 0 }}
-                >
-                  <CopyIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </>
-          ) : (
-            <>
-              <WaitingIcon fontSize="small" color="disabled" />
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<CopyIcon />}
+              onClick={handleCopyHash}
+              sx={{
+                justifyContent: 'flex-start',
+                py: 1,
+                px: 2,
+                borderColor: (theme) =>
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.23)'
+                    : 'rgba(0, 0, 0, 0.23)',
+                bgcolor: (theme) =>
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.05)'
+                    : 'rgba(0, 0, 0, 0.02)',
+                color: 'text.primary',
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  bgcolor: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? 'rgba(255, 255, 255, 0.08)'
+                      : 'rgba(0, 0, 0, 0.04)',
+                  borderColor: 'primary.main',
+                  transform: 'translateY(-1px)',
+                  boxShadow: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? '0 2px 8px rgba(0, 0, 0, 0.4)'
+                      : '0 2px 8px rgba(0, 0, 0, 0.15)',
+                },
+              }}
+            >
               <Typography
                 variant="body2"
-                color="text.secondary"
-                sx={{ fontStyle: 'italic' }}
+                sx={{
+                  fontWeight: 500,
+                }}
+              >
+                {t('imageDetail:copyHashButton')}
+              </Typography>
+            </Button>
+          ) : (
+            <Button
+              fullWidth
+              variant="outlined"
+              disabled
+              startIcon={<WaitingIcon />}
+              sx={{
+                justifyContent: 'flex-start',
+                py: 1,
+                px: 2,
+                borderColor: 'divider',
+                color: 'text.disabled',
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  fontStyle: 'italic',
+                }}
               >
                 {t('imageDetail:hashGenerating')}
               </Typography>
-            </>
+            </Button>
           )}
         </Box>
 

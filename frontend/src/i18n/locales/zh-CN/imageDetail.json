@@ -96,6 +96,7 @@
     "title": "图像信息"
   },
   "copyHash": "复制哈希值",
+  "copyHashButton": "复制哈希值",
   "hashGenerating": "等待生成哈希值...",
   "hashCopied": "哈希值已复制",
   "viewThumbnail": "查看缩略图（快速加载）",
