@@ -4,6 +4,7 @@ import { ContentCopy as CopyIcon, HourglassEmpty as WaitingIcon } from '@mui/ico
 import { useTranslation } from 'react-i18next';
 import type { ImageRecord } from '../../../types/image';
 import PromptDisplay from '../../PromptDisplay';
+import type { NaiCharacterPrompt } from '../../PromptDisplay';
 import { FileInfoSection } from './FileInfoSection';
 import { GroupInfoSection } from './GroupInfoSection';
 import { AIInfoSection } from './AIInfoSection';
@@ -36,9 +37,18 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
   const hasPrompts = image.ai_metadata &&
                      (image.ai_metadata.prompts.prompt || image.ai_metadata.prompts.negative_prompt);
 
+  // NAI 캐릭터 프롬프트 추출
+  const rawNai = image.ai_metadata?.raw_nai_parameters;
+  const characterPrompts: NaiCharacterPrompt[] | undefined = React.useMemo(() => {
+    const charCaptions = rawNai?.v4_prompt?.caption?.char_captions;
+    if (!Array.isArray(charCaptions) || charCaptions.length === 0) return undefined;
+    return charCaptions.filter((cp: any) => cp?.char_caption?.trim());
+  }, [rawNai]);
+
   // auto_tags가 있는 경우에도 프롬프트 섹션 표시
   const hasAutoTags = image.auto_tags && Object.keys(image.auto_tags).length > 0;
-  const shouldShowPromptSection = hasPrompts || isTaggerEnabled || hasAutoTags;
+  const hasCharacterPrompts = characterPrompts && characterPrompts.length > 0;
+  const shouldShowPromptSection = hasPrompts || isTaggerEnabled || hasAutoTags || hasCharacterPrompts;
 
   // Handle hash copy
   const handleCopyHash = async () => {
@@ -77,8 +87,8 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
             : 'background.paper'
       }}
     >
-      {/* Top info section - scrollable */}
-      <Box sx={{ flexShrink: 0, overflowY: 'auto', overflowX: 'visible', mb: 2 }}>
+      {/* Top info section - fixed, shrinks to content */}
+      <Box sx={{ flexShrink: 0, overflowX: 'visible', mb: 1, pt: '2px' }}>
         {/* <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
           {t('imageDetail:info.title')}
         </Typography> */}
@@ -175,13 +185,13 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
           <PromptDisplay
             prompt={image.ai_metadata?.prompts.prompt}
             negativePrompt={image.ai_metadata?.prompts.negative_prompt}
-            variant="outlined"
             showGrouped={true}
             imageId={image.composite_hash || undefined}
             autoTags={image.auto_tags}
             isTaggerEnabled={isTaggerEnabled}
             onAutoTagGenerated={onAutoTagGenerated}
             isHistoryContext={isHistoryContext}
+            characterPrompts={characterPrompts}
           />
         </Box>
       )}

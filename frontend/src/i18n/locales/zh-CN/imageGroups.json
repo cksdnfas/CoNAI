@@ -229,7 +229,13 @@
     "typeVideo": "视频和动画（原始）",
     "confirmTitle": "确认大量下载",
     "confirmMessage": "下载{{count}}个文件。继续？",
-    "confirmButton": "下载"
+    "confirmButton": "下载",
+    "typeLoraDataset": "LoRA数据集（图像+标注）",
+    "loraDatasetTitle": "LoRA数据集下载",
+    "loraDatasetDescription": "下载原始图像和配套的.txt标注文件，用于LoRA训练。标注由自动标签生成。",
+    "loraDatasetMergePrompt": "与正面提示词合并",
+    "loraDatasetMergePromptHelp": "勾选后，提示词标签将与自动标签合并并去除重复。",
+    "loraDatasetStarted": "LoRA数据集下载已开始。"
   },
   "defaultGroupName": "组",
   "autoNavigate": "自动导航到子组：{{from}} → {{to}}",

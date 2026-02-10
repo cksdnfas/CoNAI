@@ -229,7 +229,13 @@
     "typeVideo": "動画とアニメーション（オリジナル）",
     "confirmTitle": "大容量ダウンロードの確認",
     "confirmMessage": "{{count}}ファイルをダウンロードします。続けますか？",
-    "confirmButton": "ダウンロード"
+    "confirmButton": "ダウンロード",
+    "typeLoraDataset": "LoRAデータセット（画像+キャプション）",
+    "loraDatasetTitle": "LoRAデータセットダウンロード",
+    "loraDatasetDescription": "LoRA学習用のオリジナル画像と.txtキャプションファイルをダウンロードします。キャプションは自動タグから生成されます。",
+    "loraDatasetMergePrompt": "ポジティブプロンプトとマージ",
+    "loraDatasetMergePromptHelp": "チェックすると、プロンプトタグと自動タグがマージされ、重複が削除されます。",
+    "loraDatasetStarted": "LoRAデータセットのダウンロードを開始しました。"
   },
   "defaultGroupName": "グループ",
   "autoNavigate": "サブグループに自動移動：{{from}} → {{to}}",

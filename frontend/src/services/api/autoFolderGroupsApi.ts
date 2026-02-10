@@ -176,11 +176,15 @@ export const autoFolderGroupsApi = {
   downloadGroup: async (
     groupId: number,
     type: 'thumbnail' | 'original' | 'video' = 'original',
-    selectedHashes?: string[]
+    selectedHashes?: string[],
+    captionMode?: 'auto_tags' | 'merged'
   ): Promise<void> => {
     const params: any = { type };
     if (selectedHashes && selectedHashes.length > 0) {
       params.hashes = selectedHashes.join(',');
+    }
+    if (captionMode) {
+      params.captionMode = captionMode;
     }
 
     const response = await apiClient.get(`/api/auto-folder-groups/${groupId}/download`, {

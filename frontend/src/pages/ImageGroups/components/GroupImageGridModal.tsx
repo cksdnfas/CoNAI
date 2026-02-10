@@ -27,6 +27,7 @@ import {
   Image as ImageIcon,
   PhotoLibrary as PhotoLibraryIcon,
   Videocam as VideocamIcon,
+  TextSnippet as TextSnippetIcon,
 } from '@mui/icons-material';
 import type { ImageRecord, PageSize } from '../../../types/image';
 import type { GroupWithStats } from '@comfyui-image-manager/shared';
@@ -36,6 +37,7 @@ import { groupApi } from '../../../services/api/groupApi';
 import { autoFolderGroupsApi } from '../../../services/api/autoFolderGroupsApi';
 
 import { useImageListSettings } from '../../../hooks/useImageListSettings';
+import LoraDatasetDialog from './LoraDatasetDialog';
 
 interface GroupImageGridModalProps {
   open: boolean;
@@ -94,6 +96,8 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   const [pendingDownloadType, setPendingDownloadType] = useState<'thumbnail' | 'original' | 'video' | null>(null);
   const [fileCounts, setFileCounts] = useState<{ thumbnail: number; original: number; video: number } | null>(null);
   const [loadingCounts, setLoadingCounts] = useState(false);
+  const [loraDialogOpen, setLoraDialogOpen] = useState(false);
+  const [loraDialogScope, setLoraDialogScope] = useState<'all' | 'selected'>('all');
 
   // 모달 오픈 시 선택 상태 초기화
   useEffect(() => {
@@ -260,6 +264,37 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
     }
     setDownloadConfirmOpen(false);
     setPendingDownloadType(null);
+  };
+
+  // LoRA 데이터셋 다운로드 실행
+  const handleLoraDatasetDownload = async (captionMode: 'auto_tags' | 'merged') => {
+    setLoraDialogOpen(false);
+    if (!currentGroup?.id) return;
+
+    try {
+      let compositeHashes: string[] | undefined;
+      if (loraDialogScope === 'selected' && selectedIds.length > 0) {
+        compositeHashes = selectedImages
+          .map(img => img.composite_hash)
+          .filter((hash): hash is string => hash !== null);
+      }
+
+      if (groupType === 'custom') {
+        await groupApi.downloadGroupBlob(currentGroup.id, 'original', compositeHashes, captionMode);
+      } else {
+        await autoFolderGroupsApi.downloadGroup(currentGroup.id, 'original', compositeHashes, captionMode);
+      }
+
+      if (onShowSnackbar) {
+        onShowSnackbar(t('imageGroups:download.loraDatasetStarted'), 'success');
+      }
+    } catch (error) {
+      console.error('LoRA dataset download failed:', error);
+      if (onShowSnackbar) {
+        const errorMessage = error instanceof Error ? error.message : '다운로드에 실패했습니다.';
+        onShowSnackbar(errorMessage, 'error');
+      }
+    }
   };
 
   const getSelectionMessage = () => {
@@ -491,6 +526,21 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
             {fileCounts && ` (${fileCounts.video})`}
           </ListItemText>
         </MenuItem>
+        <MenuItem
+          onClick={() => {
+            handleDownloadMenuClose();
+            setLoraDialogScope('all');
+            setLoraDialogOpen(true);
+          }}
+          disabled={!fileCounts || fileCounts.original === 0}
+        >
+          <ListItemIcon>
+            <TextSnippetIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>
+            {t('imageGroups:download.typeLoraDataset')}
+          </ListItemText>
+        </MenuItem>
 
         {/* 선택된 이미지만 다운로드 */}
         {selectedIds.length > 0 && [
@@ -522,9 +572,28 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
             <ListItemText>
               {t('imageGroups:download.typeVideo')}
             </ListItemText>
+          </MenuItem>,
+          <MenuItem key="selected-lora-dataset" onClick={() => {
+            handleDownloadMenuClose();
+            setLoraDialogScope('selected');
+            setLoraDialogOpen(true);
+          }}>
+            <ListItemIcon>
+              <TextSnippetIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>
+              {t('imageGroups:download.typeLoraDataset')}
+            </ListItemText>
           </MenuItem>
         ]}
       </Menu>
+
+      {/* LoRA 데이터셋 다운로드 옵션 다이얼로그 */}
+      <LoraDatasetDialog
+        open={loraDialogOpen}
+        onClose={() => setLoraDialogOpen(false)}
+        onConfirm={handleLoraDatasetDownload}
+      />
 
       {/* 대용량 다운로드 확인 다이얼로그 */}
       <ConfirmDialog

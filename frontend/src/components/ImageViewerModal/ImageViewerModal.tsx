@@ -530,17 +530,19 @@ const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           borderColor: 'divider',
         }}
       >
-        <ImageNavigation
-          currentIndex={currentIndex}
-          totalCount={images?.length ?? 0}
-          onPrevious={navigation.handlePrevious}
-          onNext={navigation.handleNext}
-          {...(!isHistoryContext && { onRandom: navigation.handleRandom })}
-          isRandomMode={isRandomMode}
-          currentImage={currentImage}
-        />
+        <Box sx={{ minWidth: 0, flexShrink: 1 }}>
+          <ImageNavigation
+            currentIndex={currentIndex}
+            totalCount={images?.length ?? 0}
+            onPrevious={navigation.handlePrevious}
+            onNext={navigation.handleNext}
+            {...(!isHistoryContext && { onRandom: navigation.handleRandom })}
+            isRandomMode={isRandomMode}
+            currentImage={currentImage}
+          />
+        </Box>
 
-        <Box sx={{ display: 'flex', gap: { xs: 0.25, sm: 0.5 }, flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', gap: { xs: 0.25, sm: 0.5 }, flexShrink: 0 }}>
           {!isHistoryContext && (
             <Tooltip title={t('imageDetail:actions.goToDetail')}>
               <IconButton size="small" onClick={handleGoToDetail}>

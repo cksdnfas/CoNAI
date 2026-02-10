@@ -299,6 +299,21 @@ export const MarkedFieldCard: React.FC<MarkedFieldCardProps> = ({
             </TextField>
           </Box>
 
+          {/* Description - guide text for this field */}
+          <TextField
+            fullWidth
+            multiline
+            minRows={2}
+            maxRows={4}
+            label={t('workflows:fieldForm.description')}
+            value={field.description || ''}
+            onChange={(e) => onUpdate(index, { description: e.target.value })}
+            size="small"
+            placeholder={t('workflows:fieldForm.descriptionPlaceholder')}
+            helperText={t('workflows:fieldForm.descriptionHelper')}
+            sx={{ mb: 2 }}
+          />
+
           {/* JSON Path and Default Value */}
           <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
             <TextField

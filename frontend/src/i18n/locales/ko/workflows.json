@@ -138,7 +138,10 @@
     "maxPlaceholder": "150",
     "selectOptions": "선택 옵션 (쉼표로 구분)",
     "selectOptionsPlaceholder": "euler, dpm++, ddim",
-    "selectOptionsHelper": "예: euler, dpm++ 2m, ddim"
+    "selectOptionsHelper": "예: euler, dpm++ 2m, ddim",
+    "description": "설명",
+    "descriptionPlaceholder": "예: 긍정 프롬프트에 쉼표로 구분된 태그를 입력하세요",
+    "descriptionHelper": "이 필드가 무엇을 기대하는지 사용자와 AI 에이전트를 위한 안내 텍스트"
   },
   "generate": {
     "pageTitle": "이미지 생성",

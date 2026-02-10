@@ -126,7 +126,10 @@
     "maxPlaceholder": "150",
     "selectOptions": "選擇選項 (逗號分隔)",
     "selectOptionsPlaceholder": "euler, dpm++, ddim",
-    "selectOptionsHelper": "例: euler, dpm++ 2m, ddim"
+    "selectOptionsHelper": "例: euler, dpm++ 2m, ddim",
+    "description": "描述",
+    "descriptionPlaceholder": "例：在正面提示詞中輸入逗號分隔的標籤",
+    "descriptionHelper": "為使用者和AI代理說明此欄位期望的輸入內容"
   },
   "generate": {
     "pageTitle": "產生圖片",

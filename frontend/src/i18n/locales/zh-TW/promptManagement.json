@@ -154,10 +154,18 @@
       "negative": "負面",
       "auto": "自動"
     },
+    "cards": {
+      "positive": "正面提示詞",
+      "negative": "負面提示詞",
+      "character": "角色 {{index}}",
+      "auto": "自動標籤"
+    },
     "labels": {
       "prompt": "提示詞",
       "negativePrompt": "負面提示詞"
     },
+    "copy": "複製",
+    "copied": "已複製！",
     "noPrompt": "沒有提示詞資訊。",
     "loading": "載入中...",
     "loadFailed": "無法載入群組資訊。"

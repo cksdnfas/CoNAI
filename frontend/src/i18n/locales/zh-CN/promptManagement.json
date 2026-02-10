@@ -154,10 +154,18 @@
       "negative": "负面",
       "auto": "自动"
     },
+    "cards": {
+      "positive": "正面提示词",
+      "negative": "负面提示词",
+      "character": "角色 {{index}}",
+      "auto": "自动标签"
+    },
     "labels": {
       "prompt": "提示词",
       "negativePrompt": "负面提示词"
     },
+    "copy": "复制",
+    "copied": "已复制！",
     "noPrompt": "没有提示词信息。",
     "loading": "加载中...",
     "loadFailed": "无法加载组信息。"

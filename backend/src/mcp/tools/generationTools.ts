@@ -1,9 +1,15 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import fs from 'fs';
+import path from 'path';
 import { WorkflowModel } from '../../models/Workflow';
 import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUIServer';
-import { ComfyUIService } from '../../services/comfyuiService';
+import { ComfyUIService, ParallelGenerationService } from '../../services/comfyuiService';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
+import { GenerationHistoryModel } from '../../models/GenerationHistory';
+import { ComfyUIWorkflowParser } from '../../utils/comfyuiWorkflowParser';
+import { ImageSimilarityService } from '../../services/imageSimilarity';
+import { runtimePaths } from '../../config/runtimePaths';
 import { getToken } from '../../utils/nai/auth';
 import { preprocessMetadata } from '../../utils/nai/metadata';
 import axios from 'axios';
@@ -81,8 +87,9 @@ export function registerGenerationTools(server: McpServer): void {
       workflow_id: z.number().int().describe('Workflow ID to use'),
       server_id: z.number().int().describe('ComfyUI server ID to use'),
       prompt_data: z.record(z.string(), z.any()).describe('Key-value pairs for workflow field substitution. Keys should match the marked field IDs in the workflow.'),
+      group_id: z.number().int().optional().describe('Optional group ID to assign generated images to'),
     },
-    async ({ workflow_id, server_id, prompt_data }) => {
+    async ({ workflow_id, server_id, prompt_data, group_id }) => {
       try {
         const data = prompt_data as Record<string, any>;
 
@@ -112,23 +119,93 @@ export function registerGenerationTools(server: McpServer): void {
           data
         );
 
-        // 이미지 생성
-        const result = await comfyService.generateImages(workflow, substitutedWorkflow);
+        // 워크플로우에서 생성 파라미터 추출 (웹 UI와 동일)
+        const workflowJson = JSON.parse(workflow.workflow_json);
+        const extractedParams = ComfyUIWorkflowParser.extractWithSubstitution(workflowJson, data);
 
-        // 히스토리 생성
-        const positivePrompt = String(data['positive_prompt'] || data['prompt'] || '');
-        const negativePrompt = String(data['negative_prompt'] || '');
-
+        // 히스토리 생성 (생성 전에 먼저 생성 - 웹 UI와 동일)
         const historyId = await GenerationHistoryService.createComfyUIHistory({
           workflow: substitutedWorkflow,
           workflowId: workflow_id,
           workflowName: workflow.name,
-          promptId: result.promptId,
-          positivePrompt,
-          negativePrompt,
-          width: Number(data['width']) || 1024,
-          height: Number(data['height']) || 1024,
+          promptId: '',
+          positivePrompt: extractedParams.positivePrompt,
+          negativePrompt: extractedParams.negativePrompt,
+          width: extractedParams.width,
+          height: extractedParams.height,
+          groupId: group_id,
+          metadata: {
+            server_endpoint: serverRecord.endpoint,
+            server_name: serverRecord.name,
+            sampler: extractedParams.sampler,
+            steps: extractedParams.steps,
+            cfg_scale: extractedParams.cfg_scale,
+            model: extractedParams.model
+          }
         });
+
+        // 이미지 생성 (temp 폴더에 다운로드)
+        const result = await comfyService.generateImages(workflow, substitutedWorkflow);
+
+        // promptId 업데이트
+        try {
+          const history = await GenerationHistoryService.getHistory(historyId);
+          if (history) {
+            const historyAny = history as any;
+            const { actual_composite_hash, actual_thumbnail_path, actual_width, actual_height, ...baseHistory } = historyAny;
+            GenerationHistoryModel.update(historyId, {
+              ...baseHistory,
+              comfyui_prompt_id: result.promptId,
+              generation_status: 'processing' as const
+            });
+          }
+        } catch (e) {
+          console.error('[MCP ComfyUI] Failed to update history with promptId:', e);
+        }
+
+        // temp → 영구 저장소로 이동 (웹 UI execution.routes.ts와 동일한 처리)
+        const savedPaths: string[] = [];
+        for (const tempPath of result.imagePaths) {
+          try {
+            const imageBuffer = await fs.promises.readFile(tempPath);
+
+            // 날짜 기반 디렉토리 생성
+            const dateDir = new Date().toISOString().split('T')[0];
+            const targetDir = path.join(runtimePaths.uploadsDir, 'API', 'images', dateDir);
+            if (!fs.existsSync(targetDir)) {
+              fs.mkdirSync(targetDir, { recursive: true });
+            }
+
+            // 고유 파일명 생성
+            const ext = path.extname(tempPath);
+            const filename = `comfyui_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`;
+            const targetPath = path.join(targetDir, filename);
+
+            // 파일 저장
+            fs.writeFileSync(targetPath, imageBuffer);
+
+            // temp 파일 삭제
+            fs.unlinkSync(tempPath);
+
+            const relativePath = `API/images/${dateDir}/${filename}`;
+            savedPaths.push(relativePath);
+
+            // 히스토리 업데이트 (첫 번째 이미지만)
+            if (result.imagePaths.indexOf(tempPath) === 0) {
+              const { hashes } = await ImageSimilarityService.generateHashAndHistogram(targetPath);
+              GenerationHistoryModel.updateImagePaths(historyId, {
+                original: relativePath,
+                fileSize: imageBuffer.length,
+                compositeHash: hashes.compositeHash
+              });
+            }
+          } catch (fileError) {
+            console.error(`[MCP ComfyUI] Failed to save image ${tempPath}:`, fileError);
+          }
+        }
+
+        // 완료 상태 업데이트
+        GenerationHistoryModel.updateStatus(historyId, 'completed');
 
         return {
           content: [{
@@ -137,8 +214,8 @@ export function registerGenerationTools(server: McpServer): void {
               success: true,
               historyId,
               promptId: result.promptId,
-              imageCount: result.imagePaths.length,
-              imagePaths: result.imagePaths,
+              imageCount: savedPaths.length,
+              imagePaths: savedPaths,
               server: serverRecord.name,
               workflow: workflow.name,
             }, null, 2),
@@ -148,6 +225,255 @@ export function registerGenerationTools(server: McpServer): void {
         return {
           isError: true,
           content: [{ type: 'text' as const, text: `ComfyUI generation error: ${(error as Error).message}` }],
+        };
+      }
+    }
+  );
+
+  // ComfyUI 모든 활성 서버에 병렬 이미지 생성
+  server.tool(
+    'generate_comfyui_all_servers',
+    'Generate images on ALL active ComfyUI servers simultaneously. Each active server will receive the same workflow and produce images in parallel.',
+    {
+      workflow_id: z.number().int().describe('Workflow ID to use'),
+      prompt_data: z.record(z.string(), z.any()).describe('Key-value pairs for workflow field substitution. Keys should match the marked field IDs in the workflow.'),
+      group_id: z.number().int().optional().describe('Optional group ID to assign generated images to'),
+    },
+    async ({ workflow_id, prompt_data, group_id }) => {
+      try {
+        const data = prompt_data as Record<string, any>;
+
+        const workflow = WorkflowModel.findById(workflow_id);
+        if (!workflow) {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: `Workflow with ID ${workflow_id} not found` }],
+          };
+        }
+
+        // 활성 서버 목록 조회
+        const activeServers = ComfyUIServerModel.findAll(true);
+        if (activeServers.length === 0) {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: 'No active ComfyUI servers found. Please configure servers via the web UI.' }],
+          };
+        }
+
+        const comfyService = new ComfyUIService(activeServers[0].endpoint);
+
+        // 워크플로우 JSON 파싱 및 프롬프트 치환
+        const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : [];
+        const substitutedWorkflow = comfyService.substitutePromptData(
+          workflow.workflow_json,
+          markedFields,
+          data
+        );
+
+        // 워크플로우에서 생성 파라미터 추출
+        const workflowJson = JSON.parse(workflow.workflow_json);
+        const extractedParams = ComfyUIWorkflowParser.extractWithSubstitution(workflowJson, data);
+
+        // 모든 활성 서버에 병렬 생성 요청
+        const servers = activeServers.map(s => ({ id: s.id!, name: s.name, endpoint: s.endpoint }));
+        const parallelResults = await ParallelGenerationService.generateOnMultipleServers(
+          servers,
+          workflow,
+          substitutedWorkflow
+        );
+
+        // 각 서버 결과를 후처리 (temp → 영구 저장소, 히스토리, 해시)
+        const serverResults: Array<{
+          serverId: number;
+          serverName: string;
+          success: boolean;
+          historyId?: number;
+          imagePaths?: string[];
+          error?: string;
+        }> = [];
+
+        for (const result of parallelResults) {
+          if (!result.success || !result.imagePaths || result.imagePaths.length === 0) {
+            serverResults.push({
+              serverId: result.serverId,
+              serverName: result.serverName,
+              success: false,
+              error: result.error || 'No images generated',
+            });
+            continue;
+          }
+
+          // 히스토리 생성
+          let historyId: number | undefined;
+          try {
+            historyId = await GenerationHistoryService.createComfyUIHistory({
+              workflow: substitutedWorkflow,
+              workflowId: workflow_id,
+              workflowName: workflow.name,
+              promptId: result.promptId || '',
+              positivePrompt: extractedParams.positivePrompt,
+              negativePrompt: extractedParams.negativePrompt,
+              width: extractedParams.width,
+              height: extractedParams.height,
+              groupId: group_id,
+              metadata: {
+                server_endpoint: servers.find(s => s.id === result.serverId)?.endpoint,
+                server_name: result.serverName,
+                sampler: extractedParams.sampler,
+                steps: extractedParams.steps,
+                cfg_scale: extractedParams.cfg_scale,
+                model: extractedParams.model
+              }
+            });
+
+            // promptId 업데이트
+            if (result.promptId) {
+              const history = await GenerationHistoryService.getHistory(historyId);
+              if (history) {
+                const historyAny = history as any;
+                const { actual_composite_hash, actual_thumbnail_path, actual_width, actual_height, ...baseHistory } = historyAny;
+                GenerationHistoryModel.update(historyId, {
+                  ...baseHistory,
+                  comfyui_prompt_id: result.promptId,
+                  generation_status: 'processing' as const
+                });
+              }
+            }
+          } catch (historyError) {
+            console.error(`[MCP ComfyUI Parallel] Failed to create history for server ${result.serverName}:`, historyError);
+          }
+
+          // temp → 영구 저장소로 이동
+          const savedPaths: string[] = [];
+          for (const tempPath of result.imagePaths) {
+            try {
+              const imageBuffer = await fs.promises.readFile(tempPath);
+
+              const dateDir = new Date().toISOString().split('T')[0];
+              const targetDir = path.join(runtimePaths.uploadsDir, 'API', 'images', dateDir);
+              if (!fs.existsSync(targetDir)) {
+                fs.mkdirSync(targetDir, { recursive: true });
+              }
+
+              const ext = path.extname(tempPath);
+              const filename = `comfyui_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`;
+              const targetPath = path.join(targetDir, filename);
+
+              fs.writeFileSync(targetPath, imageBuffer);
+              fs.unlinkSync(tempPath);
+
+              const relativePath = `API/images/${dateDir}/${filename}`;
+              savedPaths.push(relativePath);
+
+              // 히스토리 업데이트 (첫 번째 이미지만)
+              if (historyId && result.imagePaths.indexOf(tempPath) === 0) {
+                const { hashes } = await ImageSimilarityService.generateHashAndHistogram(targetPath);
+                GenerationHistoryModel.updateImagePaths(historyId, {
+                  original: relativePath,
+                  fileSize: imageBuffer.length,
+                  compositeHash: hashes.compositeHash
+                });
+              }
+            } catch (fileError) {
+              console.error(`[MCP ComfyUI Parallel] Failed to save image ${tempPath}:`, fileError);
+            }
+          }
+
+          if (historyId) {
+            GenerationHistoryModel.updateStatus(historyId, 'completed');
+          }
+
+          serverResults.push({
+            serverId: result.serverId,
+            serverName: result.serverName,
+            success: true,
+            historyId,
+            imagePaths: savedPaths,
+          });
+        }
+
+        const successCount = serverResults.filter(r => r.success).length;
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              success: successCount > 0,
+              totalServers: activeServers.length,
+              successCount,
+              failCount: activeServers.length - successCount,
+              workflow: workflow.name,
+              results: serverResults,
+            }, null, 2),
+          }],
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `ComfyUI parallel generation error: ${(error as Error).message}` }],
+        };
+      }
+    }
+  );
+
+  // 워크플로우 상세 조회
+  server.tool(
+    'get_workflow_details',
+    'Get detailed information about a specific ComfyUI workflow, including its marked fields (parameters required for generation).',
+    {
+      workflow_id: z.number().int().describe('Workflow ID to get details for'),
+    },
+    async ({ workflow_id }) => {
+      try {
+        const workflow = WorkflowModel.findById(workflow_id);
+        if (!workflow) {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: `Workflow with ID ${workflow_id} not found` }],
+          };
+        }
+
+        const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : [];
+
+        // marked_fields에서 생성에 필요한 정보만 추출
+        const fields = markedFields.map((f: any) => ({
+          id: f.id,
+          label: f.label,
+          description: f.description,
+          type: f.type,
+          default_value: f.default_value,
+          placeholder: f.placeholder,
+          required: f.required,
+          options: f.options,
+          dropdown_list_name: f.dropdown_list_name,
+          min: f.min,
+          max: f.max,
+        }));
+
+        // 연결된 서버 목록 조회
+        const workflowServers = WorkflowServerModel.findServersByWorkflow(workflow_id);
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              id: workflow.id,
+              name: workflow.name,
+              description: workflow.description,
+              is_active: workflow.is_active,
+              api_endpoint: workflow.api_endpoint,
+              color: workflow.color,
+              marked_fields: fields,
+              server_ids: workflowServers.map((ws: any) => ws.server_id),
+              created_date: workflow.created_date,
+              updated_date: workflow.updated_date,
+            }, null, 2),
+          }],
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
         };
       }
     }
@@ -168,8 +494,9 @@ export function registerGenerationTools(server: McpServer): void {
       sampler: z.string().default('k_euler_ancestral').describe('Sampler name'),
       seed: z.number().int().optional().describe('Random seed (auto-generated if not provided)'),
       n_samples: z.number().int().min(1).max(4).default(1).describe('Number of images to generate'),
+      group_id: z.number().int().optional().describe('Optional group ID to assign generated images to'),
     },
-    async ({ prompt, negative_prompt, model, width, height, steps, scale, sampler, seed, n_samples }) => {
+    async ({ prompt, negative_prompt, model, width, height, steps, scale, sampler, seed, n_samples, group_id }) => {
       try {
         const token = getToken();
         if (!token) {
@@ -295,6 +622,7 @@ export function registerGenerationTools(server: McpServer): void {
             negativePrompt: metadata.negative_prompt,
             width: metadata.width || 1024,
             height: metadata.height || 1024,
+            groupId: group_id,
           });
           historyIds.push(historyId);
 

@@ -274,11 +274,15 @@ export const groupApi = {
   downloadGroupBlob: async (
     id: number,
     type: 'thumbnail' | 'original' | 'video',
-    compositeHashes?: string[]
+    compositeHashes?: string[],
+    captionMode?: 'auto_tags' | 'merged'
   ): Promise<void> => {
     let url = `/api/groups/${id}/download?type=${type}`;
     if (compositeHashes && compositeHashes.length > 0) {
       url += `&hashes=${encodeURIComponent(JSON.stringify(compositeHashes))}`;
+    }
+    if (captionMode) {
+      url += `&captionMode=${captionMode}`;
     }
 
     const response = await apiClient.get(url, {

@@ -209,6 +209,7 @@ export const convertHistoryToImageRecord = (
         prompt: history.positive_prompt || null,
         negative_prompt: history.negative_prompt || null,
       },
+      raw_nai_parameters: null,
     },
   };
 };

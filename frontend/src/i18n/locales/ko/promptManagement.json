@@ -154,10 +154,18 @@
       "negative": "부정",
       "auto": "AUTO"
     },
+    "cards": {
+      "positive": "긍정 프롬프트",
+      "negative": "부정 프롬프트",
+      "character": "캐릭터 {{index}}",
+      "auto": "AUTO 태그"
+    },
     "labels": {
       "prompt": "프롬프트",
       "negativePrompt": "네거티브 프롬프트"
     },
+    "copy": "복사",
+    "copied": "복사됨!",
     "noPrompt": "프롬프트 정보가 없습니다.",
     "loading": "로딩 중...",
     "loadFailed": "그룹 정보를 로드할 수 없습니다."

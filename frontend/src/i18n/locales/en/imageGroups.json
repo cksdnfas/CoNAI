@@ -229,7 +229,13 @@
     "typeVideo": "Videos & Animations (Original)",
     "confirmTitle": "Confirm Large Download",
     "confirmMessage": "Download {{count}} files. Continue?",
-    "confirmButton": "Download"
+    "confirmButton": "Download",
+    "typeLoraDataset": "LoRA Dataset (Image + Caption)",
+    "loraDatasetTitle": "LoRA Dataset Download",
+    "loraDatasetDescription": "Downloads original images with paired .txt caption files for LoRA training. Captions are generated from auto-tags.",
+    "loraDatasetMergePrompt": "Merge with positive prompt",
+    "loraDatasetMergePromptHelp": "When checked, prompt tags are merged with auto-tags and duplicates are removed.",
+    "loraDatasetStarted": "LoRA dataset download started."
   },
   "defaultGroupName": "Group",
   "autoNavigate": "Auto-navigate to subgroup: {{from}} → {{to}}",

@@ -14,6 +14,9 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
 import { useTranslation } from 'react-i18next';
 import type { AutoTagsData } from '../../types/image';
 import { taggerBatchApi } from '../../services/settingsApi';
@@ -32,6 +35,7 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
   const { t } = useTranslation('promptManagement');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [taglistCopied, setTaglistCopied] = useState(false);
 
   const handleGenerateTag = async (e?: React.MouseEvent) => {
     if (e) e.stopPropagation(); // Prevent accordion from toggling if button is inside header
@@ -114,17 +118,37 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
           <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
             {t('autoTagDisplay.sections.rating')}
           </Typography>
-          <Tooltip title={t('autoTagDisplay.regenerate', 'Regenerate Tags')}>
-            <span>
-              <IconButton
-                size="small"
-                onClick={handleGenerateTag}
-                disabled={isGenerating}
-              >
-                {isGenerating ? <CircularProgress size={16} /> : <RefreshIcon fontSize="small" />}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+            <Tooltip
+              title={
+                <Box sx={{ p: 0.5 }}>
+                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.model')}: {autoTags.model}</Typography>
+                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.generalThreshold')}: {autoTags.thresholds.general}</Typography>
+                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.characterThreshold')}: {autoTags.thresholds.character}</Typography>
+                  {autoTags.tagged_at && (
+                    <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.taggedAt')}: {new Date(autoTags.tagged_at).toLocaleString('ko-KR')}</Typography>
+                  )}
+                </Box>
+              }
+              arrow
+              placement="left"
+            >
+              <IconButton size="small" sx={{ color: 'text.secondary' }}>
+                <InfoOutlinedIcon sx={{ fontSize: '1rem' }} />
               </IconButton>
-            </span>
-          </Tooltip>
+            </Tooltip>
+            <Tooltip title={t('autoTagDisplay.regenerate', 'Regenerate Tags')}>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={handleGenerateTag}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? <CircularProgress size={16} /> : <RefreshIcon fontSize="small" />}
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
         </Box>
         <Box
           sx={{
@@ -233,15 +257,34 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
     );
   };
 
+  // Taglist 복사
+  const handleCopyTaglist = async () => {
+    if (!autoTags.taglist) return;
+    try {
+      await navigator.clipboard.writeText(autoTags.taglist);
+      setTaglistCopied(true);
+      setTimeout(() => setTaglistCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy taglist:', err);
+    }
+  };
+
   // Taglist 렌더링
   const renderTaglist = () => {
     if (!autoTags.taglist) return null;
 
     return (
       <Box sx={{ mb: 2 }}>
-        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-          {t('autoTagDisplay.sections.tagList')}
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            {t('autoTagDisplay.sections.tagList')}
+          </Typography>
+          <Tooltip title={taglistCopied ? t('autoTagDisplay.taglistCopied', 'Copied!') : t('autoTagDisplay.copyTaglist', 'Copy Tags')}>
+            <IconButton size="small" onClick={handleCopyTaglist} sx={{ color: taglistCopied ? 'success.main' : 'text.secondary' }}>
+              {taglistCopied ? <CheckIcon sx={{ fontSize: '1rem' }} /> : <ContentCopyIcon sx={{ fontSize: '1rem' }} />}
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Typography variant="body2" sx={{ lineHeight: 1.6, wordBreak: 'break-word' }}>
           {autoTags.taglist}
         </Typography>
@@ -298,42 +341,9 @@ const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
     );
   };
 
-  // Model & Thresholds 렌더링 (접을 수 있는 형태)
-  const renderModelInfo = () => {
-    return (
-      <Accordion defaultExpanded={false} sx={{ mb: 2 }}>
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-            {t('autoTagDisplay.sections.modelInfo')}
-          </Typography>
-        </AccordionSummary>
-        <AccordionDetails>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Typography variant="body2">
-              <strong>{t('autoTagDisplay.modelInfo.model')}:</strong> {autoTags.model}
-            </Typography>
-            <Typography variant="body2">
-              <strong>{t('autoTagDisplay.modelInfo.generalThreshold')}:</strong> {autoTags.thresholds.general}
-            </Typography>
-            <Typography variant="body2">
-              <strong>{t('autoTagDisplay.modelInfo.characterThreshold')}:</strong> {autoTags.thresholds.character}
-            </Typography>
-            {autoTags.tagged_at && (
-              <Typography variant="body2">
-                <strong>{t('autoTagDisplay.modelInfo.taggedAt')}:</strong>{' '}
-                {new Date(autoTags.tagged_at).toLocaleString('ko-KR')}
-              </Typography>
-            )}
-          </Box>
-        </AccordionDetails>
-      </Accordion>
-    );
-  };
-
   return (
-    <Box sx={{ p: 2, height: '100%', overflowY: 'auto' }}>
+    <Box sx={{ height: '100%', overflowY: 'auto' }}>
       {renderRatingGauge()}
-      {renderModelInfo()}
       {renderCharacters()}
       {renderTaglist()}
       {renderGeneralTags()}

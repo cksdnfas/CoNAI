@@ -9,12 +9,16 @@ import { ImageWithFileView } from '../types/image';
 
 export type DownloadType = 'thumbnail' | 'original' | 'video';
 export type GroupType = 'custom' | 'auto-folder';
+export type CaptionMode = 'auto_tags' | 'merged';
 
 interface DownloadOptions {
   groupId: number;
   downloadType: DownloadType;
   groupType: GroupType; // 그룹 타입 추가
   compositeHashes?: string[]; // 선택된 이미지만 다운로드 (없으면 전체)
+  captionOptions?: {
+    captionMode: CaptionMode; // 'auto_tags': taglist만, 'merged': taglist + prompt 병합
+  };
 }
 
 interface DownloadResult {
@@ -28,7 +32,7 @@ export class GroupDownloadService {
    * 그룹 이미지를 ZIP 파일로 생성
    */
   static async createGroupZip(options: DownloadOptions): Promise<DownloadResult> {
-    const { groupId, downloadType, groupType, compositeHashes } = options;
+    const { groupId, downloadType, groupType, compositeHashes, captionOptions } = options;
 
     // 그룹 정보 조회
     let groupName: string;
@@ -66,12 +70,26 @@ export class GroupDownloadService {
       throw new Error(`No ${downloadType} files found in group`);
     }
 
+    // 캡션 옵션이 있으면 각 파일에 캡션 텍스트 생성
+    if (captionOptions) {
+      const imageMap = new Map(images.map(img => [img.composite_hash, img]));
+      for (const file of filesToZip) {
+        const image = imageMap.get(file.compositeHash);
+        if (image) {
+          file.captionContent = this.generateCaptionContent(image, captionOptions.captionMode);
+        }
+      }
+    }
+
+    // ZIP 파일명 레이블 결정
+    const zipLabel = captionOptions ? 'lora-dataset' : downloadType;
+
     // ZIP 파일 생성
-    const zipPath = await this.createZipFile(filesToZip, groupName, downloadType);
+    const zipPath = await this.createZipFile(filesToZip, groupName, zipLabel);
 
     return {
       zipPath,
-      fileName: this.generateZipFileName(groupName, downloadType),
+      fileName: this.generateZipFileName(groupName, zipLabel),
       fileCount: filesToZip.length
     };
   }
@@ -129,8 +147,8 @@ export class GroupDownloadService {
   private static prepareFilesToZip(
     images: ImageWithFileView[],
     downloadType: DownloadType
-  ): Array<{ filePath: string; originalName: string; compositeHash: string }> {
-    const filesToZip: Array<{ filePath: string; originalName: string; compositeHash: string }> = [];
+  ): Array<{ filePath: string; originalName: string; compositeHash: string; captionContent?: string }> {
+    const filesToZip: Array<{ filePath: string; originalName: string; compositeHash: string; captionContent?: string }> = [];
     const usedNames = new Map<string, number>(); // 파일명 중복 카운터
 
     for (const image of images) {
@@ -237,9 +255,9 @@ export class GroupDownloadService {
    * ZIP 파일 생성
    */
   private static async createZipFile(
-    files: Array<{ filePath: string; originalName: string }>,
+    files: Array<{ filePath: string; originalName: string; captionContent?: string }>,
     groupName: string,
-    downloadType: DownloadType
+    typeLabel: string
   ): Promise<string> {
     const zip = new AdmZip();
 
@@ -247,6 +265,12 @@ export class GroupDownloadService {
     for (const file of files) {
       try {
         zip.addLocalFile(file.filePath, '', file.originalName);
+
+        // 캡션 .txt 파일 추가 (LoRA 데이터셋용)
+        if (file.captionContent !== undefined) {
+          const txtName = file.originalName.replace(/\.[^.]+$/, '.txt');
+          zip.addFile(txtName, Buffer.from(file.captionContent, 'utf-8'));
+        }
       } catch (error) {
         console.warn(`Failed to add file to zip: ${file.filePath}`, error);
         // 개별 파일 실패 시 계속 진행
@@ -255,7 +279,7 @@ export class GroupDownloadService {
 
     // 임시 파일로 ZIP 저장
     const tempDir = tmpdir();
-    const zipFileName = this.generateZipFileName(groupName, downloadType);
+    const zipFileName = this.generateZipFileName(groupName, typeLabel);
     const zipPath = path.join(tempDir, zipFileName);
 
     zip.writeZip(zipPath);
@@ -266,28 +290,65 @@ export class GroupDownloadService {
   /**
    * ZIP 파일명 생성
    */
-  private static generateZipFileName(groupName: string, downloadType: DownloadType): string {
+  private static generateZipFileName(groupName: string, typeLabel: string): string {
     // 파일명에 사용할 수 없는 문자 제거
     const sanitizedName = groupName.replace(/[<>:"/\\|?*]/g, '_');
-
-    // 다운로드 타입 한글 변환
-    let typeLabel = '';
-    switch (downloadType) {
-      case 'thumbnail':
-        typeLabel = 'thumbnail';
-        break;
-      case 'original':
-        typeLabel = 'original';
-        break;
-      case 'video':
-        typeLabel = 'video';
-        break;
-    }
 
     // 날짜 형식: YYYY-MM-DD
     const date = new Date().toISOString().split('T')[0];
 
     return `${sanitizedName}_${typeLabel}_${date}.zip`;
+  }
+
+  /**
+   * LoRA 학습용 캡션 텍스트 생성
+   * auto_tags의 taglist를 기본으로, merged 모드에서는 prompt 태그도 병합 (중복 제거)
+   */
+  private static generateCaptionContent(image: ImageWithFileView, captionMode: CaptionMode): string {
+    // auto_tags에서 taglist 추출
+    let taglistTokens: string[] = [];
+    if (image.auto_tags) {
+      try {
+        const parsed = JSON.parse(image.auto_tags);
+        if (parsed.taglist) {
+          taglistTokens = parsed.taglist.split(',').map((t: string) => t.trim()).filter((t: string) => t.length > 0);
+        }
+      } catch {
+        // JSON 파싱 실패 시 빈 배열
+      }
+    }
+
+    if (captionMode === 'auto_tags') {
+      return taglistTokens.join(', ');
+    }
+
+    // merged 모드: taglist + prompt 병합, 대소문자 무시 중복 제거
+    const promptTokens = image.prompt
+      ? image.prompt.split(',').map(t => t.trim()).filter(t => t.length > 0)
+      : [];
+
+    const seen = new Set<string>();
+    const result: string[] = [];
+
+    // taglist 먼저 추가 (auto_tags 우선)
+    for (const token of taglistTokens) {
+      const key = token.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(token);
+      }
+    }
+
+    // prompt 태그 추가 (중복 제거)
+    for (const token of promptTokens) {
+      const key = token.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(token);
+      }
+    }
+
+    return result.join(', ');
   }
 
   /**

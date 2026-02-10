@@ -138,7 +138,10 @@
     "maxPlaceholder": "150",
     "selectOptions": "Select Options (comma separated)",
     "selectOptionsPlaceholder": "euler, dpm++, ddim",
-    "selectOptionsHelper": "Example: euler, dpm++ 2m, ddim"
+    "selectOptionsHelper": "Example: euler, dpm++ 2m, ddim",
+    "description": "Description",
+    "descriptionPlaceholder": "e.g., Enter comma-separated tags for the positive prompt",
+    "descriptionHelper": "Guide text for users and AI agents explaining what this field expects"
   },
   "generate": {
     "pageTitle": "Generate Image",

@@ -112,6 +112,11 @@ export function WorkflowFormFields({
       case 'textarea':
         return (
           <Box key={field.id} sx={{ mb: 2 }}>
+            {field.description && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                {field.description}
+              </Typography>
+            )}
             <WildcardTextField
               multiline
               rows={4}
@@ -135,6 +140,7 @@ export function WorkflowFormFields({
             onChange={(e) => onFieldChange(field.id, e.target.value)}
             required={field.required}
             placeholder={field.placeholder}
+            helperText={field.description}
             inputProps={{
               min: field.min,
               max: field.max,
@@ -153,6 +159,11 @@ export function WorkflowFormFields({
         if (hasSubfolders) {
           return (
             <Box key={field.id} sx={{ mb: 2 }}>
+              {field.description && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                  {field.description}
+                </Typography>
+              )}
               <HierarchicalModelSelector
                 options={options}
                 value={value}
@@ -175,7 +186,7 @@ export function WorkflowFormFields({
             required={field.required}
             SelectProps={{ native: true }}
             sx={{ mb: 2 }}
-            helperText={field.dropdown_list_name ? `📋 ${field.dropdown_list_name}` : undefined}
+            helperText={field.description || (field.dropdown_list_name ? `📋 ${field.dropdown_list_name}` : undefined)}
           >
             {options.map((option: string) => (
               <option key={option} value={option}>
@@ -192,6 +203,11 @@ export function WorkflowFormFields({
             <Typography variant="subtitle2" gutterBottom>
               {field.label} {field.required && <span style={{ color: 'red' }}>*</span>}
             </Typography>
+            {field.description && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                {field.description}
+              </Typography>
+            )}
             <Button
               variant="outlined"
               startIcon={<ImageIcon />}
@@ -218,6 +234,11 @@ export function WorkflowFormFields({
       default: // text
         return (
           <Box key={field.id} sx={{ mb: 2 }}>
+            {field.description && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                {field.description}
+              </Typography>
+            )}
             <WildcardTextField
               label={field.label}
               value={value}

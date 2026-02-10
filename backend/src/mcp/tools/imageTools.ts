@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { ImageSearchModel } from '../../models/Image/ImageSearchModel';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { GenerationHistoryModel } from '../../models/GenerationHistory';
+import { AutoTagSearchService } from '../../services/autoTagSearchService';
+import { AutoTagSearchParams, TagFilter } from '../../types/autoTag';
 
 export function registerImageTools(server: McpServer): void {
   // 이미지 고급 검색
@@ -161,6 +163,120 @@ export function registerImageTools(server: McpServer): void {
         return {
           isError: true,
           content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
+        };
+      }
+    }
+  );
+
+  // 자동 태그 기반 이미지 검색
+  server.tool(
+    'search_images_by_tags',
+    'Search images by auto-generated tags (WD Tagger). Supports tag name search, character search, rating filter, and rating score range.',
+    {
+      tags: z.string().optional().describe('Comma-separated tag names to search (e.g. "long_hair, blue_eyes, school_uniform")'),
+      min_tag_score: z.number().min(0).max(1).optional().describe('Minimum confidence score for tag matching (0-1)'),
+      character: z.string().optional().describe('Character name to search for'),
+      rating: z.enum(['general', 'sensitive', 'questionable', 'explicit']).optional().describe('Filter by dominant rating category'),
+      min_rating_score: z.number().optional().describe('Minimum weighted rating score'),
+      max_rating_score: z.number().optional().describe('Maximum weighted rating score'),
+      has_auto_tags: z.boolean().optional().describe('Filter by auto-tag existence (true=tagged only, false=untagged only)'),
+      search_text: z.string().optional().describe('Search in positive prompts'),
+      ai_tool: z.string().optional().describe('Filter by AI tool (e.g. "ComfyUI", "NovelAI")'),
+      model_name: z.string().optional().describe('Filter by model name'),
+      page: z.number().int().min(1).default(1).describe('Page number'),
+      limit: z.number().int().min(1).max(100).default(20).describe('Results per page'),
+      sort_by: z.enum(['upload_date', 'filename', 'file_size', 'width', 'height']).default('upload_date').describe('Sort field'),
+      sort_order: z.enum(['ASC', 'DESC']).default('DESC').describe('Sort order'),
+    },
+    async (params) => {
+      try {
+        // 평면 파라미터 → AutoTagSearchParams 변환
+        const autoTagParams: AutoTagSearchParams = {
+          has_auto_tags: params.has_auto_tags,
+          page: params.page,
+          limit: params.limit,
+          sortBy: params.sort_by,
+          sortOrder: params.sort_order,
+        };
+
+        // 태그 파싱
+        if (params.tags) {
+          const tagNames = params.tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
+          autoTagParams.general_tags = tagNames.map(tag => {
+            const filter: TagFilter = { tag };
+            if (params.min_tag_score !== undefined) {
+              filter.min_score = params.min_tag_score;
+            }
+            return filter;
+          });
+        }
+
+        // 캐릭터 필터
+        if (params.character) {
+          autoTagParams.character = { name: params.character };
+        }
+
+        // 레이팅 필터
+        if (params.rating) {
+          autoTagParams.rating = {
+            [params.rating]: { min: 0.5 },
+          };
+        }
+
+        // 레이팅 스코어 필터
+        if (params.min_rating_score !== undefined || params.max_rating_score !== undefined) {
+          autoTagParams.rating_score = {
+            min_score: params.min_rating_score,
+            max_score: params.max_rating_score,
+          };
+        }
+
+        // 유효성 검증
+        const validation = AutoTagSearchService.validateSearchParams(autoTagParams);
+        if (!validation.valid) {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: `Invalid parameters: ${validation.errors.join(', ')}` }],
+          };
+        }
+
+        // 기본 검색 파라미터
+        const basicSearchParams = {
+          search_text: params.search_text,
+          ai_tool: params.ai_tool,
+          model_name: params.model_name,
+        };
+
+        const result = await ImageSearchModel.searchByAutoTags(autoTagParams, basicSearchParams);
+
+        const images = result.images.map((img: any) => ({
+          composite_hash: img.composite_hash,
+          width: img.width,
+          height: img.height,
+          ai_tool: img.ai_tool,
+          model_name: img.model_name,
+          prompt: img.prompt ? (img.prompt.length > 200 ? img.prompt.substring(0, 200) + '...' : img.prompt) : null,
+          seed: img.seed,
+          first_seen_date: img.first_seen_date,
+          rating_score: img.rating_score,
+          original_file_path: img.original_file_path,
+        }));
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              images,
+              total: result.total,
+              page: params.page,
+              limit: params.limit,
+            }, null, 2),
+          }],
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `Error searching by tags: ${(error as Error).message}` }],
         };
       }
     }

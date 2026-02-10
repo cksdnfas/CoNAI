@@ -500,6 +500,7 @@ const ImageDetailPage: React.FC = () => {
                   autoTags={image.auto_tags}
                   isTaggerEnabled={isTaggerEnabled}
                   onAutoTagGenerated={handleAutoTagGenerated}
+                  characterPrompts={image.ai_metadata?.raw_nai_parameters?.v4_prompt?.caption?.char_captions?.filter((cp: any) => cp?.char_caption?.trim())}
                 />
               </Paper>
             ) : null}

@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerPromptTools } from './tools/promptTools';
 import { registerGenerationTools } from './tools/generationTools';
 import { registerImageTools } from './tools/imageTools';
+import { registerResourceTools } from './tools/resourceTools';
 
 /**
  * MCP 서버 팩토리
@@ -17,6 +18,7 @@ export function createMcpServer(): McpServer {
   registerPromptTools(server);
   registerGenerationTools(server);
   registerImageTools(server);
+  registerResourceTools(server);
 
   return server;
 }

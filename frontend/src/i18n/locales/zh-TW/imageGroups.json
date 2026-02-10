@@ -229,7 +229,13 @@
     "typeVideo": "影片與動畫（原始）",
     "confirmTitle": "確認大量下載",
     "confirmMessage": "下載{{count}}個檔案。繼續？",
-    "confirmButton": "下載"
+    "confirmButton": "下載",
+    "typeLoraDataset": "LoRA資料集（圖像+標註）",
+    "loraDatasetTitle": "LoRA資料集下載",
+    "loraDatasetDescription": "下載原始圖像和配套的.txt標註檔案，用於LoRA訓練。標註由自動標籤生成。",
+    "loraDatasetMergePrompt": "與正面提示詞合併",
+    "loraDatasetMergePromptHelp": "勾選後，提示詞標籤將與自動標籤合併並去除重複。",
+    "loraDatasetStarted": "LoRA資料集下載已開始。"
   },
   "defaultGroupName": "群組",
   "autoNavigate": "自動導覽至子群組：{{from}} → {{to}}",

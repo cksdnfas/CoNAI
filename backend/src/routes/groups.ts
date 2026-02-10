@@ -3,7 +3,7 @@ import { GroupModel, ImageGroupModel } from '../models/Group';
 import { db } from '../database/init';
 import { AutoCollectionService } from '../services/autoCollectionService';
 import { ComplexFilterService } from '../services/complexFilterService';
-import { GroupDownloadService, DownloadType } from '../services/groupDownloadService';
+import { GroupDownloadService, DownloadType, CaptionMode } from '../services/groupDownloadService';
 import { getGroupHierarchyService } from '../services/groupHierarchyService';
 import {
   GroupResponse,
@@ -648,12 +648,19 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
       return res.status(400).json(errorResponse('Invalid download type. Must be: thumbnail, original, or video'));
     }
 
+    // 캡션 모드 파싱 (LoRA 데이터셋용)
+    const captionMode = req.query.captionMode as string | undefined;
+    if (captionMode && !['auto_tags', 'merged'].includes(captionMode)) {
+      return res.status(400).json(errorResponse('Invalid captionMode. Must be: auto_tags or merged'));
+    }
+
     // ZIP 파일 생성
     const result = await GroupDownloadService.createGroupZip({
       groupId,
       downloadType,
       groupType: 'custom',
-      compositeHashes
+      compositeHashes,
+      captionOptions: captionMode ? { captionMode: captionMode as CaptionMode } : undefined
     });
 
     // ZIP 파일 다운로드 (RFC 2231 - Unicode 파일명 지원)

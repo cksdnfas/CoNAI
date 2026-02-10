@@ -16,6 +16,7 @@ export interface Workflow {
 export interface MarkedField {
   id: string;
   label: string;
+  description?: string;
   jsonPath: string;
   type: 'text' | 'number' | 'select' | 'textarea' | 'image';
   default_value?: any;

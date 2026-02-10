@@ -229,7 +229,13 @@
     "typeVideo": "동영상 및 애니메이트 (원본)",
     "confirmTitle": "대용량 다운로드 확인",
     "confirmMessage": "{{count}}개의 파일을 다운로드합니다. 계속하시겠습니까?",
-    "confirmButton": "다운로드"
+    "confirmButton": "다운로드",
+    "typeLoraDataset": "LoRA 데이터셋 (이미지 + 캡션)",
+    "loraDatasetTitle": "LoRA 데이터셋 다운로드",
+    "loraDatasetDescription": "LoRA 학습용 원본 이미지와 .txt 캡션 파일을 함께 다운로드합니다. 캡션은 자동 태그에서 생성됩니다.",
+    "loraDatasetMergePrompt": "포지티브 프롬프트와 병합",
+    "loraDatasetMergePromptHelp": "체크하면 프롬프트 태그와 자동 태그가 병합되고 중복이 제거됩니다.",
+    "loraDatasetStarted": "LoRA 데이터셋 다운로드가 시작되었습니다."
   },
   "defaultGroupName": "그룹",
   "autoNavigate": "하위 그룹으로 자동 이동: {{from}} → {{to}}",

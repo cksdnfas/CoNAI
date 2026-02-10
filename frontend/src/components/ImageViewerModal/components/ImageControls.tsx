@@ -1,5 +1,5 @@
-import React from 'react';
-import { Box, IconButton, Typography, useMediaQuery } from '@mui/material';
+import React, { useState } from 'react';
+import { Box, IconButton, Typography, useMediaQuery, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
 import {
   Close as CloseIcon,
   Info as InfoIcon,
@@ -13,6 +13,7 @@ import {
   HighQuality as HighQualityIcon,
   Image as ThumbnailIcon,
   Edit as EditIcon,
+  MoreVert as MoreVertIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 
@@ -60,6 +61,9 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
   const isVeryNarrow = useMediaQuery('(max-width:420px)');
   const buttonSize = isVeryNarrow ? 'small' : 'medium';
   const iconFontSize = isVeryNarrow ? 'small' : 'medium';
+  const [moreAnchor, setMoreAnchor] = useState<null | HTMLElement>(null);
+
+  const handleMoreClose = () => setMoreAnchor(null);
 
   return (
     <Box
@@ -77,20 +81,20 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
       }}
     >
       {/* Left side - Transformation controls */}
-      <Box sx={{ display: 'flex', gap: { xs: 0.25, sm: 0.5 }, alignItems: 'center', flexWrap: 'nowrap', overflow: 'hidden' }}>
+      <Box sx={{ display: 'flex', gap: { xs: 0.25, sm: 0.5 }, alignItems: 'center', flexWrap: 'nowrap' }}>
         <IconButton
           onClick={onZoomOut}
           sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
           size={buttonSize}
-          title={t('imageDetail:controls.zoomOut')}
+          title={t('imageDetail:viewer.controls.zoomOut')}
         >
           <ZoomOutIcon fontSize={iconFontSize} />
         </IconButton>
-        <Typography 
-          variant="caption" 
-          sx={{ 
-            color: 'white', 
-            minWidth: { xs: '40px', sm: '50px' }, 
+        <Typography
+          variant="caption"
+          sx={{
+            color: 'white',
+            minWidth: { xs: '40px', sm: '50px' },
             textAlign: 'center',
             fontSize: { xs: '0.65rem', sm: '0.75rem' }
           }}
@@ -101,33 +105,78 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
           onClick={onZoomIn}
           sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
           size={buttonSize}
-          title={t('imageDetail:controls.zoomIn')}
+          title={t('imageDetail:viewer.controls.zoomIn')}
         >
           <ZoomInIcon fontSize={iconFontSize} />
         </IconButton>
-        <IconButton
-          onClick={onRotateLeft}
-          sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
-          size={buttonSize}
-          title={t('imageDetail:controls.rotateLeft')}
-        >
-          <RotateLeftIcon fontSize={iconFontSize} />
-        </IconButton>
-        <IconButton
-          onClick={onRotateRight}
-          sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
-          size={buttonSize}
-          title={t('imageDetail:controls.rotateRight')}
-        >
-          <RotateRightIcon fontSize={iconFontSize} />
-        </IconButton>
-        {!isVeryNarrow && (
+
+        {/* On narrow screens: overflow menu for rotate/flip/edit */}
+        {isVeryNarrow ? (
           <>
+            <IconButton
+              onClick={(e) => setMoreAnchor(e.currentTarget)}
+              sx={{ color: 'white', p: 0.5 }}
+              size="small"
+            >
+              <MoreVertIcon fontSize="small" />
+            </IconButton>
+            <Menu
+              anchorEl={moreAnchor}
+              open={Boolean(moreAnchor)}
+              onClose={handleMoreClose}
+              slotProps={{ paper: { sx: { bgcolor: 'rgba(30,30,30,0.95)', color: 'white' } } }}
+            >
+              <MenuItem onClick={() => { onRotateLeft(); handleMoreClose(); }}>
+                <ListItemIcon><RotateLeftIcon sx={{ color: 'white' }} fontSize="small" /></ListItemIcon>
+                <ListItemText>{t('imageDetail:viewer.controls.rotateLeft')}</ListItemText>
+              </MenuItem>
+              <MenuItem onClick={() => { onRotateRight(); handleMoreClose(); }}>
+                <ListItemIcon><RotateRightIcon sx={{ color: 'white' }} fontSize="small" /></ListItemIcon>
+                <ListItemText>{t('imageDetail:viewer.controls.rotateRight')}</ListItemText>
+              </MenuItem>
+              <MenuItem onClick={() => { onFlipHorizontal(); handleMoreClose(); }}>
+                <ListItemIcon><FlipIcon sx={{ color: 'white' }} fontSize="small" /></ListItemIcon>
+                <ListItemText>{t('imageDetail:viewer.controls.flipHorizontal')}</ListItemText>
+              </MenuItem>
+              <MenuItem onClick={() => { onFlipVertical(); handleMoreClose(); }}>
+                <ListItemIcon><FlipVerticalIcon sx={{ color: 'white' }} fontSize="small" /></ListItemIcon>
+                <ListItemText>{t('imageDetail:viewer.controls.flipVertical')}</ListItemText>
+              </MenuItem>
+              <MenuItem onClick={() => { onReset(); handleMoreClose(); }}>
+                <ListItemIcon><ResetIcon sx={{ color: 'white' }} fontSize="small" /></ListItemIcon>
+                <ListItemText>{t('imageDetail:viewer.controls.reset')}</ListItemText>
+              </MenuItem>
+              {onEdit && !isGif && !isVideo && (
+                <MenuItem onClick={() => { onEdit(); handleMoreClose(); }}>
+                  <ListItemIcon><EditIcon sx={{ color: 'white' }} fontSize="small" /></ListItemIcon>
+                  <ListItemText>Edit</ListItemText>
+                </MenuItem>
+              )}
+            </Menu>
+          </>
+        ) : (
+          <>
+            <IconButton
+              onClick={onRotateLeft}
+              sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
+              size={buttonSize}
+              title={t('imageDetail:viewer.controls.rotateLeft')}
+            >
+              <RotateLeftIcon fontSize={iconFontSize} />
+            </IconButton>
+            <IconButton
+              onClick={onRotateRight}
+              sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
+              size={buttonSize}
+              title={t('imageDetail:viewer.controls.rotateRight')}
+            >
+              <RotateRightIcon fontSize={iconFontSize} />
+            </IconButton>
             <IconButton
               onClick={onFlipHorizontal}
               sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
               size={buttonSize}
-              title={t('imageDetail:controls.flipHorizontal')}
+              title={t('imageDetail:viewer.controls.flipHorizontal')}
             >
               <FlipIcon fontSize={iconFontSize} />
             </IconButton>
@@ -135,22 +184,33 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
               onClick={onFlipVertical}
               sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
               size={buttonSize}
-              title={t('imageDetail:controls.flipVertical')}
+              title={t('imageDetail:viewer.controls.flipVertical')}
             >
               <FlipVerticalIcon fontSize={iconFontSize} />
             </IconButton>
+            <IconButton
+              onClick={onReset}
+              sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
+              size={buttonSize}
+              title={t('imageDetail:viewer.controls.reset')}
+            >
+              <ResetIcon fontSize={iconFontSize} />
+            </IconButton>
+            {/* Edit button for img2img (images only) */}
+            {onEdit && !isGif && !isVideo && (
+              <IconButton
+                onClick={onEdit}
+                sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
+                size={buttonSize}
+                title="Edit for img2img"
+              >
+                <EditIcon fontSize={iconFontSize} />
+              </IconButton>
+            )}
           </>
         )}
-        <IconButton
-          onClick={onReset}
-          sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
-          size={buttonSize}
-          title={t('imageDetail:controls.reset')}
-        >
-          <ResetIcon fontSize={iconFontSize} />
-        </IconButton>
 
-        {/* Original/Thumbnail toggle (not for GIF/Video) */}
+        {/* Original/Thumbnail toggle (not for GIF/Video) - always visible */}
         {!isGif && !isVideo && (
           <IconButton
             onClick={onToggleOriginal}
@@ -168,18 +228,6 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
             {showOriginal ? <ThumbnailIcon fontSize={iconFontSize} /> : <HighQualityIcon fontSize={iconFontSize} />}
           </IconButton>
         )}
-
-        {/* Edit button for img2img (images only) */}
-        {onEdit && !isGif && !isVideo && (
-          <IconButton
-            onClick={onEdit}
-            sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
-            size={buttonSize}
-            title="Edit for img2img"
-          >
-            <EditIcon fontSize={iconFontSize} />
-          </IconButton>
-        )}
       </Box>
 
       {/* Right side - Action buttons */}
@@ -189,7 +237,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
             onClick={onOpenDrawer}
             sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
             size={buttonSize}
-            title={t('imageDetail:controls.info')}
+            title={t('imageDetail:viewer.controls.info')}
           >
             <InfoIcon fontSize={iconFontSize} />
           </IconButton>
@@ -198,7 +246,7 @@ export const ImageControls: React.FC<ImageControlsProps> = ({
           onClick={onClose}
           sx={{ color: 'white', p: { xs: 0.5, sm: 1 } }}
           size={buttonSize}
-          title={t('imageDetail:controls.close')}
+          title={t('imageDetail:viewer.controls.close')}
         >
           <CloseIcon fontSize={iconFontSize} />
         </IconButton>

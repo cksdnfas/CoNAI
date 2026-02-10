@@ -154,10 +154,18 @@
       "negative": "Negative",
       "auto": "AUTO"
     },
+    "cards": {
+      "positive": "Positive Prompt",
+      "negative": "Negative Prompt",
+      "character": "Character {{index}}",
+      "auto": "AUTO Tags"
+    },
     "labels": {
       "prompt": "Prompt",
       "negativePrompt": "Negative Prompt"
     },
+    "copy": "Copy",
+    "copied": "Copied!",
     "noPrompt": "No prompt information available.",
     "loading": "Loading...",
     "loadFailed": "Failed to load group information."

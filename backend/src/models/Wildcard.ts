@@ -337,6 +337,40 @@ export class WildcardModel {
   }
 
   /**
+   * 와일드카드 검색 (이름 LIKE 검색 + 페이지네이션)
+   */
+  static search(query: string, page: number = 1, limit: number = 50): { wildcards: Wildcard[]; total: number } {
+    const db = getUserSettingsDb();
+    const offset = (page - 1) * limit;
+    const pattern = `%${query}%`;
+
+    const total = (db.prepare(
+      'SELECT COUNT(*) as count FROM wildcards WHERE name LIKE ?'
+    ).get(pattern) as { count: number }).count;
+
+    const wildcards = db.prepare(
+      'SELECT * FROM wildcards WHERE name LIKE ? ORDER BY name LIMIT ? OFFSET ?'
+    ).all(pattern, limit, offset) as Wildcard[];
+
+    return { wildcards, total };
+  }
+
+  /**
+   * 특정 부모의 자식 수 조회
+   */
+  static countChildren(parentId: number | null): number {
+    const db = getUserSettingsDb();
+    if (parentId === null) {
+      return (db.prepare(
+        'SELECT COUNT(*) as count FROM wildcards WHERE parent_id IS NULL'
+      ).get() as { count: number }).count;
+    }
+    return (db.prepare(
+      'SELECT COUNT(*) as count FROM wildcards WHERE parent_id = ?'
+    ).get(parentId) as { count: number }).count;
+  }
+
+  /**
    * 루트 와일드카드만 조회 (parent_id가 NULL인 것들)
    */
   static findRoots(): Wildcard[] {

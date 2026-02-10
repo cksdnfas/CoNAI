@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { AutoFolderGroupService } from '../services/autoFolderGroupService';
-import { GroupDownloadService, DownloadType } from '../services/groupDownloadService';
+import { GroupDownloadService, DownloadType, CaptionMode } from '../services/groupDownloadService';
 import { AutoFolderGroupImageModel } from '../models/AutoFolderGroup';
 import {
   validateId,
@@ -247,6 +247,12 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
     // 선택된 이미지만 다운로드 (옵션)
     const selectedHashes = hashesParam ? hashesParam.split(',') : undefined;
 
+    // 캡션 모드 파싱 (LoRA 데이터셋용)
+    const captionMode = req.query.captionMode as string | undefined;
+    if (captionMode && !['auto_tags', 'merged'].includes(captionMode)) {
+      return res.status(400).json(errorResponse('Invalid captionMode. Must be: auto_tags or merged'));
+    }
+
     const group = await AutoFolderGroupService.getGroupById(id);
     if (!group) {
       return res.status(404).json(errorResponse('Group not found'));
@@ -265,7 +271,8 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
       groupId: id,
       downloadType: type,
       groupType: 'auto-folder',
-      compositeHashes: selectedHashes
+      compositeHashes: selectedHashes,
+      captionOptions: captionMode ? { captionMode: captionMode as CaptionMode } : undefined
     });
 
     // ZIP 파일 전송
