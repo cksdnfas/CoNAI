@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
+  Chip,
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
@@ -30,6 +31,8 @@ interface PromptDisplayProps {
   isHistoryContext?: boolean;
   // NAI character prompts
   characterPrompts?: NaiCharacterPrompt[];
+  // NAI raw parameters (for original prompt toggle)
+  rawNaiParameters?: Record<string, any> | null;
 }
 
 const PromptDisplay: React.FC<PromptDisplayProps> = ({
@@ -41,24 +44,50 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
   isTaggerEnabled = false,
   onAutoTagGenerated,
   characterPrompts,
+  rawNaiParameters,
 }) => {
   const { t } = useTranslation('promptManagement');
   const [positiveGrouped, setPositiveGrouped] = useState<GroupedPromptResult | null>(null);
   const [negativeGrouped, setNegativeGrouped] = useState<GroupedPromptResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+  const [userWantsGrouped, setUserWantsGrouped] = useState(() => {
+    try {
+      const stored = localStorage.getItem('promptDisplay_grouped');
+      return stored === null ? true : stored === 'true';
+    } catch { return true; }
+  });
 
-  const hasPrompt = prompt && prompt.trim();
-  const hasNegativePrompt = negativePrompt && negativePrompt.trim();
+  // Determine if raw mode is active (only when NAI raw parameters available)
+  const hasRawNai = !!rawNaiParameters?.prompt;
+  const isRawMode = showRaw && hasRawNai;
+
+  // Effective prompts based on toggle
+  const effectivePrompt = isRawMode ? (rawNaiParameters?.prompt || '') : prompt;
+  const effectiveNegativePrompt = isRawMode ? (rawNaiParameters?.uc || '') : negativePrompt;
+  const effectiveShowGrouped = isRawMode ? false : (showGrouped && userWantsGrouped);
+
+  const toggleGrouped = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setUserWantsGrouped(prev => {
+      const next = !prev;
+      try { localStorage.setItem('promptDisplay_grouped', String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
+
+  const hasPrompt = effectivePrompt && effectivePrompt.trim();
+  const hasNegativePrompt = effectiveNegativePrompt && effectiveNegativePrompt.trim();
   const hasCharacterPrompts = characterPrompts && characterPrompts.some(cp => cp.char_caption.trim());
   const showAutoSection = (isTaggerEnabled && imageId !== undefined) || (autoTags && Object.keys(autoTags).length > 0);
 
   // Memoize prompts to prevent unnecessary re-renders
-  const memoizedPrompt = React.useMemo(() => prompt?.trim() || '', [prompt?.trim()]);
-  const memoizedNegativePrompt = React.useMemo(() => negativePrompt?.trim() || '', [negativePrompt?.trim()]);
+  const memoizedPrompt = React.useMemo(() => (typeof effectivePrompt === 'string' ? effectivePrompt.trim() : '') || '', [effectivePrompt]);
+  const memoizedNegativePrompt = React.useMemo(() => (typeof effectiveNegativePrompt === 'string' ? effectiveNegativePrompt.trim() : '') || '', [effectiveNegativePrompt]);
 
   // Grouped prompt processing
   useEffect(() => {
-    if (showGrouped) {
+    if (effectiveShowGrouped) {
       const loadGroupedData = async () => {
         setLoading(true);
         try {
@@ -82,7 +111,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
       setPositiveGrouped(null);
       setNegativeGrouped(null);
     }
-  }, [showGrouped, memoizedPrompt, memoizedNegativePrompt, hasPrompt, hasNegativePrompt]);
+  }, [effectiveShowGrouped, memoizedPrompt, memoizedNegativePrompt, hasPrompt, hasNegativePrompt]);
 
   // Render grouped prompt content
   const renderGroupedContent = (data: GroupedPromptResult | null, isNegative: boolean = false) => {
@@ -189,10 +218,35 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
         <PromptCard
           cardId="positive"
           title={t('promptDisplay.cards.positive', 'Positive Prompt')}
-          copyText={prompt || ''}
+          copyText={(typeof effectivePrompt === 'string' ? effectivePrompt : '') || ''}
           color="primary.main"
+          headerExtra={<>
+            {showGrouped && !isRawMode && (
+              <Chip
+                label={t('promptDisplay.showGrouped')}
+                onClick={toggleGrouped}
+                variant={userWantsGrouped ? 'filled' : 'outlined'}
+                size="small"
+                color={userWantsGrouped ? 'primary' : 'default'}
+                sx={{ fontSize: '0.65rem', height: 20 }}
+              />
+            )}
+            {hasRawNai && (
+              <Chip
+                label={isRawMode
+                  ? t('promptDisplay.showOriginal')
+                  : t('promptDisplay.showProcessed')
+                }
+                onClick={(e) => { e.stopPropagation(); setShowRaw(!showRaw); }}
+                variant={isRawMode ? 'filled' : 'outlined'}
+                size="small"
+                color={isRawMode ? 'warning' : 'default'}
+                sx={{ fontSize: '0.65rem', height: 20 }}
+              />
+            )}
+          </>}
         >
-          {showGrouped
+          {effectiveShowGrouped
             ? renderGroupedContent(positiveGrouped, false)
             : (
               <Typography
@@ -204,7 +258,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
                   fontSize: '0.8rem',
                 }}
               >
-                {prompt}
+                {effectivePrompt}
               </Typography>
             )
           }
@@ -242,10 +296,20 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
         <PromptCard
           cardId="negative"
           title={t('promptDisplay.cards.negative', 'Negative Prompt')}
-          copyText={negativePrompt || ''}
+          copyText={(typeof effectiveNegativePrompt === 'string' ? effectiveNegativePrompt : '') || ''}
           color="error.main"
+          headerExtra={showGrouped && !isRawMode ? (
+            <Chip
+              label={t('promptDisplay.showGrouped')}
+              onClick={toggleGrouped}
+              variant={userWantsGrouped ? 'filled' : 'outlined'}
+              size="small"
+              color={userWantsGrouped ? 'primary' : 'default'}
+              sx={{ fontSize: '0.65rem', height: 20 }}
+            />
+          ) : undefined}
         >
-          {showGrouped
+          {effectiveShowGrouped
             ? renderGroupedContent(negativeGrouped, true)
             : (
               <Typography
@@ -258,7 +322,7 @@ const PromptDisplay: React.FC<PromptDisplayProps> = ({
                   color: 'text.secondary',
                 }}
               >
-                {negativePrompt}
+                {effectiveNegativePrompt}
               </Typography>
             )
           }

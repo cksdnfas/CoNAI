@@ -45,7 +45,7 @@ npm run dev
 npm run start
 ```
 
-기본 포트: `1677`
+기본 포트: `1566`
 
 ### 방법 1: Streamable HTTP (권장)
 
@@ -54,12 +54,12 @@ npm run start
 #### Claude Code에서 설정
 
 ```bash
-claude mcp add --transport http comfyui-image-manager http://localhost:1677/mcp
+claude mcp add --transport http comfyui-image-manager http://localhost:1566/mcp
 ```
 
 외부 네트워크에서 접근하는 경우:
 ```bash
-claude mcp add --transport http comfyui-image-manager http://<서버IP>:1677/mcp
+claude mcp add --transport http comfyui-image-manager http://<서버IP>:1566/mcp
 ```
 
 #### 설정 확인
@@ -239,8 +239,8 @@ claude mcp remove comfyui-image-manager
 
 ### MCP 연결이 안 될 때
 
-1. 백엔드 서버가 실행 중인지 확인: `http://localhost:1677/health`
-2. MCP 엔드포인트 확인: `curl -X POST http://localhost:1677/mcp -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'`
+1. 백엔드 서버가 실행 중인지 확인: `http://localhost:1566/health`
+2. MCP 엔드포인트 확인: `curl -X POST http://localhost:1566/mcp -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'`
 3. Claude Code에서 `/mcp` 명령으로 연결 상태 확인
 
 ### NovelAI 생성 오류

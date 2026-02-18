@@ -68,7 +68,7 @@ export const AIInfoSection: React.FC<AIInfoSectionProps> = ({ image, onCopy }) =
   };
 
   return (
-    <Box sx={{ mb: 2 }}>
+    <Box>
       <Box
         sx={{
           display: 'flex',

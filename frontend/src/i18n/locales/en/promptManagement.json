@@ -166,6 +166,9 @@
     },
     "copy": "Copy",
     "copied": "Copied!",
+    "showOriginal": "Original",
+    "showProcessed": "Processed",
+    "showGrouped": "Group",
     "noPrompt": "No prompt information available.",
     "loading": "Loading...",
     "loadFailed": "Failed to load group information."

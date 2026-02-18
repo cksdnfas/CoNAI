@@ -63,6 +63,97 @@ export class NovelAIParser {
   }
 
   /**
+   * Convert NAI prompt syntax to ComfyUI-compatible format.
+   * - Inline weight: `-0.8::feet::` → `(feet:-0.8)`
+   * - Emphasis up: `{tag}` → `(tag:1.05)` per nesting level
+   * - Emphasis down: `[tag]` → `(tag:0.95)` per nesting level
+   */
+  static convertNaiToComfyUI(prompt: string): string {
+    if (!prompt) return prompt;
+
+    // Step 1: Convert inline weight syntax value::tag::
+    // Split comma-separated terms so each gets individual weight
+    let result = prompt.replace(/(-?[\d.]+)::([^:]+)::/g, (_match, weight, content) => {
+      const terms = content.split(',').map((t: string) => t.trim()).filter((t: string) => t);
+      return terms.map((t: string) => `(${t}:${weight})`).join(', ');
+    });
+
+    // Step 2: Convert {} and [] brackets to (:weight)
+    result = this.convertBrackets(result);
+
+    // Step 3: Simplify nested single-content weights: ((text:w1):w2) → (text:w1*w2)
+    result = this.simplifyNestedWeights(result);
+
+    return result;
+  }
+
+  /**
+   * Recursively convert NAI bracket syntax to ComfyUI weight syntax
+   */
+  private static convertBrackets(text: string): string {
+    const NAI_FACTOR = 1.05;
+    let result = '';
+    let i = 0;
+
+    while (i < text.length) {
+      const ch = text[i];
+
+      if (ch === '{' || ch === '[') {
+        const openChar = ch;
+        const closeChar = ch === '{' ? '}' : ']';
+        const isPositive = ch === '{';
+
+        // Find matching closing bracket
+        let depth = 1;
+        let j = i + 1;
+        while (j < text.length && depth > 0) {
+          if (text[j] === openChar) depth++;
+          else if (text[j] === closeChar) depth--;
+          j++;
+        }
+
+        if (depth === 0) {
+          // Found matching bracket
+          const inner = text.substring(i + 1, j - 1);
+          const processed = this.convertBrackets(inner);
+          const weight = isPositive ? NAI_FACTOR : (1 / NAI_FACTOR);
+          result += `(${processed}:${weight.toFixed(2)})`;
+          i = j;
+        } else {
+          // No matching bracket, output as-is
+          result += ch;
+          i++;
+        }
+      } else {
+        result += ch;
+        i++;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Simplify nested single-content weights: ((text:1.05):1.05) → (text:1.10)
+   */
+  private static simplifyNestedWeights(text: string): string {
+    let result = text;
+    let changed = true;
+    while (changed) {
+      changed = false;
+      result = result.replace(
+        /\(\(([^()]+):([\d.]+)\):([\d.]+)\)/g,
+        (_match, content, innerW, outerW) => {
+          changed = true;
+          const combined = (parseFloat(innerW) * parseFloat(outerW)).toFixed(2);
+          return `(${content}:${combined})`;
+        }
+      );
+    }
+    return result;
+  }
+
+  /**
    * Parse NovelAI metadata
    */
   static parse(data: any): AIMetadata {
@@ -104,31 +195,34 @@ export class NovelAIParser {
       const aiInfo: AIMetadata = {};
 
       // Positive prompt (v4_prompt takes priority)
+      // Convert NAI syntax to ComfyUI format for consistency and search
       if (naiData.v4_prompt?.caption?.base_caption) {
-        aiInfo.positive_prompt = naiData.v4_prompt.caption.base_caption;
+        const raw = naiData.v4_prompt.caption.base_caption;
+        aiInfo.positive_prompt = this.convertNaiToComfyUI(raw);
         aiInfo.prompt = aiInfo.positive_prompt;
       } else if (naiData.prompt) {
         // Type guard: ensure prompt is a string
         if (typeof naiData.prompt === 'string') {
-          aiInfo.positive_prompt = naiData.prompt;
-          aiInfo.prompt = naiData.prompt;
+          aiInfo.positive_prompt = this.convertNaiToComfyUI(naiData.prompt);
+          aiInfo.prompt = aiInfo.positive_prompt;
         } else if (typeof naiData.prompt === 'object' && naiData.prompt?.caption?.base_caption) {
           // Handle case where naiData.prompt is actually a v4_prompt structure
-          aiInfo.positive_prompt = naiData.prompt.caption.base_caption;
-          aiInfo.prompt = naiData.prompt.caption.base_caption;
+          const raw = naiData.prompt.caption.base_caption;
+          aiInfo.positive_prompt = this.convertNaiToComfyUI(raw);
+          aiInfo.prompt = aiInfo.positive_prompt;
         }
       }
 
       // Negative prompt (v4_negative_prompt takes priority)
       if (naiData.v4_negative_prompt?.caption?.base_caption) {
-        aiInfo.negative_prompt = naiData.v4_negative_prompt.caption.base_caption;
+        aiInfo.negative_prompt = this.convertNaiToComfyUI(naiData.v4_negative_prompt.caption.base_caption);
       } else if (naiData.uc) {
         // Type guard: ensure uc is a string
         if (typeof naiData.uc === 'string') {
-          aiInfo.negative_prompt = naiData.uc;
+          aiInfo.negative_prompt = this.convertNaiToComfyUI(naiData.uc);
         } else if (typeof naiData.uc === 'object' && naiData.uc?.caption?.base_caption) {
           // Handle case where naiData.uc is actually a v4_negative_prompt structure
-          aiInfo.negative_prompt = naiData.uc.caption.base_caption;
+          aiInfo.negative_prompt = this.convertNaiToComfyUI(naiData.uc.caption.base_caption);
         }
       }
 

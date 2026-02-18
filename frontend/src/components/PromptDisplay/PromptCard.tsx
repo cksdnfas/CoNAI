@@ -18,6 +18,8 @@ interface PromptCardProps {
   children?: React.ReactNode;
   copyText?: string;
   color?: string;
+  /** Extra element rendered in header next to copy button */
+  headerExtra?: React.ReactNode;
 }
 
 /**
@@ -32,6 +34,7 @@ const PromptCard: React.FC<PromptCardProps> = ({
   children,
   copyText,
   color = 'primary.main',
+  headerExtra,
 }) => {
   const { t } = useTranslation('promptManagement');
   const [copied, setCopied] = useState(false);
@@ -146,21 +149,24 @@ const PromptCard: React.FC<PromptCardProps> = ({
           </Typography>
         </Box>
 
-        {textToCopy && (
-          <Tooltip title={copied ? t('promptDisplay.copied', 'Copied!') : t('promptDisplay.copy', 'Copy')}>
-            <IconButton
-              size="small"
-              onClick={handleCopy}
-              sx={{
-                p: 0.5,
-                color: copied ? 'success.main' : 'text.secondary',
-                '&:hover': { color: copied ? 'success.main' : 'text.primary' },
-              }}
-            >
-              {copied ? <CheckIcon sx={{ fontSize: '0.9rem' }} /> : <CopyIcon sx={{ fontSize: '0.9rem' }} />}
-            </IconButton>
-          </Tooltip>
-        )}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {headerExtra}
+          {textToCopy && (
+            <Tooltip title={copied ? t('promptDisplay.copied', 'Copied!') : t('promptDisplay.copy', 'Copy')}>
+              <IconButton
+                size="small"
+                onClick={handleCopy}
+                sx={{
+                  p: 0.5,
+                  color: copied ? 'success.main' : 'text.secondary',
+                  '&:hover': { color: copied ? 'success.main' : 'text.primary' },
+                }}
+              >
+                {copied ? <CheckIcon sx={{ fontSize: '0.9rem' }} /> : <CopyIcon sx={{ fontSize: '0.9rem' }} />}
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
       </Box>
 
       {/* Collapsible Content */}

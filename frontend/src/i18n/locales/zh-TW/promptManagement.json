@@ -166,6 +166,9 @@
     },
     "copy": "複製",
     "copied": "已複製！",
+    "showOriginal": "原始",
+    "showProcessed": "已處理",
+    "showGrouped": "分組",
     "noPrompt": "沒有提示詞資訊。",
     "loading": "載入中...",
     "loadFailed": "無法載入群組資訊。"

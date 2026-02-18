@@ -166,6 +166,9 @@
     },
     "copy": "복사",
     "copied": "복사됨!",
+    "showOriginal": "원본",
+    "showProcessed": "가공됨",
+    "showGrouped": "그룹",
     "noPrompt": "프롬프트 정보가 없습니다.",
     "loading": "로딩 중...",
     "loadFailed": "그룹 정보를 로드할 수 없습니다."

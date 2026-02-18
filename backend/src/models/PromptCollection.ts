@@ -354,6 +354,24 @@ export class PromptCollectionModel {
   }
 
   /**
+   * 모든 프롬프트 전체 내보내기 (백업용 - usage_count 포함)
+   */
+  static exportAllPrompts(type: 'positive' | 'negative' | 'auto' = 'positive'): any[] {
+    const tableName = getTableName(type);
+
+    const rows = db.prepare(
+      `SELECT prompt, usage_count, group_id, synonyms FROM ${tableName} ORDER BY prompt`
+    ).all() as any[];
+
+    return rows.map(row => ({
+      prompt: row.prompt,
+      usage_count: row.usage_count,
+      group_id: row.group_id,
+      synonyms: row.synonyms ? JSON.parse(row.synonyms) : null
+    }));
+  }
+
+  /**
    * 모든 프롬프트 설정 내보내기 (JSON 공유용)
    */
   static exportAllSettings(type: 'positive' | 'negative' | 'auto' = 'positive'): any[] {

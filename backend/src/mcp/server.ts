@@ -3,6 +3,7 @@ import { registerPromptTools } from './tools/promptTools';
 import { registerGenerationTools } from './tools/generationTools';
 import { registerImageTools } from './tools/imageTools';
 import { registerResourceTools } from './tools/resourceTools';
+import { registerPromptOrganizationTools } from './tools/promptOrganizationTools';
 
 /**
  * MCP 서버 팩토리
@@ -19,6 +20,7 @@ export function createMcpServer(): McpServer {
   registerGenerationTools(server);
   registerImageTools(server);
   registerResourceTools(server);
+  registerPromptOrganizationTools(server);
 
   return server;
 }

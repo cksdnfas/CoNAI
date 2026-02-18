@@ -35,7 +35,7 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
 
   // 프롬프트 표시 여부 결정
   const hasPrompts = image.ai_metadata &&
-                     (image.ai_metadata.prompts.prompt || image.ai_metadata.prompts.negative_prompt);
+    (image.ai_metadata.prompts.prompt || image.ai_metadata.prompts.negative_prompt);
 
   // NAI 캐릭터 프롬프트 추출
   const rawNai = image.ai_metadata?.raw_nai_parameters;
@@ -75,20 +75,20 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
   };
 
   return (
-    <Box 
-      sx={{ 
-        p: { xs: 2, sm: 3 }, 
-        height: '100%', 
-        display: 'flex', 
+    <Box
+      sx={{
+        p: { xs: 2, sm: 3 },
+        height: '100%',
+        display: 'flex',
         flexDirection: 'column',
-        bgcolor: (theme) => 
-          theme.palette.mode === 'light' 
-            ? 'rgba(0, 0, 0, 0.02)' 
+        bgcolor: (theme) =>
+          theme.palette.mode === 'light'
+            ? 'rgba(0, 0, 0, 0.02)'
             : 'background.paper'
       }}
     >
       {/* Top info section - fixed, shrinks to content */}
-      <Box sx={{ flexShrink: 0, overflowX: 'visible', mb: 1, pt: '2px' }}>
+      <Box sx={{ flexShrink: 0, overflowX: 'visible', mb: 2 }}>
         {/* <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
           {t('imageDetail:info.title')}
         </Typography> */}
@@ -192,6 +192,7 @@ export const ImageDetailSidebar: React.FC<ImageDetailSidebarProps> = ({
             onAutoTagGenerated={onAutoTagGenerated}
             isHistoryContext={isHistoryContext}
             characterPrompts={characterPrompts}
+            rawNaiParameters={rawNai}
           />
         </Box>
       )}
