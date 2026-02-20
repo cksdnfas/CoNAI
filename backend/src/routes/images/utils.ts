@@ -31,7 +31,8 @@ export function enrichImageRecord(image: any) {
       },
       prompts: {
         prompt: image.prompt,
-        negative_prompt: image.negative_prompt
+        negative_prompt: image.negative_prompt,
+        character_prompt_text: image.character_prompt_text || null
       },
       raw_nai_parameters: image.raw_nai_parameters ? JSON.parse(image.raw_nai_parameters) : null
     },
@@ -118,7 +119,8 @@ export function enrichImageWithFileView(image: any) {
       },
       prompts: {
         prompt: image.prompt,
-        negative_prompt: image.negative_prompt
+        negative_prompt: image.negative_prompt,
+        character_prompt_text: image.character_prompt_text || null
       },
       raw_nai_parameters: image.raw_nai_parameters
         ? (typeof image.raw_nai_parameters === 'string' ? JSON.parse(image.raw_nai_parameters) : image.raw_nai_parameters)

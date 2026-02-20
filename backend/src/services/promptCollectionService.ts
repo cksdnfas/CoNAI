@@ -120,7 +120,11 @@ export class PromptCollectionService {
    *
    * 성능 최적화: 배치 처리를 사용하여 DB 쿼리 수를 대폭 감소
    */
-  static async collectFromImage(prompt: string | null, negativePrompt: string | null): Promise<void> {
+  static async collectFromImage(
+    prompt: string | null,
+    negativePrompt: string | null,
+    characterPromptText: string | null = null
+  ): Promise<void> {
     const startTime = Date.now();
     console.log('⏱️ [PromptCollection] Starting prompt collection...');
 
@@ -193,6 +197,45 @@ export class PromptCollectionService {
         console.log(`⏱️ [PromptCollection] Positive prompt total: ${Date.now() - positiveStart}ms`);
       } else if (prompt) {
         console.log(`⚠️ Skipping invalid prompt: "${prompt}"`);
+      }
+
+      // NAI 캐릭터 프롬프트 수집 (positive prompt 컬렉션에 병합)
+      if (this.isValidPrompt(characterPromptText)) {
+        const characterStart = Date.now();
+        console.log(`⏱️ [PromptCollection] Processing character prompt (${characterPromptText!.length} chars)...`);
+
+        const parseStart = Date.now();
+        const { terms } = parsePromptWithLoRAs(characterPromptText!);
+        console.log(`⏱️ [PromptCollection] Parse character prompt: ${Date.now() - parseStart}ms (${terms.length} terms)`);
+
+        const termPrompts: Array<{ prompt: string; group_id?: number }> = [];
+        const termCleanStart = Date.now();
+
+        for (const term of terms) {
+          const trimmed = term.trim();
+          if (!trimmed || trimmed.length < 2) continue;
+
+          try {
+            const cleaned = cleanPromptTerm(trimmed);
+            if (cleaned && cleaned.length >= 2) {
+              termPrompts.push({ prompt: cleaned });
+            }
+          } catch (termError) {
+            console.error(`❌ Failed to clean character term "${trimmed}":`, termError);
+          }
+        }
+
+        console.log(`⏱️ [PromptCollection] Clean ${terms.length} character terms: ${Date.now() - termCleanStart}ms`);
+
+        if (termPrompts.length > 0) {
+          const charDbStart = Date.now();
+          await PromptCollectionModel.batchAddOrIncrement(termPrompts);
+          console.log(`⏱️ [PromptCollection] DB save ${termPrompts.length} character terms: ${Date.now() - charDbStart}ms`);
+        }
+
+        console.log(`⏱️ [PromptCollection] Character prompt total: ${Date.now() - characterStart}ms`);
+      } else if (characterPromptText) {
+        console.log(`⚠️ Skipping invalid character prompt: "${characterPromptText}"`);
       }
 
       // 네거티브 프롬프트 수집 (동일 로직)

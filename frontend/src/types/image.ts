@@ -55,6 +55,7 @@ export interface ImageRecord {
   scheduler: string | null;            // Scheduler name
   prompt: string | null;               // Positive prompt
   negative_prompt: string | null;      // Negative prompt
+  character_prompt_text?: string | null; // NAI character prompt (normalized)
   denoise_strength: number | null;     // Denoise strength
   generation_time: number | null;      // Generation time in seconds
   batch_size: number | null;           // Batch size
@@ -108,6 +109,7 @@ export interface ImageRecord {
     prompts: {
       prompt: string | null;
       negative_prompt: string | null;
+      character_prompt_text?: string | null;
     };
     // NovelAI 원본 생성 파라미터 (전체 JSON)
     raw_nai_parameters: Record<string, any> | null;
