@@ -154,6 +154,37 @@ export class NovelAIParser {
   }
 
   /**
+   * Extract and normalize character prompts from NAI v4 structure
+   * path: v4_prompt.caption.char_captions[].char_caption
+   */
+  private static extractCharacterPromptText(naiData: any): string | undefined {
+    const rawCharCaptions = naiData?.v4_prompt?.caption?.char_captions;
+    if (!Array.isArray(rawCharCaptions) || rawCharCaptions.length === 0) {
+      return undefined;
+    }
+
+    const normalizedCaptions = rawCharCaptions
+      .map((item: any) => {
+        const rawCaption = typeof item === 'string'
+          ? item
+          : (typeof item?.char_caption === 'string' ? item.char_caption : '');
+
+        const trimmed = rawCaption.trim();
+        if (!trimmed) return null;
+
+        return this.convertNaiToComfyUI(trimmed);
+      })
+      .filter((value: string | null): value is string => !!value && value.length > 0);
+
+    if (normalizedCaptions.length === 0) {
+      return undefined;
+    }
+
+    // 검색 최적화를 위해 하나의 텍스트로 평탄화
+    return normalizedCaptions.join(', ');
+  }
+
+  /**
    * Parse NovelAI metadata
    */
   static parse(data: any): AIMetadata {
@@ -212,6 +243,9 @@ export class NovelAIParser {
           aiInfo.prompt = aiInfo.positive_prompt;
         }
       }
+
+      // Character prompt (v4_prompt.caption.char_captions)
+      aiInfo.character_prompt_text = this.extractCharacterPromptText(naiData);
 
       // Negative prompt (v4_negative_prompt takes priority)
       if (naiData.v4_negative_prompt?.caption?.base_caption) {
@@ -284,6 +318,7 @@ export class NovelAIParser {
 
       console.log('✅ [NovelAIParser] Successfully parsed:', {
         hasPrompt: !!aiInfo.prompt,
+        hasCharacterPrompt: !!aiInfo.character_prompt_text,
         hasNegativePrompt: !!aiInfo.negative_prompt,
         steps: aiInfo.steps,
         scale: aiInfo.cfg_scale,

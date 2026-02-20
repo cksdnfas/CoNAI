@@ -46,6 +46,9 @@ export interface AIMetadata {
   description?: string;
   software?: string;
 
+  // NovelAI 캐릭터 프롬프트 정규화 텍스트(검색 최적화용)
+  character_prompt_text?: string;
+
   // NovelAI 원본 생성 파라미터 (JSON 문자열)
   raw_nai_parameters?: string;
 

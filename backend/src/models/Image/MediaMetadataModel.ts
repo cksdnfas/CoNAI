@@ -74,8 +74,8 @@ export class MediaMetadataModel {
         ai_tool, model_name, lora_models, steps, cfg_scale, sampler, seed, scheduler,
         prompt, negative_prompt, denoise_strength, generation_time, batch_size, batch_index,
         auto_tags, duration, fps, video_codec, audio_codec, bitrate, rating_score, model_references,
-        raw_nai_parameters
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        character_prompt_text, raw_nai_parameters
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.composite_hash, data.perceptual_hash, data.dhash, data.ahash, data.color_histogram,
       data.width, data.height, data.thumbnail_path,
@@ -84,7 +84,7 @@ export class MediaMetadataModel {
       data.denoise_strength, data.generation_time, data.batch_size, data.batch_index,
       data.auto_tags, data.duration, data.fps, data.video_codec, data.audio_codec,
       data.bitrate, data.rating_score, data.model_references,
-      data.raw_nai_parameters
+      data.character_prompt_text, data.raw_nai_parameters
     );
 
     return data.composite_hash;
@@ -101,7 +101,7 @@ export class MediaMetadataModel {
       'sampler', 'seed', 'scheduler', 'denoise_strength',
       'generation_time', 'batch_size', 'batch_index',
       'thumbnail_path', 'width', 'height', 'model_references',
-      'raw_nai_parameters'
+      'character_prompt_text', 'raw_nai_parameters'
     ];
 
     const cleanUpdates = Object.fromEntries(
@@ -374,6 +374,7 @@ export class MediaMetadataModel {
           mm.audio_codec,
           mm.bitrate,
           mm.rating_score,
+          mm.character_prompt_text,
           mm.raw_nai_parameters,
           mm.first_seen_date,
           mm.metadata_updated_date,
@@ -423,6 +424,7 @@ export class MediaMetadataModel {
           mm.audio_codec,
           mm.bitrate,
           mm.rating_score,
+          mm.character_prompt_text,
           mm.raw_nai_parameters,
           mm.first_seen_date,
           mm.metadata_updated_date,
@@ -472,6 +474,7 @@ export class MediaMetadataModel {
           mm.audio_codec,
           mm.bitrate,
           mm.rating_score,
+          mm.character_prompt_text,
           mm.raw_nai_parameters,
           mm.first_seen_date,
           mm.metadata_updated_date,
@@ -521,6 +524,7 @@ export class MediaMetadataModel {
           mm.audio_codec,
           mm.bitrate,
           mm.rating_score,
+          mm.character_prompt_text,
           mm.raw_nai_parameters,
           mm.first_seen_date,
           mm.metadata_updated_date,
@@ -656,6 +660,7 @@ export class MediaMetadataModel {
         mm.video_codec,
         mm.audio_codec,
         mm.bitrate,
+        mm.character_prompt_text,
         mm.raw_nai_parameters,
         mm.first_seen_date,
         mm.metadata_updated_date,

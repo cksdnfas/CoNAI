@@ -97,6 +97,7 @@ export class ImageUploadService {
         bitrate: imageData.bitrate,
         rating_score: 0,
         model_references: null,
+        character_prompt_text: null,
         raw_nai_parameters: imageData.rawNaiParameters || null
       };
 

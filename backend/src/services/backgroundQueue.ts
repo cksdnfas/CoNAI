@@ -241,6 +241,7 @@ export class BackgroundQueueService {
           batch_size = ?,
           batch_index = ?,
           model_references = ?,
+          character_prompt_text = ?,
           raw_nai_parameters = ?
         WHERE composite_hash = ?
       `).run(
@@ -258,6 +259,7 @@ export class BackgroundQueueService {
         aiInfo.batch_size || null,
         aiInfo.batch_index || null,
         modelReferencesJson,
+        aiInfo.character_prompt_text || null,
         aiInfo.raw_nai_parameters || null,
         task.compositeHash
       );
@@ -291,7 +293,7 @@ export class BackgroundQueueService {
     }
 
     // 프롬프트가 있으면 프롬프트 수집 작업 추가
-    if (aiInfo.prompt) {
+    if (aiInfo.prompt || aiInfo.character_prompt_text) {
       try {
         this.addPromptCollectionTask(task.filePath, task.compositeHash);
       } catch (error) {
@@ -319,10 +321,10 @@ export class BackgroundQueueService {
   private static async processPromptCollection(task: BackgroundTask): Promise<void> {
     // 메타데이터에서 프롬프트 조회
     const metadata = db.prepare(
-      'SELECT prompt, negative_prompt FROM media_metadata WHERE composite_hash = ?'
+      'SELECT prompt, negative_prompt, character_prompt_text FROM media_metadata WHERE composite_hash = ?'
     ).get(task.compositeHash) as any;
 
-    if (!metadata || !metadata.prompt) {
+    if (!metadata || (!metadata.prompt && !metadata.character_prompt_text)) {
       logger.debug(`  ⏭️  프롬프트 없음: ${path.basename(task.filePath)}`);
       return;
     }
@@ -330,7 +332,8 @@ export class BackgroundQueueService {
     // PromptCollectionService를 사용하여 프롬프트 수집
     await PromptCollectionService.collectFromImage(
       metadata.prompt,
-      metadata.negative_prompt
+      metadata.negative_prompt,
+      metadata.character_prompt_text
     );
 
     logger.debug(`  ✅ 프롬프트 수집 완료: ${path.basename(task.filePath)}`);

@@ -46,6 +46,9 @@ export interface ImageMetadataRecord {
   // [{"name":"model", "hash":"abc123", "type":"checkpoint"}, ...]
   model_references: string | null;
 
+  // NovelAI 캐릭터 프롬프트 정규화 텍스트(검색 최적화용)
+  character_prompt_text: string | null;
+
   // NovelAI 원본 생성 파라미터 (JSON)
   raw_nai_parameters: string | null;
 
