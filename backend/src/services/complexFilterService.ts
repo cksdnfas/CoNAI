@@ -221,8 +221,13 @@ export class ComplexFilterService {
       const pattern = condition.case_sensitive
         ? `%${value}%`
         : `%${value.toLowerCase()}%`;
-      params.push(pattern);
 
+      // Positive prompt 검색은 NAI character prompt까지 포함
+      if (!isNegative) {
+        return this.buildPositivePromptSearchCondition(pattern, params, !!condition.case_sensitive);
+      }
+
+      params.push(pattern);
       return condition.case_sensitive
         ? `${column} LIKE ?`
         : `LOWER(${column}) LIKE ?`;
@@ -230,12 +235,57 @@ export class ComplexFilterService {
 
     if (condition.type === 'prompt_regex' || condition.type === 'negative_prompt_regex') {
       // SQLite doesn't support regex natively, use LIKE with wildcards
-      const pattern = String(condition.value);
-      params.push(`%${pattern}%`);
+      const pattern = `%${String(condition.value)}%`;
+
+      // Positive prompt 검색은 NAI character prompt까지 포함
+      if (!isNegative) {
+        return this.buildPositivePromptSearchCondition(pattern, params, true);
+      }
+
+      params.push(pattern);
       return `${column} LIKE ?`;
     }
 
     return null;
+  }
+
+  /**
+   * Positive prompt 검색 조건 생성
+   * - base prompt(im.prompt)
+   * - 정규화 컬럼(im.character_prompt_text)
+   * - raw_nai_parameters.v4_prompt.caption.char_captions[].char_caption (fallback)
+   */
+  private static buildPositivePromptSearchCondition(
+    pattern: string,
+    params: any[],
+    caseSensitive: boolean
+  ): string {
+    const basePromptCondition = caseSensitive
+      ? 'im.prompt LIKE ?'
+      : 'LOWER(im.prompt) LIKE ?';
+
+    const characterTextCondition = caseSensitive
+      ? 'im.character_prompt_text LIKE ?'
+      : 'LOWER(im.character_prompt_text) LIKE ?';
+
+    const charCaptionCondition = caseSensitive
+      ? `COALESCE(json_extract(char_item.value, '$.char_caption'), '') LIKE ?`
+      : `LOWER(COALESCE(json_extract(char_item.value, '$.char_caption'), '')) LIKE ?`;
+
+    params.push(pattern, pattern, pattern);
+
+    return `(
+      ${basePromptCondition}
+      OR ${characterTextCondition}
+      OR (
+        json_valid(im.raw_nai_parameters) = 1
+        AND EXISTS (
+          SELECT 1
+          FROM json_each(im.raw_nai_parameters, '$.v4_prompt.caption.char_captions') AS char_item
+          WHERE ${charCaptionCondition}
+        )
+      )
+    )`;
   }
 
   /**

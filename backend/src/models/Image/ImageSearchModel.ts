@@ -16,6 +16,36 @@ import { ImageWithFileView } from '../../types/image';
  */
 export class ImageSearchModel {
   /**
+   * Positive prompt 검색 조건 추가
+   * - base prompt(im.prompt)
+   * - 정규화 컬럼(im.character_prompt_text)
+   * - raw_nai_parameters.v4_prompt.caption.char_captions[].char_caption (fallback)
+   */
+  private static appendPositivePromptSearchCondition(
+    conditions: string[],
+    params: any[],
+    searchText: string,
+    tableAlias: string = 'im'
+  ): void {
+    const pattern = `%${searchText}%`;
+
+    conditions.push(`(
+      ${tableAlias}.prompt LIKE ?
+      OR ${tableAlias}.character_prompt_text LIKE ?
+      OR (
+        json_valid(${tableAlias}.raw_nai_parameters) = 1
+        AND EXISTS (
+          SELECT 1
+          FROM json_each(${tableAlias}.raw_nai_parameters, '$.v4_prompt.caption.char_captions') AS char_item
+          WHERE COALESCE(json_extract(char_item.value, '$.char_caption'), '') LIKE ?
+        )
+      )
+    )`);
+
+    params.push(pattern, pattern, pattern);
+  }
+
+  /**
    * 고급 검색 (필터, 정렬, 그룹 포함)
    * @param searchParams 검색 조건
    * @param page 페이지 번호
@@ -55,8 +85,7 @@ export class ImageSearchModel {
 
     // 프롬프트 검색
     if (searchParams.search_text) {
-      conditions.push('im.prompt LIKE ?');
-      params.push(`%${searchParams.search_text}%`);
+      this.appendPositivePromptSearchCondition(conditions, params, searchParams.search_text, 'im');
     }
     if (searchParams.negative_text) {
       conditions.push('im.negative_prompt LIKE ?');
@@ -421,8 +450,7 @@ export class ImageSearchModel {
     params.push('active');
 
     if (searchParams.search_text) {
-      conditions.push('im.prompt LIKE ?');
-      params.push(`%${searchParams.search_text}%`);
+      this.appendPositivePromptSearchCondition(conditions, params, searchParams.search_text, 'im');
     }
     if (searchParams.negative_text) {
       conditions.push('im.negative_prompt LIKE ?');
@@ -521,8 +549,7 @@ export class ImageSearchModel {
     const params: any[] = [];
 
     if (searchParams.search_text) {
-      conditions.push('im.prompt LIKE ?');
-      params.push(`%${searchParams.search_text}%`);
+      this.appendPositivePromptSearchCondition(conditions, params, searchParams.search_text, 'im');
     }
     if (searchParams.negative_text) {
       conditions.push('im.negative_prompt LIKE ?');
@@ -621,8 +648,7 @@ export class ImageSearchModel {
     const params: any[] = [];
 
     if (searchParams.search_text) {
-      conditions.push('im.prompt LIKE ?');
-      params.push(`%${searchParams.search_text}%`);
+      this.appendPositivePromptSearchCondition(conditions, params, searchParams.search_text, 'im');
     }
     if (searchParams.negative_text) {
       conditions.push('im.negative_prompt LIKE ?');
