@@ -12,6 +12,7 @@ import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 import { AutoCollectionService } from './autoCollectionService';
 import { checkFileAccess } from '../utils/fileAccess';
 import { MetadataExtractionError } from '../types/errors';
+import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
 
 interface UnhashedFile {
   id: number;
@@ -203,7 +204,8 @@ export class BackgroundProcessorService {
     }
 
     // Unique image - create full metadata record
-    const imageInfo = await sharp(file.original_file_path).metadata();
+    const sharpInputPath = toWindowsLongPathIfNeeded(file.original_file_path);
+    const imageInfo = await sharp(sharpInputPath).metadata();
 
     // Generate thumbnail
     const thumbnailPath = await this.generateThumbnail(

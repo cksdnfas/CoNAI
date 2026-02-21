@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import { ColorHistogram } from '../types/similarity';
+import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
 
 /**
  * 이미지 유사도 검색 서비스
@@ -13,10 +14,12 @@ export class ImageSimilarityService {
    */
   static async generatePerceptualHash(imagePath: string): Promise<string> {
     try {
+      const sharpPath = toWindowsLongPathIfNeeded(imagePath);
+
       // 1. 32x32 크기로 리사이즈 (DCT를 위한 충분한 데이터)
       // 2. 그레이스케일 변환
       // 3. Raw 픽셀 데이터 추출
-      const { data } = await sharp(imagePath)
+      const { data } = await sharp(sharpPath)
         .resize(32, 32, { fit: 'fill' })
         .greyscale()
         .raw()
@@ -70,8 +73,10 @@ export class ImageSimilarityService {
    */
   static async generateColorHistogram(imagePath: string): Promise<ColorHistogram> {
     try {
+      const sharpPath = toWindowsLongPathIfNeeded(imagePath);
+
       // 이미지를 32x32로 리사이즈 (성능과 정확도의 균형)
-      const { data } = await sharp(imagePath)
+      const { data } = await sharp(sharpPath)
         .resize(32, 32, { fit: 'fill' })
         .raw()
         .toBuffer({ resolveWithObject: true });
@@ -271,8 +276,10 @@ export class ImageSimilarityService {
    */
   static async generateDHash(imagePath: string): Promise<string> {
     try {
+      const sharpPath = toWindowsLongPathIfNeeded(imagePath);
+
       // 9x8 크기로 리사이즈 (수평 차이를 위해 가로 1픽셀 더 필요)
-      const { data } = await sharp(imagePath)
+      const { data } = await sharp(sharpPath)
         .resize(9, 8, { fit: 'fill' })
         .greyscale()
         .raw()
@@ -307,7 +314,9 @@ export class ImageSimilarityService {
    */
   static async generateAHash(imagePath: string): Promise<string> {
     try {
-      const { data } = await sharp(imagePath)
+      const sharpPath = toWindowsLongPathIfNeeded(imagePath);
+
+      const { data } = await sharp(sharpPath)
         .resize(8, 8, { fit: 'fill' })
         .greyscale()
         .raw()
@@ -345,8 +354,10 @@ export class ImageSimilarityService {
     aHash: string;
   }> {
     try {
+      const sharpPath = toWindowsLongPathIfNeeded(imagePath);
+
       // 1. 단일 Sharp 파이프라인으로 32x32 그레이스케일 버퍼 생성
-      const buffer32x32 = await sharp(imagePath)
+      const buffer32x32 = await sharp(sharpPath)
         .resize(32, 32, { fit: 'fill' })
         .greyscale()
         .raw()
@@ -439,16 +450,18 @@ export class ImageSimilarityService {
     colorHistogram: ColorHistogram;
   }> {
     try {
+      const sharpPath = toWindowsLongPathIfNeeded(imagePath);
+
       // 병렬 처리: 그레이스케일 해시 + RGB 히스토그램
       const [grayBuffer, rgbBuffer] = await Promise.all([
         // 1. 32x32 그레이스케일 버퍼 (해시용)
-        sharp(imagePath)
+        sharp(sharpPath)
           .resize(32, 32, { fit: 'fill' })
           .greyscale()
           .raw()
           .toBuffer(),
         // 2. 32x32 RGB 버퍼 (히스토그램용)
-        sharp(imagePath)
+        sharp(sharpPath)
           .resize(32, 32, { fit: 'fill' })
           .removeAlpha()  // 알파 채널 제거하여 RGB 강제 변환
           .toColourspace('srgb')  // RGB 색공간 명시

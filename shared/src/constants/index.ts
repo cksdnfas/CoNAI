@@ -3,6 +3,6 @@
  * Re-exports all constants for easy importing
  */
 
-export * from './network';
-export * from './api';
-export * from './image';
+export * from './network.js';
+export * from './api.js';
+export * from './image.js';

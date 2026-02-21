@@ -27,8 +27,7 @@ import {
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1666';
+import { API_BASE_URL } from '../../../../../services/api';
 
 interface ScanLog {
   id: number;

@@ -114,16 +114,25 @@ export class VideoProcessor {
     const second = String(now.getSeconds()).padStart(2, '0');
     const random = Math.random().toString(36).substring(2, 8);
 
+    // 원본명에서 파일명만 사용 (경로 문자열 유입 방지)
+    const originalBaseName = path.basename(originalName);
+
     // 유니코드 정규화 및 안전한 파일명 처리
     const { normalizeFilename } = require('../utils/pathResolver');
-    const safeOriginalName = normalizeFilename(originalName);
+    const safeOriginalName = normalizeFilename(originalBaseName);
 
     // 확장자 분리
     const ext = path.extname(safeOriginalName);
     const nameWithoutExt = path.basename(safeOriginalName, ext);
 
+    // 경로 길이 폭증 방지를 위해 파일명 길이 제한
+    const MAX_BASENAME_LENGTH = 120;
+    const truncatedName = nameWithoutExt.length > MAX_BASENAME_LENGTH
+      ? nameWithoutExt.substring(0, MAX_BASENAME_LENGTH)
+      : nameWithoutExt;
+
     // 타임스탬프_랜덤값_원본파일명.확장자 형식
-    return `${year}${month}${day}_${hour}${minute}${second}_${random}_${nameWithoutExt}${ext}`;
+    return `${year}${month}${day}_${hour}${minute}${second}_${random}_${truncatedName}${ext}`;
   }
 
   /**

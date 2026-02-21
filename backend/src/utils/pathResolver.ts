@@ -57,6 +57,36 @@ export function normalizePath(pathStr: string, forceUnix: boolean = false): stri
 }
 
 /**
+ * Sharp/libvips가 Windows MAX_PATH(260) 한계를 우회할 수 있도록
+ * 절대 경로를 extended-length(\\?\) 형식으로 변환합니다.
+ *
+ * - 비 Windows 환경: 원본 반환
+ * - 상대 경로: 원본 반환
+ * - 이미 \\?\ 접두사 존재: 원본 반환
+ * - UNC 경로(\\server\share): \\?\UNC\server\share 형태로 변환
+ *
+ * @param inputPath 원본 경로
+ * @returns Sharp에 전달 가능한 경로
+ */
+export function toWindowsLongPathIfNeeded(inputPath: string): string {
+  const normalized = path.normalize(inputPath);
+
+  if (process.platform !== 'win32') return normalized;
+  if (!path.isAbsolute(normalized)) return normalized;
+  if (normalized.startsWith('\\\\?\\')) return normalized;
+
+  // UNC path: \\server\share\... -> \\?\UNC\server\share\...
+  if (normalized.startsWith('\\\\')) {
+    const uncPath = normalized.replace(/^\\\\+/, '');
+    const longUnc = `\\\\?\\UNC\\${uncPath}`;
+    return normalized.length >= 260 ? longUnc : normalized;
+  }
+
+  // Local absolute path: C:\... -> \\?\C:\...
+  return normalized.length >= 260 ? `\\\\?\\${normalized}` : normalized;
+}
+
+/**
  * Windows 경로의 드라이브 문자를 대문자로 정규화
  * fast-glob이 반환하는 경로의 드라이브 문자 대소문자 불일치 문제 해결
  *

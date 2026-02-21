@@ -26,6 +26,7 @@ import {
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { workflowApi } from '../../../services/api/workflowApi';
+import { ensureAbsoluteUrl } from '../../../utils/backend';
 
 interface ImageSelectionModalProps {
   open: boolean;
@@ -247,7 +248,7 @@ export default function ImageSelectionModal({
                       <CardMedia
                         component="img"
                         height="140"
-                        image={`http://localhost:1666${image.path}`}
+                        image={ensureAbsoluteUrl(image.path)}
                         alt={image.filename}
                         sx={{ objectFit: 'cover' }}
                       />

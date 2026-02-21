@@ -20,6 +20,7 @@ import ImageSelectionModal from './ImageSelectionModal';
 import { HierarchicalModelSelector } from './HierarchicalModelSelector';
 import { WildcardTextField } from '../../../components/WildcardTextField';
 import { customDropdownListApi } from '../../../services/api/customDropdownListApi';
+import { ensureAbsoluteUrl } from '../../../utils/backend';
 
 interface WorkflowFormFieldsProps {
   workflow: Workflow;
@@ -222,7 +223,7 @@ export function WorkflowFormFields({
                 <CardMedia
                   component="img"
                   height="200"
-                  image={value.startsWith('data:') ? value : `http://localhost:1666${value}`}
+                  image={value.startsWith('data:') ? value : ensureAbsoluteUrl(value)}
                   alt={field.label}
                   sx={{ objectFit: 'contain' }}
                 />

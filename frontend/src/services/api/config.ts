@@ -3,11 +3,13 @@
  * 모든 API 서비스에서 사용하는 중앙화된 설정
  */
 
+import { getBackendOrigin } from '../../utils/backend';
+
 /**
  * API Base URL
- * 환경 변수 VITE_API_URL로 override 가능
+ * utils/backend.ts의 런타임 계산 로직 사용
  */
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:1666';
+export const API_BASE_URL = getBackendOrigin();
 
 /**
  * API 요청 타임아웃 (밀리초)

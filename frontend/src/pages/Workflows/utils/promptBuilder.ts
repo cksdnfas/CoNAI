@@ -1,6 +1,7 @@
 import type { Workflow, MarkedField } from '../../../services/api/workflowApi';
 import { parseObjectWildcards, type ObjectParseResult } from '../../../utils/wildcardParser';
 import { cleanPrompt, isPromptEmpty } from '../../../utils/promptCleaner';
+import { ensureAbsoluteUrl } from '../../../utils/backend';
 
 /**
  * 이미지를 Base64로 변환하는 헬퍼 함수
@@ -15,7 +16,8 @@ async function imageToBase64(imagePath: string): Promise<string> {
 
   // 서버 경로인 경우 fetch로 가져와서 Base64로 변환
   try {
-    const response = await fetch(`http://localhost:1666${imagePath}`);
+    const imageUrl = ensureAbsoluteUrl(imagePath);
+    const response = await fetch(imageUrl);
     const blob = await response.blob();
 
     return new Promise((resolve, reject) => {
