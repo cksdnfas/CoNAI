@@ -46,7 +46,7 @@ npm run dev
   - Image Groups 상위 페이지(탭/플로팅 생성 버튼/피드백 알림 컨테이너)
   - Upload 상위 페이지
   - Image Detail 상위 페이지(다운로드/해시복사/메타데이터 컨테이너)
-- `src` 기준 `legacy-src/pages` 직접 import는 **0개**이며, 남은 레거시 연결은 `legacy-src/entrypoints/*` 진입점으로 집약해 관리합니다.
+- `src`는 `legacy-src`를 직접 참조하며, 중간 entrypoint 레이어 없이 페이지/컴포넌트를 바로 연결합니다.
 
 ## 안정화(하이브리드 하드닝)
 - Vite `resolve.dedupe` 적용: `react`, `react-dom`, `react-router-dom`, `@tanstack/react-query`
@@ -59,13 +59,13 @@ npm run dev
 - 그룹 API/훅 일부(`services/group-api`, `hooks/use-groups`, `hooks/use-image-list-settings`)를 분리 프론트 내부로 이동
 - Image Groups UI 일부(`group-breadcrumb`, `group-card`, `image-view-card`, `auto-folder-*`)를 분리 프론트 내부 구현으로 이동
 - Home 이미지 로딩/검색 훅(`hooks/use-infinite-images`, `hooks/use-paginated-images`, `hooks/use-search`)을 분리 프론트 내부 구현으로 이동
-- Settings는 `src/features/settings/settings-page.tsx` 실구현으로 전환하고, 세부 설정 패널은 `legacy-src/entrypoints/settings.ts` 경유로 연결
-- Image Generation은 로컬 탭 셸(`features/image-generation/image-generation-page.tsx`)을 유지하고 탭 연결을 `legacy-src/entrypoints/image-generation.ts` 경유로 정리
+- Settings는 `src/features/settings/settings-page.tsx` 실구현으로 전환했고 세부 패널을 `legacy-src`에서 직접 연결합니다.
+- Image Generation은 로컬 탭 셸(`features/image-generation/image-generation-page.tsx`)을 유지하고 탭을 `legacy-src/pages/ImageGeneration/*`로 직접 연결합니다.
 - i18n 부트스트랩을 분리 프론트 내부(`src/i18n`)로 이동하고 parity app에서 로컬 i18n을 사용
 - Group Create/Edit modal을 분리 프론트 내부(`group-create-edit-modal`, `basic-info-tab`, `auto-collect-tab`, `simple-search-tab`, `search-auto-complete`)로 이동
 - Group Image modal을 분리 프론트 내부(`group-image-grid-modal`, `group-assign-modal`, `lora-dataset-dialog`) 구현으로 이동
 - Home/Settings/ImageList용 `features/legacy-pages.tsx` 브리지를 제거
-- Workflow 라우트(`new/edit/generate`)는 `features/workflows/*` 래퍼 + `legacy-src/entrypoints/workflows.ts` 경유로 유지
+- Workflow 라우트(`new/edit/generate`)는 `features/workflows/*`에서 직접 컨테이너 구현/연결로 유지
 - Upload 관련 로직(`upload-api`, `UploadZone`, `PromptPreview`, `metadata-reader`, `stealth-png-extractor`)을 분리 프론트 내부로 이동
 - Image Detail의 `PromptDisplay` 스택(`prompt-display`, `auto-tag-display`, `prompt-card`, `prompt-grouping`)을 분리 프론트 내부로 이동
 
@@ -89,7 +89,7 @@ npm run dev
 - 인증 상태/세션은 기존 백엔드 auth API와 동일하게 사용
 
 ## 다음 마이그레이션 슬라이스
-- 1순위: `legacy-src/entrypoints`를 단계적으로 축소하고 라우트/탭 실구현을 `src/features`로 순차 이관
+- 1순위: 라우트/탭 실구현을 `src/features`로 순차 이관하고 `legacy-src` 직접 의존을 줄이기
 - 분해 순서:
   - Image Generation 탭(`nai/comfyui/wildcards`)을 `src/features/image-generation` 실구현으로 이관
   - Workflow 페이지(`new/edit/generate`)를 `src/features/workflows` 실구현으로 이관
