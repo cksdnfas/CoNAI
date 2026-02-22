@@ -1,5 +1,188 @@
-import { LegacyWorkflowGeneratePage } from '../../../legacy-src/entrypoints/workflows'
+import { useEffect, useState } from 'react'
+import { Alert, Box, Button, CircularProgress, Grid, Paper } from '@mui/material'
+import { PlayArrow as PlayIcon } from '@mui/icons-material'
+import { useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { GenerationHistoryList } from '../../../legacy-src/pages/ImageGeneration/components/GenerationHistoryList'
+import RepeatControls from '../../../legacy-src/pages/ImageGeneration/components/RepeatControls'
+import GroupAssignModal from '../../../legacy-src/components/GroupAssignModal/GroupAssignModal'
+import { useWorkflowData } from '../../../legacy-src/pages/Workflows/hooks/useWorkflowData'
+import { useServerManagement } from '../../../legacy-src/pages/Workflows/hooks/useServerManagement'
+import { useGroupManagement } from '../../../legacy-src/pages/Workflows/hooks/useGroupManagement'
+import { useImageGeneration } from '../../../legacy-src/pages/Workflows/hooks/useImageGeneration'
+import { useRepeatExecution } from '../../../legacy-src/pages/Workflows/hooks/useRepeatExecution'
+import { useServerRepeat } from '../../../legacy-src/pages/Workflows/hooks/useServerRepeat'
+import { WorkflowHeader } from '../../../legacy-src/pages/Workflows/components/WorkflowHeader'
+import { WorkflowFormFields } from '../../../legacy-src/pages/Workflows/components/WorkflowFormFields'
+import { GroupAssignment } from '../../../legacy-src/pages/Workflows/components/GroupAssignment'
+import { RepeatExecutionStatus } from '../../../legacy-src/pages/Workflows/components/RepeatExecutionStatus'
+import { ServerStatusList } from '../../../legacy-src/pages/Workflows/components/ServerStatusList'
+import type { ObjectParseResult } from '../../../legacy-src/utils/wildcardParser'
 
 export function WorkflowGeneratePage() {
-  return <LegacyWorkflowGeneratePage />
+  const { id } = useParams<{ id: string }>()
+  const { t } = useTranslation(['workflows', 'common'])
+
+  const { loading, error, setError, workflow, formData, loadWorkflow, handleFieldChange, getPromptData } = useWorkflowData(id)
+
+  const [promptData, setPromptData] = useState<ObjectParseResult>({
+    data: {},
+    emptyWildcards: [],
+  })
+
+  const { servers, serverStatus, generationStatus, setGenerationStatus, loadServers, getConnectedServers } = useServerManagement()
+
+  const {
+    selectedGroupId,
+    selectedGroup,
+    groupModalOpen,
+    setGroupModalOpen,
+    loadSavedGroup,
+    handleGroupSelect,
+    handleRemoveGroup,
+  } = useGroupManagement()
+
+  const { historyRefreshKey, handleGenerateOnServer } = useImageGeneration({
+    workflowId: id,
+    workflow,
+    formData,
+    getPromptData,
+    selectedGroupId,
+    servers,
+    setGenerationStatus,
+    setError,
+  })
+
+  const [repeatConfig, setRepeatConfig] = useState({
+    enabled: false,
+    count: 3,
+    delaySeconds: 5,
+  })
+
+  const { serverRepeatStates, handleStartServerRepeat, handleStopServerRepeat } = useServerRepeat({
+    servers,
+    repeatConfig,
+    handleGenerateOnServer,
+  })
+
+  const { handleGenerateOnAllServers } = useRepeatExecution({
+    servers,
+    serverStatus,
+    repeatConfig,
+    handleGenerateOnServer,
+    handleStartServerRepeat,
+    setError,
+  })
+
+  useEffect(() => {
+    loadWorkflow()
+    loadServers()
+    loadSavedGroup()
+  }, [loadSavedGroup, loadServers, loadWorkflow])
+
+  useEffect(() => {
+    if (workflow && formData) {
+      getPromptData()
+        .then((data) => {
+          setPromptData(data)
+        })
+        .catch((getPromptDataError) => {
+          console.error('[WorkflowGeneratePage] Failed to build prompt data:', getPromptDataError)
+          setPromptData({
+            data: {},
+            emptyWildcards: [],
+          })
+        })
+    }
+  }, [formData, getPromptData, workflow])
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+        <CircularProgress />
+      </Box>
+    )
+  }
+
+  if (!workflow) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error">{t('workflows:card.notFound')}</Alert>
+      </Box>
+    )
+  }
+
+  const connectedServers = getConnectedServers()
+
+  return (
+    <Box sx={{ p: 3 }}>
+      <WorkflowHeader workflow={workflow} />
+
+      {error ? (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      ) : null}
+
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, md: 12, lg: 4 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <WorkflowFormFields workflow={workflow} formData={formData} onFieldChange={handleFieldChange} promptData={promptData.data} />
+
+            <GroupAssignment selectedGroup={selectedGroup} onOpenModal={() => setGroupModalOpen(true)} onRemove={handleRemoveGroup} />
+
+            <Paper sx={{ p: 3 }}>
+              <RepeatControls
+                config={repeatConfig}
+                state={{
+                  isRunning: Object.keys(serverRepeatStates).length > 0,
+                  currentIteration: 0,
+                  totalIterations: 0,
+                }}
+                onConfigChange={setRepeatConfig}
+                onStop={() => {
+                  Object.keys(serverRepeatStates).forEach((serverId) => {
+                    handleStopServerRepeat(parseInt(serverId, 10))
+                  })
+                }}
+                namespace="workflows"
+              />
+            </Paper>
+
+            <Button
+              fullWidth
+              variant="contained"
+              size="large"
+              startIcon={<PlayIcon />}
+              onClick={handleGenerateOnAllServers}
+              disabled={connectedServers.length === 0 || !workflow.is_active || Object.keys(serverRepeatStates).length > 0}
+            >
+              {t('workflows:generate.generateAll', { count: connectedServers.length })}
+            </Button>
+
+            <RepeatExecutionStatus servers={servers} serverRepeatStates={serverRepeatStates} />
+
+            <ServerStatusList
+              workflow={workflow}
+              servers={servers}
+              serverStatus={serverStatus}
+              generationStatus={generationStatus}
+              serverRepeatStates={serverRepeatStates}
+              onGenerate={handleGenerateOnServer}
+              onStartRepeat={handleStartServerRepeat}
+              onStopRepeat={handleStopServerRepeat}
+            />
+
+            {!workflow.is_active ? <Alert severity="warning">{t('workflows:alerts.inactiveWarning')}</Alert> : null}
+          </Box>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 12, lg: 8 }}>
+          <GenerationHistoryList serviceType="comfyui" workflowId={parseInt(id || '0', 10)} refreshKey={historyRefreshKey} />
+        </Grid>
+      </Grid>
+
+      <GroupAssignModal open={groupModalOpen} onClose={() => setGroupModalOpen(false)} selectedImageCount={1} onAssign={handleGroupSelect} />
+    </Box>
+  )
 }
