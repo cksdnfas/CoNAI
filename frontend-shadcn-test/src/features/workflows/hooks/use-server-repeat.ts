@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ComfyUIServer } from '../../../../legacy-src/services/api/comfyuiServerApi'
-import type { RepeatConfig } from '../../../../legacy-src/pages/ImageGeneration/components/RepeatControls'
+import type { RepeatConfig } from '../components/repeat-controls'
 import type { ServerRepeatState } from '../types/workflow.types'
 
 interface UseServerRepeatProps {
