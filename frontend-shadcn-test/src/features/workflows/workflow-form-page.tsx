@@ -26,8 +26,8 @@ import { useTranslation } from 'react-i18next'
 import { workflowApi, type MarkedField, type Workflow } from '@/services/workflow-api'
 import { MarkedFieldsGuide } from './components/marked-fields-guide'
 import { MarkedFieldsPreview } from './components/marked-fields-preview'
-import EnhancedWorkflowGraphViewer from '../../../legacy-src/pages/Workflows/components/EnhancedWorkflowGraphViewer'
-import { MarkedFieldsList, useMarkedFieldValidation } from '../../../legacy-src/pages/Workflows/components/MarkedFields'
+import EnhancedWorkflowGraphViewer from './components/enhanced-workflow-graph-viewer'
+import { MarkedFieldsList, useMarkedFieldValidation } from './components/marked-fields'
 import WorkflowJsonViewer from './components/workflow-json-viewer'
 
 function getErrorMessage(error: unknown): string {
