@@ -1,4 +1,3 @@
-export { default as LegacySettingsPage } from '../pages/Settings/SettingsPage'
 export { default as LegacyWorkflowFormPage } from '../pages/Workflows/WorkflowFormPage'
 export { default as LegacyWorkflowGeneratePage } from '../pages/Workflows/WorkflowGeneratePage'
 export { default as LegacyNAITab } from '../pages/ImageGeneration/NAI/NAITab'
