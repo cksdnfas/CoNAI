@@ -24,11 +24,11 @@ import {
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { workflowApi, type MarkedField, type Workflow } from '../../../legacy-src/services/api/workflowApi'
-import { MarkedFieldsGuide } from '../../../legacy-src/pages/Workflows/MarkedFieldsGuide'
+import { MarkedFieldsGuide } from './components/marked-fields-guide'
 import { MarkedFieldsPreview } from '../../../legacy-src/pages/Workflows/MarkedFieldsPreview'
 import EnhancedWorkflowGraphViewer from '../../../legacy-src/pages/Workflows/components/EnhancedWorkflowGraphViewer'
 import { MarkedFieldsList, useMarkedFieldValidation } from '../../../legacy-src/pages/Workflows/components/MarkedFields'
-import WorkflowJsonViewer from '../../../legacy-src/pages/Workflows/components/WorkflowJsonViewer'
+import WorkflowJsonViewer from './components/workflow-json-viewer'
 
 function getErrorMessage(error: unknown): string {
   if (typeof error === 'object' && error !== null) {
