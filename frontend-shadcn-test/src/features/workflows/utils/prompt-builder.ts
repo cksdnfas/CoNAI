@@ -1,6 +1,6 @@
 import { ensureAbsoluteUrl } from '@/utils/backend'
 import type { Workflow, MarkedField } from '@/services/workflow-api'
-import { parseObjectWildcards } from '../../../../legacy-src/utils/wildcardParser'
+import { parseObjectWildcards } from '@/utils/wildcard-parser'
 import { cleanPrompt, isPromptEmpty } from '@/utils/prompt-cleaner'
 import type { PromptParseResult } from '../types/prompt.types'
 
