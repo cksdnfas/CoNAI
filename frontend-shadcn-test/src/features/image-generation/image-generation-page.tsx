@@ -3,7 +3,9 @@ import { GitBranch, Sparkles, Tags } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { LegacyComfyUITab, LegacyNAITab, LegacyWildcardTab } from '../../../legacy-src/entrypoints/image-generation'
+import LegacyNAITab from '../../../legacy-src/pages/ImageGeneration/NAI/NAITab'
+import LegacyComfyUITab from '../../../legacy-src/pages/ImageGeneration/ComfyUITab'
+import LegacyWildcardTab from '../../../legacy-src/pages/ImageGeneration/WildcardTab'
 
 type GenerationTab = 'nai' | 'comfyui' | 'wildcards'
 

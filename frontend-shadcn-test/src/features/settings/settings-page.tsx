@@ -2,23 +2,23 @@ import { useCallback, useEffect, useState } from 'react'
 import { Alert, Box, CircularProgress, Tab, Tabs, Typography } from '@mui/material'
 import { Settings as SettingsIcon } from '@mui/icons-material'
 import { useTranslation } from 'react-i18next'
+import LegacyGeneralSettings from '../../../legacy-src/pages/Settings/components/GeneralSettings'
+import LegacyTaggerSettings from '../../../legacy-src/pages/Settings/features/Tagger/TaggerSettings'
+import LegacyRatingScoreSettings from '../../../legacy-src/pages/Settings/features/Rating/RatingScoreSettings'
+import LegacySimilaritySettings from '../../../legacy-src/pages/Settings/features/Similarity/SimilaritySettings'
+import LegacyFolderSettings from '../../../legacy-src/pages/Settings/features/Folder/FolderSettings'
+import { AuthSettings as LegacyAuthSettings } from '../../../legacy-src/pages/Settings/features/Auth/AuthSettings'
+import { ExternalApiSettings as LegacyExternalApiSettings } from '../../../legacy-src/pages/Settings/features/ExternalApi/ExternalApiSettings'
+import { CivitaiSettings as LegacyCivitaiSettings } from '../../../legacy-src/pages/Settings/features/Civitai/CivitaiSettings'
+import { PromptExplorer as LegacyPromptExplorer } from '../../../legacy-src/features/PromptExplorer/PromptExplorer'
 import {
-  legacySettingsApi,
-  LegacyAuthSettings,
-  LegacyCivitaiSettings,
-  LegacyExternalApiSettings,
-  LegacyFolderSettings,
-  LegacyGeneralSettings,
-  LegacyPromptExplorer,
-  LegacyRatingScoreSettings,
-  LegacySimilaritySettings,
-  LegacyTaggerSettings,
-  type LegacyAppSettings,
-  type LegacyGeneralSettingsType,
-  type LegacyMetadataExtractionSettings,
-  type LegacyTaggerSettingsType,
-  type LegacyThumbnailSettings,
-} from '../../../legacy-src/entrypoints/settings'
+  settingsApi as legacySettingsApi,
+  type AppSettings as LegacyAppSettings,
+  type GeneralSettings as LegacyGeneralSettingsType,
+  type MetadataExtractionSettings as LegacyMetadataExtractionSettings,
+  type TaggerSettings as LegacyTaggerSettingsType,
+  type ThumbnailSettings as LegacyThumbnailSettings,
+} from '../../../legacy-src/services/settingsApi'
 
 interface TabPanelProps {
   children?: React.ReactNode
