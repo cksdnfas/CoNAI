@@ -1,6 +1,6 @@
 import { Box, Chip, Divider, LinearProgress, Paper, Typography } from '@mui/material'
 import { useTranslation } from 'react-i18next'
-import type { ComfyUIServer } from '../../../../legacy-src/services/api/comfyuiServerApi'
+import type { ComfyUIServer } from '@/services/comfyui-server-api'
 import type { ServerRepeatState } from '../types/workflow.types'
 
 interface RepeatExecutionStatusProps {

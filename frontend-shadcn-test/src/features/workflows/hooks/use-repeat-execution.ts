@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { ComfyUIServer } from '../../../../legacy-src/services/api/comfyuiServerApi'
+import type { ComfyUIServer } from '@/services/comfyui-server-api'
 import type { RepeatConfig } from '../components/repeat-controls'
 
 interface UseRepeatExecutionProps {

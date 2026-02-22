@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { comfyuiServerApi, type ComfyUIServer } from '../../../../legacy-src/services/api/comfyuiServerApi'
+import { comfyuiServerApi, type ComfyUIServer } from '@/services/comfyui-server-api'
 import type { ServerConnectionStatus, ServerGenerationStatus } from '../types/workflow.types'
 
 export function useServerManagement() {

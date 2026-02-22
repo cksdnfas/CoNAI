@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import api from '../../../../legacy-src/services/api'
+import { apiClient } from '@/lib/api/client'
 import type { GroupWithStats } from '@comfyui-image-manager/shared'
 
 export function useGroupManagement() {
@@ -9,7 +9,7 @@ export function useGroupManagement() {
 
   const loadGroupInfo = useCallback(async (groupId: number) => {
     try {
-      const response = await api.get(`/api/groups/${groupId}`)
+      const response = await apiClient.get(`/api/groups/${groupId}`)
       if (response.data.success) {
         setSelectedGroup(response.data.data)
       }

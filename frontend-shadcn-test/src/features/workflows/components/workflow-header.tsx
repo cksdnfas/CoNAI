@@ -2,7 +2,7 @@ import { Box, Chip, IconButton, Typography } from '@mui/material'
 import { ArrowBack as ArrowBackIcon } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import type { Workflow } from '../../../../legacy-src/services/api/workflowApi'
+import type { Workflow } from '@/services/workflow-api'
 
 interface WorkflowHeaderProps {
   workflow: Workflow

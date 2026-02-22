@@ -3,9 +3,9 @@ import { Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, D
 import { CleaningServices as CleaningServicesIcon, Refresh as RefreshIcon } from '@mui/icons-material'
 import { useTranslation } from 'react-i18next'
 import type { GenerationHistoryRecord, ServiceType } from '@comfyui-image-manager/shared'
-import type { ImageRecord } from '../../../../legacy-src/types/image'
-import { generationHistoryApi } from '../../../../legacy-src/services/api'
-import { convertHistoriesToImageRecords } from '../../../../legacy-src/utils/generationHistoryAdapter'
+import type { ImageRecord } from '@/types/image'
+import { generationHistoryApi } from '@/services/generation-history-api'
+import { convertHistoriesToImageRecords } from '@/utils/generation-history-adapter'
 import ImageList from '../../../../legacy-src/components/ImageList/ImageList'
 
 interface GenerationHistoryListProps {

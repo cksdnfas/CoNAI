@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { workflowApi, type Workflow } from '../../../../legacy-src/services/api/workflowApi'
+import { workflowApi, type Workflow } from '@/services/workflow-api'
 import { buildPromptDataWithWildcards, initializeFormData } from '../../../../legacy-src/pages/Workflows/utils/promptBuilder'
 import type { PromptParseResult } from '../types/prompt.types'
 

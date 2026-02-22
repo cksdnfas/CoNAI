@@ -11,8 +11,8 @@ import {
 } from '@mui/material'
 import { CheckCircle as CheckCircleIcon, Error as ErrorIcon } from '@mui/icons-material'
 import { useTranslation } from 'react-i18next'
-import type { Workflow } from '../../../../legacy-src/services/api/workflowApi'
-import type { ComfyUIServer } from '../../../../legacy-src/services/api/comfyuiServerApi'
+import type { Workflow } from '@/services/workflow-api'
+import type { ComfyUIServer } from '@/services/comfyui-server-api'
 import type { ServerConnectionStatus, ServerGenerationStatus, ServerRepeatState } from '../types/workflow.types'
 
 interface ServerStatusListProps {
