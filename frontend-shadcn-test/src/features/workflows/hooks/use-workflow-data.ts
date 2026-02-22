@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { workflowApi, type Workflow } from '../../../../legacy-src/services/api/workflowApi'
 import { buildPromptDataWithWildcards, initializeFormData } from '../../../../legacy-src/pages/Workflows/utils/promptBuilder'
+import type { PromptParseResult } from '../types/prompt.types'
 
 function getErrorMessage(error: unknown): string {
   if (typeof error === 'object' && error !== null) {
@@ -44,8 +45,12 @@ export function useWorkflowData(workflowId: string | undefined) {
     }))
   }, [])
 
-  const getPromptData = useCallback(async () => {
-    return await buildPromptDataWithWildcards(workflow, formData)
+  const getPromptData = useCallback(async (): Promise<PromptParseResult> => {
+    const result = await buildPromptDataWithWildcards(workflow, formData)
+    return {
+      data: result.data as Record<string, unknown>,
+      emptyWildcards: result.emptyWildcards,
+    }
   }, [formData, workflow])
 
   return {

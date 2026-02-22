@@ -5,15 +5,15 @@ import { enqueueSnackbar } from 'notistack'
 import { workflowApi, type MarkedField, type Workflow } from '../../../../legacy-src/services/api/workflowApi'
 import { generationHistoryApi } from '../../../../legacy-src/services/api'
 import type { ComfyUIServer } from '../../../../legacy-src/services/api/comfyuiServerApi'
-import type { ObjectParseResult } from '../../../../legacy-src/utils/wildcardParser'
 import { hasEmptyPrompts } from '../../../../legacy-src/pages/Workflows/utils/promptBuilder'
 import type { ServerGenerationStatus } from '../types/workflow.types'
+import type { PromptParseResult } from '../types/prompt.types'
 
 interface UseImageGenerationProps {
   workflowId: string | undefined
   workflow: Workflow | null
   formData: Record<string, unknown>
-  getPromptData: () => Promise<ObjectParseResult>
+  getPromptData: () => Promise<PromptParseResult>
   selectedGroupId: number | null
   servers: ComfyUIServer[]
   setGenerationStatus: React.Dispatch<React.SetStateAction<Record<number, ServerGenerationStatus>>>

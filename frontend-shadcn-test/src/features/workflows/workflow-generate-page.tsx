@@ -17,7 +17,7 @@ import { WorkflowFormFields } from '../../../legacy-src/pages/Workflows/componen
 import { GroupAssignment } from './components/group-assignment'
 import { RepeatExecutionStatus } from './components/repeat-execution-status'
 import { ServerStatusList } from './components/server-status-list'
-import type { ObjectParseResult } from '../../../legacy-src/utils/wildcardParser'
+import type { PromptParseResult } from './types/prompt.types'
 
 export function WorkflowGeneratePage() {
   const { id } = useParams<{ id: string }>()
@@ -25,7 +25,7 @@ export function WorkflowGeneratePage() {
 
   const { loading, error, setError, workflow, formData, loadWorkflow, handleFieldChange, getPromptData } = useWorkflowData(id)
 
-  const [promptData, setPromptData] = useState<ObjectParseResult>({
+  const [promptData, setPromptData] = useState<PromptParseResult>({
     data: {},
     emptyWildcards: [],
   })
