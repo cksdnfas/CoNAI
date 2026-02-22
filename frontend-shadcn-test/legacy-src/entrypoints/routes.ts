@@ -1,4 +1,3 @@
-export { default as LegacyHomePage } from '../pages/Home/HomePage'
 export { default as LegacySettingsPage } from '../pages/Settings/SettingsPage'
 export { default as LegacyWorkflowFormPage } from '../pages/Workflows/WorkflowFormPage'
 export { default as LegacyWorkflowGeneratePage } from '../pages/Workflows/WorkflowGeneratePage'
