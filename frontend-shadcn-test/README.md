@@ -46,7 +46,7 @@ npm run dev
   - Image Groups 상위 페이지(탭/플로팅 생성 버튼/피드백 알림 컨테이너)
   - Upload 상위 페이지
   - Image Detail 상위 페이지(다운로드/해시복사/메타데이터 컨테이너)
-- `src` 기준 `legacy-src/pages` 직접 import는 **0개**이며, 라우트/탭 연결은 `legacy-src/entrypoints/routes.ts` 단일 진입점으로 관리합니다.
+- `src` 기준 `legacy-src/pages` 직접 import는 **0개**이며, 남은 레거시 연결은 `legacy-src/entrypoints/*` 진입점으로 집약해 관리합니다.
 
 ## 안정화(하이브리드 하드닝)
 - Vite `resolve.dedupe` 적용: `react`, `react-dom`, `react-router-dom`, `@tanstack/react-query`
@@ -59,7 +59,7 @@ npm run dev
 - 그룹 API/훅 일부(`services/group-api`, `hooks/use-groups`, `hooks/use-image-list-settings`)를 분리 프론트 내부로 이동
 - Image Groups UI 일부(`group-breadcrumb`, `group-card`, `image-view-card`, `auto-folder-*`)를 분리 프론트 내부 구현으로 이동
 - Home 이미지 로딩/검색 훅(`hooks/use-infinite-images`, `hooks/use-paginated-images`, `hooks/use-search`)을 분리 프론트 내부 구현으로 이동
-- Settings는 `legacy-src/entrypoints/routes.ts` 경유로 기능 동등성 유지
+- Settings는 `src/features/settings/settings-page.tsx` 실구현으로 전환하고, 세부 설정 패널은 `legacy-src/entrypoints/settings.ts` 경유로 연결
 - Image Generation은 로컬 탭 셸(`features/image-generation/image-generation-page.tsx`)을 유지하고 탭/워크플로우 연결을 `legacy-src/entrypoints/routes.ts` 단일 진입으로 정리
 - i18n 부트스트랩을 분리 프론트 내부(`src/i18n`)로 이동하고 parity app에서 로컬 i18n을 사용
 - Group Create/Edit modal을 분리 프론트 내부(`group-create-edit-modal`, `basic-info-tab`, `auto-collect-tab`, `simple-search-tab`, `search-auto-complete`)로 이동
@@ -93,5 +93,5 @@ npm run dev
 - 분해 순서:
   - Image Generation 탭(`nai/comfyui/wildcards`)을 `src/features/image-generation` 실구현으로 이관
   - Workflow 페이지(`new/edit/generate`)를 `src/features/workflows` 실구현으로 이관
-  - Home/Settings 및 Group modal의 `legacy-src/components` 의존을 로컬 컴포넌트로 대체
+  - Workflow/Group modal의 `legacy-src/components` 의존을 로컬 컴포넌트로 대체
 - 목표: `legacy-src` 의존 **0개**
