@@ -18,7 +18,7 @@ import {
   type MetadataExtractionSettings as LegacyMetadataExtractionSettings,
   type TaggerSettings as LegacyTaggerSettingsType,
   type ThumbnailSettings as LegacyThumbnailSettings,
-} from '../../../legacy-src/services/settingsApi'
+} from '@/services/settings-api'
 
 interface TabPanelProps {
   children?: React.ReactNode
