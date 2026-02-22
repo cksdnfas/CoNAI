@@ -3,9 +3,9 @@ import { GitBranch, Sparkles, Tags } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import LegacyNAITab from '../../../legacy-src/pages/ImageGeneration/NAI/NAITab'
-import LegacyComfyUITab from '../../../legacy-src/pages/ImageGeneration/ComfyUITab'
-import LegacyWildcardTab from '../../../legacy-src/pages/ImageGeneration/WildcardTab'
+import NAITab from './tabs/nai-tab'
+import ComfyUITab from './tabs/comfyui-tab'
+import WildcardTab from './tabs/wildcard-tab'
 
 type GenerationTab = 'nai' | 'comfyui' | 'wildcards'
 
@@ -55,13 +55,13 @@ export function ImageGenerationPage() {
         </TabsList>
 
         <TabsContent value="nai">
-          <LegacyNAITab />
+          <NAITab />
         </TabsContent>
         <TabsContent value="comfyui">
-          <LegacyComfyUITab />
+          <ComfyUITab />
         </TabsContent>
         <TabsContent value="wildcards">
-          <LegacyWildcardTab />
+          <WildcardTab />
         </TabsContent>
       </Tabs>
     </div>

@@ -8,9 +8,9 @@ import { useInfiniteImages } from '@/hooks/use-infinite-images'
 import { usePaginatedImages } from '@/hooks/use-paginated-images'
 import { useImageListSettings } from '@/hooks/use-image-list-settings'
 import { useSearch } from '@/hooks/use-search'
-import ImageList from '../../../legacy-src/components/ImageList/ImageList'
-import BulkActionBar from '../../../legacy-src/components/BulkActionBar/BulkActionBar'
-import SearchBar from '../../../legacy-src/components/SearchBar/SearchBar'
+import ImageList from '@/features/images/components/image-list'
+import BulkActionBar from './components/bulk-action-bar'
+import SearchBar from './components/search-bar'
 
 export function HomePage() {
   const { t } = useTranslation(['common', 'search'])

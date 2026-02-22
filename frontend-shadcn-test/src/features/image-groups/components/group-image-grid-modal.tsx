@@ -32,7 +32,7 @@ import {
 } from '@mui/icons-material'
 import type { GroupWithStats } from '@comfyui-image-manager/shared'
 import type { ImageRecord, PageSize } from '@/types/image'
-import ImageList from '../../../../legacy-src/components/ImageList/ImageList'
+import ImageList from '@/features/images/components/image-list'
 import GroupAssignModal from './group-assign-modal'
 import { groupApi } from '@/services/group-api'
 import { autoFolderGroupsApi } from '@/services/auto-folder-groups-api'

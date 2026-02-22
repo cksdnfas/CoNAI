@@ -6,7 +6,7 @@ import type { GenerationHistoryRecord, ServiceType } from '@comfyui-image-manage
 import type { ImageRecord } from '@/types/image'
 import { generationHistoryApi } from '@/services/generation-history-api'
 import { convertHistoriesToImageRecords } from '@/utils/generation-history-adapter'
-import ImageList from '../../../../legacy-src/components/ImageList/ImageList'
+import ImageList from '@/features/images/components/image-list'
 
 interface GenerationHistoryListProps {
   serviceType?: ServiceType
