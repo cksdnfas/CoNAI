@@ -60,12 +60,12 @@ npm run dev
 - Image Groups UI 일부(`group-breadcrumb`, `group-card`, `image-view-card`, `auto-folder-*`)를 분리 프론트 내부 구현으로 이동
 - Home 이미지 로딩/검색 훅(`hooks/use-infinite-images`, `hooks/use-paginated-images`, `hooks/use-search`)을 분리 프론트 내부 구현으로 이동
 - Settings는 `src/features/settings/settings-page.tsx` 실구현으로 전환하고, 세부 설정 패널은 `legacy-src/entrypoints/settings.ts` 경유로 연결
-- Image Generation은 로컬 탭 셸(`features/image-generation/image-generation-page.tsx`)을 유지하고 탭/워크플로우 연결을 `legacy-src/entrypoints/routes.ts` 단일 진입으로 정리
+- Image Generation은 로컬 탭 셸(`features/image-generation/image-generation-page.tsx`)을 유지하고 탭 연결을 `legacy-src/entrypoints/image-generation.ts` 경유로 정리
 - i18n 부트스트랩을 분리 프론트 내부(`src/i18n`)로 이동하고 parity app에서 로컬 i18n을 사용
 - Group Create/Edit modal을 분리 프론트 내부(`group-create-edit-modal`, `basic-info-tab`, `auto-collect-tab`, `simple-search-tab`, `search-auto-complete`)로 이동
 - Group Image modal을 분리 프론트 내부(`group-image-grid-modal`, `group-assign-modal`, `lora-dataset-dialog`) 구현으로 이동
 - Home/Settings/ImageList용 `features/legacy-pages.tsx` 브리지를 제거
-- Workflow 라우트(`new/edit/generate`)는 `features/workflows/*` 래퍼로 분리
+- Workflow 라우트(`new/edit/generate`)는 `features/workflows/*` 래퍼 + `legacy-src/entrypoints/workflows.ts` 경유로 유지
 - Upload 관련 로직(`upload-api`, `UploadZone`, `PromptPreview`, `metadata-reader`, `stealth-png-extractor`)을 분리 프론트 내부로 이동
 - Image Detail의 `PromptDisplay` 스택(`prompt-display`, `auto-tag-display`, `prompt-card`, `prompt-grouping`)을 분리 프론트 내부로 이동
 
