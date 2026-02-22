@@ -5,7 +5,7 @@ import { enqueueSnackbar } from 'notistack'
 import { workflowApi, type MarkedField, type Workflow } from '@/services/workflow-api'
 import { generationHistoryApi } from '@/services/generation-history-api'
 import type { ComfyUIServer } from '@/services/comfyui-server-api'
-import { hasEmptyPrompts } from '../../../../legacy-src/pages/Workflows/utils/promptBuilder'
+import { hasEmptyPrompts } from '../utils/prompt-builder'
 import type { ServerGenerationStatus } from '../types/workflow.types'
 import type { PromptParseResult } from '../types/prompt.types'
 

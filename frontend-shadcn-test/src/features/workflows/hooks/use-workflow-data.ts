@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { workflowApi, type Workflow } from '@/services/workflow-api'
-import { buildPromptDataWithWildcards, initializeFormData } from '../../../../legacy-src/pages/Workflows/utils/promptBuilder'
+import { buildPromptDataWithWildcards, initializeFormData } from '../utils/prompt-builder'
 import type { PromptParseResult } from '../types/prompt.types'
 
 function getErrorMessage(error: unknown): string {
