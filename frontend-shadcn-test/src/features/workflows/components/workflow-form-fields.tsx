@@ -1,1 +1,1 @@
-export { WorkflowFormFields } from '../../../../legacy-src/pages/Workflows/components/WorkflowFormFields'
+export { WorkflowFormFields } from '@/legacy/pages/Workflows/components/WorkflowFormFields'

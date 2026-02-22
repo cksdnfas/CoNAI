@@ -1,1 +1,1 @@
-export { MarkedFieldsList, useMarkedFieldValidation } from '../../../../../legacy-src/pages/Workflows/components/MarkedFields'
+export { MarkedFieldsList, useMarkedFieldValidation } from '@/legacy/pages/Workflows/components/MarkedFields'

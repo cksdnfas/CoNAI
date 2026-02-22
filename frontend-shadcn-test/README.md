@@ -39,14 +39,14 @@ npm run dev
 ## 현재 마이그레이션 상태
 - `frontend-shadcn-test`는 기능 동등성 유지를 위해 legacy 페이지를 부분 재사용하는 **Parity Hybrid** 모드입니다.
 - 현재 `frontend/src` 직접 참조는 **0개 파일, 0개 import**로 정리했습니다.
-- 대신 parity 안정성을 위해 `frontend-shadcn-test/legacy-src`에 legacy 소스를 벤더링해 내부 참조로 전환했습니다.
+- 대신 parity 안정성을 위해 `frontend-shadcn-test/src/legacy`에 legacy 소스를 내부 편입해 참조로 전환했습니다.
 - shadcn으로 전환 완료된 상위 화면:
   - 인증(`/login`) 및 보호 라우트
   - 상단 앱 셸(네비게이션/로그아웃/테마 토글)
   - Image Groups 상위 페이지(탭/플로팅 생성 버튼/피드백 알림 컨테이너)
   - Upload 상위 페이지
   - Image Detail 상위 페이지(다운로드/해시복사/메타데이터 컨테이너)
-- `src`는 `legacy-src`를 직접 참조하며, 중간 entrypoint 레이어 없이 페이지/컴포넌트를 바로 연결합니다.
+- `src`는 `src/legacy`를 직접 참조하며, 중간 entrypoint 레이어 없이 페이지/컴포넌트를 바로 연결합니다.
 
 ## 안정화(하이브리드 하드닝)
 - Vite `resolve.dedupe` 적용: `react`, `react-dom`, `react-router-dom`, `@tanstack/react-query`
@@ -59,8 +59,8 @@ npm run dev
 - 그룹 API/훅 일부(`services/group-api`, `hooks/use-groups`, `hooks/use-image-list-settings`)를 분리 프론트 내부로 이동
 - Image Groups UI 일부(`group-breadcrumb`, `group-card`, `image-view-card`, `auto-folder-*`)를 분리 프론트 내부 구현으로 이동
 - Home 이미지 로딩/검색 훅(`hooks/use-infinite-images`, `hooks/use-paginated-images`, `hooks/use-search`)을 분리 프론트 내부 구현으로 이동
-- Settings는 `src/features/settings/settings-page.tsx` 실구현으로 전환했고 세부 패널을 `legacy-src`에서 직접 연결합니다.
-- Image Generation은 로컬 탭 셸(`features/image-generation/image-generation-page.tsx`)을 유지하고 탭을 `legacy-src/pages/ImageGeneration/*`로 직접 연결합니다.
+- Settings는 `src/features/settings/settings-page.tsx` 실구현으로 전환했고 세부 패널을 `src/legacy`에서 직접 연결합니다.
+- Image Generation은 로컬 탭 셸(`features/image-generation/image-generation-page.tsx`)을 유지하고 탭을 `src/legacy/pages/ImageGeneration/*`로 직접 연결합니다.
 - i18n 부트스트랩을 분리 프론트 내부(`src/i18n`)로 이동하고 parity app에서 로컬 i18n을 사용
 - Group Create/Edit modal을 분리 프론트 내부(`group-create-edit-modal`, `basic-info-tab`, `auto-collect-tab`, `simple-search-tab`, `search-auto-complete`)로 이동
 - Group Image modal을 분리 프론트 내부(`group-image-grid-modal`, `group-assign-modal`, `lora-dataset-dialog`) 구현으로 이동
@@ -89,9 +89,9 @@ npm run dev
 - 인증 상태/세션은 기존 백엔드 auth API와 동일하게 사용
 
 ## 다음 마이그레이션 슬라이스
-- 1순위: 라우트/탭 실구현을 `src/features`로 순차 이관하고 `legacy-src` 직접 의존을 줄이기
+- 1순위: 라우트/탭 실구현을 `src/features`로 순차 이관하고 `src/legacy` 직접 의존을 줄이기
 - 분해 순서:
   - Image Generation 탭(`nai/comfyui/wildcards`)을 `src/features/image-generation` 실구현으로 이관
   - Workflow 페이지(`new/edit/generate`)를 `src/features/workflows` 실구현으로 이관
-  - Workflow/Group modal의 `legacy-src/components` 의존을 로컬 컴포넌트로 대체
-- 목표: `legacy-src` 의존 **0개**
+  - Workflow/Group modal의 `src/legacy/components` 의존을 로컬 컴포넌트로 대체
+- 목표: `src/legacy` 의존 **0개**

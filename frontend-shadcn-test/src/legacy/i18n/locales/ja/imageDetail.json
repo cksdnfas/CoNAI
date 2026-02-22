@@ -1,0 +1,110 @@
+{
+  "page": {
+    "title": "画像詳細情報",
+    "notFound": "画像が見つかりません。",
+    "errorLoading": "画像の読み込み中にエラーが発生しました。",
+    "noIdProvided": "画像IDが提供されていません。"
+  },
+  "actions": {
+    "download": "ダウンロード",
+    "share": "共有",
+    "back": "戻る",
+    "goToDetail": "詳細ページ",
+    "uploadToCivitai": "Civitaiにアップロード",
+    "delete": "削除",
+    "deleteConfirm": "画像を削除してもよろしいですか？",
+    "deleteSuccess": "画像を削除しました。",
+    "deleteError": "画像の削除中にエラーが発生しました。"
+  },
+  "sections": {
+    "fileInfo": "ファイル情報",
+    "imageInfo": "画像情報",
+    "videoInfo": "動画情報",
+    "aiInfo": "生成情報",
+    "promptInfo": "プロンプト情報",
+    "groupInfo": "所属グループ",
+    "fullMetadata": "全メタデータ"
+  },
+  "fileInfo": {
+    "originalFilename": "元のファイル名",
+    "filename": "ファイル名",
+    "size": "サイズ",
+    "fileSize": "ファイルサイズ",
+    "mimeType": "MIMEタイプ",
+    "uploadDate": "アップロード日",
+    "filenameLabel": "ファイル",
+    "dimensionsLabel": "サイズ",
+    "fileSizeLabel": "容量",
+    "uploadDateLabel": "日付"
+  },
+  "imageInfo": {
+    "dimensions": "サイズ",
+    "dimensionsValue": "{{width}} × {{height}}"
+  },
+  "videoInfo": {
+    "duration": "再生時間",
+    "durationValue": "{{minutes}}分 {{seconds}}秒",
+    "fps": "フレームレート",
+    "fpsValue": "{{fps}} fps",
+    "videoCodec": "動画コーデック",
+    "audioCodec": "音声コーデック",
+    "bitrate": "ビットレート",
+    "bitrateValue": "{{bitrate}} Mbps"
+  },
+  "aiInfo": {
+    "tool": "AIツール",
+    "toolShort": "ツール",
+    "model": "モデル",
+    "lora": "LoRA",
+    "steps": "ステップ",
+    "cfgScale": "CFG Scale",
+    "cfgShort": "CFG",
+    "sampler": "サンプラー",
+    "scheduler": "スケジューラー",
+    "seed": "シード",
+    "denoiseStrength": "デノイズ強度",
+    "generationTime": "生成時間",
+    "generationTimeValue": "{{time}}秒",
+    "batchSize": "バッチサイズ",
+    "batchIndex": "バッチインデックス"
+  },
+  "groupInfo": {
+    "autoType": "自動",
+    "manualType": "手動",
+    "groupLabel": "{{name}} ({{type}})"
+  },
+  "viewer": {
+    "controls": {
+      "zoomIn": "拡大",
+      "zoomOut": "縮小",
+      "rotateLeft": "左回転",
+      "rotateRight": "右回転",
+      "flipHorizontal": "左右反転",
+      "flipVertical": "上下反転",
+      "reset": "リセット",
+      "info": "情報",
+      "close": "閉じる"
+    },
+    "navigation": {
+      "previous": "前の画像 (←)",
+      "next": "次の画像 (→)",
+      "random": "ランダム画像 (Space)",
+      "currentPosition": "{{current}} / {{total}}"
+    }
+  },
+  "info": {
+    "title": "画像情報"
+  },
+  "copyHash": "ハッシュをコピー",
+  "copyHashButton": "ハッシュをコピー",
+  "hashGenerating": "ハッシュ生成待機中...",
+  "hashCopied": "ハッシュをコピーしました",
+  "aiInfoCopied": "コピーしました",
+  "viewThumbnail": "サムネイルを表示（高速読み込み）",
+  "viewOriginal": "オリジナルを表示（高品質）",
+  "originalNotFound": "オリジナル画像が見つかりません。サムネイルを表示します。",
+  "groupModal": {
+    "title": "グループ: {{name}}",
+    "defaultTitle": "グループ画像"
+  }
+}

@@ -1,0 +1,282 @@
+{
+  "page": {
+    "title": "图像生成",
+    "subtitle": "管理ComfyUI工作流并生成图像"
+  },
+  "tabs": {
+    "workflows": "工作流管理",
+    "servers": "服务器管理",
+    "novelai": "NovelAI",
+    "ariaLabel": "图像生成标签页",
+    "comfyui": "ComfyUI",
+    "wildcards": "通配符"
+  },
+  "nai": {
+    "subtabs": {
+      "generate": "生成图像",
+      "history": "历史记录",
+      "helper": "提示词助手"
+    },
+    "login": {
+      "title": "NovelAI登录",
+      "subtitle": "使用您的NovelAI账户登录",
+      "tabs": {
+        "credentials": "邮箱/密码",
+        "token": "令牌"
+      },
+      "username": "电子邮箱",
+      "password": "密码",
+      "token": "访问令牌",
+      "tokenPlaceholder": "请输入您的NovelAI访问令牌",
+      "tokenHint": "请输入从NovelAI网站获取的访问令牌",
+      "loginButton": "登录",
+      "loggingIn": "登录中...",
+      "error": "登录失败",
+      "tokenError": "令牌认证失败"
+    },
+    "generate": {
+      "title": "NovelAI图像生成",
+      "logout": "退出登录",
+      "prompt": "提示词",
+      "negativePrompt": "负面提示词",
+      "resolution": "分辨率",
+      "sampler": "采样器",
+      "steps": "步数",
+      "guidance": "引导强度",
+      "samples": "样本数",
+      "ucPreset": "质量预设",
+      "generateButton": "生成图像",
+      "generating": "生成中...",
+      "resultTitle": "生成的图像",
+      "download": "下载",
+      "upload": "上传",
+      "metadata": "元数据",
+      "tokenExpired": "令牌已过期。请重新登录。",
+      "subscriptionRequired": "需要有效订阅",
+      "error": "图像生成失败",
+      "uploadSuccess": "图像上传成功",
+      "uploadError": "图像上传失败",
+      "autoUploadSuccess": "已自动上传{{count}}张图像",
+      "autoUploadPartial": "成功{{success}}张，失败{{fail}}张",
+      "success": "已开始生成{{count}}张图像。请在历史记录标签页查看。",
+      "completed": "图像生成完成",
+      "failed": "图像生成失败"
+    },
+    "errors": {
+      "emptyPrompt": "提示词为空。无法生成图像。"
+    },
+    "repeat": {
+      "title": "重复执行",
+      "enable": "启用重复执行",
+      "count": "重复次数",
+      "infinite": "无限重复（-1）",
+      "countHelp": "1-999 或 -1（无限）",
+      "delay": "等待时间（秒）",
+      "delayHelp": "生成完成后到下次生成的等待时间（1-300秒）",
+      "progress": "正在执行第{{current}}次",
+      "progressWithTotal": "正在执行第{{current}}/{{total}}次",
+      "stop": "停止"
+    },
+    "resolution": {
+      "mode": "分辨率模式",
+      "modeFixed": "固定模式",
+      "modeRandom": "随机模式",
+      "selectResolution": "选择分辨率",
+      "selectMultiple": "选择分辨率（可多选）",
+      "addCustom": "添加自定义",
+      "swapDimensions": "交换宽高",
+      "swapDimensionsDesc": "交换所选分辨率的宽度和高度",
+      "finalResolution": "最终分辨率",
+      "randomPool": "随机池",
+      "swapped": "已交换",
+      "randomSwapInfo": "每个分辨率有50%的几率被交换宽高",
+      "selectAtLeastOne": "随机模式下至少选择一个分辨率",
+      "customDialog": {
+        "addTitle": "添加自定义分辨率",
+        "editTitle": "编辑自定义分辨率",
+        "name": "名称",
+        "namePlaceholder": "例：我的分辨率",
+        "width": "宽度",
+        "height": "高度",
+        "save": "保存",
+        "cancel": "取消",
+        "nameRequired": "请输入名称",
+        "widthInvalid": "宽度必须在64到2048之间",
+        "heightInvalid": "高度必须在64到2048之间"
+      }
+    },
+    "naiSettings": {
+      "basic": {
+        "title": "基本设置",
+        "model": "模型",
+        "resolution": "分辨率",
+        "prompt": "提示词",
+        "promptPlaceholder": "1girl, portrait, detailed face, masterpiece...",
+        "negativePrompt": "负面提示词",
+        "negativePromptPlaceholder": "bad anatomy, low quality..."
+      },
+      "sampling": {
+        "title": "采样设置",
+        "sampler": "采样器",
+        "noiseSchedule": "Noise Schedule",
+        "steps": "Steps",
+        "guidance": "Guidance",
+        "cfgRescale": "CFG Rescale",
+        "uncondScale": "Uncond Scale",
+        "varietyPlus": "Variety+"
+      },
+      "output": {
+        "title": "输出设置",
+        "samples": "样本数"
+      }
+    },
+    "tabs": {
+      "basic": "基本设置",
+      "advanced": "高级设置"
+    },
+    "sections": {
+      "preset": "质量预设",
+      "prompts": "提示词",
+      "output": "输出设置",
+      "advanced": "高级设置",
+      "sampling": "采样设置",
+      "quality": "质量设置",
+      "model": "模型选择"
+    },
+    "anlas": {
+      "balance": "Anlas余额",
+      "refresh": "刷新",
+      "subscription": "订阅",
+      "free": "免费",
+      "tablet": "Tablet",
+      "scroll": "Scroll",
+      "opus": "Opus"
+    },
+    "cost": {
+      "title": "费用估算",
+      "anlas": "Anlas",
+      "balance": "余额",
+      "sufficient": "充足",
+      "insufficient": "不足",
+      "opusFree": "Opus免费生成",
+      "maxSamples": "最大样本数"
+    },
+    "models": {
+      "label": "模型选择",
+      "v45curated": "V4.5 Curated（推荐）",
+      "v45full": "V4.5 Full",
+      "v4curated": "V4 Curated",
+      "v4full": "V4 Full",
+      "v3": "V3（旧版）",
+      "v3furry": "V3 Furry"
+    },
+    "advanced": {
+      "cfgRescale": "提示引导重缩放",
+      "noiseSchedule": "噪声时序",
+      "uncondScale": "非期望内容强度"
+    },
+    "settings": {
+      "qualityToggle": "自动添加质量标签"
+    },
+    "presets": {
+      "title": "质量预设",
+      "label": "质量预设",
+      "quality": {
+        "name": "质量",
+        "description": "平衡质量与速度（28步，Euler）"
+      },
+      "fast": {
+        "name": "快速",
+        "description": "快速生成（15步，Euler）"
+      },
+      "artistic": {
+        "name": "艺术",
+        "description": "创意结果（35步，DPM++ 2S Ancestral，SMEA DYN）"
+      },
+      "realistic": {
+        "name": "写实",
+        "description": "写实图像（40步，DPM++ 2M，SMEA）"
+      },
+      "detail": {
+        "name": "细节",
+        "description": "最大化细节（50步，DPM++ SDE，SMEA DYN）"
+      }
+    },
+    "gallery": {
+      "images": "图像",
+      "showMetadata": "显示元数据",
+      "hideMetadata": "隐藏元数据",
+      "downloadAll": "下载全部"
+    },
+    "history": {
+      "title": "生成历史",
+      "comingSoon": "此功能即将推出。",
+      "description": "查看之前生成的图像和设置。"
+    },
+    "groupSelector": {
+      "title": "群组分配",
+      "selectButton": "选择群组",
+      "description": "生成的图像将自动添加到所选群组"
+    }
+  },
+  "customDropdown": {
+    "title": "自定义下拉列表",
+    "buttons": {
+      "addList": "添加新列表",
+      "loadComfyUI": "加载ComfyUI模型",
+      "edit": "编辑",
+      "delete": "删除",
+      "close": "关闭",
+      "cancel": "取消",
+      "create": "创建",
+      "collect": "收集模型",
+      "viewList": "查看列表",
+      "selectFolder": "选择models文件夹"
+    },
+    "tabs": {
+      "autoCollected": "自动收集",
+      "manual": "手动创建"
+    },
+    "labels": {
+      "auto": "自动",
+      "itemCount": "{{count}}项",
+      "listName": "列表名称",
+      "listNameRequired": "列表名称 *",
+      "description": "描述",
+      "path": "路径",
+      "itemList": "项目列表（每行一项）*",
+      "itemListCount": "项目列表（{{count}}项）",
+      "pathOptions": "路径选项：",
+      "checkpointsFullPath": "checkpoints - 包含完整路径",
+      "unetFullPath": "unet - 包含完整路径",
+      "upscaleModelsFullPath": "upscale_models - 包含完整路径"
+    },
+    "dialog": {
+      "viewTitle": "查看列表（只读）",
+      "createTitle": "添加新自定义列表",
+      "editTitle": "编辑自定义列表",
+      "comfyUITitle": "加载ComfyUI模型"
+    },
+    "messages": {
+      "noAutoCollected": "没有自动收集的列表。使用\"加载ComfyUI模型\"按钮扫描模型。",
+      "noManual": "没有手动创建的列表。使用\"添加新列表\"按钮创建列表。",
+      "minItemError": "请至少输入1个项目。",
+      "deleteConfirm": "确定要删除此列表吗？",
+      "selectFolderError": "请选择模型文件夹。",
+      "autoCollectedReadOnly": "自动收集的项目无法编辑。您只能查看内容。",
+      "selectComfyUIFolder": "请选择ComfyUI的models文件夹。",
+      "foldersDetected": "在{{count}}个文件夹中检测到模型文件：",
+      "fileCount": "{{count}}个文件",
+      "moreCount": "...还有{{count}}个文件夹",
+      "collecting": "收集中...",
+      "pathExample": "例如：{{example}}",
+      "scanInfo": "扫描信息：\n• 自动收集checkpoints、unet和upscale_models文件夹\n• 重新扫描相同文件夹将更新项目\n• 自动收集的项目可在\"自动收集\"标签页中查看"
+    },
+    "placeholders": {
+      "itemList": "示例：\nSDXL 1.0\nSD 1.5\nRealistic Vision\nDreamShaper"
+    },
+    "helperText": {
+      "itemList": "每项用换行符分隔"
+    }
+  }
+}

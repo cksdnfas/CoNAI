@@ -1,4 +1,4 @@
-import LegacyWildcardTab from '../../../../legacy-src/pages/ImageGeneration/WildcardTab'
+import LegacyWildcardTab from '@/legacy/pages/ImageGeneration/WildcardTab'
 
 export default function WildcardTab() {
   return <LegacyWildcardTab />

@@ -1,0 +1,502 @@
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Card, CardMedia, Box, Skeleton, Chip, Typography, IconButton } from '@mui/material';
+import {
+  CheckCircle as CheckCircleIcon,
+  Delete as DeleteIcon,
+  BrokenImage as BrokenImageIcon,
+  // CheckCircleOutline as CompletedIcon,
+  // Error as FailedIcon,
+  // HourglassEmpty as PendingIcon,
+  // Sync as ProcessingIcon,
+} from '@mui/icons-material';
+import type { ImageRecord } from '../../../types/image';
+import type { GenerationStatus, ServiceType } from '@comfyui-image-manager/shared';
+import { getBackendOrigin } from '../../../utils/backend';
+
+interface HistoryMasonryCardProps {
+  image: ImageRecord;
+  onClick: () => void;
+  selected?: boolean;
+  selectable?: boolean;
+  onSelectionChange?: (compositeHash: string, event?: React.MouseEvent) => void;
+  onDelete?: (compositeHash: string) => void;
+  // 히스토리 전용 추가 정보
+  generationStatus?: GenerationStatus;
+  serviceType?: ServiceType;
+}
+
+const HistoryMasonryCard: React.FC<HistoryMasonryCardProps> = ({
+  image,
+  onClick,
+  selected = false,
+  selectable = false,
+  onSelectionChange,
+  onDelete,
+  serviceType,
+}) => {
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const backendOrigin = getBackendOrigin();
+
+  // 히스토리 이미지는 thumbnail_url 사용, 일반 이미지는 API 사용
+  // GIF와 비디오는 원본 사용
+  const isGif = image.file_type === 'animated';
+  const isVideo = image.file_type === 'video';
+
+  // composite_hash가 유효한지 확인 (null이 아니고, fallback "history_123" 형식이 아닌지)
+  const hasValidHash = image.composite_hash && !image.composite_hash.startsWith('history_');
+
+  // URL이 이미 절대 경로(http:// 또는 https://)인지 확인
+  const isAbsoluteUrl = (url: string | null) => url && (url.startsWith('http://') || url.startsWith('https://'));
+
+  // 폴백 URL 생성 (썸네일 실패 시 원본 사용)
+  const getFallbackUrl = () => {
+    if (image.image_url && image.image_url !== image.thumbnail_url) {
+      return isAbsoluteUrl(image.image_url) ? image.image_url : `${backendOrigin}${image.image_url}`;
+    }
+    if (hasValidHash) {
+      return `${backendOrigin}/api/images/${image.composite_hash}/file`;
+    }
+    return null;
+  };
+
+  // 이미지 URL 결정 로직 (null 체크 강화)
+  // 1. 에러 발생 시 폴백 URL 사용
+  // 2. GIF/비디오는 원본 파일 사용
+  // 3. 일반 이미지는 썸네일 우선, 없으면 원본
+  const imageUrl = imageError
+    ? getFallbackUrl()
+    : (isGif || isVideo)
+      ? (image.image_url
+          ? (isAbsoluteUrl(image.image_url) ? image.image_url : `${backendOrigin}${image.image_url}`)
+          : hasValidHash
+            ? `${backendOrigin}/api/images/${image.composite_hash}/file`
+            : null)
+      : (image.thumbnail_url
+          ? (isAbsoluteUrl(image.thumbnail_url) ? image.thumbnail_url : `${backendOrigin}${image.thumbnail_url}`)
+          : hasValidHash
+            ? `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`
+            : getFallbackUrl());
+
+  // 플레이스홀더 아이콘 SVG (이미지 로딩 실패 시 표시)
+  const placeholderIconSvg = useMemo(() =>
+    `data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24">
+        <rect width="24" height="24" fill="#1a1a1a"/>
+        <path fill="#666" d="M21 5v6.59l-3-3.01-4 4.01-4-4-4 4-3-3.01V5c0-1.1.9-2 2-2h14c1.1 0 2 .9 2 2zm-3 6.42l3 3.01V19c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2v-6.58l3 2.99 4-4 4 4 4-3.99z"/>
+      </svg>`
+    )}`, []
+  );
+
+  // 랜덤 플레이스홀더 이미지 선택 (이미지 로딩 실패 시)
+  const randomPlaceholder = useMemo(() => {
+    const PLACEHOLDER_COUNT = 12; // config.json의 count와 일치
+    const randomIndex = Math.floor(Math.random() * PLACEHOLDER_COUNT) + 1;
+    return `/placeholders/folder-overlay-${randomIndex}.webp`;
+  }, [image.composite_hash]); // composite_hash를 의존성으로 추가하여 각 이미지마다 다른 플레이스홀더
+
+  const handleSelectionChange = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onSelectionChange && image.composite_hash) {
+      onSelectionChange(image.composite_hash, e);
+    }
+  };
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    // 체크박스 또는 삭제 버튼 클릭이면 무시
+    if ((e.target as HTMLElement).closest('.image-card-actions')) {
+      return;
+    }
+    onClick();
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onDelete && image.composite_hash) {
+      onDelete(image.composite_hash);
+    }
+  };
+
+  // 이미지 aspect ratio 계산 (레이아웃 시프트 방지)
+  const aspectRatio = image.width && image.height ? image.width / image.height : 1;
+
+  // Intersection Observer로 뷰포트 진입 감지
+  useEffect(() => {
+    if (!cardRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setIsVisible(true);
+            observer.disconnect();
+          }
+        });
+      },
+      {
+        rootMargin: '50px', // 50px 전에 미리 로드 시작
+      }
+    );
+
+    observer.observe(cardRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  const handleImageLoad = () => {
+    setImageLoaded(true);
+  };
+
+  // 상태 배지 렌더링 - 주석 처리됨 (사용하지 않음)
+  // const getStatusBadge = () => {
+  //   if (!generationStatus) return null;
+  //   return null;
+  // };
+
+  // 서비스 타입 배지
+  const getServiceBadge = () => {
+    if (!serviceType) return null;
+
+    return (
+      <Chip
+        label={serviceType === 'comfyui' ? 'ComfyUI' : 'NovelAI'}
+        size="small"
+        sx={{
+          fontSize: '0.7rem',
+          height: '22px',
+          fontWeight: 600,
+          bgcolor: 'rgba(0, 0, 0, 0.75)',
+          color: 'white',
+          backdropFilter: 'blur(4px)',
+        }}
+      />
+    );
+  };
+
+  return (
+    <Card
+      ref={cardRef}
+      onClick={handleCardClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      sx={{
+        cursor: 'pointer',
+        transition: 'all 0.2s ease-in-out',
+        position: 'relative',
+        border: selected ? 3 : 1,
+        borderColor: selected ? 'primary.main' : 'divider',
+        '&:hover': {
+          transform: 'translateY(-4px)',
+          boxShadow: 6,
+        },
+      }}
+    >
+      {/* 선택 체크박스/아이콘 - selectable일 때 항상 표시 */}
+      {selectable && (
+        <Box
+          className="image-card-actions"
+          sx={{
+            position: 'absolute',
+            top: 8,
+            left: 8,
+            zIndex: 2,
+            opacity: isHovered || selected ? 1 : 0.3,
+            transition: 'opacity 0.2s ease-in-out',
+          }}
+          onClick={handleSelectionChange}
+        >
+          {selected ? (
+            <CheckCircleIcon
+              sx={{
+                fontSize: 32,
+                color: 'primary.main',
+                bgcolor: 'white',
+                borderRadius: '50%',
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+              }}
+            />
+          ) : (
+            <Box
+              sx={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                border: '2px solid white',
+                bgcolor: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  bgcolor: 'rgba(0, 0, 0, 0.7)',
+                  transform: 'scale(1.1)',
+                },
+              }}
+            />
+          )}
+        </Box>
+      )}
+
+      {/* 선택 오버레이 */}
+      {selected && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            bgcolor: 'rgba(33, 150, 243, 0.15)',
+            zIndex: 1,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+
+      <Box
+        sx={{
+          position: 'relative',
+          width: '100%',
+          // 동영상/GIF는 자연 높이 사용, 이미지는 padding-top으로 aspect ratio 유지
+          ...(isVideo || isGif ? {} : { paddingTop: `${(1 / aspectRatio) * 100}%` }),
+          overflow: 'hidden',
+          bgcolor: 'grey.200',
+        }}
+      >
+        {/* Skeleton 로딩 표시 */}
+        {!imageLoaded && !imageError && imageUrl && (
+          <Skeleton
+            variant="rectangular"
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+            }}
+          />
+        )}
+
+        {/* 플레이스홀더 표시 (이미지 로딩 실패 또는 URL 없음) */}
+        {(!imageUrl || (imageError && !imageUrl)) && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              zIndex: 1,
+            }}
+          >
+            {/* 배경: 이미지 아이콘 */}
+            <CardMedia
+              component="img"
+              image={placeholderIconSvg}
+              alt="Processing image"
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                opacity: 0.4,
+              }}
+            />
+            {/* 오버레이: 랜덤 플레이스홀더 이미지 */}
+            <Box
+              component="img"
+              src={randomPlaceholder}
+              alt="Placeholder"
+              sx={{
+                position: 'absolute',
+                top: '58%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '70%',
+                height: 'auto',
+                maxWidth: '200px',
+                opacity: 0.8,
+                objectFit: 'contain',
+              }}
+            />
+          </Box>
+        )}
+
+        {/* 이미지/비디오 - 뷰포트에 들어왔을 때만 로드 (imageUrl이 유효한 경우만) */}
+        {isVisible && imageUrl && (
+          isVideo ? (
+            <Box
+              component="video"
+              src={imageUrl}
+              muted
+              loop
+              autoPlay
+              playsInline
+              onLoadedData={handleImageLoad}
+              onError={() => {
+                console.error(`Failed to load video: ${imageUrl}`);
+                setImageError(true);
+              }}
+              sx={{
+                // 동영상은 자연 높이 사용 (원본 비율 유지)
+                width: '100%',
+                height: 'auto',
+                display: 'block',
+                opacity: imageLoaded ? 1 : 0,
+                transition: 'opacity 0.15s ease-in-out',
+              }}
+            />
+          ) : isGif ? (
+            <CardMedia
+              component="img"
+              image={imageUrl}
+              alt={image.original_file_path ?? ''}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+              onLoad={handleImageLoad}
+              onError={() => {
+                console.error(`Failed to load GIF: ${imageUrl}`);
+                setImageError(true);
+              }}
+              sx={{
+                // GIF는 자연 높이 사용 (원본 비율 유지)
+                width: '100%',
+                height: 'auto',
+                display: 'block',
+                opacity: imageLoaded ? 1 : 0,
+                transition: 'opacity 0.15s ease-in-out',
+              }}
+            />
+          ) : (
+            <CardMedia
+              component="img"
+              image={imageUrl}
+              alt={image.original_file_path ?? ''}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+              onLoad={handleImageLoad}
+              onError={() => {
+                console.error(`Failed to load image: ${imageUrl}`);
+                setImageError(true);
+              }}
+              sx={{
+                // 일반 이미지는 absolute positioning으로 aspect ratio 컨테이너 채우기
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                display: 'block',
+                opacity: imageLoaded ? 1 : 0,
+                transition: 'opacity 0.15s ease-in-out',
+              }}
+            />
+          )
+        )}
+      </Box>
+
+      {/* 배지 컨테이너 - 우측 상단 */}
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          zIndex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0.5,
+          alignItems: 'flex-end',
+        }}
+      >
+        {/* 상태 배지 - 이미지가 정상적으로 생성되었으므로 주석 처리 */}
+        {/* {getStatusBadge()} */}
+        {getServiceBadge()}
+
+        {/* 삭제 버튼 - 호버 시 표시 */}
+        {onDelete && isHovered && (
+          <IconButton
+            className="image-card-actions"
+            onClick={handleDelete}
+            size="small"
+            sx={{
+              bgcolor: 'rgba(244, 67, 54, 0.9)',
+              color: 'white',
+              backdropFilter: 'blur(4px)',
+              '&:hover': {
+                bgcolor: 'rgba(211, 47, 47, 1)',
+              },
+              width: 32,
+              height: 32,
+            }}
+          >
+            <DeleteIcon sx={{ fontSize: '1rem' }} />
+          </IconButton>
+        )}
+      </Box>
+
+      {/* 프롬프트 미리보기 - 하단 오버레이 (호버 시 표시) */}
+      {image.prompt && isHovered && (
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1,
+            bgcolor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(4px)',
+            p: 1,
+            maxHeight: '80px',
+            overflow: 'hidden',
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'white',
+              fontSize: '0.7rem',
+              display: '-webkit-box',
+              WebkitLineClamp: 3,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {image.prompt}
+          </Typography>
+        </Box>
+      )}
+
+      {/* 이미지 크기 정보 - 좌측 하단 */}
+      {image.width && image.height && (
+        <Box sx={{ position: 'absolute', bottom: 8, left: 8, zIndex: 1 }}>
+          <Chip
+            label={`${image.width} × ${image.height}`}
+            size="small"
+            sx={{
+              fontSize: '0.65rem',
+              height: '20px',
+              fontWeight: 600,
+              bgcolor: 'rgba(0, 0, 0, 0.65)',
+              color: 'white',
+              backdropFilter: 'blur(4px)',
+            }}
+          />
+        </Box>
+      )}
+    </Card>
+  );
+};
+
+export default HistoryMasonryCard;

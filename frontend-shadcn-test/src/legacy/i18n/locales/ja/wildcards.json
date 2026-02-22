@@ -1,0 +1,197 @@
+{
+  "page": {
+    "title": "ワイルドカード管理",
+    "noWildcards": "登録されたワイルドカードがありません",
+    "noChains": "登録されたチェーンがありません",
+    "noWildcardsDesc": "新しいワイルドカードを追加してプロンプト生成を自動化します"
+  },
+  "filters": {
+    "all": "すべて",
+    "both": "共通"
+  },
+  "actions": {
+    "add": "ワイルドカードを追加",
+    "edit": "ワイルドカード編集",
+    "delete": "ワイルドカード削除",
+    "addItem": "項目を追加",
+    "preview": "プレビュー",
+    "confirmDelete": "\"{{name}}\"ワイルドカードを削除してもよろしいですか?",
+    "copiedToClipboard": "クリップボードにコピーされました",
+    "copyFailed": "コピーに失敗しました"
+  },
+  "card": {
+    "items": "{{count}}個の項目",
+    "itemsCount": "個",
+    "moreItems": "他{{count}}個"
+  },
+  "dialog": {
+    "createTitle": "ワイルドカード作成",
+    "editTitle": "ワイルドカード編集",
+    "createChainTitle": "チェーンを作成",
+    "editChainTitle": "チェーンを編集"
+  },
+  "form": {
+    "name": "名前",
+    "nameHelper": "++なしで名前のみ入力してください (例: 花、色)",
+    "description": "説明 (オプション)",
+    "parent": "親ワイルドカード",
+    "parentHelper": "親ワイルドカードを選択して階層構造を作成します",
+    "noParent": "なし (ルートレベル)",
+    "includeChildren": "子ワイルドカードを自動的に含める",
+    "includeChildrenHelper": "有効にすると、このワイルドカードの使用時に直接の子の項目も自動的に含まれます",
+    "chainOption": "チェーンオプション",
+    "chainOptionReplace": "置換 (Replace)",
+    "chainOptionAppend": "追加 (Append)",
+    "weight": "重み",
+    "comfyuiItems": "ComfyUIプロンプト項目",
+    "naiItems": "NovelAIプロンプト項目",
+    "itemsHelper": "各項目はカンマ区切りの単語を含めることができます。++名前++形式で他のワイルドカードをネストできます。",
+    "itemPlaceholder": "例: バラ、赤、トゲ または しおれた、++花++"
+  },
+  "preview": {
+    "title": "ワイルドカードプレビュー",
+    "inputLabel": "テストプロンプト",
+    "inputPlaceholder": "例: ++花++が咲いている庭、++色++の空",
+    "generate": "結果を生成",
+    "results": "パース結果 (ランダム5回)",
+    "result": "結果 {{number}}"
+  },
+  "errors": {
+    "nameRequired": "ワイルドカード名は必須です",
+    "itemsRequired": "最低1つの項目が必要です",
+    "previewTextRequired": "テストするプロンプトを入力してください",
+    "copyFailed": "Failed to copy"
+  },
+  "tabs": {
+    "manual": "ワイルドカード",
+    "chain": "前処理",
+    "autoCollected": "自動収集 (LORA)"
+  },
+  "detail": {
+    "children": "サブ項目",
+    "items": "項目一覧",
+    "selectItem": "左側から項目を選択してください",
+    "moreItems": "もっと見る"
+  },
+  "autoCollect": {
+    "title": "LORAワイルドカード自動生成",
+    "description": "LORAフォルダをスキャンして、ワイルドカードを自動生成します",
+    "folderPath": "LORAフォルダパス",
+    "folderPathHelper": "ComfyUI lorasフォルダまたはLORAファイルを含むサブフォルダを指定してください",
+    "loraWeight": "デフォルトLORA重み",
+    "loraWeightHelper": "生成されるワイルドカードのデフォルト重み値 (例: 1.0)",
+    "duplicateHandling": "重複名の処理方法",
+    "duplicateNumber": "数字サフィックス (style, style_2)",
+    "duplicateParent": "親フォルダを含める (anime_style, realistic_style)",
+    "scanButton": "LORAフォルダをスキャン",
+    "scanning": "スキャン中...",
+    "lastScan": "最後のスキャン",
+    "noScanYet": "まだスキャンが実行されていません",
+    "scanLog": {
+      "title": "スキャンログ",
+      "timestamp": "スキャン時刻",
+      "folderPath": "スキャンパス",
+      "totalWildcards": "生成されたワイルドカード",
+      "totalItems": "総項目数",
+      "details": "詳細",
+      "wildcardName": "ワイルドカード名",
+      "itemCount": "項目数"
+    },
+    "noAutoWildcards": "自動収集されたワイルドカードがありません",
+    "noAutoWildcardsDesc": "LORAフォルダをスキャンしてワイルドカードを生成してください",
+    "autoCollectedBadge": "自動",
+    "viewDetail": "View Details",
+    "errors": {
+      "folderPathRequired": "LORAフォルダパスは必須です",
+      "invalidWeight": "有効な重み値を入力してください (0.1 ~ 2.0)",
+      "scanFailed": "スキャンに失敗しました: {{error}}"
+    },
+    "tierLabel": "階層 {{tier}}",
+    "filesSelected": "{{count}}個のLORAファイルが選択されました",
+    "filesFound": "<strong>{{count}}個のLORAファイル</strong>が見つかりました:",
+    "promptsCount": "{{count}}個のプロンプト",
+    "moreFiles": "...他{{count}}個のファイル",
+    "childCount": "{{count}}個のサブ項目",
+    "noItems": "項目がありません",
+    "filters": {
+      "tierFilter": "階層フィルター",
+      "wildcardSearch": "ワイルドカード検索",
+      "searchPlaceholder": "検索...",
+      "clearFilters": "フィルターをクリア",
+      "totalWildcards": "合計<strong>{{count}}</strong>個のワイルドカード",
+      "filteredCount": "(フィルター済み: <strong>{{count}}</strong>個)",
+      "noResults": "検索結果がありません",
+      "tryDifferentFilters": "別の検索キーワードまたはフィルターをお試しください"
+    },
+    "matchingMode": "テキストファイルマッチングモード",
+    "matchingModeFilename": "ファイル名マッチング (lora.txt)",
+    "matchingModeCommon": "共通テキストファイルを使用",
+    "commonTextFilename": "共通テキストファイル名",
+    "commonTextFilenameHelper": "フォルダ内で使用する共通テキストファイル名（例：add.txt、common.txt）",
+    "matchingPriority": "マッチング優先順位",
+    "priorityFilename": "ファイル名マッチング優先（共通テキストにフォールバック）",
+    "priorityCommon": "共通テキスト優先（ファイル名マッチングにフォールバック）"
+  },
+  "buttons": {
+    "openScanDialog": "Scan LORA",
+    "openLogDialog": "Last Scan Log"
+  },
+  "scanDialog": {
+    "title": "LORA Wildcard Auto-Generation",
+    "infoMessage": "Please select ComfyUI's loras folder or a folder containing LORA files.",
+    "scanButton": "Collect LORA",
+    "warningTitle": "Scan Information:",
+    "warning1": "Automatically collects .safetensors files",
+    "warning2": "Re-scanning the same folder will update the items",
+    "warning3": "Auto-collected items can be found in this tab"
+  },
+  "logDialog": {
+    "title": "Last LORA Scan Log"
+  },
+  "detailDialog": {
+    "title": "View List (Read-Only)",
+    "readOnlyInfo": "Auto-collected items cannot be edited. You can only view the contents.",
+    "name": "List Name",
+    "description": "Description",
+    "path": "Path",
+    "itemList": "Item List ({{count}} items)"
+  },
+  "autocomplete": {
+    "hint": "++を入力するとワイルドカードリストが表示されます",
+    "manualTab": "手動",
+    "autoTab": "自動 (LORA)",
+    "searchTab": "検索",
+    "noResults": "結果がありません",
+    "selectTier": "階層を選択してください",
+    "root": "ルート",
+    "searchPlaceholder": "ワイルドカード検索...",
+    "searchHint": "検索語を入力してください"
+  },
+  "deleteConfirm": {
+    "title": "ワイルドカード削除の確認",
+    "message": "\"{{name}}\" ワイルドカードを削除してもよろしいですか？",
+    "childrenNotice": "このワイルドカードには子ワイルドカードがあります。",
+    "wildcardInfo": {
+      "itemCount": "項目数: {{count}}",
+      "childCount": "子ワイルドカード: {{count}}"
+    },
+    "warning": {
+      "permanent": "この操作は元に戻せません。"
+    },
+    "options": {
+      "title": "削除オプションを選択してください:",
+      "moveUp": {
+        "label": "この項目のみ削除",
+        "description": "子ワイルドカードは一階層上に移動されます"
+      },
+      "cascade": {
+        "label": "子項目を含めて削除",
+        "description": "{{count}}個の子ワイルドカードも一緒に削除されます"
+      }
+    }
+  },
+  "messages": {
+    "deleteSuccess": "ワイルドカードを削除しました",
+    "deleteFailed": "ワイルドカードの削除に失敗しました"
+  }
+}

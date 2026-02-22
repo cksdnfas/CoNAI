@@ -1,0 +1,218 @@
+{
+  "title": "画像検索",
+  "description": "プロンプト、AIツール、モデル名、自動タグなどで画像を検索できます。",
+  "searchInput": {
+    "placeholder": "プロンプトキーワードで検索...",
+    "button": "検索",
+    "clear": "すべてリセット",
+    "execute": "検索実行"
+  },
+  "simpleSearch": {
+    "description": "ポジティブプロンプトと自動タグから検索します。",
+    "placeholder": "検索語を入力してください (例: girl, masterpiece, hatsune miku)",
+    "helpTooltip": {
+      "searchScope": "検索範囲: ポジティブプロンプト、自動タグ General/Character",
+      "ignoreWeights": "ウェイトは無視されます",
+      "advancedTip": "複雑な条件は\\\"高度な検索\\\"を使用"
+    },
+    "tooltips": {
+      "logic": "論理モード (クリックで切り替え: OR/AND/NOT)",
+      "type": "トークンタイプ (クリックで切り替え: ポジティブ/ネガティブ/自動)"
+    }
+  },
+  "results": {
+    "title": "検索結果",
+    "searching": "検索中...",
+    "found": "合計{{count}}件の画像が見つかりました。",
+    "noResults": "検索結果がありません",
+    "noResultsHint": "別のキーワードを試すか、フィルターを調整してください。",
+    "initialMessage": "検索キーワードを入力して画像を検索してください",
+    "initialHint": "プロンプト、AIツール、モデル名、自動タグ、日付などで検索できます。",
+    "reset": "検索をリセット",
+    "refresh": "更新"
+  },
+  "filters": {
+    "basic": {
+      "aiTool": {
+        "label": "AIツール",
+        "all": "すべて"
+      },
+      "modelName": {
+        "label": "モデル名",
+        "placeholder": "例: sd_xl_base_1.0"
+      },
+      "startDate": {
+        "label": "開始日"
+      },
+      "endDate": {
+        "label": "終了日"
+      }
+    },
+    "quickDate": {
+      "today": "今日",
+      "todayTooltip": "今日アップロードされた画像",
+      "7days": "7日間",
+      "7daysTooltip": "過去7日間",
+      "30days": "30日間",
+      "30daysTooltip": "過去30日間",
+      "90days": "90日間",
+      "90daysTooltip": "過去90日間"
+    },
+    "advanced": {
+      "title": "高度なフィルター",
+      "active": "有効",
+      "negativePrompt": {
+        "label": "ネガティブプロンプト",
+        "placeholder": "除外するキーワードを入力 (例: ugly, blurry)"
+      }
+    },
+    "autoTag": {
+      "title": "自動タグフィルター",
+      "subtitle": "(WD v3 Tagger)",
+      "active": "有効",
+      "tabs": {
+        "rating": "レーティング",
+        "character": "キャラクター",
+        "generalTags": "一般タグ"
+      },
+      "rating": {
+        "typeMode": "タイプ別フィルター",
+        "scoreMode": "スコアベースフィルター",
+        "typeDescription": "特定のレーティングタイプの信頼度範囲でフィルタリング",
+        "scoreDescription": "設定で構成された重み付き総合スコアでフィルタリング",
+        "type": {
+          "label": "レーティングタイプ",
+          "none": "選択なし",
+          "general": "一般",
+          "sensitive": "センシティブ",
+          "questionable": "疑わしい",
+          "explicit": "露骨"
+        },
+        "confidenceRange": "信頼度範囲",
+        "scoreRange": "スコア範囲"
+      },
+      "character": {
+        "description": "キャラクタータグで画像をフィルタリング",
+        "existence": {
+          "label": "キャラクターの存在",
+          "all": "すべて",
+          "true": "あり",
+          "false": "なし"
+        },
+        "name": {
+          "label": "キャラクター名",
+          "placeholder": "例: hatsune_miku"
+        },
+        "confidenceRange": "信頼度範囲"
+      },
+      "generalTags": {
+        "description": "一般タグと信頼度範囲でフィルタリング",
+        "tagName": {
+          "label": "タグ名",
+          "placeholder": "例: 1girl, solo, landscape"
+        },
+        "confidence": "信頼度: {{min}} ~ {{max}}",
+        "addedTags": "追加されたタグ ({{count}}個)"
+      }
+    }
+  },
+  "searchHistory": {
+    "title": "最近の検索"
+  },
+  "advancedTab": {
+    "title": "複合フィルター検索",
+    "descriptionActive": "{{count}}個のフィルターが適用中 · 実行順序: 除外 → OR → AND",
+    "descriptionEmpty": "フィルターを追加して詳細な検索を開始してください",
+    "helpTooltip": "フィルター使用方法ヘルプ"
+  },
+  "searchBar": {
+    "tabs": {
+      "simple": "一般検索",
+      "advanced": "高度な検索"
+    },
+    "buttons": {
+      "search": "検索",
+      "searching": "検索中...",
+      "reset": "リセット"
+    },
+    "validation": {
+      "searchTextRequired": "検索語を入力してください",
+      "filterRequired": "条件を1つ以上追加してください",
+      "filterError": "フィルター {{index}}: {{error}}",
+      "booleanRequired": "値は はい/いいえ である必要があります",
+      "valueRequired": "値を入力してください",
+      "scoreRequired": "最小スコアまたは最大スコアを設定してください"
+    }
+  },
+  "filterBlock": {
+    "addButton": "フィルターを追加",
+    "emptyMessage": "フィルターを追加して検索を開始",
+    "countInfo": "{{count}}個のフィルターが適用されます。",
+    "executionOrder": "実行順序：除外 → OR → AND",
+    "modal": {
+      "title": "フィルターを追加",
+      "cancel": "キャンセル",
+      "back": "戻る",
+      "next": "次へ",
+      "add": "フィルターを追加",
+      "steps": {
+        "selectGroup": "フィルターグループを選択",
+        "selectCategory": "カテゴリを選択",
+        "configureCondition": "条件を設定"
+      },
+      "step1": {
+        "description": "フィルターの適用方法を選択してください"
+      },
+      "step2": {
+        "description": "検索する情報を選択してください"
+      },
+      "step3": {
+        "description": "条件を設定してください。作成後はフィルターを編集できません。削除して再作成する必要があります。"
+      }
+    },
+    "groupTypes": {
+      "exclude": {
+        "label": "除外 (NOT)",
+        "description": "この条件に一致する画像を結果から除外"
+      },
+      "or": {
+        "label": "ORグループ",
+        "description": "この条件に一致する画像を結果に含める"
+      },
+      "and": {
+        "label": "ANDグループ",
+        "description": "すべての条件に一致する画像のみ含める"
+      }
+    },
+    "categories": {
+      "positive_prompt": {
+        "label": "ポジティブプロンプト",
+        "description": "画像生成で使用されたポジティブプロンプトを検索"
+      },
+      "negative_prompt": {
+        "label": "ネガティブプロンプト",
+        "description": "画像生成で使用されたネガティブプロンプトを検索"
+      },
+      "auto_tag": {
+        "label": "自動タグ (WD Tagger)",
+        "description": "WD v3 Taggerから自動生成されたタグを検索"
+      },
+      "basic": {
+        "label": "基本情報",
+        "description": "AIツールやモデル名などの基本メタデータを検索"
+      }
+    },
+    "conditionTypes": {
+      "conditionType": "条件タイプ",
+      "value": "値",
+      "placeholder": "検索する値を入力",
+      "scoreRange": "スコア範囲",
+      "weightRange": "ウェイト範囲",
+      "tagName": "タグ/キャラクター名",
+      "tagPlaceholder": "例: 1girl, hatsune_miku",
+      "ratingType": "レーティングタイプ",
+      "exists": "存在する",
+      "notExists": "存在しない"
+    }
+  }
+}

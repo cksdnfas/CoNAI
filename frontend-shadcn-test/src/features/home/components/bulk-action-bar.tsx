@@ -1,3 +1,3 @@
-import BulkActionBar from '../../../../legacy-src/components/BulkActionBar/BulkActionBar'
+import BulkActionBar from '@/legacy/components/BulkActionBar/BulkActionBar'
 
 export default BulkActionBar

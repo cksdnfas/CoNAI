@@ -1,3 +1,3 @@
-import ImageList from '../../../../legacy-src/components/ImageList/ImageList'
+import ImageList from '@/legacy/components/ImageList/ImageList'
 
 export default ImageList

@@ -1,0 +1,354 @@
+import React, { useState } from 'react';
+import {
+  Box,
+  Typography,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  LinearProgress,
+  Button,
+  CircularProgress,
+  Alert,
+  IconButton,
+  Tooltip,
+} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
+import { useTranslation } from 'react-i18next';
+import type { AutoTagsData } from '../../types/image';
+import { taggerBatchApi } from '../../services/settingsApi';
+
+interface AutoTagDisplayProps {
+  imageId: string;  // ✅ composite_hash
+  autoTags: AutoTagsData | null;
+  onTagGenerated?: () => void;
+}
+
+const AutoTagDisplay: React.FC<AutoTagDisplayProps> = ({
+  imageId,
+  autoTags,
+  onTagGenerated,
+}) => {
+  const { t } = useTranslation('promptManagement');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [taglistCopied, setTaglistCopied] = useState(false);
+
+  const handleGenerateTag = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation(); // Prevent accordion from toggling if button is inside header
+    setIsGenerating(true);
+    setError(null);
+    try {
+      await taggerBatchApi.testImage(imageId);
+      if (onTagGenerated) {
+        onTagGenerated();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('autoTagDisplay.generationError');
+      setError(message);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // 태그가 없는 경우 - 생성 버튼 표시
+  if (!autoTags) {
+    return (
+      <Box sx={{ p: 2, textAlign: 'center' }}>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          {t('autoTagDisplay.noTags')}
+        </Typography>
+        <Button
+          variant="contained"
+          onClick={() => handleGenerateTag()}
+          disabled={isGenerating}
+          startIcon={isGenerating ? <CircularProgress size={20} /> : undefined}
+        >
+          {isGenerating ? t('autoTagDisplay.generating') : t('autoTagDisplay.generateButton')}
+        </Button>
+      </Box>
+    );
+  }
+
+  // Rating 게이지 색상 매핑
+  const getRatingColor = (key: string): string => {
+    const colorMap: Record<string, string> = {
+      general: '#4caf50',      // 녹색
+      sensitive: '#ffeb3b',    // 노란색
+      questionable: '#ff9800', // 진한 오렌지
+      explicit: '#d32f2f',     // 진한 빨강
+    };
+    return colorMap[key] || '#9e9e9e';
+  };
+
+  // General 태그 게이지 색상 (값 크기에 따라)
+  const getGeneralTagColor = (value: number): string => {
+    if (value < 0.33) return '#9e9e9e'; // 회색
+    if (value < 0.66) return '#2196f3'; // 파랑
+    return '#4caf50'; // 초록
+  };
+
+  // Rating 게이지 렌더링 (HP바 형태)
+  const renderRatingGauge = () => {
+    if (!autoTags.rating) return null;
+
+    const ratings = Object.entries(autoTags.rating)
+      .map(([key, value]) => ({
+        key,
+        value: Math.round(value * 100) / 100, // 소수점 셋째 자리 반올림
+        color: getRatingColor(key),
+      }))
+      .filter(r => r.value > 0);
+
+    if (ratings.length === 0) return null;
+
+    const total = ratings.reduce((sum, r) => sum + r.value, 0);
+
+    return (
+      <Box sx={{ mb: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            {t('autoTagDisplay.sections.rating')}
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+            <Tooltip
+              title={
+                <Box sx={{ p: 0.5 }}>
+                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.model')}: {autoTags.model}</Typography>
+                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.generalThreshold')}: {autoTags.thresholds.general}</Typography>
+                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.characterThreshold')}: {autoTags.thresholds.character}</Typography>
+                  {autoTags.tagged_at && (
+                    <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.taggedAt')}: {new Date(autoTags.tagged_at).toLocaleString('ko-KR')}</Typography>
+                  )}
+                </Box>
+              }
+              arrow
+              placement="left"
+            >
+              <IconButton size="small" sx={{ color: 'text.secondary' }}>
+                <InfoOutlinedIcon sx={{ fontSize: '1rem' }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={t('autoTagDisplay.regenerate', 'Regenerate Tags')}>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={handleGenerateTag}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? <CircularProgress size={16} /> : <RefreshIcon fontSize="small" />}
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
+        </Box>
+        <Box
+          sx={{
+            display: 'flex',
+            height: 32,
+            borderRadius: 1,
+            overflow: 'hidden',
+            border: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          {ratings.map((rating) => (
+            <Box
+              key={rating.key}
+              sx={{
+                flex: rating.value / total,
+                backgroundColor: rating.color,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                '&:not(:last-child)': {
+                  borderRight: '1px solid rgba(0,0,0,0.1)',
+                },
+              }}
+            >
+              {rating.value >= 0.33 && (
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: rating.key === 'sensitive' ? 'rgba(0,0,0,0.7)' : 'white',
+                    fontWeight: 600,
+                    fontSize: '0.7rem',
+                    textShadow: rating.key === 'sensitive' ? 'none' : '0 1px 2px rgba(0,0,0,0.3)',
+                  }}
+                >
+                  {rating.key.substring(0, 3).toUpperCase()} {(rating.value * 100).toFixed(0)}%
+                </Typography>
+              )}
+            </Box>
+          ))}
+        </Box>
+        {/* <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+          {ratings.map(rating => (
+            <Box key={rating.key} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box
+                sx={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: '2px',
+                  backgroundColor: rating.color,
+                }}
+              />
+              <Typography variant="caption" color="text.secondary">
+                {rating.key}: {rating.value.toFixed(2)}
+              </Typography>
+            </Box>
+          ))}
+        </Box> */}
+      </Box>
+    );
+  };
+
+  // Character 정보 렌더링 (게이지 형태)
+  const renderCharacters = () => {
+    if (!autoTags.character) return null;
+
+    const characters = Object.entries(autoTags.character)
+      .sort((a, b) => b[1] - a[1]); // 점수 높은 순으로 정렬
+
+    if (characters.length === 0) return null;
+
+    return (
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+          {t('autoTagDisplay.sections.characters')}
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {characters.map(([name, score]) => (
+            <Box key={name}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                  {name}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {(score * 100).toFixed(1)}%
+                </Typography>
+              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={score * 100}
+                sx={{
+                  height: 6,
+                  borderRadius: 1,
+                  backgroundColor: 'rgba(0,0,0,0.1)',
+                  '& .MuiLinearProgress-bar': {
+                    backgroundColor: getGeneralTagColor(score),
+                    borderRadius: 1,
+                  },
+                }}
+              />
+            </Box>
+          ))}
+        </Box>
+      </Box>
+    );
+  };
+
+  // Taglist 복사
+  const handleCopyTaglist = async () => {
+    if (!autoTags.taglist) return;
+    try {
+      await navigator.clipboard.writeText(autoTags.taglist);
+      setTaglistCopied(true);
+      setTimeout(() => setTaglistCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy taglist:', err);
+    }
+  };
+
+  // Taglist 렌더링
+  const renderTaglist = () => {
+    if (!autoTags.taglist) return null;
+
+    return (
+      <Box sx={{ mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            {t('autoTagDisplay.sections.tagList')}
+          </Typography>
+          <Tooltip title={taglistCopied ? t('autoTagDisplay.taglistCopied', 'Copied!') : t('autoTagDisplay.copyTaglist', 'Copy Tags')}>
+            <IconButton size="small" onClick={handleCopyTaglist} sx={{ color: taglistCopied ? 'success.main' : 'text.secondary' }}>
+              {taglistCopied ? <CheckIcon sx={{ fontSize: '1rem' }} /> : <ContentCopyIcon sx={{ fontSize: '1rem' }} />}
+            </IconButton>
+          </Tooltip>
+        </Box>
+        <Typography variant="body2" sx={{ lineHeight: 1.6, wordBreak: 'break-word' }}>
+          {autoTags.taglist}
+        </Typography>
+      </Box>
+    );
+  };
+
+  // General 태그 렌더링 (접을 수 있는 형태)
+  const renderGeneralTags = () => {
+    if (!autoTags.general) return null;
+
+    const generalTags = Object.entries(autoTags.general)
+      .sort((a, b) => b[1] - a[1]); // 점수 높은 순으로 정렬
+
+    if (generalTags.length === 0) return null;
+
+    return (
+      <Accordion defaultExpanded={false}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            {t('autoTagDisplay.sections.generalTags', { count: generalTags.length })}
+          </Typography>
+        </AccordionSummary>
+        <AccordionDetails>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {generalTags.map(([tag, score]) => (
+              <Box key={tag}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                    {tag}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {(score * 100).toFixed(1)}%
+                  </Typography>
+                </Box>
+                <LinearProgress
+                  variant="determinate"
+                  value={score * 100}
+                  sx={{
+                    height: 6,
+                    borderRadius: 1,
+                    backgroundColor: 'rgba(0,0,0,0.1)',
+                    '& .MuiLinearProgress-bar': {
+                      backgroundColor: getGeneralTagColor(score),
+                      borderRadius: 1,
+                    },
+                  }}
+                />
+              </Box>
+            ))}
+          </Box>
+        </AccordionDetails>
+      </Accordion>
+    );
+  };
+
+  return (
+    <Box sx={{ height: '100%', overflowY: 'auto' }}>
+      {renderRatingGauge()}
+      {renderCharacters()}
+      {renderTaglist()}
+      {renderGeneralTags()}
+    </Box>
+  );
+};
+
+export default AutoTagDisplay;

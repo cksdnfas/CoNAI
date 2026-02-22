@@ -1,0 +1,63 @@
+{
+  "page": {
+    "title": "媒体上传",
+    "description": "上传AI生成的图像和视频，自动提取和分析元数据。"
+  },
+  "dropzone": {
+    "dragActive": "将文件拖放到此处",
+    "dragInactive": "拖放图像或视频，或点击上传",
+    "supportedFormats": "图像：JPG、PNG、GIF、BMP、WebP、TIFF | 视频：MP4、WebM、MOV、AVI、MKV（最大500MB，文件数量不限）",
+    "imageSupport": "支持图像",
+    "videoSupport": "支持视频",
+    "multipleSelection": "可多选",
+    "divider": "或"
+  },
+  "buttons": {
+    "selectFiles": "选择文件",
+    "selectFolder": "选择文件夹"
+  },
+  "progress": {
+    "title": "总体进度",
+    "fileCount": "{{completed}}/{{total}}",
+    "summary": "共{{total}}个文件 - 成功：{{success}}，失败：{{failed}}"
+  },
+  "stages": {
+    "upload": "上传中",
+    "metadata": "提取元数据",
+    "thumbnail": "生成缩略图",
+    "autoCollect": "自动分组",
+    "autoTag": "自动标记"
+  },
+  "status": {
+    "waiting": "等待中",
+    "processing": "处理中",
+    "complete": "完成",
+    "error": "错误"
+  },
+  "messages": {
+    "uploadComplete": "上传完成",
+    "uploadSuccess": "图像上传成功。",
+    "uploadFailed": "上传失败。",
+    "uploadError": "上传过程中发生错误。",
+    "multipleSuccess": "已成功上传{{count}}张图像。",
+    "allFailed": "所有图像上传失败。",
+    "partialSuccess": "{{success}}个成功，{{failed}}个失败。"
+  },
+  "promptPreview": {
+    "title": "提示词预览",
+    "description": "选择图像即可立即查看AI元数据，无需上传到服务器。",
+    "dragOrClick": "拖放或点击选择图像",
+    "dropHere": "将文件拖放到此处",
+    "noUpload": "图像仅在浏览器中分析，不会上传到服务器",
+    "imagePreview": "图像预览",
+    "aiTool": "AI工具",
+    "positivePrompt": "提示词",
+    "negativePrompt": "负面提示词",
+    "terms": "提取的词条",
+    "loraModels": "LoRA模型",
+    "parameters": "生成参数",
+    "rawMetadata": "原始元数据（EXIF/PNG块）",
+    "invalidFileType": "仅允许图像文件",
+    "extractionFailed": "提取元数据失败"
+  }
+}
