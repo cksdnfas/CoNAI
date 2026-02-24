@@ -1,0 +1,279 @@
+{
+  "page": {
+    "title": "이미지 생성",
+    "subtitle": "ComfyUI 워크플로우를 관리하고 이미지를 생성합니다"
+  },
+  "tabs": {
+    "novelai": "NovelAI",
+    "comfyui": "ComfyUI",
+    "wildcards": "와일드카드",
+    "ariaLabel": "이미지 생성 탭"
+  },
+  "nai": {
+    "subtabs": {
+      "generate": "이미지 생성",
+      "history": "히스토리"
+    },
+    "login": {
+      "title": "NovelAI 로그인",
+      "subtitle": "NovelAI 계정으로 로그인하세요",
+      "tabs": {
+        "credentials": "이메일/비밀번호",
+        "token": "토큰"
+      },
+      "username": "이메일",
+      "password": "비밀번호",
+      "token": "Access Token",
+      "tokenPlaceholder": "NovelAI Access Token을 입력하세요",
+      "tokenHint": "NovelAI 웹사이트에서 발급받은 Access Token을 입력하세요",
+      "loginButton": "로그인",
+      "loggingIn": "로그인 중...",
+      "error": "로그인에 실패했습니다",
+      "tokenError": "토큰 인증에 실패했습니다"
+    },
+    "tabs": {
+      "basic": "기본 설정",
+      "advanced": "고급 설정"
+    },
+    "sections": {
+      "preset": "품질 프리셋",
+      "prompts": "프롬프트",
+      "output": "출력 설정",
+      "advanced": "고급 설정",
+      "sampling": "샘플링 설정",
+      "quality": "품질 설정",
+      "model": "모델 선택"
+    },
+    "anlas": {
+      "balance": "Anlas 잔액",
+      "refresh": "새로고침",
+      "subscription": "구독",
+      "free": "무료",
+      "tablet": "Tablet",
+      "scroll": "Scroll",
+      "opus": "Opus"
+    },
+    "cost": {
+      "title": "예상 비용",
+      "anlas": "Anlas",
+      "balance": "잔액",
+      "sufficient": "충분",
+      "insufficient": "부족",
+      "opusFree": "Opus 무료 생성 가능",
+      "maxSamples": "최대 샘플 수"
+    },
+    "models": {
+      "label": "모델 선택",
+      "v45curated": "V4.5 Curated (추천)",
+      "v45full": "V4.5 Full",
+      "v4curated": "V4 Curated",
+      "v4full": "V4 Full",
+      "v3": "V3 (구버전)",
+      "v3furry": "V3 Furry"
+    },
+    "advanced": {
+      "cfgRescale": "Prompt Guidance Rescale",
+      "noiseSchedule": "Noise Schedule",
+      "uncondScale": "Undesired Content Strength"
+    },
+    "presets": {
+      "title": "품질 프리셋",
+      "label": "품질 프리셋",
+      "quality": {
+        "name": "기본 품질",
+        "description": "균형잡힌 품질과 속도 (28 steps, Euler)"
+      },
+      "fast": {
+        "name": "빠름",
+        "description": "빠른 생성 (15 steps, Euler)"
+      },
+      "artistic": {
+        "name": "예술적",
+        "description": "창의적인 결과물 (35 steps, DPM++ 2S Ancestral, SMEA DYN)"
+      },
+      "realistic": {
+        "name": "사실적",
+        "description": "사실적인 이미지 (40 steps, DPM++ 2M, SMEA)"
+      },
+      "detail": {
+        "name": "디테일",
+        "description": "최고 디테일 (50 steps, DPM++ SDE, SMEA DYN)"
+      }
+    },
+    "gallery": {
+      "images": "이미지",
+      "showMetadata": "메타데이터 표시",
+      "hideMetadata": "메타데이터 숨기기",
+      "downloadAll": "모두 다운로드"
+    },
+    "settings": {
+      "qualityToggle": "품질 태그 자동 추가"
+    },
+    "generate": {
+      "title": "NovelAI 이미지 생성",
+      "logout": "로그아웃",
+      "prompt": "프롬프트",
+      "negativePrompt": "네거티브 프롬프트",
+      "resolution": "해상도",
+      "sampler": "샘플러",
+      "steps": "스텝",
+      "guidance": "가이던스",
+      "samples": "샘플 수",
+      "ucPreset": "품질 프리셋",
+      "generateButton": "이미지 생성",
+      "generating": "생성 중...",
+      "resultTitle": "생성된 이미지",
+      "download": "다운로드",
+      "upload": "업로드",
+      "metadata": "메타데이터",
+      "tokenExpired": "토큰이 만료되었습니다. 다시 로그인하세요.",
+      "subscriptionRequired": "활성 구독이 필요합니다",
+      "error": "이미지 생성에 실패했습니다",
+      "uploadSuccess": "이미지가 성공적으로 업로드되었습니다",
+      "uploadError": "이미지 업로드에 실패했습니다",
+      "autoUploadSuccess": "{{count}}개의 이미지가 자동으로 업로드되었습니다",
+      "autoUploadPartial": "{{success}}개 업로드 성공, {{fail}}개 실패",
+      "success": "{{count}}개의 이미지 생성이 시작되었습니다. 히스토리 탭에서 확인하세요.",
+      "completed": "이미지 생성이 완료되었습니다",
+      "failed": "이미지 생성에 실패했습니다"
+    },
+    "errors": {
+      "emptyPrompt": "프롬프트가 비어있습니다. 이미지를 생성할 수 없습니다."
+    },
+    "repeat": {
+      "title": "반복 실행",
+      "enable": "반복 실행 활성화",
+      "count": "반복 횟수",
+      "infinite": "무한 반복 (-1)",
+      "countHelp": "1-999 또는 -1 (무한)",
+      "delay": "대기 시간 (초)",
+      "delayHelp": "생성 완료 후 다음 생성까지 대기 시간 (1-300초)",
+      "progress": "{{current}}회 진행 중",
+      "progressWithTotal": "{{current}}/{{total}}회 진행 중",
+      "stop": "중지"
+    },
+    "history": {
+      "title": "생성 히스토리",
+      "comingSoon": "이 기능은 곧 추가될 예정입니다.",
+      "description": "과거 생성한 이미지와 설정을 확인할 수 있습니다."
+    },
+    "groupSelector": {
+      "title": "그룹 할당",
+      "selectButton": "그룹 선택",
+      "description": "생성된 이미지가 선택한 그룹에 자동으로 추가됩니다"
+    },
+    "resolution": {
+      "mode": "해상도 모드",
+      "modeFixed": "고정 모드",
+      "modeRandom": "랜덤 모드",
+      "selectResolution": "해상도 선택",
+      "selectMultiple": "해상도 선택 (여러 개 선택 가능)",
+      "addCustom": "커스텀 추가",
+      "swapDimensions": "가로세로 전환",
+      "swapDimensionsDesc": "선택된 해상도의 가로/세로를 바꿉니다",
+      "finalResolution": "최종 해상도",
+      "randomPool": "랜덤 풀",
+      "swapped": "전환됨",
+      "randomSwapInfo": "각 해상도마다 50% 확률로 가로세로가 전환됩니다",
+      "selectAtLeastOne": "랜덤 모드에서는 최소 1개 이상의 해상도를 선택해야 합니다",
+      "customDialog": {
+        "addTitle": "커스텀 해상도 추가",
+        "editTitle": "커스텀 해상도 수정",
+        "name": "이름",
+        "namePlaceholder": "예: 내 해상도",
+        "width": "가로",
+        "height": "세로",
+        "save": "저장",
+        "cancel": "취소",
+        "nameRequired": "이름을 입력해주세요",
+        "widthInvalid": "가로는 64~2048 사이의 숫자여야 합니다",
+        "heightInvalid": "세로는 64~2048 사이의 숫자여야 합니다"
+      }
+    },
+    "naiSettings": {
+      "basic": {
+        "title": "기본 설정",
+        "model": "모델",
+        "resolution": "해상도",
+        "prompt": "프롬프트",
+        "promptPlaceholder": "1girl, portrait, detailed face, masterpiece...",
+        "negativePrompt": "네거티브 프롬프트",
+        "negativePromptPlaceholder": "bad anatomy, low quality..."
+      },
+      "sampling": {
+        "title": "샘플링 설정",
+        "sampler": "샘플러",
+        "noiseSchedule": "Noise Schedule",
+        "steps": "Steps",
+        "guidance": "Guidance",
+        "cfgRescale": "CFG Rescale",
+        "uncondScale": "Uncond Scale",
+        "varietyPlus": "Variety+"
+      },
+      "output": {
+        "title": "출력 설정",
+        "samples": "샘플 수"
+      }
+    }
+  },
+  "customDropdown": {
+    "title": "커스텀 드롭다운 목록",
+    "buttons": {
+      "addList": "새 목록 추가",
+      "loadComfyUI": "ComfyUI 모델 불러오기",
+      "edit": "수정",
+      "delete": "삭제",
+      "close": "닫기",
+      "cancel": "취소",
+      "create": "생성",
+      "collect": "모델 수집",
+      "viewList": "목록 보기",
+      "selectFolder": "models 폴더 선택"
+    },
+    "tabs": {
+      "autoCollected": "자동 수집",
+      "manual": "수동 생성"
+    },
+    "labels": {
+      "auto": "자동",
+      "itemCount": "{{count}}개",
+      "listName": "목록 이름",
+      "listNameRequired": "목록 이름 *",
+      "description": "설명",
+      "path": "경로",
+      "itemList": "항목 목록 (한 줄에 하나씩 입력) *",
+      "itemListCount": "항목 목록 ({{count}}개)",
+      "pathOptions": "경로 옵션:",
+      "checkpointsFullPath": "checkpoints - 전체 경로 포함",
+      "unetFullPath": "unet - 전체 경로 포함",
+      "upscaleModelsFullPath": "upscale_models - 전체 경로 포함"
+    },
+    "dialog": {
+      "viewTitle": "목록 보기 (읽기 전용)",
+      "createTitle": "새 커스텀 목록 추가",
+      "editTitle": "커스텀 목록 수정",
+      "comfyUITitle": "ComfyUI 모델 불러오기"
+    },
+    "messages": {
+      "noAutoCollected": "자동 수집된 목록이 없습니다. \"ComfyUI 모델 불러오기\" 버튼을 사용하여 모델을 스캔하세요.",
+      "noManual": "수동으로 생성한 목록이 없습니다. \"새 목록 추가\" 버튼을 사용하여 목록을 만드세요.",
+      "minItemError": "최소 1개 이상의 항목을 입력해주세요.",
+      "deleteConfirm": "정말 이 목록을 삭제하시겠습니까?",
+      "selectFolderError": "모델 폴더를 선택해주세요.",
+      "autoCollectedReadOnly": "자동 수집된 항목은 편집할 수 없습니다. 내용을 확인만 할 수 있습니다.",
+      "selectComfyUIFolder": "ComfyUI의 models 폴더를 선택해주세요.",
+      "foldersDetected": "{{count}}개 폴더에서 모델 파일을 발견했습니다:",
+      "fileCount": "{{count}}개 파일",
+      "moreCount": "...외 {{count}}개 폴더",
+      "collecting": "수집 중...",
+      "pathExample": "예: {{example}}",
+      "scanInfo": "스캔 안내:\n• checkpoints, unet, upscale_models 폴더를 자동으로 수집합니다\n• 같은 폴더를 다시 수집하면 항목이 최신화됩니다\n• 자동 수집된 항목은 \"자동 수집\" 탭에서 확인할 수 있습니다"
+    },
+    "placeholders": {
+      "itemList": "예시:\nSDXL 1.0\nSD 1.5\nRealistic Vision\nDreamShaper"
+    },
+    "helperText": {
+      "itemList": "각 항목을 줄바꿈으로 구분하여 입력하세요"
+    }
+  }
+}

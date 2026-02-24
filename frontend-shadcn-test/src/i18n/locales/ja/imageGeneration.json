@@ -1,0 +1,282 @@
+{
+  "page": {
+    "title": "画像生成",
+    "subtitle": "ComfyUIワークフローを管理して画像を生成します"
+  },
+  "tabs": {
+    "workflows": "ワークフロー管理",
+    "servers": "サーバー管理",
+    "novelai": "NovelAI",
+    "ariaLabel": "画像生成タブ",
+    "comfyui": "ComfyUI",
+    "wildcards": "Wildcards"
+  },
+  "nai": {
+    "subtabs": {
+      "generate": "画像生成",
+      "history": "履歴",
+      "helper": "プロンプトヘルパー"
+    },
+    "login": {
+      "title": "NovelAIログイン",
+      "subtitle": "NovelAIアカウントでログインしてください",
+      "tabs": {
+        "credentials": "メール/パスワード",
+        "token": "トークン"
+      },
+      "username": "メールアドレス",
+      "password": "パスワード",
+      "token": "アクセストークン",
+      "tokenPlaceholder": "NovelAI アクセストークンを入力してください",
+      "tokenHint": "NovelAIウェブサイトから取得したアクセストークンを入力してください",
+      "loginButton": "ログイン",
+      "loggingIn": "ログイン中...",
+      "error": "ログインに失敗しました",
+      "tokenError": "トークン認証に失敗しました"
+    },
+    "generate": {
+      "title": "NovelAI画像生成",
+      "logout": "ログアウト",
+      "prompt": "プロンプト",
+      "negativePrompt": "ネガティブプロンプト",
+      "resolution": "解像度",
+      "sampler": "サンプラー",
+      "steps": "ステップ",
+      "guidance": "ガイダンス",
+      "samples": "サンプル数",
+      "ucPreset": "品質プリセット",
+      "generateButton": "画像を生成",
+      "generating": "生成中...",
+      "resultTitle": "生成された画像",
+      "download": "ダウンロード",
+      "upload": "アップロード",
+      "metadata": "メタデータ",
+      "tokenExpired": "トークンが期限切れです。再度ログインしてください。",
+      "subscriptionRequired": "有効なサブスクリプションが必要です",
+      "error": "画像生成に失敗しました",
+      "uploadSuccess": "画像が正常にアップロードされました",
+      "uploadError": "画像のアップロードに失敗しました",
+      "autoUploadSuccess": "{{count}}枚の画像が自動的にアップロードされました",
+      "autoUploadPartial": "{{success}}枚アップロード成功、{{fail}}枚失敗",
+      "success": "{{count}}枚の画像生成を開始しました。履歴タブで確認してください。",
+      "completed": "画像生成が完了しました",
+      "failed": "画像生成に失敗しました"
+    },
+    "errors": {
+      "emptyPrompt": "プロンプトが空です。画像を生成できません。"
+    },
+    "repeat": {
+      "title": "繰り返し実行",
+      "enable": "繰り返し実行を有効にする",
+      "count": "繰り返し回数",
+      "infinite": "無限繰り返し (-1)",
+      "countHelp": "1-999 または -1 (無限)",
+      "delay": "待機時間（秒）",
+      "delayHelp": "生成完了後、次の生成までの待機時間（1-300秒）",
+      "progress": "{{current}}回目実行中",
+      "progressWithTotal": "{{current}}/{{total}}回目実行中",
+      "stop": "停止"
+    },
+    "resolution": {
+      "mode": "解像度モード",
+      "modeFixed": "固定モード",
+      "modeRandom": "ランダムモード",
+      "selectResolution": "解像度を選択",
+      "selectMultiple": "解像度を選択（複数選択可）",
+      "addCustom": "カスタム追加",
+      "swapDimensions": "縦横を入れ替え",
+      "swapDimensionsDesc": "選択した解像度の幅と高さを入れ替えます",
+      "finalResolution": "最終解像度",
+      "randomPool": "ランダムプール",
+      "swapped": "入れ替え済み",
+      "randomSwapInfo": "各解像度は50%の確率で縦横が入れ替わります",
+      "selectAtLeastOne": "ランダムモードでは少なくとも1つの解像度を選択してください",
+      "customDialog": {
+        "addTitle": "カスタム解像度を追加",
+        "editTitle": "カスタム解像度を編集",
+        "name": "名前",
+        "namePlaceholder": "例：マイ解像度",
+        "width": "幅",
+        "height": "高さ",
+        "save": "保存",
+        "cancel": "キャンセル",
+        "nameRequired": "名前を入力してください",
+        "widthInvalid": "幅は64〜2048の範囲で指定してください",
+        "heightInvalid": "高さは64〜2048の範囲で指定してください"
+      }
+    },
+    "naiSettings": {
+      "basic": {
+        "title": "基本設定",
+        "model": "モデル",
+        "resolution": "解像度",
+        "prompt": "プロンプト",
+        "promptPlaceholder": "1girl, portrait, detailed face, masterpiece...",
+        "negativePrompt": "ネガティブプロンプト",
+        "negativePromptPlaceholder": "bad anatomy, low quality..."
+      },
+      "sampling": {
+        "title": "サンプリング設定",
+        "sampler": "サンプラー",
+        "noiseSchedule": "Noise Schedule",
+        "steps": "Steps",
+        "guidance": "Guidance",
+        "cfgRescale": "CFG Rescale",
+        "uncondScale": "Uncond Scale",
+        "varietyPlus": "Variety+"
+      },
+      "output": {
+        "title": "出力設定",
+        "samples": "サンプル数"
+      }
+    },
+    "tabs": {
+      "basic": "Basic Settings",
+      "advanced": "Advanced Settings"
+    },
+    "sections": {
+      "preset": "Quality Presets",
+      "prompts": "Prompts",
+      "output": "Output Settings",
+      "advanced": "Advanced Settings",
+      "sampling": "Sampling Settings",
+      "quality": "Quality Settings",
+      "model": "Model Selection"
+    },
+    "anlas": {
+      "balance": "Anlas Balance",
+      "refresh": "更新",
+      "subscription": "Subscription",
+      "free": "Free",
+      "tablet": "Tablet",
+      "scroll": "Scroll",
+      "opus": "Opus"
+    },
+    "cost": {
+      "title": "Cost Estimate",
+      "anlas": "Anlas",
+      "balance": "Balance",
+      "sufficient": "Sufficient",
+      "insufficient": "Insufficient",
+      "opusFree": "Opus Free Generation",
+      "maxSamples": "Max Samples"
+    },
+    "models": {
+      "label": "Model Selection",
+      "v45curated": "V4.5 Curated (Recommended)",
+      "v45full": "V4.5 Full",
+      "v4curated": "V4 Curated",
+      "v4full": "V4 Full",
+      "v3": "V3 (Legacy)",
+      "v3furry": "V3 Furry"
+    },
+    "advanced": {
+      "cfgRescale": "Prompt Guidance Rescale",
+      "noiseSchedule": "Noise Schedule",
+      "uncondScale": "Undesired Content Strength"
+    },
+    "settings": {
+      "qualityToggle": "Auto-add quality tags"
+    },
+    "presets": {
+      "title": "Quality Presets",
+      "label": "Quality Presets",
+      "quality": {
+        "name": "Quality",
+        "description": "Balanced quality and speed (28 steps, Euler)"
+      },
+      "fast": {
+        "name": "Fast",
+        "description": "Quick generation (15 steps, Euler)"
+      },
+      "artistic": {
+        "name": "Artistic",
+        "description": "Creative results (35 steps, DPM++ 2S Ancestral, SMEA DYN)"
+      },
+      "realistic": {
+        "name": "Realistic",
+        "description": "Realistic images (40 steps, DPM++ 2M, SMEA)"
+      },
+      "detail": {
+        "name": "Detail",
+        "description": "Maximum detail (50 steps, DPM++ SDE, SMEA DYN)"
+      }
+    },
+    "gallery": {
+      "images": "Images",
+      "showMetadata": "Show Metadata",
+      "hideMetadata": "Hide Metadata",
+      "downloadAll": "Download All"
+    },
+    "history": {
+      "title": "Generation History",
+      "comingSoon": "This feature is coming soon.",
+      "description": "View your previously generated images and settings."
+    },
+    "groupSelector": {
+      "title": "グループ割り当て",
+      "selectButton": "グループ選択",
+      "description": "生成された画像が選択したグループに自動的に追加されます"
+    }
+  },
+  "customDropdown": {
+    "title": "カスタムドロップダウンリスト",
+    "buttons": {
+      "addList": "新しいリストを追加",
+      "loadComfyUI": "ComfyUIモデルを読み込む",
+      "edit": "編集",
+      "delete": "削除",
+      "close": "閉じる",
+      "cancel": "キャンセル",
+      "create": "作成",
+      "collect": "モデル収集",
+      "viewList": "リスト表示",
+      "selectFolder": "modelsフォルダを選択"
+    },
+    "tabs": {
+      "autoCollected": "自動収集",
+      "manual": "手動作成"
+    },
+    "labels": {
+      "auto": "自動",
+      "itemCount": "{{count}}項目",
+      "listName": "リスト名",
+      "listNameRequired": "リスト名 *",
+      "description": "説明",
+      "path": "パス",
+      "itemList": "項目リスト（1行に1つ）*",
+      "itemListCount": "項目リスト（{{count}}項目）",
+      "pathOptions": "パスオプション：",
+      "checkpointsFullPath": "checkpoints - フルパスを含める",
+      "unetFullPath": "unet - フルパスを含める",
+      "upscaleModelsFullPath": "upscale_models - フルパスを含める"
+    },
+    "dialog": {
+      "viewTitle": "リスト表示（読み取り専用）",
+      "createTitle": "新しいカスタムリストを追加",
+      "editTitle": "カスタムリストを編集",
+      "comfyUITitle": "ComfyUIモデルを読み込む"
+    },
+    "messages": {
+      "noAutoCollected": "自動収集されたリストはありません。\\\"ComfyUIモデルを読み込む\\\"ボタンを使用してモデルをスキャンしてください。",
+      "noManual": "手動で作成されたリストはありません。\"新しいリストを追加\"ボタンを使用してリストを作成してください。",
+      "minItemError": "最低1つ以上の項目を入力してください。",
+      "deleteConfirm": "本当にこのリストを削除しますか？",
+      "selectFolderError": "モデルフォルダを選択してください。",
+      "autoCollectedReadOnly": "自動収集された項目は編集できません。内容の確認のみ可能です。",
+      "selectComfyUIFolder": "ComfyUIのmodelsフォルダを選択してください。",
+      "foldersDetected": "{{count}}個のフォルダでモデルファイルが検出されました：",
+      "fileCount": "{{count}}ファイル",
+      "moreCount": "...他{{count}}個のフォルダ",
+      "collecting": "収集中...",
+      "pathExample": "例：{{example}}",
+      "scanInfo": "スキャン情報：\n• checkpoints、unet、upscale_modelsフォルダを自動的に収集します\n• 同じフォルダを再スキャンすると項目が更新されます\n• 自動収集された項目は「自動収集」タブで確認できます"
+    },
+    "placeholders": {
+      "itemList": "例：\nSDXL 1.0\nSD 1.5\nRealistic Vision\nDreamShaper"
+    },
+    "helperText": {
+      "itemList": "各項目を改行で区切って入力してください"
+    }
+  }
+}

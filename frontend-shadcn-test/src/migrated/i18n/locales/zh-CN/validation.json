@@ -1,0 +1,46 @@
+{
+  "required": {
+    "field": "这是必填字段",
+    "name": "请输入名称",
+    "description": "请输入描述",
+    "file": "请选择文件",
+    "image": "请选择图片",
+    "group": "请选择组"
+  },
+  "format": {
+    "invalid": "格式无效",
+    "email": "电子邮件格式无效",
+    "url": "URL格式无效",
+    "number": "必须是数字",
+    "integer": "必须是整数"
+  },
+  "length": {
+    "min": "最少{{min}}个字符",
+    "max": "最多{{max}}个字符",
+    "exact": "必须是{{length}}个字符",
+    "between": "长度必须在{{min}}到{{max}}个字符之间"
+  },
+  "size": {
+    "fileSize": "文件大小不得超过{{max}}",
+    "imageSize": "图片尺寸不得超过{{width}}×{{height}}",
+    "fileTooLarge": "文件太大（最大：{{max}}）",
+    "fileTooSmall": "文件太小（最小：{{min}}）"
+  },
+  "range": {
+    "min": "值必须至少为{{min}}",
+    "max": "值不得超过{{max}}",
+    "between": "值必须在{{min}}到{{max}}之间"
+  },
+  "fileType": {
+    "invalid": "不支持的文件类型",
+    "imageOnly": "只允许上传图片文件",
+    "videoOnly": "只允许上传视频文件",
+    "imageOrVideo": "只允许上传图片和视频文件",
+    "allowedTypes": "允许的类型：{{types}}"
+  },
+  "duplicate": {
+    "exists": "已存在",
+    "name": "名称已存在",
+    "value": "值已存在"
+  }
+}

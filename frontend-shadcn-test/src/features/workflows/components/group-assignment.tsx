@@ -1,7 +1,10 @@
-import { Box, Button, Chip, Divider, Paper, Typography } from '@mui/material'
-import { FolderOpen as FolderIcon } from '@mui/icons-material'
+import { FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { GroupWithStats } from '@comfyui-image-manager/shared'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
 
 interface GroupAssignmentProps {
   selectedGroup: GroupWithStats | null
@@ -13,25 +16,30 @@ export function GroupAssignment({ selectedGroup, onOpenModal, onRemove }: GroupA
   const { t } = useTranslation(['workflows'])
 
   return (
-    <Paper sx={{ p: 3 }}>
-      <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-        {t('workflows:groupAssignment.title')}
-      </Typography>
-      <Divider sx={{ mb: 2 }} />
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t('workflows:groupAssignment.title')}</CardTitle>
+      </CardHeader>
+      <Separator />
+      <CardContent className="space-y-2 pt-4">
         {selectedGroup ? (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Chip icon={<FolderIcon />} label={selectedGroup.name} onDelete={onRemove} color="primary" sx={{ flex: 1 }} />
-          </Box>
+          <div className="flex items-center gap-2">
+            <Badge className="gap-1">
+              <FolderOpen className="h-3.5 w-3.5" />
+              {selectedGroup.name}
+            </Badge>
+            <Button type="button" variant="outline" size="sm" onClick={onRemove}>
+              Remove
+            </Button>
+          </div>
         ) : (
-          <Button variant="outlined" startIcon={<FolderIcon />} onClick={onOpenModal} fullWidth>
+          <Button type="button" variant="outline" onClick={onOpenModal} className="w-full">
+            <FolderOpen className="h-4 w-4" />
             {t('workflows:groupAssignment.selectGroup')}
           </Button>
         )}
-        <Typography variant="caption" color="text.secondary">
-          {t('workflows:groupAssignment.autoAddDescription')}
-        </Typography>
-      </Box>
-    </Paper>
+        <p className="text-xs text-muted-foreground">{t('workflows:groupAssignment.autoAddDescription')}</p>
+      </CardContent>
+    </Card>
   )
 }

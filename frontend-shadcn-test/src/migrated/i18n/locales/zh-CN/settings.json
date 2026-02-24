@@ -1,0 +1,966 @@
+{
+  "title": "设置",
+  "subtitle": "管理ComfyUI Image Manager应用程序设置",
+  "tabs": {
+    "general": "常规设置",
+    "tagger": "Tagger设置",
+    "rating": "评分设置",
+    "similarity": "图像相似度搜索",
+    "prompts": "提示词管理",
+    "advanced": "高级设置",
+    "metadata": "元数据提取",
+    "folders": "文件夹管理",
+    "account": "账户",
+    "externalApi": "外部API认证",
+    "auto": "自动提示词"
+  },
+  "general": {
+    "title": "常规设置",
+    "language": {
+      "label": "语言",
+      "description": "选择应用程序显示语言",
+      "ko": "한국어",
+      "en": "English",
+      "ja": "日本語",
+      "zh-CN": "简体中文",
+      "zh-TW": "繁體中文"
+    },
+    "gallery": {
+      "label": "启用图库",
+      "tooltip": "在菜单和导航中显示图库页面。禁用后仅使用瀑布流视图。"
+    },
+    "canvasCleanup": {
+      "label": "关闭时自动清理Canvas文件夹",
+      "tooltip": "服务器关闭时自动删除Canvas文件夹中的已编辑图像。禁用后将保留已编辑图像。"
+    },
+    "ratingBadges": {
+      "label": "显示评分徽章",
+      "tooltip": "在图像上显示评分分数和等级徽章。禁用后将隐藏评分信息。"
+    },
+    "deleteProtection": {
+      "title": "删除文件保护",
+      "description": "将删除的文件存储在回收站文件夹中以便恢复",
+      "label": "将删除的文件存储在回收站中",
+      "enabled": {
+        "label": "将删除的文件存储在回收站中",
+        "description": "启用后,删除的文件将备份到回收站文件夹而不是永久删除。"
+      },
+      "info": "回收站文件夹将在项目根目录中创建。删除的文件将带有时间戳存储。如需恢复,您可以手动从回收站复制文件。"
+    },
+    "metadata": {
+      "title": "元数据提取优化",
+      "scanMode": {
+        "title": "Stealth PNG扫描模式",
+        "fast": {
+          "label": "快速（推荐）",
+          "description": "快速签名扫描 - 检查前200像素后提前退出"
+        },
+        "full": {
+          "label": "完整",
+          "description": "完整文件扫描 - 检查所有像素（速度慢）"
+        },
+        "skip": {
+          "label": "跳过",
+          "description": "跳过扫描 - 禁用二次提取"
+        }
+      },
+      "limits": {
+        "title": "文件大小和分辨率限制",
+        "fileSize": {
+          "label": "最大文件大小（MB）",
+          "helper": "大于此值的文件将跳过Stealth PNG扫描"
+        },
+        "resolution": {
+          "label": "最大分辨率（百万像素）",
+          "helper": "大于此值的图像将跳过Stealth PNG扫描"
+        }
+      },
+      "skipSettings": {
+        "title": "AI工具跳过设置",
+        "description": "自动跳过特定AI工具图像的Stealth PNG扫描。",
+        "comfyui": {
+          "label": "跳过ComfyUI图像（推荐）",
+          "description": "ComfyUI不使用Stealth PNG，扫描无意义"
+        },
+        "webui": {
+          "label": "跳过WebUI图像",
+          "description": "WebUI可能使用Stealth PNG，仅在需要时启用"
+        }
+      },
+      "secondary": {
+        "label": "启用二次提取",
+        "description": "如果主要提取失败，使用Stealth PNG方法重试。"
+      },
+      "performanceNote": "💡 提示：默认设置（快速 + 跳过ComfyUI）在大多数情况下提供最佳性能。ComfyUI图像处理时间从2682ms减少到4ms！"
+    },
+    "thumbnail": {
+      "title": "缩略图设置",
+      "description": "配置生成缩略图时使用的大小和质量",
+      "saveFailed": "保存缩略图设置失败",
+      "size": {
+        "label": "缩略图大小",
+        "selectLabel": "缩略图大小",
+        "original": "与原始大小相同",
+        "default": "1080px（默认）"
+      },
+      "quality": {
+        "label": "缩略图质量",
+        "helperText": "更高的质量会增加文件大小（60-100%）"
+      },
+      "regenerate": {
+        "button": "重新生成缩略图",
+        "description": "使用当前设置重新生成所有图像的缩略图"
+      }
+    }
+  },
+  "tagger": {
+    "title": "WD Tagger设置",
+    "description": "配置基于AI的图像自动标记功能。",
+    "enabled": "启用Tagger",
+    "autoTagOnUpload": "上传时自动标记",
+    "model": {
+      "label": "模型选择",
+      "loading": "正在加载模型列表...",
+      "downloaded": "已下载",
+      "vit": {
+        "label": "ViT (Vision Transformer)",
+        "description": "快速、高精度 - 推荐一般使用"
+      },
+      "swinv2": {
+        "label": "SwinV2 (Swin Transformer V2)",
+        "description": "中速、极高精度 - 需要高精度时使用"
+      },
+      "convnext": {
+        "label": "ConvNeXt",
+        "description": "快速、高精度 - 需要快速处理时使用"
+      }
+    },
+    "device": {
+      "label": "设备选择",
+      "auto": {
+        "title": "自动 (Auto)",
+        "description": "如果GPU可用则使用GPU，否则使用CPU"
+      },
+      "cpu": {
+        "title": "CPU",
+        "description": "仅使用CPU（速度慢但稳定）"
+      },
+      "cuda": {
+        "title": "GPU (CUDA)",
+        "description": "使用NVIDIA GPU（速度快，需要GPU）"
+      }
+    },
+    "modelStatus": {
+      "title": "模型状态",
+      "loaded": "已加载",
+      "unloaded": "已卸载",
+      "lastUsed": "最后使用",
+      "justNow": "刚刚",
+      "minutesAgo": "{{minutes}}分钟前",
+      "hoursAgo": "{{hours}}小时前",
+      "daysAgo": "{{days}}天前",
+      "none": "无"
+    },
+    "buttons": {
+      "load": "加载",
+      "unload": "卸载",
+      "refresh": "刷新",
+      "download": "下载模型",
+      "downloading": "正在确认下载信息...",
+      "refreshStatus": "刷新状态",
+      "checkDependencies": "检查Python依赖",
+      "checking": "正在检查Python依赖...",
+      "save": "保存",
+      "cancel": "取消"
+    },
+    "alerts": {
+      "modelDownloaded": "{{model}}模型已下载。",
+      "modelNotDownloaded": "{{model}}模型尚未下载。首次使用时将自动下载。",
+      "modelLoaded": "模型已加载",
+      "modelUnloaded": "模型已卸载",
+      "loadFailed": "模型加载失败",
+      "unloadFailed": "模型卸载失败",
+      "saveFailed": "设置保存失败",
+      "dependencyCheckFailed": "依赖检查失败"
+    },
+    "threshold": {
+      "general": {
+        "label": "常规标签阈值: {{value}}",
+        "description": "越低提取越多标签（可能增加噪音）"
+      },
+      "character": {
+        "label": "角色标签阈值: {{value}}",
+        "description": "越低识别越多角色（可能增加误识别）"
+      }
+    },
+    "pythonPath": {
+      "label": "Python执行路径",
+      "helper": "Python可执行文件路径（例如: python, python3, C:\\Python39\\python.exe）"
+    },
+    "memoryManagement": {
+      "title": "内存管理",
+      "description": "设置模型的内存卸载方式。",
+      "keepModelLoaded": "启用任务后自动卸载",
+      "autoUnloadMinutes": "自动卸载时间: {{minutes}}分钟",
+      "autoUnloadDescription": "最后使用后经过设定时间将自动从内存中卸载。",
+      "keepLoadedAlert": "任务后经过设定时间将自动从内存中卸载。",
+      "notKeepLoadedAlert": "模型将持续保留在内存中。需手动卸载或等待程序关闭才会从内存中移除。"
+    },
+    "batch": {
+      "title": "批处理任务",
+      "description": "执行批量图像处理任务。",
+      "untaggedCount": "未处理图像: {{count}}张",
+      "progress": "进度: {{current}} / {{total}}",
+      "buttons": {
+        "tagUnprocessed": "标记未处理图像（最多100张）",
+        "tagAll": "重新标记全部（最多100张）",
+        "processing": "处理中..."
+      },
+      "alerts": {
+        "complete": "完成: 成功{{success}}张，失败{{failed}}张",
+        "failed": "未处理图像标记失败",
+        "tagAllFailed": "全部重新标记失败",
+        "resetComplete": "重置完成。已加入后台处理队列。",
+        "resetFailed": "重置标签失败"
+      },
+      "confirmDialog": {
+        "title": "确认重新标记全部",
+        "message": "是否覆盖所有图像的标签？此操作无法撤销。\n（最多处理100张）",
+        "resetMessage": "您确定要重置所有自动标签吗？这将清除活动标签并将图像加入后台处理队列。",
+        "confirm": "确认",
+        "cancel": "取消"
+      }
+    },
+    "test": {
+      "title": "测试",
+      "description": "使用特定图像测试当前设置。",
+      "imageId": "图像ID",
+      "placeholder": "例如: 123",
+      "button": "运行测试",
+      "processing": "处理中...",
+      "result": "标记结果:",
+      "failed": "测试失败",
+      "invalidId": "请输入有效的图像ID",
+      "imageHash": "图像哈希",
+      "placeholderHash": "例如: abc123def456..."
+    },
+    "enableAutoTagging": "启用自动标记"
+  },
+  "rating": {
+    "title": "评分设置",
+    "description": "配置图像评分系统",
+    "weights": {
+      "title": "权重设置",
+      "description": "设置各评分项的分数权重。",
+      "general": "General: {{value}}",
+      "sensitive": "Sensitive: {{value}}",
+      "questionable": "Questionable: {{value}}",
+      "explicit": "Explicit: {{value}}",
+      "preview": {
+        "title": "实时预览（示例评分: general=0.001, sensitive=0.045, questionable=0.735, explicit=0.470）",
+        "score": "总分: <strong>{{score}}分</strong>"
+      },
+      "buttons": {
+        "save": "保存权重",
+        "cancel": "取消",
+        "saving": "保存中..."
+      },
+      "alerts": {
+        "saveSuccess": "权重设置已保存。",
+        "saveFailed": "权重保存失败。",
+        "loadFailed": "权重设置加载失败。"
+      }
+    },
+    "tiers": {
+      "title": "等级区间设置",
+      "description": "按分数区间设置等级。",
+      "addButton": "添加等级",
+      "table": {
+        "order": "顺序",
+        "name": "等级名称",
+        "scoreRange": "分数区间",
+        "color": "颜色",
+        "actions": "操作",
+        "empty": "没有等级。请添加等级。",
+        "scoreFormat": "{{min}}分 ~ {{max}}分",
+        "infinity": "∞"
+      },
+      "dialog": {
+        "createTitle": "添加等级",
+        "editTitle": "编辑等级",
+        "tierName": "等级名称",
+        "minScore": "最低分数",
+        "maxScore": "最高分数（空 = 无限）",
+        "order": "顺序",
+        "color": "颜色 (Hex)",
+        "colorPlaceholder": "#2196f3",
+        "colorHelper": "例如: #22c55e, #3b82f6, #f59e0b, #ef4444",
+        "save": "保存",
+        "cancel": "取消",
+        "saving": "保存中...",
+        "requiredFields": "请填写所有必填项。"
+      },
+      "alerts": {
+        "created": "等级已添加。",
+        "updated": "等级已更新。",
+        "deleted": "等级已删除。",
+        "saveFailed": "等级保存失败。",
+        "deleteFailed": "等级删除失败。",
+        "loadFailed": "等级设置加载失败。",
+        "deleteConfirm": "确定要删除此等级吗？"
+      }
+    },
+    "calculator": {
+      "title": "分数计算测试",
+      "description": "输入评分值以计算分数。",
+      "general": "General: {{value}}",
+      "sensitive": "Sensitive: {{value}}",
+      "questionable": "Questionable: {{value}}",
+      "explicit": "Explicit: {{value}}",
+      "calculate": "计算分数",
+      "calculating": "计算中...",
+      "result": {
+        "title": "计算结果",
+        "score": "总分: <strong>{{score}}分</strong>",
+        "breakdown": "详细分数:",
+        "generalScore": "General: {{score}}分",
+        "sensitiveScore": "Sensitive: {{score}}分",
+        "questionableScore": "Questionable: {{score}}分",
+        "explicitScore": "Explicit: {{score}}分"
+      },
+      "failed": "分数计算失败。"
+    },
+    "recalculation": {
+      "title": "重新计算评分",
+      "description": "根据当前权重设置重新计算所有图像的rating_score。将处理所有包含auto_tags的图像。",
+      "buttons": {
+        "recalculate": "重新计算所有图像分数",
+        "processing": "重新计算中..."
+      },
+      "progress": "重新计算进行中... {{current}}/{{total}}",
+      "success": "重新计算完成: 总计{{total}}个，成功{{success}}个，失败{{failed}}个",
+      "failed": "分数重新计算失败。",
+      "confirmDialog": {
+        "title": "重新计算评分",
+        "message": "是否重新计算所有图像的rating_score？此操作可能需要一些时间。",
+        "confirm": "重新计算",
+        "cancel": "取消"
+      }
+    }
+  },
+  "similarity": {
+    "title": "图像相似度搜索设置",
+    "description": "自动生成用于相似图像搜索的哈希值",
+    "systemStatus": {
+      "title": "系统状态",
+      "description": "图像相似度搜索系统的当前状态。",
+      "totalImages": "总图像: {{count}}张",
+      "withHash": "已生成哈希: {{count}}张",
+      "withoutHash": "未生成: {{count}}张",
+      "completion": "完成率: {{percent}}%",
+      "autoGenerateHash": "上传时自动生成哈希",
+      "rebuildButton": "生成所有未生成图像的哈希（{{count}}张）",
+      "rebuildingButton": "生成中...",
+      "refreshButton": "刷新统计",
+      "rebuildProgress": "哈希生成进行中... {{processed}}张完成/{{total}}张总计（{{percent}}%完成）",
+      "allComplete": "所有图像的哈希已生成！",
+      "rebuildComplete": "处理完成: {{processed}}张图像哈希已生成。",
+      "rebuildCompleteWithErrors": "处理完成: {{success}}张成功，{{failed}}张失败",
+      "rebuildFailed": "哈希重新生成失败",
+      "noImagesToProcess": "没有要处理的图像。",
+      "autoGenerateUpdateFailed": "设置更新失败"
+    },
+    "test": {
+      "title": "测试与预览",
+      "description": "使用特定图像测试相似度搜索。",
+      "imageId": "图像ID",
+      "placeholder": "例如: 123",
+      "searchType": "搜索类型",
+      "types": {
+        "duplicates": "重复搜索",
+        "similar": "相似搜索",
+        "color": "色彩搜索"
+      },
+      "searchButton": "执行搜索",
+      "searching": "搜索中...",
+      "queryImage": "搜索源图像",
+      "results": "搜索结果: {{count}}张",
+      "noResults": "没有相似图像。",
+      "searchFailed": "搜索失败",
+      "imageDetails": {
+        "id": "ID:",
+        "filename": "文件名:",
+        "size": "大小:",
+        "aiTool": "AI工具:"
+      },
+      "matchTypes": {
+        "exact": "完全相同",
+        "nearDuplicate": "几乎相同",
+        "similar": "相似",
+        "colorSimilar": "色彩相似"
+      },
+      "similarity": "{{percent}}%",
+      "colorSimilarity": "色彩: {{percent}}%",
+      "hashStatus": "哈希状态",
+      "rebuild": {
+        "button": "重建{{count}}个缺失的哈希",
+        "rebuilding": "重建中...",
+        "success": "已处理: {{processed}}个、失败: {{failed}}个、剩余: {{remaining}}个",
+        "error": "错误: {{error}}"
+      },
+      "imageHash": "图像哈希",
+      "placeholderHash": "例如: abc123def456...",
+      "compositeHash": "图像哈希",
+      "hashHelperText": "输入图像的composite_hash",
+      "button": "运行测试",
+      "processing": "处理中...",
+      "result": "标记结果:",
+      "failed": "测试失败"
+    },
+    "duplicateScan": {
+      "title": "全局重复分析",
+      "description": "在整个数据库中查找重复图像组。",
+      "scanButton": "执行全局扫描",
+      "scanning": "扫描中...",
+      "foundGroups": "发现的重复组: {{count}}个",
+      "groupLabel": "组{{id}} • {{count}}张图像",
+      "similarityLabel": "{{percent}}%相似",
+      "moreImages": "+{{count}}张更多",
+      "noResults": "执行扫描后将显示重复图像组。",
+      "id": "ID: {{id}}",
+      "selectAll": "全选",
+      "deselectAll": "取消全选",
+      "keepOne": "保留1张",
+      "keepOneDelete": "保留第一张图像并选择其余的删除",
+      "deleteSelected": "删除{{count}}张已选",
+      "deleteConfirmTitle": "确认删除图像",
+      "deleteConfirmMessage": "确定要删除{{count}}张已选图像吗？",
+      "deleteWarning": "已删除的图像无法恢复！",
+      "cancel": "取消",
+      "confirmDelete": "删除",
+      "deleting": "删除中...",
+      "deleteSuccess": "{{count}}张图像删除成功。",
+      "deletePartialSuccess": "{{success}}张成功，{{failed}}张失败",
+      "deleteFailed": "删除图像失败。"
+    },
+    "thresholds": {
+      "title": "阈值设置",
+      "description": "调整相似度搜索的灵敏度。",
+      "duplicate": {
+        "label": "重复搜索阈值: {{value}}",
+        "description": "越低越严格（0=完全相同，5=几乎相同，10=可能略有不同）",
+        "strict": "0（严格）",
+        "recommended": "5（推荐）",
+        "lenient": "10（宽松）"
+      },
+      "similar": {
+        "label": "相似搜索阈值: {{value}}",
+        "description": "越低越严格，越高搜索越多相似图像",
+        "strict": "5（严格）",
+        "recommended": "15（推荐）",
+        "lenient": "25（宽松）"
+      },
+      "color": {
+        "label": "色彩相似度阈值: {{value}}%",
+        "description": "色彩相似度标准（越高越严格）",
+        "min": "70%",
+        "recommended": "85%（推荐）",
+        "max": "100%"
+      },
+      "searchLimit": {
+        "label": "搜索结果限制",
+        "options": {
+          "10": "10张",
+          "20": "20张（推荐）",
+          "50": "50张",
+          "100": "100张"
+        }
+      },
+      "localStorageNote": "设置值仅本地保存，搜索时实时应用。"
+    },
+    "autoGenerateHash": "上传时自动生成哈希",
+    "hashPlaceholder": "例如: a1b2c3d4e5f6..."
+  },
+  "messages": {
+    "saveSuccess": "设置保存成功",
+    "saveFailed": "设置保存失败",
+    "loadFailed": "设置加载失败"
+  },
+  "thumbnailRegeneration": {
+    "title": "缩略图重新生成",
+    "sections": {
+      "currentStatus": "当前状态"
+    },
+    "stats": {
+      "totalFiles": "总文件:",
+      "withThumbnail": "有缩略图:",
+      "withoutThumbnail": "无缩略图:"
+    },
+    "phases": {
+      "verifying": "验证文件中...",
+      "deleting": "删除现有缩略图中...",
+      "generating": "生成缩略图中...",
+      "completed": "已完成",
+      "waiting": "等待中"
+    },
+    "time": {
+      "seconds": "{{elapsed}}秒",
+      "minutesSeconds": "{{minutes}}分{{seconds}}秒"
+    },
+    "status": {
+      "completed": "已完成",
+      "inProgress": "进行中"
+    },
+    "progress": {
+      "deletedThumbnails": "已删除缩略图:",
+      "generatedThumbnails": "已生成缩略图:",
+      "elapsedTime": "耗时:"
+    },
+    "messages": {
+      "success": "缩略图重新生成完成！",
+      "loadStatsFailed": "统计信息加载失败",
+      "alreadyRunning": "缩略图重新生成已在运行中",
+      "startFailed": "启动缩略图重新生成失败"
+    },
+    "instructions": {
+      "title": "缩略图重新生成将按以下顺序进行:",
+      "step1": "1. 验证文件",
+      "step2": "2. 删除现有缩略图",
+      "step3": "3. 生成新缩略图",
+      "warning": "警告:",
+      "warningText": "根据文件数量可能需要较长时间。"
+    },
+    "buttons": {
+      "close": "关闭",
+      "start": "开始重新生成",
+      "starting": "启动中...",
+      "inProgress": "进行中..."
+    }
+  },
+  "folderSettings": {
+    "title": "文件夹管理",
+    "subtitle": "配置监视文件夹并监控后台任务状态。",
+    "scheduler": {
+      "title": "调度器设置",
+      "backgroundHash": {
+        "title": "后台哈希监视间隔",
+        "tooltip": "为上传文件生成哈希的后台任务（Phase 2）执行间隔。间隔越短处理越快，但系统负载会增加。",
+        "intervalLabel": "间隔（秒）",
+        "intervalTooltip": "检查未处理哈希任务的周期。可设置为5-300秒之间。",
+        "saveButton": "保存",
+        "savingButton": "保存中...",
+        "errorRange": "间隔必须在5-300秒之间",
+        "errorSave": "设置保存失败"
+      },
+      "autoTagger": {
+        "title": "自动标记调度器",
+        "tooltip": "配置自动标记调度器的轮询间隔和批处理大小。轮询间隔越短、批处理大小越大处理越快，但系统负载会增加。",
+        "pollingIntervalLabel": "轮询间隔（秒）",
+        "pollingIntervalTooltip": "检查未标记图像的周期。可设置为5-300秒之间。",
+        "batchSizeLabel": "批处理大小（张）",
+        "batchSizeTooltip": "一次处理的图像数量。可设置为1-100张之间。",
+        "saveButton": "保存",
+        "savingButton": "保存中...",
+        "errorPollingRange": "轮询间隔必须在5-300秒之间",
+        "errorBatchRange": "批处理大小必须在1-100之间",
+        "errorSave": "设置保存失败"
+      }
+    },
+    "watchedFolders": {
+      "title": "监视文件夹列表",
+      "addFolder": "添加文件夹",
+      "refresh": "刷新",
+      "viewAllLogs": "全部日志",
+      "scanAll": "扫描全部",
+      "scanning": "扫描中...",
+      "noName": "未命名",
+      "active": "活动",
+      "inactive": "非活动",
+      "autoScanInterval": "{{interval}}分钟",
+      "scanStatus": "扫描",
+      "lastScan": "最后扫描: {{date}}",
+      "noScanHistory": "无扫描历史",
+      "watcherStatus": {
+        "starting": "启动中...",
+        "watching": "监视中",
+        "error": "错误",
+        "stopped": "已停止",
+        "inactive": "非活动"
+      },
+      "tooltips": {
+        "scan": "扫描",
+        "log": "日志",
+        "edit": "编辑",
+        "delete": "删除",
+        "watcherStart": "开始监视",
+        "watcherStop": "停止监视",
+        "processing": "处理中..."
+      },
+      "messages": {
+        "loadFailed": "加载文件夹列表失败",
+        "deleteFailed": "删除文件夹失败",
+        "deleteConfirm": "删除文件夹\"{{name}}\"？",
+        "scanFailed": "扫描文件夹失败",
+        "scanAllFailed": "扫描所有文件夹失败",
+        "scanAllComplete": "全面扫描完成: {{totalFolders}}个文件夹，{{totalNew}}个新增，{{totalExisting}}个现有{{errors}}",
+        "scanAllErrors": "，{{totalErrors}}个错误",
+        "watcherStartFailed": "启动实时监控失败",
+        "watcherStopFailed": "停止实时监控失败"
+      }
+    },
+    "dialog": {
+      "addTitle": "添加文件夹",
+      "editTitle": "编辑文件夹",
+      "folderPath": "文件夹路径 *",
+      "folderPathDisabled": "文件夹路径无法编辑",
+      "folderPathHelper": "输入绝对路径（例如: D:\\Images 或 \\\\192.168.1.100\\Share\\Images）",
+      "folderName": "文件夹名称",
+      "folderNameHelper": "如果留空，将自动使用文件夹名称",
+      "watcherEnabled": "启用实时文件监控",
+      "watcherTooltip": "实时监控会立即检测文件夹中的文件添加/修改/删除并自动处理。独立于自动扫描运行，提供更快的响应速度。",
+      "pollingInterval": "轮询间隔（用于网络驱动器）",
+      "pollingIntervalTooltip": "对于网络驱动器，使用轮询方式检测文件更改。间隔越短检测越快，但会增加网络负载。留空则自动检测（默认: 1000ms）。",
+      "pollingIntervalLabel": "轮询间隔（毫秒）",
+      "pollingIntervalPlaceholder": "自动检测（网络驱动器: 1000ms）",
+      "pollingIntervalHelper": "留空则自动配置。推荐: 500-3000ms",
+      "autoScan": "启用自动扫描",
+      "scanInterval": "扫描间隔（分钟）",
+      "scanIntervalHelper": "自动扫描周期（以分钟为单位）",
+      "advancedOptions": "高级选项",
+      "recursive": "包含子文件夹（递归扫描）",
+      "excludeExtensions": "排除扩展名",
+      "excludeExtensionsTooltip": "默认情况下扫描所有图像格式（.jpg, .png, .webp, .gif, .bmp, .tiff）。添加要从扫描中排除的扩展名。",
+      "excludeExtensionsPlaceholder": ".tmp",
+      "excludePatterns": "排除模式",
+      "excludePatternsTooltip": "从扫描中排除特定文件夹或文件模式。示例: node_modules, .git, temp",
+      "excludePatternsPlaceholder": "例如: node_modules, .git",
+      "addButton": "添加",
+      "saveButton": "保存",
+      "savingButton": "保存中...",
+      "cancelButton": "取消",
+      "errorPath": "请输入文件夹路径",
+      "errorSave": "保存文件夹失败"
+    },
+    "scanLog": {
+      "title": "扫描日志",
+      "titleSpecific": "扫描日志（特定文件夹）",
+      "titleAll": "扫描日志（全部）",
+      "noLogs": "无扫描日志",
+      "loadFailed": "加载扫描日志失败",
+      "refresh": "刷新",
+      "close": "关闭",
+      "columns": {
+        "scanTime": "扫描时间",
+        "folder": "文件夹",
+        "status": "状态",
+        "scanned": "已扫描",
+        "new": "新增",
+        "existing": "现有",
+        "errors": "错误",
+        "duration": "耗时",
+        "details": "详情"
+      },
+      "status": {
+        "success": "成功",
+        "error": "错误"
+      },
+      "errorDetails": "错误详情（{{count}}）",
+      "durationSeconds": "{{seconds}}秒"
+    },
+    "verificationLog": {
+      "title": "文件验证日志",
+      "noLogs": "无验证日志",
+      "loadFailed": "加载验证日志失败",
+      "refresh": "刷新",
+      "close": "关闭",
+      "columns": {
+        "verificationTime": "验证时间",
+        "verificationType": "验证类型",
+        "checked": "已检查文件",
+        "missingFound": "发现缺失",
+        "deletedRecords": "已删除记录",
+        "errors": "错误",
+        "duration": "耗时"
+      },
+      "verificationType": {
+        "auto": "自动验证",
+        "manual": "手动验证"
+      },
+      "errorDetails": "错误详情（{{count}}）",
+      "errorItem": {
+        "fileId": "文件ID: {{id}}",
+        "path": "路径: {{path}}",
+        "error": "错误: {{error}}"
+      },
+      "noErrors": "无",
+      "countFormat": "{{count}}",
+      "durationMs": "{{ms}}ms",
+      "durationSeconds": "{{seconds}}秒"
+    }
+  },
+  "thumbnail": {
+    "title": "缩略图设置",
+    "description": "配置生成缩略图时使用的大小和质量",
+    "saveFailed": "保存缩略图设置失败",
+    "size": {
+      "label": "缩略图大小",
+      "selectLabel": "缩略图大小",
+      "original": "与原始大小相同",
+      "default": "1080px（默认）"
+    },
+    "quality": {
+      "label": "缩略图质量",
+      "helperText": "更高的质量会增加文件大小（60-100%）"
+    },
+    "regenerate": {
+      "button": "重新生成缩略图",
+      "description": "使用当前设置重新生成所有图像的缩略图"
+    }
+  },
+  "background": {
+    "title": "后台任务监控",
+    "loadFailed": "加载后台任务状态失败",
+    "confirmReset": "重置后台队列？所有待处理任务将被取消。",
+    "resetFailed": "重置队列失败",
+    "resetQueue": "重置队列",
+    "autoTagFailed": "触发自动标记失败",
+    "confirmHashGen": "为{{count}}张图像生成哈希？",
+    "hashGenComplete": "哈希生成完成: {{processed}}张成功，{{failed}}张失败",
+    "hashGenFailed": "重新生成哈希失败",
+    "confirmVerify": "验证{{count}}个文件？\\n如果文件数量较多可能需要一些时间。",
+    "verifyFailed": "运行文件验证失败",
+    "verifyIntervalError": "验证间隔必须在300-86400秒之间",
+    "verifySaveFailed": "保存文件验证设置失败",
+    "autoUpdate": "每5秒自动更新。",
+    "autoUpdateDisabled": "自动更新已禁用。",
+    "queue": {
+      "title": "后台队列",
+      "pending": "待处理: {{count}}个",
+      "processing": "处理中",
+      "waiting": "等待中"
+    },
+    "tasks": {
+      "metadata": "元数据提取",
+      "promptCollection": "提示词收集",
+      "pendingCount": "{{count}}个待处理"
+    },
+    "autoTag": {
+      "title": "自动标记调度器",
+      "manualTrigger": "手动运行",
+      "running": "运行中",
+      "stopped": "已停止",
+      "untaggedCount": "未标记图像: {{count}}张",
+      "pollingInterval": "轮询间隔: {{seconds}}秒",
+      "batchSize": "批处理大小: {{size}}张"
+    },
+    "hash": {
+      "title": "媒体哈希状态",
+      "generate": "生成哈希",
+      "total": "总计: {{count}}张",
+      "completed": "已生成哈希: {{count}}张",
+      "pending": "未生成: {{count}}张",
+      "completion": "完成率: {{percent}}%"
+    },
+    "verify": {
+      "title": "文件验证状态",
+      "viewLogs": "查看日志",
+      "run": "运行验证",
+      "progress": "文件验证进行中: {{checked}}/{{total}}",
+      "missing": "缺失: {{count}}个",
+      "totalFiles": "总文件: {{count}}个",
+      "missingFiles": "缺失文件: {{count}}个",
+      "lastVerification": "最后验证: {{date}}",
+      "schedulerTitle": "验证调度器设置",
+      "intervalLabel": "验证间隔（秒）",
+      "intervalHelper": "300-86400秒（5分钟 - 24小时）",
+      "intervalTooltip": "如果文件数量较多可能导致时间消耗和系统负载"
+    }
+  },
+  "auth": {
+    "forgotAccount": {
+      "title": "忘记账户？",
+      "description": "如果您忘记了密码，可以使用以下方法恢复账户。",
+      "methodTitle": "恢复方法：",
+      "step1": "停止服务器",
+      "step2": "删除下面的文件",
+      "step3": "重启服务器",
+      "step4": "设置新账户",
+      "fileToDelete": "要删除的文件：",
+      "warning": "⚠️ 警告：删除此文件将使所有会话失效并需要重新登录。",
+      "warningNote": "其他数据（如工作流和设置）不会受到影响。"
+    },
+    "setup": {
+      "title": "设置身份验证",
+      "description": "配置用户名和密码以保护您的图像管理器免受未经授权的访问。设置后，您需要登录才能访问应用程序。",
+      "username": "用户名",
+      "password": "密码",
+      "confirmPassword": "确认密码",
+      "button": "设置身份验证",
+      "success": "身份验证配置成功！下次访问时需要登录。",
+      "errors": {
+        "required": "用户名和密码是必需的",
+        "mismatch": "密码不匹配",
+        "failed": "设置身份验证失败"
+      }
+    },
+    "update": {
+      "title": "更改凭据",
+      "description": "更改凭据后需要使用新凭据重新登录。",
+      "currentPassword": "当前密码",
+      "newUsername": "新用户名",
+      "newPassword": "新密码",
+      "confirmNewPassword": "确认新密码",
+      "button": "更新凭据",
+      "success": "凭据更新成功！",
+      "errors": {
+        "required": "所有字段都是必需的",
+        "mismatch": "新密码不匹配",
+        "failed": "更新凭据失败"
+      }
+    }
+  },
+  "common": {
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "create": "创建",
+    "enabled": "已启用",
+    "disabled": "已禁用"
+  },
+  "civitai": {
+    "title": "Civitai集成",
+    "description": "根据图片元数据中的模型哈希自动从Civitai获取模型信息。",
+    "settings": {
+      "title": "设置",
+      "enableIntegration": "启用Civitai集成",
+      "enableDescription": "启用后，将自动从Civitai获取新图片的模型信息。",
+      "apiInterval": "API调用间隔: {{interval}}秒",
+      "apiIntervalDescription": "避免速率限制的最小API调用间隔。推荐：2秒。"
+    },
+    "statistics": {
+      "title": "统计",
+      "refresh": "刷新",
+      "totalLookups": "总查询数",
+      "successful": "成功",
+      "failed": "失败",
+      "successRate": "成功率",
+      "lastApiCall": "最后API调用",
+      "never": "从未",
+      "recheckFailed": "重新检查失败的模型",
+      "resetStats": "重置统计"
+    },
+    "rescan": {
+      "title": "扫描现有图片",
+      "description": "扫描库中的现有图片以提取模型引用并添加到Civitai查询队列。这对于在启用Civitai集成之前导入的图片很有用。",
+      "processing": "处理中: {{processed}}/{{total}}",
+      "added": "已添加模型引用: {{count}}个",
+      "startButton": "开始完整重新扫描",
+      "starting": "启动中...",
+      "enableRequired": "启用Civitai集成以使用此功能。"
+    },
+    "cachedModels": {
+      "title": "已缓存的模型 ({{count}}个)",
+      "clearCache": "清除缓存",
+      "modelName": "模型名称",
+      "type": "类型",
+      "hash": "哈希",
+      "cachedAt": "缓存时间",
+      "empty": "尚无缓存模型。添加带有模型哈希的图片时将自动缓存。",
+      "unknown": "未知"
+    },
+    "dialogs": {
+      "clearCache": {
+        "title": "清除模型缓存",
+        "message": "确定要清除所有缓存的模型信息吗？这将删除所有本地存储的Civitai数据。需要时将重新获取。",
+        "confirm": "清除"
+      },
+      "resetStats": {
+        "title": "重置统计",
+        "message": "确定要重置所有统计信息吗？此操作无法撤消。",
+        "confirm": "重置"
+      },
+      "cancel": "取消"
+    },
+    "upload": {
+      "title": "上传到Civitai",
+      "description": "在Civitai上分享此图片",
+      "selectedImage": "已选择的图片",
+      "methodLabel": "上传方式",
+      "downloadMethod": "下载后上传",
+      "intentMethod": "直接链接",
+      "downloadTooltip": "下载图片并打开Civitai。手动上传下载的文件",
+      "intentTooltip": "通过服务器URL分享。需要服务器可从互联网访问",
+      "downloadDescription": "下载图片，然后在Civitai上传页面选择文件",
+      "intentDescription": "服务器直接向Civitai提供图片URL（需要外部访问）",
+      "downloadSuccess": "图片已下载！正在打开Civitai...",
+      "downloadError": "下载图片失败",
+      "downloadButtonTooltip": "下载图片并打开Civitai上传页面",
+      "intentButtonTooltip": "生成意图URL并打开Civitai",
+      "downloadAndOpen": "下载并打开Civitai",
+      "postTitle": "标题",
+      "postTitlePlaceholder": "输入帖子标题",
+      "postDescription": "描述",
+      "postDescriptionPlaceholder": "输入帖子描述（可选）",
+      "tags": "标签",
+      "tagsPlaceholder": "用逗号分隔输入标签",
+      "includeMetadata": "包含生成元数据",
+      "includeMetadataDescription": "在帖子中包含AI生成信息（提示词、模型等）",
+      "uploadButton": "上传",
+      "uploading": "处理中...",
+      "submit": "创建帖子",
+      "openInCivitai": "在Civitai中打开",
+      "success": "Intent URL已创建。点击打开Civitai。",
+      "error": "创建上传意图失败",
+      "disabled": "Civitai集成已禁用"
+    },
+    "errors": {
+      "loadFailed": "加载Civitai设置失败",
+      "updateFailed": "更新设置失败",
+      "resetFailed": "重置失败",
+      "clearFailed": "清除缓存失败",
+      "rescanFailed": "启动重新扫描失败"
+    },
+    "success": {
+      "enabled": "Civitai集成已启用",
+      "disabled": "Civitai集成已禁用",
+      "statsReset": "统计已重置",
+      "cacheCleared": "缓存已清除",
+      "rescanStarted": "重新扫描已启动：{{total}}张图片待处理",
+      "rescanCompleted": "重新扫描完成：已添加{{added}}个模型引用"
+    }
+  },
+  "externalApi": {
+    "title": "外部API认证",
+    "description": "管理Civitai等外部API服务的认证信息。",
+    "currentApiKey": "当前API密钥",
+    "currentApiKeyHelper": "出于安全考虑仅显示部分内容",
+    "newApiKey": "新API密钥",
+    "newApiKeyPlaceholder": "请输入新的API密钥",
+    "baseUrl": "基础URL",
+    "baseUrlHelper": "可选：API端点URL",
+    "testConnection": "测试连接",
+    "addProvider": "添加新提供商",
+    "addProviderDescription": "添加新的外部API提供商。",
+    "providerName": "提供商名称",
+    "providerNameHelper": "仅允许字母、数字、_、-（例如：openai、stability）",
+    "providerDisplayName": "显示名称",
+    "deleteConfirmTitle": "删除提供商",
+    "deleteConfirmMessage": "确定要删除{{provider}}吗？",
+    "success": {
+      "saved": "API密钥已保存",
+      "deleted": "提供商已删除",
+      "created": "提供商已创建",
+      "connectionTest": "连接测试成功",
+      "toggled": "已{{state}}"
+    },
+    "errors": {
+      "loadFailed": "加载提供商失败",
+      "saveFailed": "保存失败",
+      "deleteFailed": "删除失败",
+      "createFailed": "创建失败",
+      "connectionTestFailed": "连接测试失败",
+      "nameRequired": "请输入名称和显示名称",
+      "toggleFailed": "切换状态失败"
+    }
+  }
+}

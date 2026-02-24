@@ -6,15 +6,24 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  base: './',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@comfyui-image-manager/shared': path.resolve(__dirname, '../shared/src/index.ts'),
     },
+    dedupe: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
   },
   server: {
     host: '0.0.0.0',
     port: 5666,
     strictPort: true,
+    fs: {
+      allow: [
+        path.resolve(__dirname, '.'),
+        path.resolve(__dirname, '../shared/src'),
+      ],
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:1666',

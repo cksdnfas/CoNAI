@@ -1,0 +1,197 @@
+{
+  "page": {
+    "title": "通配符管理",
+    "noWildcards": "没有注册的通配符",
+    "noChains": "没有注册的链",
+    "noWildcardsDesc": "添加新的通配符以自动化提示词生成"
+  },
+  "filters": {
+    "all": "全部",
+    "both": "通用"
+  },
+  "actions": {
+    "add": "添加通配符",
+    "edit": "编辑通配符",
+    "delete": "删除通配符",
+    "addItem": "添加项目",
+    "preview": "预览",
+    "confirmDelete": "确定要删除'{{name}}'通配符吗?",
+    "copiedToClipboard": "已复制到剪贴板",
+    "copyFailed": "复制失败"
+  },
+  "card": {
+    "items": "{{count}}个项目",
+    "itemsCount": "个",
+    "moreItems": "和其他{{count}}个"
+  },
+  "dialog": {
+    "createTitle": "创建通配符",
+    "editTitle": "编辑通配符",
+    "createChainTitle": "创建链",
+    "editChainTitle": "编辑链"
+  },
+  "form": {
+    "name": "名称",
+    "nameHelper": "请输入不带++的名称 (例如: 花, 颜色)",
+    "description": "描述 (可选)",
+    "parent": "父通配符",
+    "parentHelper": "选择父通配符以创建层次结构",
+    "noParent": "无 (根级别)",
+    "includeChildren": "自动包含子通配符",
+    "includeChildrenHelper": "启用后，使用此通配符时将自动包含直接子级的项目",
+    "chainOption": "链选项",
+    "chainOptionReplace": "替换 (Replace)",
+    "chainOptionAppend": "追加 (Append)",
+    "weight": "权重",
+    "comfyuiItems": "ComfyUI提示词项目",
+    "naiItems": "NovelAI提示词项目",
+    "itemsHelper": "每个项目可以包含逗号分隔的词语。您可以使用++名称++格式嵌套其他通配符。",
+    "itemPlaceholder": "例如: 玫瑰, 红色, 刺 或 枯萎, ++花++"
+  },
+  "preview": {
+    "title": "通配符预览",
+    "inputLabel": "测试提示词",
+    "inputPlaceholder": "例如: 盛开着++花++的花园, ++颜色++的天空",
+    "generate": "生成结果",
+    "results": "解析结果 (随机5次)",
+    "result": "结果 {{number}}"
+  },
+  "errors": {
+    "nameRequired": "通配符名称为必填项",
+    "itemsRequired": "至少需要一个项目",
+    "previewTextRequired": "请输入要测试的提示词",
+    "copyFailed": "复制失败"
+  },
+  "tabs": {
+    "manual": "通配符",
+    "chain": "预处理",
+    "autoCollected": "自动收集 (LORA)"
+  },
+  "detail": {
+    "children": "子项目",
+    "items": "项目列表",
+    "selectItem": "请从左侧选择项目",
+    "moreItems": "更多"
+  },
+  "autoCollect": {
+    "title": "LORA通配符自动生成",
+    "description": "扫描LORA文件夹以自动生成通配符",
+    "folderPath": "LORA文件夹路径",
+    "folderPathHelper": "指定ComfyUI loras文件夹或包含LORA文件的子文件夹",
+    "loraWeight": "默认LORA权重",
+    "loraWeightHelper": "生成通配符的默认权重值 (例如: 1.0)",
+    "duplicateHandling": "重复名称处理方式",
+    "duplicateNumber": "数字后缀 (style, style_2)",
+    "duplicateParent": "包含父文件夹 (anime_style, realistic_style)",
+    "scanButton": "扫描LORA文件夹",
+    "scanning": "扫描中...",
+    "lastScan": "最后扫描",
+    "noScanYet": "尚未执行扫描",
+    "scanLog": {
+      "title": "扫描日志",
+      "timestamp": "扫描时间",
+      "folderPath": "扫描路径",
+      "totalWildcards": "生成的通配符",
+      "totalItems": "总项目数",
+      "details": "详细信息",
+      "wildcardName": "通配符名称",
+      "itemCount": "项目数"
+    },
+    "noAutoWildcards": "没有自动收集的通配符",
+    "noAutoWildcardsDesc": "扫描LORA文件夹以生成通配符",
+    "autoCollectedBadge": "自动",
+    "viewDetail": "查看详情",
+    "errors": {
+      "folderPathRequired": "LORA文件夹路径为必填项",
+      "invalidWeight": "请输入有效的权重值 (0.1 ~ 2.0)",
+      "scanFailed": "扫描失败: {{error}}"
+    },
+    "tierLabel": "层级 {{tier}}",
+    "filesSelected": "已选择{{count}}个LORA文件",
+    "filesFound": "找到<strong>{{count}}个LORA文件</strong>:",
+    "promptsCount": "{{count}}个提示词",
+    "moreFiles": "...还有{{count}}个文件",
+    "childCount": "{{count}}个子项",
+    "noItems": "无项目",
+    "filters": {
+      "tierFilter": "层级过滤器",
+      "wildcardSearch": "通配符搜索",
+      "searchPlaceholder": "搜索...",
+      "clearFilters": "清除过滤器",
+      "totalWildcards": "共<strong>{{count}}</strong>个通配符",
+      "filteredCount": "(已过滤: <strong>{{count}}</strong>个)",
+      "noResults": "未找到结果",
+      "tryDifferentFilters": "请尝试不同的搜索词或过滤器"
+    },
+    "matchingMode": "文本文件匹配模式",
+    "matchingModeFilename": "文件名匹配 (lora.txt)",
+    "matchingModeCommon": "使用公共文本文件",
+    "commonTextFilename": "公共文本文件名",
+    "commonTextFilenameHelper": "在文件夹中使用的公共文本文件名 (例如: add.txt, common.txt)",
+    "matchingPriority": "匹配优先级",
+    "priorityFilename": "文件名匹配优先 (回退到公共文本)",
+    "priorityCommon": "公共文本优先 (回退到文件名匹配)"
+  },
+  "buttons": {
+    "openScanDialog": "扫描LORA",
+    "openLogDialog": "最后扫描日志"
+  },
+  "scanDialog": {
+    "title": "LORA通配符自动生成",
+    "infoMessage": "请选择ComfyUI的loras文件夹或包含LORA文件的文件夹。",
+    "scanButton": "收集LORA",
+    "warningTitle": "扫描信息:",
+    "warning1": "自动收集.safetensors文件",
+    "warning2": "重新扫描同一文件夹将更新项目",
+    "warning3": "自动收集的项目可以在此标签中找到"
+  },
+  "logDialog": {
+    "title": "最后LORA扫描日志"
+  },
+  "detailDialog": {
+    "title": "查看列表 (只读)",
+    "readOnlyInfo": "自动收集的项目无法编辑。您只能查看内容。",
+    "name": "列表名称",
+    "description": "描述",
+    "path": "路径",
+    "itemList": "项目列表 ({{count}}个项目)"
+  },
+  "autocomplete": {
+    "hint": "输入 ++ 可显示通配符列表",
+    "manualTab": "手动",
+    "autoTab": "自动 (LORA)",
+    "searchTab": "搜索",
+    "noResults": "无结果",
+    "selectTier": "请选择层级",
+    "root": "根目录",
+    "searchPlaceholder": "搜索通配符...",
+    "searchHint": "请输入搜索内容"
+  },
+  "deleteConfirm": {
+    "title": "确认删除通配符",
+    "message": "确定要删除'{{name}}'通配符吗?",
+    "childrenNotice": "此通配符包含子通配符。",
+    "wildcardInfo": {
+      "itemCount": "项目数: {{count}}",
+      "childCount": "子通配符数: {{count}}"
+    },
+    "warning": {
+      "permanent": "此操作无法撤销。"
+    },
+    "options": {
+      "title": "选择删除选项:",
+      "moveUp": {
+        "label": "仅删除此项",
+        "description": "子通配符将提升一级"
+      },
+      "cascade": {
+        "label": "删除此项及所有子项",
+        "description": "将同时删除{{count}}个子通配符"
+      }
+    }
+  },
+  "messages": {
+    "deleteSuccess": "通配符删除成功",
+    "deleteFailed": "通配符删除失败"
+  }
+}

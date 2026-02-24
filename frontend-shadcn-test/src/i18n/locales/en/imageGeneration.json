@@ -1,0 +1,279 @@
+{
+  "page": {
+    "title": "Image Generation",
+    "subtitle": "Manage ComfyUI workflows and generate images"
+  },
+  "tabs": {
+    "novelai": "NovelAI",
+    "comfyui": "ComfyUI",
+    "wildcards": "Wildcards",
+    "ariaLabel": "Image generation tabs"
+  },
+  "nai": {
+    "subtabs": {
+      "generate": "Generate",
+      "history": "History"
+    },
+    "login": {
+      "title": "NovelAI Login",
+      "subtitle": "Sign in with your NovelAI account",
+      "tabs": {
+        "credentials": "Email/Password",
+        "token": "Token"
+      },
+      "username": "Email",
+      "password": "Password",
+      "token": "Access Token",
+      "tokenPlaceholder": "Enter your NovelAI Access Token",
+      "tokenHint": "Enter the Access Token obtained from the NovelAI website",
+      "loginButton": "Login",
+      "loggingIn": "Logging in...",
+      "error": "Login failed",
+      "tokenError": "Token authentication failed"
+    },
+    "tabs": {
+      "basic": "Basic Settings",
+      "advanced": "Advanced Settings"
+    },
+    "sections": {
+      "preset": "Quality Presets",
+      "prompts": "Prompts",
+      "output": "Output Settings",
+      "advanced": "Advanced Settings",
+      "sampling": "Sampling Settings",
+      "quality": "Quality Settings",
+      "model": "Model Selection"
+    },
+    "anlas": {
+      "balance": "Anlas Balance",
+      "refresh": "Refresh",
+      "subscription": "Subscription",
+      "free": "Free",
+      "tablet": "Tablet",
+      "scroll": "Scroll",
+      "opus": "Opus"
+    },
+    "cost": {
+      "title": "Cost Estimate",
+      "anlas": "Anlas",
+      "balance": "Balance",
+      "sufficient": "Sufficient",
+      "insufficient": "Insufficient",
+      "opusFree": "Opus Free Generation",
+      "maxSamples": "Max Samples"
+    },
+    "models": {
+      "label": "Model Selection",
+      "v45curated": "V4.5 Curated (Recommended)",
+      "v45full": "V4.5 Full",
+      "v4curated": "V4 Curated",
+      "v4full": "V4 Full",
+      "v3": "V3 (Legacy)",
+      "v3furry": "V3 Furry"
+    },
+    "advanced": {
+      "cfgRescale": "Prompt Guidance Rescale",
+      "noiseSchedule": "Noise Schedule",
+      "uncondScale": "Undesired Content Strength"
+    },
+    "settings": {
+      "qualityToggle": "Auto-add quality tags"
+    },
+    "presets": {
+      "title": "Quality Presets",
+      "label": "Quality Presets",
+      "quality": {
+        "name": "Quality",
+        "description": "Balanced quality and speed (28 steps, Euler)"
+      },
+      "fast": {
+        "name": "Fast",
+        "description": "Quick generation (15 steps, Euler)"
+      },
+      "artistic": {
+        "name": "Artistic",
+        "description": "Creative results (35 steps, DPM++ 2S Ancestral, SMEA DYN)"
+      },
+      "realistic": {
+        "name": "Realistic",
+        "description": "Realistic images (40 steps, DPM++ 2M, SMEA)"
+      },
+      "detail": {
+        "name": "Detail",
+        "description": "Maximum detail (50 steps, DPM++ SDE, SMEA DYN)"
+      }
+    },
+    "gallery": {
+      "images": "Images",
+      "showMetadata": "Show Metadata",
+      "hideMetadata": "Hide Metadata",
+      "downloadAll": "Download All"
+    },
+    "generate": {
+      "title": "NovelAI Image Generation",
+      "logout": "Logout",
+      "prompt": "Prompt",
+      "negativePrompt": "Negative Prompt",
+      "resolution": "Resolution",
+      "sampler": "Sampler",
+      "steps": "Steps",
+      "guidance": "Guidance",
+      "samples": "Samples",
+      "ucPreset": "Quality Preset",
+      "generateButton": "Generate Image",
+      "generating": "Generating...",
+      "resultTitle": "Generated Images",
+      "download": "Download",
+      "upload": "Upload",
+      "metadata": "Metadata",
+      "tokenExpired": "Token expired. Please login again.",
+      "subscriptionRequired": "Active subscription required",
+      "error": "Image generation failed",
+      "uploadSuccess": "Image uploaded successfully",
+      "uploadError": "Image upload failed",
+      "autoUploadSuccess": "{{count}} image(s) uploaded automatically",
+      "autoUploadPartial": "{{success}} uploaded, {{fail}} failed",
+      "success": "{{count}} image(s) generation started. Check the History tab.",
+      "completed": "Image generation completed",
+      "failed": "Image generation failed"
+    },
+    "errors": {
+      "emptyPrompt": "Prompt is empty. Cannot generate image."
+    },
+    "repeat": {
+      "title": "Repeat Execution",
+      "enable": "Enable repeat execution",
+      "count": "Repeat count",
+      "infinite": "Infinite repeat (-1)",
+      "countHelp": "1-999 or -1 (infinite)",
+      "delay": "Delay (seconds)",
+      "delayHelp": "Wait time before next generation after completion (1-300 seconds)",
+      "progress": "Iteration {{current}} in progress",
+      "progressWithTotal": "Iteration {{current}}/{{total}} in progress",
+      "stop": "Stop"
+    },
+    "history": {
+      "title": "Generation History",
+      "comingSoon": "This feature is coming soon.",
+      "description": "View your previously generated images and settings."
+    },
+    "groupSelector": {
+      "title": "Group Assignment",
+      "selectButton": "Select Group",
+      "description": "Generated images will be automatically added to the selected group"
+    },
+    "resolution": {
+      "mode": "Resolution Mode",
+      "modeFixed": "Fixed Mode",
+      "modeRandom": "Random Mode",
+      "selectResolution": "Select Resolution",
+      "selectMultiple": "Select Resolutions (Multiple)",
+      "addCustom": "Add Custom",
+      "swapDimensions": "Swap Dimensions",
+      "swapDimensionsDesc": "Swap width and height of selected resolution",
+      "finalResolution": "Final Resolution",
+      "randomPool": "Random Pool",
+      "swapped": "swapped",
+      "randomSwapInfo": "Each resolution has 50% chance to be swapped",
+      "selectAtLeastOne": "Select at least one resolution in random mode",
+      "customDialog": {
+        "addTitle": "Add Custom Resolution",
+        "editTitle": "Edit Custom Resolution",
+        "name": "Name",
+        "namePlaceholder": "e.g., My Resolution",
+        "width": "Width",
+        "height": "Height",
+        "save": "Save",
+        "cancel": "Cancel",
+        "nameRequired": "Name is required",
+        "widthInvalid": "Width must be between 64 and 2048",
+        "heightInvalid": "Height must be between 64 and 2048"
+      }
+    },
+    "naiSettings": {
+      "basic": {
+        "title": "Basic Settings",
+        "model": "Model",
+        "resolution": "Resolution",
+        "prompt": "Prompt",
+        "promptPlaceholder": "1girl, portrait, detailed face, masterpiece...",
+        "negativePrompt": "Negative Prompt",
+        "negativePromptPlaceholder": "bad anatomy, low quality..."
+      },
+      "sampling": {
+        "title": "Sampling Settings",
+        "sampler": "Sampler",
+        "noiseSchedule": "Noise Schedule",
+        "steps": "Steps",
+        "guidance": "Guidance",
+        "cfgRescale": "CFG Rescale",
+        "uncondScale": "Uncond Scale",
+        "varietyPlus": "Variety+"
+      },
+      "output": {
+        "title": "Output Settings",
+        "samples": "Sample Count"
+      }
+    }
+  },
+  "customDropdown": {
+    "title": "Custom Dropdown Lists",
+    "buttons": {
+      "addList": "Add New List",
+      "loadComfyUI": "Load ComfyUI Models",
+      "edit": "Edit",
+      "delete": "Delete",
+      "close": "Close",
+      "cancel": "Cancel",
+      "create": "Create",
+      "collect": "Collect Models",
+      "viewList": "View List",
+      "selectFolder": "Select models folder"
+    },
+    "tabs": {
+      "autoCollected": "Auto-Collected",
+      "manual": "Manual"
+    },
+    "labels": {
+      "auto": "Auto",
+      "itemCount": "{{count}} items",
+      "listName": "List Name",
+      "listNameRequired": "List Name *",
+      "description": "Description",
+      "path": "Path",
+      "itemList": "Item List (one per line) *",
+      "itemListCount": "Item List ({{count}} items)",
+      "pathOptions": "Path Options:",
+      "checkpointsFullPath": "checkpoints - Include full path",
+      "unetFullPath": "unet - Include full path",
+      "upscaleModelsFullPath": "upscale_models - Include full path"
+    },
+    "dialog": {
+      "viewTitle": "View List (Read Only)",
+      "createTitle": "Add New Custom List",
+      "editTitle": "Edit Custom List",
+      "comfyUITitle": "Load ComfyUI Models"
+    },
+    "messages": {
+      "noAutoCollected": "No auto-collected lists. Use \"Load ComfyUI Models\" button to scan models.",
+      "noManual": "No manually created lists. Use \"Add New List\" button to create a list.",
+      "minItemError": "Please enter at least 1 item.",
+      "deleteConfirm": "Are you sure you want to delete this list?",
+      "selectFolderError": "Please select a model folder.",
+      "autoCollectedReadOnly": "Auto-collected items cannot be edited. You can only view the content.",
+      "selectComfyUIFolder": "Please select the ComfyUI models folder.",
+      "foldersDetected": "Model files detected in {{count}} folder(s):",
+      "fileCount": "{{count}} files",
+      "moreCount": "...and {{count}} more folders",
+      "collecting": "Collecting...",
+      "pathExample": "e.g., {{example}}",
+      "scanInfo": "Scan Information:\n• Automatically collects checkpoints, unet, and upscale_models folders\n• Rescanning the same folder will update the items\n• Auto-collected items can be viewed in the \"Auto-Collected\" tab"
+    },
+    "placeholders": {
+      "itemList": "Example:\nSDXL 1.0\nSD 1.5\nRealistic Vision\nDreamShaper"
+    },
+    "helperText": {
+      "itemList": "Enter each item separated by a line break"
+    }
+  }
+}

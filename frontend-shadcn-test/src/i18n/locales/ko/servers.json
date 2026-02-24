@@ -1,0 +1,46 @@
+{
+  "page": {
+    "title": "서버 관리",
+    "listTitle": "ComfyUI 서버 목록",
+    "addButton": "서버 추가",
+    "noServers": "등록된 서버가 없습니다",
+    "noServersDesc": "\"서버 추가\" 버튼을 클릭하여 ComfyUI 서버를 추가하세요"
+  },
+  "card": {
+    "active": "활성",
+    "inactive": "비활성",
+    "priority": "우선순위: {{priority}}",
+    "concurrent": "동시작업: {{count}}",
+    "connectionSuccess": "연결 성공",
+    "connectionFailed": "연결 실패",
+    "testConnection": "연결 테스트"
+  },
+  "dialog": {
+    "addTitle": "서버 추가",
+    "editTitle": "서버 수정",
+    "serverName": "서버 이름",
+    "endpointUrl": "엔드포인트 URL",
+    "endpointPlaceholder": "http://127.0.0.1:8188",
+    "description": "설명",
+    "priority": "우선순위",
+    "priorityHelper": "높을수록 먼저 사용됩니다",
+    "maxConcurrent": "최대 동시 작업 수",
+    "activate": "활성화",
+    "cancel": "취소",
+    "add": "추가",
+    "update": "수정"
+  },
+  "status": {
+    "connected": "연결됨",
+    "disconnected": "연결 끊김",
+    "testing": "테스트 중",
+    "error": "오류",
+    "responseTime": "응답 시간: {{time}}ms"
+  },
+  "actions": {
+    "test": "연결 테스트",
+    "edit": "편집",
+    "delete": "삭제",
+    "confirmDelete": "정말 이 서버를 삭제하시겠습니까?"
+  }
+}

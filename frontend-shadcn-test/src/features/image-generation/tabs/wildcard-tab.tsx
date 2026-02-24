@@ -1,5 +1,5 @@
-import LegacyWildcardTab from '@/legacy/pages/ImageGeneration/WildcardTab'
+import WildcardPage from '@/bridges/image-generation/wildcard-page'
 
 export default function WildcardTab() {
-  return <LegacyWildcardTab />
+  return <WildcardPage />
 }

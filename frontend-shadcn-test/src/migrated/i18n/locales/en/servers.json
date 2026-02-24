@@ -1,0 +1,46 @@
+{
+  "page": {
+    "title": "Server Management",
+    "listTitle": "ComfyUI Server List",
+    "addButton": "Add Server",
+    "noServers": "No servers registered",
+    "noServersDesc": "Click \"Add Server\" button to add a ComfyUI server"
+  },
+  "card": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "priority": "Priority: {{priority}}",
+    "concurrent": "Concurrent: {{count}}",
+    "connectionSuccess": "Connection successful",
+    "connectionFailed": "Connection failed",
+    "testConnection": "Test Connection"
+  },
+  "dialog": {
+    "addTitle": "Add Server",
+    "editTitle": "Edit Server",
+    "serverName": "Server Name",
+    "endpointUrl": "Endpoint URL",
+    "endpointPlaceholder": "http://127.0.0.1:8188",
+    "description": "Description",
+    "priority": "Priority",
+    "priorityHelper": "Higher values are used first",
+    "maxConcurrent": "Max Concurrent Jobs",
+    "activate": "Activate",
+    "cancel": "Cancel",
+    "add": "Add",
+    "update": "Update"
+  },
+  "status": {
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "testing": "Testing",
+    "error": "Error",
+    "responseTime": "Response time: {{time}}ms"
+  },
+  "actions": {
+    "test": "Test Connection",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirmDelete": "Are you sure you want to delete this server?"
+  }
+}

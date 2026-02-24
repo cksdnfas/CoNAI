@@ -25,9 +25,10 @@ const formatFileSize = (bytes?: number) => {
 export function ImagesPage() {
   const [search, setSearch] = useState('')
   const imagesQuery = useImages(20)
+  const imageRows = imagesQuery.data?.data.images
 
-  const rows = imagesQuery.data?.data.images ?? []
   const filteredRows = useMemo(() => {
+    const rows = imageRows ?? []
     const keyword = search.trim().toLowerCase()
     if (!keyword) return rows
 
@@ -38,7 +39,7 @@ export function ImagesPage() {
         row.model_name?.toLowerCase().includes(keyword)
       )
     })
-  }, [rows, search])
+  }, [imageRows, search])
 
   return (
     <div className="space-y-4">

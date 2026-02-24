@@ -1,0 +1,3 @@
+import LegacyCustomDropdownListsSection from '@/migrated/pages/ImageGeneration/CustomDropdownListsSection'
+
+export default LegacyCustomDropdownListsSection

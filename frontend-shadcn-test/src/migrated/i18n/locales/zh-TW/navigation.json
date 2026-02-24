@@ -1,0 +1,36 @@
+{
+  "header": {
+    "title": "ComfyUI Image Manager",
+    "menu": {
+      "home": "首頁",
+      "gallery": "圖庫",
+      "imageGroups": "群組",
+      "search": "搜尋",
+      "upload": "上傳",
+      "imageGeneration": "圖像生成",
+      "settings": "設定"
+    },
+    "tooltip": {
+      "home": "前往首頁",
+      "gallery": "查看圖庫",
+      "imageGroups": "管理群組",
+      "search": "搜尋圖像",
+      "upload": "上傳圖像",
+      "imageGeneration": "生成AI圖像",
+      "settings": "管理設定"
+    },
+    "theme": {
+      "light": "淺色模式",
+      "dark": "深色模式",
+      "toggle": "切換主題"
+    },
+    "mobileMenu": {
+      "open": "開啟選單",
+      "close": "關閉選單"
+    }
+  },
+  "footer": {
+    "copyright": "© 2024 ComfyUI Image Manager. 保留所有權利。",
+    "version": "版本"
+  }
+}

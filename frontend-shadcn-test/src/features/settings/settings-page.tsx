@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, Box, CircularProgress, Tab, Tabs, Typography } from '@mui/material'
-import { Settings as SettingsIcon } from '@mui/icons-material'
+import { Settings } from 'lucide-react'
+import { Alert as UiAlert, AlertDescription } from '@/components/ui/alert'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useTranslation } from 'react-i18next'
-import LegacyGeneralSettings from '@/legacy/pages/Settings/components/GeneralSettings'
-import LegacyTaggerSettings from '@/legacy/pages/Settings/features/Tagger/TaggerSettings'
-import LegacyRatingScoreSettings from '@/legacy/pages/Settings/features/Rating/RatingScoreSettings'
-import LegacySimilaritySettings from '@/legacy/pages/Settings/features/Similarity/SimilaritySettings'
-import LegacyFolderSettings from '@/legacy/pages/Settings/features/Folder/FolderSettings'
-import { AuthSettings as LegacyAuthSettings } from '@/legacy/pages/Settings/features/Auth/AuthSettings'
-import { ExternalApiSettings as LegacyExternalApiSettings } from '@/legacy/pages/Settings/features/ExternalApi/ExternalApiSettings'
-import { CivitaiSettings as LegacyCivitaiSettings } from '@/legacy/pages/Settings/features/Civitai/CivitaiSettings'
-import { PromptExplorer as LegacyPromptExplorer } from '@/legacy/features/PromptExplorer/PromptExplorer'
+import { GeneralSettingsPanel } from '@/features/settings/components/general-settings-panel'
+import { TaggerSettingsPanel } from '@/features/settings/components/tagger-settings-panel'
+import LegacyRatingScoreSettings from '@/bridges/settings/rating-score-settings'
+import LegacySimilaritySettings from '@/bridges/settings/similarity-settings'
+import LegacyFolderSettings from '@/bridges/settings/folder-settings'
+import { AuthSettings as LegacyAuthSettings } from '@/bridges/settings/auth-settings'
+import { ExternalApiSettings as LegacyExternalApiSettings } from '@/bridges/settings/external-api-settings'
+import { CivitaiSettings as LegacyCivitaiSettings } from '@/bridges/settings/civitai-settings'
+import { PromptExplorer as LegacyPromptExplorer } from '@/bridges/settings/prompt-explorer'
 import {
   settingsApi as legacySettingsApi,
   type AppSettings as LegacyAppSettings,
@@ -20,21 +21,11 @@ import {
   type ThumbnailSettings as LegacyThumbnailSettings,
 } from '@/services/settings-api'
 
-interface TabPanelProps {
-  children?: React.ReactNode
-  index: number
-  value: number
-}
-
-function TabPanel({ children, value, index }: TabPanelProps) {
-  return <div role="tabpanel" hidden={value !== index}>{value === index ? <Box sx={{ py: 3 }}>{children}</Box> : null}</div>
-}
-
 export function SettingsPage() {
   const { t } = useTranslation('settings')
   const { t: tPrompt } = useTranslation('promptManagement')
-  const [tabValue, setTabValue] = useState(0)
-  const [promptTabValue, setPromptTabValue] = useState(0)
+  const [tabValue, setTabValue] = useState('general')
+  const [promptTabValue, setPromptTabValue] = useState('positive')
   const [settings, setSettings] = useState<LegacyAppSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -121,118 +112,100 @@ export function SettingsPage() {
     }
   }
 
-  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue)
-  }
-
   if (loading) {
     return (
-      <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <CircularProgress />
-      </Box>
+      <div className="flex min-h-[60vh] w-full items-center justify-center">
+        <div className="h-7 w-7 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" />
+      </div>
     )
   }
 
   if (error || !settings) {
     return (
-      <Box sx={{ width: '100%' }}>
-        <Alert severity="error">{error || t('messages.loadFailed')}</Alert>
-      </Box>
+      <div className="w-full">
+        <UiAlert variant="destructive"><AlertDescription>{error || t('messages.loadFailed')}</AlertDescription></UiAlert>
+      </div>
     )
   }
 
   return (
-    <Box sx={{ width: '100%' }}>
-      <Box sx={{ mb: 4 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <SettingsIcon sx={{ mr: 1, fontSize: 32 }} />
-          <Typography variant="h4" component="h1">
-            {t('title')}
-          </Typography>
-        </Box>
-      </Box>
+    <div className="w-full">
+      <div className="mb-4">
+        <div className="mb-1 flex items-center">
+          <Settings className="mr-2 h-8 w-8" />
+          <h1 className="text-3xl font-semibold tracking-tight">{t('title')}</h1>
+        </div>
+      </div>
 
       {successMessage ? (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          {successMessage}
-        </Alert>
+        <UiAlert className="mb-3 border-green-500/30 text-green-700"><AlertDescription>{successMessage}</AlertDescription></UiAlert>
       ) : null}
 
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-        <Tabs value={tabValue} onChange={handleTabChange} variant="scrollable" scrollButtons="auto">
-          <Tab label={t('tabs.general')} />
-          <Tab label={t('tabs.folders')} />
-          <Tab label={t('tabs.tagger')} />
-          <Tab label={t('tabs.prompts')} />
-          <Tab label={t('tabs.rating')} />
-          <Tab label={t('tabs.similarity')} />
-          <Tab label={t('tabs.account')} />
-          <Tab label="Civitai" />
-        </Tabs>
-      </Box>
+      <Tabs value={tabValue} onValueChange={setTabValue}>
+              <TabsList className="mb-2 h-auto w-full flex-wrap justify-start gap-1 p-1">
+                <TabsTrigger value="general">{t('tabs.general')}</TabsTrigger>
+                <TabsTrigger value="folders">{t('tabs.folders')}</TabsTrigger>
+                <TabsTrigger value="tagger">{t('tabs.tagger')}</TabsTrigger>
+                <TabsTrigger value="prompts">{t('tabs.prompts')}</TabsTrigger>
+                <TabsTrigger value="rating">{t('tabs.rating')}</TabsTrigger>
+                <TabsTrigger value="similarity">{t('tabs.similarity')}</TabsTrigger>
+                <TabsTrigger value="account">{t('tabs.account')}</TabsTrigger>
+                <TabsTrigger value="civitai">Civitai</TabsTrigger>
+              </TabsList>
 
-      <TabPanel value={tabValue} index={0}>
-        <LegacyGeneralSettings
-          settings={settings.general}
-          metadataSettings={settings.metadataExtraction}
-          thumbnailSettings={settings.thumbnail}
-          onUpdate={handleUpdateGeneralSettings}
-          onMetadataUpdate={handleUpdateMetadataSettings}
-          onThumbnailUpdate={handleUpdateThumbnailSettings}
-        />
-      </TabPanel>
+      <TabsContent value="general">
+              <GeneralSettingsPanel
+                settings={settings.general}
+                metadataSettings={settings.metadataExtraction}
+                thumbnailSettings={settings.thumbnail}
+                onUpdate={handleUpdateGeneralSettings}
+                onMetadataUpdate={handleUpdateMetadataSettings}
+                onThumbnailUpdate={handleUpdateThumbnailSettings}
+              />
+            </TabsContent>
 
-      <TabPanel value={tabValue} index={1}>
-        <LegacyFolderSettings />
-      </TabPanel>
+      <TabsContent value="folders">
+              <LegacyFolderSettings />
+            </TabsContent>
 
-      <TabPanel value={tabValue} index={2}>
-        <LegacyTaggerSettings settings={settings.tagger} onUpdate={handleUpdateTaggerSettings} />
-      </TabPanel>
+      <TabsContent value="tagger">
+              <TaggerSettingsPanel settings={settings.tagger} onUpdate={handleUpdateTaggerSettings} />
+            </TabsContent>
 
-      <TabPanel value={tabValue} index={3}>
-        <Box sx={{ width: '100%', mt: -2 }}>
-          <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-            <Tabs
-              value={promptTabValue}
-              onChange={(_event, newValue) => setPromptTabValue(newValue)}
-              aria-label="prompt management tabs"
-              variant="scrollable"
-              scrollButtons="auto"
-              sx={{ px: 2 }}
-            >
-              <Tab label={tPrompt('tabs.positive')} />
-              <Tab label={tPrompt('tabs.negative')} />
-              <Tab label={tPrompt('tabs.auto')} />
-            </Tabs>
-          </Box>
+      <TabsContent value="prompts">
+              <div className="w-full">
+                <Tabs value={promptTabValue} onValueChange={setPromptTabValue}>
+                  <TabsList className="mb-2 h-auto w-full justify-start gap-1 p-1">
+                    <TabsTrigger value="positive">{tPrompt('tabs.positive')}</TabsTrigger>
+                    <TabsTrigger value="negative">{tPrompt('tabs.negative')}</TabsTrigger>
+                    <TabsTrigger value="auto">{tPrompt('tabs.auto')}</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="positive"><LegacyPromptExplorer type="positive" /></TabsContent>
+                  <TabsContent value="negative"><LegacyPromptExplorer type="negative" /></TabsContent>
+                  <TabsContent value="auto"><LegacyPromptExplorer type="auto" /></TabsContent>
+                </Tabs>
+              </div>
+            </TabsContent>
 
-          <Box>
-            {promptTabValue === 0 ? <LegacyPromptExplorer type="positive" /> : null}
-            {promptTabValue === 1 ? <LegacyPromptExplorer type="negative" /> : null}
-            {promptTabValue === 2 ? <LegacyPromptExplorer type="auto" /> : null}
-          </Box>
-        </Box>
-      </TabPanel>
+      <TabsContent value="rating">
+              <LegacyRatingScoreSettings />
+            </TabsContent>
 
-      <TabPanel value={tabValue} index={4}>
-        <LegacyRatingScoreSettings />
-      </TabPanel>
+      <TabsContent value="similarity">
+              <LegacySimilaritySettings />
+            </TabsContent>
 
-      <TabPanel value={tabValue} index={5}>
-        <LegacySimilaritySettings />
-      </TabPanel>
+      <TabsContent value="account">
+              <LegacyAuthSettings />
+            </TabsContent>
 
-      <TabPanel value={tabValue} index={6}>
-        <LegacyAuthSettings />
-      </TabPanel>
-
-      <TabPanel value={tabValue} index={7}>
-        <LegacyExternalApiSettings />
-        <Box sx={{ mt: 3 }}>
-          <LegacyCivitaiSettings />
-        </Box>
-      </TabPanel>
-    </Box>
+      <TabsContent value="civitai">
+              <LegacyExternalApiSettings />
+              <div className="mt-3">
+                <LegacyCivitaiSettings />
+              </div>
+            </TabsContent>
+      </Tabs>
+    </div>
   )
 }

@@ -1,0 +1,6 @@
+- Kept this ULW plan strictly scoped to `frontend-shadcn-test` continuation and anchored tasks to path-specific verification commands to prevent cross-module drift.
+- Treated Task 2 as satisfied by removing direct `LegacyComfyUITab` import and introducing local implementation in `comfyui-tab`, while deferring remaining legacy subcomponent extraction to later slices.
+- Updated README migration notes to reflect completed `comfyui` slice and remaining `nai/wildcard` + deeper workflow/component legacy targets.
+- Used `npm run build` + route-level HTTP checks as fallback verification because plan-targeted `npm run test -- ...` commands are unavailable without a `test` script.
+- For workflow header parity, replaced MUI usage with existing local shadcn primitives (`@/components/ui/button`, `@/components/ui/badge`) and native semantic tags so migration stays within allowed local UI system and avoids introducing new dependencies.
+- Treated backend-dependent browser assertions as environment-gated: when workflow API returns 500, record route-level QA as inconclusive rather than forcing a false pass/fail on header interactions.

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Alert, Box, Drawer, IconButton, Snackbar, Tooltip, Typography } from '@mui/material'
-import { ArrowBack as ArrowBackIcon, Close as CloseIcon, Refresh as RefreshIcon } from '@mui/icons-material'
+import { ArrowLeft, RefreshCw, X } from 'lucide-react'
+import { Alert as UiAlert, AlertDescription } from '@/components/ui/alert'
 import { useTranslation } from 'react-i18next'
 import type { ComplexSearchRequest } from '@comfyui-image-manager/shared'
 import type { PageSize } from '@/types/image'
@@ -21,12 +21,24 @@ export function HomePage() {
   const [snackbarMessage, setSnackbarMessage] = useState('')
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'info' | 'error'>('info')
 
-  const handleSnackbarClose = (_event?: Event | React.SyntheticEvent, reason?: string) => {
+  const handleSnackbarClose = (_event?: Event | object, reason?: string) => {
     if (reason === 'clickaway') {
       return
     }
     setSnackbarOpen(false)
   }
+
+  useEffect(() => {
+    if (!snackbarOpen) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      handleSnackbarClose()
+    }, 3000)
+
+    return () => window.clearTimeout(timeout)
+  }, [snackbarOpen])
 
   const { settings: homeSettings } = useImageListSettings('home')
   const { settings: searchSettings } = useImageListSettings('search')
@@ -191,58 +203,44 @@ export function HomePage() {
         }
 
   return (
-    <Box sx={{ width: '100%' }}>
-      <Box
-        sx={{
-          mb: { xs: 2, sm: 3 },
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+    <div className="w-full">
+      <div className="mb-2 flex items-center justify-between sm:mb-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {isSearchMode ? (
-            <IconButton onClick={handleExitSearchMode} color="primary">
-              <ArrowBackIcon />
-            </IconButton>
+            <button
+              type="button"
+              onClick={handleExitSearchMode}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+              aria-label={t('common:back')}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
           ) : null}
-          <Typography
-            variant="h4"
-            component="h1"
-            sx={{
-              fontSize: { xs: '1.75rem', sm: '2rem', md: '2.25rem' },
-              fontWeight: 600,
-            }}
-          >
+          <h1 className="text-[1.75rem] font-semibold leading-tight sm:text-[2rem] md:text-[2.25rem]">
             {isSearchMode ? t('search:title') : 'Home'}
-          </Typography>
-        </Box>
+          </h1>
+        </div>
 
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <div className="flex gap-1">
           {!isSearchMode ? (
-            <Tooltip title={t('common:refresh')}>
-              <span>
-                <IconButton onClick={handleRefresh} disabled={currentLoading}>
-                  <RefreshIcon />
-                </IconButton>
-              </span>
-            </Tooltip>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={currentLoading}
+              title={t('common:refresh')}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-foreground hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={t('common:refresh')}
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
           ) : null}
-        </Box>
-      </Box>
+        </div>
+      </div>
 
       {currentError ? (
-        <Box
-          sx={{
-            mb: { xs: 2, sm: 3 },
-            p: 2,
-            bgcolor: 'error.light',
-            color: 'error.contrastText',
-            borderRadius: 2,
-          }}
-        >
-          <Typography variant="body2">{currentError}</Typography>
-        </Box>
+        <UiAlert variant="destructive" className="mb-2 sm:mb-3">
+                  <AlertDescription>{currentError}</AlertDescription>
+                </UiAlert>
       ) : null}
 
       <ImageList
@@ -265,47 +263,46 @@ export function HomePage() {
         onActionComplete={handleActionComplete}
       />
 
-      <Drawer
-        anchor={window.innerWidth < 600 ? 'bottom' : 'right'}
-        open={searchOpen}
-        onClose={handleCloseSearchUI}
-        PaperProps={{
-          sx: {
-            width: { xs: '100%', sm: 400 },
-            height: { xs: '100%', sm: '100%' },
-            bgcolor: 'background.default',
-            display: 'flex',
-            flexDirection: 'column',
-          },
-        }}
-        ModalProps={{
-          keepMounted: true,
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', p: 2, borderBottom: 1, borderColor: 'divider' }}>
-          <Typography variant="h6" sx={{ flex: 1 }}>
-            {t('common:search')}
-          </Typography>
-          <IconButton onClick={handleCloseSearchUI} edge="end">
-            <CloseIcon />
-          </IconButton>
-        </Box>
+      {searchOpen ? (
+        <div className="fixed inset-0 z-50">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            onClick={handleCloseSearchUI}
+            aria-label={t('common:close')}
+          />
+          <div className="absolute inset-x-0 bottom-0 flex h-full w-full flex-col border border-border bg-background sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[400px] sm:max-w-full">
+            <div className="flex items-center border-b border-border p-2">
+              <h2 className="flex-1 text-lg font-semibold">
+                {t('common:search')}
+              </h2>
+              <button
+                type="button"
+                onClick={handleCloseSearchUI}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground"
+                aria-label={t('common:close')}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-        <Box sx={{ p: 2, overflowY: 'auto', flex: 1 }}>
-          <SearchBar onSearch={handleExecuteSearch} loading={search.loading} />
-        </Box>
-      </Drawer>
+            <div className="flex-1 overflow-y-auto p-2">
+              <SearchBar onSearch={handleExecuteSearch} loading={search.loading} />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={3000}
-        onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
-    </Box>
+      {snackbarOpen ? (
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
+          <UiAlert
+            variant={snackbarSeverity === 'error' ? 'destructive' : 'default'}
+            className="min-w-[220px] shadow-lg"
+          >
+            <AlertDescription>{snackbarMessage}</AlertDescription>
+          </UiAlert>
+        </div>
+      ) : null}
+    </div>
   )
 }

@@ -1,16 +1,10 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Divider,
-  LinearProgress,
-  Paper,
-  Typography,
-} from '@mui/material'
-import { CheckCircle as CheckCircleIcon, Error as ErrorIcon } from '@mui/icons-material'
+import { CheckCircle2, CircleX, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
 import type { Workflow } from '@/services/workflow-api'
 import type { ComfyUIServer } from '@/services/comfyui-server-api'
 import type { ServerConnectionStatus, ServerGenerationStatus, ServerRepeatState } from '../types/workflow.types'
@@ -39,88 +33,84 @@ export function ServerStatusList({
   const { t } = useTranslation(['workflows'])
 
   return (
-    <Paper sx={{ p: 3 }}>
-      <Typography variant="h6" gutterBottom>
-        {t('workflows:generate.serversListTitle')}
-      </Typography>
-      <Divider sx={{ mb: 2 }} />
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t('workflows:generate.serversListTitle')}</CardTitle>
+      </CardHeader>
+      <Separator />
+      <CardContent className="space-y-2 pt-4">
+        {servers.length === 0 ? <Alert><AlertDescription>{t('workflows:generate.noServers')}</AlertDescription></Alert> : null}
 
-      {servers.length === 0 ? <Alert severity="info">{t('workflows:generate.noServers')}</Alert> : null}
+        {servers.map((server) => {
+          const status = serverStatus[server.id]
+          const generation = generationStatus[server.id]
+          const repeatState = serverRepeatStates[server.id]
 
-      {servers.map((server) => {
-        const status = serverStatus[server.id]
-        const generation = generationStatus[server.id]
-        const repeatState = serverRepeatStates[server.id]
+          return (
+            <div key={server.id} className="space-y-2 border-b pb-2 last:border-b-0">
+              <div className="flex items-center gap-2">
+                {status?.connected ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                ) : (
+                  <CircleX className="h-4 w-4 text-rose-500" />
+                )}
+                <p className="flex-1 text-sm font-semibold">{server.name}</p>
+                {generation?.status === 'generating' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              </div>
 
-        return (
-          <Box key={server.id} sx={{ mb: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-              {status?.connected ? <CheckCircleIcon color="success" fontSize="small" /> : <ErrorIcon color="error" fontSize="small" />}
-              <Typography variant="body2" fontWeight="bold" sx={{ flex: 1 }}>
-                {server.name}
-              </Typography>
-              {generation?.status === 'generating' ? <CircularProgress size={16} /> : null}
-            </Box>
+              {status?.responseTime ? (
+                <p className="text-xs text-muted-foreground">{t('workflows:generate.responseTime', { time: status.responseTime })}</p>
+              ) : null}
 
-            {status?.responseTime ? (
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('workflows:generate.responseTime', { time: status.responseTime })}
-              </Typography>
-            ) : null}
+              {repeatState ? (
+                <Badge>
+                  {repeatState.totalIterations === -1
+                    ? t('workflows:serverStatus.executingInfinite', { count: repeatState.currentIteration })
+                    : t('workflows:serverStatus.executingProgress', {
+                        current: repeatState.currentIteration,
+                        total: repeatState.totalIterations,
+                      })}
+                </Badge>
+              ) : null}
 
-            {repeatState ? (
-              <Box sx={{ mt: 1, mb: 1 }}>
-                <Chip
-                  label={
-                    repeatState.totalIterations === -1
-                      ? t('workflows:serverStatus.executingInfinite', { count: repeatState.currentIteration })
-                      : t('workflows:serverStatus.executingProgress', {
-                          current: repeatState.currentIteration,
-                          total: repeatState.totalIterations,
-                        })
-                  }
-                  color="primary"
-                  size="small"
-                />
-              </Box>
-            ) : null}
-
-            <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => onGenerate(server.id)}
-                disabled={!status?.connected || generation?.status === 'generating' || repeatState?.isRunning || !workflow.is_active}
-              >
-                {t('workflows:serverStatus.generate')}
-              </Button>
-              {!repeatState?.isRunning ? (
+              <div className="flex flex-wrap gap-2">
                 <Button
-                  size="small"
-                  variant="outlined"
-                  color="primary"
-                  onClick={() => onStartRepeat(server.id)}
-                  disabled={!status?.connected || generation?.status === 'generating' || !workflow.is_active}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onGenerate(server.id)}
+                  disabled={!status?.connected || generation?.status === 'generating' || repeatState?.isRunning || !workflow.is_active}
                 >
-                  {t('workflows:serverStatus.startRepeat')}
+                  {t('workflows:serverStatus.generate')}
                 </Button>
-              ) : (
-                <Button size="small" variant="outlined" color="error" onClick={() => onStopRepeat(server.id)}>
-                  {t('workflows:serverStatus.stop')}
-                </Button>
-              )}
-            </Box>
+                {!repeatState?.isRunning ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onStartRepeat(server.id)}
+                    disabled={!status?.connected || generation?.status === 'generating' || !workflow.is_active}
+                  >
+                    {t('workflows:serverStatus.startRepeat')}
+                  </Button>
+                ) : (
+                  <Button type="button" size="sm" variant="outline" onClick={() => onStopRepeat(server.id)}>
+                    {t('workflows:serverStatus.stop')}
+                  </Button>
+                )}
+              </div>
 
-            {generation?.status === 'generating' ? <LinearProgress sx={{ mt: 1 }} /> : null}
+              {generation?.status === 'generating' ? (
+                <div className="h-1.5 w-full rounded bg-muted"><div className="h-1.5 w-1/2 animate-pulse rounded bg-primary" /></div>
+              ) : null}
 
-            {generation?.status === 'failed' ? (
-              <Alert severity="error" sx={{ mt: 1 }}>
-                {generation.error || t('workflows:generate.generationFailed')}
-              </Alert>
-            ) : null}
-          </Box>
-        )
-      })}
-    </Paper>
+              {generation?.status === 'failed' ? (
+                <Alert variant="destructive"><AlertDescription>{generation.error || t('workflows:generate.generationFailed')}</AlertDescription></Alert>
+              ) : null}
+            </div>
+          )
+        })}
+      </CardContent>
+    </Card>
   )
 }

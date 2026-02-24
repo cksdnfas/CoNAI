@@ -1,42 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Divider,
-  FormControlLabel,
-  IconButton,
-  Paper,
-  Switch,
-  Tab,
-  Tabs,
-  TextField,
-  Typography,
-} from '@mui/material'
-import {
-  Add as AddIcon,
-  ArrowBack as ArrowBackIcon,
-  Save as SaveIcon,
-  Upload as UploadIcon,
-} from '@mui/icons-material'
+import { useEffect, useState } from 'react'
+import { ArrowLeft, Plus, Save, Upload } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { workflowApi, type MarkedField, type Workflow } from '@/services/workflow-api'
-import { MarkedFieldsGuide } from './components/marked-fields-guide'
-import { MarkedFieldsPreview } from './components/marked-fields-preview'
-import EnhancedWorkflowGraphViewer from './components/enhanced-workflow-graph-viewer'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { MarkedFieldsList, useMarkedFieldValidation } from './components/marked-fields'
-import WorkflowJsonViewer from './components/workflow-json-viewer'
 
 function getErrorMessage(error: unknown): string {
   if (typeof error === 'object' && error !== null) {
-    const maybeResponse = error as {
-      response?: { data?: { error?: string } }
-      message?: string
-    }
-    return maybeResponse.response?.data?.error || maybeResponse.message || 'Unknown error'
+    const maybe = error as { response?: { data?: { error?: string } }; message?: string }
+    return maybe.response?.data?.error || maybe.message || 'Unknown error'
   }
   return 'Unknown error'
 }
@@ -45,436 +23,88 @@ export function WorkflowFormPage() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
   const isEditMode = Boolean(id)
-  const { t } = useTranslation(['workflows', 'common'])
+  const { t } = useTranslation(['workflows'])
 
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [workflowJson, setWorkflowJson] = useState('')
   const [isActive, setIsActive] = useState(true)
-  const [color, setColor] = useState('#2196f3')
   const [markedFields, setMarkedFields] = useState<MarkedField[]>([])
-  const [jsonTabValue, setJsonTabValue] = useState(0)
-
-  const validation = useMarkedFieldValidation(markedFields)
-  const colorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const handleColorChange = useCallback((newColor: string) => {
-    if (colorTimeoutRef.current) {
-      clearTimeout(colorTimeoutRef.current)
-    }
-    colorTimeoutRef.current = setTimeout(() => {
-      setColor(newColor)
-    }, 100)
-  }, [])
-
   const [jsonError, setJsonError] = useState<string | null>(null)
 
-  const loadWorkflow = useCallback(async () => {
-    if (!id) {
-      return
-    }
-
-    try {
-      setLoading(true)
-      const response = await workflowApi.getWorkflow(parseInt(id, 10))
-      const workflow: Workflow = response.data
-
-      setName(workflow.name)
-      setDescription(workflow.description || '')
-      setWorkflowJson(workflow.workflow_json)
-      setIsActive(workflow.is_active)
-      setColor(workflow.color || '#2196f3')
-      setMarkedFields(workflow.marked_fields || [])
-    } catch (loadError) {
-      setError(getErrorMessage(loadError))
-    } finally {
-      setLoading(false)
-    }
-  }, [id])
+  const validation = useMarkedFieldValidation(markedFields)
 
   useEffect(() => {
-    if (isEditMode) {
-      void loadWorkflow()
+    const load = async () => {
+      if (!id) return
+      try {
+        setLoading(true)
+        const response = await workflowApi.getWorkflow(parseInt(id, 10))
+        const workflow: Workflow = response.data
+        setName(workflow.name)
+        setDescription(workflow.description || '')
+        setWorkflowJson(workflow.workflow_json)
+        setIsActive(workflow.is_active)
+        setMarkedFields(workflow.marked_fields || [])
+      } catch (e) {
+        setError(getErrorMessage(e))
+      } finally {
+        setLoading(false)
+      }
     }
-  }, [isEditMode, loadWorkflow])
+    if (isEditMode) void load()
+  }, [id, isEditMode])
 
   const handleWorkflowJsonChange = (value: string) => {
     setWorkflowJson(value)
-    if (value.trim()) {
-      try {
-        JSON.parse(value)
-        setJsonError(null)
-      } catch {
-        setJsonError(t('workflows:form.invalidJson'))
-      }
-    } else {
-      setJsonError(null)
-    }
-  }
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) {
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onload = (readerEvent) => {
-      const content = readerEvent.target?.result
-      if (typeof content === 'string') {
-        handleWorkflowJsonChange(content)
-      }
-    }
-    reader.readAsText(file)
-  }
-
-  const addMarkedField = () => {
-    const newField: MarkedField = {
-      id: `field_${Date.now()}`,
-      label: '',
-      jsonPath: '',
-      type: 'text',
-      required: false,
-    }
-    setMarkedFields([...markedFields, newField])
-  }
-
-  const updateMarkedField = (index: number, updates: Partial<MarkedField>) => {
-    const updated = [...markedFields]
-    updated[index] = { ...updated[index], ...updates }
-    setMarkedFields(updated)
-  }
-
-  const removeMarkedField = (index: number) => {
-    setMarkedFields(markedFields.filter((_, fieldIndex) => fieldIndex !== index))
-  }
-
-  const handleParameterRightClick = (
-    nodeId: string,
-    paramKey: string,
-    paramValue: unknown,
-    paramType: string,
-    nodeTitle: string,
-    classType: string,
-  ) => {
-    void paramType
-    void classType
-    const jsonPath = `${nodeId}.inputs.${paramKey}`
-    const isDuplicate = markedFields.some((field) => field.jsonPath === jsonPath)
-    if (isDuplicate) {
-      setError(`Parameter "${paramKey}" from node ${nodeId} is already in Marked Fields`)
-      window.setTimeout(() => setError(null), 3000)
-      return
-    }
-
-    let fieldType: 'text' | 'number' | 'textarea' = 'text'
-    if (typeof paramValue === 'number') {
-      fieldType = 'number'
-    } else if (typeof paramValue === 'string' && paramValue.length > 100) {
-      fieldType = 'textarea'
-    }
-
-    const cleanTitle = nodeTitle
-      .replace(/[^a-zA-Z0-9_]/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_|_$/g, '')
-
-    const autoLabel = `#${nodeId}_${cleanTitle}(${paramKey.toUpperCase()})`
-
-    const newField: MarkedField = {
-      id: `field_${Date.now()}`,
-      label: autoLabel,
-      jsonPath,
-      type: fieldType,
-      required: false,
-    }
-
-    setMarkedFields([...markedFields, newField])
-    setSuccess(`Added "${paramKey}" from Node ${nodeId} to Marked Fields`)
-    window.setTimeout(() => setSuccess(null), 3000)
+    if (!value.trim()) return setJsonError(null)
+    try { JSON.parse(value); setJsonError(null) } catch { setJsonError(t('workflows:form.invalidJson')) }
   }
 
   const handleSubmit = async () => {
-    if (!name.trim()) {
-      setError(t('workflows:form.nameRequired'))
-      return
-    }
-
-    if (!workflowJson.trim()) {
-      setError(t('workflows:form.jsonRequired'))
-      return
-    }
-
-    if (jsonError) {
-      setError(t('workflows:form.validateJson'))
-      return
-    }
-
+    if (!name.trim()) return setError(t('workflows:form.nameRequired'))
+    if (!workflowJson.trim()) return setError(t('workflows:form.jsonRequired'))
+    if (jsonError) return setError(t('workflows:form.validateJson'))
     try {
       setSaving(true)
       setError(null)
-
-      const data = {
-        name: name.trim(),
-        description: description.trim() || undefined,
-        workflow_json: workflowJson,
-        marked_fields: markedFields.length > 0 ? markedFields : undefined,
-        is_active: isActive,
-        color,
-      }
-
-      if (isEditMode && id) {
-        await workflowApi.updateWorkflow(parseInt(id, 10), data)
-        setSuccess(t('workflows:alerts.updated'))
-      } else {
-        await workflowApi.createWorkflow(data)
-        setSuccess(t('workflows:alerts.created'))
-      }
-
-      window.setTimeout(() => {
-        navigate('/image-generation?tab=workflows')
-      }, 1500)
-    } catch (submitError) {
-      setError(getErrorMessage(submitError))
+      const data = { name: name.trim(), description: description.trim() || undefined, workflow_json: workflowJson, marked_fields: markedFields.length ? markedFields : undefined, is_active: isActive }
+      if (isEditMode && id) await workflowApi.updateWorkflow(parseInt(id, 10), data)
+      else await workflowApi.createWorkflow(data)
+      setSuccess(isEditMode ? t('workflows:alerts.updated') : t('workflows:alerts.created'))
+      window.setTimeout(() => navigate('/image-generation?tab=workflows'), 1200)
+    } catch (e) {
+      setError(getErrorMessage(e))
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
-    )
-  }
+  if (loading) return <div className="flex min-h-[400px] items-center justify-center"><div className="h-7 w-7 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" /></div>
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
-      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <IconButton onClick={() => navigate('/image-generation?tab=workflows')}>
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h4">{isEditMode ? t('workflows:page.editTitle') : t('workflows:page.createTitle')}</Typography>
-      </Box>
+    <div className="mx-auto max-w-[1200px] space-y-3 p-3">
+      <div className="flex items-center gap-2"><Button type="button" variant="ghost" size="icon-sm" onClick={() => navigate('/image-generation?tab=workflows')}><ArrowLeft className="h-4 w-4" /></Button><h1 className="text-2xl font-semibold tracking-tight">{isEditMode ? t('workflows:page.editTitle') : t('workflows:page.createTitle')}</h1></div>
+      {error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}
+      {success ? <Alert><AlertDescription>{success}</AlertDescription></Alert> : null}
 
-      {error ? (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      ) : null}
-      {success ? <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert> : null}
+      <Card><CardHeader><CardTitle>{t('workflows:form.basicInfo')}</CardTitle></CardHeader><CardContent className="space-y-2"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('workflows:form.workflowName')} /><Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t('workflows:form.description')} /><label className="flex items-center justify-between rounded border p-2 text-sm">{t('workflows:form.activate')}<input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /></label></CardContent></Card>
 
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          {t('workflows:form.basicInfo')}
-        </Typography>
-        <Divider sx={{ mb: 2 }} />
+      <Card>
+        <CardHeader><div className="flex items-center justify-between gap-2"><CardTitle>{t('workflows:form.workflowJson')}</CardTitle><Button type="button" variant="outline" size="sm" asChild><label><Upload className="h-4 w-4" />{t('workflows:form.uploadFile')}<input type="file" accept=".json" hidden onChange={(e) => { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = (event) => { if (typeof event.target?.result === 'string') handleWorkflowJsonChange(event.target.result) }; reader.readAsText(file) }} /></label></Button></div></CardHeader>
+        <CardContent className="space-y-2"><Textarea rows={15} className="font-mono text-sm" value={workflowJson} onChange={(e) => handleWorkflowJsonChange(e.target.value)} />{jsonError ? <p className="text-sm text-destructive">{jsonError}</p> : null}{workflowJson && !jsonError ? <Badge>{t('workflows:form.jsonCharCount', { count: JSON.stringify(JSON.parse(workflowJson)).length })}</Badge> : null}</CardContent>
+      </Card>
 
-        <TextField
-          fullWidth
-          label={t('workflows:form.workflowName')}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          required
-          sx={{ mb: 2 }}
-        />
+      <Card>
+        <CardHeader><div className="flex items-center justify-between"><CardTitle>{t('workflows:markedFields.sectionTitle')}</CardTitle><Button type="button" size="sm" onClick={() => setMarkedFields((prev) => [...prev, { id: `field_${Date.now()}`, label: '', jsonPath: '', type: 'text', required: false }])}><Plus className="h-4 w-4" />{t('workflows:markedFields.addField')}</Button></div></CardHeader>
+        <CardContent className="space-y-2">{validation.errorCount > 0 || validation.warningCount > 0 ? <Alert variant={validation.errorCount > 0 ? 'destructive' : 'default'}><AlertDescription>{validation.errorCount > 0 ? `${validation.errorCount} errors` : `${validation.warningCount} warnings`}</AlertDescription></Alert> : null}<MarkedFieldsList fields={markedFields} onFieldsChange={setMarkedFields} onUpdateField={(index, updates) => setMarkedFields((prev) => prev.map((field, i) => (i === index ? { ...field, ...updates } : field)))} onDeleteField={(index) => setMarkedFields((prev) => prev.filter((_, i) => i !== index))} /></CardContent>
+      </Card>
 
-        <TextField
-          fullWidth
-          label={t('workflows:form.description')}
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-          multiline
-          rows={2}
-          sx={{ mb: 2 }}
-        />
-
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" sx={{ mb: 1 }}>
-            {t('workflows:form.colorLabel')}
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            {[
-              { color: '#2196f3', label: t('workflows:colors.blue') },
-              { color: '#f44336', label: t('workflows:colors.red') },
-              { color: '#4caf50', label: t('workflows:colors.green') },
-              { color: '#ff9800', label: t('workflows:colors.orange') },
-              { color: '#9c27b0', label: t('workflows:colors.purple') },
-              { color: '#00bcd4', label: t('workflows:colors.cyan') },
-              { color: '#ffeb3b', label: t('workflows:colors.yellow') },
-              { color: '#795548', label: t('workflows:colors.brown') },
-              { color: '#607d8b', label: t('workflows:colors.gray') },
-              { color: '#e91e63', label: t('workflows:colors.pink') },
-            ].map((item) => (
-              <Box
-                key={item.color}
-                onClick={() => setColor(item.color)}
-                sx={{
-                  width: 40,
-                  height: 40,
-                  bgcolor: item.color,
-                  borderRadius: 1,
-                  cursor: 'pointer',
-                  border: color === item.color ? '3px solid #000' : '2px solid #ddd',
-                  transition: 'all 0.2s',
-                  '&:hover': {
-                    transform: 'scale(1.1)',
-                    boxShadow: 2,
-                  },
-                }}
-                title={item.label}
-              />
-            ))}
-            <input
-              type="color"
-              defaultValue={color}
-              onInput={(event) => handleColorChange((event.target as HTMLInputElement).value)}
-              style={{
-                width: '40px',
-                height: '40px',
-                border: '2px solid #ddd',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-              title={t('workflows:form.customColorTooltip')}
-            />
-          </Box>
-        </Box>
-
-        <FormControlLabel
-          control={<Switch checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />}
-          label={t('workflows:form.activate')}
-        />
-      </Paper>
-
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">{t('workflows:form.workflowJson')}</Typography>
-          <Button component="label" startIcon={<UploadIcon />} size="small">
-            {t('workflows:form.uploadFile')}
-            <input type="file" accept=".json" hidden onChange={handleFileUpload} />
-          </Button>
-        </Box>
-
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-          <Tabs value={jsonTabValue} onChange={(_event, newValue) => setJsonTabValue(newValue)}>
-            <Tab label="JSON Editor" />
-            <Tab label="Graph View" disabled={!workflowJson || Boolean(jsonError)} />
-            <Tab label="JSON View" disabled={!workflowJson || Boolean(jsonError)} />
-          </Tabs>
-        </Box>
-
-        <Box role="tabpanel" hidden={jsonTabValue !== 0}>
-          {jsonTabValue === 0 ? (
-            <>
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                <Typography variant="body2">
-                  <strong>{t('workflows:alerts.importantNote')}</strong> {t('workflows:alerts.apiFormatWarning')}
-                </Typography>
-              </Alert>
-
-              <TextField
-                fullWidth
-                multiline
-                rows={15}
-                value={workflowJson}
-                onChange={(event) => handleWorkflowJsonChange(event.target.value)}
-                placeholder={t('workflows:form.jsonPlaceholder')}
-                error={Boolean(jsonError)}
-                helperText={jsonError || t('workflows:form.jsonHelper')}
-                sx={{
-                  '& .MuiInputBase-input': {
-                    fontFamily: 'monospace',
-                    fontSize: '0.875rem',
-                  },
-                }}
-              />
-
-              {workflowJson && !jsonError ? (
-                <Box sx={{ mt: 2 }}>
-                  <Chip
-                    label={t('workflows:form.jsonCharCount', { count: JSON.stringify(JSON.parse(workflowJson)).length })}
-                    size="small"
-                    color="success"
-                  />
-                </Box>
-              ) : null}
-            </>
-          ) : null}
-        </Box>
-
-        <Box role="tabpanel" hidden={jsonTabValue !== 1}>
-          {jsonTabValue === 1 && workflowJson && !jsonError ? (
-            <Box sx={{ height: '600px', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-              <EnhancedWorkflowGraphViewer workflowJson={workflowJson} onParameterRightClick={handleParameterRightClick} />
-            </Box>
-          ) : null}
-        </Box>
-
-        <Box role="tabpanel" hidden={jsonTabValue !== 2}>
-          {jsonTabValue === 2 && workflowJson && !jsonError ? (
-            <Box sx={{ height: '600px', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'auto' }}>
-              <WorkflowJsonViewer workflowJson={workflowJson} />
-            </Box>
-          ) : null}
-        </Box>
-      </Paper>
-
-      <MarkedFieldsGuide />
-
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">{t('workflows:markedFields.sectionTitle')}</Typography>
-          <Button startIcon={<AddIcon />} onClick={addMarkedField} variant="contained" size="small">
-            {t('workflows:markedFields.addField')}
-          </Button>
-        </Box>
-        <Divider sx={{ mb: 2 }} />
-
-        {validation.errorCount > 0 || validation.warningCount > 0 ? (
-          <Alert severity={validation.errorCount > 0 ? 'error' : 'warning'} sx={{ mb: 2 }}>
-            {validation.errorCount > 0 ? (
-              <Typography variant="body2">
-                {validation.errorCount} error{validation.errorCount > 1 ? 's' : ''} found
-              </Typography>
-            ) : null}
-            {validation.warningCount > 0 ? (
-              <Typography variant="body2">
-                {validation.warningCount} warning{validation.warningCount > 1 ? 's' : ''} found
-              </Typography>
-            ) : null}
-          </Alert>
-        ) : null}
-
-        <MarkedFieldsList
-          fields={markedFields}
-          onFieldsChange={setMarkedFields}
-          onUpdateField={updateMarkedField}
-          onDeleteField={removeMarkedField}
-        />
-      </Paper>
-
-      <MarkedFieldsPreview workflowJson={workflowJson} markedFields={markedFields} />
-
-      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-        <Button variant="outlined" onClick={() => navigate('/image-generation?tab=workflows')} disabled={saving}>
-          {t('workflows:actions.cancel')}
-        </Button>
-        <Button
-          variant="contained"
-          startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
-          onClick={handleSubmit}
-          disabled={saving || Boolean(jsonError) || !name.trim() || !workflowJson.trim()}
-        >
-          {saving ? t('workflows:actions.saving') : isEditMode ? t('workflows:actions.update') : t('workflows:actions.create')}
-        </Button>
-      </Box>
-    </Box>
+      <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => navigate('/image-generation?tab=workflows')} disabled={saving}>{t('workflows:actions.cancel')}</Button><Button type="button" onClick={() => void handleSubmit()} disabled={saving || Boolean(jsonError) || !name.trim() || !workflowJson.trim()}>{saving ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground" /> : <Save className="h-4 w-4" />}{saving ? t('workflows:actions.saving') : isEditMode ? t('workflows:actions.update') : t('workflows:actions.create')}</Button></div>
+    </div>
   )
 }

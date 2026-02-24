@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Alert, Box, Button, CircularProgress, Grid, Paper } from '@mui/material'
-import { PlayArrow as PlayIcon } from '@mui/icons-material'
+import { Play } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import GroupAssignModal from '@/features/image-groups/components/group-assign-modal'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { useWorkflowData } from './hooks/use-workflow-data'
 import { useServerManagement } from './hooks/use-server-management'
 import { useGroupManagement } from './hooks/use-group-management'
@@ -98,91 +100,92 @@ export function WorkflowGeneratePage() {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="h-7 w-7 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" />
+      </div>
     )
   }
 
   if (!workflow) {
     return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="error">{t('workflows:card.notFound')}</Alert>
-      </Box>
+      <div className="p-3">
+        <Alert variant="destructive"><AlertDescription>{t('workflows:card.notFound')}</AlertDescription></Alert>
+      </div>
     )
   }
 
   const connectedServers = getConnectedServers()
 
   return (
-    <Box sx={{ p: 3 }}>
+    <div className="space-y-3 p-3">
       <WorkflowHeader workflow={workflow} />
 
       {error ? (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
-      <Grid container spacing={3}>
-        <Grid size={{ xs: 12, md: 12, lg: 4 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <WorkflowFormFields workflow={workflow} formData={formData} onFieldChange={handleFieldChange} promptData={promptData.data} />
+      <div className="grid gap-3 lg:grid-cols-12">
+        <div className="space-y-3 lg:col-span-4">
+          <WorkflowFormFields workflow={workflow} formData={formData} onFieldChange={handleFieldChange} promptData={promptData.data} />
 
-            <GroupAssignment selectedGroup={selectedGroup} onOpenModal={() => setGroupModalOpen(true)} onRemove={handleRemoveGroup} />
+          <GroupAssignment selectedGroup={selectedGroup} onOpenModal={() => setGroupModalOpen(true)} onRemove={handleRemoveGroup} />
 
-            <Paper sx={{ p: 3 }}>
-              <RepeatControls
-                config={repeatConfig}
-                state={{
-                  isRunning: Object.keys(serverRepeatStates).length > 0,
-                  currentIteration: 0,
-                  totalIterations: 0,
-                }}
-                onConfigChange={setRepeatConfig}
-                onStop={() => {
-                  Object.keys(serverRepeatStates).forEach((serverId) => {
-                    handleStopServerRepeat(parseInt(serverId, 10))
-                  })
-                }}
-                namespace="workflows"
-              />
-            </Paper>
-
-            <Button
-              fullWidth
-              variant="contained"
-              size="large"
-              startIcon={<PlayIcon />}
-              onClick={handleGenerateOnAllServers}
-              disabled={connectedServers.length === 0 || !workflow.is_active || Object.keys(serverRepeatStates).length > 0}
-            >
-              {t('workflows:generate.generateAll', { count: connectedServers.length })}
-            </Button>
-
-            <RepeatExecutionStatus servers={servers} serverRepeatStates={serverRepeatStates} />
-
-            <ServerStatusList
-              workflow={workflow}
-              servers={servers}
-              serverStatus={serverStatus}
-              generationStatus={generationStatus}
-              serverRepeatStates={serverRepeatStates}
-              onGenerate={handleGenerateOnServer}
-              onStartRepeat={handleStartServerRepeat}
-              onStopRepeat={handleStopServerRepeat}
+          <Card className="p-3">
+            <RepeatControls
+              config={repeatConfig}
+              state={{
+                isRunning: Object.keys(serverRepeatStates).length > 0,
+                currentIteration: 0,
+                totalIterations: 0,
+              }}
+              onConfigChange={setRepeatConfig}
+              onStop={() => {
+                Object.keys(serverRepeatStates).forEach((serverId) => {
+                  handleStopServerRepeat(Number(serverId))
+                })
+              }}
+              namespace="workflows"
             />
+          </Card>
 
-            {!workflow.is_active ? <Alert severity="warning">{t('workflows:alerts.inactiveWarning')}</Alert> : null}
-          </Box>
-        </Grid>
+          <Button
+            className="w-full"
+            size="lg"
+            onClick={handleGenerateOnAllServers}
+            disabled={connectedServers.length === 0 || !workflow.is_active || Object.keys(serverRepeatStates).length > 0}
+          >
+            <Play className="h-4 w-4" />
+            {t('workflows:generate.generateAll', { count: connectedServers.length })}
+          </Button>
 
-        <Grid size={{ xs: 12, md: 12, lg: 8 }}>
-          <GenerationHistoryList serviceType="comfyui" workflowId={parseInt(id || '0', 10)} refreshKey={historyRefreshKey} />
-        </Grid>
-      </Grid>
+          <RepeatExecutionStatus servers={servers} serverRepeatStates={serverRepeatStates} />
+
+          <ServerStatusList
+            workflow={workflow}
+            servers={servers}
+            serverStatus={serverStatus}
+            generationStatus={generationStatus}
+            serverRepeatStates={serverRepeatStates}
+            onGenerate={handleGenerateOnServer}
+            onStartRepeat={handleStartServerRepeat}
+            onStopRepeat={handleStopServerRepeat}
+          />
+
+          {!workflow.is_active ? (
+            <Alert>
+              <AlertDescription>{t('workflows:alerts.inactiveWarning')}</AlertDescription>
+            </Alert>
+          ) : null}
+        </div>
+
+        <div className="lg:col-span-8">
+          <GenerationHistoryList serviceType="comfyui" workflowId={id ? Number(id) : 0} refreshKey={historyRefreshKey} />
+        </div>
+      </div>
 
       <GroupAssignModal open={groupModalOpen} onClose={() => setGroupModalOpen(false)} selectedImageCount={1} onAssign={handleGroupSelect} />
-    </Box>
+    </div>
   )
 }

@@ -60,7 +60,7 @@ npm run dev
 - Image Groups UI 일부(`group-breadcrumb`, `group-card`, `image-view-card`, `auto-folder-*`)를 분리 프론트 내부 구현으로 이동
 - Home 이미지 로딩/검색 훅(`hooks/use-infinite-images`, `hooks/use-paginated-images`, `hooks/use-search`)을 분리 프론트 내부 구현으로 이동
 - Settings는 `src/features/settings/settings-page.tsx` 실구현으로 전환했고 세부 패널을 `src/legacy`에서 직접 연결합니다.
-- Image Generation은 로컬 탭 셸(`features/image-generation/image-generation-page.tsx`)을 유지하고 탭을 `src/legacy/pages/ImageGeneration/*`로 직접 연결합니다.
+- Image Generation은 로컬 탭 셸(`features/image-generation/image-generation-page.tsx`)을 유지하며 `comfyui-tab`은 `src/features/image-generation/tabs/comfyui-tab.tsx` 실구현으로 전환했습니다. (`nai`, `wildcard`는 아직 `src/legacy` 의존)
 - i18n 부트스트랩을 분리 프론트 내부(`src/i18n`)로 이동하고 parity app에서 로컬 i18n을 사용
 - Group Create/Edit modal을 분리 프론트 내부(`group-create-edit-modal`, `basic-info-tab`, `auto-collect-tab`, `simple-search-tab`, `search-auto-complete`)로 이동
 - Group Image modal을 분리 프론트 내부(`group-image-grid-modal`, `group-assign-modal`, `lora-dataset-dialog`) 구현으로 이동
@@ -71,7 +71,7 @@ npm run dev
 
 ## 화면 구성
 - 현재는 **기능 동등성 우선(Parity Hybrid)** 단계입니다.
-- shadcn 기반 상단 셸/로그인/보호 라우트를 사용하고, 핵심 기능 페이지는 기존 `frontend` 페이지를 연결해 기능을 유지합니다.
+- shadcn 기반 상단 셸/로그인/보호 라우트를 사용하고, 핵심 기능 페이지는 parity를 유지하며 일부 탭/라우트는 `src/features` 실구현으로 전환 중입니다.
 
 ### Parity Hybrid 라우트
 - `/` : Home (기존 HomePage 연결)
@@ -79,7 +79,7 @@ npm run dev
 - `/upload` : shadcn 상위 페이지 + 분리 프론트 내부 업로드/프롬프트 컴포넌트 연결
 - `/settings` : 설정
 - `/image/:compositeHash` : shadcn 상위 페이지 + 기존 프롬프트/태깅 컴포넌트 연결
-- `/image-generation` : shadcn 탭 컨테이너 + 기존 생성 탭 컴포넌트 연결
+- `/image-generation` : shadcn 탭 컨테이너 + `comfyui` 탭 로컬 실구현 + 일부 탭 legacy 연결
 - `/image-generation/new` : 워크플로우 신규
 - `/image-generation/:id/edit` : 워크플로우 수정
 - `/image-generation/:id/generate` : 워크플로우 실행
@@ -91,7 +91,7 @@ npm run dev
 ## 다음 마이그레이션 슬라이스
 - 1순위: 라우트/탭 실구현을 `src/features`로 순차 이관하고 `src/legacy` 직접 의존을 줄이기
 - 분해 순서:
-  - Image Generation 탭(`nai/comfyui/wildcards`)을 `src/features/image-generation` 실구현으로 이관
-  - Workflow 페이지(`new/edit/generate`)를 `src/features/workflows` 실구현으로 이관
+  - Image Generation 잔여 탭(`nai/wildcards`)을 `src/features/image-generation` 실구현으로 이관
+  - Workflow 라우트 컨테이너에서 남은 legacy 직접 의존 제거 및 로컬 컴포넌트 치환
   - Workflow/Group modal의 `src/legacy/components` 의존을 로컬 컴포넌트로 대체
 - 목표: `src/legacy` 의존 **0개**

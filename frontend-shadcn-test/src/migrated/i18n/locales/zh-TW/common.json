@@ -1,0 +1,273 @@
+{
+  "buttons": {
+    "save": "儲存",
+    "cancel": "取消",
+    "delete": "刪除",
+    "edit": "編輯",
+    "add": "新增",
+    "upload": "上傳",
+    "download": "下載",
+    "search": "搜尋",
+    "filter": "篩選",
+    "reset": "重設",
+    "confirm": "確認",
+    "close": "關閉",
+    "back": "返回",
+    "next": "下一步",
+    "previous": "上一步",
+    "select": "選擇",
+    "deselect": "取消選擇",
+    "selectAll": "全選",
+    "deselectAll": "取消全選",
+    "apply": "套用",
+    "clear": "清除",
+    "copy": "複製"
+  },
+  "messages": {
+    "loading": "載入中...",
+    "saving": "儲存中...",
+    "success": "成功",
+    "error": "錯誤",
+    "noData": "無資料",
+    "confirmDelete": "確定要刪除嗎？",
+    "unsavedChanges": "有未儲存的變更",
+    "processing": "處理中...",
+    "uploading": "上傳中...",
+    "downloading": "下載中...",
+    "deleting": "刪除中..."
+  },
+  "labels": {
+    "name": "名稱",
+    "description": "描述",
+    "date": "日期",
+    "status": "狀態",
+    "type": "類型",
+    "size": "大小",
+    "created": "建立日期",
+    "updated": "更新日期",
+    "width": "寬度",
+    "height": "高度",
+    "duration": "時長",
+    "resolution": "解析度"
+  },
+  "imageCard": {
+    "tooltips": {
+      "viewDetails": "檢視詳情",
+      "download": "下載",
+      "delete": "刪除",
+      "select": "選擇"
+    },
+    "badges": {
+      "auto": "自動",
+      "video": "影片"
+    },
+    "confirmDelete": {
+      "image": "確定要刪除這張圖片嗎？",
+      "video": "確定要刪除這個影片嗎？"
+    }
+  },
+  "bulkActions": {
+    "selectedCount": "已選擇{{count}}個項目",
+    "selectedCountImages": "已選擇{{count}}張圖片",
+    "tooltips": {
+      "download": "下載",
+      "addToGroup": "加入群組",
+      "delete": "刪除",
+      "clearSelection": "取消選擇",
+      "batchTag": "批次標籤產生"
+    },
+    "confirmDelete": {
+      "mixed": "確定要刪除選取的{{count}}個檔案（圖片/影片）嗎？",
+      "images": "確定要刪除選取的{{count}}張圖片嗎？",
+      "videos": "確定要刪除選取的{{count}}個影片嗎？",
+      "files": "確定要刪除選取的{{count}}個檔案嗎？"
+    },
+    "confirmBatchTag": "為選取的{{count}}張圖片產生標籤？",
+    "batchTagSuccess": "已成功為{{count}}張圖片產生標籤",
+    "batchTagError": "批次標籤產生時發生錯誤"
+  },
+  "pagination": {
+    "perPage": "每頁",
+    "items": "筆",
+    "page": "頁",
+    "of": "/",
+    "showing": "顯示{{total}}筆中的{{from}}-{{to}}",
+    "goToPage": "前往頁面",
+    "rowsPerPage": "每頁列數"
+  },
+  "states": {
+    "loading": "載入中",
+    "error": "錯誤",
+    "empty": "空",
+    "status": {
+      "noImages": "未找到圖片"
+    },
+    "success": "成功",
+    "pending": "待處理",
+    "completed": "已完成",
+    "failed": "失敗"
+  },
+  "actions": {
+    "view": "檢視",
+    "download": "下載",
+    "delete": "刪除",
+    "edit": "編輯",
+    "create": "建立",
+    "update": "更新",
+    "cancel": "取消",
+    "confirm": "確認",
+    "retry": "重試",
+    "refresh": "重新整理",
+    "copy": "複製"
+  },
+  "filterModal": {
+    "title": {
+      "add": "新增篩選器",
+      "edit": "編輯篩選器"
+    },
+    "groupTypes": {
+      "label": "選擇群組",
+      "exclude": "排除",
+      "or": "OR",
+      "and": "AND"
+    },
+    "categories": {
+      "label": "類別",
+      "positive_prompt": "正向",
+      "negative_prompt": "負向",
+      "auto_tag": "自動標籤",
+      "basic": "基本"
+    },
+    "conditionSettings": {
+      "label": "條件設定",
+      "conditionType": "條件類型",
+      "value": "值",
+      "valuePlaceholder": "輸入要搜尋的值"
+    },
+    "conditionTypes": {
+      "prompt_contains": "包含",
+      "prompt_regex": "模式匹配",
+      "negative_prompt_contains": "包含",
+      "negative_prompt_regex": "模式匹配",
+      "auto_tag_exists": "自動標籤存在",
+      "auto_tag_has_character": "角色存在",
+      "auto_tag_rating": "Rating類型",
+      "auto_tag_rating_score": "Rating分數",
+      "auto_tag_general": "General標籤",
+      "auto_tag_character": "Character標籤",
+      "auto_tag_model": "模型",
+      "ai_tool": "AI工具",
+      "model_name": "模型名稱"
+    },
+    "fields": {
+      "exists": "存在",
+      "notExists": "不存在",
+      "ratingType": "Rating類型",
+      "scoreRange": "分數範圍: {{min}} ~ {{max}}",
+      "weightRange": "權重範圍: {{min}} ~ {{max}}",
+      "tagOrCharacter": "標籤/角色名",
+      "tagPlaceholder": "例如: 1girl, hatsune_miku"
+    },
+    "ratingTypes": {
+      "general": "General",
+      "sensitive": "Sensitive",
+      "questionable": "Questionable",
+      "explicit": "Explicit"
+    }
+  },
+  "filterBuilder": {
+    "groupTypes": {
+      "exclude": {
+        "label": "排除 (NOT)",
+        "labelShort": "排除",
+        "description": "排除符合這些條件的圖片（最高優先級）"
+      },
+      "or": {
+        "label": "OR群組",
+        "labelShort": "OR",
+        "description": "包含符合任一條件的圖片"
+      },
+      "and": {
+        "label": "AND群組",
+        "labelShort": "AND",
+        "description": "包含符合所有條件的圖片"
+      }
+    },
+    "categories": {
+      "positive_prompt": "正向提示詞",
+      "negative_prompt": "負向提示詞",
+      "auto_tag": "自動標籤",
+      "basic": "基本"
+    },
+    "conditionTypes": {
+      "prompt_contains": "包含",
+      "prompt_regex": "模式匹配",
+      "negative_prompt_contains": "包含",
+      "negative_prompt_regex": "模式匹配",
+      "auto_tag_exists": "自動標籤存在",
+      "auto_tag_has_character": "角色存在",
+      "auto_tag_rating": "分級類型",
+      "auto_tag_rating_score": "分級分數",
+      "auto_tag_general": "通用標籤",
+      "auto_tag_character": "角色標籤",
+      "auto_tag_model": "模型",
+      "ai_tool": "AI工具",
+      "model_name": "模型名稱"
+    },
+    "labels": {
+      "condition": "條件",
+      "conditionNumber": "條件 #{{number}}",
+      "editCondition": "編輯條件 #{{number}}",
+      "category": "分類",
+      "conditionType": "條件類型",
+      "value": "值",
+      "score": "分數",
+      "scoreRange": "分數範圍: {{min}} ~ {{max}}",
+      "weightRange": "權重範圍: {{min}} ~ {{max}}",
+      "ratingType": "分級類型",
+      "tagCharacterName": "標籤/角色名",
+      "conditionsCount": "{{count}}個條件"
+    },
+    "buttons": {
+      "addCondition": "新增條件"
+    },
+    "messages": {
+      "noConditions": "沒有條件。點擊下面的按鈕新增條件。"
+    },
+    "values": {
+      "exists": "存在",
+      "notExists": "不存在"
+    },
+    "ratingTypes": {
+      "general": "General",
+      "sensitive": "Sensitive",
+      "questionable": "Questionable",
+      "explicit": "Explicit"
+    }
+  },
+  "imageEditor": {
+    "title": "圖片編輯器",
+    "canvasInfo": "畫布資訊",
+    "canvasSize": "大小: {{width}} x {{height}} px",
+    "toolProperties": "工具屬性",
+    "brushSize": "筆刷大小: {{size}}px",
+    "brushColor": "筆刷顏色",
+    "eraserSize": "橡皮擦大小: {{size}}px",
+    "panHelp": "點擊並拖動以移動畫布。使用滑鼠滾輪放大/縮小。"
+  },
+  "clickToCopy": "點擊複製",
+  "thumbnail": "縮圖",
+  "original": "原圖",
+  "video": "影片",
+  "none": "無",
+  "enabled": "啟用",
+  "disabled": "停用",
+  "save": "儲存",
+  "refresh": "重新整理",
+  "viewSettings": "檢視設定",
+  "layout": "版面配置",
+  "columns": "欄數",
+  "masonry": "瀑布流",
+  "grid": "網格",
+  "fitToScreen": "適應螢幕"
+}

@@ -1,0 +1,282 @@
+{
+  "page": {
+    "title": "圖片產生",
+    "subtitle": "管理ComfyUI工作流程並產生圖片"
+  },
+  "tabs": {
+    "workflows": "工作流程管理",
+    "servers": "伺服器管理",
+    "novelai": "NovelAI",
+    "ariaLabel": "圖片產生分頁",
+    "comfyui": "ComfyUI",
+    "wildcards": "萬用字元"
+  },
+  "nai": {
+    "subtabs": {
+      "generate": "產生圖片",
+      "history": "歷史記錄",
+      "helper": "提示詞助手"
+    },
+    "login": {
+      "title": "NovelAI登入",
+      "subtitle": "使用您的NovelAI帳戶登入",
+      "tabs": {
+        "credentials": "電郵/密碼",
+        "token": "權杖"
+      },
+      "username": "電子郵件",
+      "password": "密碼",
+      "token": "存取權杖",
+      "tokenPlaceholder": "請輸入您的NovelAI存取權杖",
+      "tokenHint": "請輸入從NovelAI網站取得的存取權杖",
+      "loginButton": "登入",
+      "loggingIn": "登入中...",
+      "error": "登入失敗",
+      "tokenError": "權杖驗證失敗"
+    },
+    "generate": {
+      "title": "NovelAI圖片產生",
+      "logout": "登出",
+      "prompt": "提示詞",
+      "negativePrompt": "負面提示詞",
+      "resolution": "解析度",
+      "sampler": "採樣器",
+      "steps": "步數",
+      "guidance": "引導強度",
+      "samples": "樣本數",
+      "ucPreset": "品質預設",
+      "generateButton": "產生圖片",
+      "generating": "產生中...",
+      "resultTitle": "已產生的圖片",
+      "download": "下載",
+      "upload": "上傳",
+      "metadata": "中繼資料",
+      "tokenExpired": "令牌已過期。請重新登入。",
+      "subscriptionRequired": "需要有效訂閱",
+      "error": "圖片產生失敗",
+      "uploadSuccess": "圖片上傳成功",
+      "uploadError": "圖片上傳失敗",
+      "autoUploadSuccess": "已自動上傳{{count}}張圖片",
+      "autoUploadPartial": "成功{{success}}張，失敗{{fail}}張",
+      "success": "已開始產生{{count}}張圖片。請在歷史記錄標籤頁查看。",
+      "completed": "圖片產生完成",
+      "failed": "圖片產生失敗"
+    },
+    "errors": {
+      "emptyPrompt": "提示詞為空。無法產生圖片。"
+    },
+    "repeat": {
+      "title": "重複執行",
+      "enable": "啟用重複執行",
+      "count": "重複次數",
+      "infinite": "無限重複（-1）",
+      "countHelp": "1-999 或 -1（無限）",
+      "delay": "等待時間（秒）",
+      "delayHelp": "產生完成後到下次產生的等待時間（1-300秒）",
+      "progress": "正在執行第{{current}}次",
+      "progressWithTotal": "正在執行第{{current}}/{{total}}次",
+      "stop": "停止"
+    },
+    "resolution": {
+      "mode": "解析度模式",
+      "modeFixed": "固定模式",
+      "modeRandom": "隨機模式",
+      "selectResolution": "選擇解析度",
+      "selectMultiple": "選擇解析度（可多選）",
+      "addCustom": "新增自訂",
+      "swapDimensions": "交換寬高",
+      "swapDimensionsDesc": "交換所選解析度的寬度和高度",
+      "finalResolution": "最終解析度",
+      "randomPool": "隨機池",
+      "swapped": "已交換",
+      "randomSwapInfo": "每個解析度有50%的機率被交換寬高",
+      "selectAtLeastOne": "隨機模式下至少選擇一個解析度",
+      "customDialog": {
+        "addTitle": "新增自訂解析度",
+        "editTitle": "編輯自訂解析度",
+        "name": "名稱",
+        "namePlaceholder": "例：我的解析度",
+        "width": "寬度",
+        "height": "高度",
+        "save": "儲存",
+        "cancel": "取消",
+        "nameRequired": "請輸入名稱",
+        "widthInvalid": "寬度必須在64到2048之間",
+        "heightInvalid": "高度必須在64到2048之間"
+      }
+    },
+    "naiSettings": {
+      "basic": {
+        "title": "基本設定",
+        "model": "模型",
+        "resolution": "解析度",
+        "prompt": "提示詞",
+        "promptPlaceholder": "1girl, portrait, detailed face, masterpiece...",
+        "negativePrompt": "負面提示詞",
+        "negativePromptPlaceholder": "bad anatomy, low quality..."
+      },
+      "sampling": {
+        "title": "採樣設定",
+        "sampler": "採樣器",
+        "noiseSchedule": "Noise Schedule",
+        "steps": "Steps",
+        "guidance": "Guidance",
+        "cfgRescale": "CFG Rescale",
+        "uncondScale": "Uncond Scale",
+        "varietyPlus": "Variety+"
+      },
+      "output": {
+        "title": "輸出設定",
+        "samples": "樣本數"
+      }
+    },
+    "tabs": {
+      "basic": "基本設定",
+      "advanced": "進階設定"
+    },
+    "sections": {
+      "preset": "品質預設",
+      "prompts": "提示詞",
+      "output": "輸出設定",
+      "advanced": "進階設定",
+      "sampling": "採樣設定",
+      "quality": "品質設定",
+      "model": "模型選擇"
+    },
+    "anlas": {
+      "balance": "Anlas餘額",
+      "refresh": "重新整理",
+      "subscription": "訂閱",
+      "free": "免費",
+      "tablet": "Tablet",
+      "scroll": "Scroll",
+      "opus": "Opus"
+    },
+    "cost": {
+      "title": "費用估算",
+      "anlas": "Anlas",
+      "balance": "餘額",
+      "sufficient": "充足",
+      "insufficient": "不足",
+      "opusFree": "Opus免費產生",
+      "maxSamples": "最大樣本數"
+    },
+    "models": {
+      "label": "模型選擇",
+      "v45curated": "V4.5 Curated（推薦）",
+      "v45full": "V4.5 Full",
+      "v4curated": "V4 Curated",
+      "v4full": "V4 Full",
+      "v3": "V3（舊版）",
+      "v3furry": "V3 Furry"
+    },
+    "advanced": {
+      "cfgRescale": "提示引導重縮放",
+      "noiseSchedule": "雜訊時序",
+      "uncondScale": "非期望內容強度"
+    },
+    "settings": {
+      "qualityToggle": "自動新增品質標籤"
+    },
+    "presets": {
+      "title": "品質預設",
+      "label": "品質預設",
+      "quality": {
+        "name": "品質",
+        "description": "平衡品質與速度（28步，Euler）"
+      },
+      "fast": {
+        "name": "快速",
+        "description": "快速產生（15步，Euler）"
+      },
+      "artistic": {
+        "name": "藝術",
+        "description": "創意結果（35步，DPM++ 2S Ancestral，SMEA DYN）"
+      },
+      "realistic": {
+        "name": "寫實",
+        "description": "寫實圖片（40步，DPM++ 2M，SMEA）"
+      },
+      "detail": {
+        "name": "細節",
+        "description": "最大化細節（50步，DPM++ SDE，SMEA DYN）"
+      }
+    },
+    "gallery": {
+      "images": "圖片",
+      "showMetadata": "顯示中繼資料",
+      "hideMetadata": "隱藏中繼資料",
+      "downloadAll": "下載全部"
+    },
+    "history": {
+      "title": "產生歷史",
+      "comingSoon": "此功能即將推出。",
+      "description": "檢視先前產生的圖片和設定。"
+    },
+    "groupSelector": {
+      "title": "群組分配",
+      "selectButton": "選擇群組",
+      "description": "生成的圖像將自動加入所選群組"
+    }
+  },
+  "customDropdown": {
+    "title": "自訂下拉式選單",
+    "buttons": {
+      "addList": "新增清單",
+      "loadComfyUI": "載入ComfyUI模型",
+      "edit": "編輯",
+      "delete": "刪除",
+      "close": "關閉",
+      "cancel": "取消",
+      "create": "建立",
+      "collect": "收集模型",
+      "viewList": "檢視清單",
+      "selectFolder": "選擇models資料夾"
+    },
+    "tabs": {
+      "autoCollected": "自動收集",
+      "manual": "手動建立"
+    },
+    "labels": {
+      "auto": "自動",
+      "itemCount": "{{count}}項",
+      "listName": "清單名稱",
+      "listNameRequired": "清單名稱 *",
+      "description": "描述",
+      "path": "路徑",
+      "itemList": "項目清單（每行一項）*",
+      "itemListCount": "項目清單（{{count}}項）",
+      "pathOptions": "路徑選項：",
+      "checkpointsFullPath": "checkpoints - 包含完整路徑",
+      "unetFullPath": "unet - 包含完整路徑",
+      "upscaleModelsFullPath": "upscale_models - 包含完整路徑"
+    },
+    "dialog": {
+      "viewTitle": "檢視清單（唯讀）",
+      "createTitle": "新增自訂清單",
+      "editTitle": "編輯自訂清單",
+      "comfyUITitle": "載入ComfyUI模型"
+    },
+    "messages": {
+      "noAutoCollected": "沒有自動收集的清單。使用\"載入ComfyUI模型\"按鈕掃描模型。",
+      "noManual": "沒有手動建立的清單。使用\"新增清單\"按鈕建立清單。",
+      "minItemError": "請至少輸入1個項目。",
+      "deleteConfirm": "確定要刪除此清單嗎？",
+      "selectFolderError": "請選擇模型資料夾。",
+      "autoCollectedReadOnly": "自動收集的項目無法編輯。您只能檢視內容。",
+      "selectComfyUIFolder": "請選擇ComfyUI的models資料夾。",
+      "foldersDetected": "在{{count}}個資料夾中偵測到模型檔案：",
+      "fileCount": "{{count}}個檔案",
+      "moreCount": "...還有{{count}}個資料夾",
+      "collecting": "收集中...",
+      "pathExample": "例如：{{example}}",
+      "scanInfo": "掃描資訊：\n• 自動收集checkpoints、unet和upscale_models資料夾\n• 重新掃描相同資料夾將更新項目\n• 自動收集的項目可在\"自動收集\"標籤頁中檢視"
+    },
+    "placeholders": {
+      "itemList": "範例：\nSDXL 1.0\nSD 1.5\nRealistic Vision\nDreamShaper"
+    },
+    "helperText": {
+      "itemList": "每項用換行符號分隔"
+    }
+  }
+}

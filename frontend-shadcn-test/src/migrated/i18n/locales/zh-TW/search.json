@@ -1,0 +1,218 @@
+{
+  "title": "圖像搜尋",
+  "description": "可以透過提示詞、AI工具、模型名稱、自動標籤等搜尋圖像。",
+  "searchInput": {
+    "placeholder": "按提示詞關鍵字搜尋...",
+    "button": "搜尋",
+    "clear": "全部重設",
+    "execute": "執行搜尋"
+  },
+  "simpleSearch": {
+    "description": "在正面提示詞和自動標籤中搜尋。",
+    "placeholder": "輸入搜尋詞 (例如: girl, masterpiece, hatsune miku)",
+    "helpTooltip": {
+      "searchScope": "搜尋範圍: 正面提示詞、自動標籤 General/Character",
+      "ignoreWeights": "權重將被忽略",
+      "advancedTip": "複雜條件請使用 \"進階搜尋\""
+    },
+    "tooltips": {
+      "logic": "邏輯模式 (點擊切換: OR/AND/NOT)",
+      "type": "Token類型 (點擊切換: 正向/負向/自動)"
+    }
+  },
+  "results": {
+    "title": "搜尋結果",
+    "searching": "搜尋中...",
+    "found": "找到{{count}}張圖像。",
+    "noResults": "未找到搜尋結果",
+    "noResultsHint": "嘗試其他關鍵詞或調整過濾器。",
+    "initialMessage": "輸入關鍵詞搜尋圖像",
+    "initialHint": "可以透過提示詞、AI工具、模型名稱、自動標籤、日期等搜尋。",
+    "reset": "重設搜尋",
+    "refresh": "重新整理"
+  },
+  "filters": {
+    "basic": {
+      "aiTool": {
+        "label": "AI工具",
+        "all": "全部"
+      },
+      "modelName": {
+        "label": "模型名稱",
+        "placeholder": "例如: sd_xl_base_1.0"
+      },
+      "startDate": {
+        "label": "開始日期"
+      },
+      "endDate": {
+        "label": "結束日期"
+      }
+    },
+    "quickDate": {
+      "today": "今天",
+      "todayTooltip": "今天上傳的圖像",
+      "7days": "7天",
+      "7daysTooltip": "最近7天",
+      "30days": "30天",
+      "30daysTooltip": "最近30天",
+      "90days": "90天",
+      "90daysTooltip": "最近90天"
+    },
+    "advanced": {
+      "title": "進階篩選",
+      "active": "活動",
+      "negativePrompt": {
+        "label": "負面提示詞",
+        "placeholder": "輸入要排除的關鍵詞 (例如: ugly, blurry)"
+      }
+    },
+    "autoTag": {
+      "title": "自動標籤篩選",
+      "subtitle": "(WD v3 Tagger)",
+      "active": "活動",
+      "tabs": {
+        "rating": "評級",
+        "character": "角色",
+        "generalTags": "通用標籤"
+      },
+      "rating": {
+        "typeMode": "按類型篩選",
+        "scoreMode": "按分數篩選",
+        "typeDescription": "按特定評級類型的置信度範圍篩選",
+        "scoreDescription": "按設定中配置的加權總分篩選",
+        "type": {
+          "label": "評級類型",
+          "none": "無選擇",
+          "general": "一般",
+          "sensitive": "敏感",
+          "questionable": "可疑",
+          "explicit": "露骨"
+        },
+        "confidenceRange": "置信度範圍",
+        "scoreRange": "分數範圍"
+      },
+      "character": {
+        "description": "按角色標籤篩選圖像",
+        "existence": {
+          "label": "角色存在",
+          "all": "全部",
+          "true": "存在",
+          "false": "不存在"
+        },
+        "name": {
+          "label": "角色名稱",
+          "placeholder": "例如: hatsune_miku"
+        },
+        "confidenceRange": "置信度範圍"
+      },
+      "generalTags": {
+        "description": "按通用標籤和置信度範圍篩選",
+        "tagName": {
+          "label": "標籤名稱",
+          "placeholder": "例如: 1girl, solo, landscape"
+        },
+        "confidence": "置信度: {{min}} ~ {{max}}",
+        "addedTags": "已新增標籤 ({{count}}個)"
+      }
+    }
+  },
+  "searchHistory": {
+    "title": "最近搜尋"
+  },
+  "advancedTab": {
+    "title": "複合篩選搜尋",
+    "descriptionActive": "{{count}}個篩選器正在應用 · 執行順序: 排除 → OR → AND",
+    "descriptionEmpty": "新增篩選器以開始精細搜尋",
+    "helpTooltip": "篩選器使用說明"
+  },
+  "searchBar": {
+    "tabs": {
+      "simple": "一般搜尋",
+      "advanced": "進階搜尋"
+    },
+    "buttons": {
+      "search": "搜尋",
+      "searching": "搜尋中...",
+      "reset": "重設"
+    },
+    "validation": {
+      "searchTextRequired": "請輸入搜尋詞",
+      "filterRequired": "請新增至少一個條件",
+      "filterError": "篩選器 {{index}}: {{error}}",
+      "booleanRequired": "值必須是 是/否",
+      "valueRequired": "請輸入值",
+      "scoreRequired": "請設定最小分數或最大分數"
+    }
+  },
+  "filterBlock": {
+    "addButton": "新增篩選器",
+    "emptyMessage": "新增篩選器以開始搜尋",
+    "countInfo": "將套用{{count}}個篩選器。",
+    "executionOrder": "執行順序: 排除 → OR → AND",
+    "modal": {
+      "title": "新增篩選器",
+      "cancel": "取消",
+      "back": "返回",
+      "next": "下一步",
+      "add": "新增篩選器",
+      "steps": {
+        "selectGroup": "選擇篩選器組",
+        "selectCategory": "選擇類別",
+        "configureCondition": "配置條件"
+      },
+      "step1": {
+        "description": "選擇如何套用篩選器"
+      },
+      "step2": {
+        "description": "選擇要搜尋的資訊類型"
+      },
+      "step3": {
+        "description": "配置條件。篩選器建立後無法編輯，必須刪除並重新建立。"
+      }
+    },
+    "groupTypes": {
+      "exclude": {
+        "label": "排除 (NOT)",
+        "description": "從結果中排除符合此條件的圖像"
+      },
+      "or": {
+        "label": "OR組",
+        "description": "將符合此條件的圖像包含在結果中"
+      },
+      "and": {
+        "label": "AND組",
+        "description": "僅包含符合所有條件的圖像"
+      }
+    },
+    "categories": {
+      "positive_prompt": {
+        "label": "正面提示詞",
+        "description": "搜尋圖像生成中使用的正面提示詞"
+      },
+      "negative_prompt": {
+        "label": "負面提示詞",
+        "description": "搜尋圖像生成中使用的負面提示詞"
+      },
+      "auto_tag": {
+        "label": "自動標籤 (WD Tagger)",
+        "description": "搜尋WD v3 Tagger自動產生的標籤"
+      },
+      "basic": {
+        "label": "基本資訊",
+        "description": "搜尋AI工具和模型名稱等基本詮釋資料"
+      }
+    },
+    "conditionTypes": {
+      "conditionType": "條件類型",
+      "value": "值",
+      "placeholder": "輸入要搜尋的值",
+      "scoreRange": "分數範圍",
+      "weightRange": "權重範圍",
+      "tagName": "標籤/角色名稱",
+      "tagPlaceholder": "例如: 1girl, hatsune_miku",
+      "ratingType": "評級類型",
+      "exists": "存在",
+      "notExists": "不存在"
+    }
+  }
+}

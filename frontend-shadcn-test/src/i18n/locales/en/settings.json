@@ -1,0 +1,890 @@
+{
+  "title": "Settings",
+  "subtitle": "Manage your ComfyUI Image Manager application settings",
+  "tabs": {
+    "general": "General Settings",
+    "tagger": "Tagger Settings",
+    "rating": "Rating Score Settings",
+    "similarity": "Image Similarity Search",
+    "prompts": "Prompt Management",
+    "metadata": "Metadata Extraction",
+    "folders": "Folder Management",
+    "account": "Account",
+    "externalApi": "External API",
+    "advanced": "Advanced Settings",
+    "auto": "Auto Prompts"
+  },
+  "general": {
+    "title": "General Settings",
+    "language": {
+      "label": "Language",
+      "description": "Select the application display language",
+      "ko": "한국어",
+      "en": "English",
+      "ja": "日本語",
+      "zh-CN": "简体中文",
+      "zh-TW": "繁體中文"
+    },
+    "gallery": {
+      "label": "Enable Gallery",
+      "tooltip": "Show gallery page in menu and navigation. When disabled, only masonry view will be used."
+    },
+    "canvasCleanup": {
+      "label": "Auto cleanup Canvas folder on shutdown",
+      "tooltip": "Automatically delete edited images in the Canvas folder when the server shuts down. When disabled, edited images are preserved."
+    },
+    "deleteProtection": {
+      "title": "Delete File Protection",
+      "description": "Store deleted files in RecycleBin folder for recovery",
+      "enabled": {
+        "label": "Store deleted files in RecycleBin",
+        "description": "When enabled, deleted files are backed up to RecycleBin folder instead of being permanently removed."
+      },
+      "info": "RecycleBin folder is created in the project root. Deleted files are stored with timestamps. You can manually copy files from RecycleBin if recovery is needed."
+    },
+    "metadata": {
+      "title": "Metadata Extraction Optimization",
+      "scanMode": {
+        "title": "Stealth PNG Scan Mode",
+        "fast": {
+          "label": "Fast (Recommended)",
+          "description": "Quick signature scan - checks first 200 pixels then exits early"
+        },
+        "full": {
+          "label": "Full",
+          "description": "Full file scan - checks all pixels (slow)"
+        },
+        "skip": {
+          "label": "Skip",
+          "description": "Skip scanning - disables secondary extraction"
+        }
+      },
+      "limits": {
+        "title": "File Size and Resolution Limits",
+        "fileSize": {
+          "label": "Max File Size (MB)",
+          "helper": "Files larger than this will skip Stealth PNG scanning"
+        },
+        "resolution": {
+          "label": "Max Resolution (Megapixels)",
+          "helper": "Images larger than this will skip Stealth PNG scanning"
+        }
+      },
+      "skipSettings": {
+        "title": "AI Tool Skip Settings",
+        "description": "Automatically skip Stealth PNG scanning for specific AI tool images.",
+        "comfyui": {
+          "label": "Skip ComfyUI images (Recommended)",
+          "description": "ComfyUI doesn't use Stealth PNG, scanning unnecessary"
+        },
+        "webui": {
+          "label": "Skip WebUI images",
+          "description": "WebUI may use Stealth PNG, enable only if needed"
+        }
+      },
+      "secondary": {
+        "label": "Enable secondary extraction",
+        "description": "Retry with Stealth PNG method if primary extraction fails."
+      },
+      "performanceNote": "💡 Tip: Default settings (Fast + ComfyUI skip) provide optimal performance for most cases. ComfyUI image processing time reduced from 2682ms → 4ms!"
+    },
+    "thumbnail": {
+      "title": "Thumbnail Settings",
+      "description": "Configure the size and quality used when generating thumbnails",
+      "saveFailed": "Failed to save thumbnail settings",
+      "size": {
+        "label": "Thumbnail Size",
+        "selectLabel": "Thumbnail Size",
+        "original": "Same as original",
+        "default": "1080px (default)"
+      },
+      "quality": {
+        "label": "Thumbnail Quality",
+        "helperText": "Higher quality increases file size (60-100%)"
+      },
+      "regenerate": {
+        "button": "Regenerate Thumbnails",
+        "description": "Regenerate thumbnails for all images with current settings"
+      }
+    }
+  },
+  "tagger": {
+    "title": "WD Tagger Settings",
+    "description": "Configure AI-based automatic image tagging",
+    "enableAutoTagging": "Enable Auto-Tagging",
+    "model": {
+      "label": "Model Selection",
+      "loading": "Loading models...",
+      "downloaded": "Downloaded",
+      "vit": {
+        "label": "ViT (Vision Transformer)",
+        "description": "Fast speed, high accuracy - recommended for general use"
+      },
+      "swinv2": {
+        "label": "SwinV2 (Swin Transformer V2)",
+        "description": "Moderate speed, very high accuracy - for cases requiring high accuracy"
+      },
+      "convnext": {
+        "label": "ConvNeXt",
+        "description": "Fast speed, high accuracy - for cases requiring fast processing"
+      }
+    },
+    "device": {
+      "label": "Device Selection",
+      "auto": {
+        "title": "Auto",
+        "description": "Use GPU if available, otherwise CPU"
+      },
+      "cpu": {
+        "title": "CPU",
+        "description": "CPU only (slower but stable)"
+      },
+      "cuda": {
+        "title": "GPU (CUDA)",
+        "description": "Use NVIDIA GPU (fast, requires GPU)"
+      }
+    },
+    "threshold": {
+      "general": {
+        "label": "General Tags Threshold: {{value}}",
+        "description": "Lower values extract more tags (may increase noise)"
+      },
+      "character": {
+        "label": "Character Tags Threshold: {{value}}",
+        "description": "Lower values detect more characters (may increase false positives)"
+      }
+    },
+    "pythonPath": {
+      "label": "Python Executable Path",
+      "helper": "Path to Python executable (e.g., python, python3, C:\\Python39\\python.exe)"
+    },
+    "memoryManagement": {
+      "title": "Memory Management",
+      "description": "Configure how the model is unloaded from memory.",
+      "keepModelLoaded": "Enable Auto-Unload After Tasks",
+      "autoUnloadMinutes": "Auto-Unload Time: {{minutes}} minutes",
+      "autoUnloadDescription": "Automatically unloads from memory after the configured time since last use.",
+      "keepLoadedAlert": "Model will be automatically unloaded from memory after the configured time.",
+      "notKeepLoadedAlert": "Model will remain in memory. It will stay loaded until manually unloaded or program shutdown."
+    },
+    "test": {
+      "title": "Test",
+      "description": "Test current settings with a specific image.",
+      "imageHash": "Image Hash",
+      "placeholderHash": "e.g., abc123def456...",
+      "button": "Run Test",
+      "processing": "Processing...",
+      "result": "Tagging Result:",
+      "failed": "Test failed"
+    },
+    "batch": {
+      "confirmDialog": {
+        "resetMessage": "Are you sure you want to reset ALL auto tags? This will clear active tags and queue images for background processing."
+      },
+      "alerts": {
+        "resetComplete": "Reset complete. Queued for background processing.",
+        "resetFailed": "Failed to reset tags"
+      }
+    },
+    "buttons": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "download": "Download Model",
+      "downloading": "Checking download info...",
+      "checkDependencies": "Check Python Dependencies",
+      "checking": "Checking dependencies..."
+    }
+  },
+  "rating": {
+    "title": "Rating Score Settings",
+    "description": "Configure the image rating score system",
+    "weights": {
+      "title": "Weight Configuration",
+      "description": "Configure scoring weights for each rating category.",
+      "general": "General: {{value}}",
+      "sensitive": "Sensitive: {{value}}",
+      "questionable": "Questionable: {{value}}",
+      "explicit": "Explicit: {{value}}",
+      "preview": {
+        "title": "Live Preview (Example Rating: general=0.001, sensitive=0.045, questionable=0.735, explicit=0.470)",
+        "score": "Total Score: <strong>{{score}} points</strong>"
+      },
+      "buttons": {
+        "save": "Save Weights",
+        "cancel": "Cancel",
+        "saving": "Saving..."
+      },
+      "alerts": {
+        "saveSuccess": "Weight settings have been saved.",
+        "saveFailed": "Failed to save weight settings.",
+        "loadFailed": "Failed to load weight settings."
+      }
+    },
+    "tiers": {
+      "title": "Tier Configuration",
+      "description": "Configure rating tiers by score range.",
+      "addButton": "Add Tier",
+      "table": {
+        "order": "Order",
+        "name": "Tier Name",
+        "scoreRange": "Score Range",
+        "color": "Color",
+        "actions": "Actions",
+        "empty": "No tiers. Please add a tier.",
+        "scoreFormat": "{{min}} ~ {{max}} points",
+        "infinity": "∞"
+      },
+      "dialog": {
+        "createTitle": "Add Tier",
+        "editTitle": "Edit Tier",
+        "tierName": "Tier Name",
+        "minScore": "Minimum Score",
+        "maxScore": "Maximum Score (empty = infinity)",
+        "order": "Order",
+        "color": "Color (Hex)",
+        "colorPlaceholder": "#2196f3",
+        "colorHelper": "e.g., #22c55e, #3b82f6, #f59e0b, #ef4444",
+        "save": "Save",
+        "cancel": "Cancel",
+        "saving": "Saving...",
+        "requiredFields": "Please fill in all required fields."
+      },
+      "alerts": {
+        "created": "Tier has been added.",
+        "updated": "Tier has been updated.",
+        "deleted": "Tier has been deleted.",
+        "saveFailed": "Failed to save tier.",
+        "deleteFailed": "Failed to delete tier.",
+        "loadFailed": "Failed to load tier settings.",
+        "deleteConfirm": "Delete this tier?"
+      }
+    },
+    "calculator": {
+      "title": "Score Calculator Test",
+      "description": "Enter rating values to calculate the score.",
+      "general": "General: {{value}}",
+      "sensitive": "Sensitive: {{value}}",
+      "questionable": "Questionable: {{value}}",
+      "explicit": "Explicit: {{value}}",
+      "calculate": "Calculate Score",
+      "calculating": "Calculating...",
+      "result": {
+        "title": "Calculation Result",
+        "score": "Total Score: <strong>{{score}} points</strong>",
+        "breakdown": "Detailed Scores:",
+        "generalScore": "General: {{score}} points",
+        "sensitiveScore": "Sensitive: {{score}} points",
+        "questionableScore": "Questionable: {{score}} points",
+        "explicitScore": "Explicit: {{score}} points"
+      },
+      "failed": "Failed to calculate score."
+    },
+    "recalculation": {
+      "title": "Recalculate Rating Scores",
+      "description": "Recalculate rating_score for all images based on current weight settings. All images with auto_tags will be processed.",
+      "buttons": {
+        "recalculate": "Recalculate All Image Scores",
+        "processing": "Recalculating..."
+      },
+      "progress": "Recalculation in progress... {{current}}/{{total}}",
+      "success": "Recalculation complete: {{success}} succeeded, {{failed}} failed out of {{total}}",
+      "failed": "Failed to recalculate scores.",
+      "confirmDialog": {
+        "title": "Recalculate Rating Scores",
+        "message": "Recalculate rating_score for all images? This may take some time.",
+        "confirm": "Recalculate",
+        "cancel": "Cancel"
+      }
+    }
+  },
+  "thumbnail": {
+    "title": "Thumbnail Settings",
+    "description": "Configure size and quality used for thumbnail generation",
+    "saveFailed": "Failed to save thumbnail settings",
+    "size": {
+      "label": "Thumbnail Size",
+      "selectLabel": "Thumbnail Size",
+      "original": "Same as original size",
+      "default": "1080px (default)"
+    },
+    "quality": {
+      "label": "Thumbnail Quality",
+      "helperText": "Higher quality increases file size (60-100%)"
+    },
+    "regenerate": {
+      "button": "Regenerate Thumbnails",
+      "description": "Regenerate all image thumbnails with current settings"
+    }
+  },
+  "background": {
+    "title": "Background Task Monitoring",
+    "loadFailed": "Failed to load background task status",
+    "confirmReset": "Reset background queue? All pending tasks will be cancelled.",
+    "resetFailed": "Failed to reset queue",
+    "resetQueue": "Reset Queue",
+    "autoTagFailed": "Failed to trigger auto-tagging",
+    "confirmHashGen": "Generate hash for {{count}} images?",
+    "hashGenComplete": "Hash generation complete: {{processed}} succeeded, {{failed}} failed",
+    "hashGenFailed": "Failed to regenerate hashes",
+    "confirmVerify": "Verify {{count}} files?\\nThis may take time if there are many files.",
+    "verifyFailed": "Failed to run file verification",
+    "verifyIntervalError": "Verification interval must be between 300-86400 seconds",
+    "verifySaveFailed": "Failed to save file verification settings",
+    "autoUpdate": "Auto-updates every 5 seconds.",
+    "autoUpdateDisabled": "Auto-update is disabled.",
+    "queue": {
+      "title": "Background Queue",
+      "pending": "Pending: {{count}}",
+      "processing": "Processing",
+      "waiting": "Waiting"
+    },
+    "tasks": {
+      "metadata": "Metadata Extraction",
+      "promptCollection": "Prompt Collection",
+      "pendingCount": "{{count}} pending"
+    },
+    "autoTag": {
+      "title": "Auto-Tagging Scheduler",
+      "manualTrigger": "Manual Run",
+      "running": "Running",
+      "stopped": "Stopped",
+      "untaggedCount": "Untagged images: {{count}}",
+      "pollingInterval": "Polling interval: {{seconds}}s",
+      "batchSize": "Batch size: {{size}}"
+    },
+    "hash": {
+      "title": "Media Hash Status",
+      "generate": "Generate Hash",
+      "total": "Total: {{count}}",
+      "completed": "Hash generated: {{count}}",
+      "pending": "Not generated: {{count}}",
+      "completion": "Completion: {{percent}}%"
+    },
+    "verify": {
+      "title": "File Verification Status",
+      "viewLogs": "View Logs",
+      "run": "Run Verification",
+      "progress": "File verification in progress: {{checked}}/{{total}}",
+      "missing": "Missing: {{count}}",
+      "totalFiles": "Total files: {{count}}",
+      "missingFiles": "Missing files: {{count}}",
+      "lastVerification": "Last verification: {{date}}",
+      "schedulerTitle": "Verification Scheduler Settings",
+      "intervalLabel": "Verification Interval (seconds)",
+      "intervalHelper": "300-86400 seconds (5 min - 24 hours)",
+      "intervalTooltip": "May cause time consumption and system load if there are many files"
+    }
+  },
+  "similarity": {
+    "title": "Image Similarity Search Settings",
+    "autoGenerateHash": "Auto-generate Hash on Upload",
+    "description": "Automatically generate hashes for similar image search",
+    "hashPlaceholder": "e.g., a1b2c3d4e5f6...",
+    "systemStatus": {
+      "title": "System Status",
+      "description": "Current status of the image similarity search system.",
+      "totalImages": "Total images: {{count}}",
+      "withHash": "Hash generated: {{count}}",
+      "withoutHash": "Not generated: {{count}}",
+      "completion": "Completion: {{percent}}%",
+      "autoGenerateHash": "Auto-generate hash on upload",
+      "rebuildButton": "Generate all missing image hashes ({{count}})",
+      "rebuildingButton": "Generating...",
+      "refreshButton": "Refresh statistics",
+      "rebuildProgress": "Hash generation in progress... {{processed}} completed/{{total}} total ({{percent}}% complete)",
+      "allComplete": "All images have hashes generated!",
+      "allCompleteShort": "Complete",
+      "rebuildComplete": "Processing complete: {{processed}} image hashes generated.",
+      "rebuildCompleteWithErrors": "Processing complete: {{success}} succeeded, {{failed}} failed",
+      "rebuildFailed": "Hash rebuild failed",
+      "noImagesToProcess": "No images to process.",
+      "autoGenerateUpdateFailed": "Failed to update settings"
+    },
+    "test": {
+      "title": "Test",
+      "description": "Test current settings with a specific image.",
+      "imageHash": "Image Hash",
+      "placeholderHash": "e.g., abc123def456...",
+      "compositeHash": "Image Hash",
+      "hashHelperText": "Enter the image's composite_hash",
+      "button": "Run Test",
+      "processing": "Processing...",
+      "result": "Tagging Result:",
+      "failed": "Test failed",
+      "hashStatus": "Hash Status",
+      "rebuild": {
+        "button": "Rebuild {{count}} Missing Hashes",
+        "rebuilding": "Rebuilding...",
+        "success": "Processed: {{processed}}, Failed: {{failed}}, Remaining: {{remaining}}",
+        "error": "Error: {{error}}"
+      }
+    },
+    "duplicateScan": {
+      "title": "Full Duplicate Analysis",
+      "description": "Find duplicate image groups across the entire database.",
+      "scanButton": "Run Full Scan",
+      "scanning": "Scanning...",
+      "foundGroups": "Found Duplicate Groups: {{count}}",
+      "groupLabel": "Group {{id}} • {{count}} images",
+      "similarityLabel": "{{percent}}% similar",
+      "moreImages": "+{{count}} more",
+      "noResults": "Run scan to display duplicate image groups.",
+      "id": "ID: {{id}}",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "keepOne": "Keep 1",
+      "keepOneDelete": "Keep first image and select rest for deletion",
+      "deleteSelected": "Delete {{count}} Selected",
+      "deleteConfirmTitle": "Confirm Image Deletion",
+      "deleteConfirmMessage": "Are you sure you want to delete {{count}} selected images?",
+      "deleteWarning": "Deleted images cannot be recovered!",
+      "cancel": "Cancel",
+      "confirmDelete": "Delete",
+      "deleting": "Deleting...",
+      "deleteSuccess": "{{count}} images deleted successfully.",
+      "deletePartialSuccess": "{{success}} succeeded, {{failed}} failed",
+      "deleteFailed": "Failed to delete images."
+    }
+  },
+  "auth": {
+    "forgotAccount": {
+      "title": "Forgot your account?",
+      "description": "If you forgot your password, you can recover your account using the following method.",
+      "methodTitle": "Recovery Method:",
+      "step1": "Stop the server",
+      "step2": "Delete the file below",
+      "step3": "Restart the server",
+      "step4": "Set up a new account",
+      "fileToDelete": "File to delete:",
+      "warning": "⚠️ Warning: Deleting this file will invalidate all sessions and require re-login.",
+      "warningNote": "Other data such as workflows and settings will not be affected."
+    },
+    "setup": {
+      "title": "Setup Authentication",
+      "description": "Configure username and password to protect your image manager from unauthorized access. Once set, you will need to login to access the application.",
+      "username": "Username",
+      "password": "Password",
+      "confirmPassword": "Confirm Password",
+      "button": "Setup Authentication",
+      "success": "Authentication configured successfully! You will need to login on your next visit.",
+      "errors": {
+        "required": "Username and password are required",
+        "mismatch": "Passwords do not match",
+        "failed": "Failed to setup authentication"
+      }
+    },
+    "update": {
+      "title": "Change Credentials",
+      "description": "Changing your credentials will require you to login again with the new credentials.",
+      "currentPassword": "Current Password",
+      "newUsername": "New Username",
+      "newPassword": "New Password",
+      "confirmNewPassword": "Confirm New Password",
+      "button": "Update Credentials",
+      "success": "Credentials updated successfully!",
+      "errors": {
+        "required": "All fields are required",
+        "mismatch": "New passwords do not match",
+        "failed": "Failed to update credentials"
+      }
+    }
+  },
+  "messages": {
+    "saveSuccess": "Settings saved successfully",
+    "saveFailed": "Failed to save settings",
+    "loadFailed": "Failed to load settings"
+  },
+  "thumbnailRegeneration": {
+    "title": "Thumbnail Regeneration",
+    "sections": {
+      "currentStatus": "Current Status"
+    },
+    "stats": {
+      "totalFiles": "Total Files:",
+      "withThumbnail": "With Thumbnail:",
+      "withoutThumbnail": "Without Thumbnail:"
+    },
+    "phases": {
+      "verifying": "Verifying files...",
+      "deleting": "Deleting existing thumbnails...",
+      "generating": "Generating thumbnails...",
+      "completed": "Completed",
+      "waiting": "Waiting"
+    },
+    "time": {
+      "seconds": "{{elapsed}}s",
+      "minutesSeconds": "{{minutes}}m {{seconds}}s"
+    },
+    "status": {
+      "completed": "Completed",
+      "inProgress": "In Progress"
+    },
+    "progress": {
+      "deletedThumbnails": "Deleted Thumbnails:",
+      "generatedThumbnails": "Generated Thumbnails:",
+      "elapsedTime": "Elapsed Time:"
+    },
+    "messages": {
+      "success": "Thumbnail regeneration completed!",
+      "loadStatsFailed": "Failed to load statistics",
+      "alreadyRunning": "Thumbnail regeneration is already running",
+      "startFailed": "Failed to start thumbnail regeneration"
+    },
+    "instructions": {
+      "title": "Thumbnail regeneration will proceed in the following order:",
+      "step1": "1. Verify files",
+      "step2": "2. Delete existing thumbnails",
+      "step3": "3. Generate new thumbnails",
+      "warning": "Warning:",
+      "warningText": "This may take a long time depending on the number of files."
+    },
+    "buttons": {
+      "close": "Close",
+      "start": "Start Regeneration",
+      "starting": "Starting...",
+      "inProgress": "In Progress..."
+    }
+  },
+  "folderSettings": {
+    "title": "Folder Management",
+    "subtitle": "Configure watched folders and monitor background task status.",
+    "scheduler": {
+      "title": "Scheduler Settings",
+      "backgroundHash": {
+        "title": "Background Hash Monitoring Interval",
+        "tooltip": "Execution interval for background task (Phase 2) that generates hashes for uploaded files. Shorter intervals process faster but increase system load.",
+        "intervalLabel": "Interval (seconds)",
+        "intervalTooltip": "Period to check for unprocessed hash tasks. Can be set between 5-300 seconds.",
+        "saveButton": "Save",
+        "savingButton": "Saving...",
+        "errorRange": "Interval must be between 5-300 seconds",
+        "errorSave": "Failed to save settings"
+      },
+      "autoTagger": {
+        "title": "Auto-Tagging Scheduler",
+        "tooltip": "Configure polling interval and batch size for auto-tagging scheduler. Shorter polling intervals and larger batch sizes process faster but increase system load.",
+        "pollingIntervalLabel": "Polling Interval (seconds)",
+        "pollingIntervalTooltip": "Period to check for untagged images. Can be set between 5-300 seconds.",
+        "batchSizeLabel": "Batch Size (images)",
+        "batchSizeTooltip": "Number of images to process at once. Can be set between 1-100 images.",
+        "saveButton": "Save",
+        "savingButton": "Saving...",
+        "errorPollingRange": "Polling interval must be between 5-300 seconds",
+        "errorBatchRange": "Batch size must be between 1-100",
+        "errorSave": "Failed to save settings"
+      }
+    },
+    "watchedFolders": {
+      "title": "Watched Folders List",
+      "addFolder": "Add Folder",
+      "refresh": "Refresh",
+      "viewAllLogs": "All Logs",
+      "scanAll": "Scan All",
+      "scanning": "Scanning...",
+      "noName": "Unnamed",
+      "active": "Active",
+      "inactive": "Inactive",
+      "autoScanInterval": "{{interval}}min",
+      "scanStatus": "Scan",
+      "lastScan": "Last scan: {{date}}",
+      "noScanHistory": "No scan history",
+      "watcherStatus": {
+        "starting": "Starting...",
+        "watching": "Watching",
+        "error": "Error",
+        "stopped": "Stopped",
+        "inactive": "Inactive"
+      },
+      "tooltips": {
+        "scan": "Scan",
+        "log": "Log",
+        "edit": "Edit",
+        "delete": "Delete",
+        "watcherStart": "Start watching",
+        "watcherStop": "Stop watching",
+        "processing": "Processing..."
+      },
+      "messages": {
+        "loadFailed": "Failed to load folder list",
+        "deleteFailed": "Failed to delete folder",
+        "deleteConfirm": "Delete folder \"{{name}}\"?",
+        "scanFailed": "Failed to scan folder",
+        "scanAllFailed": "Failed to scan all folders",
+        "scanAllComplete": "Full scan complete: {{totalFolders}} folders, {{totalNew}} new, {{totalExisting}} existing{{errors}}",
+        "scanAllErrors": ", {{totalErrors}} errors",
+        "watcherStartFailed": "Failed to start real-time monitoring",
+        "watcherStopFailed": "Failed to stop real-time monitoring"
+      }
+    },
+    "dialog": {
+      "addTitle": "Add Folder",
+      "editTitle": "Edit Folder",
+      "folderPath": "Folder Path *",
+      "folderPathDisabled": "Folder path cannot be edited",
+      "folderPathHelper": "Enter absolute path (e.g., D:\\Images or \\\\192.168.1.100\\Share\\Images)",
+      "folderName": "Folder Name",
+      "folderNameHelper": "If left blank, folder name will be used automatically",
+      "watcherEnabled": "Enable Real-time File Monitoring",
+      "watcherTooltip": "Real-time monitoring immediately detects file additions/modifications/deletions in the folder and processes them automatically. Works independently of auto-scan and provides faster response.",
+      "pollingInterval": "Polling Interval (for Network Drives)",
+      "pollingIntervalTooltip": "For network drives, file changes are detected using polling method. Shorter intervals detect faster but increase network load. Leave blank for auto-detection (default: 1000ms).",
+      "pollingIntervalLabel": "Polling Interval (milliseconds)",
+      "pollingIntervalPlaceholder": "Auto-detect (Network drive: 1000ms)",
+      "pollingIntervalHelper": "Leave blank for automatic configuration. Recommended: 500-3000ms",
+      "autoScan": "Enable Auto-Scan",
+      "scanInterval": "Scan Interval (minutes)",
+      "scanIntervalHelper": "Auto-scan period (in minutes)",
+      "advancedOptions": "Advanced Options",
+      "recursive": "Include Subfolders (Recursive Scan)",
+      "excludeExtensions": "Exclude Extensions",
+      "excludeExtensionsTooltip": "By default, all image formats (.jpg, .png, .webp, .gif, .bmp, .tiff) are scanned. Add extensions to exclude from scanning.",
+      "excludeExtensionsPlaceholder": ".tmp",
+      "excludePatterns": "Exclude Patterns",
+      "excludePatternsTooltip": "Exclude specific folders or file patterns from scanning. Examples: node_modules, .git, temp",
+      "excludePatternsPlaceholder": "e.g., node_modules, .git",
+      "addButton": "Add",
+      "saveButton": "Save",
+      "savingButton": "Saving...",
+      "cancelButton": "Cancel",
+      "errorPath": "Please enter folder path",
+      "errorSave": "Failed to save folder"
+    },
+    "scanLog": {
+      "title": "Scan Log",
+      "titleSpecific": "Scan Log (Specific Folder)",
+      "titleAll": "Scan Log (All)",
+      "noLogs": "No scan logs",
+      "loadFailed": "Failed to load scan logs",
+      "refresh": "Refresh",
+      "close": "Close",
+      "columns": {
+        "scanTime": "Scan Time",
+        "folder": "Folder",
+        "status": "Status",
+        "scanned": "Scanned",
+        "new": "New",
+        "existing": "Existing",
+        "errors": "Errors",
+        "duration": "Duration",
+        "details": "Details"
+      },
+      "status": {
+        "success": "Success",
+        "error": "Error"
+      },
+      "errorDetails": "Error Details ({{count}})",
+      "durationSeconds": "{{seconds}}s"
+    },
+    "verificationLog": {
+      "title": "File Verification Log",
+      "noLogs": "No verification logs",
+      "loadFailed": "Failed to load verification logs",
+      "refresh": "Refresh",
+      "close": "Close",
+      "columns": {
+        "verificationTime": "Verification Time",
+        "verificationType": "Verification Type",
+        "checked": "Files Checked",
+        "missingFound": "Missing Found",
+        "deletedRecords": "Deleted Records",
+        "errors": "Errors",
+        "duration": "Duration"
+      },
+      "verificationType": {
+        "auto": "Auto Verification",
+        "manual": "Manual Verification"
+      },
+      "errorDetails": "Error Details ({{count}})",
+      "errorItem": {
+        "fileId": "File ID: {{id}}",
+        "path": "Path: {{path}}",
+        "error": "Error: {{error}}"
+      },
+      "noErrors": "None",
+      "countFormat": "{{count}}",
+      "durationMs": "{{ms}}ms",
+      "durationSeconds": "{{seconds}}s"
+    }
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "create": "Create",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "civitai": {
+    "title": "Civitai Integration",
+    "description": "Automatically fetch model information from Civitai based on model hashes in image metadata.",
+    "settings": {
+      "title": "Settings",
+      "enableIntegration": "Enable Civitai Integration",
+      "enableDescription": "When enabled, model information will be automatically fetched from Civitai for new images.",
+      "apiInterval": "API Call Interval: {{interval}} seconds",
+      "apiIntervalDescription": "Minimum time between API calls to avoid rate limiting. Recommended: 2 seconds."
+    },
+    "statistics": {
+      "title": "Statistics",
+      "refresh": "Refresh",
+      "totalLookups": "Total Lookups",
+      "successful": "Successful",
+      "failed": "Failed",
+      "successRate": "Success Rate",
+      "lastApiCall": "Last API Call",
+      "never": "Never",
+      "recheckFailed": "Re-check Failed Models",
+      "resetStats": "Reset Statistics"
+    },
+    "rescan": {
+      "title": "Scan Existing Images",
+      "description": "Scan existing images in your library to extract model references and add them to the Civitai lookup queue. This is useful for images that were imported before Civitai integration was enabled.",
+      "processing": "Processing: {{processed}}/{{total}}",
+      "added": "Model references added: {{count}}",
+      "startButton": "Start Full Rescan",
+      "starting": "Starting...",
+      "enableRequired": "Enable Civitai integration to use this feature."
+    },
+    "cachedModels": {
+      "title": "Cached Models ({{count}})",
+      "clearCache": "Clear Cache",
+      "modelName": "Model Name",
+      "type": "Type",
+      "hash": "Hash",
+      "cachedAt": "Cached At",
+      "empty": "No models cached yet. Models will be cached automatically when images with model hashes are added.",
+      "unknown": "Unknown"
+    },
+    "dialogs": {
+      "clearCache": {
+        "title": "Clear Model Cache",
+        "message": "Are you sure you want to clear all cached model information? This will remove all locally stored Civitai data. Models will be re-fetched when needed.",
+        "confirm": "Clear"
+      },
+      "resetStats": {
+        "title": "Reset Statistics",
+        "message": "Are you sure you want to reset all statistics? This action cannot be undone.",
+        "confirm": "Reset"
+      },
+      "cancel": "Cancel"
+    },
+    "upload": {
+      "title": "Upload to Civitai",
+      "description": "Share this image on Civitai",
+      "selectedImage": "Selected image",
+      "methodLabel": "Upload Method",
+      "downloadMethod": "Download & Upload",
+      "intentMethod": "Direct Link",
+      "downloadTooltip": "Download image and open Civitai. Upload the downloaded file manually",
+      "intentTooltip": "Use server URL to share. Requires server to be accessible from internet",
+      "downloadDescription": "Download image, then select the file on Civitai upload page",
+      "intentDescription": "Server provides image URL directly to Civitai (requires external access)",
+      "downloadSuccess": "Image downloaded! Opening Civitai...",
+      "downloadError": "Failed to download image",
+      "downloadButtonTooltip": "Download image and open Civitai upload page",
+      "intentButtonTooltip": "Generate intent URL and open Civitai",
+      "downloadAndOpen": "Download & Open Civitai",
+      "postTitle": "Title",
+      "postTitlePlaceholder": "Enter post title",
+      "postDescription": "Description",
+      "postDescriptionPlaceholder": "Enter post description (optional)",
+      "tags": "Tags",
+      "tagsPlaceholder": "Enter tags separated by comma",
+      "includeMetadata": "Include generation metadata",
+      "includeMetadataDescription": "Include AI generation info (prompt, model, etc.) in the post",
+      "uploadButton": "Upload",
+      "uploading": "Processing...",
+      "submit": "Create Post",
+      "openInCivitai": "Open in Civitai",
+      "success": "Intent URL created successfully. Click to open Civitai.",
+      "error": "Failed to create upload intent",
+      "disabled": "Civitai integration is disabled"
+    },
+    "errors": {
+      "loadFailed": "Failed to load Civitai settings",
+      "updateFailed": "Failed to update settings",
+      "resetFailed": "Failed to reset",
+      "clearFailed": "Failed to clear cache",
+      "rescanFailed": "Failed to start rescan"
+    },
+    "success": {
+      "enabled": "Civitai integration enabled",
+      "disabled": "Civitai integration disabled",
+      "statsReset": "Statistics reset",
+      "cacheCleared": "Cache cleared",
+      "rescanStarted": "Rescan started: {{total}} images to process",
+      "rescanCompleted": "Rescan completed: {{added}} model references added"
+    }
+  },
+  "externalApi": {
+    "title": "External API Authentication",
+    "description": "Manage authentication credentials for external API services like Civitai.",
+    "currentApiKey": "Current API Key",
+    "currentApiKeyHelper": "Only partially shown for security",
+    "newApiKey": "New API Key",
+    "newApiKeyPlaceholder": "Enter your new API key",
+    "baseUrl": "Base URL",
+    "baseUrlHelper": "Optional: API endpoint URL",
+    "testConnection": "Test Connection",
+    "addProvider": "Add New Provider",
+    "addProviderDescription": "Add a new external API provider.",
+    "providerName": "Provider Name",
+    "providerNameHelper": "Only letters, numbers, _, - allowed (e.g., openai, stability)",
+    "providerDisplayName": "Display Name",
+    "deleteConfirmTitle": "Delete Provider",
+    "deleteConfirmMessage": "Are you sure you want to delete {{provider}}?",
+    "providerType": "Provider Type",
+    "providerTypes": {
+      "general": "General",
+      "llm": "LLM"
+    },
+    "llm": {
+      "title": "LLM Settings",
+      "addLLMProvider": "Add LLM Provider",
+      "selectPreset": "Select Preset",
+      "model": "Model",
+      "modelPlaceholder": "Select or type a model name",
+      "modelCustomHelper": "You can select from the list or type a custom model name",
+      "refreshModels": "Refresh model list",
+      "loadingModels": "Loading models...",
+      "noModels": "No models available",
+      "temperature": "Temperature",
+      "temperatureHelper": "Higher = more creative, Lower = more consistent (0-2)",
+      "maxTokens": "Max Tokens",
+      "maxTokensHelper": "Maximum response length",
+      "systemPrompt": "Default System Prompt",
+      "systemPromptPlaceholder": "Enter default system prompt",
+      "organizationId": "Organization ID (OpenAI)",
+      "organizationIdPlaceholder": "org-...",
+      "localServer": "Local Server",
+      "localServerHelper": "This is a local server. No API key required.",
+      "serverNotRunning": "Server is not running",
+      "testChat": "Test Chat",
+      "testChatTitle": "Test LLM Connection",
+      "testChatPlaceholder": "Type a message to test...",
+      "testChatSend": "Send",
+      "testChatResponse": "Response",
+      "testChatSuccess": "Test successful!",
+      "testChatError": "Test failed",
+      "testChatNoModel": "Please select a model first"
+    },
+    "success": {
+      "saved": "API key saved successfully",
+      "deleted": "Provider deleted successfully",
+      "created": "Provider created successfully",
+      "connectionTest": "Connection test successful",
+      "toggled": "{{state}} successfully",
+      "modelSelected": "Model selected"
+    },
+    "errors": {
+      "loadFailed": "Failed to load providers",
+      "saveFailed": "Failed to save",
+      "deleteFailed": "Failed to delete",
+      "createFailed": "Failed to create",
+      "connectionTestFailed": "Connection test failed",
+      "nameRequired": "Please enter both name and display name",
+      "toggleFailed": "Failed to toggle status",
+      "modelLoadFailed": "Failed to load model list"
+    }
+  }
+}

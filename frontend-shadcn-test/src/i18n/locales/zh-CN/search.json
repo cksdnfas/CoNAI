@@ -1,0 +1,218 @@
+{
+  "title": "图像搜索",
+  "description": "可以通过提示词、AI工具、模型名称、自动标签等搜索图像。",
+  "searchInput": {
+    "placeholder": "按提示词关键字搜索...",
+    "button": "搜索",
+    "clear": "全部重置",
+    "execute": "执行搜索"
+  },
+  "simpleSearch": {
+    "description": "在正面提示词和自动标签中搜索。",
+    "placeholder": "输入搜索词 (例如: girl, masterpiece, hatsune miku)",
+    "helpTooltip": {
+      "searchScope": "搜索范围: 正面提示词、自动标签 General/Character",
+      "ignoreWeights": "权重将被忽略",
+      "advancedTip": "复杂条件请使用 \"高级搜索\""
+    },
+    "tooltips": {
+      "logic": "逻辑模式 (点击切换: OR/AND/NOT)",
+      "type": "Token类型 (点击切换: 正向/负向/自动)"
+    }
+  },
+  "results": {
+    "title": "搜索结果",
+    "searching": "搜索中...",
+    "found": "找到{{count}}张图像。",
+    "noResults": "未找到搜索结果",
+    "noResultsHint": "尝试其他关键词或调整过滤器。",
+    "initialMessage": "输入关键词搜索图像",
+    "initialHint": "可以通过提示词、AI工具、模型名称、自动标签、日期等搜索。",
+    "reset": "重置搜索",
+    "refresh": "刷新"
+  },
+  "filters": {
+    "basic": {
+      "aiTool": {
+        "label": "AI工具",
+        "all": "全部"
+      },
+      "modelName": {
+        "label": "模型名称",
+        "placeholder": "例如: sd_xl_base_1.0"
+      },
+      "startDate": {
+        "label": "开始日期"
+      },
+      "endDate": {
+        "label": "结束日期"
+      }
+    },
+    "quickDate": {
+      "today": "今天",
+      "todayTooltip": "今天上传的图像",
+      "7days": "7天",
+      "7daysTooltip": "最近7天",
+      "30days": "30天",
+      "30daysTooltip": "最近30天",
+      "90days": "90天",
+      "90daysTooltip": "最近90天"
+    },
+    "advanced": {
+      "title": "高级过滤器",
+      "active": "活动",
+      "negativePrompt": {
+        "label": "负面提示词",
+        "placeholder": "输入要排除的关键词 (例如: ugly, blurry)"
+      }
+    },
+    "autoTag": {
+      "title": "自动标签过滤器",
+      "subtitle": "(WD v3 Tagger)",
+      "active": "活动",
+      "tabs": {
+        "rating": "评级",
+        "character": "角色",
+        "generalTags": "通用标签"
+      },
+      "rating": {
+        "typeMode": "按类型过滤",
+        "scoreMode": "按分数过滤",
+        "typeDescription": "按特定评级类型的置信度范围过滤",
+        "scoreDescription": "按设置中配置的加权总分过滤",
+        "type": {
+          "label": "评级类型",
+          "none": "无选择",
+          "general": "一般",
+          "sensitive": "敏感",
+          "questionable": "可疑",
+          "explicit": "露骨"
+        },
+        "confidenceRange": "置信度范围",
+        "scoreRange": "分数范围"
+      },
+      "character": {
+        "description": "按角色标签过滤图像",
+        "existence": {
+          "label": "角色存在",
+          "all": "全部",
+          "true": "存在",
+          "false": "不存在"
+        },
+        "name": {
+          "label": "角色名称",
+          "placeholder": "例如: hatsune_miku"
+        },
+        "confidenceRange": "置信度范围"
+      },
+      "generalTags": {
+        "description": "按通用标签和置信度范围过滤",
+        "tagName": {
+          "label": "标签名称",
+          "placeholder": "例如: 1girl, solo, landscape"
+        },
+        "confidence": "置信度: {{min}} ~ {{max}}",
+        "addedTags": "已添加标签 ({{count}}个)"
+      }
+    }
+  },
+  "searchHistory": {
+    "title": "最近搜索"
+  },
+  "advancedTab": {
+    "title": "复合过滤搜索",
+    "descriptionActive": "{{count}}个过滤器正在应用 · 执行顺序: 排除 → OR → AND",
+    "descriptionEmpty": "添加过滤器以开始精细搜索",
+    "helpTooltip": "过滤器使用帮助"
+  },
+  "searchBar": {
+    "tabs": {
+      "simple": "普通搜索",
+      "advanced": "高级搜索"
+    },
+    "buttons": {
+      "search": "搜索",
+      "searching": "搜索中...",
+      "reset": "重置"
+    },
+    "validation": {
+      "searchTextRequired": "请输入搜索词",
+      "filterRequired": "请添加至少一个条件",
+      "filterError": "过滤器 {{index}}: {{error}}",
+      "booleanRequired": "值必须是 是/否",
+      "valueRequired": "请输入值",
+      "scoreRequired": "请设置最小分数或最大分数"
+    }
+  },
+  "filterBlock": {
+    "addButton": "添加过滤器",
+    "emptyMessage": "添加过滤器以开始搜索",
+    "countInfo": "将应用{{count}}个过滤器。",
+    "executionOrder": "执行顺序: 排除 → OR → AND",
+    "modal": {
+      "title": "添加过滤器",
+      "cancel": "取消",
+      "back": "返回",
+      "next": "下一步",
+      "add": "添加过滤器",
+      "steps": {
+        "selectGroup": "选择过滤器组",
+        "selectCategory": "选择类别",
+        "configureCondition": "配置条件"
+      },
+      "step1": {
+        "description": "选择如何应用过滤器"
+      },
+      "step2": {
+        "description": "选择要搜索的信息类型"
+      },
+      "step3": {
+        "description": "配置条件。过滤器创建后无法编辑，必须删除并重新创建。"
+      }
+    },
+    "groupTypes": {
+      "exclude": {
+        "label": "排除 (NOT)",
+        "description": "从结果中排除符合此条件的图像"
+      },
+      "or": {
+        "label": "OR组",
+        "description": "将符合此条件的图像包含在结果中"
+      },
+      "and": {
+        "label": "AND组",
+        "description": "仅包含符合所有条件的图像"
+      }
+    },
+    "categories": {
+      "positive_prompt": {
+        "label": "正面提示词",
+        "description": "搜索图像生成中使用的正面提示词"
+      },
+      "negative_prompt": {
+        "label": "负面提示词",
+        "description": "搜索图像生成中使用的负面提示词"
+      },
+      "auto_tag": {
+        "label": "自动标签 (WD Tagger)",
+        "description": "搜索WD v3 Tagger自动生成的标签"
+      },
+      "basic": {
+        "label": "基本信息",
+        "description": "搜索AI工具和模型名称等基本元数据"
+      }
+    },
+    "conditionTypes": {
+      "conditionType": "条件类型",
+      "value": "值",
+      "placeholder": "输入要搜索的值",
+      "scoreRange": "分数范围",
+      "weightRange": "权重范围",
+      "tagName": "标签/角色名称",
+      "tagPlaceholder": "例如: 1girl, hatsune_miku",
+      "ratingType": "评级类型",
+      "exists": "存在",
+      "notExists": "不存在"
+    }
+  }
+}

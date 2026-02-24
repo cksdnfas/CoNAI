@@ -1,0 +1,60 @@
+{
+  "title": "생성 히스토리",
+  "count": "{{count}}개",
+  "empty": "생성 히스토리가 없습니다",
+  "loading": "로딩 중...",
+  "loadingMore": "히스토리를 불러오는 중...",
+  "allLoaded": "모든 히스토리를 불러왔습니다",
+  "noHistory": "생성 히스토리가 없습니다",
+  "noHistoryDescription": "이미지 생성을 시작하면 히스토리가 표시됩니다",
+  "deleteConfirm": "이 생성 히스토리를 삭제하시겠습니까?",
+  "deleteFailed": "삭제에 실패했습니다",
+  "status": {
+    "pending": "대기중",
+    "processing": "처리중",
+    "completed": "완료",
+    "failed": "실패"
+  },
+  "service": {
+    "comfyui": "ComfyUI",
+    "novelai": "NovelAI"
+  },
+  "actions": {
+    "regenerate": "재생성",
+    "delete": "삭제",
+    "refresh": "새로고침",
+    "confirmDelete": "이 생성 히스토리를 삭제하시겠습니까?"
+  },
+  "cleanupFailed": "실패 항목 정리",
+  "cleanupFailedTitle": "실패 항목 정리",
+  "cleanupFailedConfirm": "{{count}}개의 실패한 생성 히스토리를 삭제하시겠습니까?",
+  "cleanupFailedNote": "데이터베이스에서만 삭제되며, 파일은 유지됩니다.",
+  "cleanup": "정리",
+  "cleaning": "정리 중...",
+  "cleanupSuccess": "{{count}}개의 실패 항목이 삭제되었습니다",
+  "noFailedRecords": "삭제할 실패 항목이 없습니다",
+  "cleanupFailed": "정리에 실패했습니다",
+  "bulkDeleteFailed": "일괄 삭제에 실패했습니다",
+  "deleteSelected": "선택 삭제 ({{count}})",
+  "deleteDialog": {
+    "title": "선택된 항목 삭제",
+    "confirm": "선택된 {{count}}개의 히스토리를 삭제하시겠습니까?",
+    "warning": "이 작업은 되돌릴 수 없습니다."
+  },
+  "detail": {
+    "title": "생성 히스토리 상세",
+    "status": "상태",
+    "service": "서비스",
+    "positivePrompt": "긍정 프롬프트",
+    "negativePrompt": "부정 프롬프트",
+    "size": "크기",
+    "model": "모델",
+    "sampler": "샘플러",
+    "steps": "스텝",
+    "cfgScale": "CFG Scale",
+    "seed": "시드",
+    "error": "에러",
+    "createdAt": "생성 시간",
+    "completedAt": "완료 시간"
+  }
+}

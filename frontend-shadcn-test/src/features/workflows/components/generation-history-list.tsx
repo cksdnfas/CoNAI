@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Tooltip, Typography } from '@mui/material'
-import { CleaningServices as CleaningServicesIcon, Refresh as RefreshIcon } from '@mui/icons-material'
+import { RefreshCw, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { GenerationHistoryRecord, ServiceType } from '@comfyui-image-manager/shared'
 import type { ImageRecord } from '@/types/image'
 import { generationHistoryApi } from '@/services/generation-history-api'
 import { convertHistoriesToImageRecords } from '@/utils/generation-history-adapter'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import ImageList from '@/features/images/components/image-list'
 
 interface GenerationHistoryListProps {
@@ -115,35 +116,28 @@ export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: G
   const failedCount = records.filter((record) => record.generation_status === 'failed').length
 
   return (
-    <Box sx={{ width: '100%', p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexShrink: 0 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          {t('generationHistory:title')} ({imageRecords.length})
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Tooltip title={t('common:refresh')}>
-            <Button variant="outlined" size="small" startIcon={<RefreshIcon />} onClick={handleRefresh}>
-              {t('common:refresh')}
-            </Button>
-          </Tooltip>
-          <Tooltip title={t('generationHistory:cleanupFailedTooltip')}>
-            <span>
-              <Button
-                variant="outlined"
-                size="small"
-                color="warning"
-                startIcon={<CleaningServicesIcon />}
-                onClick={() => setCleanupDialogOpen(true)}
-                disabled={failedCount === 0 || cleanupLoading}
-              >
-                {t('generationHistory:cleanupFailedButton')} ({failedCount})
-              </Button>
-            </span>
-          </Tooltip>
-        </Box>
-      </Box>
+    <div className="flex h-full w-full flex-col gap-2 p-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">{t('generationHistory:title')} ({imageRecords.length})</h2>
+        <div className="flex gap-1">
+          <Button type="button" variant="outline" size="sm" onClick={handleRefresh}>
+            <RefreshCw className="h-4 w-4" />
+            {t('common:refresh')}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setCleanupDialogOpen(true)}
+            disabled={failedCount === 0 || cleanupLoading}
+          >
+            <Trash2 className="h-4 w-4" />
+            {t('generationHistory:cleanupFailedButton')} ({failedCount})
+          </Button>
+        </div>
+      </div>
 
-      <Box sx={{ flex: 1, minHeight: 0 }}>
+      <div className="min-h-0 flex-1">
         <ImageList
           images={imageRecords}
           loading={loading}
@@ -155,20 +149,24 @@ export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: G
           total={imageRecords.length}
           onSearchClick={undefined}
         />
-      </Box>
+      </div>
 
-      <Dialog open={cleanupDialogOpen} onClose={() => setCleanupDialogOpen(false)}>
-        <DialogTitle>{t('generationHistory:cleanupConfirmTitle')}</DialogTitle>
+      <Dialog open={cleanupDialogOpen} onOpenChange={setCleanupDialogOpen}>
         <DialogContent>
-          <DialogContentText>{t('generationHistory:cleanupConfirmMessage', { count: failedCount })}</DialogContentText>
+          <DialogHeader>
+            <DialogTitle>{t('generationHistory:cleanupConfirmTitle')}</DialogTitle>
+            <DialogDescription>{t('generationHistory:cleanupConfirmMessage', { count: failedCount })}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setCleanupDialogOpen(false)}>
+              {t('common:cancel')}
+            </Button>
+            <Button type="button" onClick={handleCleanupFailed} disabled={cleanupLoading}>
+              {cleanupLoading ? t('common:loading') : t('generationHistory:cleanupFailedButton')}
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCleanupDialogOpen(false)}>{t('common:cancel')}</Button>
-          <Button onClick={handleCleanupFailed} color="warning" variant="contained" disabled={cleanupLoading}>
-            {cleanupLoading ? t('common:loading') : t('generationHistory:cleanupFailedButton')}
-          </Button>
-        </DialogActions>
       </Dialog>
-    </Box>
+    </div>
   )
 }

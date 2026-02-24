@@ -1,0 +1,292 @@
+{
+  "subtabs": {
+    "generate": "生成图像",
+    "history": "历史记录"
+  },
+  "page": {
+    "title": "工作流管理",
+    "listTitle": "工作流列表",
+    "addButton": "添加工作流",
+    "editTitle": "编辑工作流",
+    "createTitle": "添加工作流",
+    "noWorkflows": "没有注册的工作流",
+    "noWorkflowsDesc": "点击\"添加工作流\"按钮添加ComfyUI工作流"
+  },
+  "card": {
+    "active": "活动",
+    "inactive": "非活动",
+    "fieldsCount": "{{count}}个字段",
+    "createdDate": "创建日期: {{date}}",
+    "generateImage": "生成图像",
+    "notFound": "未找到工作流"
+  },
+  "form": {
+    "basicInfo": "基本信息",
+    "workflowName": "工作流名称",
+    "description": "描述",
+    "apiEndpoint": "API端点",
+    "activate": "激活",
+    "workflowJson": "工作流JSON",
+    "uploadFile": "上传文件",
+    "jsonPlaceholder": "{\"prompt\": {...}}",
+    "jsonHelper": "粘贴从ComfyUI导出的工作流API JSON",
+    "jsonCharCount": "{{count}}个字符",
+    "invalidJson": "无效的JSON格式",
+    "nameRequired": "请输入工作流名称",
+    "jsonRequired": "请输入工作流JSON",
+    "validateJson": "请检查JSON格式",
+    "colorLabel": "工作流颜色",
+    "customColorTooltip": "选择自定义颜色",
+    "selectImage": "选择图像"
+  },
+  "alerts": {
+    "importantNote": "重要:",
+    "apiFormatWarning": "使用ComfyUI中\"Save (API Format)\"按钮保存的JSON。常规工作流JSON将不起作用。",
+    "created": "工作流创建成功",
+    "updated": "工作流更新成功",
+    "inactiveWarning": "此工作流当前处于非活动状态。您需要先激活它才能生成图像。",
+    "noConfigurableFields": "此工作流没有可配置字段。"
+  },
+  "markedFields": {
+    "sectionTitle": "标记字段配置",
+    "guideTitle": "标记字段使用指南",
+    "addField": "添加字段",
+    "noFields": "没有标记字段。点击\"添加字段\"按钮添加一个",
+    "whatIs": "什么是标记字段？",
+    "whatIsDesc": "定义用户在生成图像时可以修改的字段。例如，您可以动态输入提示词、种子值、步数、CFG等。",
+    "howToFind": "如何找到JSON路径:",
+    "step1": "在ComfyUI中创建工作流后点击\"Save (API Format)\"按钮",
+    "step2": "打开JSON文件并找到节点编号和输入字段名称",
+    "step3": "路径格式: [节点编号].inputs.[字段名]",
+    "exampleTitle": "实际示例:",
+    "example1Title": "1. 提示词字段 (CLIPTextEncode节点 #6)",
+    "example1FieldId": "字段ID: prompt_positive",
+    "example1Label": "标签: 提示词",
+    "example1Type": "类型: 长文本 (textarea)",
+    "example1Path": "JSON路径: 6.inputs.text",
+    "example1Default": "默认值: a beautiful landscape",
+    "example2Title": "2. 种子值 (KSampler节点 #3)",
+    "example2FieldId": "字段ID: seed",
+    "example2Label": "标签: 种子",
+    "example2Type": "类型: 数字",
+    "example2Path": "JSON路径: 3.inputs.seed",
+    "example2Default": "默认值: 123456",
+    "example3Title": "3. 步数 (KSampler节点 #3)",
+    "example3FieldId": "字段ID: steps",
+    "example3Label": "标签: 步数",
+    "example3Type": "类型: 数字",
+    "example3Path": "JSON路径: 3.inputs.steps",
+    "example3Default": "默认值: 20",
+    "example3Min": "最小值: 1",
+    "example3Max": "最大值: 150",
+    "example4Title": "4. 采样器 (KSampler节点 #3)",
+    "example4FieldId": "字段ID: sampler_name",
+    "example4Label": "标签: 采样器",
+    "example4Type": "类型: 选择",
+    "example4Path": "JSON路径: 3.inputs.sampler_name",
+    "example4Options": "选项: euler, euler_ancestral, dpm++ 2m, ddim",
+    "tipTitle": "💡 提示:",
+    "tipDesc": "JSON路径遵循工作流JSON的结构。例如，如果JSON是{\\\"3\\\": {\\\"inputs\\\": {\\\"seed\\\": 123}}}，则JSON路径为3.inputs.seed。",
+    "previewTitle": "标记字段预览",
+    "unnamedField": "未命名字段",
+    "noJsonPath": "无JSON路径",
+    "stepLabel": "步长单位",
+    "stepHelperText": "步长值（例: 0.01）",
+    "stepPlaceholder": "0.01",
+    "autoUpdated": "(自动更新)",
+    "listPreviewHelper": "引用列表的预览（只读）",
+    "loadFromListTooltip": "从自定义列表加载",
+    "loadFromListTitle": "从自定义列表加载",
+    "noCustomLists": "没有注册的自定义列表。",
+    "itemCount": "{{count}}个项目 - "
+  },
+  "fieldForm": {
+    "fieldId": "字段ID",
+    "fieldIdPlaceholder": "prompt_positive",
+    "fieldIdHelper": "唯一标识符",
+    "label": "标签",
+    "labelPlaceholder": "提示词",
+    "labelHelper": "显示给用户的名称",
+    "type": "类型",
+    "typeHelper": "输入方法",
+    "typeText": "文本 (单行)",
+    "typeTextarea": "长文本 (多行)",
+    "typeNumber": "数字",
+    "typeSelect": "选择 (下拉菜单)",
+    "jsonPath": "JSON路径 *",
+    "jsonPathPlaceholder": "6.inputs.text",
+    "jsonPathHelper": "工作流JSON中的路径。例: 6.inputs.text (节点6的text输入)",
+    "defaultValue": "默认值",
+    "defaultValuePlaceholder": "a beautiful landscape",
+    "defaultValueHelper": "为空时显示的值",
+    "required": "必填",
+    "minValue": "最小值",
+    "minPlaceholder": "1",
+    "maxValue": "最大值",
+    "maxPlaceholder": "150",
+    "selectOptions": "选择选项 (逗号分隔)",
+    "selectOptionsPlaceholder": "euler, dpm++, ddim",
+    "selectOptionsHelper": "例: euler, dpm++ 2m, ddim",
+    "description": "描述",
+    "descriptionPlaceholder": "例：在正面提示词中输入逗号分隔的标签",
+    "descriptionHelper": "为用户和AI代理说明此字段期望的输入内容"
+  },
+  "generate": {
+    "pageTitle": "生成图像",
+    "settingsTitle": "生成设置",
+    "missingFields": "请输入必填字段: {{fields}}",
+    "emptyPrompt": "提示词为空。无法生成图像。",
+    "selectPlaceholder": "请选择",
+    "previewTitle": "要发送的数据预览",
+    "generateAll": "在所有活动服务器上同时生成 ({{count}}个)",
+    "serversListTitle": "ComfyUI服务器列表",
+    "serversListDesc": "您可以在每个服务器上独立生成图像",
+    "noServers": "没有注册的ComfyUI服务器。请在服务器管理页面添加服务器。",
+    "noConnectedServers": "没有已连接的服务器",
+    "responseTime": "响应时间: {{time}}毫秒",
+    "generateButton": "在此服务器上生成",
+    "generating": "生成中...",
+    "generationComplete": "图像生成完成！",
+    "generationFailed": "图像生成失败",
+    "executionTime": "{{time}}秒",
+    "viewImage": "查看图像详情"
+  },
+  "actions": {
+    "save": "保存",
+    "saving": "保存中...",
+    "cancel": "取消",
+    "create": "创建",
+    "update": "更新",
+    "delete": "删除",
+    "confirmDelete": "确定要删除此工作流吗？"
+  },
+  "repeat": {
+    "title": "重复执行",
+    "enable": "启用重复执行",
+    "count": "重复次数",
+    "infinite": "无限重复（-1）",
+    "countHelp": "1-999 或 -1（无限）",
+    "delay": "等待时间（秒）",
+    "delayHelp": "所有服务器生成完成后到下次生成的等待时间（1-300秒）",
+    "progress": "正在执行第{{current}}次",
+    "progressWithTotal": "正在执行第{{current}}/{{total}}次",
+    "stop": "停止"
+  },
+  "customDropdowns": {
+    "title": "自定义下拉列表管理",
+    "buttons": {
+      "add": "添加新列表",
+      "edit": "编辑",
+      "delete": "删除",
+      "view": "查看",
+      "cancel": "取消",
+      "create": "创建",
+      "save": "保存"
+    },
+    "labels": {
+      "name": "列表名称",
+      "description": "描述",
+      "items": "项目列表（每行一个）",
+      "itemsHelper": "每个项目用换行符分隔"
+    },
+    "empty": {
+      "title": "没有注册的自定义下拉列表",
+      "description": "点击\"添加新列表\"创建自定义下拉列表"
+    },
+    "dialog": {
+      "add": "添加新的自定义列表",
+      "edit": "编辑自定义列表",
+      "deleteConfirm": "确定要删除此列表吗？"
+    },
+    "validation": {
+      "minItems": "请至少输入1个项目"
+    },
+    "stats": {
+      "itemCount": "{{count}}个项目",
+      "moreItems": "+{{count}}个",
+      "createdAt": "创建日期: {{date}}"
+    }
+  },
+  "repeatExecution": {
+    "statusTitle": "重复执行状况",
+    "overall": "全体: {{completed}}{{total}} 完成",
+    "withInfinite": " (包含无限重复)",
+    "serverProgress": "{{count}}次",
+    "serverProgressInfinite": "{{count}}次 (无限)"
+  },
+  "serverStatus": {
+    "generate": "生成",
+    "startRepeat": "重复执行",
+    "stop": "停止",
+    "executingInfinite": "{{count}}次执行中 (无限)",
+    "executingProgress": "{{current}} / {{total}}次"
+  },
+  "groupAssignment": {
+    "title": "组分配",
+    "selectGroup": "选择组",
+    "autoAddDescription": "生成的图像将自动添加到所选组"
+  },
+  "graphToolbar": {
+    "searchPlaceholder": "搜索节点...",
+    "filterTypes": "类型过滤",
+    "layoutSwitch": "切换到{{layout}}布局",
+    "layoutTopBottom": "上下",
+    "layoutLeftRight": "左右",
+    "expandAll": "展开所有节点",
+    "collapseAll": "折叠所有节点"
+  },
+  "jsonViewer": {
+    "title": "工作流JSON结构",
+    "copyToClipboard": "复制到剪贴板",
+    "copied": "已复制到剪贴板！"
+  },
+  "workflowViewer": {
+    "graphView": "图形视图",
+    "jsonView": "JSON视图"
+  },
+  "colors": {
+    "blue": "蓝色（默认）",
+    "red": "红色",
+    "green": "绿色",
+    "orange": "橙色",
+    "purple": "紫色",
+    "cyan": "青色",
+    "yellow": "黄色",
+    "brown": "棕色",
+    "gray": "灰色",
+    "pink": "粉色"
+  },
+  "preview": {
+    "title": "标记字段预览",
+    "parseError": "无法解析工作流JSON",
+    "noJson": "无工作流JSON",
+    "pathNotFound": "未找到路径: {{path}}",
+    "validationError": "路径验证时出错",
+    "substitutionError": "替换时出错",
+    "validationResults": "路径验证结果",
+    "currentValue": "当前值:",
+    "formTitle": "图像生成时显示的表单",
+    "generateButton": "生成图像（预览）",
+    "testDataButton": "使用测试数据预览",
+    "viewJsonTitle": "查看替换后的工作流JSON"
+  },
+  "imageSelection": {
+    "title": "选择图像",
+    "tabs": {
+      "dbSearch": "数据库搜索",
+      "hash": "哈希值",
+      "upload": "上传",
+      "history": "历史记录",
+      "dedicatedFolder": "专用文件夹"
+    },
+    "inPreparation": "准备中",
+    "hashInputLabel": "输入图像哈希值",
+    "hashInputPlaceholder": "输入图像哈希值",
+    "hashComingSoon": "基于哈希的图像加载将在未来实现。",
+    "selectButton": "选择图像",
+    "useAsIs": "直接使用",
+    "editButton": "编辑（准备中）",
+    "noImagesInFolder": "专用文件夹中没有图像。",
+    "addImagesPrompt": "添加图像到文件夹。"
+  }
+}

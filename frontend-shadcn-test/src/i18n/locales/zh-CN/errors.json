@@ -1,0 +1,57 @@
+{
+  "api": {
+    "network": "网络连接错误。请检查您的互联网连接。",
+    "timeout": "请求超时。请重试。",
+    "unauthorized": "需要身份验证。请重新登录。",
+    "forbidden": "访问被拒绝。您没有执行此操作的权限。",
+    "notFound": "未找到请求的资源。",
+    "serverError": "服务器错误。请稍后重试。",
+    "badRequest": "无效的请求。请检查您的输入。",
+    "unknown": "发生意外错误。请重试。"
+  },
+  "upload": {
+    "fileTooLarge": "文件大小过大。最大文件大小为50MB。",
+    "invalidFileType": "不支持的文件类型。只允许上传图片和视频文件。",
+    "uploadFailed": "上传失败。请重试。",
+    "multipleUploadFailed": "部分文件上传失败。",
+    "fileCountLimit": "上传文件数量超过限制。",
+    "processingFailed": "文件处理失败。",
+    "noFilesSelected": "未选择文件。请选择要上传的文件。"
+  },
+  "image": {
+    "loadFailed": "图片加载失败。",
+    "deleteFailed": "图片删除失败。",
+    "multipleDeleteFailed": "{{count}}张图片删除失败。",
+    "downloadFailed": "图片下载失败。",
+    "notFound": "未找到图片。",
+    "metadataExtractionFailed": "图片元数据提取失败。"
+  },
+  "group": {
+    "loadFailed": "组加载失败。",
+    "createFailed": "组创建失败。",
+    "updateFailed": "组更新失败。",
+    "deleteFailed": "组删除失败。",
+    "assignFailed": "分配到组失败。",
+    "removeFailed": "从组中移除失败。",
+    "autoCollectFailed": "自动收集失败。",
+    "notFound": "未找到组。"
+  },
+  "prompt": {
+    "loadFailed": "提示词加载失败。",
+    "deleteFailed": "提示词删除失败。",
+    "assignFailed": "提示词分配到组失败。",
+    "synonymFailed": "同义词设置失败。",
+    "notFound": "未找到提示词。"
+  },
+  "search": {
+    "failed": "搜索失败。请重试。",
+    "invalidQuery": "无效的搜索查询。",
+    "noResults": "未找到搜索结果。"
+  },
+  "validation": {
+    "required": "这是必填字段。",
+    "invalid": "无效的输入。",
+    "tooShort": "输入太短。",
+    "tooLong": "输入太长。"
+  }
+}

@@ -1,12 +1,7 @@
-import { AppProviders } from '@/app/providers'
-import { AppRoutes } from '@/app/routes'
+import { ParityApp } from '@/app/parity-app'
 
 function App() {
-  return (
-    <AppProviders>
-      <AppRoutes />
-    </AppProviders>
-  )
+  return <ParityApp />
 }
 
 export default App

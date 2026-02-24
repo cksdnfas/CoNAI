@@ -1,6 +1,9 @@
-import { Box, Button, Checkbox, Chip, Divider, FormControlLabel, TextField, Typography } from '@mui/material'
-import { Repeat as RepeatIcon, Stop as StopIcon } from '@mui/icons-material'
+import { Repeat2, Square } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
 
 export interface RepeatConfig {
   enabled: boolean
@@ -57,66 +60,66 @@ export default function RepeatControls({
   }
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <RepeatIcon fontSize="small" />
-        <Typography variant="subtitle1" fontWeight="bold">
-          {t(getKey('title'))}
-        </Typography>
-      </Box>
-      <Divider sx={{ mb: 2 }} />
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Repeat2 className="h-4 w-4" />
+        <h3 className="text-sm font-semibold">{t(getKey('title'))}</h3>
+      </div>
+      <Separator />
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <FormControlLabel
-          control={<Checkbox checked={config.enabled} onChange={(event) => handleEnabledChange(event.target.checked)} disabled={state.isRunning} />}
-          label={t(getKey('enable'))}
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={config.enabled}
+          onChange={(event) => handleEnabledChange(event.target.checked)}
+          disabled={state.isRunning}
         />
+        {t(getKey('enable'))}
+      </label>
 
-        {config.enabled ? (
-          <>
-            <TextField
-              fullWidth
+      {config.enabled ? (
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">{t(getKey('count'))}</p>
+            <Input
               type="number"
-              label={t(getKey('count'))}
               value={config.count}
               onChange={(event) => handleCountChange(event.target.value)}
               disabled={state.isRunning}
-              inputProps={{ min: -1, max: 999 }}
-              helperText={config.count === -1 ? t(getKey('infinite')) : t(getKey('countHelp'))}
+              min={-1}
+              max={999}
             />
+            <p className="text-xs text-muted-foreground">{config.count === -1 ? t(getKey('infinite')) : t(getKey('countHelp'))}</p>
+          </div>
 
-            <TextField
-              fullWidth
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">{t(getKey('delay'))}</p>
+            <Input
               type="number"
-              label={t(getKey('delay'))}
               value={config.delaySeconds}
               onChange={(event) => handleDelayChange(event.target.value)}
               disabled={state.isRunning}
-              inputProps={{ min: 1, max: 300 }}
-              helperText={t(getKey('delayHelp'))}
+              min={1}
+              max={300}
             />
+            <p className="text-xs text-muted-foreground">{t(getKey('delayHelp'))}</p>
+          </div>
 
-            {state.isRunning ? (
-              <Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <Chip
-                    label={
-                      config.count === -1
-                        ? t(getKey('progress'), { current: state.currentIteration })
-                        : t(getKey('progressWithTotal'), { current: state.currentIteration, total: state.totalIterations })
-                    }
-                    color="primary"
-                    size="small"
-                  />
-                </Box>
-                <Button fullWidth variant="outlined" color="error" startIcon={<StopIcon />} onClick={onStop}>
-                  {t(getKey('stop'))}
-                </Button>
-              </Box>
-            ) : null}
-          </>
-        ) : null}
-      </Box>
-    </Box>
+          {state.isRunning ? (
+            <div className="space-y-2">
+              <Badge>
+                {config.count === -1
+                  ? t(getKey('progress'), { current: state.currentIteration })
+                  : t(getKey('progressWithTotal'), { current: state.currentIteration, total: state.totalIterations })}
+              </Badge>
+              <Button type="button" variant="outline" className="w-full" onClick={onStop}>
+                <Square className="h-4 w-4" />
+                {t(getKey('stop'))}
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   )
 }
