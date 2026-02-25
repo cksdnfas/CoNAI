@@ -3,11 +3,11 @@
  * Re-exports all type definitions for easy importing
  */
 
-export * from './group.js';
-export * from './autoFolderGroup.js';
-export * from './promptCollection.js';
-export * from './image.js';
-export * from './rating.js';
-export * from './settings.js';
-export * from './generationHistory.js';
-export * from './filter.js';
+export * from './group';
+export * from './autoFolderGroup';
+export * from './promptCollection';
+export * from './image';
+export * from './rating';
+export * from './settings';
+export * from './generationHistory';
+export * from './filter';

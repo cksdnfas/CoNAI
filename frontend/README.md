@@ -1,73 +1,97 @@
-# React + TypeScript + Vite
+# frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+ComfyUI Image Manager의 기본 프론트엔드입니다.
 
-Currently, two official plugins are available:
+## 목적
+- 기본 프론트엔드(승격된 shadcn/ui 기반) 제공
+- 기존 `backend`(`:1666`)에 연결하여 UI/연동 검증
+- 백엔드(`:1666`)와의 기본 연동 유지
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 핵심 분리 정책
+- 프론트: `frontend` (dev port `5666`, `strictPort=true`)
+- 레거시 백업: `frontend-legacy-backup`
+- 백엔드: `backend` (port `1666`)
 
-## React Compiler
+## 실행
+```bash
+# 1) 백엔드 실행 (프로젝트 루트)
+npm run dev:backend
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# 2) 프론트 실행 (프로젝트 루트)
+npm run dev:frontend
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+또는:
+```bash
+cd frontend
+npm install
+npm run dev
 ```
+
+## API 연결 방식
+- Vite dev origin: `http://localhost:5666`
+- Vite proxy
+  - `/api` -> `http://localhost:1666`
+  - `/uploads` -> `http://localhost:1666`
+  - `/temp` -> `http://localhost:1666`
+- 선택 옵션: `VITE_BACKEND_URL` 지정 시 axios baseURL override 가능
+
+## 현재 마이그레이션 상태
+- `frontend`는 기능 동등성 유지를 위해 legacy 페이지를 부분 재사용하는 **Parity Hybrid** 모드입니다.
+- 현재 `frontend/src` 직접 참조는 **0개 파일, 0개 import**로 정리했습니다.
+- 대신 parity 안정성을 위해 `frontend/src/legacy`에 legacy 소스를 내부 편입해 참조로 전환했습니다.
+- shadcn으로 전환 완료된 상위 화면:
+  - 인증(`/login`) 및 보호 라우트
+  - 상단 앱 셸(네비게이션/로그아웃/테마 토글)
+  - Image Groups 상위 페이지(탭/플로팅 생성 버튼/피드백 알림 컨테이너)
+  - Upload 상위 페이지
+  - Image Detail 상위 페이지(다운로드/해시복사/메타데이터 컨테이너)
+- `src`는 `src/legacy`를 직접 참조하며, 중간 entrypoint 레이어 없이 페이지/컴포넌트를 바로 연결합니다.
+
+## 안정화(하이브리드 하드닝)
+- Vite `resolve.dedupe` 적용: `react`, `react-dom`, `react-router-dom`, `@tanstack/react-query`
+- Vite `server.fs.allow` 적용: `../shared/src` 외부 소스 허용
+- Vite `base: './'` 적용: 기존 포터블/상대 경로 배포 방식과 정렬
+- legacy `frontend/src/index.css` 전역 import 제거: Tailwind/shadcn 스타일 충돌 리스크 축소
+- legacy 컴포넌트 의존 패키지들을 `frontend/package.json`에 명시
+- `AuthContext`/`ThemeContext`/`authApi`를 `frontend/src` 내부 구현으로 이동
+- 공통 타입/유틸 일부(`types/image`, `utils/backend`, `services/image-api`, `services/settings-api`)를 분리 프론트 내부로 이동
+- 그룹 API/훅 일부(`services/group-api`, `hooks/use-groups`, `hooks/use-image-list-settings`)를 분리 프론트 내부로 이동
+- Image Groups UI 일부(`group-breadcrumb`, `group-card`, `image-view-card`, `auto-folder-*`)를 분리 프론트 내부 구현으로 이동
+- Home 이미지 로딩/검색 훅(`hooks/use-infinite-images`, `hooks/use-paginated-images`, `hooks/use-search`)을 분리 프론트 내부 구현으로 이동
+- Settings는 `src/features/settings/settings-page.tsx` 실구현으로 전환했고 세부 패널을 `src/legacy`에서 직접 연결합니다.
+- Image Generation은 로컬 탭 셸(`features/image-generation/image-generation-page.tsx`)을 유지하며 `comfyui-tab`은 `src/features/image-generation/tabs/comfyui-tab.tsx` 실구현으로 전환했습니다. (`nai`, `wildcard`는 아직 `src/legacy` 의존)
+- i18n 부트스트랩을 분리 프론트 내부(`src/i18n`)로 이동하고 parity app에서 로컬 i18n을 사용
+- Group Create/Edit modal을 분리 프론트 내부(`group-create-edit-modal`, `basic-info-tab`, `auto-collect-tab`, `simple-search-tab`, `search-auto-complete`)로 이동
+- Group Image modal을 분리 프론트 내부(`group-image-grid-modal`, `group-assign-modal`, `lora-dataset-dialog`) 구현으로 이동
+- Home/Settings/ImageList용 `features/legacy-pages.tsx` 브리지를 제거
+- Workflow 라우트(`new/edit/generate`)는 `features/workflows/*`에서 직접 컨테이너 구현/연결로 유지
+- Upload 관련 로직(`upload-api`, `UploadZone`, `PromptPreview`, `metadata-reader`, `stealth-png-extractor`)을 분리 프론트 내부로 이동
+- Image Detail의 `PromptDisplay` 스택(`prompt-display`, `auto-tag-display`, `prompt-card`, `prompt-grouping`)을 분리 프론트 내부로 이동
+
+## 화면 구성
+- 현재는 **기능 동등성 우선(Parity Hybrid)** 단계입니다.
+- shadcn 기반 상단 셸/로그인/보호 라우트를 사용하고, 핵심 기능 페이지는 parity를 유지하며 일부 탭/라우트는 `src/features` 실구현으로 전환 중입니다.
+
+### Parity Hybrid 라우트
+- `/` : Home (기존 HomePage 연결)
+- `/image-groups` : shadcn 상위 페이지 + 기존 그룹 기능 컴포넌트 연결
+- `/upload` : shadcn 상위 페이지 + 분리 프론트 내부 업로드/프롬프트 컴포넌트 연결
+- `/settings` : 설정
+- `/image/:compositeHash` : shadcn 상위 페이지 + 기존 프롬프트/태깅 컴포넌트 연결
+- `/image-generation` : shadcn 탭 컨테이너 + `comfyui` 탭 로컬 실구현 + 일부 탭 legacy 연결
+- `/image-generation/new` : 워크플로우 신규
+- `/image-generation/:id/edit` : 워크플로우 수정
+- `/image-generation/:id/generate` : 워크플로우 실행
+
+### 인증
+- `/login` : shadcn 기반 로그인 화면
+- 인증 상태/세션은 기존 백엔드 auth API와 동일하게 사용
+
+## 다음 마이그레이션 슬라이스
+- 1순위: 라우트/탭 실구현을 `src/features`로 순차 이관하고 `src/legacy` 직접 의존을 줄이기
+- 분해 순서:
+  - Image Generation 잔여 탭(`nai/wildcards`)을 `src/features/image-generation` 실구현으로 이관
+  - Workflow 라우트 컨테이너에서 남은 legacy 직접 의존 제거 및 로컬 컴포넌트 치환
+  - Workflow/Group modal의 `src/legacy/components` 의존을 로컬 컴포넌트로 대체
+- 목표: `src/legacy` 의존 **0개**

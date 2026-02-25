@@ -12,13 +12,18 @@ const path = require('path');
 const ROOT_DIR = path.resolve(__dirname, '..');
 const BACKEND_DIST = path.join(ROOT_DIR, 'backend', 'dist');
 const BUNDLE_OUTPUT = path.join(BACKEND_DIST, 'bundle.js');
-const ENTRY_POINT = path.join(BACKEND_DIST, 'index.js');
+const ENTRY_POINT_CANDIDATES = [
+  path.join(BACKEND_DIST, 'index.js'),
+  path.join(BACKEND_DIST, 'backend', 'src', 'index.js')
+];
+const ENTRY_POINT = ENTRY_POINT_CANDIDATES.find((candidate) => fs.existsSync(candidate));
 
 console.log('📦 ComfyUI Image Manager - Bundling\n');
 
 // Check if backend is built
-if (!fs.existsSync(ENTRY_POINT)) {
+if (!ENTRY_POINT) {
   console.error('❌ Backend dist not found. Run "npm run build:integrated" first.');
+  console.error(`   Checked: ${ENTRY_POINT_CANDIDATES.map((p) => path.relative(ROOT_DIR, p)).join(', ')}`);
   process.exit(1);
 }
 

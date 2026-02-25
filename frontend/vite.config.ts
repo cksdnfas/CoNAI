@@ -1,50 +1,43 @@
+import path from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import path from 'path'
-import svgr from 'vite-plugin-svgr'
-const ReactCompilerConfig = { /* ... */ };
+import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [
-    svgr({
-      svgrOptions: {
-        icon: true,
-        exportType: 'default',
-      }
-    }),
-    react({
-      babel: {
-        plugins: ["babel-plugin-react-compiler", ReactCompilerConfig],
-      },
-    })
-  ],
+  plugins: [react(), tailwindcss()],
   base: './',
   resolve: {
+    extensions: ['.ts', '.tsx', '.mjs', '.js', '.mts', '.jsx', '.json'],
     alias: {
-      '@comfyui-image-manager/shared': path.resolve(__dirname, '../shared/src/index.ts')
-    }
+      '@': path.resolve(__dirname, './src'),
+      '@comfyui-image-manager/shared': path.resolve(__dirname, '../shared/src/index.ts'),
+    },
+    dedupe: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
   },
   server: {
     host: '0.0.0.0',
-    port: 5555,
+    port: 5666,
+    strictPort: true,
+    fs: {
+      allow: [
+        path.resolve(__dirname, '.'),
+        path.resolve(__dirname, '../shared/src'),
+      ],
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:1666',
         changeOrigin: true,
-        configure: (proxy, _options) => {
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
-            console.log('[Vite Proxy] Proxying:', req.method, req.url, '→', proxyReq.path);
-          });
-          proxy.on('error', (err, _req, _res) => {
-            console.error('[Vite Proxy] Error:', err);
-          });
-        }
       },
       '/uploads': {
         target: 'http://localhost:1666',
         changeOrigin: true,
-      }
-    }
-  }
+      },
+      '/temp': {
+        target: 'http://localhost:1666',
+        changeOrigin: true,
+      },
+    },
+  },
 })
