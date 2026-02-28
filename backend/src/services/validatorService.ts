@@ -39,8 +39,25 @@ export class ValidatorService {
     }
 
     try {
-      const parsed = JSON.parse(autoTagsJson);
-      return parsed;
+      const parsed = JSON.parse(autoTagsJson) as Record<string, unknown>;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+      }
+
+      const tagger = parsed.tagger && typeof parsed.tagger === 'object' && !Array.isArray(parsed.tagger)
+        ? parsed.tagger as Record<string, unknown>
+        : null;
+
+      const kaloscope = parsed.kaloscope && typeof parsed.kaloscope === 'object' && !Array.isArray(parsed.kaloscope)
+        ? parsed.kaloscope as Record<string, unknown>
+        : null;
+
+      return {
+        rating: (parsed.rating as ParsedAutoTags['rating']) || (tagger?.rating as ParsedAutoTags['rating']),
+        general: (parsed.general as ParsedAutoTags['general']) || (tagger?.general as ParsedAutoTags['general']) || (kaloscope?.artists as ParsedAutoTags['general']),
+        character: (parsed.character as ParsedAutoTags['character']) || (tagger?.character as ParsedAutoTags['character']),
+        model: (parsed.model as string | undefined) || (tagger?.model as string | undefined) || (kaloscope?.model as string | undefined),
+      };
     } catch (error) {
       console.warn('Failed to parse auto_tags JSON:', error);
       return null;

@@ -1,29 +1,49 @@
-import React from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Slider,
-  Button,
-  Alert,
-  CircularProgress,
-  Stack,
-  Chip,
-  Divider,
-} from '@mui/material';
-import {
-  Calculate as CalculateIcon,
-} from '@mui/icons-material';
-import { useTranslation } from 'react-i18next';
-import type { RatingData, RatingScoreResult } from '../../../../../types/rating';
+import React from 'react'
+import { Calculator } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
+import type { RatingData, RatingScoreResult } from '../../../../../types/rating'
 
 interface ScoreCalculatorProps {
-  testRating: RatingData;
-  testResult: RatingScoreResult | null;
-  testLoading: boolean;
-  onUpdateTestRating: (updates: RatingData) => void;
-  onCalculateTest: () => void;
+  testRating: RatingData
+  testResult: RatingScoreResult | null
+  testLoading: boolean
+  onUpdateTestRating: (updates: RatingData) => void
+  onCalculateTest: () => void
+}
+
+function RatioRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="text-sm font-medium">{label}</div>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.001}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-full"
+      />
+      <div className="text-muted-foreground flex justify-between text-xs">
+        <span>0.0</span>
+        <span>0.5</span>
+        <span>1.0</span>
+      </div>
+    </div>
+  )
 }
 
 export const ScoreCalculator: React.FC<ScoreCalculatorProps> = ({
@@ -33,172 +53,68 @@ export const ScoreCalculator: React.FC<ScoreCalculatorProps> = ({
   onUpdateTestRating,
   onCalculateTest,
 }) => {
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation('settings')
 
   return (
     <Card>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          {t('rating.calculator.title')}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" paragraph>
-          {t('rating.calculator.description')}
-        </Typography>
+      <CardHeader>
+        <CardTitle>{t('rating.calculator.title')}</CardTitle>
+        <CardDescription>{t('rating.calculator.description')}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <RatioRow
+          label={t('rating.calculator.general', { value: testRating.general.toFixed(3) })}
+          value={testRating.general}
+          onChange={(value) => onUpdateTestRating({ ...testRating, general: value })}
+        />
 
-        <Stack spacing={3} sx={{ mt: 3 }}>
-          <Box>
-            <Typography gutterBottom>
-              {t('rating.calculator.general', { value: testRating.general.toFixed(3) })}
-            </Typography>
-            <Box sx={{ width: '90%', mx: 'auto' }}>
-              <Slider
-                value={testRating.general}
-                onChange={(_, value) =>
-                  onUpdateTestRating({ ...testRating, general: value as number })
-                }
-                min={0}
-                max={1}
-                step={0.001}
-                marks={[
-                  { value: 0, label: '0.0' },
-                  { value: 0.5, label: '0.5' },
-                  { value: 1, label: '1.0' },
-                ]}
-              />
-            </Box>
-          </Box>
+        <RatioRow
+          label={t('rating.calculator.sensitive', { value: testRating.sensitive.toFixed(3) })}
+          value={testRating.sensitive}
+          onChange={(value) => onUpdateTestRating({ ...testRating, sensitive: value })}
+        />
 
-          <Box>
-            <Typography gutterBottom>
-              {t('rating.calculator.sensitive', { value: testRating.sensitive.toFixed(3) })}
-            </Typography>
-            <Box sx={{ width: '90%', mx: 'auto' }}>
-              <Slider
-                value={testRating.sensitive}
-                onChange={(_, value) =>
-                  onUpdateTestRating({ ...testRating, sensitive: value as number })
-                }
-                min={0}
-                max={1}
-                step={0.001}
-                marks={[
-                  { value: 0, label: '0.0' },
-                  { value: 0.5, label: '0.5' },
-                  { value: 1, label: '1.0' },
-                ]}
-              />
-            </Box>
-          </Box>
+        <RatioRow
+          label={t('rating.calculator.questionable', { value: testRating.questionable.toFixed(3) })}
+          value={testRating.questionable}
+          onChange={(value) => onUpdateTestRating({ ...testRating, questionable: value })}
+        />
 
-          <Box>
-            <Typography gutterBottom>
-              {t('rating.calculator.questionable', { value: testRating.questionable.toFixed(3) })}
-            </Typography>
-            <Box sx={{ width: '90%', mx: 'auto' }}>
-              <Slider
-                value={testRating.questionable}
-                onChange={(_, value) =>
-                  onUpdateTestRating({ ...testRating, questionable: value as number })
-                }
-                min={0}
-                max={1}
-                step={0.001}
-                marks={[
-                  { value: 0, label: '0.0' },
-                  { value: 0.5, label: '0.5' },
-                  { value: 1, label: '1.0' },
-                ]}
-              />
-            </Box>
-          </Box>
+        <RatioRow
+          label={t('rating.calculator.explicit', { value: testRating.explicit.toFixed(3) })}
+          value={testRating.explicit}
+          onChange={(value) => onUpdateTestRating({ ...testRating, explicit: value })}
+        />
 
-          <Box>
-            <Typography gutterBottom>
-              {t('rating.calculator.explicit', { value: testRating.explicit.toFixed(3) })}
-            </Typography>
-            <Box sx={{ width: '90%', mx: 'auto' }}>
-              <Slider
-                value={testRating.explicit}
-                onChange={(_, value) =>
-                  onUpdateTestRating({ ...testRating, explicit: value as number })
-                }
-                min={0}
-                max={1}
-                step={0.001}
-                marks={[
-                  { value: 0, label: '0.0' },
-                  { value: 0.5, label: '0.5' },
-                  { value: 1, label: '1.0' },
-                ]}
-              />
-            </Box>
-          </Box>
+        <Button onClick={onCalculateTest} disabled={testLoading}>
+          {testLoading ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground" /> : <Calculator className="h-4 w-4" />}
+          {testLoading ? t('rating.calculator.calculating') : t('rating.calculator.calculate')}
+        </Button>
 
-          <Button
-            variant="contained"
-            startIcon={testLoading ? <CircularProgress size={20} /> : <CalculateIcon />}
-            onClick={onCalculateTest}
-            disabled={testLoading}
-          >
-            {testLoading ? t('rating.calculator.calculating') : t('rating.calculator.calculate')}
-          </Button>
-
-          {testResult && (
-            <Alert severity="success">
-              <Typography variant="subtitle2" gutterBottom>
-                {t('rating.calculator.result.title')}
-              </Typography>
-              <Box sx={{ mt: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                  <Typography
-                    variant="body1"
-                    dangerouslySetInnerHTML={{
-                      __html: t('rating.calculator.result.score', {
-                        score: testResult.score.toFixed(2),
-                      }),
-                    }}
-                  />
-                  {testResult.tier && (
-                    <Chip
-                      label={testResult.tier.tier_name}
-                      sx={{
-                        bgcolor: testResult.tier.color || undefined,
-                        color: 'white',
-                      }}
-                    />
-                  )}
-                </Box>
-                <Divider sx={{ my: 1 }} />
-                <Typography variant="caption" color="text.secondary">
-                  {t('rating.calculator.result.breakdown')}
-                </Typography>
-                <Box sx={{ mt: 1 }}>
-                  <Typography variant="body2">
-                    {t('rating.calculator.result.generalScore', {
-                      score: testResult.breakdown.general.toFixed(3),
-                    })}
-                  </Typography>
-                  <Typography variant="body2">
-                    {t('rating.calculator.result.sensitiveScore', {
-                      score: testResult.breakdown.sensitive.toFixed(3),
-                    })}
-                  </Typography>
-                  <Typography variant="body2">
-                    {t('rating.calculator.result.questionableScore', {
-                      score: testResult.breakdown.questionable.toFixed(3),
-                    })}
-                  </Typography>
-                  <Typography variant="body2">
-                    {t('rating.calculator.result.explicitScore', {
-                      score: testResult.breakdown.explicit.toFixed(3),
-                    })}
-                  </Typography>
-                </Box>
-              </Box>
-            </Alert>
-          )}
-        </Stack>
+        {testResult ? (
+          <Alert>
+            <AlertDescription className="space-y-3">
+              <div className="font-medium">{t('rating.calculator.result.title')}</div>
+              <div className="flex items-center gap-2">
+                <span>{t('rating.calculator.result.score', { score: testResult.score.toFixed(2) })}</span>
+                {testResult.tier ? (
+                  <Badge style={{ backgroundColor: testResult.tier.color || undefined, color: '#fff' }}>
+                    {testResult.tier.tier_name}
+                  </Badge>
+                ) : null}
+              </div>
+              <Separator />
+              <div className="text-muted-foreground text-xs">{t('rating.calculator.result.breakdown')}</div>
+              <div className="space-y-1 text-sm">
+                <div>{t('rating.calculator.result.generalScore', { score: testResult.breakdown.general.toFixed(3) })}</div>
+                <div>{t('rating.calculator.result.sensitiveScore', { score: testResult.breakdown.sensitive.toFixed(3) })}</div>
+                <div>{t('rating.calculator.result.questionableScore', { score: testResult.breakdown.questionable.toFixed(3) })}</div>
+                <div>{t('rating.calculator.result.explicitScore', { score: testResult.breakdown.explicit.toFixed(3) })}</div>
+              </div>
+            </AlertDescription>
+          </Alert>
+        ) : null}
       </CardContent>
     </Card>
-  );
-};
+  )
+}

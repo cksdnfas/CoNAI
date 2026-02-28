@@ -1,35 +1,23 @@
-import React from 'react';
-import {
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  Chip,
-  CircularProgress,
-  Stack,
-  LinearProgress,
-  FormControlLabel,
-  Switch,
-  Box,
-  Tooltip,
-} from '@mui/material';
-import {
-  Refresh as RefreshIcon,
-  CheckCircle as CheckCircleIcon,
-} from '@mui/icons-material';
-import { useTranslation } from 'react-i18next';
-import type { SimilarityStats } from '../../../../../services/similarityApi';
+import React from 'react'
+import { CheckCircle, RefreshCw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import type { SimilarityStats } from '../../../../../services/similarityApi'
 
 interface SimilaritySystemStatusProps {
-  stats: SimilarityStats | null;
-  rebuilding: boolean;
-  rebuildProgress: number;
-  rebuildProcessed: number;
-  rebuildTotal: number;
-  autoGenerateHash: boolean;
-  onAutoGenerateHashChange: (checked: boolean) => void;
-  onRebuildHashes: () => void;
-  onRefreshStats: () => void;
+  stats: SimilarityStats | null
+  rebuilding: boolean
+  rebuildProgress: number
+  rebuildProcessed: number
+  rebuildTotal: number
+  autoGenerateHash: boolean
+  onAutoGenerateHashChange: (checked: boolean) => void
+  onRebuildHashes: () => void
+  onRefreshStats: () => void
 }
 
 export const SimilaritySystemStatus: React.FC<SimilaritySystemStatusProps> = ({
@@ -43,98 +31,79 @@ export const SimilaritySystemStatus: React.FC<SimilaritySystemStatusProps> = ({
   onRebuildHashes,
   onRefreshStats,
 }) => {
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation('settings')
 
   if (!stats) {
-    return <CircularProgress />;
+    return (
+      <div className="flex justify-center py-6">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" />
+      </div>
+    )
   }
 
   return (
-    <Card sx={{ mb: 3 }}>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          {t('similarity.systemStatus.title')}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" paragraph>
-          {t('similarity.systemStatus.description')}
-        </Typography>
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('similarity.systemStatus.title')}</CardTitle>
+        <CardDescription>{t('similarity.systemStatus.description')}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">{t('similarity.systemStatus.totalImages', { count: stats.totalImages })}</Badge>
+          <Badge>{t('similarity.systemStatus.withHash', { count: stats.imagesWithHash })}</Badge>
+          <Badge variant="secondary">{t('similarity.systemStatus.withoutHash', { count: stats.imagesWithoutHash })}</Badge>
+          <Badge variant="outline">{t('similarity.systemStatus.completion', { percent: stats.completionPercentage })}</Badge>
+        </div>
 
-        <Stack spacing={2}>
-          <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
-            <Chip
-              label={t('similarity.systemStatus.totalImages', { count: stats.totalImages })}
-              color="primary"
-              variant="outlined"
-            />
-            <Chip
-              label={t('similarity.systemStatus.withHash', { count: stats.imagesWithHash })}
-              color="success"
-              icon={<CheckCircleIcon />}
-            />
-            <Chip
-              label={t('similarity.systemStatus.withoutHash', { count: stats.imagesWithoutHash })}
-              color="warning"
-            />
-            <Chip
-              label={t('similarity.systemStatus.completion', { percent: stats.completionPercentage })}
-              color={stats.completionPercentage === 100 ? 'success' : 'info'}
-            />
-          </Stack>
+        {rebuilding ? (
+          <div className="space-y-1">
+            <div className="text-sm">
+              {t('similarity.systemStatus.rebuildProgress', {
+                processed: rebuildProcessed,
+                total: rebuildTotal,
+                percent: rebuildProgress.toFixed(0),
+              })}
+            </div>
+            <div className="h-2 w-full rounded bg-muted">
+              <div className="h-2 rounded bg-primary" style={{ width: `${rebuildProgress}%` }} />
+            </div>
+          </div>
+        ) : null}
 
-          {rebuilding && (
-            <Box>
-              <Typography variant="body2" gutterBottom>
-                {t('similarity.systemStatus.rebuildProgress', {
-                  processed: rebuildProcessed,
-                  total: rebuildTotal,
-                  percent: rebuildProgress.toFixed(0)
-                })}
-              </Typography>
-              <LinearProgress variant="determinate" value={rebuildProgress} />
-            </Box>
-          )}
+        <div className="flex items-center gap-2">
+          <Switch checked={autoGenerateHash} onCheckedChange={onAutoGenerateHashChange} />
+          <span className="text-sm">{t('similarity.systemStatus.autoGenerateHash')}</span>
+        </div>
 
-          <FormControlLabel
-            control={
-              <Switch
-                checked={autoGenerateHash}
-                onChange={(e) => onAutoGenerateHashChange(e.target.checked)}
-                color="primary"
-              />
-            }
-            label={t('similarity.systemStatus.autoGenerateHash')}
-          />
+        <div className="flex gap-2">
+          <Button onClick={onRebuildHashes} disabled={rebuilding || stats.imagesWithoutHash === 0}>
+            <RefreshCw className="h-4 w-4" />
+            {rebuilding
+              ? t('similarity.systemStatus.rebuildingButton')
+              : t('similarity.systemStatus.rebuildButton', { count: stats.imagesWithoutHash })}
+          </Button>
+          <Button variant="outline" onClick={onRefreshStats}>
+            <RefreshCw className="h-4 w-4" />
+            {t('similarity.systemStatus.refreshButton')}
+          </Button>
+        </div>
 
-          <Stack direction="row" spacing={2}>
-            <Button
-              variant="contained"
-              startIcon={rebuilding ? <CircularProgress size={20} /> : <RefreshIcon />}
-              onClick={onRebuildHashes}
-              disabled={rebuilding || stats.imagesWithoutHash === 0}
-            >
-              {rebuilding ? t('similarity.systemStatus.rebuildingButton') : t('similarity.systemStatus.rebuildButton', { count: stats.imagesWithoutHash })}
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<RefreshIcon />}
-              onClick={onRefreshStats}
-            >
-              {t('similarity.systemStatus.refreshButton')}
-            </Button>
-          </Stack>
-
-          {stats.imagesWithoutHash === 0 && (
-            <Tooltip title={t('similarity.systemStatus.allComplete')} arrow>
-              <Chip
-                icon={<CheckCircleIcon />}
-                label={t('similarity.systemStatus.allCompleteShort')}
-                color="success"
-                size="small"
-              />
+        {stats.imagesWithoutHash === 0 ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <Badge>
+                    <CheckCircle className="h-3 w-3" />
+                    {t('similarity.systemStatus.allCompleteShort')}
+                  </Badge>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>{t('similarity.systemStatus.allComplete')}</TooltipContent>
             </Tooltip>
-          )}
-        </Stack>
+          </TooltipProvider>
+        ) : null}
       </CardContent>
     </Card>
-  );
-};
+  )
+}

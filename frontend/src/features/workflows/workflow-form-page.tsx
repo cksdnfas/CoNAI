@@ -9,7 +9,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MarkedFieldsList, useMarkedFieldValidation } from './components/marked-fields'
+import EnhancedWorkflowGraphViewer from './components/enhanced-workflow-graph-viewer'
+import WorkflowJsonViewer from './components/workflow-json-viewer'
 
 function getErrorMessage(error: unknown): string {
   if (typeof error === 'object' && error !== null) {
@@ -35,6 +38,7 @@ export function WorkflowFormPage() {
   const [isActive, setIsActive] = useState(true)
   const [markedFields, setMarkedFields] = useState<MarkedField[]>([])
   const [jsonError, setJsonError] = useState<string | null>(null)
+  const [jsonTabValue, setJsonTabValue] = useState<'editor' | 'graph' | 'json'>('editor')
 
   const validation = useMarkedFieldValidation(markedFields)
 
@@ -84,6 +88,49 @@ export function WorkflowFormPage() {
     }
   }
 
+  const handleParameterRightClick = (
+    nodeId: string,
+    paramKey: string,
+    paramValue: unknown,
+    paramType: string,
+    nodeTitle: string,
+    classType: string,
+  ) => {
+    const jsonPath = `${nodeId}.inputs.${paramKey}`
+    const isDuplicate = markedFields.some((field) => field.jsonPath === jsonPath)
+
+    if (isDuplicate) {
+      setError(`Parameter "${paramKey}" from node ${nodeId} is already in Marked Fields`)
+      window.setTimeout(() => setError(null), 3000)
+      return
+    }
+
+    let fieldType: 'text' | 'number' | 'textarea' = 'text'
+    if (typeof paramValue === 'number') {
+      fieldType = 'number'
+    } else if (typeof paramValue === 'string' && paramValue.length > 100) {
+      fieldType = 'textarea'
+    }
+
+    const cleanTitle = nodeTitle
+      .replace(/[^a-zA-Z0-9_]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+
+    const autoLabel = `#${nodeId}_${cleanTitle}(${paramKey.toUpperCase()})`
+    const newField: MarkedField = {
+      id: `field_${Date.now()}`,
+      label: autoLabel,
+      jsonPath,
+      type: fieldType,
+      required: false,
+    }
+
+    setMarkedFields((prev) => [...prev, newField])
+    setSuccess(`Added "${paramKey}" (${paramType}) from Node ${nodeId} [${classType}] to Marked Fields`)
+    window.setTimeout(() => setSuccess(null), 3000)
+  }
+
   if (loading) return <div className="flex min-h-[400px] items-center justify-center"><div className="h-7 w-7 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" /></div>
 
   return (
@@ -96,7 +143,37 @@ export function WorkflowFormPage() {
 
       <Card>
         <CardHeader><div className="flex items-center justify-between gap-2"><CardTitle>{t('workflows:form.workflowJson')}</CardTitle><Button type="button" variant="outline" size="sm" asChild><label><Upload className="h-4 w-4" />{t('workflows:form.uploadFile')}<input type="file" accept=".json" hidden onChange={(e) => { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = (event) => { if (typeof event.target?.result === 'string') handleWorkflowJsonChange(event.target.result) }; reader.readAsText(file) }} /></label></Button></div></CardHeader>
-        <CardContent className="space-y-2"><Textarea rows={15} className="font-mono text-sm" value={workflowJson} onChange={(e) => handleWorkflowJsonChange(e.target.value)} />{jsonError ? <p className="text-sm text-destructive">{jsonError}</p> : null}{workflowJson && !jsonError ? <Badge>{t('workflows:form.jsonCharCount', { count: JSON.stringify(JSON.parse(workflowJson)).length })}</Badge> : null}</CardContent>
+        <CardContent className="space-y-3">
+          <Tabs value={jsonTabValue} onValueChange={(value) => setJsonTabValue(value as 'editor' | 'graph' | 'json')}>
+            <TabsList>
+              <TabsTrigger value="editor">JSON Editor</TabsTrigger>
+              <TabsTrigger value="graph" disabled={!workflowJson || Boolean(jsonError)}>Graph View</TabsTrigger>
+              <TabsTrigger value="json" disabled={!workflowJson || Boolean(jsonError)}>JSON View</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="editor" className="space-y-2">
+              <Textarea rows={15} className="font-mono text-sm" value={workflowJson} onChange={(e) => handleWorkflowJsonChange(e.target.value)} />
+              {jsonError ? <p className="text-sm text-destructive">{jsonError}</p> : null}
+              {workflowJson && !jsonError ? <Badge>{t('workflows:form.jsonCharCount', { count: JSON.stringify(JSON.parse(workflowJson)).length })}</Badge> : null}
+            </TabsContent>
+
+            <TabsContent value="graph">
+              {workflowJson && !jsonError ? (
+                <div className="h-[600px] overflow-hidden rounded-md border">
+                  <EnhancedWorkflowGraphViewer workflowJson={workflowJson} onParameterRightClick={handleParameterRightClick} />
+                </div>
+              ) : null}
+            </TabsContent>
+
+            <TabsContent value="json">
+              {workflowJson && !jsonError ? (
+                <div className="h-[600px] overflow-auto rounded-md border p-2">
+                  <WorkflowJsonViewer workflowJson={workflowJson} />
+                </div>
+              ) : null}
+            </TabsContent>
+          </Tabs>
+        </CardContent>
       </Card>
 
       <Card>

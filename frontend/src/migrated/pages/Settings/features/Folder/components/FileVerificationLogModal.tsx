@@ -1,68 +1,59 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react'
+import { AlertTriangle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
-  Button,
-  Box,
-  Typography,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
+  TableHeader,
   TableRow,
-  Paper,
-  Chip,
-  CircularProgress,
-  Alert,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-} from '@mui/material';
-import {
-  ExpandMore as ExpandMoreIcon,
-  Error as ErrorIcon,
-  CheckCircle as CheckCircleIcon,
-} from '@mui/icons-material';
-import { useTranslation } from 'react-i18next';
-import { fileVerificationApi, type VerificationLog } from '../../../../../services/fileVerificationApi';
+} from '@/components/ui/table'
+import { fileVerificationApi, type VerificationLog } from '../../../../../services/fileVerificationApi'
 
 interface FileVerificationLogModalProps {
-  open: boolean;
-  onClose: () => void;
+  open: boolean
+  onClose: () => void
 }
 
 const FileVerificationLogModal: React.FC<FileVerificationLogModalProps> = ({ open, onClose }) => {
-  const { t } = useTranslation('settings');
-  const [logs, setLogs] = useState<VerificationLog[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation('settings')
+  const [logs, setLogs] = useState<VerificationLog[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadLogs = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const data = await fileVerificationApi.getLogs(50)
+      setLogs(data)
+    } catch {
+      setError(t('folderSettings.verificationLog.loadFailed'))
+    } finally {
+      setLoading(false)
+    }
+  }, [t])
 
   useEffect(() => {
     if (open) {
-      loadLogs();
+      void loadLogs()
     }
-  }, [open]);
-
-  const loadLogs = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const data = await fileVerificationApi.getLogs(50);
-      setLogs(data);
-    } catch (err) {
-      console.error('Failed to load verification logs:', err);
-      setError(t('folderSettings.verificationLog.loadFailed'));
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [open, loadLogs])
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    const date = new Date(dateString)
     return date.toLocaleString('ko-KR', {
       year: 'numeric',
       month: '2-digit',
@@ -70,192 +61,140 @@ const FileVerificationLogModal: React.FC<FileVerificationLogModalProps> = ({ ope
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-    });
-  };
+    })
+  }
 
   const formatDuration = (ms: number) => {
     if (ms < 1000) {
-      return t('folderSettings.verificationLog.durationMs', { ms });
+      return t('folderSettings.verificationLog.durationMs', { ms })
     }
-    const seconds = (ms / 1000).toFixed(2);
-    return t('folderSettings.verificationLog.durationSeconds', { seconds });
-  };
+    return t('folderSettings.verificationLog.durationSeconds', { seconds: (ms / 1000).toFixed(2) })
+  }
 
   const getVerificationTypeText = (type: string) => {
     switch (type) {
       case 'auto':
-        return t('folderSettings.verificationLog.verificationType.auto');
+        return t('folderSettings.verificationLog.verificationType.auto')
       case 'manual':
-        return t('folderSettings.verificationLog.verificationType.manual');
+        return t('folderSettings.verificationLog.verificationType.manual')
       default:
-        return type;
+        return type
     }
-  };
+  }
 
   const parseErrorDetails = (errorDetails: string | null) => {
-    if (!errorDetails) return [];
+    if (!errorDetails) return [] as Array<{ fileId: number; filePath: string; error: string }>
     try {
-      return JSON.parse(errorDetails);
+      return JSON.parse(errorDetails) as Array<{ fileId: number; filePath: string; error: string }>
     } catch {
-      return [];
+      return [] as Array<{ fileId: number; filePath: string; error: string }>
     }
-  };
+  }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
-      <DialogTitle>
-        <Box display="flex" alignItems="center" gap={1}>
-          <CheckCircleIcon color="primary" />
-          <Typography variant="h6">{t('folderSettings.verificationLog.title')}</Typography>
-        </Box>
-      </DialogTitle>
+    <Dialog open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose() : undefined)}>
+      <DialogContent className="max-w-6xl">
+        <DialogHeader>
+          <DialogTitle>{t('folderSettings.verificationLog.title')}</DialogTitle>
+        </DialogHeader>
 
-      <DialogContent dividers>
-        {loading && (
-          <Box display="flex" justifyContent="center" alignItems="center" py={4}>
-            <CircularProgress />
-          </Box>
-        )}
+        {loading ? (
+          <div className="flex justify-center py-6">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" />
+          </div>
+        ) : null}
 
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
           </Alert>
-        )}
+        ) : null}
 
-        {!loading && !error && logs.length === 0 && (
-          <Alert severity="info">{t('folderSettings.verificationLog.noLogs')}</Alert>
-        )}
+        {!loading && !error && logs.length === 0 ? (
+          <Alert>
+            <AlertDescription>{t('folderSettings.verificationLog.noLogs')}</AlertDescription>
+          </Alert>
+        ) : null}
 
-        {!loading && !error && logs.length > 0 && (
-          <TableContainer component={Paper} variant="outlined">
-            <Table size="small">
-              <TableHead>
+        {!loading && !error && logs.length > 0 ? (
+          <div className="max-h-[65vh] overflow-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell>{t('folderSettings.verificationLog.columns.verificationTime')}</TableCell>
-                  <TableCell align="center">{t('folderSettings.verificationLog.columns.verificationType')}</TableCell>
-                  <TableCell align="right">{t('folderSettings.verificationLog.columns.checked')}</TableCell>
-                  <TableCell align="right">{t('folderSettings.verificationLog.columns.missingFound')}</TableCell>
-                  <TableCell align="right">{t('folderSettings.verificationLog.columns.deletedRecords')}</TableCell>
-                  <TableCell align="right">{t('folderSettings.verificationLog.columns.errors')}</TableCell>
-                  <TableCell align="right">{t('folderSettings.verificationLog.columns.duration')}</TableCell>
+                  <TableHead>{t('folderSettings.verificationLog.columns.verificationTime')}</TableHead>
+                  <TableHead>{t('folderSettings.verificationLog.columns.verificationType')}</TableHead>
+                  <TableHead className="text-right">{t('folderSettings.verificationLog.columns.checked')}</TableHead>
+                  <TableHead className="text-right">{t('folderSettings.verificationLog.columns.missingFound')}</TableHead>
+                  <TableHead className="text-right">{t('folderSettings.verificationLog.columns.deletedRecords')}</TableHead>
+                  <TableHead className="text-right">{t('folderSettings.verificationLog.columns.errors')}</TableHead>
+                  <TableHead className="text-right">{t('folderSettings.verificationLog.columns.duration')}</TableHead>
                 </TableRow>
-              </TableHead>
+              </TableHeader>
               <TableBody>
                 {logs.map((log) => {
-                  const errors = parseErrorDetails(log.error_details);
-                  const hasErrors = log.error_count > 0 || errors.length > 0;
+                  const errors = parseErrorDetails(log.error_details)
+                  const hasErrors = log.error_count > 0 || errors.length > 0
 
                   return (
                     <React.Fragment key={log.id}>
-                      <TableRow hover>
+                      <TableRow>
                         <TableCell>{formatDate(log.verification_date)}</TableCell>
-                        <TableCell align="center">
-                          <Chip
-                            label={getVerificationTypeText(log.verification_type)}
-                            size="small"
-                            color={log.verification_type === 'auto' ? 'default' : 'primary'}
-                          />
+                        <TableCell>
+                          <Badge variant="secondary">{getVerificationTypeText(log.verification_type)}</Badge>
                         </TableCell>
-                        <TableCell align="right">{log.total_checked.toLocaleString()}</TableCell>
-                        <TableCell align="right">
-                          {log.missing_found > 0 ? (
-                            <Chip
-                              label={t('folderSettings.verificationLog.countFormat', { count: log.missing_found })}
-                              size="small"
-                              color="warning"
-                            />
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              {t('folderSettings.verificationLog.countFormat', { count: 0 })}
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
-                          {log.deleted_records > 0 ? (
-                            <Chip
-                              label={t('folderSettings.verificationLog.countFormat', { count: log.deleted_records })}
-                              size="small"
-                              color="error"
-                            />
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              {t('folderSettings.verificationLog.countFormat', { count: 0 })}
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
+                        <TableCell className="text-right">{log.total_checked.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">{log.missing_found.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">{log.deleted_records.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">
                           {hasErrors ? (
-                            <Chip
-                              label={t('folderSettings.verificationLog.countFormat', { count: log.error_count })}
-                              size="small"
-                              color="error"
-                              icon={<ErrorIcon />}
-                            />
+                            <Badge variant="destructive">
+                              <AlertTriangle className="h-3 w-3" />
+                              {t('folderSettings.verificationLog.countFormat', { count: log.error_count })}
+                            </Badge>
                           ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              {t('folderSettings.verificationLog.noErrors')}
-                            </Typography>
+                            t('folderSettings.verificationLog.noErrors')
                           )}
                         </TableCell>
-                        <TableCell align="right">{formatDuration(log.duration_ms)}</TableCell>
+                        <TableCell className="text-right">{formatDuration(log.duration_ms)}</TableCell>
                       </TableRow>
 
-                      {hasErrors && errors.length > 0 && (
+                      {hasErrors && errors.length > 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} sx={{ py: 0 }}>
-                            <Accordion sx={{ boxShadow: 'none', '&:before': { display: 'none' } }}>
-                              <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                sx={{ minHeight: 'auto', '& .MuiAccordionSummary-content': { my: 1 } }}
-                              >
-                                <Box display="flex" alignItems="center" gap={1}>
-                                  <ErrorIcon color="error" fontSize="small" />
-                                  <Typography variant="body2" color="error">
-                                    {t('folderSettings.verificationLog.errorDetails', { count: errors.length })}
-                                  </Typography>
-                                </Box>
-                              </AccordionSummary>
-                              <AccordionDetails>
-                                <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
-                                  {errors.map((err: any, idx: number) => (
-                                    <Box key={idx} sx={{ mb: 1, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
-                                      <Typography variant="caption" display="block" color="error" fontWeight="bold">
-                                        {t('folderSettings.verificationLog.errorItem.fileId', { id: err.fileId })}
-                                      </Typography>
-                                      <Typography variant="caption" display="block" sx={{ wordBreak: 'break-all' }}>
-                                        {t('folderSettings.verificationLog.errorItem.path', { path: err.filePath })}
-                                      </Typography>
-                                      <Typography variant="caption" display="block" color="text.secondary">
-                                        {t('folderSettings.verificationLog.errorItem.error', { error: err.error })}
-                                      </Typography>
-                                    </Box>
-                                  ))}
-                                </Box>
-                              </AccordionDetails>
-                            </Accordion>
+                          <TableCell colSpan={7}>
+                            <details>
+                              <summary className="cursor-pointer text-sm text-destructive">
+                                {t('folderSettings.verificationLog.errorDetails', { count: errors.length })}
+                              </summary>
+                              <div className="mt-2 space-y-1">
+                                {errors.map((item) => (
+                                  <div key={`${item.fileId}-${item.filePath}`} className="rounded border p-2 text-xs">
+                                    <div className="font-medium">{t('folderSettings.verificationLog.errorItem.fileId', { id: item.fileId })}</div>
+                                    <div>{t('folderSettings.verificationLog.errorItem.path', { path: item.filePath })}</div>
+                                    <div className="text-destructive">{t('folderSettings.verificationLog.errorItem.error', { error: item.error })}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
                           </TableCell>
                         </TableRow>
-                      )}
+                      ) : null}
                     </React.Fragment>
-                  );
+                  )
                 })}
               </TableBody>
             </Table>
-          </TableContainer>
-        )}
+          </div>
+        ) : null}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => void loadLogs()} disabled={loading}>
+            {t('folderSettings.verificationLog.refresh')}
+          </Button>
+          <Button onClick={onClose}>{t('folderSettings.verificationLog.close')}</Button>
+        </DialogFooter>
       </DialogContent>
-
-      <DialogActions>
-        <Button onClick={loadLogs} disabled={loading}>
-          {t('folderSettings.verificationLog.refresh')}
-        </Button>
-        <Button onClick={onClose} variant="contained">
-          {t('folderSettings.verificationLog.close')}
-        </Button>
-      </DialogActions>
     </Dialog>
-  );
-};
+  )
+}
 
-export default FileVerificationLogModal;
+export default FileVerificationLogModal

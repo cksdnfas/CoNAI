@@ -15,7 +15,7 @@ import {
 import { Security, VpnKey, Help, ExpandMore } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { authApi, type DatabaseInfoResponse } from '../../../../services/authApi';
-import { useAuth } from '../../../../contexts/AuthContext';
+import { useAuth } from '@/contexts/auth-context';
 
 export const AuthSettings: React.FC = () => {
   const { t } = useTranslation('settings');

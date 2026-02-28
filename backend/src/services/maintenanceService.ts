@@ -3,6 +3,56 @@ import { db } from '../database/init';
 import { PromptCollectionService } from './promptCollectionService';
 
 export class MaintenanceService {
+    private static splitTaglist(raw: unknown): string[] {
+        if (typeof raw !== 'string' || raw.trim().length === 0) {
+            return [];
+        }
+
+        return raw
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter((tag) => tag.length > 0);
+    }
+
+    private static objectKeys(raw: unknown): string[] {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+            return [];
+        }
+
+        return Object.keys(raw as Record<string, unknown>)
+            .map((tag) => tag.trim())
+            .filter((tag) => tag.length > 0);
+    }
+
+    private static extractAutoTagsPrompts(tagsData: unknown): string[] {
+        if (!tagsData || typeof tagsData !== 'object') {
+            return [];
+        }
+
+        const data = tagsData as Record<string, unknown>;
+        const tagger = (data.tagger && typeof data.tagger === 'object') ? data.tagger as Record<string, unknown> : null;
+        const kaloscope = (data.kaloscope && typeof data.kaloscope === 'object') ? data.kaloscope as Record<string, unknown> : null;
+
+        const prompts: string[] = [];
+
+        prompts.push(...this.splitTaglist(data.taglist));
+        prompts.push(...this.splitTaglist(tagger?.taglist));
+        prompts.push(...this.splitTaglist(kaloscope?.taglist));
+
+        // Kaloscope artist labels
+        prompts.push(...this.objectKeys(kaloscope?.artists));
+        prompts.push(...this.objectKeys(kaloscope?.artist));
+
+        // Fallbacks when taglist is missing
+        if (prompts.length === 0) {
+            prompts.push(...this.objectKeys(data.general));
+            prompts.push(...this.objectKeys(tagger?.general));
+            prompts.push(...this.objectKeys(kaloscope?.general));
+        }
+
+        return prompts;
+    }
+
     /**
      * Syncs auto-tags from all images in media_metadata to the auto_prompt_collection table.
      * This is useful if the prompt collection gets out of sync or was not properly populated.
@@ -24,21 +74,6 @@ export class MaintenanceService {
             let totalTags = 0;
             const uniqueTags = new Set<string>();
 
-            // 2. Parse tags and collect unique ones
-            // Using a Set to dedup first might save DB calls if we were doing single inserts,
-            // but PromptCollectionService.batchAddOrIncrementAuto handles increments, so we should allow duplicates
-            // across images to count usage correctly?
-            // WAIT: "usage_count" represents how many images have this tag.
-            // So if I have 100 images with "1girl", usage_count should be ~100.
-            // IF resetting, we might over-count if we just add blindly and the DB isn't empty.
-            // BUT PromptCollectionService.batchAddOrIncrementAuto increments existing.
-            // IF we are just "Backfilling", we risk double-counting if some were already added.
-            // Ideally, we should recalculate from scratch or be careful.
-            // For a "Sync" (meaning "fix missing"), maybe we should just clear and rebuild?
-            // Or just add missing?
-            // The user issue is "collection is missing".
-            // Clearing and rebuilding is safest for "usage_count" accuracy.
-
             // Let's truncate the auto_prompt_collection table first to ensure accuracy.
             // "PromptCollectionService" doesn't have a truncate method, but we can access DB directly here since we are Maintenance.
 
@@ -51,15 +86,9 @@ export class MaintenanceService {
 
             for (const row of rows) {
                 try {
-                    const tagsData = JSON.parse(row.auto_tags);
-                    if (tagsData && tagsData.taglist) {
-                        // taglist is usually a comma-separated string
-                        const tags = tagsData.taglist.split(',').map((t: string) => t.trim()).filter((t: string) => t.length > 0);
-
-                        for (const tag of tags) {
-                            allPrompts.push(tag);
-                        }
-                    }
+                    const tagsData = JSON.parse(row.auto_tags) as unknown;
+                    const prompts = this.extractAutoTagsPrompts(tagsData);
+                    allPrompts.push(...prompts);
                 } catch (e) {
                     // Ignore parse errors
                 }

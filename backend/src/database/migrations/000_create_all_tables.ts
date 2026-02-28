@@ -82,7 +82,9 @@ export const up = async (db: Database.Database): Promise<void> => {
     'CREATE INDEX IF NOT EXISTS idx_negative_groups_visible ON negative_prompt_groups(is_visible)'
   ];
 
-  promptIndexes.forEach(sql => db.exec(sql));
+  promptIndexes.forEach(sql => {
+    db.exec(sql);
+  });
 
   // Pre-create LoRA groups to avoid race conditions during prompt collection
   db.prepare(`INSERT OR IGNORE INTO prompt_groups (group_name, display_order, is_visible)
@@ -141,7 +143,9 @@ export const up = async (db: Database.Database): Promise<void> => {
     'CREATE INDEX IF NOT EXISTS idx_image_groups_auto_date ON image_groups(auto_collected_date)'
   ];
 
-  groupIndexes.forEach(sql => db.exec(sql));
+  groupIndexes.forEach(sql => {
+    db.exec(sql);
+  });
 
   // 기본 그룹 생성
   db.prepare(`INSERT OR IGNORE INTO groups (name, description, color) VALUES (?, ?, ?)`)
@@ -260,7 +264,9 @@ export const up = async (db: Database.Database): Promise<void> => {
     'CREATE INDEX IF NOT EXISTS idx_metadata_first_seen_desc ON media_metadata(first_seen_date DESC)'
   ];
 
-  metadataIndexes.forEach(sql => db.exec(sql));
+  metadataIndexes.forEach(sql => {
+    db.exec(sql);
+  });
   console.log('  ✅ 미디어 메타데이터 테이블 + 인덱스 생성 완료\n');
 
   // ============================================
@@ -351,17 +357,50 @@ export const up = async (db: Database.Database): Promise<void> => {
     'CREATE INDEX IF NOT EXISTS idx_files_scan_date_desc ON image_files(scan_date DESC)'
   ];
 
-  folderIndexes.forEach(sql => db.exec(sql));
+  folderIndexes.forEach(sql => {
+    db.exec(sql);
+  });
 
   // 기본 업로드 폴더 등록
-  // 환경변수에서 직접 경로 계산 (runtimePaths 의존성 제거 for Docker bundling)
-  // - RUNTIME_UPLOADS_DIR 환경변수 설정 시: 해당 경로 사용 (예: E:/img/Images)
-  // - RUNTIME_BASE_PATH 설정 시: {basePath}/uploads 사용
-  // - 미설정 시: {cwd}/uploads 사용
-  const defaultUploadPath = process.env.RUNTIME_UPLOADS_DIR ||
-    (process.env.RUNTIME_BASE_PATH
-      ? path.join(process.env.RUNTIME_BASE_PATH, 'uploads')
-      : path.join(process.cwd(), 'uploads'));
+  // runtimePaths 기본 해석과 동일한 우선순위로 계산 (runtimePaths 직접 의존은 피함)
+  // 1) RUNTIME_UPLOADS_DIR
+  // 2) RUNTIME_BASE_PATH/uploads
+  // 3) PORTABLE_EXECUTABLE_DIR/user/uploads
+  // 4) CWD 기준 user/uploads (backend/dist 실행 시 한 단계 상위 루트 사용)
+  const cleanEnvPath = (value: string | undefined): string | null => {
+    if (!value) {
+      return null;
+    }
+
+    const cleaned = value.trim().split('#')[0].trim();
+    return cleaned.length > 0 ? cleaned : null;
+  };
+
+  const explicitUploadsDir = cleanEnvPath(process.env.RUNTIME_UPLOADS_DIR);
+  const explicitBasePath = cleanEnvPath(process.env.RUNTIME_BASE_PATH);
+  const portableExecutableDir = cleanEnvPath(process.env.PORTABLE_EXECUTABLE_DIR);
+
+  const resolvedBasePath = (() => {
+    if (explicitBasePath) {
+      return path.resolve(explicitBasePath);
+    }
+
+    if (portableExecutableDir) {
+      return path.resolve(portableExecutableDir, 'user');
+    }
+
+    const currentCwd = process.cwd();
+    const cwdBasename = path.basename(currentCwd);
+    if (cwdBasename === 'backend' || cwdBasename === 'dist') {
+      return path.resolve(currentCwd, '..', 'user');
+    }
+
+    return path.resolve(currentCwd, 'user');
+  })();
+
+  const defaultUploadPath = explicitUploadsDir
+    ? path.resolve(explicitUploadsDir)
+    : path.join(resolvedBasePath, 'uploads');
 
   db.prepare(`
     INSERT OR IGNORE INTO watched_folders

@@ -1,147 +1,97 @@
-import React, { useState } from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Chip,
-  Stack,
-} from '@mui/material';
-import { useTranslation } from 'react-i18next';
-import type { ImageRecord } from '../../../../../types/image';
-import type { SimilarImage } from '../../../../../services/similarityApi';
-import { getThumbnailUrl, getMatchTypeColor, getMatchTypeLabel } from '../utils/similarityHelpers';
-import ImageViewerModal from '../../../../../components/ImageViewerModal/ImageViewerModal';
+import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import type { ImageRecord } from '../../../../../types/image'
+import type { SimilarImage } from '../../../../../services/similarityApi'
+import { getMatchTypeLabel, getThumbnailUrl } from '../utils/similarityHelpers'
+import ImageViewerModal from '../../../../../components/ImageViewerModal/ImageViewerModal'
 
 interface SimilarityResultsDisplayProps {
-  queryImage: ImageRecord;
-  testResults: SimilarImage[];
+  queryImage: ImageRecord
+  testResults: SimilarImage[]
 }
 
 export const SimilarityResultsDisplay: React.FC<SimilarityResultsDisplayProps> = ({
   queryImage,
   testResults,
 }) => {
-  const { t } = useTranslation('settings');
-  const [selectedImage, setSelectedImage] = useState<ImageRecord | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const { t } = useTranslation('settings')
+  const [selectedImage, setSelectedImage] = useState<ImageRecord | null>(null)
+  const [selectedIndex, setSelectedIndex] = useState(0)
 
   return (
-    <Box>
-      {/* Query Image */}
-      <Typography variant="subtitle2" gutterBottom>
-        {t('similarity.test.queryImage')}
-      </Typography>
-      <Card variant="outlined" sx={{ maxWidth: 400, mx: 'auto', mb: 3 }}>
-        {getThumbnailUrl(queryImage) ? (
-          <Box
-            component="img"
-            src={getThumbnailUrl(queryImage)!}
-            alt={queryImage.original_file_path ?? ''}
-            sx={{
-              width: '100%',
-              maxHeight: 300,
-              objectFit: 'contain',
-            }}
-          />
-        ) : (
-          <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'grey.100' }}>
-            <Typography color="text.secondary">No thumbnail available</Typography>
-          </Box>
-        )}
-        <CardContent>
-          <Typography variant="body2">
-            <strong>{t('similarity.test.imageDetails.id')}</strong> {queryImage.composite_hash}
-          </Typography>
-          <Typography variant="body2" noWrap>
-            <strong>{t('similarity.test.imageDetails.filename')}</strong> {queryImage.original_file_path ?? ''}
-          </Typography>
-          <Typography variant="body2">
-            <strong>{t('similarity.test.imageDetails.size')}</strong> {queryImage.width} × {queryImage.height}
-          </Typography>
-          {queryImage.ai_tool && (
-            <Typography variant="body2">
-              <strong>{t('similarity.test.imageDetails.aiTool')}</strong> {queryImage.ai_tool}
-            </Typography>
+    <div className="space-y-3">
+      <div>
+        <h4 className="mb-1 text-sm font-semibold">{t('similarity.test.queryImage')}</h4>
+        <Card className="mx-auto max-w-md">
+          {getThumbnailUrl(queryImage) ? (
+            <img
+              src={getThumbnailUrl(queryImage) || ''}
+              alt={queryImage.original_file_path ?? ''}
+              className="max-h-[300px] w-full object-contain"
+            />
+          ) : (
+            <div className="text-muted-foreground flex h-[300px] items-center justify-center text-sm">No thumbnail available</div>
           )}
-        </CardContent>
-      </Card>
+          <CardContent className="space-y-1 pt-4 text-sm">
+            <div><strong>{t('similarity.test.imageDetails.id')}</strong> {queryImage.composite_hash}</div>
+            <div className="truncate"><strong>{t('similarity.test.imageDetails.filename')}</strong> {queryImage.original_file_path ?? ''}</div>
+            <div><strong>{t('similarity.test.imageDetails.size')}</strong> {queryImage.width} x {queryImage.height}</div>
+            {queryImage.ai_tool ? (
+              <div><strong>{t('similarity.test.imageDetails.aiTool')}</strong> {queryImage.ai_tool}</div>
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Search Results */}
-      {testResults.length > 0 && (
-        <Box>
-          <Typography variant="subtitle2" gutterBottom>
-            {t('similarity.test.results', { count: testResults.length })}
-          </Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' }, gap: 2 }}>
+      {testResults.length > 0 ? (
+        <div>
+          <h4 className="mb-2 text-sm font-semibold">{t('similarity.test.results', { count: testResults.length })}</h4>
+          <div className="grid gap-2 sm:grid-cols-3 md:grid-cols-4">
             {testResults.slice(0, 12).map((result, index) => (
-              <Box key={`${result.image.composite_hash}-${result.image.file_id || index}`}>
-                <Card
-                  variant="outlined"
-                  onClick={() => {
-                    setSelectedImage(result.image);
-                    setSelectedIndex(index);
-                  }}
-                  sx={{
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease-in-out',
-                    '&:hover': {
-                      transform: 'translateY(-2px)',
-                      boxShadow: 4,
-                    },
-                  }}
-                >
-                  {getThumbnailUrl(result.image) ? (
-                    <Box
-                      component="img"
-                      src={getThumbnailUrl(result.image)!}
-                      alt={result.image.original_file_path ?? ''}
-                      sx={{
-                        width: '100%',
-                        height: 150,
-                        objectFit: 'cover',
-                      }}
-                    />
-                  ) : (
-                    <Box sx={{ height: 150, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'grey.100' }}>
-                      <Typography variant="caption" color="text.secondary">No image</Typography>
-                    </Box>
-                  )}
-                  <CardContent sx={{ p: 1 }}>
-                    <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
-                      <Chip
-                        label={t('similarity.test.similarity', { percent: result.similarity.toFixed(1) })}
-                        size="small"
-                        color="primary"
-                      />
-                      <Chip
-                        label={getMatchTypeLabel(result.matchType, t)}
-                        size="small"
-                        color={getMatchTypeColor(result.matchType)}
-                      />
-                    </Stack>
-                    {result.colorSimilarity && (
-                      <Typography variant="caption" color="text.secondary">
-                        {t('similarity.test.colorSimilarity', { percent: result.colorSimilarity.toFixed(1) })}
-                      </Typography>
-                    )}
-                  </CardContent>
-                </Card>
-              </Box>
+              <Card
+                key={`${result.image.composite_hash}-${result.image.file_id || index}`}
+                className="cursor-pointer transition hover:-translate-y-0.5"
+                onClick={() => {
+                  setSelectedImage(result.image)
+                  setSelectedIndex(index)
+                }}
+              >
+                {getThumbnailUrl(result.image) ? (
+                  <img
+                    src={getThumbnailUrl(result.image) || ''}
+                    alt={result.image.original_file_path ?? ''}
+                    className="h-[150px] w-full object-cover"
+                  />
+                ) : (
+                  <div className="text-muted-foreground flex h-[150px] items-center justify-center text-xs">No image</div>
+                )}
+                <CardContent className="space-y-1 pt-3">
+                  <div className="flex flex-wrap gap-1">
+                    <Badge>{t('similarity.test.similarity', { percent: result.similarity.toFixed(1) })}</Badge>
+                    <Badge variant="outline">{getMatchTypeLabel(result.matchType, t)}</Badge>
+                  </div>
+                  {result.colorSimilarity ? (
+                    <div className="text-muted-foreground text-xs">
+                      {t('similarity.test.colorSimilarity', { percent: result.colorSimilarity.toFixed(1) })}
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
             ))}
-          </Box>
-        </Box>
-      )}
+          </div>
+        </div>
+      ) : null}
 
-      {/* Image Viewer Modal */}
       <ImageViewerModal
         open={selectedImage !== null}
         onClose={() => setSelectedImage(null)}
         image={selectedImage}
-        images={testResults.map(r => r.image)}
+        images={testResults.map((item) => item.image)}
         currentIndex={selectedIndex}
         onImageChange={setSelectedIndex}
       />
-    </Box>
-  );
-};
+    </div>
+  )
+}

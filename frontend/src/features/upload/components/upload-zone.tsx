@@ -1,32 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
+import { CheckCircle2, FolderOpen, Hourglass, Image as ImageIcon, Sparkles, TriangleAlert, UploadCloud, Video } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Divider,
-  Grid,
-  LinearProgress,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Paper,
-  Stack,
-  Typography,
-} from '@mui/material'
-import {
-  AutoAwesome as AutoAwesomeIcon,
-  CheckCircle as CheckCircleIcon,
-  CloudUpload as CloudUploadIcon,
-  Error as ErrorIcon,
-  FolderOpen as FolderOpenIcon,
-  HourglassEmpty as HourglassEmptyIcon,
-  Image as ImageIcon,
-  VideoLibrary as VideoLibraryIcon,
-} from '@mui/icons-material'
 import { useTranslation } from 'react-i18next'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/lib/utils'
 import { uploadApi } from '@/services/upload-api'
 import type { UploadProgressEvent, UploadStage } from '@/types/image'
 
@@ -205,135 +185,115 @@ export default function UploadZone({ onUploadComplete }: UploadZoneProps) {
   const getStatusIcon = (status: FileProgress['status']) => {
     switch (status) {
       case 'complete':
-        return <CheckCircleIcon sx={{ color: 'success.main' }} />
+        return <CheckCircle2 className="h-4 w-4 text-emerald-500" />
       case 'error':
-        return <ErrorIcon sx={{ color: 'error.main' }} />
+        return <TriangleAlert className="h-4 w-4 text-destructive" />
       case 'processing':
-        return <AutoAwesomeIcon sx={{ color: 'primary.main' }} />
+        return <Sparkles className="h-4 w-4 text-primary" />
       default:
-        return <HourglassEmptyIcon sx={{ color: 'text.secondary' }} />
+        return <Hourglass className="h-4 w-4 text-muted-foreground" />
     }
   }
 
+  const completedCount = fileProgressList.filter((file) => file.status === 'complete' || file.status === 'error').length
+  const successCount = fileProgressList.filter((file) => file.status === 'complete').length
+  const failedCount = fileProgressList.filter((file) => file.status === 'error').length
+
   return (
-    <Box sx={{ width: '100%' }}>
-      <Paper
+    <div className="w-full space-y-4">
+      <div
         {...getRootProps()}
-        elevation={isDragActive ? 8 : 2}
-        sx={{
-          p: 4,
-          textAlign: 'center',
-          border: '2px dashed',
-          borderColor: isDragActive ? 'primary.main' : 'grey.300',
-          backgroundColor: isDragActive ? 'action.hover' : 'background.paper',
-          cursor: 'pointer',
-          transition: 'all 0.2s ease-in-out',
-          '&:hover': {
-            borderColor: 'primary.main',
-            backgroundColor: 'action.hover',
-          },
-        }}
+        className={cn(
+          'cursor-pointer rounded-xl border-2 border-dashed bg-card p-8 text-center transition-colors',
+          isDragActive ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/60 hover:bg-accent/40',
+        )}
       >
         <input {...getInputProps()} />
-        <CloudUploadIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
-        <Typography variant="h5" gutterBottom>
-          {isDragActive ? t('dropzone.dragActive') : t('dropzone.dragInactive')}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          {t('dropzone.supportedFormats')}
-        </Typography>
+        <UploadCloud className="mx-auto mb-3 h-12 w-12 text-primary" />
+        <p className="text-base font-medium">{isDragActive ? t('dropzone.dragActive') : t('dropzone.dragInactive')}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{t('dropzone.supportedFormats')}</p>
 
-        <Stack direction="row" spacing={2} justifyContent="center" flexWrap="wrap">
-          <Chip icon={<ImageIcon />} label={t('dropzone.imageSupport')} variant="outlined" size="small" />
-          <Chip icon={<VideoLibraryIcon />} label={t('dropzone.videoSupport')} variant="outlined" size="small" />
-          <Chip label={t('dropzone.multipleSelection')} variant="outlined" size="small" />
-        </Stack>
-      </Paper>
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+          <Badge variant="outline" className="gap-1">
+            <ImageIcon className="h-3 w-3" />
+            {t('dropzone.imageSupport')}
+          </Badge>
+          <Badge variant="outline" className="gap-1">
+            <Video className="h-3 w-3" />
+            {t('dropzone.videoSupport')}
+          </Badge>
+          <Badge variant="outline">{t('dropzone.multipleSelection')}</Badge>
+        </div>
+      </div>
 
-      <Divider sx={{ my: 3 }}>{t('dropzone.divider')}</Divider>
+      <div className="relative py-1 text-center text-xs text-muted-foreground">
+        <div className="absolute inset-x-0 top-1/2 -z-10 h-px bg-border" />
+        <span className="bg-background px-2">{t('dropzone.divider')}</span>
+      </div>
 
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 6 }}>
-          <Button fullWidth variant="outlined" size="large" startIcon={<ImageIcon />} onClick={handleFileSelect} disabled={uploading}>
-            {t('buttons.selectFiles')}
-          </Button>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6 }}>
-          <Button fullWidth variant="outlined" size="large" startIcon={<FolderOpenIcon />} onClick={handleFolderSelect} disabled={uploading}>
-            {t('buttons.selectFolder')}
-          </Button>
-        </Grid>
-      </Grid>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <Button variant="outline" className="w-full" onClick={handleFileSelect} disabled={uploading}>
+          <ImageIcon className="h-4 w-4" />
+          {t('buttons.selectFiles')}
+        </Button>
+        <Button variant="outline" className="w-full" onClick={handleFolderSelect} disabled={uploading}>
+          <FolderOpen className="h-4 w-4" />
+          {t('buttons.selectFolder')}
+        </Button>
+      </div>
 
       {uploading && fileProgressList.length > 0 ? (
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            {t('progress.title')}:{' '}
-            {t('progress.fileCount', {
-              completed: fileProgressList.filter((file) => file.status === 'complete' || file.status === 'error').length,
-              total: fileProgressList.length,
-            })}
-          </Typography>
-          <LinearProgress variant="determinate" value={progressPercentage} sx={{ height: 8, borderRadius: 4, mb: 2 }} />
+        <div className="space-y-2 rounded-lg border bg-card p-3">
+          <p className="text-sm text-muted-foreground">
+            {t('progress.title')}: {t('progress.fileCount', { completed: completedCount, total: fileProgressList.length })}
+          </p>
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div className="h-full bg-primary transition-[width]" style={{ width: `${progressPercentage}%` }} />
+          </div>
 
-          <Paper variant="outlined" sx={{ maxHeight: 400, overflow: 'auto', p: 2 }}>
-            <List dense>
+          <ScrollArea className="h-72 rounded-md border">
+            <div className="space-y-1 p-2">
               {fileProgressList.map((file, index) => (
-                <ListItem
+                <div
                   key={`${file.filename}-${index}`}
-                  sx={{
-                    bgcolor: index === currentFileIndex && file.status === 'processing' ? 'action.selected' : 'transparent',
-                    borderRadius: 1,
-                    mb: 0.5,
-                  }}
+                  className={cn(
+                    'rounded-md border p-2',
+                    index === currentFileIndex && file.status === 'processing' ? 'border-primary/50 bg-primary/5' : 'border-transparent',
+                  )}
                 >
-                  <ListItemIcon sx={{ minWidth: 40 }}>{getStatusIcon(file.status)}</ListItemIcon>
-                  <ListItemText
-                    primary={file.filename}
-                    secondary={
-                      <>
-                        {file.status === 'processing' && file.currentStage ? (
-                          <Typography component="span" variant="caption" color="primary">
-                            {stageLabels[file.currentStage]}
-                          </Typography>
-                        ) : null}
-                        {file.message ? (
-                          <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                            {file.message}
-                          </Typography>
-                        ) : null}
-                        {file.error ? (
-                          <Typography component="span" variant="caption" color="error">
-                            {file.error}
-                          </Typography>
-                        ) : null}
-                      </>
-                    }
-                  />
-                </ListItem>
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5">{getStatusIcon(file.status)}</span>
+                    <div className="min-w-0 space-y-1">
+                      <p className="truncate text-sm font-medium">{file.filename}</p>
+                      <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
+                        {file.status === 'processing' && file.currentStage ? <Badge variant="outline">{stageLabels[file.currentStage]}</Badge> : null}
+                        {file.message ? <span>{file.message}</span> : null}
+                        {file.error ? <span className="text-destructive">{file.error}</span> : null}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               ))}
-            </List>
-          </Paper>
-        </Box>
+            </div>
+          </ScrollArea>
+        </div>
       ) : null}
 
       {message ? (
-        <Alert severity={message.type} sx={{ mt: 3 }} onClose={() => setMessage(null)}>
-          {message.text}
+        <Alert variant={message.type === 'error' ? 'destructive' : 'default'} className="mt-2">
+          <AlertDescription>{message.text}</AlertDescription>
         </Alert>
       ) : null}
 
       {fileProgressList.length > 0 && !uploading ? (
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            {t('progress.summary', {
-              total: fileProgressList.length,
-              success: fileProgressList.filter((file) => file.status === 'complete').length,
-              failed: fileProgressList.filter((file) => file.status === 'error').length,
-            })}
-          </Typography>
-        </Box>
+        <p className="text-sm text-muted-foreground">
+          {t('progress.summary', {
+            total: fileProgressList.length,
+            success: successCount,
+            failed: failedCount,
+          })}
+        </p>
       ) : null}
-    </Box>
+    </div>
   )
 }

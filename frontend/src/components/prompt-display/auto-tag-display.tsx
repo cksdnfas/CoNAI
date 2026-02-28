@@ -69,6 +69,17 @@ export default function AutoTagDisplay({ imageId, autoTags, onTagGenerated }: Au
     )
   }
 
+  const taggerData = autoTags.tagger && typeof autoTags.tagger === 'object' ? autoTags.tagger : null
+  const resolved = {
+    rating: autoTags.rating || taggerData?.rating,
+    character: autoTags.character || taggerData?.character,
+    taglist: autoTags.taglist || taggerData?.taglist,
+    general: autoTags.general || taggerData?.general,
+    model: autoTags.model || taggerData?.model,
+    thresholds: autoTags.thresholds || taggerData?.thresholds,
+    tagged_at: autoTags.tagged_at || taggerData?.tagged_at,
+  }
+
   const getRatingColor = (key: string): string => {
     const colorMap: Record<string, string> = {
       general: '#4caf50',
@@ -86,9 +97,9 @@ export default function AutoTagDisplay({ imageId, autoTags, onTagGenerated }: Au
   }
 
   const renderRatingGauge = () => {
-    if (!autoTags.rating) return null
+    if (!resolved.rating) return null
 
-    const ratings = Object.entries(autoTags.rating)
+    const ratings = Object.entries(resolved.rating)
       .map(([key, value]) => ({
         key,
         value: Math.round(value * 100) / 100,
@@ -110,11 +121,11 @@ export default function AutoTagDisplay({ imageId, autoTags, onTagGenerated }: Au
             <Tooltip
               title={
                 <Box sx={{ p: 0.5 }}>
-                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.model')}: {autoTags.model}</Typography>
-                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.generalThreshold')}: {autoTags.thresholds.general}</Typography>
-                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.characterThreshold')}: {autoTags.thresholds.character}</Typography>
-                  {autoTags.tagged_at ? (
-                    <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.taggedAt')}: {new Date(autoTags.tagged_at).toLocaleString('ko-KR')}</Typography>
+                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.model')}: {resolved.model}</Typography>
+                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.generalThreshold')}: {resolved.thresholds?.general}</Typography>
+                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.characterThreshold')}: {resolved.thresholds?.character}</Typography>
+                  {resolved.tagged_at ? (
+                    <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.taggedAt')}: {new Date(resolved.tagged_at).toLocaleString('ko-KR')}</Typography>
                   ) : null}
                 </Box>
               }
@@ -180,9 +191,9 @@ export default function AutoTagDisplay({ imageId, autoTags, onTagGenerated }: Au
   }
 
   const renderCharacters = () => {
-    if (!autoTags.character) return null
+    if (!resolved.character) return null
 
-    const characters = Object.entries(autoTags.character).sort((a, b) => b[1] - a[1])
+    const characters = Object.entries(resolved.character).sort((a, b) => b[1] - a[1])
     if (characters.length === 0) return null
 
     return (
@@ -218,9 +229,9 @@ export default function AutoTagDisplay({ imageId, autoTags, onTagGenerated }: Au
   }
 
   const handleCopyTaglist = async () => {
-    if (!autoTags.taglist) return
+    if (!resolved.taglist) return
     try {
-      await navigator.clipboard.writeText(autoTags.taglist)
+      await navigator.clipboard.writeText(resolved.taglist)
       setTaglistCopied(true)
       setTimeout(() => setTaglistCopied(false), 2000)
     } catch (err) {
@@ -229,7 +240,7 @@ export default function AutoTagDisplay({ imageId, autoTags, onTagGenerated }: Au
   }
 
   const renderTaglist = () => {
-    if (!autoTags.taglist) return null
+    if (!resolved.taglist) return null
 
     return (
       <Box sx={{ mb: 2 }}>
@@ -242,16 +253,16 @@ export default function AutoTagDisplay({ imageId, autoTags, onTagGenerated }: Au
           </Tooltip>
         </Box>
         <Typography variant="body2" sx={{ lineHeight: 1.6, wordBreak: 'break-word' }}>
-          {autoTags.taglist}
+          {resolved.taglist}
         </Typography>
       </Box>
     )
   }
 
   const renderGeneralTags = () => {
-    if (!autoTags.general) return null
+    if (!resolved.general) return null
 
-    const generalTags = Object.entries(autoTags.general).sort((a, b) => b[1] - a[1])
+    const generalTags = Object.entries(resolved.general).sort((a, b) => b[1] - a[1])
     if (generalTags.length === 0) return null
 
     return (

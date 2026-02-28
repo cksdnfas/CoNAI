@@ -1,28 +1,56 @@
-import React from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Slider,
-  Stack,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-} from '@mui/material';
-import { useTranslation } from 'react-i18next';
-import { InfoTooltip } from '../../../../../components/common';
+import React from 'react'
+import { CircleHelp } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface SimilarityThresholdsProps {
-  duplicateThreshold: number;
-  similarThreshold: number;
-  colorThreshold: number;
-  searchLimit: number;
-  onSetDuplicateThreshold: (value: number) => void;
-  onSetSimilarThreshold: (value: number) => void;
-  onSetColorThreshold: (value: number) => void;
-  onSetSearchLimit: (value: number) => void;
+  duplicateThreshold: number
+  similarThreshold: number
+  colorThreshold: number
+  searchLimit: number
+  onSetDuplicateThreshold: (value: number) => void
+  onSetSimilarThreshold: (value: number) => void
+  onSetColorThreshold: (value: number) => void
+  onSetSearchLimit: (value: number) => void
+}
+
+function ThresholdRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  marks,
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  marks: [string, string, string]
+  onChange: (value: number) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="text-sm font-medium">{label}</div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-full"
+      />
+      <div className="text-muted-foreground flex justify-between text-xs">
+        <span>{marks[0]}</span>
+        <span>{marks[1]}</span>
+        <span>{marks[2]}</span>
+      </div>
+    </div>
+  )
 }
 
 export const SimilarityThresholds: React.FC<SimilarityThresholdsProps> = ({
@@ -35,113 +63,85 @@ export const SimilarityThresholds: React.FC<SimilarityThresholdsProps> = ({
   onSetColorThreshold,
   onSetSearchLimit,
 }) => {
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation('settings')
 
   return (
     <Card>
-      <CardContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">
-            {t('similarity.thresholds.title')}
-          </Typography>
-          <InfoTooltip title={t('similarity.thresholds.localStorageNote')} />
-        </Box>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-1">
+          {t('similarity.thresholds.title')}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" className="text-muted-foreground">
+                  <CircleHelp className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{t('similarity.thresholds.localStorageNote')}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <ThresholdRow
+          label={t('similarity.thresholds.duplicate.label', { value: duplicateThreshold })}
+          value={duplicateThreshold}
+          min={0}
+          max={10}
+          step={1}
+          marks={[
+            t('similarity.thresholds.duplicate.strict'),
+            t('similarity.thresholds.duplicate.recommended'),
+            t('similarity.thresholds.duplicate.lenient'),
+          ]}
+          onChange={onSetDuplicateThreshold}
+        />
 
-        <Stack spacing={2}>
-          {/* Duplicate Threshold */}
-          <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-              <Typography>
-                {t('similarity.thresholds.duplicate.label', { value: duplicateThreshold })}
-              </Typography>
-              <InfoTooltip title={t('similarity.thresholds.duplicate.description')} />
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-              <Box sx={{ width: '90%' }}>
-                <Slider
-                  value={duplicateThreshold}
-                  onChange={(_, value) => onSetDuplicateThreshold(value as number)}
-                  min={0}
-                  max={10}
-                  step={1}
-                  marks={[
-                    { value: 0, label: t('similarity.thresholds.duplicate.strict') },
-                    { value: 5, label: t('similarity.thresholds.duplicate.recommended') },
-                    { value: 10, label: t('similarity.thresholds.duplicate.lenient') },
-                  ]}
-                />
-              </Box>
-            </Box>
-          </Box>
+        <ThresholdRow
+          label={t('similarity.thresholds.similar.label', { value: similarThreshold })}
+          value={similarThreshold}
+          min={5}
+          max={25}
+          step={1}
+          marks={[
+            t('similarity.thresholds.similar.strict'),
+            t('similarity.thresholds.similar.recommended'),
+            t('similarity.thresholds.similar.lenient'),
+          ]}
+          onChange={onSetSimilarThreshold}
+        />
 
-          {/* Similar Threshold */}
-          <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-              <Typography>
-                {t('similarity.thresholds.similar.label', { value: similarThreshold })}
-              </Typography>
-              <InfoTooltip title={t('similarity.thresholds.similar.description')} />
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-              <Box sx={{ width: '90%' }}>
-                <Slider
-                  value={similarThreshold}
-                  onChange={(_, value) => onSetSimilarThreshold(value as number)}
-                  min={5}
-                  max={25}
-                  step={1}
-                  marks={[
-                    { value: 5, label: t('similarity.thresholds.similar.strict') },
-                    { value: 15, label: t('similarity.thresholds.similar.recommended') },
-                    { value: 25, label: t('similarity.thresholds.similar.lenient') },
-                  ]}
-                />
-              </Box>
-            </Box>
-          </Box>
+        <ThresholdRow
+          label={t('similarity.thresholds.color.label', { value: colorThreshold })}
+          value={colorThreshold}
+          min={70}
+          max={100}
+          step={5}
+          marks={[
+            t('similarity.thresholds.color.min'),
+            t('similarity.thresholds.color.recommended'),
+            t('similarity.thresholds.color.max'),
+          ]}
+          onChange={onSetColorThreshold}
+        />
 
-          {/* Color Threshold */}
-          <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-              <Typography>
-                {t('similarity.thresholds.color.label', { value: colorThreshold })}
-              </Typography>
-              <InfoTooltip title={t('similarity.thresholds.color.description')} />
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-              <Box sx={{ width: '90%' }}>
-                <Slider
-                  value={colorThreshold}
-                  onChange={(_, value) => onSetColorThreshold(value as number)}
-                  min={70}
-                  max={100}
-                  step={5}
-                  marks={[
-                    { value: 70, label: t('similarity.thresholds.color.min') },
-                    { value: 85, label: t('similarity.thresholds.color.recommended') },
-                    { value: 100, label: t('similarity.thresholds.color.max') },
-                  ]}
-                />
-              </Box>
-            </Box>
-          </Box>
-
-          {/* Search Limit */}
-          <FormControl fullWidth>
-            <InputLabel>{t('similarity.thresholds.searchLimit.label')}</InputLabel>
-            <Select
-              value={searchLimit}
-              label={t('similarity.thresholds.searchLimit.label')}
-              onChange={(e) => onSetSearchLimit(e.target.value as number)}
-            >
-              <MenuItem value={10}>{t('similarity.thresholds.searchLimit.options.10')}</MenuItem>
-              <MenuItem value={20}>{t('similarity.thresholds.searchLimit.options.20')}</MenuItem>
-              <MenuItem value={50}>{t('similarity.thresholds.searchLimit.options.50')}</MenuItem>
-              <MenuItem value={100}>{t('similarity.thresholds.searchLimit.options.100')}</MenuItem>
-            </Select>
-          </FormControl>
-        </Stack>
+        <div className="space-y-1">
+          <label htmlFor="search-limit" className="text-sm font-medium">
+            {t('similarity.thresholds.searchLimit.label')}
+          </label>
+          <select
+            id="search-limit"
+            className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+            value={searchLimit}
+            onChange={(event) => onSetSearchLimit(Number(event.target.value))}
+          >
+            <option value={10}>{t('similarity.thresholds.searchLimit.options.10')}</option>
+            <option value={20}>{t('similarity.thresholds.searchLimit.options.20')}</option>
+            <option value={50}>{t('similarity.thresholds.searchLimit.options.50')}</option>
+            <option value={100}>{t('similarity.thresholds.searchLimit.options.100')}</option>
+          </select>
+        </div>
       </CardContent>
     </Card>
-  );
-};
+  )
+}

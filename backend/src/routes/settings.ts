@@ -1,16 +1,61 @@
 import { Router, Request, Response } from 'express';
+import fs from 'fs';
 import { asyncHandler } from '../middleware/errorHandler';
 import { settingsService } from '../services/settingsService';
-import { imageTaggerService } from '../services/imageTaggerService';
+import { imageTaggerService, ImageTaggerService } from '../services/imageTaggerService';
 import { RatingScoreService } from '../services/ratingScoreService';
 import { SystemSettingsService } from '../services/systemSettingsService';
 import { AutoScanScheduler } from '../services/autoScanScheduler';
 import { autoTagScheduler } from '../services/autoTagScheduler';
-import { GeneralSettings, TaggerSettings, SimilaritySettings, MetadataExtractionSettings, ThumbnailSettings, SupportedLanguage } from '../types/settings';
+import { kaloscopeTaggerService } from '../services/kaloscopeTaggerService';
+import path from 'path';
+import { GeneralSettings, TaggerSettings, KaloscopeSettings, TaggerDevice, TaggerModel, SimilaritySettings, MetadataExtractionSettings, ThumbnailSettings, SupportedLanguage, KaloscopeServerStatus } from '../types/settings';
 import { RatingWeightsUpdate, RatingTierInput, RatingData } from '../types/rating';
 import { MaintenanceService } from '../services/maintenanceService';
+import { db } from '../database/init';
+import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
 
 const router = Router();
+
+function isKaloscopeModelCached(repoId: string, modelFile: string): boolean {
+  const modelDirName = `models--${repoId.replace('/', '--')}`;
+  const possibleBasePaths = [
+    path.join(runtimePaths.modelsDir, modelDirName),
+    path.join(runtimePaths.modelsDir, 'hub', modelDirName),
+  ];
+
+  for (const basePath of possibleBasePaths) {
+    const snapshotsPath = path.join(basePath, 'snapshots');
+    if (!fs.existsSync(snapshotsPath)) {
+      continue;
+    }
+
+    try {
+      const snapshots = fs.readdirSync(snapshotsPath);
+      for (const snapshot of snapshots) {
+        const snapshotPath = path.join(snapshotsPath, snapshot);
+        if (!fs.statSync(snapshotPath).isDirectory()) {
+          continue;
+        }
+
+        const exactPath = path.join(snapshotPath, modelFile);
+        if (fs.existsSync(exactPath)) {
+          return true;
+        }
+
+        const modelFileName = path.basename(modelFile);
+        const directPath = path.join(snapshotPath, modelFileName);
+        if (fs.existsSync(directPath)) {
+          return true;
+        }
+      }
+    } catch {
+      // Ignore cache read errors and treat as not cached.
+    }
+  }
+
+  return false;
+}
 
 /**
  * GET /api/settings
@@ -76,6 +121,153 @@ router.get(
     res.json({
       success: true,
       data: models,
+    });
+    return;
+  })
+);
+
+/**
+ * PUT /api/settings/kaloscope
+ * Update kaloscope settings
+ */
+router.put(
+  '/kaloscope',
+  asyncHandler(async (req: Request, res: Response) => {
+    const kaloscopeSettings: Partial<KaloscopeSettings> = req.body;
+
+    if (kaloscopeSettings.device !== undefined) {
+      const validDevices = ['auto', 'cpu', 'cuda'];
+      if (!validDevices.includes(kaloscopeSettings.device)) {
+        res.status(400).json({
+          success: false,
+          error: `Invalid device. Must be one of: ${validDevices.join(', ')}`,
+        });
+        return;
+      }
+    }
+
+    if (kaloscopeSettings.topK !== undefined) {
+      if (!Number.isInteger(kaloscopeSettings.topK) || kaloscopeSettings.topK < 1 || kaloscopeSettings.topK > 200) {
+        res.status(400).json({
+          success: false,
+          error: 'topK must be an integer between 1 and 200',
+        });
+        return;
+      }
+    }
+
+    const updatedSettings = settingsService.updateKaloscopeSettings(kaloscopeSettings);
+    autoTagScheduler.restart();
+
+    res.json({
+      success: true,
+      data: updatedSettings,
+      message: 'Kaloscope settings updated successfully',
+    });
+    return;
+  })
+);
+
+/**
+ * GET /api/settings/kaloscope/status
+ * Get kaloscope runtime/config status
+ */
+router.get(
+  '/kaloscope/status',
+  asyncHandler(async (req: Request, res: Response) => {
+    const settings = settingsService.loadSettings();
+    const modelRepo = process.env.KALOSCOPE_MODEL_REPO || 'DraconicDragon/Kaloscope-onnx';
+    const modelFile = process.env.KALOSCOPE_MODEL_FILE || 'v2.0/kaloscope_2-0.onnx';
+    const scriptPath = path.join(__dirname, '..', '..', 'python', 'kaloscope_tagger.py');
+
+    const status: KaloscopeServerStatus = {
+      enabled: settings.kaloscope.enabled,
+      autoTagOnUpload: settings.kaloscope.autoTagOnUpload,
+      currentDevice: settings.kaloscope.device,
+      topK: settings.kaloscope.topK,
+      scriptExists: fs.existsSync(scriptPath),
+      modelCached: isKaloscopeModelCached(modelRepo, modelFile),
+      modelRepo,
+      modelFile,
+    };
+
+    res.json({
+      success: true,
+      data: status,
+    });
+    return;
+  })
+);
+
+/**
+ * POST /api/settings/kaloscope/test
+ * Test kaloscope tagging with a single image hash
+ */
+router.post(
+  '/kaloscope/test',
+  asyncHandler(async (req: Request, res: Response) => {
+    const imageId = String(req.body?.imageId || '').trim();
+    if (!imageId) {
+      res.status(400).json({
+        success: false,
+        error: 'imageId is required',
+      });
+      return;
+    }
+
+    const imageData = db.prepare(`
+      SELECT
+        mm.composite_hash,
+        if_.original_file_path,
+        if_.mime_type as file_mime_type,
+        mm.mime_type
+      FROM media_metadata mm
+      LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash AND if_.file_status = 'active'
+      WHERE mm.composite_hash = ?
+      LIMIT 1
+    `).get(imageId) as { composite_hash: string; original_file_path: string | null; file_mime_type: string | null; mime_type: string | null } | undefined;
+
+    if (!imageData || !imageData.original_file_path) {
+      res.status(404).json({
+        success: false,
+        error: 'Image not found or no active file',
+      });
+      return;
+    }
+
+    const imagePath = resolveUploadsPath(imageData.original_file_path);
+    if (!fs.existsSync(imagePath)) {
+      res.status(404).json({
+        success: false,
+        error: 'Image file not found on disk',
+      });
+      return;
+    }
+
+    const mimeType = imageData.file_mime_type || imageData.mime_type || undefined;
+    if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
+      res.status(400).json({
+        success: false,
+        error: 'Kaloscope test supports only image files',
+      });
+      return;
+    }
+
+    const result = await kaloscopeTaggerService.tagImage(imagePath);
+    if (!result.success) {
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Kaloscope test failed',
+        details: {
+          error_type: result.error_type,
+        },
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: result,
     });
     return;
   })
@@ -227,7 +419,7 @@ router.get(
 router.post(
   '/tagger/load-model',
   asyncHandler(async (req: Request, res: Response) => {
-    const { model } = req.body;
+    const { model, device }: { model?: TaggerModel; device?: TaggerDevice } = req.body;
 
     if (model && !['vit', 'swinv2', 'convnext'].includes(model)) {
       res.status(400).json({
@@ -237,7 +429,15 @@ router.post(
       return;
     }
 
-    await imageTaggerService.loadModel(model);
+    if (device && !['auto', 'cpu', 'cuda'].includes(device)) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid device. Must be one of: auto, cpu, cuda',
+      });
+      return;
+    }
+
+    await imageTaggerService.loadModel(model, device);
 
     res.json({
       success: true,

@@ -22,6 +22,49 @@ import { RatingWeights } from '../types/rating';
  * Final result = (OR results ∩ AND results) - Exclude results
  */
 export class ComplexFilterService {
+  private static readonly generalJsonPaths = [
+    '$.general',
+    '$.tagger.general',
+    '$.kaloscope.general',
+    '$.kaloscope.artists',
+    '$.kaloscope.artist'
+  ] as const;
+
+  private static readonly characterJsonPaths = [
+    '$.character',
+    '$.tagger.character'
+  ] as const;
+
+  private static ratingExpr(alias: string, ratingType: 'general' | 'sensitive' | 'questionable' | 'explicit'): string {
+    return `COALESCE(json_extract(${alias}.auto_tags, '$.rating.${ratingType}'), json_extract(${alias}.auto_tags, '$.tagger.rating.${ratingType}'))`;
+  }
+
+  private static modelExpr(alias: string): string {
+    return `COALESCE(json_extract(${alias}.auto_tags, '$.model'), json_extract(${alias}.auto_tags, '$.tagger.model'), json_extract(${alias}.auto_tags, '$.kaloscope.model'))`;
+  }
+
+  private static buildExistsForPaths(alias: string, paths: readonly string[], valueConditionSql: string): string {
+    return `(${paths.map((path) => `EXISTS (SELECT 1 FROM json_each(${alias}.auto_tags, '${path}') WHERE ${valueConditionSql})`).join(' OR ')})`;
+  }
+
+  private static pushPathMatchParams(
+    params: any[],
+    pathCount: number,
+    variant: string,
+    minScore?: number,
+    maxScore?: number
+  ): void {
+    for (let i = 0; i < pathCount; i++) {
+      params.push(`%${variant}%`);
+      if (minScore !== undefined) {
+        params.push(minScore);
+      }
+      if (maxScore !== undefined) {
+        params.push(maxScore);
+      }
+    }
+  }
+
   /**
    * Build complex search query with CTE (Common Table Expression)
    * Uses multi-stage filtering for optimal performance
@@ -305,32 +348,47 @@ export class ComplexFilterService {
       if (condition.value === true) {
         // 캐릭터 필드가 존재하고, object이며, 빈 객체가 아님
         return `(
-          json_extract(im.auto_tags, '$.character') IS NOT NULL
-          AND json_type(im.auto_tags, '$.character') = 'object'
-          AND json_extract(im.auto_tags, '$.character') != '{}'
+          (
+            json_extract(im.auto_tags, '$.character') IS NOT NULL
+            AND json_type(im.auto_tags, '$.character') = 'object'
+            AND json_extract(im.auto_tags, '$.character') != '{}'
+          )
+          OR
+          (
+            json_extract(im.auto_tags, '$.tagger.character') IS NOT NULL
+            AND json_type(im.auto_tags, '$.tagger.character') = 'object'
+            AND json_extract(im.auto_tags, '$.tagger.character') != '{}'
+          )
         )`;
       } else {
         // 캐릭터 필드가 없거나, object가 아니거나, 빈 객체임
         return `(
-          json_extract(im.auto_tags, '$.character') IS NULL
-          OR json_type(im.auto_tags, '$.character') != 'object'
-          OR json_extract(im.auto_tags, '$.character') = '{}'
+          (
+            json_extract(im.auto_tags, '$.character') IS NULL
+            OR json_type(im.auto_tags, '$.character') != 'object'
+            OR json_extract(im.auto_tags, '$.character') = '{}'
+          )
+          AND
+          (
+            json_extract(im.auto_tags, '$.tagger.character') IS NULL
+            OR json_type(im.auto_tags, '$.tagger.character') != 'object'
+            OR json_extract(im.auto_tags, '$.tagger.character') = '{}'
+          )
         )`;
       }
     }
 
     // Rating type-based
     if (condition.type === 'auto_tag_rating' && condition.rating_type) {
-      const jsonPath = `$.rating.${condition.rating_type}`;
       const conditions: string[] = [];
 
       if (condition.min_score !== undefined) {
         params.push(condition.min_score);
-        conditions.push(`json_extract(im.auto_tags, '${jsonPath}') >= ?`);
+        conditions.push(`${this.ratingExpr('im', condition.rating_type as 'general' | 'sensitive' | 'questionable' | 'explicit')} >= ?`);
       }
       if (condition.max_score !== undefined) {
         params.push(condition.max_score);
-        conditions.push(`json_extract(im.auto_tags, '${jsonPath}') <= ?`);
+        conditions.push(`${this.ratingExpr('im', condition.rating_type as 'general' | 'sensitive' | 'questionable' | 'explicit')} <= ?`);
       }
 
       return conditions.length > 0 ? conditions.join(' AND ') : null;
@@ -342,10 +400,10 @@ export class ComplexFilterService {
 
       // 점수 계산 식 생성
       const scoreExpression = `
-        (ROUND(json_extract(im.auto_tags, '$.rating.general') * 1000) / 1000 * ${weights.general_weight} +
-         ROUND(json_extract(im.auto_tags, '$.rating.sensitive') * 1000) / 1000 * ${weights.sensitive_weight} +
-         ROUND(json_extract(im.auto_tags, '$.rating.questionable') * 1000) / 1000 * ${weights.questionable_weight} +
-         ROUND(json_extract(im.auto_tags, '$.rating.explicit') * 1000) / 1000 * ${weights.explicit_weight})
+        (ROUND(COALESCE(json_extract(im.auto_tags, '$.rating.general'), json_extract(im.auto_tags, '$.tagger.rating.general'), 0) * 1000) / 1000 * ${weights.general_weight} +
+         ROUND(COALESCE(json_extract(im.auto_tags, '$.rating.sensitive'), json_extract(im.auto_tags, '$.tagger.rating.sensitive'), 0) * 1000) / 1000 * ${weights.sensitive_weight} +
+         ROUND(COALESCE(json_extract(im.auto_tags, '$.rating.questionable'), json_extract(im.auto_tags, '$.tagger.rating.questionable'), 0) * 1000) / 1000 * ${weights.questionable_weight} +
+         ROUND(COALESCE(json_extract(im.auto_tags, '$.rating.explicit'), json_extract(im.auto_tags, '$.tagger.rating.explicit'), 0) * 1000) / 1000 * ${weights.explicit_weight})
       `.trim();
 
       if (condition.min_score !== undefined) {
@@ -367,17 +425,20 @@ export class ComplexFilterService {
 
       const tagConditions: string[] = [];
       for (const variant of variants) {
-        const existsCondition = `EXISTS (
-          SELECT 1 FROM json_each(im.auto_tags, '$.general')
-          WHERE LOWER(key) LIKE ?
-          ${condition.min_score !== undefined ? ' AND value >= ?' : ''}
-          ${condition.max_score !== undefined ? ' AND value <= ?' : ''}
-        )`;
+        const existsCondition = this.buildExistsForPaths(
+          'im',
+          this.generalJsonPaths,
+          `LOWER(key) LIKE ?${condition.min_score !== undefined ? ' AND value >= ?' : ''}${condition.max_score !== undefined ? ' AND value <= ?' : ''}`
+        );
 
         tagConditions.push(existsCondition);
-        params.push(`%${variant}%`);
-        if (condition.min_score !== undefined) params.push(condition.min_score);
-        if (condition.max_score !== undefined) params.push(condition.max_score);
+        this.pushPathMatchParams(
+          params,
+          this.generalJsonPaths.length,
+          variant,
+          condition.min_score,
+          condition.max_score
+        );
       }
 
       return tagConditions.length > 0 ? `(${tagConditions.join(' OR ')})` : null;
@@ -390,17 +451,20 @@ export class ComplexFilterService {
 
       const charConditions: string[] = [];
       for (const variant of variants) {
-        const existsCondition = `EXISTS (
-          SELECT 1 FROM json_each(im.auto_tags, '$.character')
-          WHERE LOWER(key) LIKE ?
-          ${condition.min_score !== undefined ? ' AND value >= ?' : ''}
-          ${condition.max_score !== undefined ? ' AND value <= ?' : ''}
-        )`;
+        const existsCondition = this.buildExistsForPaths(
+          'im',
+          this.characterJsonPaths,
+          `LOWER(key) LIKE ?${condition.min_score !== undefined ? ' AND value >= ?' : ''}${condition.max_score !== undefined ? ' AND value <= ?' : ''}`
+        );
 
         charConditions.push(existsCondition);
-        params.push(`%${variant}%`);
-        if (condition.min_score !== undefined) params.push(condition.min_score);
-        if (condition.max_score !== undefined) params.push(condition.max_score);
+        this.pushPathMatchParams(
+          params,
+          this.characterJsonPaths.length,
+          variant,
+          condition.min_score,
+          condition.max_score
+        );
       }
 
       return charConditions.length > 0 ? `(${charConditions.join(' OR ')})` : null;
@@ -409,7 +473,7 @@ export class ComplexFilterService {
     // Model
     if (condition.type === 'auto_tag_model') {
       params.push(condition.value);
-      return `json_extract(im.auto_tags, '$.model') = ?`;
+      return `${this.modelExpr('im')} = ?`;
     }
 
     // Any Tag (General + Character)
@@ -419,32 +483,36 @@ export class ComplexFilterService {
 
       const anyConditions: string[] = [];
       for (const variant of variants) {
-        const generalCondition = `EXISTS (
-          SELECT 1 FROM json_each(im.auto_tags, '$.general')
-          WHERE LOWER(key) LIKE ?
-          ${condition.min_score !== undefined ? ' AND value >= ?' : ''}
-          ${condition.max_score !== undefined ? ' AND value <= ?' : ''}
-        )`;
+        const generalCondition = this.buildExistsForPaths(
+          'im',
+          this.generalJsonPaths,
+          `LOWER(key) LIKE ?${condition.min_score !== undefined ? ' AND value >= ?' : ''}${condition.max_score !== undefined ? ' AND value <= ?' : ''}`
+        );
 
-        const characterCondition = `EXISTS (
-          SELECT 1 FROM json_each(im.auto_tags, '$.character')
-          WHERE LOWER(key) LIKE ?
-          ${condition.min_score !== undefined ? ' AND value >= ?' : ''}
-          ${condition.max_score !== undefined ? ' AND value <= ?' : ''}
-        )`;
+        const characterCondition = this.buildExistsForPaths(
+          'im',
+          this.characterJsonPaths,
+          `LOWER(key) LIKE ?${condition.min_score !== undefined ? ' AND value >= ?' : ''}${condition.max_score !== undefined ? ' AND value <= ?' : ''}`
+        );
 
         // OR condition for each variant
         anyConditions.push(`(${generalCondition} OR ${characterCondition})`);
 
-        // Params for general
-        params.push(`%${variant}%`);
-        if (condition.min_score !== undefined) params.push(condition.min_score);
-        if (condition.max_score !== undefined) params.push(condition.max_score);
+        this.pushPathMatchParams(
+          params,
+          this.generalJsonPaths.length,
+          variant,
+          condition.min_score,
+          condition.max_score
+        );
 
-        // Params for character
-        params.push(`%${variant}%`);
-        if (condition.min_score !== undefined) params.push(condition.min_score);
-        if (condition.max_score !== undefined) params.push(condition.max_score);
+        this.pushPathMatchParams(
+          params,
+          this.characterJsonPaths.length,
+          variant,
+          condition.min_score,
+          condition.max_score
+        );
       }
 
       return anyConditions.length > 0 ? `(${anyConditions.join(' OR ')})` : null;

@@ -10,7 +10,7 @@ const basePath = (() => {
     const cleaned = overrideBasePath.trim().split('#')[0].trim();
     if (cleaned.length > 0) {
       const resolved = path.resolve(cleaned);
-      console.log(`[Config] Base path overridden by RUNTIME_BASE_PATH: ${resolved}`);
+      console.log(`[Config] Data root overridden by RUNTIME_BASE_PATH: ${resolved}`);
       return resolved;
     }
   }
@@ -19,8 +19,8 @@ const basePath = (() => {
   // This is set when running from the packaged executable
   const portableDir = process.env.PORTABLE_EXECUTABLE_DIR;
   if (portableDir && portableDir.trim().length > 0) {
-    const resolved = path.resolve(portableDir);
-    console.log(`[Config] Base path set from PORTABLE_EXECUTABLE_DIR: ${resolved}`);
+    const resolved = path.resolve(portableDir, 'user');
+    console.log(`[Config] Data root set from PORTABLE_EXECUTABLE_DIR: ${resolved}`);
     return resolved;
   }
 
@@ -31,15 +31,15 @@ const basePath = (() => {
   // If running from inside 'backend' or 'dist' (common in dev/build),
   // assume the true root is one level up.
   if (cwdBasename === 'backend' || cwdBasename === 'dist') {
-    const resolved = path.resolve(currentCwd, '..');
-    console.log(`[Config] Base path resolved from subdirectory '${cwdBasename}': ${resolved}`);
+    const resolved = path.resolve(currentCwd, '..', 'user');
+    console.log(`[Config] Data root resolved from subdirectory '${cwdBasename}': ${resolved}`);
     return resolved;
   }
 
   // 4. Default: Current working directory is the root
   // This is the standard behavior for Docker volumes and correct production runs
-  const resolved = path.resolve(currentCwd);
-  console.log(`[Config] Base path defaulting to CWD: ${resolved}`);
+  const resolved = path.resolve(currentCwd, 'user');
+  console.log(`[Config] Data root defaulting to CWD/user: ${resolved}`);
   return resolved;
 })();
 
@@ -114,7 +114,7 @@ export const publicUrls = {
 };
 
 export function ensureRuntimeDirectories(): void {
-  console.log('fyp [Config] Data Root Configuration:');
+  console.log('[Config] Data Root Configuration:');
   console.log(`   - Base Path:   ${basePath}`);
   console.log(`   - Uploads:     ${uploadsDir}`);
   console.log(`   - Database:    ${databaseDir}`);

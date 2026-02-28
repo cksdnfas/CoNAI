@@ -278,12 +278,12 @@ export class TaggerDaemon {
   /**
    * Load model into memory
    */
-  async loadModel(model?: TaggerModel): Promise<void> {
+  async loadModel(model?: TaggerModel, device?: string): Promise<void> {
     await this.ensureStarted();
 
     const settings = settingsService.loadSettings();
     const targetModel = model || settings.tagger.model;
-    const targetDevice = settings.tagger.device || 'auto';
+    const targetDevice = device || settings.tagger.device || 'auto';
 
     console.log(`[TaggerDaemon] Loading model: ${targetModel} on device: ${targetDevice}`);
 

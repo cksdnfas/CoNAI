@@ -1,19 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
-  Alert,
-  Box,
-  Chip,
-  CircularProgress,
-  Paper,
-  Stack,
-  Typography,
-} from '@mui/material'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import ImageIcon from '@mui/icons-material/Image'
+import { ChevronDown, Image as ImageIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/lib/utils'
 import { parsePrompt, parsePromptWithLoRAs } from '@comfyui-image-manager/shared'
 import { extractMetadata, type ParsedMetadata } from '@/utils/metadata-reader'
 
@@ -52,7 +43,7 @@ export default function PromptPreview() {
   )
 
   const handleDrop = useCallback(
-    (event: React.DragEvent<HTMLDivElement>) => {
+    (event: React.DragEvent<HTMLElement>) => {
       event.preventDefault()
       event.stopPropagation()
       setDragActive(false)
@@ -64,13 +55,13 @@ export default function PromptPreview() {
     [handleFile],
   )
 
-  const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+  const handleDragOver = useCallback((event: React.DragEvent<HTMLElement>) => {
     event.preventDefault()
     event.stopPropagation()
     setDragActive(true)
   }, [])
 
-  const handleDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+  const handleDragLeave = useCallback((event: React.DragEvent<HTMLElement>) => {
     event.preventDefault()
     event.stopPropagation()
     setDragActive(false)
@@ -98,225 +89,133 @@ export default function PromptPreview() {
   }, [imagePreview])
 
   return (
-    <Paper
-      elevation={1}
-      sx={{
-        p: { xs: 2, sm: 3 },
-        mt: { xs: 3, sm: 4 },
-        borderRadius: 2,
-      }}
-    >
-      <Typography
-        variant="h6"
-        gutterBottom
-        sx={{
-          fontSize: { xs: '1.1rem', sm: '1.25rem' },
-          fontWeight: 600,
-        }}
-      >
-        {t('upload:promptPreview.title')}
-      </Typography>
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-lg font-semibold">{t('upload:promptPreview.title')}</h3>
+        <p className="mt-1 text-sm text-muted-foreground">{t('upload:promptPreview.description')}</p>
+      </div>
 
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        {t('upload:promptPreview.description')}
-      </Typography>
-
-      <Box
+      <button
+        type="button"
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        sx={{
-          border: '2px dashed',
-          borderColor: dragActive ? 'primary.main' : 'grey.300',
-          borderRadius: 2,
-          p: 3,
-          textAlign: 'center',
-          backgroundColor: dragActive ? 'action.hover' : 'background.default',
-          cursor: 'pointer',
-          transition: 'all 0.2s',
-          '&:hover': {
-            borderColor: 'primary.main',
-            backgroundColor: 'action.hover',
-          },
-        }}
+        className={cn(
+          'w-full cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors',
+          dragActive ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/60 hover:bg-accent/40',
+        )}
         onClick={() => document.getElementById('prompt-preview-input')?.click()}
       >
-        <input id="prompt-preview-input" type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileInput} />
-        <ImageIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
-        <Typography variant="body1" color="text.secondary">
-          {dragActive ? t('upload:promptPreview.dropHere') : t('upload:promptPreview.dragOrClick')}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {t('upload:promptPreview.noUpload')}
-        </Typography>
-      </Box>
+        <input id="prompt-preview-input" type="file" accept="image/*" className="hidden" onChange={handleFileInput} />
+        <ImageIcon className="mx-auto mb-2 h-10 w-10 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">{dragActive ? t('upload:promptPreview.dropHere') : t('upload:promptPreview.dragOrClick')}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{t('upload:promptPreview.noUpload')}</p>
+      </button>
 
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}>
-          <CircularProgress />
-        </Box>
+        <div className="my-3 flex justify-center">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" />
+        </div>
       ) : null}
 
       {error ? (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          {error}
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
       {metadata && !loading ? (
-        <Box sx={{ mt: 3 }}>
+        <div className="space-y-3 pt-1">
           {imagePreview ? (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                {t('upload:promptPreview.imagePreview')}
-              </Typography>
-              <Paper
-                variant="outlined"
-                sx={{
-                  p: 1,
-                  backgroundColor: 'background.default',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                }}
-              >
-                <Box
-                  component="img"
-                  src={imagePreview}
-                  alt="Preview"
-                  sx={{
-                    maxWidth: '100%',
-                    maxHeight: 400,
-                    objectFit: 'contain',
-                    borderRadius: 1,
-                  }}
-                />
-              </Paper>
-            </Box>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">{t('upload:promptPreview.imagePreview')}</p>
+              <div className="flex justify-center rounded-md border bg-muted/30 p-2">
+                <img src={imagePreview} alt="Preview" className="max-h-[400px] max-w-full rounded object-contain" />
+              </div>
+            </div>
           ) : null}
 
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              {t('upload:promptPreview.aiTool')}
-            </Typography>
-            <Chip label={metadata.aiTool || 'Unknown'} color={metadata.aiTool !== 'Unknown' ? 'primary' : 'default'} size="small" />
-          </Box>
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-muted-foreground">{t('upload:promptPreview.aiTool')}</p>
+            <Badge variant={metadata.aiTool && metadata.aiTool !== 'Unknown' ? 'default' : 'outline'}>{metadata.aiTool || 'Unknown'}</Badge>
+          </div>
 
           {parsedPrompt ? (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                {t('upload:promptPreview.positivePrompt')}
-              </Typography>
-              <Paper
-                variant="outlined"
-                sx={{
-                  p: 2,
-                  backgroundColor: 'background.default',
-                  maxHeight: 200,
-                  overflow: 'auto',
-                }}
-              >
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                  {parsedPrompt.cleaned}
-                </Typography>
-              </Paper>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">{t('upload:promptPreview.positivePrompt')}</p>
+              <ScrollArea className="max-h-48 rounded-md border bg-muted/20 p-3">
+                <p className="whitespace-pre-wrap text-sm">{parsedPrompt.cleaned}</p>
+              </ScrollArea>
               {parsedPrompt.terms.length > 0 ? (
-                <Box sx={{ mt: 1 }}>
-                  <Typography variant="caption" color="text.secondary">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">
                     {t('upload:promptPreview.terms')} ({parsedPrompt.terms.length})
-                  </Typography>
-                  <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>
-                    {parsedPrompt.terms.slice(0, 20).map((term: string, idx: number) => (
-                      <Chip key={`${term}-${idx}`} label={term} size="small" variant="outlined" sx={{ mb: 0.5 }} />
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {parsedPrompt.terms.slice(0, 20).map((term: string) => (
+                      <Badge key={term} variant="outline">
+                        {term}
+                      </Badge>
                     ))}
                     {parsedPrompt.terms.length > 20 ? (
-                      <Chip label={`+${parsedPrompt.terms.length - 20} more`} size="small" variant="outlined" sx={{ mb: 0.5 }} />
+                      <Badge variant="outline">+{parsedPrompt.terms.length - 20} more</Badge>
                     ) : null}
-                  </Stack>
-                </Box>
+                  </div>
+                </div>
               ) : null}
-            </Box>
+            </div>
           ) : null}
 
           {parsedNegative && parsedNegative.cleaned ? (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                {t('upload:promptPreview.negativePrompt')}
-              </Typography>
-              <Paper
-                variant="outlined"
-                sx={{
-                  p: 2,
-                  backgroundColor: 'background.default',
-                  maxHeight: 150,
-                  overflow: 'auto',
-                }}
-              >
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                  {parsedNegative.cleaned}
-                </Typography>
-              </Paper>
-            </Box>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">{t('upload:promptPreview.negativePrompt')}</p>
+              <ScrollArea className="max-h-40 rounded-md border bg-muted/20 p-3">
+                <p className="whitespace-pre-wrap text-sm">{parsedNegative.cleaned}</p>
+              </ScrollArea>
+            </div>
           ) : null}
 
           {loraInfo && loraInfo.loras.length > 0 ? (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">
                 {t('upload:promptPreview.loraModels')} ({loraInfo.loras.length})
-              </Typography>
-              <Stack direction="row" spacing={0.5} flexWrap="wrap">
-                {loraInfo.loras.map((lora: string, idx: number) => (
-                  <Chip key={`${lora}-${idx}`} label={lora} size="small" color="secondary" sx={{ mb: 0.5 }} />
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {loraInfo.loras.map((lora: string) => (
+                  <Badge key={lora} variant="secondary">
+                    {lora}
+                  </Badge>
                 ))}
-              </Stack>
-            </Box>
+              </div>
+            </div>
           ) : null}
 
           {metadata.parameters && Object.keys(metadata.parameters).length > 0 ? (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                {t('upload:promptPreview.parameters')}
-              </Typography>
-              <Paper
-                variant="outlined"
-                sx={{
-                  p: 2,
-                  backgroundColor: 'background.default',
-                }}
-              >
-                <Stack spacing={0.5}>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">{t('upload:promptPreview.parameters')}</p>
+              <div className="space-y-1 rounded-md border bg-muted/20 p-3 text-sm">
                   {Object.entries(metadata.parameters)
                     .filter(([, value]) => value !== undefined && value !== null)
                     .map(([key, value]) => (
-                      <Typography key={key} variant="body2">
-                        <strong>{key}:</strong> {String(value)}
-                      </Typography>
+                      <p key={key}>
+                        <span className="font-semibold">{key}:</span> {String(value)}
+                      </p>
                     ))}
-                </Stack>
-              </Paper>
-            </Box>
+              </div>
+            </div>
           ) : null}
 
-          <Accordion sx={{ mt: 2 }}>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="subtitle2">{t('upload:promptPreview.rawMetadata')}</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Paper
-                variant="outlined"
-                sx={{
-                  p: 2,
-                  backgroundColor: 'background.default',
-                  maxHeight: 400,
-                  overflow: 'auto',
-                }}
-              >
-                <pre style={{ margin: 0, fontSize: '0.75rem', whiteSpace: 'pre-wrap' }}>{JSON.stringify(metadata.rawMetadata, null, 2)}</pre>
-              </Paper>
-            </AccordionDetails>
-          </Accordion>
-        </Box>
+          <details className="rounded-md border">
+            <summary className="flex cursor-pointer items-center justify-between px-3 py-2 text-sm font-medium">
+              {t('upload:promptPreview.rawMetadata')}
+              <ChevronDown className="h-4 w-4" />
+            </summary>
+            <ScrollArea className="max-h-96 border-t bg-muted/20 p-3">
+              <pre className="whitespace-pre-wrap break-all text-xs">{JSON.stringify(metadata.rawMetadata, null, 2)}</pre>
+            </ScrollArea>
+          </details>
+        </div>
       ) : null}
-    </Paper>
+    </div>
   )
 }

@@ -94,3 +94,11 @@ nul
 
 # Claude Code settings (local only)
 .claude/settings.local.json
+
+# Local/agent cleanup artifacts
+.sisyphus/
+**/__pycache__/
+models/models--*/
+
+# Runtime user data
+user/

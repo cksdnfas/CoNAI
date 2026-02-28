@@ -225,7 +225,7 @@ RUN pip3 install --no-cache-dir \\
     rm -rf /root/.cache/pip
 
 # Create data directories
-RUN mkdir -p /app/data/uploads /app/data/database /app/data/logs /app/data/temp /app/data/models /app/data/config /app/data/RecycleBin
+RUN mkdir -p /app/data/user/uploads /app/data/user/database /app/data/user/logs /app/data/user/temp /app/data/user/models /app/data/user/config /app/data/user/RecycleBin
 
 # Create non-root user
 RUN groupadd -g 1001 appuser && \\
@@ -300,7 +300,7 @@ RUN pip3 install --no-cache-dir \\
     rm -rf /root/.cache/pip
 
 # Create data directories
-RUN mkdir -p /app/data/uploads /app/data/database /app/data/logs /app/data/temp /app/data/models /app/data/config /app/data/RecycleBin
+RUN mkdir -p /app/data/user/uploads /app/data/user/database /app/data/user/logs /app/data/user/temp /app/data/user/models /app/data/user/config /app/data/user/RecycleBin
 
 # Create non-root user
 RUN groupadd -g 1001 appuser && \\
@@ -340,7 +340,7 @@ ENV NODE_ENV=production \\
     PORT=1666 \\
     HOST=0.0.0.0 \\
     DOCKER=true \\
-    RUNTIME_BASE_PATH=/app/data \\
+    RUNTIME_BASE_PATH=/app/data/user \\
     PYTHON_PATH=python3 \\
     PYTHONUNBUFFERED=1
 
@@ -401,7 +401,7 @@ services:
       - PORT=1666
       - HOST=0.0.0.0
       - LOCALE=en
-      # All data paths are automatically configured via RUNTIME_BASE_PATH=/app/data
+      # All data paths are automatically configured via RUNTIME_BASE_PATH=/app/data/user/user
 
     restart: unless-stopped
     
@@ -873,7 +873,7 @@ environment:
   - LOCALE=en                # Interface language (en, ko)
 
   # Optional: Override individual data paths
-  # - RUNTIME_BASE_PATH=/app/data
+  # - RUNTIME_BASE_PATH=/app/data/user
   # - RUNTIME_UPLOADS_DIR=/custom/path
   # - RUNTIME_DATABASE_DIR=/custom/path
   # - RUNTIME_TEMP_DIR=/custom/path

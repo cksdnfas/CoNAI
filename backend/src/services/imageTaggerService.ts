@@ -1,6 +1,6 @@
 import { taggerDaemon, TaggerResult, TaggerServerStatus } from './taggerDaemon';
 import { logger } from '../utils/logger';
-import { TaggerModel } from '../types/settings';
+import { TaggerDevice, TaggerModel } from '../types/settings';
 import { VideoFrameExtractor } from './videoFrameExtractor';
 import { TagMergeService } from './tagMergeService';
 import path from 'path';
@@ -209,9 +209,9 @@ export class ImageTaggerService {
   /**
    * Load model manually
    */
-  async loadModel(model?: TaggerModel): Promise<void> {
-    logger.info('[ImageTagger] Loading model manually:', model || 'default');
-    await taggerDaemon.loadModel(model);
+  async loadModel(model?: TaggerModel, device?: TaggerDevice): Promise<void> {
+    logger.info('[ImageTagger] Loading model manually:', model || 'default', 'device:', device || 'default');
+    await taggerDaemon.loadModel(model, device);
   }
 
   /**

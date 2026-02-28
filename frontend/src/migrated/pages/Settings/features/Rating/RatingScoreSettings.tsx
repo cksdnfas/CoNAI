@@ -1,30 +1,26 @@
-import React, { useState } from 'react';
-import {
-  Box,
-  Alert,
-  CircularProgress,
-} from '@mui/material';
-import { useTranslation } from 'react-i18next';
+import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 // Hooks
-import { useRatingWeights } from './hooks/useRatingWeights';
-import { useRatingTiers } from './hooks/useRatingTiers';
-import { useRatingCalculator } from './hooks/useRatingCalculator';
+import { useRatingWeights } from './hooks/useRatingWeights'
+import { useRatingTiers } from './hooks/useRatingTiers'
+import { useRatingCalculator } from './hooks/useRatingCalculator'
 
 // Components
-import { WeightConfiguration } from './components/WeightConfiguration';
-import { TierManagement } from './components/TierManagement';
-import { TierDialog } from './components/TierDialog';
-import { ScoreCalculator } from './components/ScoreCalculator';
-import { RatingScoreRecalculation } from './components/RatingScoreRecalculation';
+import { WeightConfiguration } from './components/WeightConfiguration'
+import { TierManagement } from './components/TierManagement'
+import { TierDialog } from './components/TierDialog'
+import { ScoreCalculator } from './components/ScoreCalculator'
+import { RatingScoreRecalculation } from './components/RatingScoreRecalculation'
 
 const RatingScoreSettings: React.FC = () => {
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation('settings')
 
   // Global state
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   // Hooks
   const {
@@ -35,7 +31,7 @@ const RatingScoreSettings: React.FC = () => {
     setLocalWeights,
     handleSaveWeights,
     handleResetWeights,
-  } = useRatingWeights();
+  } = useRatingWeights()
 
   const {
     tiers,
@@ -46,7 +42,7 @@ const RatingScoreSettings: React.FC = () => {
     handleCloseTierDialog,
     handleSaveTier,
     handleDeleteTier,
-  } = useRatingTiers();
+  } = useRatingTiers()
 
   const {
     testRating,
@@ -55,88 +51,88 @@ const RatingScoreSettings: React.FC = () => {
     previewResult,
     setTestRating,
     handleCalculateTest,
-  } = useRatingCalculator(weights, localWeights, tiers);
+  } = useRatingCalculator(weights, localWeights, tiers)
 
   // Handlers with error handling
   const onSaveWeights = async () => {
-    setSaving(true);
-    setError(null);
-    setSuccessMessage(null);
+    setSaving(true)
+    setError(null)
+    setSuccessMessage(null)
     try {
-      await handleSaveWeights();
-      setSuccessMessage(t('rating.weights.alerts.saveSuccess'));
-      setTimeout(() => setSuccessMessage(null), 3000);
+      await handleSaveWeights()
+      setSuccessMessage(t('rating.weights.alerts.saveSuccess'))
+      setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err) {
-      setError(t('rating.weights.alerts.saveFailed'));
+      setError(t('rating.weights.alerts.saveFailed'))
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
   const onSaveTier = async () => {
-    setSaving(true);
-    setError(null);
+    setSaving(true)
+    setError(null)
     try {
-      const mode = await handleSaveTier();
+      const mode = await handleSaveTier()
       setSuccessMessage(
         mode === 'create'
           ? t('rating.tiers.alerts.created')
           : t('rating.tiers.alerts.updated')
       );
-      setTimeout(() => setSuccessMessage(null), 3000);
+      setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err: any) {
       if (err.message === 'Required fields missing') {
-        setError(t('rating.tiers.dialog.requiredFields'));
+        setError(t('rating.tiers.dialog.requiredFields'))
       } else {
-        setError(t('rating.tiers.alerts.saveFailed'));
+        setError(t('rating.tiers.alerts.saveFailed'))
       }
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
   const onDeleteTier = async (id: number) => {
-    setSaving(true);
-    setError(null);
+    setSaving(true)
+    setError(null)
     try {
-      await handleDeleteTier(id);
-      setSuccessMessage(t('rating.tiers.alerts.deleted'));
-      setTimeout(() => setSuccessMessage(null), 3000);
+      await handleDeleteTier(id)
+      setSuccessMessage(t('rating.tiers.alerts.deleted'))
+      setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err) {
-      setError(t('rating.tiers.alerts.deleteFailed'));
+      setError(t('rating.tiers.alerts.deleteFailed'))
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
   const onCalculateTest = async () => {
-    setError(null);
+    setError(null)
     try {
-      await handleCalculateTest();
+      await handleCalculateTest()
     } catch (err) {
-      setError(t('rating.calculator.failed'));
+      setError(t('rating.calculator.failed'))
     }
-  };
+  }
 
   if (weightsLoading || tiersLoading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-        <CircularProgress />
-      </Box>
-    );
+      <div className="flex justify-center py-6">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" />
+      </div>
+    )
   }
 
   return (
-    <Box>
+    <div className="space-y-3">
       {successMessage && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          {successMessage}
+        <Alert>
+          <AlertDescription>{successMessage}</AlertDescription>
         </Alert>
       )}
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
@@ -187,8 +183,8 @@ const RatingScoreSettings: React.FC = () => {
           })
         }
       />
-    </Box>
-  );
-};
+    </div>
+  )
+}
 
-export default RatingScoreSettings;
+export default RatingScoreSettings

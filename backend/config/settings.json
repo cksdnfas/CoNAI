@@ -20,6 +20,12 @@
     "keepModelLoaded": false,
     "autoUnloadMinutes": 5
   },
+  "kaloscope": {
+    "enabled": true,
+    "autoTagOnUpload": true,
+    "device": "auto",
+    "topK": 15
+  },
   "similarity": {
     "autoGenerateHashOnUpload": true
   },

@@ -1,42 +1,25 @@
-import React, { useEffect, useState } from 'react';
-import {
-  Card,
-  CardContent,
-  Typography,
-  TextField,
-  Button,
-  CircularProgress,
-  Stack,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Alert,
-  Box,
-  LinearProgress,
-  Chip,
-} from '@mui/material';
-import {
-  Search as SearchIcon,
-  Refresh as RefreshIcon,
-  CheckCircle as CheckCircleIcon,
-  Warning as WarningIcon,
-} from '@mui/icons-material';
-import { useTranslation } from 'react-i18next';
-import type { ImageRecord } from '../../../../../types/image';
-import type { SimilarImage, SimilarityStats } from '../../../../../services/similarityApi';
-import { similarityApi } from '../../../../../services/similarityApi';
-import { SimilarityResultsDisplay } from './SimilarityResultsDisplay';
+import React, { useCallback, useEffect, useState } from 'react'
+import { CheckCircle, RefreshCw, Search, TriangleAlert } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import type { ImageRecord } from '../../../../../types/image'
+import type { SimilarImage, SimilarityStats } from '../../../../../services/similarityApi'
+import { similarityApi } from '../../../../../services/similarityApi'
+import { SimilarityResultsDisplay } from './SimilarityResultsDisplay'
 
 interface SimilarityTestPanelProps {
-  testImageId: string;
-  testLoading: boolean;
-  testType: 'duplicates' | 'similar' | 'color';
-  queryImage: ImageRecord | null;
-  testResults: SimilarImage[];
-  onSetTestImageId: (id: string) => void;
-  onSetTestType: (type: 'duplicates' | 'similar' | 'color') => void;
-  onTestSearch: () => void;
+  testImageId: string
+  testLoading: boolean
+  testType: 'duplicates' | 'similar' | 'color'
+  queryImage: ImageRecord | null
+  testResults: SimilarImage[]
+  onSetTestImageId: (id: string) => void
+  onSetTestType: (type: 'duplicates' | 'similar' | 'color') => void
+  onTestSearch: () => void
 }
 
 export const SimilarityTestPanel: React.FC<SimilarityTestPanelProps> = ({
@@ -49,160 +32,140 @@ export const SimilarityTestPanel: React.FC<SimilarityTestPanelProps> = ({
   onSetTestType,
   onTestSearch,
 }) => {
-  const { t } = useTranslation('settings');
-  const [stats, setStats] = useState<SimilarityStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [rebuildLoading, setRebuildLoading] = useState(false);
-  const [rebuildMessage, setRebuildMessage] = useState<string>('');
-  const [rebuildSuccess, setRebuildSuccess] = useState<boolean>(false);
+  const { t } = useTranslation('settings')
+  const [stats, setStats] = useState<SimilarityStats | null>(null)
+  const [statsLoading, setStatsLoading] = useState(false)
+  const [rebuildLoading, setRebuildLoading] = useState(false)
+  const [rebuildMessage, setRebuildMessage] = useState('')
+  const [rebuildSuccess, setRebuildSuccess] = useState(false)
 
-  // Load stats on mount
-  useEffect(() => {
-    loadStats();
-  }, []);
-
-  const loadStats = async () => {
-    setStatsLoading(true);
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true)
     try {
-      const data = await similarityApi.getStats();
-      setStats(data);
-    } catch (error) {
-      console.error('Failed to load stats:', error);
+      const data = await similarityApi.getStats()
+      setStats(data)
     } finally {
-      setStatsLoading(false);
+      setStatsLoading(false)
     }
-  };
+  }, [])
+
+  useEffect(() => {
+    void loadStats()
+  }, [loadStats])
 
   const handleRebuildHashes = async () => {
-    setRebuildLoading(true);
-    setRebuildMessage('');
-    setRebuildSuccess(false);
+    setRebuildLoading(true)
+    setRebuildMessage('')
+    setRebuildSuccess(false)
     try {
-      const result = await similarityApi.rebuildHashes(100);
-      setRebuildMessage(t('similarity.test.rebuild.success', {
-        processed: result.processed,
-        failed: result.failed,
-        remaining: result.remaining
-      }));
-      setRebuildSuccess(true);
-      // Reload stats after rebuild
-      await loadStats();
-    } catch (error: any) {
-      setRebuildMessage(t('similarity.test.rebuild.error', {
-        error: error.response?.data?.error || error.message
-      }));
-      setRebuildSuccess(false);
+      const result = await similarityApi.rebuildHashes(100)
+      setRebuildMessage(
+        t('similarity.test.rebuild.success', {
+          processed: result.processed,
+          failed: result.failed,
+          remaining: result.remaining,
+        })
+      )
+      setRebuildSuccess(true)
+      await loadStats()
+    } catch (error: unknown) {
+      const fallback = error instanceof Error ? error.message : 'Unknown error'
+      setRebuildMessage(t('similarity.test.rebuild.error', { error: fallback }))
+      setRebuildSuccess(false)
     } finally {
-      setRebuildLoading(false);
+      setRebuildLoading(false)
     }
-  };
+  }
 
   return (
-    <Card sx={{ mb: 3 }}>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          {t('similarity.test.title')}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" paragraph>
-          {t('similarity.test.description')}
-        </Typography>
-
-        {/* Hash Generation Stats */}
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('similarity.test.title')}</CardTitle>
+        <CardDescription>{t('similarity.test.description')}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
         {statsLoading ? (
-          <Box sx={{ mb: 2 }}>
-            <CircularProgress size={20} />
-          </Box>
+          <div className="flex items-center gap-2 text-sm">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" />
+          </div>
         ) : stats ? (
-          <Box sx={{ mb: 2 }}>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-              <Typography variant="body2" color="text.secondary">
-                {t('similarity.test.hashStatus')}:
-              </Typography>
-              <Chip
-                size="small"
-                icon={stats.completionPercentage >= 100 ? <CheckCircleIcon /> : <WarningIcon />}
-                label={`${stats.imagesWithHash} / ${stats.totalImages} (${stats.completionPercentage.toFixed(1)}%)`}
-                color={stats.completionPercentage >= 100 ? 'success' : 'warning'}
-              />
-            </Stack>
-            {stats.completionPercentage < 100 && (
-              <LinearProgress
-                variant="determinate"
-                value={stats.completionPercentage}
-                sx={{ mb: 1 }}
-              />
-            )}
-            {stats.imagesWithoutHash > 0 && (
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={rebuildLoading ? <CircularProgress size={16} /> : <RefreshIcon />}
-                onClick={handleRebuildHashes}
-                disabled={rebuildLoading}
-                sx={{ mt: 1 }}
-              >
-                {rebuildLoading ? t('similarity.test.rebuild.rebuilding') : t('similarity.test.rebuild.button', { count: stats.imagesWithoutHash })}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">{t('similarity.test.hashStatus')}:</span>
+              <Badge variant={stats.completionPercentage >= 100 ? 'default' : 'secondary'}>
+                {stats.completionPercentage >= 100 ? <CheckCircle className="h-3 w-3" /> : <TriangleAlert className="h-3 w-3" />}
+                {stats.imagesWithHash} / {stats.totalImages} ({stats.completionPercentage.toFixed(1)}%)
+              </Badge>
+            </div>
+
+            {stats.completionPercentage < 100 ? (
+              <div className="h-2 w-full rounded bg-muted">
+                <div className="h-2 rounded bg-primary" style={{ width: `${stats.completionPercentage}%` }} />
+              </div>
+            ) : null}
+
+            {stats.imagesWithoutHash > 0 ? (
+              <Button variant="outline" size="sm" onClick={() => void handleRebuildHashes()} disabled={rebuildLoading}>
+                <RefreshCw className="h-4 w-4" />
+                {rebuildLoading
+                  ? t('similarity.test.rebuild.rebuilding')
+                  : t('similarity.test.rebuild.button', { count: stats.imagesWithoutHash })}
               </Button>
-            )}
-            {rebuildMessage && (
-              <Alert severity={rebuildSuccess ? 'success' : 'error'} sx={{ mt: 1 }}>
-                {rebuildMessage}
+            ) : null}
+
+            {rebuildMessage ? (
+              <Alert variant={rebuildSuccess ? 'default' : 'destructive'}>
+                <AlertDescription>{rebuildMessage}</AlertDescription>
               </Alert>
-            )}
-          </Box>
+            ) : null}
+          </div>
         ) : null}
 
-        <Stack spacing={2}>
-          <Stack direction="row" spacing={2} alignItems="flex-end">
-            <TextField
-              label={t('similarity.test.imageId')}
+        <div className="grid gap-2 md:grid-cols-[1fr_180px] md:items-end">
+          <div className="space-y-1">
+            <label htmlFor="test-image-id" className="text-sm font-medium">
+              {t('similarity.test.imageId')}
+            </label>
+            <Input
+              id="test-image-id"
               value={testImageId}
-              onChange={(e) => onSetTestImageId(e.target.value)}
+              onChange={(event) => onSetTestImageId(event.target.value)}
               type="text"
               placeholder="e.g., a1b2c3d4e5f6... (48-character composite hash)"
-              fullWidth
             />
-            <FormControl sx={{ minWidth: 150 }}>
-              <InputLabel>{t('similarity.test.searchType')}</InputLabel>
-              <Select
-                value={testType}
-                label={t('similarity.test.searchType')}
-                onChange={(e) => onSetTestType(e.target.value as any)}
-              >
-                <MenuItem value="duplicates">{t('similarity.test.types.duplicates')}</MenuItem>
-                <MenuItem value="similar">{t('similarity.test.types.similar')}</MenuItem>
-                <MenuItem value="color">{t('similarity.test.types.color')}</MenuItem>
-              </Select>
-            </FormControl>
-          </Stack>
-
-          <Stack direction="row" spacing={2}>
-            <Button
-              variant="contained"
-              startIcon={testLoading ? <CircularProgress size={20} /> : <SearchIcon />}
-              onClick={onTestSearch}
-              disabled={testLoading || !testImageId}
-              fullWidth
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="test-type" className="text-sm font-medium">
+              {t('similarity.test.searchType')}
+            </label>
+            <select
+              id="test-type"
+              className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+              value={testType}
+              onChange={(event) => onSetTestType(event.target.value as 'duplicates' | 'similar' | 'color')}
             >
-              {testLoading ? t('similarity.test.searching') : t('similarity.test.searchButton')}
-            </Button>
-          </Stack>
+              <option value="duplicates">{t('similarity.test.types.duplicates')}</option>
+              <option value="similar">{t('similarity.test.types.similar')}</option>
+              <option value="color">{t('similarity.test.types.color')}</option>
+            </select>
+          </div>
+        </div>
 
-          {/* Results Display */}
-          {queryImage && (
-            <SimilarityResultsDisplay
-              queryImage={queryImage}
-              testResults={testResults}
-            />
-          )}
+        <Button onClick={onTestSearch} disabled={testLoading || !testImageId}>
+          {testLoading ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground" /> : <Search className="h-4 w-4" />}
+          {testLoading ? t('similarity.test.searching') : t('similarity.test.searchButton')}
+        </Button>
 
-          {testResults.length === 0 && testImageId && !testLoading && (
-            <Alert severity="info">
-              {t('similarity.test.noResults')}
-            </Alert>
-          )}
-        </Stack>
+        {queryImage ? (
+          <SimilarityResultsDisplay queryImage={queryImage} testResults={testResults} />
+        ) : null}
+
+        {testResults.length === 0 && testImageId && !testLoading ? (
+          <Alert>
+            <AlertDescription>{t('similarity.test.noResults')}</AlertDescription>
+          </Alert>
+        ) : null}
       </CardContent>
     </Card>
-  );
-};
+  )
+}

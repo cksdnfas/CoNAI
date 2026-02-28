@@ -1,22 +1,17 @@
-import React from 'react';
-import { Box, Divider } from '@mui/material';
-import { useTranslation } from 'react-i18next';
-
-// Hooks
-import { useSimilarityStats } from './hooks/useSimilarityStats';
-import { useSimilarityTest } from './hooks/useSimilarityTest';
-import { useDuplicateScan } from './hooks/useDuplicateScan';
-
-// Components
-import { SimilaritySystemStatus } from './components/SimilaritySystemStatus';
-import { SimilarityTestPanel } from './components/SimilarityTestPanel';
-import { SimilarityDuplicateScan } from './components/SimilarityDuplicateScan';
-import { SimilarityThresholds } from './components/SimilarityThresholds';
+import React from 'react'
+import { useTranslation } from 'react-i18next'
+import { Separator } from '@/components/ui/separator'
+import { useSimilarityStats } from './hooks/useSimilarityStats'
+import { useSimilarityTest } from './hooks/useSimilarityTest'
+import { useDuplicateScan } from './hooks/useDuplicateScan'
+import { SimilaritySystemStatus } from './components/SimilaritySystemStatus'
+import { SimilarityTestPanel } from './components/SimilarityTestPanel'
+import { SimilarityDuplicateScan } from './components/SimilarityDuplicateScan'
+import { SimilarityThresholds } from './components/SimilarityThresholds'
 
 const SimilaritySettings: React.FC = () => {
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation('settings')
 
-  // Stats hook
   const {
     stats,
     rebuilding,
@@ -27,9 +22,8 @@ const SimilaritySettings: React.FC = () => {
     loadStats,
     handleAutoGenerateHashChange,
     handleRebuildHashes,
-  } = useSimilarityStats();
+  } = useSimilarityStats()
 
-  // Test hook
   const {
     testImageId,
     testLoading,
@@ -47,18 +41,12 @@ const SimilaritySettings: React.FC = () => {
     setColorThreshold,
     setSearchLimit,
     handleTestSearch,
-  } = useSimilarityTest();
+  } = useSimilarityTest()
 
-  // Duplicate scan hook
-  const {
-    duplicateGroups,
-    scanLoading,
-    handleScanDuplicates,
-  } = useDuplicateScan(duplicateThreshold);
+  const { duplicateGroups, scanLoading, handleScanDuplicates } = useDuplicateScan(duplicateThreshold)
 
   return (
-    <Box>
-      {/* System Status */}
+    <div className="space-y-4">
       <SimilaritySystemStatus
         stats={stats}
         rebuilding={rebuilding}
@@ -71,9 +59,8 @@ const SimilaritySettings: React.FC = () => {
         onRefreshStats={loadStats}
       />
 
-      <Divider sx={{ my: 3 }} />
+      <Separator />
 
-      {/* Test & Preview */}
       <SimilarityTestPanel
         testImageId={testImageId}
         testLoading={testLoading}
@@ -85,22 +72,19 @@ const SimilaritySettings: React.FC = () => {
         onTestSearch={() => handleTestSearch(t)}
       />
 
-      <Divider sx={{ my: 3 }} />
+      <Separator />
 
-      {/* Duplicate Analysis */}
       <SimilarityDuplicateScan
         duplicateGroups={duplicateGroups}
         scanLoading={scanLoading}
         onScanDuplicates={() => handleScanDuplicates(t)}
         onImagesDeleted={() => {
-          // 이미지 삭제 후 다시 스캔
-          handleScanDuplicates(t);
+          void handleScanDuplicates(t)
         }}
       />
 
-      <Divider sx={{ my: 3 }} />
+      <Separator />
 
-      {/* Threshold Settings */}
       <SimilarityThresholds
         duplicateThreshold={duplicateThreshold}
         similarThreshold={similarThreshold}
@@ -111,8 +95,8 @@ const SimilaritySettings: React.FC = () => {
         onSetColorThreshold={setColorThreshold}
         onSetSearchLimit={setSearchLimit}
       />
-    </Box>
-  );
-};
+    </div>
+  )
+}
 
-export default SimilaritySettings;
+export default SimilaritySettings

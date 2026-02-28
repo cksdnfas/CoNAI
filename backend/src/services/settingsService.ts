@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
-import { AppSettings, GeneralSettings, TaggerSettings, SimilaritySettings, MetadataExtractionSettings, ThumbnailSettings, TaggerModel, TaggerModelInfo, TaggerDevice, SupportedLanguage } from '../types/settings';
+import { AppSettings, GeneralSettings, TaggerSettings, KaloscopeSettings, SimilaritySettings, MetadataExtractionSettings, ThumbnailSettings, TaggerModel, TaggerModelInfo, TaggerDevice, SupportedLanguage } from '../types/settings';
 
 const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
 
@@ -54,6 +54,12 @@ export class SettingsService {
         pythonPath: process.env.PYTHON_PATH || 'python',
         keepModelLoaded: true,     // 기본값: 자동 언로드 활성화 (메모리 관리 활성)
         autoUnloadMinutes: 5,      // 기본값: 5분 후 자동 언로드
+      },
+      kaloscope: {
+        enabled: process.env.KALOSCOPE_ENABLED === undefined ? true : process.env.KALOSCOPE_ENABLED === 'true',
+        autoTagOnUpload: true,
+        device: ((process.env.KALOSCOPE_DEVICE as 'auto' | 'cpu' | 'cuda') || 'auto'),
+        topK: Number.parseInt(process.env.KALOSCOPE_TOPK || '15', 10),
       },
       similarity: {
         autoGenerateHashOnUpload: true,  // 기본값: 자동 해시 생성
@@ -110,6 +116,13 @@ export class SettingsService {
             // Environment variable takes highest precedence (for Docker deployments)
             ...(process.env.PYTHON_PATH && { pythonPath: process.env.PYTHON_PATH }),
           },
+          kaloscope: {
+            ...defaults.kaloscope,
+            ...loadedSettings.kaloscope,
+            ...(process.env.KALOSCOPE_ENABLED !== undefined && { enabled: process.env.KALOSCOPE_ENABLED === 'true' }),
+            ...(process.env.KALOSCOPE_DEVICE && { device: process.env.KALOSCOPE_DEVICE as 'auto' | 'cpu' | 'cuda' }),
+            ...(process.env.KALOSCOPE_TOPK && { topK: Number.parseInt(process.env.KALOSCOPE_TOPK, 10) }),
+          },
           similarity: {
             ...defaults.similarity,
             ...loadedSettings.similarity,
@@ -128,6 +141,9 @@ export class SettingsService {
           tagger_enabled: this.settings.tagger.enabled,
           tagger_model: this.settings.tagger.model,
           tagger_device: this.settings.tagger.device,
+          kaloscope_enabled: this.settings.kaloscope.enabled,
+          kaloscope_device: this.settings.kaloscope.device,
+          kaloscope_topK: this.settings.kaloscope.topK,
           similarity_autoHash: this.settings.similarity.autoGenerateHashOnUpload
         });
 
@@ -179,6 +195,14 @@ export class SettingsService {
       }
     }
 
+    // Check kaloscope fields
+    for (const key of Object.keys(defaults.kaloscope)) {
+      if (!(key in (loaded.kaloscope || {}))) {
+        console.log(`[SettingsService] Missing field: kaloscope.${key}`);
+        return true;
+      }
+    }
+
     // Check metadata extraction fields
     for (const key of Object.keys(defaults.metadataExtraction)) {
       if (!(key in (loaded.metadataExtraction || {}))) {
@@ -208,6 +232,7 @@ export class SettingsService {
       this.settings = settings;
       console.log('[SettingsService] Settings saved successfully:', {
         tagger_enabled: settings.tagger.enabled,
+        kaloscope_enabled: settings.kaloscope.enabled,
         similarity_autoHash: settings.similarity.autoGenerateHashOnUpload
       });
     } catch (error) {
@@ -242,6 +267,22 @@ export class SettingsService {
       tagger: {
         ...currentSettings.tagger,
         ...taggerSettings,
+      },
+    };
+    this.saveSettings(updatedSettings);
+    return updatedSettings;
+  }
+
+  /**
+   * Update kaloscope settings
+   */
+  updateKaloscopeSettings(kaloscopeSettings: Partial<KaloscopeSettings>): AppSettings {
+    const currentSettings = this.loadSettings();
+    const updatedSettings: AppSettings = {
+      ...currentSettings,
+      kaloscope: {
+        ...currentSettings.kaloscope,
+        ...kaloscopeSettings,
       },
     };
     this.saveSettings(updatedSettings);

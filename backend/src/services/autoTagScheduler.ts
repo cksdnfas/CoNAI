@@ -6,6 +6,9 @@ import { SystemSettingsService } from './systemSettingsService';
 import { RatingScoreService } from './ratingScoreService';
 import { PromptCollectionService } from './promptCollectionService';
 import path from 'path';
+import { AutoTagsComposeService } from './autoTagsComposeService';
+import { kaloscopeTaggerService } from './kaloscopeTaggerService';
+import { RatingData } from '../types/autoTag';
 
 /**
  * 자동 태깅 스케줄러
@@ -43,8 +46,9 @@ export class AutoTagScheduler {
     }
 
     const settings = settingsService.loadSettings();
-    if (!settings.tagger.enabled) {
-      console.log('[AutoTagScheduler] Auto-tagging is disabled in settings');
+    const autoTagEnabled = settings.tagger.enabled || (settings.kaloscope.enabled && settings.kaloscope.autoTagOnUpload);
+    if (!autoTagEnabled) {
+      console.log('[AutoTagScheduler] Auto-tagging is disabled in settings (tagger/kaloscope)');
       return;
     }
 
@@ -89,6 +93,29 @@ export class AutoTagScheduler {
   /**
    * 태깅되지 않은 이미지 처리
    */
+  private extractRatingData(raw: unknown): RatingData | null {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return null;
+    }
+
+    const rating = raw as Record<string, unknown>;
+    const general = rating.general;
+    const sensitive = rating.sensitive;
+    const questionable = rating.questionable;
+    const explicit = rating.explicit;
+
+    if (
+      typeof general !== 'number' ||
+      typeof sensitive !== 'number' ||
+      typeof questionable !== 'number' ||
+      typeof explicit !== 'number'
+    ) {
+      return null;
+    }
+
+    return { general, sensitive, questionable, explicit };
+  }
+
   private async processUntaggedImages(): Promise<void> {
     if (this.isProcessing) {
       return;
@@ -96,7 +123,9 @@ export class AutoTagScheduler {
 
     // 설정 재확인 (실행 중 설정 변경 가능)
     const settings = settingsService.loadSettings();
-    if (!settings.tagger.enabled) {
+    const taggerAutoEnabled = settings.tagger.enabled;
+    const kaloscopeAutoEnabled = settings.kaloscope.enabled && settings.kaloscope.autoTagOnUpload;
+    if (!taggerAutoEnabled && !kaloscopeAutoEnabled) {
       return;
     }
 
@@ -112,15 +141,24 @@ export class AutoTagScheduler {
       const untaggedImages = db.prepare(`
         SELECT
           mm.composite_hash,
+          mm.auto_tags,
           if_.original_file_path,
           if_.file_type as media_type
         FROM media_metadata mm
         LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
-        WHERE mm.auto_tags IS NULL
+        WHERE (
+          mm.auto_tags IS NULL
+          OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
+          OR (
+            ? = 1
+            AND if_.file_type != 'video'
+            AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL
+          )
+        )
           AND if_.original_file_path IS NOT NULL
           AND if_.file_status = 'active'
         LIMIT ?
-      `).all(batchSize) as Array<{ composite_hash: string; original_file_path: string; media_type: string }>;
+      `).all(taggerAutoEnabled ? 1 : 0, kaloscopeAutoEnabled ? 1 : 0, batchSize) as Array<{ composite_hash: string; auto_tags: string | null; original_file_path: string; media_type: string }>;
 
       // 총 미태깅 개수도 확인 (Removed this part)
       // const totalUntagged = db.prepare(`
@@ -148,7 +186,7 @@ export class AutoTagScheduler {
         const image = untaggedImages[i];
 
         try {
-          await this.tagSingleImage(image.composite_hash, image.original_file_path, image.media_type);
+          await this.tagSingleImage(image.composite_hash, image.original_file_path, image.media_type, image.auto_tags || null);
 
           // 마지막 이미지가 아니면 대기
           if (i < untaggedImages.length - 1) {
@@ -183,42 +221,65 @@ export class AutoTagScheduler {
   private async tagSingleImage(
     compositeHash: string,
     filePath: string,
-    mediaType: string
+    mediaType: string,
+    existingAutoTags: string | null
   ): Promise<void> {
     console.log(`[AutoTagScheduler] Tagging (${mediaType}): ${path.basename(filePath)}`);
 
     // file_type='video'만 비디오 태깅 사용, 'image'와 'animated'는 이미지 태깅 사용
     const isVideo = mediaType === 'video';
 
-    // 이미지 또는 비디오 태깅 실행
-    const result = isVideo
-      ? await imageTaggerService.tagVideo(filePath)
-      : await taggerDaemon.tagImage(filePath);
+    const settings = settingsService.loadSettings();
+    const taggerAutoEnabled = settings.tagger.enabled;
+    const kaloscopeAutoEnabled = settings.kaloscope.enabled && settings.kaloscope.autoTagOnUpload;
 
-    if (!result.success) {
-      throw new Error(result.error || 'Unknown tagging error');
+    const needsTagger = taggerAutoEnabled && !AutoTagsComposeService.hasTagger(existingAutoTags);
+    const needsKaloscope = kaloscopeAutoEnabled && !isVideo && !AutoTagsComposeService.hasKaloscope(existingAutoTags);
+
+    if (!needsTagger && !needsKaloscope) {
+      return;
     }
 
-    // 태깅 결과를 JSON으로 직렬화
-    const autoTags = JSON.stringify({
-      caption: result.caption,
-      taglist: result.taglist,
-      rating: result.rating,
-      general: result.general,
-      character: result.character,
-      model: result.model,
-      thresholds: result.thresholds
-    });
+    let autoTags = existingAutoTags;
+    let taggerTaglist = '';
+    let ratingData: RatingData | null = null;
+
+    if (needsTagger) {
+      const result = isVideo
+        ? await imageTaggerService.tagVideo(filePath)
+        : await taggerDaemon.tagImage(filePath);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Unknown tagging error');
+      }
+
+      autoTags = AutoTagsComposeService.mergeTagger(autoTags, result);
+      taggerTaglist = result.taglist || '';
+      ratingData = this.extractRatingData(result.rating);
+    }
+
+    if (needsKaloscope) {
+      const kaloscopeResult = await kaloscopeTaggerService.tagImage(filePath);
+      if (kaloscopeResult.success) {
+        autoTags = AutoTagsComposeService.mergeKaloscope(autoTags, kaloscopeResult);
+      } else {
+        console.warn('[AutoTagScheduler] Kaloscope tagging failed:', kaloscopeResult.error || kaloscopeResult.error_type || 'unknown');
+      }
+    }
 
     // Calculate rating_score if rating data is available
     let ratingScore = 0;
-    if (result.rating) {
+    if (ratingData) {
       try {
-        const scoreResult = await RatingScoreService.calculateScore(result.rating as any);
+        const scoreResult = await RatingScoreService.calculateScore(ratingData);
         ratingScore = scoreResult.score;
       } catch (error) {
         console.error('[AutoTagScheduler] Failed to calculate rating_score:', error);
       }
+    }
+
+    if (!autoTags) {
+      return;
     }
 
     // media_metadata 테이블 업데이트
@@ -229,9 +290,9 @@ export class AutoTagScheduler {
     `).run(autoTags, ratingScore, compositeHash);
 
     // Auto Prompt 수집
-    if (result.taglist) {
+    if (taggerTaglist) {
       try {
-        const tags = result.taglist.split(',').map(t => t.trim()).filter(t => t.length > 0);
+        const tags = taggerTaglist.split(',').map(t => t.trim()).filter(t => t.length > 0);
         if (tags.length > 0) {
           const autoPrompts = tags.map(tag => ({ prompt: tag }));
           await PromptCollectionService.batchAddOrIncrementAuto(autoPrompts);
@@ -264,14 +325,26 @@ export class AutoTagScheduler {
     let untaggedCount = 0;
 
     try {
+      const settings = settingsService.loadSettings();
+      const taggerAutoEnabled = settings.tagger.enabled;
+      const kaloscopeAutoEnabled = settings.kaloscope.enabled && settings.kaloscope.autoTagOnUpload;
+
       const result = db.prepare(`
         SELECT COUNT(*) as count
         FROM media_metadata mm
         LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
-        WHERE mm.auto_tags IS NULL
+        WHERE (
+          mm.auto_tags IS NULL
+          OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
+          OR (
+            ? = 1
+            AND if_.file_type != 'video'
+            AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL
+          )
+        )
           AND if_.original_file_path IS NOT NULL
           AND if_.file_status = 'active'
-      `).get() as { count: number };
+      `).get(taggerAutoEnabled ? 1 : 0, kaloscopeAutoEnabled ? 1 : 0) as { count: number };
 
       untaggedCount = result.count;
     } catch (error) {

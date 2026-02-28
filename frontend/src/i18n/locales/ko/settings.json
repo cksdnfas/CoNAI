@@ -3,7 +3,7 @@
   "subtitle": "ComfyUI Image Manager 애플리케이션 설정을 관리합니다",
   "tabs": {
     "general": "일반 설정",
-    "tagger": "Tagger 설정",
+    "tagger": "AutoTags 설정",
     "rating": "Rating 점수 설정",
     "similarity": "이미지 유사도 검색",
     "prompts": "프롬프트 관리",
@@ -110,6 +110,8 @@
   "tagger": {
     "title": "WD Tagger 설정",
     "description": "AI 기반 이미지 자동 태깅 기능을 설정합니다.",
+    "enabled": "Tagger 활성화",
+    "autoTagOnUpload": "업로드 시 자동 태깅",
     "enableAutoTagging": "자동 태깅 활성화",
     "model": {
       "label": "모델 선택",

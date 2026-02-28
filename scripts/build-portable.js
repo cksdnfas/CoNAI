@@ -534,9 +534,9 @@ console.log('✅ Environment template created\n');
 
 // Step 10: Create data directories
 console.log('Step 10: Creating data directories...');
-const dataDirectories = ['database', 'uploads', 'logs', 'temp', 'models', 'config'];
+const dataDirectories = ['database', 'uploads', 'logs', 'temp', 'models', 'config', 'RecycleBin'];
 for (const dir of dataDirectories) {
-  const dirPath = path.join(PORTABLE_OUTPUT_DIR, dir);
+  const dirPath = path.join(PORTABLE_OUTPUT_DIR, 'user', dir);
   fs.ensureDirSync(dirPath);
 }
 console.log('✅ Data directories created\n');

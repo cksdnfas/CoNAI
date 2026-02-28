@@ -1,226 +1,189 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react'
+import { AlertTriangle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import axios from 'axios'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
-  Button,
-  Box,
-  Typography,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
+  TableHeader,
   TableRow,
-  Paper,
-  Chip,
-  CircularProgress,
-  Alert,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
-} from '@mui/material';
-import {
-  ExpandMore as ExpandMoreIcon,
-  Error as ErrorIcon
-} from '@mui/icons-material';
-import { useTranslation } from 'react-i18next';
-import axios from 'axios';
-import { API_BASE_URL } from '../../../../../services/api';
+} from '@/components/ui/table'
+import { API_BASE_URL } from '../../../../../services/api'
 
 interface ScanLog {
-  id: number;
-  folder_id: number;
-  folder_name?: string;
-  folder_path?: string;
-  scan_date: string;
-  scan_status: string;
-  total_scanned: number;
-  new_images: number;
-  existing_images: number;
-  updated_paths: number;
-  missing_images: number;
-  errors_count: number;
-  duration_ms: number;
-  error_details: Array<{ file: string; error: string }>;
+  id: number
+  folder_id: number
+  folder_name?: string
+  folder_path?: string
+  scan_date: string
+  scan_status: string
+  total_scanned: number
+  new_images: number
+  existing_images: number
+  updated_paths: number
+  missing_images: number
+  errors_count: number
+  duration_ms: number
+  error_details: Array<{ file: string; error: string }>
 }
 
 interface ScanLogModalProps {
-  open: boolean;
-  onClose: () => void;
-  folderId?: number;
+  open: boolean
+  onClose: () => void
+  folderId?: number
 }
 
 const ScanLogModal: React.FC<ScanLogModalProps> = ({ open, onClose, folderId }) => {
-  const { t } = useTranslation('settings');
-  const [logs, setLogs] = useState<ScanLog[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation('settings')
+  const [logs, setLogs] = useState<ScanLog[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (open) {
-      loadLogs();
-    }
-  }, [open, folderId]);
-
-  const loadLogs = async () => {
-    setLoading(true);
-    setError(null);
+  const loadLogs = useCallback(async () => {
+    setLoading(true)
+    setError(null)
 
     try {
       const url = folderId
         ? `${API_BASE_URL}/api/folders/${folderId}/scan-logs`
-        : `${API_BASE_URL}/api/folders/scan-logs/recent`;
+        : `${API_BASE_URL}/api/folders/scan-logs/recent`
 
-      const response = await axios.get(url);
-      setLogs(response.data.data);
-    } catch (err) {
-      console.error('Failed to load scan logs:', err);
-      setError(t('folderSettings.scanLog.loadFailed'));
+      const response = await axios.get(url)
+      setLogs(response.data.data)
+    } catch {
+      setError(t('folderSettings.scanLog.loadFailed'))
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }, [folderId, t])
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'success':
-        return 'success';
-      case 'error':
-        return 'error';
-      default:
-        return 'default';
+  useEffect(() => {
+    if (open) {
+      void loadLogs()
     }
-  };
+  }, [open, loadLogs])
 
   const getStatusText = (status: string) => {
     switch (status) {
       case 'success':
-        return t('folderSettings.scanLog.status.success');
+        return t('folderSettings.scanLog.status.success')
       case 'error':
-        return t('folderSettings.scanLog.status.error');
+        return t('folderSettings.scanLog.status.error')
       default:
-        return status;
+        return status
     }
-  };
+  }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
-      <DialogTitle>
-        {folderId ? t('folderSettings.scanLog.titleSpecific') : t('folderSettings.scanLog.titleAll')}
-      </DialogTitle>
+    <Dialog open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose() : undefined)}>
+      <DialogContent className="max-w-6xl">
+        <DialogHeader>
+          <DialogTitle>
+            {folderId ? t('folderSettings.scanLog.titleSpecific') : t('folderSettings.scanLog.titleAll')}
+          </DialogTitle>
+        </DialogHeader>
 
-      <DialogContent>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
           </Alert>
-        )}
+        ) : null}
 
         {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-            <CircularProgress />
-          </Box>
+          <div className="flex justify-center py-6">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" />
+          </div>
         ) : logs.length === 0 ? (
-          <Alert severity="info">{t('folderSettings.scanLog.noLogs')}</Alert>
+          <Alert>
+            <AlertDescription>{t('folderSettings.scanLog.noLogs')}</AlertDescription>
+          </Alert>
         ) : (
-          <TableContainer component={Paper} variant="outlined">
-            <Table size="small">
-              <TableHead>
+          <div className="max-h-[65vh] overflow-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell>{t('folderSettings.scanLog.columns.scanTime')}</TableCell>
-                  {!folderId && <TableCell>{t('folderSettings.scanLog.columns.folder')}</TableCell>}
-                  <TableCell align="center">{t('folderSettings.scanLog.columns.status')}</TableCell>
-                  <TableCell align="right">{t('folderSettings.scanLog.columns.scanned')}</TableCell>
-                  <TableCell align="right">{t('folderSettings.scanLog.columns.new')}</TableCell>
-                  <TableCell align="right">{t('folderSettings.scanLog.columns.existing')}</TableCell>
-                  <TableCell align="right">{t('folderSettings.scanLog.columns.errors')}</TableCell>
-                  <TableCell align="right">{t('folderSettings.scanLog.columns.duration')}</TableCell>
-                  <TableCell>{t('folderSettings.scanLog.columns.details')}</TableCell>
+                  <TableHead>{t('folderSettings.scanLog.columns.scanTime')}</TableHead>
+                  {!folderId ? <TableHead>{t('folderSettings.scanLog.columns.folder')}</TableHead> : null}
+                  <TableHead>{t('folderSettings.scanLog.columns.status')}</TableHead>
+                  <TableHead className="text-right">{t('folderSettings.scanLog.columns.scanned')}</TableHead>
+                  <TableHead className="text-right">{t('folderSettings.scanLog.columns.new')}</TableHead>
+                  <TableHead className="text-right">{t('folderSettings.scanLog.columns.existing')}</TableHead>
+                  <TableHead className="text-right">{t('folderSettings.scanLog.columns.errors')}</TableHead>
+                  <TableHead className="text-right">{t('folderSettings.scanLog.columns.duration')}</TableHead>
+                  <TableHead>{t('folderSettings.scanLog.columns.details')}</TableHead>
                 </TableRow>
-              </TableHead>
+              </TableHeader>
               <TableBody>
                 {logs.map((log) => (
                   <TableRow key={log.id}>
+                    <TableCell>{new Date(log.scan_date).toLocaleString()}</TableCell>
+                    {!folderId ? <TableCell>{log.folder_name || log.folder_path}</TableCell> : null}
                     <TableCell>
-                      <Typography variant="caption">
-                        {new Date(log.scan_date).toLocaleString()}
-                      </Typography>
+                      <Badge variant={log.scan_status === 'error' ? 'destructive' : 'secondary'}>
+                        {getStatusText(log.scan_status)}
+                      </Badge>
                     </TableCell>
-                    {!folderId && (
-                      <TableCell>
-                        <Typography variant="caption" noWrap>
-                          {log.folder_name || log.folder_path}
-                        </Typography>
-                      </TableCell>
-                    )}
-                    <TableCell align="center">
-                      <Chip
-                        label={getStatusText(log.scan_status)}
-                        size="small"
-                        color={getStatusColor(log.scan_status)}
-                      />
-                    </TableCell>
-                    <TableCell align="right">{log.total_scanned}</TableCell>
-                    <TableCell align="right">{log.new_images}</TableCell>
-                    <TableCell align="right">{log.existing_images}</TableCell>
-                    <TableCell align="right">
-                      {log.errors_count > 0 && (
-                        <Chip
-                          label={log.errors_count}
-                          size="small"
-                          color="error"
-                          icon={<ErrorIcon />}
-                        />
+                    <TableCell className="text-right">{log.total_scanned}</TableCell>
+                    <TableCell className="text-right">{log.new_images}</TableCell>
+                    <TableCell className="text-right">{log.existing_images}</TableCell>
+                    <TableCell className="text-right">
+                      {log.errors_count > 0 ? (
+                        <Badge variant="destructive">
+                          <AlertTriangle className="h-3 w-3" />
+                          {log.errors_count}
+                        </Badge>
+                      ) : (
+                        <span>0</span>
                       )}
                     </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="caption">
-                        {t('folderSettings.scanLog.durationSeconds', { seconds: (log.duration_ms / 1000).toFixed(2) })}
-                      </Typography>
+                    <TableCell className="text-right">
+                      {t('folderSettings.scanLog.durationSeconds', { seconds: (log.duration_ms / 1000).toFixed(2) })}
                     </TableCell>
                     <TableCell>
-                      {log.error_details && log.error_details.length > 0 && (
-                        <Accordion>
-                          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                            <Typography variant="caption">
-                              {t('folderSettings.scanLog.errorDetails', { count: log.error_details.length })}
-                            </Typography>
-                          </AccordionSummary>
-                          <AccordionDetails>
-                            <Box sx={{ maxHeight: 200, overflow: 'auto' }}>
-                              {log.error_details.map((error, idx) => (
-                                <Box key={idx} sx={{ mb: 1 }}>
-                                  <Typography variant="caption" fontWeight="bold">
-                                    {error.file}
-                                  </Typography>
-                                  <Typography variant="caption" color="error" display="block">
-                                    {error.error}
-                                  </Typography>
-                                </Box>
-                              ))}
-                            </Box>
-                          </AccordionDetails>
-                        </Accordion>
-                      )}
+                      {log.error_details && log.error_details.length > 0 ? (
+                        <details>
+                          <summary className="cursor-pointer text-sm">
+                            {t('folderSettings.scanLog.errorDetails', { count: log.error_details.length })}
+                          </summary>
+                          <div className="mt-2 space-y-1">
+                            {log.error_details.map((item) => (
+                              <div key={`${item.file}-${item.error}`} className="rounded border p-2 text-xs">
+                                <div className="font-medium">{item.file}</div>
+                                <div className="text-destructive">{item.error}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </TableContainer>
+          </div>
         )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => void loadLogs()} disabled={loading}>
+            {t('folderSettings.scanLog.refresh')}
+          </Button>
+          <Button onClick={onClose}>{t('folderSettings.scanLog.close')}</Button>
+        </DialogFooter>
       </DialogContent>
-
-      <DialogActions>
-        <Button onClick={loadLogs} disabled={loading}>
-          {t('folderSettings.scanLog.refresh')}
-        </Button>
-        <Button onClick={onClose}>{t('folderSettings.scanLog.close')}</Button>
-      </DialogActions>
     </Dialog>
-  );
-};
+  )
+}
 
-export default ScanLogModal;
+export default ScanLogModal

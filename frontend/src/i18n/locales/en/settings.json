@@ -3,7 +3,7 @@
   "subtitle": "Manage your ComfyUI Image Manager application settings",
   "tabs": {
     "general": "General Settings",
-    "tagger": "Tagger Settings",
+    "tagger": "AutoTags Settings",
     "rating": "Rating Score Settings",
     "similarity": "Image Similarity Search",
     "prompts": "Prompt Management",
@@ -111,6 +111,8 @@
   "tagger": {
     "title": "WD Tagger Settings",
     "description": "Configure AI-based automatic image tagging",
+    "enabled": "Enable Tagger",
+    "autoTagOnUpload": "Auto-tag on upload",
     "enableAutoTagging": "Enable Auto-Tagging",
     "model": {
       "label": "Model Selection",

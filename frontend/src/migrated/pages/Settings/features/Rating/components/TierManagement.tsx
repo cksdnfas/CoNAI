@@ -1,33 +1,17 @@
-import React from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  IconButton,
-  Chip,
-} from '@mui/material';
-import {
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Add as AddIcon,
-} from '@mui/icons-material';
-import { useTranslation } from 'react-i18next';
-import type { RatingTier } from '../../../../../types/rating';
+import React from 'react'
+import { Edit, Plus, Trash2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import type { RatingTier } from '../../../../../types/rating'
 
 interface TierManagementProps {
-  tiers: RatingTier[];
-  saving: boolean;
-  onOpenTierDialog: (mode: 'create' | 'edit', tier?: RatingTier) => void;
-  onDeleteTier: (id: number) => void;
+  tiers: RatingTier[]
+  saving: boolean
+  onOpenTierDialog: (mode: 'create' | 'edit', tier?: RatingTier) => void
+  onDeleteTier: (id: number) => void
 }
 
 export const TierManagement: React.FC<TierManagementProps> = ({
@@ -36,107 +20,91 @@ export const TierManagement: React.FC<TierManagementProps> = ({
   onOpenTierDialog,
   onDeleteTier,
 }) => {
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation('settings')
 
   const handleDelete = (id: number) => {
     if (window.confirm(t('rating.tiers.alerts.deleteConfirm'))) {
-      onDeleteTier(id);
+      onDeleteTier(id)
     }
-  };
+  }
 
   return (
-    <Card sx={{ mb: 3 }}>
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <div>
+          <CardTitle>{t('rating.tiers.title')}</CardTitle>
+          <CardDescription>{t('rating.tiers.description')}</CardDescription>
+        </div>
+        <Button onClick={() => onOpenTierDialog('create')}>
+          <Plus className="h-4 w-4" />
+          {t('rating.tiers.addButton')}
+        </Button>
+      </CardHeader>
       <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Box>
-            <Typography variant="h6" gutterBottom>
-              {t('rating.tiers.title')}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {t('rating.tiers.description')}
-            </Typography>
-          </Box>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => onOpenTierDialog('create')}
-          >
-            {t('rating.tiers.addButton')}
-          </Button>
-        </Box>
-
-        <TableContainer component={Paper} variant="outlined">
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>{t('rating.tiers.table.order')}</TableCell>
-                <TableCell>{t('rating.tiers.table.name')}</TableCell>
-                <TableCell>{t('rating.tiers.table.scoreRange')}</TableCell>
-                <TableCell>{t('rating.tiers.table.color')}</TableCell>
-                <TableCell align="right">{t('rating.tiers.table.actions')}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {tiers.map((tier) => (
-                <TableRow key={tier.id}>
-                  <TableCell>{tier.tier_order}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={tier.tier_name}
-                      sx={{
-                        bgcolor: tier.color || undefined,
-                        color: 'white',
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {t('rating.tiers.table.scoreFormat', {
-                      min: tier.min_score,
-                      max: tier.max_score !== null ? tier.max_score : t('rating.tiers.table.infinity'),
-                    })}
-                  </TableCell>
-                  <TableCell>
-                    <Box
-                      sx={{
-                        width: 24,
-                        height: 24,
-                        bgcolor: tier.color || '#ccc',
-                        borderRadius: 1,
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton
-                      size="small"
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('rating.tiers.table.order')}</TableHead>
+              <TableHead>{t('rating.tiers.table.name')}</TableHead>
+              <TableHead>{t('rating.tiers.table.scoreRange')}</TableHead>
+              <TableHead>{t('rating.tiers.table.color')}</TableHead>
+              <TableHead className="text-right">{t('rating.tiers.table.actions')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tiers.map((tier) => (
+              <TableRow key={tier.id}>
+                <TableCell>{tier.tier_order}</TableCell>
+                <TableCell>
+                  <Badge style={{ backgroundColor: tier.color || undefined, color: '#fff' }}>
+                    {tier.tier_name}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  {t('rating.tiers.table.scoreFormat', {
+                    min: tier.min_score,
+                    max: tier.max_score !== null ? tier.max_score : t('rating.tiers.table.infinity'),
+                  })}
+                </TableCell>
+                <TableCell>
+                  <div
+                    className="h-6 w-6 rounded"
+                    style={{ backgroundColor: tier.color || '#ccc' }}
+                  />
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
                       onClick={() => onOpenTierDialog('edit', tier)}
                       disabled={saving}
                     >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      size="small"
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
                       onClick={() => handleDelete(tier.id)}
                       disabled={saving}
-                      color="error"
+                      className="text-destructive"
                     >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {tiers.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} align="center">
-                    <Typography variant="body2" color="text.secondary">
-                      {t('rating.tiers.table.empty')}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+            {tiers.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-muted-foreground text-center">
+                  {t('rating.tiers.table.empty')}
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
-  );
-};
+  )
+}

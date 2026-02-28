@@ -29,6 +29,53 @@ export interface TaggerSettings {
   autoUnloadMinutes: number
 }
 
+export interface KaloscopeSettings {
+  enabled: boolean
+  autoTagOnUpload: boolean
+  device: TaggerDevice
+  topK: number
+}
+
+export interface TaggerModel {
+  name: 'vit' | 'swinv2' | 'convnext'
+  label: string
+  description: string
+  downloaded: boolean
+}
+
+export interface TaggerServerStatus {
+  isRunning: boolean
+  modelLoaded: boolean
+  currentModel: 'vit' | 'swinv2' | 'convnext' | null
+  currentDevice: string | null
+  lastUsedAt: string | null
+}
+
+export interface KaloscopeServerStatus {
+  enabled: boolean
+  autoTagOnUpload: boolean
+  currentDevice: TaggerDevice
+  topK: number
+  scriptExists: boolean
+  modelCached: boolean
+  modelRepo: string
+  modelFile: string
+}
+
+export interface DependencyCheckResult {
+  available: boolean
+  message: string
+  details?: {
+    python: boolean
+    torch: boolean
+    timm: boolean
+    huggingface_hub: boolean
+    pillow: boolean
+    pandas: boolean
+    numpy: boolean
+  }
+}
+
 export interface SimilaritySettings {
   autoGenerateHashOnUpload: boolean
 }
@@ -54,6 +101,7 @@ export interface ThumbnailSettings {
 export interface AppSettings {
   general: GeneralSettings
   tagger: TaggerSettings
+  kaloscope: KaloscopeSettings
   similarity: SimilaritySettings
   metadataExtraction: MetadataExtractionSettings
   thumbnail: ThumbnailSettings
@@ -75,6 +123,52 @@ export const settingsApi = {
     return response.data.data
   },
 
+  async updateKaloscopeSettings(settings: Partial<KaloscopeSettings>): Promise<AppSettings> {
+    const response = await apiClient.put<{ success: boolean; data: AppSettings; message: string }>('/api/settings/kaloscope', settings)
+    return response.data.data
+  },
+
+  async testKaloscope(imageId: string): Promise<unknown> {
+    const response = await apiClient.post<{ success: boolean; data: unknown }>('/api/settings/kaloscope/test', { imageId })
+    return response.data.data
+  },
+
+  async getModelsList(): Promise<TaggerModel[]> {
+    const response = await apiClient.get<{ success: boolean; data: TaggerModel[] }>('/api/settings/tagger/models')
+    return response.data.data
+  },
+
+  async checkDependencies(): Promise<DependencyCheckResult> {
+    const response = await apiClient.post<{ success: boolean; data: DependencyCheckResult }>('/api/settings/tagger/check-dependencies')
+    return response.data.data
+  },
+
+  async downloadModel(model: 'vit' | 'swinv2' | 'convnext'): Promise<{ downloaded: boolean; message: string }> {
+    const response = await apiClient.post<{ success: boolean; data: { downloaded: boolean }; message: string }>('/api/settings/tagger/download', { model })
+    return {
+      downloaded: response.data.data.downloaded,
+      message: response.data.message,
+    }
+  },
+
+  async getTaggerStatus(): Promise<TaggerServerStatus> {
+    const response = await apiClient.get<{ success: boolean; data: TaggerServerStatus }>('/api/settings/tagger/status')
+    return response.data.data
+  },
+
+  async getKaloscopeStatus(): Promise<KaloscopeServerStatus> {
+    const response = await apiClient.get<{ success: boolean; data: KaloscopeServerStatus }>('/api/settings/kaloscope/status')
+    return response.data.data
+  },
+
+  async loadModel(model?: 'vit' | 'swinv2' | 'convnext', device?: TaggerDevice): Promise<void> {
+    await apiClient.post('/api/settings/tagger/load-model', { model, device })
+  },
+
+  async unloadModel(): Promise<void> {
+    await apiClient.post('/api/settings/tagger/unload-model')
+  },
+
   async updateMetadataSettings(settings: Partial<MetadataExtractionSettings>): Promise<AppSettings> {
     const response = await apiClient.put<{ success: boolean; data: AppSettings; message: string }>('/api/settings/metadata', settings)
     return response.data.data
@@ -83,5 +177,11 @@ export const settingsApi = {
   async updateThumbnailSettings(settings: Partial<ThumbnailSettings>): Promise<AppSettings> {
     const response = await apiClient.put<{ success: boolean; data: AppSettings; message: string }>('/api/settings/thumbnail', settings)
     return response.data.data
+  },
+
+  thumbnailRegeneration: {
+    async regenerate(): Promise<void> {
+      await apiClient.post('/api/thumbnails/regenerate')
+    },
   },
 }

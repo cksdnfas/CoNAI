@@ -27,6 +27,8 @@ export interface MetadataExtractionSettings {
 export type TaggerModel = 'vit' | 'swinv2' | 'convnext';
 export type TaggerDevice = 'auto' | 'cpu' | 'cuda';
 
+export type KaloscopeDevice = 'auto' | 'cpu' | 'cuda';
+
 export interface TaggerSettings {
   enabled: boolean;                // Tagger 활성화 (활성화 시 자동으로 미처리 이미지 태깅)
   autoTagOnUpload: boolean;        // 업로드 시 자동 태깅 여부
@@ -37,6 +39,13 @@ export interface TaggerSettings {
   pythonPath: string;
   keepModelLoaded: boolean;        // 메모리 유지 여부
   autoUnloadMinutes: number;       // 자동 언로드 시간 (분)
+}
+
+export interface KaloscopeSettings {
+  enabled: boolean;                // Kaloscope 활성화
+  autoTagOnUpload: boolean;        // 업로드/스케줄러 자동 처리 여부
+  device: KaloscopeDevice;         // 디바이스 선택 (auto/cpu/cuda)
+  topK: number;                    // 추출할 아티스트 태그 수
 }
 
 export interface SimilaritySettings {
@@ -53,6 +62,7 @@ export interface ThumbnailSettings {
 export interface AppSettings {
   general: GeneralSettings;
   tagger: TaggerSettings;
+  kaloscope: KaloscopeSettings;
   similarity: SimilaritySettings;
   metadataExtraction: MetadataExtractionSettings;
   thumbnail: ThumbnailSettings;
@@ -92,4 +102,15 @@ export interface TaggerServerStatus {
   currentModel: TaggerModel | null; // 현재 로드된 모델
   currentDevice: string | null;    // 현재 사용 중인 디바이스 (예: "cuda:0", "cpu")
   lastUsedAt: string | null;       // 마지막 사용 시간 (ISO string)
+}
+
+export interface KaloscopeServerStatus {
+  enabled: boolean;
+  autoTagOnUpload: boolean;
+  currentDevice: KaloscopeDevice;
+  topK: number;
+  scriptExists: boolean;
+  modelCached: boolean;
+  modelRepo: string;
+  modelFile: string;
 }

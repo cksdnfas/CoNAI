@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Settings } from 'lucide-react'
 import { Alert as UiAlert, AlertDescription } from '@/components/ui/alert'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useTranslation } from 'react-i18next'
 import { GeneralSettingsPanel } from '@/features/settings/components/general-settings-panel'
@@ -16,6 +17,7 @@ import {
   settingsApi as legacySettingsApi,
   type AppSettings as LegacyAppSettings,
   type GeneralSettings as LegacyGeneralSettingsType,
+  type KaloscopeSettings as LegacyKaloscopeSettingsType,
   type MetadataExtractionSettings as LegacyMetadataExtractionSettings,
   type TaggerSettings as LegacyTaggerSettingsType,
   type ThumbnailSettings as LegacyThumbnailSettings,
@@ -84,6 +86,20 @@ export function SettingsPage() {
     }
   }
 
+  const handleUpdateKaloscopeSettings = async (kaloscopeSettings: Partial<LegacyKaloscopeSettingsType>) => {
+    setError(null)
+    setSuccessMessage(null)
+    try {
+      const updatedSettings = await legacySettingsApi.updateKaloscopeSettings(kaloscopeSettings)
+      setSettings(updatedSettings)
+      showSaved()
+    } catch (updateError) {
+      setError(t('messages.saveFailed'))
+      console.error('Failed to update kaloscope settings:', updateError)
+      throw updateError
+    }
+  }
+
   const handleUpdateMetadataSettings = async (metadataSettings: Partial<LegacyMetadataExtractionSettings>) => {
     setError(null)
     setSuccessMessage(null)
@@ -111,6 +127,24 @@ export function SettingsPage() {
       throw updateError
     }
   }
+
+  const sectionTitleMap: Record<string, string> = {
+    folders: t('tabs.folders'),
+    prompts: t('tabs.prompts'),
+    rating: t('tabs.rating'),
+    similarity: t('tabs.similarity'),
+    account: t('tabs.account'),
+    civitai: 'Civitai',
+  }
+
+  const renderSectionCard = (sectionKey: keyof typeof sectionTitleMap, content: ReactNode) => (
+    <Card>
+      <CardHeader>
+        <CardTitle>{sectionTitleMap[sectionKey]}</CardTitle>
+      </CardHeader>
+      <CardContent>{content}</CardContent>
+    </Card>
+  )
 
   if (loading) {
     return (
@@ -165,15 +199,20 @@ export function SettingsPage() {
             </TabsContent>
 
       <TabsContent value="folders">
-              <LegacyFolderSettings />
+              {renderSectionCard('folders', <LegacyFolderSettings />)}
             </TabsContent>
 
       <TabsContent value="tagger">
-              <TaggerSettingsPanel settings={settings.tagger} onUpdate={handleUpdateTaggerSettings} />
+              <TaggerSettingsPanel
+                settings={settings.tagger}
+                kaloscopeSettings={settings.kaloscope}
+                onUpdate={handleUpdateTaggerSettings}
+                onUpdateKaloscope={handleUpdateKaloscopeSettings}
+              />
             </TabsContent>
 
       <TabsContent value="prompts">
-              <div className="w-full">
+              {renderSectionCard('prompts', <div className="w-full">
                 <Tabs value={promptTabValue} onValueChange={setPromptTabValue}>
                   <TabsList className="mb-2 h-auto w-full justify-start gap-1 p-1">
                     <TabsTrigger value="positive">{tPrompt('tabs.positive')}</TabsTrigger>
@@ -184,26 +223,23 @@ export function SettingsPage() {
                   <TabsContent value="negative"><LegacyPromptExplorer type="negative" /></TabsContent>
                   <TabsContent value="auto"><LegacyPromptExplorer type="auto" /></TabsContent>
                 </Tabs>
-              </div>
+              </div>)}
             </TabsContent>
 
       <TabsContent value="rating">
-              <LegacyRatingScoreSettings />
+              {renderSectionCard('rating', <LegacyRatingScoreSettings />)}
             </TabsContent>
 
       <TabsContent value="similarity">
-              <LegacySimilaritySettings />
+              {renderSectionCard('similarity', <LegacySimilaritySettings />)}
             </TabsContent>
 
       <TabsContent value="account">
-              <LegacyAuthSettings />
+              {renderSectionCard('account', <LegacyAuthSettings />)}
             </TabsContent>
 
       <TabsContent value="civitai">
-              <LegacyExternalApiSettings />
-              <div className="mt-3">
-                <LegacyCivitaiSettings />
-              </div>
+              {renderSectionCard('civitai', <><LegacyExternalApiSettings /><div className="mt-3"><LegacyCivitaiSettings /></div></>)}
             </TabsContent>
       </Tabs>
     </div>

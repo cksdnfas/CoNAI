@@ -71,24 +71,29 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
   )
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className="group relative aspect-[5/7] w-full overflow-hidden rounded-md border bg-card text-left transition hover:-translate-y-1 hover:shadow-lg"
     >
+      <button
+        type="button"
+        onClick={onClick}
+        className="absolute inset-0 z-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        aria-label={group.name}
+      />
+
       {previewUrl ? (
         isVideo ? (
-          <video className="absolute inset-0 h-full w-full object-cover" src={previewUrl} muted loop autoPlay playsInline />
+          <video className="pointer-events-none absolute inset-0 h-full w-full object-cover" src={previewUrl} muted loop autoPlay playsInline />
         ) : (
-          <img className="absolute inset-0 h-full w-full object-cover" src={previewUrl} alt={group.name} loading="lazy" />
+          <img className="pointer-events-none absolute inset-0 h-full w-full object-cover" src={previewUrl} alt={group.name} loading="lazy" />
         )
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-muted/20 to-muted/60">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gradient-to-b from-muted/20 to-muted/60">
           <Folder className="h-12 w-12 text-muted-foreground" />
         </div>
       )}
 
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/45 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/45 to-transparent" />
 
       {onSettingsClick ? (
         <Button
@@ -102,7 +107,7 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
         </Button>
       ) : null}
 
-      <div className="absolute right-0 bottom-0 left-0 z-10 space-y-1 p-2">
+      <div className="pointer-events-none absolute right-0 bottom-0 left-0 z-10 space-y-1 p-2">
         <div className="flex items-center gap-1.5">
           <Folder className="h-4 w-4" style={{ color: group.color || 'hsl(var(--primary))' }} />
           <p className="truncate text-sm font-medium text-white">{group.name}</p>
@@ -126,6 +131,6 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
           ) : null}
         </div>
       </div>
-    </button>
+    </div>
   )
 }

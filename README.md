@@ -114,6 +114,8 @@ npm run db:reset           # DB 초기화 후 마이그레이션
 - `LOCALE` (기본: en)
 - `BIND_ADDRESS` (기본: 0.0.0.0)
 - `RUNTIME_*` 경로 옵션 (uploads/database/logs/models/temp 등)
+- 기본 런타임 데이터 루트는 `user/` (기본값 `RUNTIME_BASE_PATH=./user`)
+
 
 자세한 항목: [`.env.example`](.env.example)
 
@@ -128,8 +130,7 @@ Comfyui_Image_Manager_2/
 ├─ shared/         # 공통 타입/상수
 ├─ docs/           # 가이드, 계획서, 릴리즈 문서
 ├─ scripts/        # 빌드/배포 스크립트
-├─ database/       # SQLite DB 파일
-├─ uploads/        # 이미지/미디어 저장소
+├─ user/           # 런타임 데이터 루트 (database/uploads/logs/temp/models/RecycleBin)
 └─ build-output/   # 빌드 산출물
 ```
 
@@ -157,3 +158,9 @@ v3.0.1은 v3.0.0 기반 안정화 및 사용성 개선 버전으로 진행합니
 ---
 
 필요 시 v3.0.1 개발 목표(우선순위/마일스톤/완료 조건) 섹션을 본 문서에 이어서 추가해 관리할 수 있습니다.
+
+### 런타임 데이터 경로 마이그레이션 메모
+
+- 기본 저장 경로가 루트에서 `user/` 하위로 변경되었습니다.
+- 기존 루트의 `uploads/`, `database/`, `logs/`, `temp/`, `RecycleBin/`, `models/` 데이터는 `user/`로 이동해 사용하세요.
+- 경로 충돌 시 기존 대상은 유지하고, 충돌 원본은 `user/_migration_backup/<timestamp>/`로 백업 이동됩니다.

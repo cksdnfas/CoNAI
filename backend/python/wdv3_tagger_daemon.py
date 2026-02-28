@@ -133,6 +133,7 @@ def load_model_command(model_name: str, cache_dir: Optional[str] = None, device:
         elif device == "cpu":
             # Force CPU
             torch_device = torch.device("cpu")
+        elif device == "cuda":
             # Force CUDA, error if not available
             if not torch.cuda.is_available():
                 return {

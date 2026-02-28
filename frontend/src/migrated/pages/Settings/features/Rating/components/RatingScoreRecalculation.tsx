@@ -1,135 +1,121 @@
-import React, { useState } from 'react';
+import React, { useState } from 'react'
+import { RefreshCcw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import axios from 'axios'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  Alert,
-  CircularProgress,
-  Stack,
-  LinearProgress,
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogContentText,
-  DialogActions,
-} from '@mui/material';
-import {
-  Refresh as RefreshIcon,
-} from '@mui/icons-material';
-import { useTranslation } from 'react-i18next';
-import axios from 'axios';
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 export const RatingScoreRecalculation: React.FC = () => {
-  const { t } = useTranslation('settings');
-  const [processing, setProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [total, setTotal] = useState(0);
-  const [confirmDialog, setConfirmDialog] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const { t } = useTranslation('settings')
+  const [processing, setProcessing] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [total, setTotal] = useState(0)
+  const [confirmDialog, setConfirmDialog] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const handleRecalculate = async () => {
-    setConfirmDialog(false);
-    setProcessing(true);
-    setError(null);
-    setSuccessMessage(null);
-    setProgress(0);
-    setTotal(0);
+    setConfirmDialog(false)
+    setProcessing(true)
+    setError(null)
+    setSuccessMessage(null)
+    setProgress(0)
+    setTotal(0)
 
     try {
-      const response = await axios.post('/api/images/recalculate-rating-scores');
+      const response = await axios.post('/api/images/recalculate-rating-scores')
 
       if (response.data.success) {
-        const { total, success_count, fail_count } = response.data.data;
-        setTotal(total);
-        setProgress(total);
+        const { total: responseTotal, success_count, fail_count } = response.data.data
+        setTotal(responseTotal)
+        setProgress(responseTotal)
         setSuccessMessage(
           t('rating.recalculation.success', {
-            total,
+            total: responseTotal,
             success: success_count,
             failed: fail_count,
           })
-        );
+        )
       } else {
-        setError(response.data.error || t('rating.recalculation.failed'));
+        setError(response.data.error || t('rating.recalculation.failed'))
       }
-    } catch (err: any) {
-      console.error('[RatingScoreRecalculation] Error:', err);
-      setError(err.response?.data?.error || t('rating.recalculation.failed'));
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        setError((err.response?.data as { error?: string } | undefined)?.error || t('rating.recalculation.failed'))
+      } else {
+        setError(t('rating.recalculation.failed'))
+      }
     } finally {
-      setProcessing(false);
+      setProcessing(false)
     }
-  };
+  }
 
   return (
-    <Card sx={{ mt: 3, mb: 3 }}>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          {t('rating.recalculation.title')}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" paragraph>
-          {t('rating.recalculation.description')}
-        </Typography>
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('rating.recalculation.title')}</CardTitle>
+        <CardDescription>{t('rating.recalculation.description')}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
+        {successMessage ? (
+          <Alert>
+            <AlertDescription>{successMessage}</AlertDescription>
+          </Alert>
+        ) : null}
 
-      {successMessage && (
-        <Alert severity="success" sx={{ mb: 2 }}>
-          {successMessage}
-        </Alert>
-      )}
+        {processing && total > 0 ? (
+          <div className="space-y-2">
+            <div className="text-sm">{t('rating.recalculation.progress', { current: progress, total })}</div>
+            <div className="h-2 w-full rounded bg-muted">
+              <div
+                className="h-2 rounded bg-primary transition-all"
+                style={{ width: `${(progress / total) * 100}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
 
-      {processing && total > 0 && (
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" gutterBottom>
-            {t('rating.recalculation.progress', { current: progress, total })}
-          </Typography>
-          <LinearProgress
-            variant="determinate"
-            value={(progress / total) * 100}
-          />
-        </Box>
-      )}
-
-      <Stack spacing={2}>
         <Button
-          variant="contained"
-          color="primary"
-          startIcon={processing ? <CircularProgress size={20} /> : <RefreshIcon />}
           onClick={() => setConfirmDialog(true)}
           disabled={processing}
-          fullWidth
+          className="w-full"
         >
-          {processing
-            ? t('rating.recalculation.buttons.processing')
-            : t('rating.recalculation.buttons.recalculate')}
+          {processing ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground" /> : <RefreshCcw className="h-4 w-4" />}
+          {processing ? t('rating.recalculation.buttons.processing') : t('rating.recalculation.buttons.recalculate')}
         </Button>
-      </Stack>
 
-        {/* Confirmation Dialog */}
-        <Dialog open={confirmDialog} onClose={() => setConfirmDialog(false)}>
-          <DialogTitle>{t('rating.recalculation.confirmDialog.title')}</DialogTitle>
+        <Dialog open={confirmDialog} onOpenChange={setConfirmDialog}>
           <DialogContent>
-            <DialogContentText>
-              {t('rating.recalculation.confirmDialog.message')}
-            </DialogContentText>
+            <DialogHeader>
+              <DialogTitle>{t('rating.recalculation.confirmDialog.title')}</DialogTitle>
+              <DialogDescription>{t('rating.recalculation.confirmDialog.message')}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmDialog(false)}>
+                {t('rating.recalculation.confirmDialog.cancel')}
+              </Button>
+              <Button onClick={handleRecalculate}>
+                {t('rating.recalculation.confirmDialog.confirm')}
+              </Button>
+            </DialogFooter>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setConfirmDialog(false)}>
-              {t('rating.recalculation.confirmDialog.cancel')}
-            </Button>
-            <Button onClick={handleRecalculate} color="primary" variant="contained">
-              {t('rating.recalculation.confirmDialog.confirm')}
-            </Button>
-          </DialogActions>
         </Dialog>
       </CardContent>
     </Card>
-  );
-};
+  )
+}

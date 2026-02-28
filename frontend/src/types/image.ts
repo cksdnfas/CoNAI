@@ -10,6 +10,26 @@ export interface AutoTagsData {
     character: number;
   };
   tagged_at: string;
+  tagger?: {
+    caption?: string;
+    taglist?: string;
+    rating?: Record<string, number>;
+    general?: Record<string, number>;
+    character?: Record<string, number>;
+    model?: string;
+    thresholds?: {
+      general: number;
+      character: number;
+    };
+    tagged_at?: string;
+  };
+  kaloscope?: {
+    model?: string;
+    topk?: number;
+    artists?: Record<string, number>;
+    taglist?: string;
+    tagged_at?: string;
+  };
 }
 
 export interface ImageRecord {

@@ -1,43 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react'
+import { CircleHelp, Info } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
-  TextField,
-  Button,
-  FormControlLabel,
-  Switch,
-  Alert,
-  Box,
-  Chip,
-  Tooltip,
-  IconButton,
-  Typography,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
-} from '@mui/material';
-import {
-  Add as AddIcon,
-  InfoOutlined as InfoOutlinedIcon,
-  HelpOutline as HelpOutlineIcon,
-  ExpandMore as ExpandMoreIcon
-} from '@mui/icons-material';
-import { useTranslation } from 'react-i18next';
-import { folderApi } from '../../../../../services/folderApi';
-import type { WatchedFolder, WatchedFolderCreate, WatchedFolderUpdate } from '../../../../../types/folder';
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { folderApi } from '../../../../../services/folderApi'
+import type { WatchedFolder, WatchedFolderCreate, WatchedFolderUpdate } from '../../../../../types/folder'
 
 interface Props {
-  open: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
-  folder?: WatchedFolder | null;
+  open: boolean
+  onClose: () => void
+  onSuccess: () => void
+  folder?: WatchedFolder | null
 }
 
 const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess }) => {
-  const { t } = useTranslation('settings');
-  const isEdit = !!folder;
+  const { t } = useTranslation('settings')
+  const isEdit = Boolean(folder)
 
   const [formData, setFormData] = useState<WatchedFolderCreate>({
     folder_path: '',
@@ -48,13 +37,14 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
     exclude_extensions: [],
     exclude_patterns: [],
     watcher_enabled: true,
-    watcher_polling_interval: null
-  });
+    watcher_polling_interval: null,
+  })
 
-  const [newExtension, setNewExtension] = useState('');
-  const [newPattern, setNewPattern] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [newExtension, setNewExtension] = useState('')
+  const [newPattern, setNewPattern] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   useEffect(() => {
     if (folder) {
@@ -67,8 +57,8 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
         exclude_extensions: folder.exclude_extensions ? JSON.parse(folder.exclude_extensions) : [],
         exclude_patterns: folder.exclude_patterns ? JSON.parse(folder.exclude_patterns) : [],
         watcher_enabled: folder.watcher_enabled === 1,
-        watcher_polling_interval: folder.watcher_polling_interval
-      });
+        watcher_polling_interval: folder.watcher_polling_interval,
+      })
     } else {
       setFormData({
         folder_path: '',
@@ -79,59 +69,59 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
         exclude_extensions: [],
         exclude_patterns: [],
         watcher_enabled: true,
-        watcher_polling_interval: null
-      });
+        watcher_polling_interval: null,
+      })
     }
-    setError(null);
-  }, [folder, open]);
+    setError(null)
+  }, [folder])
 
   const handleAddExtension = () => {
-    if (!newExtension.trim()) return;
-    const ext = newExtension.trim().startsWith('.') ? newExtension.trim() : `.${newExtension.trim()}`;
-    if (!formData.exclude_extensions?.includes(ext)) {
+    if (!newExtension.trim()) return
+    const extension = newExtension.trim().startsWith('.') ? newExtension.trim() : `.${newExtension.trim()}`
+    if (!formData.exclude_extensions?.includes(extension)) {
       setFormData({
         ...formData,
-        exclude_extensions: [...(formData.exclude_extensions || []), ext]
-      });
+        exclude_extensions: [...(formData.exclude_extensions || []), extension],
+      })
     }
-    setNewExtension('');
-  };
+    setNewExtension('')
+  }
 
-  const handleRemoveExtension = (ext: string) => {
+  const handleRemoveExtension = (extension: string) => {
     setFormData({
       ...formData,
-      exclude_extensions: formData.exclude_extensions?.filter(e => e !== ext)
-    });
-  };
+      exclude_extensions: formData.exclude_extensions?.filter((item) => item !== extension),
+    })
+  }
 
   const handleAddPattern = () => {
-    if (!newPattern.trim()) return;
-    if (!formData.exclude_patterns?.includes(newPattern.trim())) {
+    if (!newPattern.trim()) return
+    const pattern = newPattern.trim()
+    if (!formData.exclude_patterns?.includes(pattern)) {
       setFormData({
         ...formData,
-        exclude_patterns: [...(formData.exclude_patterns || []), newPattern.trim()]
-      });
+        exclude_patterns: [...(formData.exclude_patterns || []), pattern],
+      })
     }
-    setNewPattern('');
-  };
+    setNewPattern('')
+  }
 
   const handleRemovePattern = (pattern: string) => {
     setFormData({
       ...formData,
-      exclude_patterns: formData.exclude_patterns?.filter(p => p !== pattern)
-    });
-  };
+      exclude_patterns: formData.exclude_patterns?.filter((item) => item !== pattern),
+    })
+  }
 
   const handleSave = async () => {
     if (!formData.folder_path.trim()) {
-      setError(t('folderSettings.dialog.errorPath'));
-      return;
+      setError(t('folderSettings.dialog.errorPath'))
+      return
     }
 
-    setSaving(true);
+    setSaving(true)
     try {
-      setError(null);
-
+      setError(null)
       if (isEdit && folder) {
         const updates: WatchedFolderUpdate = {
           folder_name: formData.folder_name,
@@ -141,234 +131,238 @@ const FolderFormDialog: React.FC<Props> = ({ open, onClose, folder, onSuccess })
           exclude_extensions: formData.exclude_extensions,
           exclude_patterns: formData.exclude_patterns,
           watcher_enabled: formData.watcher_enabled,
-          watcher_polling_interval: formData.watcher_polling_interval
-        };
-        await folderApi.updateFolder(folder.id, updates);
+          watcher_polling_interval: formData.watcher_polling_interval,
+        }
+        await folderApi.updateFolder(folder.id, updates)
       } else {
-        await folderApi.addFolder(formData);
+        await folderApi.addFolder(formData)
       }
 
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      onSuccess();
-      onClose();
-    } catch (err: any) {
-      setError(err.response?.data?.message || t('folderSettings.dialog.errorSave'));
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      onSuccess()
+      onClose()
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'response' in err
+          ? ((err as { response?: { data?: { message?: string } } }).response?.data?.message ?? t('folderSettings.dialog.errorSave'))
+          : t('folderSettings.dialog.errorSave')
+      setError(message)
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>{isEdit ? t('folderSettings.dialog.editTitle') : t('folderSettings.dialog.addTitle')}</DialogTitle>
-      <DialogContent>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
+    <Dialog open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose() : undefined)}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? t('folderSettings.dialog.editTitle') : t('folderSettings.dialog.addTitle')}</DialogTitle>
+        </DialogHeader>
+
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
           </Alert>
-        )}
+        ) : null}
 
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 0.5 }}>
-          <TextField
-            fullWidth
-            label={t('folderSettings.dialog.folderPath')}
-            value={formData.folder_path}
-            onChange={(e) => setFormData({ ...formData, folder_path: e.target.value })}
-            disabled={isEdit}
-            helperText={
-              isEdit
-                ? t('folderSettings.dialog.folderPathDisabled')
-                : t('folderSettings.dialog.folderPathHelper')
-            }
-          />
-
-          <TextField
-            fullWidth
-            label={t('folderSettings.dialog.folderName')}
-            value={formData.folder_name}
-            onChange={(e) => setFormData({ ...formData, folder_name: e.target.value })}
-            helperText={t('folderSettings.dialog.folderNameHelper')}
-          />
-
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={formData.watcher_enabled}
-                  onChange={(e) => setFormData({ ...formData, watcher_enabled: e.target.checked })}
-                />
-              }
-              label={t('folderSettings.dialog.watcherEnabled')}
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label htmlFor="folder-path" className="text-sm font-medium">{t('folderSettings.dialog.folderPath')}</label>
+            <Input
+              id="folder-path"
+              value={formData.folder_path}
+              onChange={(event) => setFormData({ ...formData, folder_path: event.target.value })}
+              disabled={isEdit}
             />
-            <Tooltip
-              title={t('folderSettings.dialog.watcherTooltip')}
-              arrow
-              placement="right"
-            >
-              <IconButton size="small">
-                <InfoOutlinedIcon fontSize="small" color="action" />
-              </IconButton>
-            </Tooltip>
-          </Box>
+            <p className="text-muted-foreground text-xs">
+              {isEdit ? t('folderSettings.dialog.folderPathDisabled') : t('folderSettings.dialog.folderPathHelper')}
+            </p>
+          </div>
 
-          {formData.watcher_enabled && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <Typography variant="body2" color="text.secondary">
-                  {t('folderSettings.dialog.pollingInterval')}
-                </Typography>
-                <Tooltip
-                  title={t('folderSettings.dialog.pollingIntervalTooltip')}
-                  arrow
-                >
-                  <HelpOutlineIcon fontSize="small" color="action" sx={{ cursor: 'help' }} />
-                </Tooltip>
-              </Box>
-              <TextField
-                size="small"
+          <div className="space-y-1">
+            <label htmlFor="folder-name" className="text-sm font-medium">{t('folderSettings.dialog.folderName')}</label>
+            <Input
+              id="folder-name"
+              value={formData.folder_name}
+              onChange={(event) => setFormData({ ...formData, folder_name: event.target.value })}
+            />
+            <p className="text-muted-foreground text-xs">{t('folderSettings.dialog.folderNameHelper')}</p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={formData.watcher_enabled}
+              onCheckedChange={(checked) => setFormData({ ...formData, watcher_enabled: checked })}
+            />
+            <span className="text-sm">{t('folderSettings.dialog.watcherEnabled')}</span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" className="text-muted-foreground">
+                    <Info className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{t('folderSettings.dialog.watcherTooltip')}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+
+          {formData.watcher_enabled ? (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 text-sm font-medium">
+                <span>{t('folderSettings.dialog.pollingInterval')}</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="text-muted-foreground">
+                        <CircleHelp className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t('folderSettings.dialog.pollingIntervalTooltip')}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <Input
                 type="number"
-                label={t('folderSettings.dialog.pollingIntervalLabel')}
                 value={formData.watcher_polling_interval ?? ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  watcher_polling_interval: e.target.value === '' ? null : parseInt(e.target.value) || null
-                })}
+                onChange={(event) =>
+                  setFormData({
+                    ...formData,
+                    watcher_polling_interval:
+                      event.target.value === '' ? null : Number.parseInt(event.target.value, 10) || null,
+                  })
+                }
                 placeholder={t('folderSettings.dialog.pollingIntervalPlaceholder')}
-                helperText={t('folderSettings.dialog.pollingIntervalHelper')}
-                sx={{ maxWidth: 300 }}
-                inputProps={{ min: 100, step: 100 }}
+                min={100}
+                step={100}
               />
-            </Box>
-          )}
+              <p className="text-muted-foreground text-xs">{t('folderSettings.dialog.pollingIntervalHelper')}</p>
+            </div>
+          ) : null}
 
-          <FormControlLabel
-            control={
-              <Switch
-                checked={formData.auto_scan}
-                onChange={(e) => setFormData({ ...formData, auto_scan: e.target.checked })}
-              />
-            }
-            label={t('folderSettings.dialog.autoScan')}
-          />
-
-          {formData.auto_scan && (
-            <TextField
-              fullWidth
-              type="number"
-              label={t('folderSettings.dialog.scanInterval')}
-              value={formData.scan_interval}
-              onChange={(e) => setFormData({ ...formData, scan_interval: parseInt(e.target.value) || 60 })}
-              helperText={t('folderSettings.dialog.scanIntervalHelper')}
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={formData.auto_scan}
+              onCheckedChange={(checked) => setFormData({ ...formData, auto_scan: checked })}
             />
-          )}
+            <span className="text-sm">{t('folderSettings.dialog.autoScan')}</span>
+          </div>
 
-          <Accordion sx={{ boxShadow: 'none', '&:before': { display: 'none' } }}>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, '& .MuiAccordionSummary-content': { my: 0.5 } }}>
-              <Typography variant="body2" color="text.secondary">{t('folderSettings.dialog.advancedOptions')}</Typography>
-            </AccordionSummary>
-            <AccordionDetails sx={{ pt: 0 }}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={formData.recursive}
-                      onChange={(e) => setFormData({ ...formData, recursive: e.target.checked })}
-                    />
-                  }
-                  label={t('folderSettings.dialog.recursive')}
+          {formData.auto_scan ? (
+            <div className="space-y-1">
+              <label htmlFor="scan-interval" className="text-sm font-medium">{t('folderSettings.dialog.scanInterval')}</label>
+              <Input
+                id="scan-interval"
+                type="number"
+                value={formData.scan_interval}
+                onChange={(event) =>
+                  setFormData({ ...formData, scan_interval: Number.parseInt(event.target.value, 10) || 60 })
+                }
+              />
+              <p className="text-muted-foreground text-xs">{t('folderSettings.dialog.scanIntervalHelper')}</p>
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            className="text-muted-foreground text-left text-sm hover:underline"
+            onClick={() => setShowAdvanced((prev) => !prev)}
+          >
+            {t('folderSettings.dialog.advancedOptions')}
+          </button>
+
+          {showAdvanced ? (
+            <div className="space-y-3 rounded-md border p-3">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={formData.recursive}
+                  onCheckedChange={(checked) => setFormData({ ...formData, recursive: checked })}
                 />
+                <span className="text-sm">{t('folderSettings.dialog.recursive')}</span>
+              </div>
 
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('folderSettings.dialog.excludeExtensions')}
-                  </Typography>
-                  <Tooltip
-                    title={t('folderSettings.dialog.excludeExtensionsTooltip')}
-                    arrow
-                  >
-                    <HelpOutlineIcon fontSize="small" color="action" sx={{ cursor: 'help' }} />
-                  </Tooltip>
-                </Box>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <TextField
-                    size="small"
+              <div className="space-y-2">
+                <div className="flex items-center gap-1 text-sm font-medium">
+                  <span>{t('folderSettings.dialog.excludeExtensions')}</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button type="button" className="text-muted-foreground">
+                          <CircleHelp className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>{t('folderSettings.dialog.excludeExtensionsTooltip')}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <div className="flex gap-2">
+                  <Input
                     value={newExtension}
-                    onChange={(e) => setNewExtension(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddExtension()}
+                    onChange={(event) => setNewExtension(event.target.value)}
+                    onKeyDown={(event) => (event.key === 'Enter' ? handleAddExtension() : undefined)}
                     placeholder={t('folderSettings.dialog.excludeExtensionsPlaceholder')}
-                    sx={{ width: 200 }}
                   />
-                  <Button onClick={handleAddExtension} startIcon={<AddIcon />} variant="outlined" size="small">
+                  <Button type="button" variant="outline" onClick={handleAddExtension}>
                     {t('folderSettings.dialog.addButton')}
                   </Button>
-                </Box>
-                {formData.exclude_extensions && formData.exclude_extensions.length > 0 && (
-                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                    {formData.exclude_extensions.map((ext) => (
-                      <Chip
-                        key={ext}
-                        label={ext}
-                        onDelete={() => handleRemoveExtension(ext)}
-                        size="small"
-                        color="error"
-                        variant="outlined"
-                      />
-                    ))}
-                  </Box>
-                )}
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {(formData.exclude_extensions || []).map((extension) => (
+                    <Badge key={extension} className="cursor-pointer" onClick={() => handleRemoveExtension(extension)}>
+                      {extension}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
 
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('folderSettings.dialog.excludePatterns')}
-                  </Typography>
-                  <Tooltip
-                    title={t('folderSettings.dialog.excludePatternsTooltip')}
-                    arrow
-                  >
-                    <HelpOutlineIcon fontSize="small" color="action" sx={{ cursor: 'help' }} />
-                  </Tooltip>
-                </Box>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <TextField
-                    size="small"
+              <div className="space-y-2">
+                <div className="flex items-center gap-1 text-sm font-medium">
+                  <span>{t('folderSettings.dialog.excludePatterns')}</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button type="button" className="text-muted-foreground">
+                          <CircleHelp className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>{t('folderSettings.dialog.excludePatternsTooltip')}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <div className="flex gap-2">
+                  <Input
                     value={newPattern}
-                    onChange={(e) => setNewPattern(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddPattern()}
+                    onChange={(event) => setNewPattern(event.target.value)}
+                    onKeyDown={(event) => (event.key === 'Enter' ? handleAddPattern() : undefined)}
                     placeholder={t('folderSettings.dialog.excludePatternsPlaceholder')}
-                    sx={{ width: 300 }}
                   />
-                  <Button onClick={handleAddPattern} startIcon={<AddIcon />} variant="outlined" size="small">
+                  <Button type="button" variant="outline" onClick={handleAddPattern}>
                     {t('folderSettings.dialog.addButton')}
                   </Button>
-                </Box>
-                {formData.exclude_patterns && formData.exclude_patterns.length > 0 && (
-                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                    {formData.exclude_patterns.map((pattern) => (
-                      <Chip
-                        key={pattern}
-                        label={pattern}
-                        onDelete={() => handleRemovePattern(pattern)}
-                        size="small"
-                      />
-                    ))}
-                  </Box>
-                )}
-              </Box>
-            </AccordionDetails>
-          </Accordion>
-        </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={saving}>
-          {t('folderSettings.dialog.cancelButton')}
-        </Button>
-        <Button onClick={handleSave} variant="contained" disabled={saving}>
-          {saving ? t('folderSettings.dialog.savingButton') : t('folderSettings.dialog.saveButton')}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-};
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {(formData.exclude_patterns || []).map((pattern) => (
+                    <Badge key={pattern} className="cursor-pointer" onClick={() => handleRemovePattern(pattern)}>
+                      {pattern}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
 
-export default FolderFormDialog;
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            {t('folderSettings.dialog.cancelButton')}
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? t('folderSettings.dialog.savingButton') : t('folderSettings.dialog.saveButton')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export default FolderFormDialog

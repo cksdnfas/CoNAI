@@ -8,6 +8,7 @@ import { ImageSearchModel } from '../../models/Image/ImageSearchModel';
 import { ImageStatsModel } from '../../models/Image/ImageStatsModel';
 import { db } from '../../database/init';
 import { imageTaggerService, ImageTaggerService } from '../../services/imageTaggerService';
+import { TaggerResult } from '../../services/taggerDaemon';
 import { ImageListResponse } from '../../types/image';
 import { runtimePaths, resolveUploadsPath } from '../../config/runtimePaths';
 import { AutoTagSearchService } from '../../services/autoTagSearchService';
@@ -16,8 +17,56 @@ import { enrichImageRecord } from './utils';
 import { RatingScoreService } from '../../services/ratingScoreService';
 import { logger } from '../../utils/logger';
 import { QueryCacheService } from '../../services/QueryCacheService';
+import { AutoTagsComposeService } from '../../services/autoTagsComposeService';
+import { kaloscopeTaggerService } from '../../services/kaloscopeTaggerService';
+import { RatingData } from '../../types/autoTag';
+import { settingsService } from '../../services/settingsService';
 
 const router = Router();
+
+function extractRatingData(raw: unknown): RatingData | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null;
+  }
+
+  const rating = raw as Record<string, unknown>;
+  const general = rating.general;
+  const sensitive = rating.sensitive;
+  const questionable = rating.questionable;
+  const explicit = rating.explicit;
+
+  if (
+    typeof general !== 'number' ||
+    typeof sensitive !== 'number' ||
+    typeof questionable !== 'number' ||
+    typeof explicit !== 'number'
+  ) {
+    return null;
+  }
+
+  return { general, sensitive, questionable, explicit };
+}
+
+async function buildMergedAutoTags(
+  existingAutoTags: string | null,
+  taggerResult: TaggerResult,
+  imagePath: string,
+  mimeType?: string
+): Promise<string> {
+  let autoTagsJson = AutoTagsComposeService.mergeTagger(existingAutoTags, taggerResult);
+  const settings = settingsService.loadSettings();
+
+  if (settings.kaloscope.enabled && !ImageTaggerService.isVideoFile(imagePath, mimeType)) {
+    const kaloscopeResult = await kaloscopeTaggerService.tagImage(imagePath);
+    if (kaloscopeResult.success) {
+      autoTagsJson = AutoTagsComposeService.mergeKaloscope(autoTagsJson, kaloscopeResult);
+    } else {
+      logger.warn('[Kaloscope] Tagging skipped or failed:', kaloscopeResult.error || kaloscopeResult.error_type || 'unknown');
+    }
+  }
+
+  return autoTagsJson;
+}
 
 /**
  * 단일 이미지 태깅 (WD v3 Tagger)
@@ -90,7 +139,7 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
 
     // 동영상 또는 이미지 태깅 실행
     const mimeType = imageData.file_mime_type || imageData.mime_type;
-    let taggerResult;
+    let taggerResult: TaggerResult;
     if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
       logger.debug('[ImageTag] Detected video file, extracting frames...');
       taggerResult = await imageTaggerService.tagVideo(imagePath);
@@ -116,8 +165,8 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
-    // 데이터베이터에 저장 (통합 media_metadata 테이블 업데이트)
-    const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
+    // 데이터베이스에 저장 (통합 media_metadata 테이블 업데이트)
+    const autoTagsJson = await buildMergedAutoTags(imageData.auto_tags || null, taggerResult, imagePath, mimeType);
     logger.debug(`[ImageTag] Formatted JSON length: ${autoTagsJson?.length || 0}`);
     if (autoTagsJson) {
       logger.verbose(`[ImageTag] Formatted JSON preview: ${autoTagsJson.substring(0, 100)}`);
@@ -125,9 +174,10 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
 
     // Calculate rating_score if rating data is available
     let ratingScore = 0;
-    if (taggerResult.rating) {
+    const ratingData = extractRatingData(taggerResult.rating);
+    if (ratingData) {
       try {
-        const scoreResult = await RatingScoreService.calculateScore(taggerResult.rating as any);
+        const scoreResult = await RatingScoreService.calculateScore(ratingData);
         ratingScore = scoreResult.score;
         logger.debug(`[ImageTag] Calculated rating_score: ${ratingScore}`);
       } catch (error) {
@@ -233,7 +283,7 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
 
         // 동영상 또는 이미지 태깅 실행
         const mimeType = imageData.file_mime_type || imageData.mime_type;
-        let taggerResult;
+        let taggerResult: TaggerResult;
         if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
           taggerResult = await imageTaggerService.tagVideo(imagePath);
         } else {
@@ -251,13 +301,14 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
         }
 
         // 데이터베이스에 저장
-        const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
+        const autoTagsJson = await buildMergedAutoTags(imageData.auto_tags || null, taggerResult, imagePath, mimeType);
 
         // Calculate rating_score if rating data is available
         let ratingScore = 0;
-        if (taggerResult.rating) {
+        const ratingData = extractRatingData(taggerResult.rating);
+        if (ratingData) {
           try {
-            const scoreResult = await RatingScoreService.calculateScore(taggerResult.rating as any);
+            const scoreResult = await RatingScoreService.calculateScore(ratingData);
             ratingScore = scoreResult.score;
           } catch (error) {
             logger.error('[BatchTag] Failed to calculate rating_score:', error);
@@ -373,7 +424,7 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
 
         // 동영상 또는 이미지 태깅 실행
         const mimeType = image.file_mime_type || image.mime_type;
-        let taggerResult;
+        let taggerResult: TaggerResult;
         if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
           taggerResult = await imageTaggerService.tagVideo(imagePath);
         } else {
@@ -390,13 +441,14 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
           continue;
         }
 
-        const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
+        const autoTagsJson = await buildMergedAutoTags(image.auto_tags || null, taggerResult, imagePath, mimeType);
 
         // Calculate rating_score if rating data is available
         let ratingScore = 0;
-        if (taggerResult.rating) {
+        const ratingData = extractRatingData(taggerResult.rating);
+        if (ratingData) {
           try {
-            const scoreResult = await RatingScoreService.calculateScore(taggerResult.rating as any);
+            const scoreResult = await RatingScoreService.calculateScore(ratingData);
             ratingScore = scoreResult.score;
           } catch (error) {
             logger.error('[BatchTagUnprocessed] Failed to calculate rating_score:', error);
@@ -543,7 +595,7 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
 
         // 동영상 또는 이미지 태깅 실행
         const mimeType = imageData.file_mime_type || imageData.mime_type;
-        let taggerResult;
+        let taggerResult: TaggerResult;
         if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
           taggerResult = await imageTaggerService.tagVideo(imagePath);
         } else {
@@ -560,13 +612,14 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
           continue;
         }
 
-        const autoTagsJson = ImageTaggerService.formatForDatabase(taggerResult);
+        const autoTagsJson = await buildMergedAutoTags(imageData.auto_tags || null, taggerResult, imagePath, mimeType);
 
         // Calculate rating_score if rating data is available
         let ratingScore = 0;
-        if (taggerResult.rating) {
+        const ratingData = extractRatingData(taggerResult.rating);
+        if (ratingData) {
           try {
-            const scoreResult = await RatingScoreService.calculateScore(taggerResult.rating as any);
+            const scoreResult = await RatingScoreService.calculateScore(ratingData);
             ratingScore = scoreResult.score;
           } catch (error) {
             logger.error('[BatchTagAll] Failed to calculate rating_score:', error);
@@ -822,10 +875,11 @@ router.post('/recalculate-rating-scores', asyncHandler(async (req: Request, res:
     for (const image of imagesWithTags) {
       try {
         const autoTagsData = JSON.parse(image.auto_tags);
+        const ratingData = extractRatingData(autoTagsData?.rating || autoTagsData?.tagger?.rating);
 
-        if (autoTagsData.rating) {
+        if (ratingData) {
           // Calculate rating score
-          const scoreResult = await RatingScoreService.calculateScore(autoTagsData.rating);
+          const scoreResult = await RatingScoreService.calculateScore(ratingData);
 
           // Update only rating_score
           db.prepare(`
