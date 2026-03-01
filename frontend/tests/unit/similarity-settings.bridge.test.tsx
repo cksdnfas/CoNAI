@@ -300,6 +300,7 @@ describe('SimilaritySettings bridge', () => {
     expect(screen.getByText('Match: Near Duplicate')).toBeInTheDocument()
     expect(screen.getByText('Similarity: 92.4%')).toBeInTheDocument()
     expect(screen.getByText('Color Similarity: 88.2%')).toBeInTheDocument()
+    expect(screen.getByTestId('thumbnail-card-preview')).toBeInTheDocument()
   })
 
   it('renders similarity controls and updates auto-generate setting on success', async () => {
@@ -597,5 +598,42 @@ describe('SimilaritySettings bridge', () => {
     })
 
     expect(await screen.findByText('Cannot delete selected duplicate files right now.')).toBeInTheDocument()
+  })
+
+  it('cancels duplicate deletion when confirmation is rejected', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => false))
+
+    findDuplicateGroupsMock.mockResolvedValue([
+      {
+        groupId: 'dup-cancel',
+        similarity: 95.1,
+        matchType: 'near',
+        images: [
+          { file_id: 501, composite_hash: '7'.repeat(48), original_file_path: 'first.png' },
+          { file_id: 502, composite_hash: '8'.repeat(48), original_file_path: 'second.png' },
+        ],
+      },
+    ])
+
+    render(<SimilaritySettings />)
+
+    await screen.findByRole('switch')
+    fireEvent.click(screen.getByRole('button', { name: 'Run Full Scan' }))
+    await screen.findByText('Group dup-cancel • 2 images')
+
+    expect(screen.getAllByTestId('thumbnail-card-selection')).toHaveLength(2)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select All' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete 2 Selected' }))
+
+    await waitFor(() => {
+      expect(globalThis.confirm).toHaveBeenCalledWith(
+        'Are you sure you want to delete 2 selected images? Deleted images cannot be recovered!',
+      )
+    })
+
+    expect(deleteImageFilesMock).not.toHaveBeenCalled()
+    expect(findDuplicateGroupsMock).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Delete 2 Selected' })).toBeInTheDocument()
   })
 })

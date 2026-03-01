@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { imageApi } from '@/services/image-api'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ThumbnailCard } from '@/features/image-groups/components/thumbnail-card'
 import {
   type DuplicateGroup,
   findDuplicateGroups,
@@ -577,40 +578,47 @@ export default function SimilaritySettingsFeature() {
             <p className="text-sm font-medium">{t('similarity.test.results', { defaultValue: 'Search results: {{count}}', count: testResults.length })}</p>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {testResults.map((result, index) => (
-                <Card key={`${result.image.composite_hash ?? index}-${result.image.file_id ?? index}`}>
-                  <CardContent className="space-y-2">
-                    {getThumbnailUrl(result.image.composite_hash, result.image.thumbnail_url) ? (
-                      <img
-                        src={getThumbnailUrl(result.image.composite_hash, result.image.thumbnail_url) ?? ''}
-                        alt={result.image.original_file_path ?? result.image.composite_hash ?? t('similarity.test.resultImage', { defaultValue: 'Result image' })}
-                        className="h-28 w-full rounded-md border object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-28 items-center justify-center rounded-md border text-xs text-muted-foreground">{t('similarity.test.noPreview', { defaultValue: 'No preview' })}</div>
-                    )}
-                    <div className="flex flex-wrap gap-1">
+                <ThumbnailCard
+                  key={`${result.image.composite_hash ?? index}-${result.image.file_id ?? index}`}
+                  ariaLabel={result.image.original_file_path ?? result.image.composite_hash ?? t('similarity.test.resultImage', { defaultValue: 'Result image' })}
+                  onClick={() => undefined}
+                  className="aspect-auto min-h-[14rem]"
+                  preview={getThumbnailUrl(result.image.composite_hash, result.image.thumbnail_url)
+                    ? (
+                        <img
+                          src={getThumbnailUrl(result.image.composite_hash, result.image.thumbnail_url) ?? ''}
+                          alt={result.image.original_file_path ?? result.image.composite_hash ?? t('similarity.test.resultImage', { defaultValue: 'Result image' })}
+                          className="h-full w-full object-cover"
+                        />
+                      )
+                    : undefined}
+                  fallbackPreview={
+                    <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                      {t('similarity.test.noPreview', { defaultValue: 'No preview' })}
+                    </div>
+                  }
+                  title={result.image.original_file_path ?? result.image.composite_hash ?? '-'}
+                  subtitle={t('similarity.test.similarity', {
+                    defaultValue: 'Similarity: {{percent}}%',
+                    percent: Number.isFinite(result.similarity) ? result.similarity.toFixed(1) : '-',
+                  })}
+                  badges={
+                    <>
                       <Badge variant="outline">{t('similarity.test.modeLabel', { defaultValue: 'Mode: {{mode}}', mode: getModeLabel(testMode) })}</Badge>
                       {result.matchType
                         ? <Badge variant="outline">{t('similarity.test.matchLabel', { defaultValue: 'Match: {{type}}', type: getMatchTypeLabel(result.matchType) })}</Badge>
                         : null}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {t('similarity.test.similarity', {
-                        defaultValue: 'Similarity: {{percent}}%',
-                        percent: Number.isFinite(result.similarity) ? result.similarity.toFixed(1) : '-',
-                      })}
-                    </p>
-                    {typeof result.colorSimilarity === 'number' ? (
-                      <p className="text-xs text-muted-foreground">
-                        {t('similarity.test.colorSimilarity', {
-                          defaultValue: 'Color similarity: {{percent}}%',
-                          percent: result.colorSimilarity.toFixed(1),
-                        })}
-                      </p>
-                    ) : null}
-                    <p className="truncate text-xs text-muted-foreground">{result.image.original_file_path ?? result.image.composite_hash ?? '-'}</p>
-                  </CardContent>
-                </Card>
+                      {typeof result.colorSimilarity === 'number' ? (
+                        <Badge variant="outline">
+                          {t('similarity.test.colorSimilarity', {
+                            defaultValue: 'Color similarity: {{percent}}%',
+                            percent: result.colorSimilarity.toFixed(1),
+                          })}
+                        </Badge>
+                      ) : null}
+                    </>
+                  }
+                />
               ))}
             </div>
           </div>
@@ -727,32 +735,45 @@ export default function SimilaritySettingsFeature() {
                           })
 
                         return (
-                          <div
+                          <ThumbnailCard
                             key={`${group.groupId}-${fileId ?? image.composite_hash ?? index}`}
-                            className={`space-y-2 rounded-md border p-2 ${isSelected ? 'border-destructive bg-destructive/10' : ''}`}
-                          >
-                            {getThumbnailUrl(image.composite_hash, image.thumbnail_url) ? (
-                              <img
-                                src={getThumbnailUrl(image.composite_hash, image.thumbnail_url) ?? ''}
-                                alt={imageTitle}
-                                className="h-28 w-full rounded-md border object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-28 items-center justify-center rounded-md border text-xs text-muted-foreground">{t('similarity.test.noPreview', { defaultValue: 'No preview' })}</div>
-                            )}
-
-                            <label className="flex items-center gap-2 text-xs">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                disabled={fileId === null || duplicateDeleteLoading}
-                                onChange={() => {
-                                  if (fileId !== null) {
-                                    toggleDuplicateImageSelection(fileId)
-                                  }
-                                }}
-                              />
-                              <span>
+                            ariaLabel={imageTitle}
+                            onClick={() => undefined}
+                            className={`aspect-auto min-h-[14rem] ${isSelected ? 'border-destructive bg-destructive/10' : ''}`}
+                            preview={getThumbnailUrl(image.composite_hash, image.thumbnail_url)
+                              ? (
+                                  <img
+                                    src={getThumbnailUrl(image.composite_hash, image.thumbnail_url) ?? ''}
+                                    alt={imageTitle}
+                                    className="h-full w-full object-cover"
+                                  />
+                                )
+                              : undefined}
+                            fallbackPreview={
+                              <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                                {t('similarity.test.noPreview', { defaultValue: 'No preview' })}
+                              </div>
+                            }
+                            selectable
+                            selected={isSelected}
+                            readOnly={fileId === null || duplicateDeleteLoading}
+                            onSelectedChange={() => {
+                              if (fileId !== null) {
+                                toggleDuplicateImageSelection(fileId)
+                              }
+                            }}
+                            selectionAriaLabel={fileId !== null
+                              ? t('similarity.duplicateScan.selectForDelete', {
+                                  defaultValue: 'Select for delete (ID: {{id}})',
+                                  id: fileId,
+                                })
+                              : t('similarity.duplicateScan.unselectable', { defaultValue: 'Unselectable image' })}
+                            title={imageTitle}
+                            subtitle={typeof image.width === 'number' && typeof image.height === 'number'
+                              ? `${image.width} x ${image.height}`
+                              : undefined}
+                            badges={
+                              <span className="text-[11px] text-white/90">
                                 {fileId !== null
                                   ? t('similarity.duplicateScan.selectForDelete', {
                                       defaultValue: 'Select for delete (ID: {{id}})',
@@ -760,13 +781,8 @@ export default function SimilaritySettingsFeature() {
                                     })
                                   : t('similarity.duplicateScan.unselectable', { defaultValue: 'Unselectable image' })}
                               </span>
-                            </label>
-
-                            <p className="truncate text-xs text-muted-foreground">{imageTitle}</p>
-                            {typeof image.width === 'number' && typeof image.height === 'number' ? (
-                              <p className="text-xs text-muted-foreground">{image.width} x {image.height}</p>
-                            ) : null}
-                          </div>
+                            }
+                          />
                         )
                       })}
                     </div>
