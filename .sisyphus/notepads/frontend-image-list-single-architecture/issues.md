@@ -19,3 +19,4 @@
 - #T10-CLOSURE|- 2026-03-01T14:45:18Z - Repo-local plan file is condensed and does not contain an explicit Task 10 line; closure bookkeeping updates only its single pending checkbox while keeping frontend source unchanged.
 - #T14|- 2026-03-02T00:38:00Z - Initial Task 14 test run failed on new group-assign async close assertion and similarity no-preview count expectation; fixed by awaiting async assign completion and relaxing fallback assertion to the deterministic single-fallback case.
 - #T14|- 2026-03-02T00:38:00Z - Full vitest output still includes known non-blocking stderr from bridge-boundary tests and intentional failure-path logging; treated as informational because all suites exited 0.
+- #T15|- 2026-03-02T01:00:00Z - Full vitest run for final cleanup still emits expected non-blocking stderr from intentional bridge/error-boundary coverage; treated as informational because all tests passed and exit code remained 0.

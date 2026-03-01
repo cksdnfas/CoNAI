@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "verify:no-banned-imports": "node ../scripts/verify-no-banned-imports.mjs --mode=bridges-settings",
     "verify:no-mui-deps": "node ../scripts/verify-no-mui-deps.mjs --mode=warn",
+    "verify:image-render-guardrails": "node ../scripts/verify-image-render-guardrails.mjs",
     "verify:bridge-imports": "node ../scripts/verify-bridge-placeholder-gates.mjs --target=bridge-imports --mode=warn",
     "verify:placeholder-bridges": "node ../scripts/verify-bridge-placeholder-gates.mjs --target=placeholder-bridges --mode=warn",
     "verify:bridge-gates": "node ../scripts/verify-bridge-placeholder-gates.mjs --target=all --mode=error",
