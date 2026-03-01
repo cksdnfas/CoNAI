@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Folder } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AutoFolderGroupWithStats } from '@comfyui-image-manager/shared'
-import type { ImageRecord } from '@/types/image'
 import { autoFolderGroupsApi } from '@/services/auto-folder-groups-api'
 import { getBackendOrigin } from '@/utils/backend'
 import { buildPreviewMediaUrl } from '@/features/images/components/image-preview-url'
+import { useGroupPreviewImage } from '@/features/image-groups/hooks/use-group-preview-image'
 import { Badge } from '@/components/ui/badge'
 
 interface AutoFolderGroupCardProps {
@@ -16,31 +16,18 @@ interface AutoFolderGroupCardProps {
 export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps) {
   const { t } = useTranslation('imageGroups')
   const backendOrigin = getBackendOrigin()
-  const [preview, setPreview] = useState<ImageRecord | null>(null)
-
-  useEffect(() => {
-    let disposed = false
-
-    const loadPreview = async () => {
-      try {
-        const response = await autoFolderGroupsApi.getPreviewImages(group.id, 1, true)
-        if (!disposed) {
-          setPreview(response.success && response.data && response.data.length > 0 ? response.data[0] : null)
-        }
-      } catch (error) {
-        if (!disposed) {
-          console.error(`Failed to load auto-folder preview for group ${group.id}:`, error)
-          setPreview(null)
-        }
-      }
-    }
-
-    void loadPreview()
-
-    return () => {
-      disposed = true
-    }
-  }, [group.id])
+  const fetchPreviewImages = useCallback((groupId: number) => autoFolderGroupsApi.getPreviewImages(groupId, 1, true), [])
+  const handlePreviewError = useCallback(
+    (error: unknown) => {
+      console.error(`Failed to load auto-folder preview for group ${group.id}:`, error)
+    },
+    [group.id],
+  )
+  const preview = useGroupPreviewImage({
+    groupId: group.id,
+    fetchPreviewImages,
+    onError: handlePreviewError,
+  })
 
   const previewUrl = useMemo(() => {
     if (!preview) {
