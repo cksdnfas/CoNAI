@@ -6,6 +6,7 @@ import { groupApi } from '@/services/group-api'
 import { getBackendOrigin } from '@/utils/backend'
 import { buildPreviewMediaUrl } from '@/features/images/components/image-preview-url'
 import { useGroupPreviewImage } from '@/features/image-groups/hooks/use-group-preview-image'
+import { GroupTileBase } from '@/features/image-groups/components/group-tile-base'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
@@ -47,6 +48,18 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
   }, [backendOrigin, preview])
   const isVideo = preview?.file_type === 'video'
 
+  const previewNode = useMemo(() => {
+    if (!previewUrl) {
+      return null
+    }
+
+    if (isVideo) {
+      return <video className="h-full w-full object-cover" src={previewUrl} muted loop autoPlay playsInline />
+    }
+
+    return <img className="h-full w-full object-cover" src={previewUrl} alt={group.name} loading="lazy" />
+  }, [group.name, isVideo, previewUrl])
+
   const handleSettingsClick = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation()
@@ -56,49 +69,18 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
   )
 
   return (
-    <div
-      className="group relative aspect-[5/7] w-full overflow-hidden rounded-md border bg-card text-left transition hover:-translate-y-1 hover:shadow-lg"
-    >
-      <button
-        type="button"
-        onClick={onClick}
-        className="absolute inset-0 z-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        aria-label={group.name}
-      />
-
-      {previewUrl ? (
-        isVideo ? (
-          <video className="pointer-events-none absolute inset-0 h-full w-full object-cover" src={previewUrl} muted loop autoPlay playsInline />
-        ) : (
-          <img className="pointer-events-none absolute inset-0 h-full w-full object-cover" src={previewUrl} alt={group.name} loading="lazy" />
-        )
-      ) : (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gradient-to-b from-muted/20 to-muted/60">
-          <Folder className="h-12 w-12 text-muted-foreground" />
-        </div>
-      )}
-
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/45 to-transparent" />
-
-      {onSettingsClick ? (
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon-sm"
-          className="absolute right-2 bottom-2 z-20 h-7 w-7 bg-black/60 text-white hover:bg-black/80"
-          onClick={handleSettingsClick}
-        >
-          <Settings className="h-3.5 w-3.5" />
-        </Button>
-      ) : null}
-
-      <div className="pointer-events-none absolute right-0 bottom-0 left-0 z-10 space-y-1 p-2">
+    <GroupTileBase
+      ariaLabel={group.name}
+      onClick={onClick}
+      preview={previewNode}
+      title={
         <div className="flex items-center gap-1.5">
           <Folder className="h-4 w-4" style={{ color: group.color || 'hsl(var(--primary))' }} />
           <p className="truncate text-sm font-medium text-white">{group.name}</p>
         </div>
-
-        <div className="flex flex-wrap gap-1">
+      }
+      badges={
+        <>
           <Badge variant="secondary" className="bg-white/20 text-white hover:bg-white/25">
             {t('groupCard.imageCount', { count: group.image_count || 0 })}
           </Badge>
@@ -114,8 +96,21 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
               <Sparkles className="h-3.5 w-3.5" />
             </Badge>
           ) : null}
-        </div>
-      </div>
-    </div>
+        </>
+      }
+      secondaryAction={
+        onSettingsClick ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon-sm"
+            className="h-7 w-7 bg-black/60 text-white hover:bg-black/80"
+            onClick={handleSettingsClick}
+          >
+            <Settings className="h-3.5 w-3.5" />
+          </Button>
+        ) : undefined
+      }
+    />
   )
 }
