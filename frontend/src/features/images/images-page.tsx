@@ -12,34 +12,27 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { buildThumbnailUrl } from '@/lib/api/endpoints'
+import { createImageRenderItemFromApiItem } from '@/features/images/components/image-list-contract'
 import { useImages } from '@/hooks/use-images'
-
-const formatFileSize = (bytes?: number) => {
-  if (!bytes || bytes <= 0) return '-'
-  const kb = bytes / 1024
-  if (kb < 1024) return `${kb.toFixed(1)} KB`
-  return `${(kb / 1024).toFixed(1)} MB`
-}
+import { getBackendOrigin } from '@/utils/backend'
 
 export function ImagesPage() {
   const [search, setSearch] = useState('')
   const imagesQuery = useImages(20)
   const imageRows = imagesQuery.data?.data.images
+  const backendOrigin = getBackendOrigin()
+
+  const renderItems = useMemo(
+    () => (imageRows ?? []).map((item, index) => createImageRenderItemFromApiItem(item, index, backendOrigin)),
+    [backendOrigin, imageRows],
+  )
 
   const filteredRows = useMemo(() => {
-    const rows = imageRows ?? []
     const keyword = search.trim().toLowerCase()
-    if (!keyword) return rows
+    if (!keyword) return renderItems
 
-    return rows.filter((row) => {
-      return (
-        row.composite_hash.toLowerCase().includes(keyword) ||
-        row.original_file_path?.toLowerCase().includes(keyword) ||
-        row.model_name?.toLowerCase().includes(keyword)
-      )
-    })
-  }, [imageRows, search])
+    return renderItems.filter((row) => row.searchSource.includes(keyword))
+  }, [renderItems, search])
 
   return (
     <div className="space-y-4">
@@ -83,24 +76,26 @@ export function ImagesPage() {
               </TableHeader>
               <TableBody>
                 {filteredRows.map((item) => (
-                  <TableRow key={item.composite_hash}>
+                  <TableRow key={item.stableIdentity.stableKey}>
                     <TableCell>
                       <img
-                        src={buildThumbnailUrl(item.composite_hash)}
-                        alt={item.composite_hash}
+                        src={item.previewUrl}
+                        alt={item.compositeHashLabel}
                         className="h-14 w-14 rounded-md border object-cover"
                         loading="lazy"
                       />
                     </TableCell>
                     <TableCell className="font-mono text-xs">
-                      {item.composite_hash.slice(0, 20)}...
+                      {item.compositeHashLabel === '-'
+                        ? '-'
+                        : `${item.compositeHashLabel.slice(0, 20)}...`}
                     </TableCell>
+                    <TableCell>{item.resolutionLabel}</TableCell>
+                    <TableCell>{item.fileSizeLabel}</TableCell>
                     <TableCell>
-                      {item.width ?? '-'} × {item.height ?? '-'}
-                    </TableCell>
-                    <TableCell>{formatFileSize(item.file_size)}</TableCell>
-                    <TableCell>
-                      {item.model_name ? <Badge variant="secondary">{item.model_name}</Badge> : '-'}
+                      {item.modelLabel !== '-'
+                        ? <Badge variant="secondary">{item.modelLabel}</Badge>
+                        : '-'}
                     </TableCell>
                   </TableRow>
                 ))}
