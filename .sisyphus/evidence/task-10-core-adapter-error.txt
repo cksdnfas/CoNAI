@@ -1,0 +1,17 @@
+Task 10 forbidden-branch guard evidence
+Timestamp: 2026-03-01T23:43:00Z
+
+Command:
+grep pattern: if \(contextId ===
+target: Comfyui_Image_Manager_2/frontend/src/features/images/components/image-list.tsx
+
+Output:
+No matches found
+
+Interpretation:
+No behavioral if(contextId===...) branch remains in the ImageList core.
+
+Related verification context:
+- lsp_diagnostics on image-list.tsx: No diagnostics found
+- test run status: pass
+- build run status: pass
