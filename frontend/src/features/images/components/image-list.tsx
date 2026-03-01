@@ -5,24 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import PromptDisplay, { type NaiCharacterPrompt } from '@/components/prompt-display'
 import { settingsApi } from '@/services/settings-api'
-
-interface PaginationConfig {
-  currentPage: number
-  totalPages: number
-  onPageChange: (page: number) => void
-  pageSize: number
-  onPageSizeChange: (size: number) => void
-}
-
-interface InfiniteScrollConfig {
-  hasMore: boolean
-  loadMore: () => void
-}
-
-interface SelectionConfig {
-  selectedIds: number[]
-  onSelectionChange: (selectedIds: number[]) => void
-}
+import {
+  type ImageListAdapterPolicy,
+  type ImageListSelectionConfig,
+  getImageStableIdentity,
+} from './image-list-contract'
 
 interface ImageListProps {
   images: ImageRecord[]
@@ -30,16 +17,9 @@ interface ImageListProps {
   viewMode?: 'grid' | 'masonry'
   gridColumns?: number
   selectable?: boolean
-  selection?: SelectionConfig
+  selection?: ImageListSelectionConfig
   onSearchClick?: () => void
-  contextId?: string
-  mode?: 'infinite' | 'pagination'
-  infiniteScroll?: InfiniteScrollConfig
-  pagination?: PaginationConfig
-  total?: number
-  showCollectionType?: boolean
-  currentGroupId?: number
-  isModal?: boolean
+  adapter: ImageListAdapterPolicy
 }
 
 interface RawNaiParametersShape {
@@ -170,15 +150,9 @@ export default function ImageList({
   selectable = false,
   selection,
   onSearchClick,
-  mode = 'infinite',
-  infiniteScroll,
-  pagination,
-  total,
-  showCollectionType,
-  currentGroupId,
-  contextId,
-  isModal,
+  adapter,
 }: ImageListProps) {
+  const { mode, infiniteScroll, pagination, total, showCollectionType, currentGroupId, contextId, isModal } = adapter
   void showCollectionType
   void currentGroupId
   void contextId
@@ -284,8 +258,9 @@ export default function ImageList({
       <div className="text-xs text-muted-foreground">Total: {total ?? images.length}</div>
       <ul className={listClassName} style={listStyle}>
         {images.map((image, index) => {
-          const id = image.id ?? -1
-          const isChecked = Boolean(selection && id !== -1 && selection.selectedIds.includes(id))
+          const stableIdentity = getImageStableIdentity(image, index)
+          const numericId = stableIdentity.numericId
+          const isChecked = Boolean(selection && numericId !== null && selection.selectedIds.includes(numericId))
           const previewUrl = getPreviewMediaUrl(image, backendOrigin)
           const isVideo = isVideoLike(image)
 
@@ -295,7 +270,7 @@ export default function ImageList({
 
           return (
             <li
-              key={`${image.composite_hash || 'image'}-${index}`}
+              key={stableIdentity.stableKey}
               className={`${itemClassName} group cursor-pointer transition-colors hover:bg-muted/30`}
               style={itemStyle}
               data-testid="image-list-item"
@@ -319,14 +294,14 @@ export default function ImageList({
 
               <div className="flex items-start justify-between gap-2">
                 <p className="line-clamp-2 text-sm font-medium leading-snug">{getImageTitle(image, index)}</p>
-                {selectable && selection && id !== -1 ? (
+                {selectable && selection && numericId !== null ? (
                   <input
                     type="checkbox"
                     checked={isChecked}
                     onClick={(event) => event.stopPropagation()}
                     onPointerDown={(event) => event.stopPropagation()}
-                    onChange={() => toggleSelection(id)}
-                    aria-label={`Select image ${id}`}
+                    onChange={() => toggleSelection(numericId)}
+                    aria-label={`Select image ${numericId}`}
                   />
                 ) : null}
               </div>

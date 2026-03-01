@@ -11,6 +11,7 @@ import { usePaginatedImages } from '@/hooks/use-paginated-images'
 import { useImageListSettings } from '@/hooks/use-image-list-settings'
 import { useSearch } from '@/hooks/use-search'
 import ImageList from '@/features/images/components/image-list'
+import { createInfiniteImageListAdapter, createPaginationImageListAdapter } from '@/features/images/components/image-list-contract'
 import BulkActionBar from './components/bulk-action-bar'
 import SearchBar from './components/search-bar'
 
@@ -249,11 +250,10 @@ export function HomePage() {
     closeLayoutOptions(false)
   }
 
-  const imageListProps = isSearchMode
+  const imageListAdapter = isSearchMode
     ? activeMode === 'pagination'
-      ? {
+      ? createPaginationImageListAdapter({
           contextId: 'search',
-          mode: 'pagination' as const,
           pagination: {
             currentPage: search.currentPage,
             totalPages: search.totalPages,
@@ -262,20 +262,18 @@ export function HomePage() {
             onPageSizeChange: (size: number) => search.changePageSize(size as PageSize),
           },
           total: search.total,
-        }
-      : {
+        })
+      : createInfiniteImageListAdapter({
           contextId: 'search',
-          mode: 'infinite' as const,
           infiniteScroll: {
             hasMore: search.hasMore,
             loadMore: search.loadMore,
           },
           total: search.total,
-        }
+        })
     : activeMode === 'pagination'
-      ? {
+      ? createPaginationImageListAdapter({
           contextId: 'home',
-          mode: 'pagination' as const,
           pagination: {
             currentPage: paginatedImages.page,
             totalPages: paginatedImages.totalPages,
@@ -284,16 +282,15 @@ export function HomePage() {
             onPageSizeChange: paginatedImages.setPageSize,
           },
           total: paginatedImages.total,
-        }
-      : {
+        })
+      : createInfiniteImageListAdapter({
           contextId: 'home',
-          mode: 'infinite' as const,
           infiniteScroll: {
             hasMore: infiniteImages.hasMore,
             loadMore: infiniteImages.loadMore,
           },
           total: infiniteImages.images.length,
-        }
+        })
 
   return (
     <div className="w-full">
@@ -347,7 +344,7 @@ export function HomePage() {
           onSelectionChange: handleSelectionChange,
         }}
         onSearchClick={handleOpenSearch}
-        {...imageListProps}
+        adapter={imageListAdapter}
       />
 
       {!searchOpen ? (

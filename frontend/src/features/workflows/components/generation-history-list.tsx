@@ -8,12 +8,15 @@ import { convertHistoriesToImageRecords } from '@/utils/generation-history-adapt
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import ImageList from '@/features/images/components/image-list'
+import { createInfiniteImageListAdapter } from '@/features/images/components/image-list-contract'
 
 interface GenerationHistoryListProps {
   serviceType?: ServiceType
   workflowId?: number
   refreshKey?: number
 }
+
+const ITEMS_PER_PAGE = 50
 
 export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: GenerationHistoryListProps) {
   const { t } = useTranslation()
@@ -27,8 +30,6 @@ export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: G
   const [cleanupLoading, setCleanupLoading] = useState(false)
   const [localRefreshKey, setLocalRefreshKey] = useState(0)
 
-  const itemsPerPage = 50
-
   useEffect(() => {
     const loadHistory = async () => {
       try {
@@ -38,19 +39,19 @@ export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: G
         const bustCache = localRefreshKey > 0 || (refreshKey !== undefined && refreshKey > 0)
         const response = workflowId
           ? await generationHistoryApi.getByWorkflow(workflowId, {
-              limit: itemsPerPage,
+              limit: ITEMS_PER_PAGE,
               offset: 0,
               bustCache,
             })
           : await generationHistoryApi.getAll({
               service_type: serviceType,
-              limit: itemsPerPage,
+              limit: ITEMS_PER_PAGE,
               offset: 0,
               bustCache,
             })
 
         const newRecords = response.records || []
-        setHasMore(newRecords.length >= itemsPerPage)
+        setHasMore(newRecords.length >= ITEMS_PER_PAGE)
         setRecords([...newRecords])
         setImageRecords([...convertHistoriesToImageRecords(newRecords)])
       } catch (loadError) {
@@ -62,24 +63,24 @@ export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: G
     }
 
     void loadHistory()
-  }, [itemsPerPage, localRefreshKey, refreshKey, serviceType, workflowId])
+  }, [localRefreshKey, refreshKey, serviceType, workflowId])
 
   const loadMoreData = useCallback(async () => {
     try {
       const nextPage = page + 1
       const response = workflowId
         ? await generationHistoryApi.getByWorkflow(workflowId, {
-            limit: itemsPerPage,
-            offset: (nextPage - 1) * itemsPerPage,
+            limit: ITEMS_PER_PAGE,
+            offset: (nextPage - 1) * ITEMS_PER_PAGE,
           })
         : await generationHistoryApi.getAll({
             service_type: serviceType,
-            limit: itemsPerPage,
-            offset: (nextPage - 1) * itemsPerPage,
+            limit: ITEMS_PER_PAGE,
+            offset: (nextPage - 1) * ITEMS_PER_PAGE,
           })
 
       const newRecords = response.records || []
-      setHasMore(newRecords.length >= itemsPerPage)
+      setHasMore(newRecords.length >= ITEMS_PER_PAGE)
       setRecords((previous) => [...previous, ...newRecords])
       setImageRecords((previous) => [...previous, ...convertHistoriesToImageRecords(newRecords)])
       setPage(nextPage)
@@ -87,7 +88,7 @@ export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: G
       console.error('Failed to load more generation history:', loadMoreError)
       setHasMore(false)
     }
-  }, [itemsPerPage, page, serviceType, workflowId])
+  }, [page, serviceType, workflowId])
 
   const handleRefresh = () => {
     setSelectedIds([])
@@ -114,6 +115,11 @@ export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: G
   }
 
   const failedCount = records.filter((record) => record.generation_status === 'failed').length
+  const imageListAdapter = createInfiniteImageListAdapter({
+    contextId: 'generation_history',
+    infiniteScroll: { hasMore, loadMore: loadMoreData },
+    total: imageRecords.length,
+  })
 
   return (
     <div className="flex h-full w-full flex-col gap-2 p-2">
@@ -143,10 +149,7 @@ export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: G
           loading={loading}
           selectable={true}
           selection={{ selectedIds, onSelectionChange: setSelectedIds }}
-          contextId="generation_history"
-          mode="infinite"
-          infiniteScroll={{ hasMore, loadMore: loadMoreData }}
-          total={imageRecords.length}
+          adapter={imageListAdapter}
           onSearchClick={undefined}
         />
       </div>

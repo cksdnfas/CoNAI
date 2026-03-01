@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import type { GroupWithStats } from '@comfyui-image-manager/shared'
 import type { ImageRecord, PageSize } from '@/types/image'
 import ImageList from '@/features/images/components/image-list'
+import { createInfiniteImageListAdapter, createPaginationImageListAdapter } from '@/features/images/components/image-list-contract'
 import GroupAssignModal from './group-assign-modal'
 import { groupApi } from '@/services/group-api'
 import { autoFolderGroupsApi } from '@/services/auto-folder-groups-api'
@@ -198,6 +199,29 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
 
   const canRemove = hasManualSelected && !hasAutoSelected && selectedIds.length > 0
   const canAssign = selectedIds.length > 0
+  const imageListAdapter = activeMode === 'infinite'
+    ? createInfiniteImageListAdapter({
+        contextId: 'group_modal',
+        infiniteScroll: infiniteScroll ?? { hasMore: false, loadMore: () => undefined },
+        total,
+        showCollectionType: true,
+        currentGroupId: currentGroup?.id,
+        isModal: true,
+      })
+    : createPaginationImageListAdapter({
+        contextId: 'group_modal',
+        pagination: {
+          currentPage,
+          totalPages,
+          onPageChange: onPageChange || (() => undefined),
+          pageSize: pageSize as number,
+          onPageSizeChange: (size: number) => onPageSizeChange?.(size as PageSize),
+        },
+        total,
+        showCollectionType: true,
+        currentGroupId: currentGroup?.id,
+        isModal: true,
+      })
 
   const handleRemoveClick = () => {
     setRemoveDialogOpen(true)
@@ -431,25 +455,12 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
           <ImageList
             images={images}
             loading={loading}
-            contextId="group_modal"
-            mode={activeMode}
-            infiniteScroll={infiniteScroll}
-            pagination={{
-              currentPage,
-              totalPages,
-              onPageChange: onPageChange || (() => {}),
-              pageSize: pageSize as number,
-              onPageSizeChange: (size: number) => onPageSizeChange?.(size as PageSize),
-            }}
+            adapter={imageListAdapter}
             selectable={true}
             selection={{
               selectedIds,
               onSelectionChange: setSelectedIds,
             }}
-            showCollectionType={true}
-            currentGroupId={currentGroup?.id}
-            total={total}
-            isModal={true}
           />
         </DialogContent>
       </Dialog>
