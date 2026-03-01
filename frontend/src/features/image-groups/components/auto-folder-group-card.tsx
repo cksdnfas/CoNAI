@@ -6,6 +6,7 @@ import { autoFolderGroupsApi } from '@/services/auto-folder-groups-api'
 import { getBackendOrigin } from '@/utils/backend'
 import { buildPreviewMediaUrl } from '@/features/images/components/image-preview-url'
 import { useGroupPreviewImage } from '@/features/image-groups/hooks/use-group-preview-image'
+import { GroupTileBase } from '@/features/image-groups/components/group-tile-base'
 import { Badge } from '@/components/ui/badge'
 
 interface AutoFolderGroupCardProps {
@@ -46,34 +47,18 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
   const isVideo = preview?.file_type === 'video'
 
   return (
-    <button
-      type="button"
+    <GroupTileBase
+      ariaLabel={group.display_name}
       onClick={onClick}
-      className="group relative aspect-[5/7] w-full overflow-hidden rounded-md border bg-card text-left transition hover:-translate-y-1 hover:shadow-lg"
-    >
-      {previewUrl ? (
-        isVideo ? (
-          <video className="absolute inset-0 h-full w-full object-cover" src={previewUrl} muted loop autoPlay playsInline />
-        ) : (
-          <img className="absolute inset-0 h-full w-full object-cover" src={previewUrl} alt={group.display_name} loading="lazy" />
-        )
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-muted/20 to-muted/60">
-          <Folder className="h-12 w-12 text-muted-foreground" />
-        </div>
-      )}
-
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/45 to-transparent" />
-
-      <div className="absolute right-0 bottom-0 left-0 z-10 space-y-1 p-2">
+      title={
         <div className="flex items-center gap-1.5">
           <Folder className="h-4 w-4 text-primary" />
-          <p className="truncate text-sm font-medium text-white">{group.display_name}</p>
+          <span>{group.display_name}</span>
         </div>
-
-        <p className="truncate text-[11px] text-white/80">{group.folder_path}</p>
-
-        <div className="flex flex-wrap gap-1">
+      }
+      subtitle={group.folder_path}
+      badges={
+        <>
           <Badge variant="secondary" className="bg-white/20 text-white hover:bg-white/25">
             {t('groupCard.imageCount', { count: group.image_count || 0 })}
           </Badge>
@@ -82,8 +67,17 @@ export function AutoFolderGroupCard({ group, onClick }: AutoFolderGroupCardProps
               {t('groupCard.folderCount', { count: group.child_count })}
             </Badge>
           ) : null}
-        </div>
-      </div>
-    </button>
+        </>
+      }
+      preview={
+        previewUrl ? (
+          isVideo ? (
+            <video className="h-full w-full object-cover" src={previewUrl} muted loop autoPlay playsInline />
+          ) : (
+            <img className="h-full w-full object-cover" src={previewUrl} alt={group.display_name} loading="lazy" />
+          )
+        ) : undefined
+      }
+    />
   )
 }
