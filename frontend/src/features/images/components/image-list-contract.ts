@@ -18,6 +18,8 @@ export interface ImageListInfiniteScrollConfig {
 export interface ImageListSelectionConfig {
   selectedIds: number[]
   onSelectionChange: (selectedIds: number[]) => void
+  selectedStableKeys?: string[]
+  onStableSelectionChange?: (selectedStableKeys: string[]) => void
 }
 
 interface ImageListAdapterPolicyBase {

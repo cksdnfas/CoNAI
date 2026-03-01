@@ -8,7 +8,7 @@ import { convertHistoriesToImageRecords } from '@/utils/generation-history-adapt
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import ImageList from '@/features/images/components/image-list'
-import { createInfiniteImageListAdapter } from '@/features/images/components/image-list-contract'
+import { createInfiniteImageListAdapter, getImageStableIdentity } from '@/features/images/components/image-list-contract'
 
 interface GenerationHistoryListProps {
   serviceType?: ServiceType
@@ -25,7 +25,7 @@ export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: G
   const [loading, setLoading] = useState(true)
   const [hasMore, setHasMore] = useState(true)
   const [page, setPage] = useState(1)
-  const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [selectedStableKeys, setSelectedStableKeys] = useState<string[]>([])
   const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false)
   const [cleanupLoading, setCleanupLoading] = useState(false)
   const [localRefreshKey, setLocalRefreshKey] = useState(0)
@@ -91,7 +91,7 @@ export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: G
   }, [page, serviceType, workflowId])
 
   const handleRefresh = () => {
-    setSelectedIds([])
+    setSelectedStableKeys([])
     setLocalRefreshKey((previous) => previous + 1)
   }
 
@@ -113,6 +113,16 @@ export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: G
       setCleanupLoading(false)
     }
   }
+
+  const selectedIds = imageRecords
+    .map((image, index) => {
+      const stableIdentity = getImageStableIdentity(image, index)
+      if (!selectedStableKeys.includes(stableIdentity.stableKey)) {
+        return null
+      }
+      return stableIdentity.numericId
+    })
+    .filter((id): id is number => id !== null)
 
   const failedCount = records.filter((record) => record.generation_status === 'failed').length
   const imageListAdapter = createInfiniteImageListAdapter({
@@ -148,7 +158,12 @@ export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: G
           images={imageRecords}
           loading={loading}
           selectable={true}
-          selection={{ selectedIds, onSelectionChange: setSelectedIds }}
+          selection={{
+            selectedIds,
+            onSelectionChange: () => undefined,
+            selectedStableKeys,
+            onStableSelectionChange: setSelectedStableKeys,
+          }}
           adapter={imageListAdapter}
           onSearchClick={undefined}
         />

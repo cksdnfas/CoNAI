@@ -1,11 +1,11 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, Image as ImageIcon, Images as PhotoLibraryIcon, Loader2, MoveRight as MoveIcon, Text as TextSnippetIcon, Video as VideocamIcon, Download as DownloadIcon, X as CloseIcon, Trash2 as DeleteIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { GroupWithStats } from '@comfyui-image-manager/shared'
 import type { ImageRecord, PageSize } from '@/types/image'
 import ImageList from '@/features/images/components/image-list'
-import { createInfiniteImageListAdapter, createPaginationImageListAdapter } from '@/features/images/components/image-list-contract'
+import { createInfiniteImageListAdapter, createPaginationImageListAdapter, getImageStableIdentity } from '@/features/images/components/image-list-contract'
 import GroupAssignModal from './group-assign-modal'
 import { groupApi } from '@/services/group-api'
 import { autoFolderGroupsApi } from '@/services/auto-folder-groups-api'
@@ -160,7 +160,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   const { settings } = useImageListSettings('group_modal')
   const activeMode = settings.activeScrollMode || 'pagination'
 
-  const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [selectedStableKeys, setSelectedStableKeys] = useState<string[]>([])
   const [assignDialogOpen, setAssignDialogOpen] = useState(false)
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
   const [downloadAnchorEl, setDownloadAnchorEl] = useState<null | HTMLElement>(null)
@@ -187,7 +187,10 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
 
   const fileCounts = fileCountsResponse?.success && fileCountsResponse.data ? fileCountsResponse.data : null
 
-  const selectedImages = images.filter((image) => image.id && selectedIds.includes(image.id))
+  const selectedImages = useMemo(
+    () => images.filter((image, index) => selectedStableKeys.includes(getImageStableIdentity(image, index).stableKey)),
+    [images, selectedStableKeys],
+  )
   const hasManualSelected = selectedImages.some((image) => {
     const groupInfo = image.groups?.find((g) => g.id === currentGroup?.id)
     return groupInfo?.collection_type === 'manual'
@@ -197,8 +200,8 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
     return groupInfo?.collection_type === 'auto'
   })
 
-  const canRemove = hasManualSelected && !hasAutoSelected && selectedIds.length > 0
-  const canAssign = selectedIds.length > 0
+  const canRemove = hasManualSelected && !hasAutoSelected && selectedImages.length > 0
+  const canAssign = selectedImages.length > 0
   const imageListAdapter = activeMode === 'infinite'
     ? createInfiniteImageListAdapter({
         contextId: 'group_modal',
@@ -239,7 +242,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
         .filter((hash): hash is string => hash !== null)
       onImagesRemoved(manualImageIds)
     }
-    setSelectedIds([])
+    setSelectedStableKeys([])
   }
 
   const handleAssignClick = () => {
@@ -253,7 +256,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
       .map((image) => image.composite_hash)
       .filter((hash): hash is string => hash !== null)
     onImagesAssigned(groupId, compositeHashes)
-    setSelectedIds([])
+    setSelectedStableKeys([])
   }
 
   const handleDownloadClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -268,7 +271,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
     handleDownloadMenuClose()
     if (!currentGroup?.id) return
 
-    const count = scope === 'all' ? (fileCounts?.[type] || 0) : selectedIds.length
+    const count = scope === 'all' ? (fileCounts?.[type] || 0) : selectedImages.length
     if (count === 0) {
       const typeLabel = type === 'thumbnail' ? t('common:thumbnail') : type === 'original' ? t('common:original') : t('common:video')
       onShowSnackbar?.(`다운로드할 ${typeLabel} 파일이 없습니다.`, 'warning')
@@ -289,7 +292,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
 
     try {
       let compositeHashes: string[] | undefined
-      if (scope === 'selected' && selectedIds.length > 0) {
+      if (scope === 'selected' && selectedImages.length > 0) {
         compositeHashes = selectedImages
           .map((image) => image.composite_hash)
           .filter((hash): hash is string => hash !== null)
@@ -323,7 +326,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
 
     try {
       let compositeHashes: string[] | undefined
-      if (loraDialogScope === 'selected' && selectedIds.length > 0) {
+      if (loraDialogScope === 'selected' && selectedImages.length > 0) {
         compositeHashes = selectedImages
           .map((image) => image.composite_hash)
           .filter((hash): hash is string => hash !== null)
@@ -344,7 +347,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   }
 
   const getSelectionMessage = () => {
-    if (selectedIds.length === 0) return null
+    if (selectedImages.length === 0) return null
 
     if (hasManualSelected && hasAutoSelected) {
       return (
@@ -404,7 +407,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
           </Box>
         </DialogTitle>
 
-        {selectedIds.length > 0 ? (
+        {selectedImages.length > 0 ? (
           <Toolbar
             sx={{
               bgcolor: 'action.hover',
@@ -414,7 +417,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
             }}
           >
             <Typography variant="body2" sx={{ flex: 1 }}>
-              {t('imageGroups:imageModal.selectedCount', { count: selectedIds.length })}
+              {t('imageGroups:imageModal.selectedCount', { count: selectedImages.length })}
             </Typography>
             <Box sx={{ display: 'flex', gap: 1 }}>
               {!readOnly ? (
@@ -458,8 +461,12 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
             adapter={imageListAdapter}
             selectable={true}
             selection={{
-              selectedIds,
-              onSelectionChange: setSelectedIds,
+              selectedIds: selectedImages
+                .map((image) => image.id)
+                .filter((id): id is number => typeof id === 'number'),
+              onSelectionChange: () => undefined,
+              selectedStableKeys,
+              onStableSelectionChange: setSelectedStableKeys,
             }}
           />
         </DialogContent>
@@ -491,7 +498,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
         key={`assign-${assignDialogOpen ? 'open' : 'closed'}-${currentGroup?.id ?? 'none'}`}
         open={assignDialogOpen}
         onClose={() => setAssignDialogOpen(false)}
-        selectedImageCount={selectedIds.length}
+        selectedImageCount={selectedImages.length}
         onAssign={handleAssignConfirm}
         currentGroupId={currentGroup?.id}
       />
@@ -549,11 +556,11 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
           <ListItemText>{t('imageGroups:download.typeLoraDataset')}</ListItemText>
         </MenuItem>
 
-        {selectedIds.length > 0
+        {selectedImages.length > 0
           ? [
               <MenuItem key="selected-header" disabled sx={{ opacity: '1 !important', mt: 1 }}>
                 <Typography variant="caption" color="text.secondary">
-                  {t('imageGroups:download.scopeSelected', { count: selectedIds.length })}
+                  {t('imageGroups:download.scopeSelected', { count: selectedImages.length })}
                 </Typography>
               </MenuItem>,
               <MenuItem key="selected-thumbnail" onClick={() => handleDownloadTypeSelect('thumbnail', 'selected')}>
@@ -598,7 +605,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
         <DialogContent>
           <DialogContentText>
             {t('imageGroups:download.confirmMessage', {
-              count: downloadScope === 'all' ? (fileCounts?.[pendingDownloadType || 'thumbnail'] || 0) : selectedIds.length,
+              count: downloadScope === 'all' ? (fileCounts?.[pendingDownloadType || 'thumbnail'] || 0) : selectedImages.length,
             })}
           </DialogContentText>
         </DialogContent>

@@ -73,8 +73,15 @@ describe('image-list-contract', () => {
     const pathIdentity = getImageStableIdentity(makeImage({ id: undefined, composite_hash: null, original_file_path: '/images/no-id.png' }), 2)
     expect(pathIdentity.stableKey).toBe('path:/images/no-id.png')
 
+    const fileIdentity = getImageStableIdentity(makeImage({ id: undefined, composite_hash: null, original_file_path: null, file_id: 88 }), 2)
+    expect(fileIdentity.stableKey).toBe('file:88')
+
     const fallbackIdentity = getImageStableIdentity(makeImage({ id: undefined, composite_hash: null, original_file_path: null, file_id: null }), 3)
     expect(fallbackIdentity.stableKey).toBe('fallback:2026-01-01T00:00:00.000Z:3')
+
+    const fallbackIdentityNext = getImageStableIdentity(makeImage({ id: undefined, composite_hash: null, original_file_path: null, file_id: null }), 4)
+    expect(fallbackIdentityNext.stableKey).toBe('fallback:2026-01-01T00:00:00.000Z:4')
+    expect(fallbackIdentityNext.stableKey).not.toBe(fallbackIdentity.stableKey)
   })
 
   it('builds explicit mode-specific adapters', () => {

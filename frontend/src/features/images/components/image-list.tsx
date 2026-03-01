@@ -187,14 +187,31 @@ export default function ImageList({
   const activePrompts = activeImage?.ai_metadata?.prompts
   const activeCharacterPrompts = useMemo(() => extractCharacterPrompts(activeImage?.ai_metadata?.raw_nai_parameters), [activeImage?.ai_metadata?.raw_nai_parameters])
 
-  const toggleSelection = (id: number) => {
+  const supportsStableSelection = Boolean(selection?.onStableSelectionChange)
+
+  const toggleSelection = (numericId: number | null, stableKey: string) => {
     if (!selection) {
       return
     }
-    const selected = selection.selectedIds.includes(id)
+
+    if (supportsStableSelection && selection.onStableSelectionChange) {
+      const currentStableKeys = selection.selectedStableKeys ?? []
+      const selected = currentStableKeys.includes(stableKey)
+      const next = selected
+        ? currentStableKeys.filter((value) => value !== stableKey)
+        : [...currentStableKeys, stableKey]
+      selection.onStableSelectionChange(next)
+      return
+    }
+
+    if (numericId === null) {
+      return
+    }
+
+    const selected = selection.selectedIds.includes(numericId)
     const next = selected
-      ? selection.selectedIds.filter((value) => value !== id)
-      : [...selection.selectedIds, id]
+      ? selection.selectedIds.filter((value) => value !== numericId)
+      : [...selection.selectedIds, numericId]
     selection.onSelectionChange(next)
   }
 
@@ -246,7 +263,12 @@ export default function ImageList({
         {images.map((image, index) => {
           const stableIdentity = getImageStableIdentity(image, index)
           const numericId = stableIdentity.numericId
-          const isChecked = Boolean(selection && numericId !== null && selection.selectedIds.includes(numericId))
+          const isChecked = Boolean(
+            selection
+            && (supportsStableSelection
+              ? (selection.selectedStableKeys ?? []).includes(stableIdentity.stableKey)
+              : (numericId !== null && selection.selectedIds.includes(numericId))),
+          )
           const previewUrl = buildPreviewMediaUrl(image, backendOrigin)
           const isVideo = isVideoLike(image)
 
@@ -280,14 +302,14 @@ export default function ImageList({
 
               <div className="flex items-start justify-between gap-2">
                 <p className="line-clamp-2 text-sm font-medium leading-snug">{getImageTitle(image, index)}</p>
-                {selectable && selection && numericId !== null ? (
+                {selectable && selection && (numericId !== null || supportsStableSelection) ? (
                   <input
                     type="checkbox"
                     checked={isChecked}
                     onClick={(event) => event.stopPropagation()}
                     onPointerDown={(event) => event.stopPropagation()}
-                    onChange={() => toggleSelection(numericId)}
-                    aria-label={`Select image ${numericId}`}
+                    onChange={() => toggleSelection(numericId, stableIdentity.stableKey)}
+                    aria-label={`Select image ${numericId ?? stableIdentity.stableKey}`}
                   />
                 ) : null}
               </div>
