@@ -1,23 +1,21 @@
 import React, { useCallback, useState } from 'react'
-import {
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Tab,
-  Tabs,
-} from '@mui/material'
-import DeleteIcon from '@mui/icons-material/Delete'
+import { Loader2, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AutoCollectCondition, ComplexFilter, GroupCreateData, GroupUpdateData, GroupWithHierarchy } from '@comfyui-image-manager/shared'
 import { useAllGroupsWithHierarchy, useCreateGroup, useDeleteGroup, useUpdateGroup } from '@/hooks/use-groups'
 import BasicInfoTab from './basic-info-tab'
 import AutoCollectTab from './auto-collect-tab'
 import { GroupDeleteConfirmDialog } from './group-delete-confirm-dialog'
+import { Alert } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface GroupCreateEditModalProps {
   open: boolean
@@ -25,20 +23,6 @@ interface GroupCreateEditModalProps {
   onSuccess: () => void
   group?: GroupWithHierarchy
   initialAutoCollectConditions?: ComplexFilter
-}
-
-interface TabPanelProps {
-  children?: React.ReactNode
-  index: number
-  value: number
-}
-
-const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
-  return (
-    <div role="tabpanel" hidden={value !== index} id={`group-tabpanel-${index}`} aria-labelledby={`group-tab-${index}`}>
-      {value === index ? <Box sx={{ py: 2 }}>{children}</Box> : null}
-    </div>
-  )
 }
 
 function getInitialFormData(group?: GroupWithHierarchy, initialAutoCollectConditions?: ComplexFilter) {
@@ -88,7 +72,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   initialAutoCollectConditions,
 }) => {
   const { t } = useTranslation(['imageGroups', 'common'])
-  const [activeTab, setActiveTab] = useState(0)
+  const [activeTab, setActiveTab] = useState<'basic' | 'auto'>('basic')
   const [formData, setFormData] = useState(() => getInitialFormData(group, initialAutoCollectConditions))
   const [conditions, setConditions] = useState<ComplexFilter>(() => getInitialConditions(group, initialAutoCollectConditions))
   const [error, setError] = useState<string | null>(null)
@@ -184,75 +168,74 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>{isEditMode ? t('imageGroups:modal.editTitle') : t('imageGroups:modal.createTitle')}</DialogTitle>
+    <Dialog open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose() : null)}>
+      <DialogContent className="sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{isEditMode ? t('imageGroups:modal.editTitle') : t('imageGroups:modal.createTitle')}</DialogTitle>
+        </DialogHeader>
 
-      <DialogContent dividers>
+        <div className="space-y-3">
         {error ? (
-          <Alert severity="error" sx={{ mb: 2 }}>
+          <Alert>
             {error}
           </Alert>
         ) : null}
 
         <Tabs
           value={activeTab}
-          onChange={(_event, next) => setActiveTab(next)}
-          aria-label="group editor tabs"
-          sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
+          onValueChange={(next) => setActiveTab(next as 'basic' | 'auto')}
         >
-          <Tab label={t('imageGroups:tabs.basicInfo')} id="group-tab-0" aria-controls="group-tabpanel-0" />
-          <Tab label={t('imageGroups:tabs.autoCollect')} id="group-tab-1" aria-controls="group-tabpanel-1" />
+          <TabsList>
+            <TabsTrigger value="basic">{t('imageGroups:tabs.basicInfo')}</TabsTrigger>
+            <TabsTrigger value="auto">{t('imageGroups:tabs.autoCollect')}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="basic" className="pt-2">
+            <BasicInfoTab
+              formData={formData}
+              onFormChange={handleFormChange}
+              availableParents={availableParents}
+              currentGroupId={group?.id}
+              isEditMode={isEditMode}
+            />
+          </TabsContent>
+          <TabsContent value="auto" className="pt-2">
+            <AutoCollectTab
+              enabled={formData.auto_collect_enabled}
+              conditions={conditions}
+              onEnabledChange={(enabled) => handleFormChange('auto_collect_enabled', enabled)}
+              onConditionsChange={handleConditionsChange}
+            />
+          </TabsContent>
         </Tabs>
+        </div>
 
-        <TabPanel value={activeTab} index={0}>
-          <BasicInfoTab
-            formData={formData}
-            onFormChange={handleFormChange}
-            availableParents={availableParents}
-            currentGroupId={group?.id}
-            isEditMode={isEditMode}
-          />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={1}>
-          <AutoCollectTab
-            enabled={formData.auto_collect_enabled}
-            conditions={conditions}
-            onEnabledChange={(enabled) => handleFormChange('auto_collect_enabled', enabled)}
-            onConditionsChange={handleConditionsChange}
-          />
-        </TabPanel>
-      </DialogContent>
-
-      <DialogActions sx={{ justifyContent: 'space-between' }}>
-        <Box>
+        <DialogFooter className="!justify-between">
+        <div>
           {isEditMode ? (
             <Button
               onClick={handleDelete}
-              color="error"
-              startIcon={<DeleteIcon />}
+              variant="destructive"
               disabled={createGroupMutation.isPending || updateGroupMutation.isPending || deleteGroupMutation.isPending}
             >
+              <Trash2 className="h-4 w-4" />
               {t('common:delete')}
             </Button>
           ) : null}
-        </Box>
+        </div>
 
-        <Box>
-          <Button onClick={onClose} disabled={createGroupMutation.isPending || updateGroupMutation.isPending || deleteGroupMutation.isPending}>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={onClose} disabled={createGroupMutation.isPending || updateGroupMutation.isPending || deleteGroupMutation.isPending}>
             {t('imageGroups:modal.buttonCancel')}
           </Button>
           <Button
             onClick={handleSubmit}
-            variant="contained"
             disabled={createGroupMutation.isPending || updateGroupMutation.isPending || deleteGroupMutation.isPending}
-            startIcon={createGroupMutation.isPending || updateGroupMutation.isPending ? <CircularProgress size={20} /> : null}
-            sx={{ ml: 1 }}
           >
+            {createGroupMutation.isPending || updateGroupMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {isEditMode ? t('imageGroups:modal.buttonUpdate') : t('imageGroups:modal.buttonCreate')}
           </Button>
-        </Box>
-      </DialogActions>
+        </div>
+      </DialogFooter>
 
       <GroupDeleteConfirmDialog
         open={deleteDialogOpen}
@@ -261,6 +244,7 @@ const GroupCreateEditModal: React.FC<GroupCreateEditModalProps> = ({
         onClose={() => setDeleteDialogOpen(false)}
         onConfirm={handleDeleteConfirm}
       />
+      </DialogContent>
     </Dialog>
   )
 }

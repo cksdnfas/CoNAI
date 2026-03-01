@@ -1,35 +1,7 @@
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import {
-  Box,
-  Button,
-  CircularProgress,
-  Dialog,
-  Dialog as ConfirmDialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  IconButton,
-  ListItemIcon,
-  ListItemText,
-  Menu,
-  MenuItem,
-  Toolbar,
-  Typography,
-  Alert,
-} from '@mui/material'
+import { AlertCircle, Image as ImageIcon, Images as PhotoLibraryIcon, Loader2, MoveRight as MoveIcon, Text as TextSnippetIcon, Video as VideocamIcon, Download as DownloadIcon, X as CloseIcon, Trash2 as DeleteIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import {
-  Close as CloseIcon,
-  Delete as DeleteIcon,
-  Download as DownloadIcon,
-  DriveFileMove as MoveIcon,
-  Image as ImageIcon,
-  PhotoLibrary as PhotoLibraryIcon,
-  TextSnippet as TextSnippetIcon,
-  Videocam as VideocamIcon,
-} from '@mui/icons-material'
 import type { GroupWithStats } from '@comfyui-image-manager/shared'
 import type { ImageRecord, PageSize } from '@/types/image'
 import ImageList from '@/features/images/components/image-list'
@@ -38,6 +10,106 @@ import { groupApi } from '@/services/group-api'
 import { autoFolderGroupsApi } from '@/services/auto-folder-groups-api'
 import { useImageListSettings } from '@/hooks/use-image-list-settings'
 import LoraDatasetDialog from './lora-dataset-dialog'
+import { Button as UiButton } from '@/components/ui/button'
+import { Alert as UiAlert, AlertDescription } from '@/components/ui/alert'
+
+type Sx = Record<string, unknown>
+
+const sxToStyle = (sx?: Sx): React.CSSProperties | undefined => {
+  if (!sx) return undefined
+  const style: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(sx)) {
+    if (!key.startsWith('&') && typeof value !== 'object') {
+      style[key] = value
+    }
+  }
+  return style as React.CSSProperties
+}
+
+const Box: React.FC<React.PropsWithChildren<{ sx?: Sx; className?: string; component?: string }>> = ({ sx, className, children }) => (
+  <div className={className} style={sxToStyle(sx)}>{children}</div>
+)
+
+const Typography: React.FC<any> = ({ children, sx }) => (
+  <span style={sxToStyle(sx)}>{children}</span>
+)
+
+const CircularProgress: React.FC<{ size?: number }> = ({ size = 16 }) => <Loader2 className="animate-spin" style={{ width: size, height: size }} />
+
+const Button: React.FC<React.PropsWithChildren<{ variant?: 'contained' | 'outlined' | 'text'; color?: string; startIcon?: React.ReactNode; onClick?: () => void; disabled?: boolean; sx?: Sx }>> = ({ variant = 'text', color, startIcon, onClick, disabled, sx, children }) => {
+  const mappedVariant = variant === 'contained' ? 'default' : variant === 'outlined' ? 'outline' : 'ghost'
+  return (
+    <UiButton type="button" variant={mappedVariant} onClick={onClick} disabled={disabled} style={{ color: color === 'error' ? 'hsl(var(--destructive))' : undefined, ...sxToStyle(sx) }}>
+      {startIcon}
+      {children}
+    </UiButton>
+  )
+}
+
+const IconButton: React.FC<React.PropsWithChildren<{ onClick?: (event: React.MouseEvent<HTMLElement>) => void; disabled?: boolean; sx?: Sx; 'aria-label'?: string }>> = ({ children, onClick, disabled, sx, ...props }) => (
+  <button type="button" onClick={onClick} disabled={disabled} style={{ border: '1px solid hsl(var(--border))', borderRadius: 8, padding: 8, background: 'transparent', ...sxToStyle(sx) }} {...props}>
+    {children}
+  </button>
+)
+
+const Dialog: React.FC<any> = ({ open, onClose, children, PaperProps }) => {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="max-h-[90vh] w-[95vw] max-w-[1200px] overflow-hidden rounded-lg border bg-background" style={sxToStyle(PaperProps?.sx)}>
+        {onClose ? (
+          <div className="flex justify-end border-b px-2 py-1">
+            <UiButton type="button" variant="ghost" size="icon-sm" onClick={onClose}>
+              <CloseIcon className="h-4 w-4" />
+            </UiButton>
+          </div>
+        ) : null}
+        {children}
+      </div>
+    </div>
+  )
+}
+
+const ConfirmDialog: React.FC<any> = Dialog
+
+const DialogTitle: React.FC<any> = ({ children }) => <div className="border-b px-4 py-3 font-semibold">{children}</div>
+const DialogContent: React.FC<any> = ({ children, sx }) => <div className="p-4" style={sxToStyle(sx)}>{children}</div>
+const DialogActions: React.FC<any> = ({ children }) => <div className="flex justify-end gap-2 border-t px-4 py-3">{children}</div>
+const DialogContentText: React.FC<any> = ({ children }) => <p className="text-sm text-muted-foreground">{children}</p>
+
+const Toolbar: React.FC<any> = ({ children, sx }) => <div style={sxToStyle(sx)} className="flex items-center gap-2 px-4 py-2">{children}</div>
+
+const Alert: React.FC<any> = ({ severity, sx, children }) => (
+  <UiAlert variant={severity === 'error' ? 'destructive' : 'default'} style={sxToStyle(sx)}>
+    {severity === 'error' ? <AlertCircle className="h-4 w-4" /> : null}
+    <AlertDescription>{children}</AlertDescription>
+  </UiAlert>
+)
+
+const Menu: React.FC<any> = ({ open, children, onClose }) => {
+  if (!open) return null
+  return (
+    <div className="fixed right-8 top-24 z-[60] min-w-[260px] rounded-md border bg-popover p-1 shadow-lg">
+      {onClose ? (
+        <div className="mb-1 flex justify-end">
+          <UiButton type="button" variant="ghost" size="icon-xs" onClick={onClose}>
+            <CloseIcon className="h-3.5 w-3.5" />
+          </UiButton>
+        </div>
+      ) : null}
+      {children}
+    </div>
+  )
+}
+
+const MenuItem: React.FC<any> = ({ onClick, disabled, children, sx }) => (
+  <button type="button" disabled={disabled} onClick={onClick} className="hover:bg-muted disabled:text-muted-foreground flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm" style={sxToStyle(sx)}>
+    {children}
+  </button>
+)
+
+const ListItemIcon: React.FC<any> = ({ children }) => <span className="inline-flex h-4 w-4 items-center justify-center">{children}</span>
+const ListItemText: React.FC<any> = ({ children }) => <span>{children}</span>
 
 interface GroupImageGridModalProps {
   open: boolean
@@ -293,14 +365,14 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
                 aria-label="download"
                 onClick={handleDownloadClick}
                 disabled={loadingCounts || total === 0}
-                sx={{ color: (theme) => theme.palette.primary.main }}
+                sx={{ color: 'primary.main' }}
               >
                 {loadingCounts ? <CircularProgress size={24} /> : <DownloadIcon />}
               </IconButton>
               <IconButton
                 aria-label="close"
                 onClick={onClose}
-                sx={{ color: (theme) => theme.palette.grey[500] }}
+                sx={{ color: 'grey.500' }}
               >
                 <CloseIcon />
               </IconButton>

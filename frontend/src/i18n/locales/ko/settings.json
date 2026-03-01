@@ -462,10 +462,18 @@
       },
       "searchButton": "검색 실행",
       "searching": "검색 중...",
+      "validation": {
+        "requiredHash": "이미지 해시를 입력하세요.",
+        "invalidHashFormat": "잘못된 해시 형식입니다. 48자리 16진수여야 합니다."
+      },
       "hashStatus": "Hash 상태",
       "queryImage": "검색 원본 이미지",
+      "resultImage": "검색 결과 이미지",
       "results": "검색 결과: {{count}}개",
+      "modeLabel": "모드: {{mode}}",
+      "matchLabel": "일치: {{type}}",
       "noResults": "유사한 이미지가 없습니다.",
+      "noPreview": "미리보기 없음",
       "searchFailed": "검색 실패",
       "rebuild": {
         "button": "{{count}}개 미생성 해시 재생성",
@@ -474,6 +482,7 @@
         "error": "오류: {{error}}"
       },
       "imageDetails": {
+        "hash": "해시:",
         "id": "ID:",
         "filename": "파일명:",
         "size": "크기:",
@@ -503,6 +512,9 @@
       "deselectAll": "선택 해제",
       "keepOne": "1개만 유지",
       "keepOneDelete": "첫 번째 이미지만 남기고 나머지 선택",
+      "selectForDelete": "삭제 선택 (ID: {{id}})",
+      "unselectable": "선택할 수 없는 이미지",
+      "imageFallback": "중복 이미지 {{index}}",
       "deleteSelected": "선택한 {{count}}개 삭제",
       "deleteConfirmTitle": "이미지 삭제 확인",
       "deleteConfirmMessage": "선택한 {{count}}개의 이미지를 삭제하시겠습니까?",
@@ -815,6 +827,7 @@
     "cancel": "취소",
     "delete": "삭제",
     "create": "생성",
+    "loading": "로딩 중...",
     "enabled": "활성화",
     "disabled": "비활성화"
   },

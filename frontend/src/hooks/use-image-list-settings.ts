@@ -41,24 +41,29 @@ export const useImageListSettings = (contextId: string) => {
   const [settings, setSettings] = useState<ImageListSettings>(loadSettings)
 
   const updateSettings = useCallback(
-    (newSettings: ImageListSettings) => {
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY)
-        const allSettings = stored ? (JSON.parse(stored) as Record<string, ImageListSettings>) : {}
+    (updater: (prev: ImageListSettings) => ImageListSettings) => {
+      setSettings((prev) => {
+        const next = updater(prev)
 
-        allSettings[contextId] = newSettings
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(allSettings))
+        try {
+          const stored = localStorage.getItem(STORAGE_KEY)
+          const allSettings = stored ? (JSON.parse(stored) as Record<string, ImageListSettings>) : {}
 
-        window.dispatchEvent(
-          new CustomEvent(EVENT_NAME, {
-            detail: { contextId, settings: newSettings },
-          }),
-        )
+          allSettings[contextId] = next
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(allSettings))
 
-        setSettings(newSettings)
-      } catch (error) {
-        console.error('Failed to save image list settings:', error)
-      }
+          window.dispatchEvent(
+            new CustomEvent(EVENT_NAME, {
+              detail: { contextId, settings: next },
+            }),
+          )
+
+          return next
+        } catch (error) {
+          console.error('Failed to save image list settings:', error)
+          return prev
+        }
+      })
     },
     [contextId],
   )
@@ -84,28 +89,28 @@ export const useImageListSettings = (contextId: string) => {
   }, [contextId])
 
   const setViewMode = useCallback((mode: ViewMode) => {
-    updateSettings({ ...settings, viewMode: mode })
-  }, [settings, updateSettings])
+    updateSettings((prev) => ({ ...prev, viewMode: mode }))
+  }, [updateSettings])
 
   const setGridColumns = useCallback((columns: number) => {
-    updateSettings({ ...settings, gridColumns: columns })
-  }, [settings, updateSettings])
+    updateSettings((prev) => ({ ...prev, gridColumns: columns }))
+  }, [updateSettings])
 
   const setImageSize = useCallback((size: ImageSize) => {
-    updateSettings({ ...settings, imageSize: size })
-  }, [settings, updateSettings])
+    updateSettings((prev) => ({ ...prev, imageSize: size }))
+  }, [updateSettings])
 
   const setActiveScrollMode = useCallback((mode: 'infinite' | 'pagination') => {
-    updateSettings({ ...settings, activeScrollMode: mode })
-  }, [settings, updateSettings])
+    updateSettings((prev) => ({ ...prev, activeScrollMode: mode }))
+  }, [updateSettings])
 
   const setPageSize = useCallback((size: number) => {
-    updateSettings({ ...settings, pageSize: size })
-  }, [settings, updateSettings])
+    updateSettings((prev) => ({ ...prev, pageSize: size }))
+  }, [updateSettings])
 
   const setFitToScreen = useCallback((fit: boolean) => {
-    updateSettings({ ...settings, fitToScreen: fit })
-  }, [settings, updateSettings])
+    updateSettings((prev) => ({ ...prev, fitToScreen: fit }))
+  }, [updateSettings])
 
   return {
     settings,

@@ -1,5 +1,32 @@
 import { apiClient } from '@/lib/api/client'
 
+export interface NAICostInput {
+  width: number
+  height: number
+  steps: number
+  n_samples: number
+  subscriptionTier: number
+  anlasBalance?: number
+}
+
+export interface NAICostResponse {
+  estimatedCost: number
+  maxSamples: number
+  canAfford: boolean
+  isOpusFree: boolean
+  breakdown: {
+    baseCost: number
+    smeaMultiplier: number
+    samplesMultiplier: number
+  }
+}
+
+const buildBearerHeaders = (token: string) => ({
+  headers: {
+    Authorization: `Bearer ${token}`,
+  },
+})
+
 export const naiApi = {
   login: async (username: string, password: string): Promise<{ accessToken: string; expiresAt: string }> => {
     const response = await apiClient.post('/api/nai/auth/login', { username, password })
@@ -23,6 +50,7 @@ export const naiApi = {
       scale?: number
       sampler?: string
       n_samples?: number
+      variety_plus?: boolean
       sm?: boolean
       sm_dyn?: boolean
       cfg_rescale?: number
@@ -52,11 +80,17 @@ export const naiApi = {
       model: string
     }
   }> => {
-    const response = await apiClient.post('/api/nai/generate/image', params, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
+    const response = await apiClient.post('/api/nai/generate/image', params, buildBearerHeaders(token))
+    return response.data
+  },
+
+  getUserData: async (token: string) => {
+    const response = await apiClient.get('/api/nai/user/data', buildBearerHeaders(token))
+    return response.data
+  },
+
+  calculateCost: async (input: NAICostInput) => {
+    const response = await apiClient.post<NAICostResponse>('/api/nai/cost/calculate', input)
     return response.data
   },
 }

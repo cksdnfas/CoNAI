@@ -1,20 +1,17 @@
 import React, { useMemo, useState } from 'react'
-import {
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  MenuItem,
-  TextField,
-  Typography,
-} from '@mui/material'
 import { useTranslation } from 'react-i18next'
 import { useAllGroupsWithHierarchy } from '@/hooks/use-groups'
+import { Alert } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Loader2 } from 'lucide-react'
 
 interface GroupAssignModalProps {
   open: boolean
@@ -54,54 +51,53 @@ const GroupAssignModal: React.FC<GroupAssignModalProps> = ({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{t('imageGroups:assignModal.title')}</DialogTitle>
-      <DialogContent>
-        <DialogContentText sx={{ mb: 2 }}>
-          {t('imageGroups:assignModal.description', { count: selectedImageCount })}
-        </DialogContentText>
+    <Dialog open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose() : null)}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t('imageGroups:assignModal.title')}</DialogTitle>
+          <DialogDescription>{t('imageGroups:assignModal.description', { count: selectedImageCount })}</DialogDescription>
+        </DialogHeader>
 
-        {error ? (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        ) : null}
+        <div className="space-y-3">
+          {error ? <Alert>{error}</Alert> : null}
 
-        {isLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-            <CircularProgress />
-          </Box>
-        ) : assignableGroups.length === 0 ? (
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <Typography color="text.secondary">{t('imageGroups:assignModal.emptyGroups')}</Typography>
-          </Box>
-        ) : (
-          <TextField
-            select
-            fullWidth
-            label={t('imageGroups:assignModal.title')}
-            value={selectedGroupId ?? ''}
-            onChange={(event) => {
-              const value = event.target.value
-              setSelectedGroupId(value === '' ? null : Number(value))
-            }}
-          >
-            <MenuItem value="">{t('imageGroups:assignModal.selectPlaceholder', 'Select group')}</MenuItem>
-            {assignableGroups.map((group) => (
-              <MenuItem key={group.id} value={group.id}>
-                {group.depth && group.depth > 0 ? `${'-- '.repeat(group.depth)}` : ''}
-                {group.name}
-              </MenuItem>
-            ))}
-          </TextField>
-        )}
+          {isLoading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : assignableGroups.length === 0 ? (
+            <div className="py-4 text-center text-sm text-muted-foreground">{t('imageGroups:assignModal.emptyGroups')}</div>
+          ) : (
+            <div className="space-y-1">
+              <label className="text-sm font-medium" htmlFor="assign-group-select">
+                {t('imageGroups:assignModal.title')}
+              </label>
+              <select
+                id="assign-group-select"
+                className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                value={selectedGroupId ?? ''}
+                onChange={(event) => {
+                  const value = event.target.value
+                  setSelectedGroupId(value === '' ? null : Number(value))
+                }}
+              >
+                <option value="">{t('imageGroups:assignModal.selectPlaceholder', 'Select group')}</option>
+                {assignableGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.depth && group.depth > 0 ? `${'-- '.repeat(group.depth)}` : ''}
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>{t('imageGroups:assignModal.buttonCancel')}</Button>
+          <Button type="button" onClick={handleAssign} disabled={!selectedGroupId}>{t('imageGroups:assignModal.buttonAssign')}</Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>{t('imageGroups:assignModal.buttonCancel')}</Button>
-        <Button onClick={handleAssign} color="primary" variant="contained" disabled={!selectedGroupId}>
-          {t('imageGroups:assignModal.buttonAssign')}
-        </Button>
-      </DialogActions>
     </Dialog>
   )
 }

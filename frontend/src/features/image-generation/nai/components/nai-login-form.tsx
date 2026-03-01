@@ -1,7 +1,12 @@
 import { useState } from 'react'
-import { Alert, Box, Button, CircularProgress, Paper, Tab, Tabs, TextField, Typography } from '@mui/material'
-import { KeyRound, LogIn } from 'lucide-react'
+import { KeyRound, Loader2, LogIn } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Textarea } from '@/components/ui/textarea'
 import { naiApi } from '@/services/nai-api'
 
 interface NAILoginFormProps {
@@ -10,7 +15,7 @@ interface NAILoginFormProps {
 
 export default function NAILoginForm({ onLoginSuccess }: NAILoginFormProps) {
   const { t } = useTranslation(['imageGeneration'])
-  const [tabIndex, setTabIndex] = useState(0)
+  const [activeTab, setActiveTab] = useState<'credentials' | 'token'>('credentials')
   const [credentials, setCredentials] = useState({ username: '', password: '' })
   const [token, setToken] = useState('')
   const [loading, setLoading] = useState(false)
@@ -60,100 +65,94 @@ export default function NAILoginForm({ onLoginSuccess }: NAILoginFormProps) {
   }
 
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-      <Paper sx={{ p: 4, maxWidth: 500, width: '100%' }}>
-        <Box sx={{ textAlign: 'center', mb: 3 }}>
-          <Typography variant="h5" gutterBottom>
-            {t('imageGeneration:nai.login.title')}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {t('imageGeneration:nai.login.subtitle')}
-          </Typography>
-        </Box>
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <Card className="w-full max-w-[500px] py-0">
+        <CardContent className="space-y-6 p-6">
+          <div className="space-y-1 text-center">
+            <h2 className="text-2xl font-semibold">{t('imageGeneration:nai.login.title')}</h2>
+            <p className="text-muted-foreground text-sm">{t('imageGeneration:nai.login.subtitle')}</p>
+          </div>
 
-        <Tabs
-          value={tabIndex}
-          onChange={(_event, newValue) => {
-            setTabIndex(newValue)
-            setError(null)
-          }}
-          variant="fullWidth"
-          sx={{ mb: 3 }}
-        >
-          <Tab icon={<LogIn className="h-4 w-4" />} iconPosition="start" label={t('imageGeneration:nai.login.tabs.credentials')} />
-          <Tab icon={<KeyRound className="h-4 w-4" />} iconPosition="start" label={t('imageGeneration:nai.login.tabs.token')} />
-        </Tabs>
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => {
+              setActiveTab(value as 'credentials' | 'token')
+              setError(null)
+            }}
+          >
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="credentials" className="gap-2">
+                <LogIn className="h-4 w-4" />
+                {t('imageGeneration:nai.login.tabs.credentials')}
+              </TabsTrigger>
+              <TabsTrigger value="token" className="gap-2">
+                <KeyRound className="h-4 w-4" />
+                {t('imageGeneration:nai.login.tabs.token')}
+              </TabsTrigger>
+            </TabsList>
 
-        {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+            {error ? (
+              <Alert variant="destructive" className="mt-4">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
 
-        {tabIndex === 0 ? (
-          <form onSubmit={handleCredentialsSubmit}>
-            <TextField
-              fullWidth
-              label={t('imageGeneration:nai.login.username')}
-              type="email"
-              value={credentials.username}
-              onChange={(event) => setCredentials({ ...credentials, username: event.target.value })}
-              required
-              disabled={loading}
-              sx={{ mb: 2 }}
-            />
+            <TabsContent value="credentials" className="mt-4">
+              <form onSubmit={handleCredentialsSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-sm">{t('imageGeneration:nai.login.username')}</p>
+                  <Input
+                    type="email"
+                    value={credentials.username}
+                    onChange={(event) => setCredentials({ ...credentials, username: event.target.value })}
+                    required
+                    disabled={loading}
+                  />
+                </div>
 
-            <TextField
-              fullWidth
-              label={t('imageGeneration:nai.login.password')}
-              type="password"
-              value={credentials.password}
-              onChange={(event) => setCredentials({ ...credentials, password: event.target.value })}
-              required
-              disabled={loading}
-              sx={{ mb: 3 }}
-            />
+                <div className="space-y-2">
+                  <p className="text-sm">{t('imageGeneration:nai.login.password')}</p>
+                  <Input
+                    type="password"
+                    value={credentials.password}
+                    onChange={(event) => setCredentials({ ...credentials, password: event.target.value })}
+                    required
+                    disabled={loading}
+                  />
+                </div>
 
-            <Button
-              fullWidth
-              type="submit"
-              variant="contained"
-              size="large"
-              disabled={loading}
-              startIcon={loading ? <CircularProgress size={20} /> : <LogIn className="h-4 w-4" />}
-            >
-              {loading ? t('imageGeneration:nai.login.loggingIn') : t('imageGeneration:nai.login.loginButton')}
-            </Button>
-          </form>
-        ) : (
-          <form onSubmit={handleTokenSubmit}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              {t('imageGeneration:nai.login.tokenHint')}
-            </Typography>
+                <Button className="w-full" type="submit" size="lg" disabled={loading}>
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
+                  {loading ? t('imageGeneration:nai.login.loggingIn') : t('imageGeneration:nai.login.loginButton')}
+                </Button>
+              </form>
+            </TabsContent>
 
-            <TextField
-              fullWidth
-              label={t('imageGeneration:nai.login.token')}
-              type="password"
-              multiline
-              rows={3}
-              value={token}
-              onChange={(event) => setToken(event.target.value)}
-              placeholder={t('imageGeneration:nai.login.tokenPlaceholder')}
-              required
-              disabled={loading}
-              sx={{ mb: 3 }}
-            />
+            <TabsContent value="token" className="mt-4">
+              <form onSubmit={handleTokenSubmit} className="space-y-4">
+                <p className="text-muted-foreground text-sm">{t('imageGeneration:nai.login.tokenHint')}</p>
 
-            <Button
-              fullWidth
-              type="submit"
-              variant="contained"
-              size="large"
-              disabled={loading}
-              startIcon={loading ? <CircularProgress size={20} /> : <KeyRound className="h-4 w-4" />}
-            >
-              {loading ? t('imageGeneration:nai.login.loggingIn') : t('imageGeneration:nai.login.loginButton')}
-            </Button>
-          </form>
-        )}
-      </Paper>
-    </Box>
+                <div className="space-y-2">
+                  <p className="text-sm">{t('imageGeneration:nai.login.token')}</p>
+                  <Textarea
+                    rows={3}
+                    value={token}
+                    onChange={(event) => setToken(event.target.value)}
+                    placeholder={t('imageGeneration:nai.login.tokenPlaceholder')}
+                    required
+                    disabled={loading}
+                  />
+                </div>
+
+                <Button className="w-full" type="submit" size="lg" disabled={loading}>
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                  {loading ? t('imageGeneration:nai.login.loggingIn') : t('imageGeneration:nai.login.loginButton')}
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

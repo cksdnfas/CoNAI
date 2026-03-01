@@ -1,32 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
-import {
-  Box,
-  CircularProgress,
-  ClickAwayListener,
-  Fade,
-  InputAdornment,
-  List,
-  ListItemButton,
-  ListItemText,
-  Paper,
-  Popper,
-  Tab,
-  Tabs,
-  TextField,
-  Tooltip,
-  Typography,
-  useTheme,
-} from '@mui/material'
-import {
-  AutoAwesome as AutoIcon,
-  Block as NegativeIcon,
-  CheckCircle as PositiveIcon,
-  Search as SearchIcon,
-  Star as RatingIcon,
-} from '@mui/icons-material'
+import { Ban as NegativeIcon, CheckCircle as PositiveIcon, Search as SearchIcon, Sparkles as AutoIcon, Star as RatingIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { RatingTier } from '@comfyui-image-manager/shared'
 import { apiClient } from '@/lib/api/client'
+import { cn } from '@/lib/utils'
 
 export interface PromptSearchResult {
   id: number
@@ -57,7 +34,6 @@ interface SearchAutoCompleteProps {
   onSelectTag?: (tag: PromptSearchResult) => void
   onKeyPress?: (event: React.KeyboardEvent) => void
   placeholder?: string
-  autoFocus?: boolean
 }
 
 type TabType = 'positive' | 'auto' | 'negative' | 'rating'
@@ -68,10 +44,8 @@ const SearchAutoComplete: React.FC<SearchAutoCompleteProps> = ({
   onSelectTag,
   onKeyPress,
   placeholder,
-  autoFocus,
 }) => {
   const { t } = useTranslation(['search'])
-  const theme = useTheme()
 
   const [open, setOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<TabType>('positive')
@@ -180,6 +154,19 @@ const SearchAutoComplete: React.FC<SearchAutoCompleteProps> = ({
     return () => window.clearTimeout(timer)
   }, [activeTab, currentTerm, open])
 
+  useEffect(() => {
+    if (!open) return
+    const handlePointerDown = (event: MouseEvent) => {
+      const root = anchorRef.current
+      if (root && !root.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown)
+    return () => window.removeEventListener('pointerdown', handlePointerDown)
+  }, [open])
+
   const handleTabChange = (_event: React.SyntheticEvent, newValue: TabType) => {
     setActiveTab(newValue)
     inputRef.current?.focus()
@@ -215,173 +202,95 @@ const SearchAutoComplete: React.FC<SearchAutoCompleteProps> = ({
 
   const getTagColor = (option: PromptSearchResult) => {
     if (option.type === 'rating' && option.color) return option.color
-
-    switch (option.type) {
-      case 'positive':
-        return theme.palette.success.main
-      case 'negative':
-        return theme.palette.error.main
-      case 'auto':
-        return theme.palette.info.main
-      case 'rating':
-        return theme.palette.warning.main
-      default:
-        return theme.palette.text.primary
-    }
+    if (option.type === 'positive') return '#16a34a'
+    if (option.type === 'negative') return '#dc2626'
+    if (option.type === 'auto') return '#0284c7'
+    if (option.type === 'rating') return '#ca8a04'
+    return '#111827'
   }
 
   return (
-    <Box sx={{ position: 'relative' }}>
-      <TextField
-        fullWidth
-        variant="outlined"
-        placeholder={placeholder}
-        value={value}
-        onChange={(event) => {
-          onChange(event.target.value)
-          setOpen(true)
-        }}
-        onKeyPress={onKeyPress}
-        autoFocus={autoFocus}
-        inputRef={inputRef}
-        onClick={() => setOpen(true)}
-        onSelect={(event) => {
-          const target = event.target as HTMLInputElement
-          setCursorPosition(target.selectionStart ?? 0)
-        }}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchIcon />
-            </InputAdornment>
-          ),
-          ref: anchorRef,
-        }}
-      />
+    <div className="relative" ref={anchorRef}>
+      <div className="border-input bg-background focus-within:ring-ring/50 flex h-9 items-center rounded-md border px-3 focus-within:ring-2">
+        <SearchIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+        <input
+          className="h-full w-full bg-transparent text-sm outline-none"
+          placeholder={placeholder}
+          value={value}
+          onChange={(event) => {
+            onChange(event.target.value)
+            setOpen(true)
+          }}
+          onKeyPress={onKeyPress}
+          ref={inputRef}
+          onClick={() => setOpen(true)}
+          onSelect={(event: React.SyntheticEvent<HTMLInputElement>) => {
+            const target = event.target as HTMLInputElement
+            setCursorPosition(target.selectionStart ?? 0)
+          }}
+        />
+      </div>
 
-      <Popper
-        open={open && (suggestions.length > 0 || currentTerm.length > 0 || activeTab === 'rating')}
-        anchorEl={anchorRef.current}
-        placement="bottom-start"
-        transition
-        style={{ zIndex: 1300, width: anchorRef.current?.clientWidth }}
-      >
-        {({ TransitionProps }) => (
-          <Fade {...TransitionProps} timeout={200}>
-            <Paper elevation={8} sx={{ mt: 1, overflow: 'hidden' }}>
-              <ClickAwayListener onClickAway={() => setOpen(false)}>
-                <Box>
-                  <Tabs
-                    value={activeTab}
-                    onChange={handleTabChange}
-                    variant="fullWidth"
-                    sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 40 }}
-                  >
-                    <Tab
-                      icon={<Tooltip title={`${t('search:tabs.positive', 'Positive')} (${stats.positive})`}><PositiveIcon /></Tooltip>}
-                      value="positive"
-                      sx={{ minHeight: 40, py: 1, color: activeTab === 'positive' ? 'success.main' : 'text.secondary' }}
-                    />
-                    <Tab
-                      icon={<Tooltip title={`${t('search:tabs.auto', 'Auto')} (${stats.auto})`}><AutoIcon /></Tooltip>}
-                      value="auto"
-                      sx={{ minHeight: 40, py: 1, color: activeTab === 'auto' ? 'info.main' : 'text.secondary' }}
-                    />
-                    <Tab
-                      icon={<Tooltip title={`${t('search:tabs.negative', 'Negative')} (${stats.negative})`}><NegativeIcon /></Tooltip>}
-                      value="negative"
-                      sx={{ minHeight: 40, py: 1, color: activeTab === 'negative' ? 'error.main' : 'text.secondary' }}
-                    />
-                    <Tab
-                      icon={<Tooltip title={`${t('search:tabs.rating', 'Rating')}`}><RatingIcon /></Tooltip>}
-                      value="rating"
-                      sx={{ minHeight: 40, py: 1, color: activeTab === 'rating' ? 'warning.main' : 'text.secondary' }}
-                    />
-                  </Tabs>
-
-                  {loading ? (
-                    <Box sx={{ p: 2, textAlign: 'center' }}>
-                      <CircularProgress size={24} />
-                    </Box>
-                  ) : (
-                    <List sx={{ maxHeight: 400, overflow: 'auto', py: 0 }}>
-                      {suggestions.map((option) => (
-                        <ListItemButton
-                          key={`${option.type}-${option.id}`}
-                          onClick={() => handleSelectTag(option)}
-                          sx={{
-                            py: 0.5,
-                            '&:hover': {
-                              bgcolor: 'action.hover',
-                            },
-                          }}
-                        >
-                          <ListItemText
-                            primary={
-                              <Box component="span" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Typography
-                                  variant="body2"
-                                  component="span"
-                                  sx={{
-                                    fontWeight: 'bold',
-                                    color: getTagColor(option),
-                                  }}
-                                >
-                                  {option.prompt}
-                                </Typography>
-                                {option.type === 'rating' ? (
-                                  <Typography variant="caption" color="text.secondary">
-                                    {option.min_score}~{option.max_score || '∞'}
-                                  </Typography>
-                                ) : (
-                                  <Typography variant="caption" color="text.secondary">
-                                    {option.usage_count > 0 ? `${option.usage_count}` : ''}
-                                  </Typography>
-                                )}
-                              </Box>
-                            }
-                            secondary={
-                              option.synonyms && option.synonyms.length > 0 ? (
-                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                  → {option.synonyms.join(', ')}
-                                </Typography>
-                              ) : null
-                            }
-                          />
-                        </ListItemButton>
-                      ))}
-                      {suggestions.length === 0 ? (
-                        <Box sx={{ p: 2, textAlign: 'center' }}>
-                          <Typography variant="body2" color="text.secondary">
-                            {t('search:noResults', 'No tags found')}
-                          </Typography>
-                        </Box>
-                      ) : null}
-                    </List>
+      {open && (suggestions.length > 0 || currentTerm.length > 0 || activeTab === 'rating') ? (
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border bg-popover shadow-lg">
+          <div className="border-b p-1">
+            <div className="grid grid-cols-4 gap-1">
+              {([
+                { key: 'positive' as const, label: `${t('search:tabs.positive', 'Positive')} (${stats.positive})`, icon: <PositiveIcon className="h-4 w-4" /> },
+                { key: 'auto' as const, label: `${t('search:tabs.auto', 'Auto')} (${stats.auto})`, icon: <AutoIcon className="h-4 w-4" /> },
+                { key: 'negative' as const, label: `${t('search:tabs.negative', 'Negative')} (${stats.negative})`, icon: <NegativeIcon className="h-4 w-4" /> },
+                { key: 'rating' as const, label: t('search:tabs.rating', 'Rating'), icon: <RatingIcon className="h-4 w-4" /> },
+              ]).map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  title={tab.label}
+                  className={cn(
+                    'flex h-8 items-center justify-center rounded text-muted-foreground hover:bg-muted/60',
+                    activeTab === tab.key ? 'bg-muted text-foreground' : null,
                   )}
+                  onClick={(event) => handleTabChange(event, tab.key)}
+                >
+                  {tab.icon}
+                </button>
+              ))}
+            </div>
+          </div>
 
-                  <Box
-                    sx={{
-                      p: 1,
-                      bgcolor: 'background.default',
-                      borderTop: 1,
-                      borderColor: 'divider',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1,
-                    }}
-                  >
-                    <Typography variant="caption" color="text.secondary">
-                      {t('search:tip.select', 'Select to add tag')}
-                    </Typography>
-                  </Box>
-                </Box>
-              </ClickAwayListener>
-            </Paper>
-          </Fade>
-        )}
-      </Popper>
-    </Box>
+          {loading ? (
+            <div className="p-2 text-center text-sm text-muted-foreground">Loading...</div>
+          ) : (
+            <div className="max-h-96 overflow-auto py-1">
+              {suggestions.map((option) => (
+                <button
+                  type="button"
+                  key={`${option.type}-${option.id}`}
+                  onClick={() => handleSelectTag(option)}
+                  className="hover:bg-muted flex w-full items-start justify-between gap-3 px-3 py-1 text-left"
+                >
+                  <span>
+                    <span className="block text-sm font-semibold" style={{ color: getTagColor(option) }}>{option.prompt}</span>
+                    {option.synonyms && option.synonyms.length > 0 ? (
+                      <span className="block text-xs text-muted-foreground">→ {option.synonyms.join(', ')}</span>
+                    ) : null}
+                  </span>
+                  {option.type === 'rating' ? (
+                    <span className="text-xs text-muted-foreground">{option.min_score}~{option.max_score || '∞'}</span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">{option.usage_count > 0 ? `${option.usage_count}` : ''}</span>
+                  )}
+                </button>
+              ))}
+              {suggestions.length === 0 ? (
+                <div className="p-2 text-center text-sm text-muted-foreground">{t('search:noResults', 'No tags found')}</div>
+              ) : null}
+            </div>
+          )}
+
+          <div className="border-t px-2 py-1 text-xs text-muted-foreground">{t('search:tip.select', 'Select to add tag')}</div>
+        </div>
+      ) : null}
+    </div>
   )
 }
 

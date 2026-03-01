@@ -1,5 +1,5 @@
-import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Divider, Paper, Typography } from '@mui/material'
-import { ExpandMore as ExpandMoreIcon, Info as InfoIcon } from '@mui/icons-material'
+import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Divider, Paper, Typography } from '@/features/workflows/utils/workflow-ui'
+import { ExpandMore as ExpandMoreIcon, Info as InfoIcon } from '@/features/workflows/utils/workflow-icons'
 import { useTranslation } from 'react-i18next'
 
 export function MarkedFieldsGuide() {

@@ -1,22 +1,18 @@
 import { useState } from 'react'
-import {
-  Box,
-  Typography,
-  Paper,
-  Alert,
-  Divider,
-  Button,
-  TextField,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-} from '@mui/material'
-import {
-  Visibility as VisibilityIcon,
-  ExpandMore as ExpandMoreIcon,
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
-} from '@mui/icons-material'
+import { Box,
+Typography,
+Paper,
+Alert,
+Divider,
+Button,
+TextField,
+Accordion,
+AccordionSummary,
+AccordionDetails, } from '@/features/workflows/utils/workflow-ui'
+import { Visibility as VisibilityIcon,
+ExpandMore as ExpandMoreIcon,
+CheckCircle as CheckCircleIcon,
+Error as ErrorIcon, } from '@/features/workflows/utils/workflow-icons'
 import { useTranslation } from 'react-i18next'
 import type { MarkedField } from '@/services/workflow-api'
 

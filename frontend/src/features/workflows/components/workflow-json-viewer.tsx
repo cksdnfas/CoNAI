@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Alert, Box, IconButton, Paper, Snackbar, Tooltip, Typography } from '@mui/material'
-import { ContentCopy as CopyIcon } from '@mui/icons-material'
+import { Alert, Box, IconButton, Paper, Snackbar, Tooltip, Typography } from '@/features/workflows/utils/workflow-ui'
+import { ContentCopy as CopyIcon } from '@/features/workflows/utils/workflow-icons'
 import { useTranslation } from 'react-i18next'
 
 interface WorkflowJsonViewerProps {

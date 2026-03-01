@@ -1,24 +1,20 @@
 import { useState } from 'react'
-import {
-  Box,
-  Chip,
-  FormControl,
-  IconButton,
-  InputLabel,
-  MenuItem,
-  Paper,
-  Select,
-  TextField,
-  Tooltip,
-} from '@mui/material'
-import type { SelectChangeEvent } from '@mui/material/Select'
-import {
-  Search as SearchIcon,
-  UnfoldLess as CollapseAllIcon,
-  UnfoldMore as ExpandAllIcon,
-  ViewList as ViewListIcon,
-  ViewModule as ViewModuleIcon,
-} from '@mui/icons-material'
+import { Box,
+Chip,
+FormControl,
+IconButton,
+InputLabel,
+MenuItem,
+Paper,
+Select,
+TextField,
+Tooltip, } from '@/features/workflows/utils/workflow-ui'
+import type { SelectChangeEvent } from '@/features/workflows/utils/workflow-ui'
+import { Search as SearchIcon,
+UnfoldLess as CollapseAllIcon,
+UnfoldMore as ExpandAllIcon,
+ViewList as ViewListIcon,
+ViewModule as ViewModuleIcon, } from '@/features/workflows/utils/workflow-icons'
 import { useTranslation } from 'react-i18next'
 
 interface GraphToolbarProps {
@@ -51,7 +47,7 @@ export default function GraphToolbar({
   }
 
   const handleFilterChange = (event: SelectChangeEvent<string[]>) => {
-    const value = event.target.value
+    const value = event.target.value as string[] | string
     const nextFilters = Array.isArray(value) ? value : value.split(',').filter(Boolean)
     setSelectedFilters(nextFilters)
     onFilterChange(nextFilters)
@@ -95,9 +91,9 @@ export default function GraphToolbar({
           value={selectedFilters}
           onChange={handleFilterChange}
           label={t('workflows:graphToolbar.filterTypes')}
-          renderValue={(selected) => (
+          renderValue={(selected: string[]) => (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-              {selected.map((value) => (
+              {selected.map((value: string) => (
                 <Chip
                   key={value}
                   label={value}
@@ -116,27 +112,31 @@ export default function GraphToolbar({
               sx: {
                 bgcolor: '#2a2a2a',
                 border: '1px solid rgba(64, 64, 64, 0.5)',
-                '& .MuiMenuItem-root': {
-                  color: '#ffffff',
-                  '&:hover': {
-                    bgcolor: 'rgba(255, 255, 255, 0.1)',
-                  },
-                  '&.Mui-selected': {
-                    bgcolor: 'rgba(76, 175, 80, 0.2)',
-                    '&:hover': {
-                      bgcolor: 'rgba(76, 175, 80, 0.3)',
-                    },
-                  },
-                },
               },
             },
           }}
         >
-          {nodeTypes.map((type) => (
-            <MenuItem key={type} value={type}>
-              {type}
-            </MenuItem>
-          ))}
+          {nodeTypes.map((type) => {
+            const isTypeSelected = selectedFilters.includes(type)
+
+            return (
+              <MenuItem
+                key={type}
+                value={type}
+                aria-selected={isTypeSelected}
+                sx={{
+                  color: '#ffffff',
+                  fontWeight: isTypeSelected ? 600 : 400,
+                  bgcolor: isTypeSelected ? 'rgba(76, 175, 80, 0.2)' : 'transparent',
+                  '&:hover': {
+                    bgcolor: isTypeSelected ? 'rgba(76, 175, 80, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+                  },
+                }}
+              >
+                {type}
+              </MenuItem>
+            )
+          })}
         </Select>
       </FormControl>
 

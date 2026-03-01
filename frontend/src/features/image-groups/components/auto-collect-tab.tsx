@@ -1,15 +1,51 @@
 import React, { useEffect, useState } from 'react'
-import { Box, FormControlLabel, Switch, Typography } from '@mui/material'
 import { useTranslation } from 'react-i18next'
 import type { ComplexFilter, FilterCondition } from '@comfyui-image-manager/shared'
 import SimpleSearchTab, { type SearchToken } from './simple-search-tab'
 import type { PromptSearchResult } from './search-auto-complete'
+import { Switch } from '@/components/ui/switch'
 
 interface AutoCollectTabProps {
   enabled: boolean
   conditions: ComplexFilter
   onEnabledChange: (enabled: boolean) => void
   onConditionsChange: (conditions: ComplexFilter) => void
+}
+
+function conditionsToTokens(conditions: ComplexFilter): SearchToken[] {
+  const tokens: SearchToken[] = []
+
+  const processCondition = (condition: FilterCondition, defaultLogic: 'OR' | 'AND' | 'NOT') => {
+    let type: SearchToken['type'] = 'positive'
+
+    if (condition.category === 'auto_tag' || condition.type === 'auto_tag_any') {
+      type = 'auto'
+    } else if (condition.category === 'negative_prompt' || condition.type?.includes('negative')) {
+      type = 'negative'
+    }
+
+    tokens.push({
+      id: `${Date.now()}-${Math.random()}`,
+      type,
+      label: String(condition.value),
+      value: String(condition.value),
+      logic: defaultLogic,
+      minScore: condition.min_score,
+      maxScore: condition.max_score,
+    })
+  }
+
+  conditions.exclude_group?.forEach((condition) => {
+    processCondition(condition, 'NOT')
+  })
+  conditions.or_group?.forEach((condition) => {
+    processCondition(condition, 'OR')
+  })
+  conditions.and_group?.forEach((condition) => {
+    processCondition(condition, 'AND')
+  })
+
+  return tokens
 }
 
 const AutoCollectTab: React.FC<AutoCollectTabProps> = ({
@@ -21,41 +57,7 @@ const AutoCollectTab: React.FC<AutoCollectTabProps> = ({
   const { t } = useTranslation(['imageGroups'])
 
   const [searchText, setSearchText] = useState('')
-  const [searchTokens, setSearchTokens] = useState<SearchToken[]>([])
-
-  useEffect(() => {
-    const tokens: SearchToken[] = []
-
-    const processCondition = (condition: FilterCondition, defaultLogic: 'OR' | 'AND' | 'NOT') => {
-      let type: SearchToken['type'] = 'positive'
-
-      if (condition.category === 'auto_tag' || condition.type === 'auto_tag_any') {
-        type = 'auto'
-      } else if (condition.category === 'negative_prompt' || condition.type?.includes('negative')) {
-        type = 'negative'
-      }
-
-      tokens.push({
-        id: `${Date.now()}-${Math.random()}`,
-        type,
-        label: String(condition.value),
-        value: String(condition.value),
-        logic: defaultLogic,
-        minScore: condition.min_score,
-        maxScore: condition.max_score,
-      })
-    }
-
-    conditions.exclude_group?.forEach((condition) => processCondition(condition, 'NOT'))
-    conditions.or_group?.forEach((condition) => processCondition(condition, 'OR'))
-    conditions.and_group?.forEach((condition) => processCondition(condition, 'AND'))
-
-    if (tokens.length > 0) {
-      setSearchTokens(tokens)
-    }
-    // initialize once per mount/open cycle
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const [searchTokens, setSearchTokens] = useState<SearchToken[]>(() => conditionsToTokens(conditions))
 
   useEffect(() => {
     const excludeGroup: FilterCondition[] = []
@@ -153,20 +155,14 @@ const AutoCollectTab: React.FC<AutoCollectTabProps> = ({
   }
 
   return (
-    <Box>
-      <Box sx={{ mb: 3 }}>
-        <FormControlLabel
-          control={<Switch checked={enabled} onChange={(event) => onEnabledChange(event.target.checked)} color="primary" />}
-          label={
-            <Typography variant="subtitle1" fontWeight={500}>
-              {t('imageGroups:modal.autoCollectEnable')}
-            </Typography>
-          }
-        />
-      </Box>
+    <div>
+      <div className="mb-3 flex items-center gap-3">
+        <Switch checked={enabled} onCheckedChange={onEnabledChange} />
+        <p className="text-base font-medium">{t('imageGroups:modal.autoCollectEnable')}</p>
+      </div>
 
       {enabled ? (
-        <Box>
+        <div>
           <SimpleSearchTab
             searchText={searchText}
             onSearchTextChange={setSearchText}
@@ -177,24 +173,13 @@ const AutoCollectTab: React.FC<AutoCollectTabProps> = ({
             onCycleLogic={handleCycleLogic}
             onUpdateToken={handleUpdateToken}
           />
-        </Box>
+        </div>
       ) : (
-        <Box
-          sx={{
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: 2,
-            p: 3,
-            textAlign: 'center',
-            backgroundColor: (theme) => (theme.palette.mode === 'dark' ? 'background.paper' : 'grey.50'),
-          }}
-        >
-          <Typography variant="body2" color="text.secondary">
-            {t('imageGroups:modal.autoCollectDisabledHelp')}
-          </Typography>
-        </Box>
+        <div className="border-border bg-muted/30 rounded-md border p-3 text-center">
+          <p className="text-sm text-muted-foreground">{t('imageGroups:modal.autoCollectDisabledHelp')}</p>
+        </div>
       )}
-    </Box>
+    </div>
   )
 }
 

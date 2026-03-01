@@ -1,28 +1,24 @@
 import { useMemo, useState } from 'react'
-import {
-  Box,
-  Collapse,
-  IconButton,
-  InputAdornment,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Paper,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material'
-import {
-  ChevronRight as ChevronRightIcon,
-  ExpandMore as ExpandMoreIcon,
-  Folder as FolderIcon,
-  FolderOpen as FolderOpenIcon,
-  InsertDriveFile as FileIcon,
-  Search as SearchIcon,
-  ViewList as ViewListIcon,
-  AccountTree as TreeIcon,
-} from '@mui/icons-material'
+import { Box,
+Collapse,
+IconButton,
+InputAdornment,
+List,
+ListItemButton,
+ListItemIcon,
+ListItemText,
+Paper,
+TextField,
+Tooltip,
+Typography, } from '@/features/workflows/utils/workflow-ui'
+import { ChevronRight as ChevronRightIcon,
+ExpandMore as ExpandMoreIcon,
+Folder as FolderIcon,
+FolderOpen as FolderOpenIcon,
+InsertDriveFile as FileIcon,
+Search as SearchIcon,
+ViewList as ViewListIcon,
+AccountTree as TreeIcon, } from '@/features/workflows/utils/workflow-icons'
 import { useTranslation } from 'react-i18next'
 
 interface TreeNode {
@@ -139,17 +135,15 @@ function TreeNodeItem({ node, depth, selectedValue, onSelect, expandedFolders, o
     <>
       <ListItemButton
         onClick={handleClick}
-        selected={isSelected}
+        aria-selected={isSelected}
         sx={{
           pl: 1 + depth * 2,
           py: 0.5,
           borderRadius: 1,
-          '&.Mui-selected': {
-            bgcolor: 'primary.main',
-            color: 'primary.contrastText',
-            '&:hover': {
-              bgcolor: 'primary.dark',
-            },
+          bgcolor: isSelected ? 'primary.main' : 'transparent',
+          color: isSelected ? 'primary.contrastText' : 'inherit',
+          '&:hover': {
+            bgcolor: isSelected ? 'primary.dark' : 'action.hover',
           },
         }}
       >

@@ -1,24 +1,5 @@
-import { useState } from 'react'
-import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  IconButton,
-  LinearProgress,
-  Tooltip,
-  Typography,
-} from '@mui/material'
-import {
-  Check as CheckIcon,
-  ContentCopy as ContentCopyIcon,
-  ExpandMore as ExpandMoreIcon,
-  InfoOutlined as InfoOutlinedIcon,
-  Refresh as RefreshIcon,
-} from '@mui/icons-material'
+import { useState, type MouseEvent } from 'react'
+import { Check, ChevronDown, Copy, Info, Loader2, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AutoTagsData } from '@/types/image'
 import { taggerBatchApi } from '@/services/tagger-batch-api'
@@ -35,7 +16,7 @@ export default function AutoTagDisplay({ imageId, autoTags, onTagGenerated }: Au
   const [error, setError] = useState<string | null>(null)
   const [taglistCopied, setTaglistCopied] = useState(false)
 
-  const handleGenerateTag = async (event?: React.MouseEvent) => {
+  const handleGenerateTag = async (event?: MouseEvent<HTMLButtonElement>) => {
     if (event) event.stopPropagation()
     setIsGenerating(true)
     setError(null)
@@ -52,20 +33,19 @@ export default function AutoTagDisplay({ imageId, autoTags, onTagGenerated }: Au
 
   if (!autoTags) {
     return (
-      <Box sx={{ p: 2, textAlign: 'center' }}>
-        {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          {t('autoTagDisplay.noTags')}
-        </Typography>
-        <Button
-          variant="contained"
+      <div className="p-2 text-center">
+        {error ? <div role="alert" className="mb-2 rounded-md border border-red-300 bg-red-50 px-2 py-1 text-sm text-red-700">{error}</div> : null}
+        <p className="mb-2 text-sm text-muted-foreground">{t('autoTagDisplay.noTags')}</p>
+        <button
+          type="button"
           onClick={() => void handleGenerateTag()}
           disabled={isGenerating}
-          startIcon={isGenerating ? <CircularProgress size={20} /> : undefined}
+          className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
+          {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
           {isGenerating ? t('autoTagDisplay.generating') : t('autoTagDisplay.generateButton')}
-        </Button>
-      </Box>
+        </button>
+      </div>
     )
   }
 
@@ -96,6 +76,16 @@ export default function AutoTagDisplay({ imageId, autoTags, onTagGenerated }: Au
     return '#4caf50'
   }
 
+  const renderScoreFill = (score: number) => (
+    <div
+      className="h-full rounded"
+      style={{
+        width: `${Math.max(0, Math.min(100, score * 100))}%`,
+        backgroundColor: getGeneralTagColor(score),
+      }}
+    />
+  )
+
   const renderRatingGauge = () => {
     if (!resolved.rating) return null
 
@@ -110,83 +100,66 @@ export default function AutoTagDisplay({ imageId, autoTags, onTagGenerated }: Au
     if (ratings.length === 0) return null
 
     const total = ratings.reduce((sum, entry) => sum + entry.value, 0)
+    const modelInfo = [
+      `${t('autoTagDisplay.modelInfo.model')}: ${resolved.model ?? '-'}`,
+      `${t('autoTagDisplay.modelInfo.generalThreshold')}: ${resolved.thresholds?.general ?? '-'}`,
+      `${t('autoTagDisplay.modelInfo.characterThreshold')}: ${resolved.thresholds?.character ?? '-'}`,
+      resolved.tagged_at
+        ? `${t('autoTagDisplay.modelInfo.taggedAt')}: ${new Date(resolved.tagged_at).toLocaleString('ko-KR')}`
+        : null,
+    ].filter(Boolean).join('\n')
 
     return (
-      <Box sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-            {t('autoTagDisplay.sections.rating')}
-          </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-            <Tooltip
-              title={
-                <Box sx={{ p: 0.5 }}>
-                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.model')}: {resolved.model}</Typography>
-                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.generalThreshold')}: {resolved.thresholds?.general}</Typography>
-                  <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.characterThreshold')}: {resolved.thresholds?.character}</Typography>
-                  {resolved.tagged_at ? (
-                    <Typography variant="caption" display="block">{t('autoTagDisplay.modelInfo.taggedAt')}: {new Date(resolved.tagged_at).toLocaleString('ko-KR')}</Typography>
-                  ) : null}
-                </Box>
-              }
-              arrow
-              placement="left"
+      <div className="mb-3">
+        <div className="mb-1 flex items-center justify-between">
+          <p className="text-sm font-semibold">{t('autoTagDisplay.sections.rating')}</p>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted/50"
+              title={modelInfo}
+              aria-label={t('autoTagDisplay.modelInfo.model')}
             >
-              <IconButton size="small" sx={{ color: 'text.secondary' }}>
-                <InfoOutlinedIcon sx={{ fontSize: '1rem' }} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title={t('autoTagDisplay.regenerate', 'Regenerate Tags')}>
-              <span>
-                <IconButton size="small" onClick={(event) => void handleGenerateTag(event)} disabled={isGenerating}>
-                  {isGenerating ? <CircularProgress size={16} /> : <RefreshIcon fontSize="small" />}
-                </IconButton>
-              </span>
-            </Tooltip>
-          </Box>
-        </Box>
-        <Box
-          sx={{
-            display: 'flex',
-            height: 32,
-            borderRadius: 1,
-            overflow: 'hidden',
-            border: '1px solid',
-            borderColor: 'divider',
-          }}
-        >
+              <Info className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={(event) => void handleGenerateTag(event)}
+              disabled={isGenerating}
+              title={t('autoTagDisplay.regenerate', 'Regenerate Tags')}
+              aria-label={t('autoTagDisplay.regenerate', 'Regenerate Tags')}
+            >
+              {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
+            </button>
+          </div>
+        </div>
+        <div className="flex h-8 overflow-hidden rounded border border-border">
           {ratings.map((rating) => (
-            <Box
+            <div
               key={rating.key}
-              sx={{
+              className="relative flex items-center justify-center"
+              style={{
                 flex: rating.value / total,
                 backgroundColor: rating.color,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                position: 'relative',
-                '&:not(:last-child)': {
-                  borderRight: '1px solid rgba(0,0,0,0.1)',
-                },
+                borderRight: '1px solid rgba(0,0,0,0.1)',
               }}
             >
               {rating.value >= 0.33 ? (
-                <Typography
-                  variant="caption"
-                  sx={{
+                <span
+                  className="text-[0.7rem] font-semibold"
+                  style={{
                     color: rating.key === 'sensitive' ? 'rgba(0,0,0,0.7)' : 'white',
-                    fontWeight: 600,
-                    fontSize: '0.7rem',
                     textShadow: rating.key === 'sensitive' ? 'none' : '0 1px 2px rgba(0,0,0,0.3)',
                   }}
                 >
                   {rating.key.substring(0, 3).toUpperCase()} {(rating.value * 100).toFixed(0)}%
-                </Typography>
+                </span>
               ) : null}
-            </Box>
+            </div>
           ))}
-        </Box>
-      </Box>
+        </div>
+      </div>
     )
   }
 
@@ -197,34 +170,22 @@ export default function AutoTagDisplay({ imageId, autoTags, onTagGenerated }: Au
     if (characters.length === 0) return null
 
     return (
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-          {t('autoTagDisplay.sections.characters')}
-        </Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <div className="mb-2">
+        <p className="mb-1 text-sm font-semibold">{t('autoTagDisplay.sections.characters')}</p>
+        <div className="flex flex-col gap-1">
           {characters.map(([name, score]) => (
-            <Box key={name}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>{name}</Typography>
-                <Typography variant="caption" color="text.secondary">{(score * 100).toFixed(1)}%</Typography>
-              </Box>
-              <LinearProgress
-                variant="determinate"
-                value={score * 100}
-                sx={{
-                  height: 6,
-                  borderRadius: 1,
-                  backgroundColor: 'rgba(0,0,0,0.1)',
-                  '& .MuiLinearProgress-bar': {
-                    backgroundColor: getGeneralTagColor(score),
-                    borderRadius: 1,
-                  },
-                }}
-              />
-            </Box>
+            <div key={name}>
+              <div className="mb-0.5 flex justify-between">
+                <p className="text-[0.85rem]">{name}</p>
+                <span className="text-xs text-muted-foreground">{(score * 100).toFixed(1)}%</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded bg-black/10 dark:bg-white/10">
+                {renderScoreFill(score)}
+              </div>
+            </div>
           ))}
-        </Box>
-      </Box>
+        </div>
+      </div>
     )
   }
 
@@ -243,19 +204,23 @@ export default function AutoTagDisplay({ imageId, autoTags, onTagGenerated }: Au
     if (!resolved.taglist) return null
 
     return (
-      <Box sx={{ mb: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{t('autoTagDisplay.sections.tagList')}</Typography>
-          <Tooltip title={taglistCopied ? t('autoTagDisplay.taglistCopied', 'Copied!') : t('autoTagDisplay.copyTaglist', 'Copy Tags')}>
-            <IconButton size="small" onClick={() => void handleCopyTaglist()} sx={{ color: taglistCopied ? 'success.main' : 'text.secondary' }}>
-              {taglistCopied ? <CheckIcon sx={{ fontSize: '1rem' }} /> : <ContentCopyIcon sx={{ fontSize: '1rem' }} />}
-            </IconButton>
-          </Tooltip>
-        </Box>
-        <Typography variant="body2" sx={{ lineHeight: 1.6, wordBreak: 'break-word' }}>
+      <div className="mb-2">
+        <div className="mb-1 flex items-center justify-between">
+          <p className="text-sm font-semibold">{t('autoTagDisplay.sections.tagList')}</p>
+          <button
+            type="button"
+            onClick={() => void handleCopyTaglist()}
+            className={`inline-flex h-7 w-7 items-center justify-center rounded ${taglistCopied ? 'text-emerald-600' : 'text-muted-foreground hover:bg-muted/50'}`}
+            title={taglistCopied ? t('autoTagDisplay.taglistCopied', 'Copied!') : t('autoTagDisplay.copyTaglist', 'Copy Tags')}
+            aria-label={taglistCopied ? t('autoTagDisplay.taglistCopied', 'Copied!') : t('autoTagDisplay.copyTaglist', 'Copy Tags')}
+          >
+            {taglistCopied ? <Check className="h-4 w-4" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
+          </button>
+        </div>
+        <p className="text-sm leading-relaxed" style={{ wordBreak: 'break-word' }}>
           {resolved.taglist}
-        </Typography>
-      </Box>
+        </p>
+      </div>
     )
   }
 
@@ -266,47 +231,35 @@ export default function AutoTagDisplay({ imageId, autoTags, onTagGenerated }: Au
     if (generalTags.length === 0) return null
 
     return (
-      <Accordion defaultExpanded={false}>
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-            {t('autoTagDisplay.sections.generalTags', { count: generalTags.length })}
-          </Typography>
-        </AccordionSummary>
-        <AccordionDetails>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {generalTags.map(([tag, score]) => (
-              <Box key={tag}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>{tag}</Typography>
-                  <Typography variant="caption" color="text.secondary">{(score * 100).toFixed(1)}%</Typography>
-                </Box>
-                <LinearProgress
-                  variant="determinate"
-                  value={score * 100}
-                  sx={{
-                    height: 6,
-                    borderRadius: 1,
-                    backgroundColor: 'rgba(0,0,0,0.1)',
-                    '& .MuiLinearProgress-bar': {
-                      backgroundColor: getGeneralTagColor(score),
-                      borderRadius: 1,
-                    },
-                  }}
-                />
-              </Box>
-            ))}
-          </Box>
-        </AccordionDetails>
-      </Accordion>
+      <details>
+        <summary className="flex cursor-pointer list-none items-center gap-2 py-1 text-sm font-semibold">
+          <ChevronDown className="h-4 w-4" aria-hidden="true" />
+          {t('autoTagDisplay.sections.generalTags', { count: generalTags.length })}
+        </summary>
+        <div className="mt-1 flex flex-col gap-1">
+          {generalTags.map(([tag, score]) => (
+            <div key={tag}>
+              <div className="mb-0.5 flex justify-between">
+                <p className="text-[0.85rem]">{tag}</p>
+                <span className="text-xs text-muted-foreground">{(score * 100).toFixed(1)}%</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded bg-black/10 dark:bg-white/10">
+                {renderScoreFill(score)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </details>
     )
   }
 
   return (
-    <Box sx={{ height: '100%', overflowY: 'auto' }}>
+    <div className="overflow-y-auto">
+      {error ? <div role="alert" className="mb-2 rounded-md border border-red-300 bg-red-50 px-2 py-1 text-sm text-red-700">{error}</div> : null}
       {renderRatingGauge()}
       {renderCharacters()}
       {renderTaglist()}
       {renderGeneralTags()}
-    </Box>
+    </div>
   )
 }

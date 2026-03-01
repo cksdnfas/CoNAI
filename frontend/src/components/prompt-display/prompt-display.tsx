@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Box, Chip, Typography } from '@mui/material'
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { AutoTagsData } from '@/types/image'
 import AutoTagDisplay from '@/components/prompt-display/auto-tag-display'
@@ -30,64 +29,47 @@ interface PromptDisplayProps {
 function renderGroupedContent(data: GroupedPromptResult | null, loading: boolean, t: (key: string) => string, isNegative = false): ReactNode {
   if (loading) {
     return (
-      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 1 }}>
+      <p className="py-1 text-center text-sm text-muted-foreground">
         {t('promptDisplay.loading')}
-      </Typography>
+      </p>
     )
   }
 
   if (!data) {
     return (
-      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 1 }}>
+      <p className="py-1 text-center text-sm text-muted-foreground">
         {t('promptDisplay.loadFailed')}
-      </Typography>
+      </p>
     )
   }
 
   return (
-    <Box>
+    <div>
       {data.groups.map((group) => (
-        <Box key={group.id} sx={{ mb: 1 }}>
-          <Typography
-            variant="caption"
-            sx={{
-              fontWeight: 600,
-              color: isNegative ? 'error.main' : 'primary.main',
-              fontSize: '0.75rem',
-            }}
-          >
+        <div key={group.id} className="mb-2">
+          <p className={`text-xs font-semibold ${isNegative ? 'text-red-600 dark:text-red-400' : 'text-primary'}`}>
             {group.group_name}
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={{
-              lineHeight: 1.6,
-              wordBreak: 'break-word',
-              fontSize: '0.8rem',
-              color: 'text.primary',
-            }}
+          </p>
+          <p
+            className="text-[0.8rem] leading-relaxed text-foreground"
+            style={{ wordBreak: 'break-word' }}
           >
             {group.terms.join(', ')}
-          </Typography>
-        </Box>
+          </p>
+        </div>
       ))}
 
       {data.unclassified_terms.length > 0 ? (
-        <Box>
-          <Typography
-            variant="body2"
-            sx={{
-              lineHeight: 1.6,
-              wordBreak: 'break-word',
-              fontSize: '0.8rem',
-              color: 'text.secondary',
-            }}
+        <div>
+          <p
+            className="text-[0.8rem] leading-relaxed text-muted-foreground"
+            style={{ wordBreak: 'break-word' }}
           >
             {data.unclassified_terms.join(', ')}
-          </Typography>
-        </Box>
+          </p>
+        </div>
       ) : null}
-    </Box>
+    </div>
   )
 }
 
@@ -123,7 +105,7 @@ export default function PromptDisplay({
   const effectiveNegativePrompt = isRawMode ? ((rawNaiParameters as { uc?: string | null } | null | undefined)?.uc || '') : negativePrompt
   const effectiveShowGrouped = isRawMode ? false : showGrouped && userWantsGrouped
 
-  const toggleGrouped = (event: React.MouseEvent) => {
+  const toggleGrouped = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
     setUserWantsGrouped((prev) => {
       const next = !prev
@@ -176,39 +158,14 @@ export default function PromptDisplay({
 
   if (!hasPrompt && !hasNegativePrompt && !hasCharacterPrompts && !showAutoSection) {
     return (
-      <Box sx={{ py: 2, textAlign: 'center' }}>
-        <Typography variant="body2" color="text.secondary">
-          {t('promptDisplay.noPrompt')}
-        </Typography>
-      </Box>
+      <div className="py-2 text-center">
+        <p className="text-sm text-muted-foreground">{t('promptDisplay.noPrompt')}</p>
+      </div>
     )
   }
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 1.5,
-        height: '100%',
-        overflowY: 'auto',
-        overflowX: 'hidden',
-        pr: 0.5,
-        '&::-webkit-scrollbar': {
-          width: '4px',
-        },
-        '&::-webkit-scrollbar-track': {
-          background: 'transparent',
-        },
-        '&::-webkit-scrollbar-thumb': {
-          background: 'rgba(128,128,128,0.3)',
-          borderRadius: '2px',
-          '&:hover': {
-            background: 'rgba(128,128,128,0.5)',
-          },
-        },
-      }}
-    >
+    <div className="flex h-full flex-col gap-1.5 overflow-x-hidden overflow-y-auto pr-0.5">
       {hasPrompt ? (
         <PromptCard
           cardId="positive"
@@ -218,27 +175,25 @@ export default function PromptDisplay({
           headerExtra={
             <>
               {showGrouped && !isRawMode ? (
-                <Chip
-                  label={t('promptDisplay.showGrouped')}
+                <button
+                  type="button"
                   onClick={toggleGrouped}
-                  variant={userWantsGrouped ? 'filled' : 'outlined'}
-                  size="small"
-                  color={userWantsGrouped ? 'primary' : 'default'}
-                  sx={{ fontSize: '0.65rem', height: 20 }}
-                />
+                  className={`h-5 rounded-full px-2 text-[0.65rem] ${userWantsGrouped ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground'}`}
+                >
+                  {t('promptDisplay.showGrouped')}
+                </button>
               ) : null}
               {hasRawNai ? (
-                <Chip
-                  label={isRawMode ? t('promptDisplay.showOriginal') : t('promptDisplay.showProcessed')}
-                  onClick={(event) => {
+                <button
+                  type="button"
+                  onClick={(event: MouseEvent<HTMLButtonElement>) => {
                     event.stopPropagation()
                     setShowRaw(!showRaw)
                   }}
-                  variant={isRawMode ? 'filled' : 'outlined'}
-                  size="small"
-                  color={isRawMode ? 'warning' : 'default'}
-                  sx={{ fontSize: '0.65rem', height: 20 }}
-                />
+                  className={`h-5 rounded-full px-2 text-[0.65rem] ${isRawMode ? 'bg-amber-500 text-amber-950' : 'border border-border text-muted-foreground'}`}
+                >
+                  {isRawMode ? t('promptDisplay.showOriginal') : t('promptDisplay.showProcessed')}
+                </button>
               ) : null}
             </>
           }
@@ -246,17 +201,12 @@ export default function PromptDisplay({
           {effectiveShowGrouped
             ? renderGroupedContent(positiveGrouped, loading, t, false)
             : (
-              <Typography
-                variant="body2"
-                sx={{
-                  whiteSpace: 'pre-wrap',
-                  lineHeight: 1.6,
-                  wordBreak: 'break-word',
-                  fontSize: '0.8rem',
-                }}
+              <p
+                className="text-[0.8rem] leading-relaxed"
+                style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
               >
                 {effectivePrompt}
-              </Typography>
+              </p>
             )}
         </PromptCard>
       ) : null}
@@ -271,30 +221,25 @@ export default function PromptDisplay({
           {effectiveShowGrouped
             ? renderGroupedContent(negativeGrouped, loading, t, true)
             : (
-              <Typography
-                variant="body2"
-                sx={{
-                  whiteSpace: 'pre-wrap',
-                  lineHeight: 1.6,
-                  wordBreak: 'break-word',
-                  fontSize: '0.8rem',
-                }}
+              <p
+                className="text-[0.8rem] leading-relaxed"
+                style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
               >
                 {effectiveNegativePrompt}
-              </Typography>
+              </p>
             )}
         </PromptCard>
       ) : null}
 
       {hasCharacterPrompts ? (
         <PromptCard cardId="characters" title={t('promptDisplay.cards.characters', 'Character Prompts')} color="warning.main">
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <div className="flex flex-col gap-1">
             {characterPrompts?.map((cp, index) => (
-              <Typography key={`${cp.char_caption}-${index}`} variant="body2" sx={{ fontSize: '0.8rem', lineHeight: 1.5 }}>
+              <p key={`${cp.char_caption}-${index}`} className="text-[0.8rem] leading-6">
                 {cp.char_caption}
-              </Typography>
+              </p>
             ))}
-          </Box>
+          </div>
         </PromptCard>
       ) : null}
 
@@ -303,6 +248,6 @@ export default function PromptDisplay({
           {imageId ? <AutoTagDisplay imageId={imageId} autoTags={autoTags || null} onTagGenerated={onAutoTagGenerated} /> : null}
         </PromptCard>
       ) : null}
-    </Box>
+    </div>
   )
 }

@@ -1,13 +1,11 @@
 import { memo, useState } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
-import { Box, Collapse, Divider, IconButton, Paper, Tooltip, Typography } from '@mui/material'
-import {
-  ExpandLess as ExpandLessIcon,
-  ExpandMore as ExpandMoreIcon,
-  Input as InputIcon,
-  Output as OutputIcon,
-  Settings as SettingsIcon,
-} from '@mui/icons-material'
+import { Box, Collapse, Divider, IconButton, Paper, Tooltip, Typography } from '@/features/workflows/utils/workflow-ui'
+import { ExpandLess as ExpandLessIcon,
+ExpandMore as ExpandMoreIcon,
+Input as InputIcon,
+Output as OutputIcon,
+Settings as SettingsIcon, } from '@/features/workflows/utils/workflow-icons'
 import type { EnhancedNodeData } from '@/features/workflows/utils/node-data-parser'
 import { getDataTypeColor, getDataTypeLabel } from '@/features/workflows/utils/data-type-colors'
 import { getNodeColor, getNodeIcon } from '@/features/workflows/utils/node-style-helpers'

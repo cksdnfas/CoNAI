@@ -1,32 +1,28 @@
 import { useState, type HTMLAttributes } from 'react'
-import {
-  Card,
-  CardContent,
-  Box,
-  TextField,
-  IconButton,
-  FormControlLabel,
-  Switch,
-  Collapse,
-  Typography,
-  Chip,
-  alpha,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
-} from '@mui/material'
-import {
-  Delete as DeleteIcon,
-  ExpandMore as ExpandMoreIcon,
-  DragIndicator as DragIndicatorIcon,
-  PlaylistAdd as PlaylistAddIcon,
-} from '@mui/icons-material'
+import { Card,
+CardContent,
+Box,
+TextField,
+IconButton,
+FormControlLabel,
+Switch,
+Collapse,
+Typography,
+Chip,
+alpha,
+Button,
+Dialog,
+DialogTitle,
+DialogContent,
+DialogActions,
+List,
+ListItem,
+ListItemButton,
+ListItemText, } from '@/features/workflows/utils/workflow-ui'
+import { Delete as DeleteIcon,
+ExpandMore as ExpandMoreIcon,
+DragIndicator as DragIndicatorIcon,
+PlaylistAdd as PlaylistAddIcon, } from '@/features/workflows/utils/workflow-icons'
 import { useTranslation } from 'react-i18next'
 import type { MarkedField } from '@/services/workflow-api'
 import { generateFieldId } from './utils/smart-defaults'
@@ -128,7 +124,7 @@ export function MarkedFieldCard({
           py: 1.5,
           cursor: 'pointer',
           '&:hover': {
-            bgcolor: (theme) => alpha(theme.palette.action.hover, 0.04),
+            bgcolor: 'action.hover',
           },
         }}
         onClick={onToggleExpand}
@@ -226,7 +222,7 @@ export function MarkedFieldCard({
             pb: 2,
             borderTop: '1px solid',
             borderColor: 'divider',
-            bgcolor: (theme) => alpha(theme.palette.background.default, 0.3),
+            bgcolor: 'background.default',
           }}
         >
           <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
@@ -285,7 +281,7 @@ export function MarkedFieldCard({
             <TextField
               fullWidth
               label={t('workflows:fieldForm.defaultValue')}
-              value={field.default_value || ''}
+              value={typeof field.default_value === 'string' || typeof field.default_value === 'number' ? field.default_value : ''}
               onChange={(event) => onUpdate(index, { default_value: event.target.value })}
               size="small"
               placeholder={t('workflows:fieldForm.defaultValuePlaceholder')}
@@ -354,8 +350,8 @@ export function MarkedFieldCard({
                     onUpdate(index, {
                       options: event.target.value
                         .split(',')
-                        .map((item) => item.trim())
-                        .filter((item) => item),
+                        .map((item: string) => item.trim())
+                        .filter((item: string) => item),
                     })
                   }
                   size="small"
@@ -384,7 +380,7 @@ export function MarkedFieldCard({
               control={
                 <Switch
                   checked={field.required || false}
-                  onChange={(event) => onUpdate(index, { required: event.target.checked })}
+                  onChange={(event: React.ChangeEvent<HTMLInputElement>) => onUpdate(index, { required: event.target.checked })}
                   size="small"
                 />
               }

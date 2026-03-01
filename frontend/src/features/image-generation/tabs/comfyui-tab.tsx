@@ -1,30 +1,25 @@
 import { useCallback, useEffect, useState } from 'react'
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  FormControlLabel,
-  IconButton,
-  Stack,
-  Switch,
-  TextField,
-  Typography,
-} from '@mui/material'
-import { AlertCircle, CheckCircle2, GitBranch, Pencil, Plus, Server, Trash2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, GitBranch, Loader2, Pencil, Plus, Server, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { workflowApi, type Workflow } from '@/services/workflow-api'
 import { comfyuiServerApi, type ComfyUIServer } from '@/services/comfyui-server-api'
-import CustomDropdownListsSection from '@/bridges/image-generation/custom-dropdown-lists-section'
+import CustomDropdownListsSection from '@/features/image-generation/bridges/custom-dropdown-lists-section'
 
 export default function ComfyUITab() {
   const { t } = useTranslation(['workflows', 'servers', 'common'])
@@ -166,371 +161,247 @@ export default function ComfyUITab() {
   const loading = workflowsLoading || serversLoading
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+      </div>
     )
   }
 
   return (
-    <Box>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+    <div className="space-y-6">
+      <section className="space-y-3">
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
           <GitBranch className="h-4 w-4" /> {t('workflows:page.listTitle')}
-        </Typography>
+        </h2>
 
         {workflowsError ? (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setWorkflowsError(null)}>
-            {workflowsError}
+          <Alert variant="destructive">
+            <AlertDescription className="flex items-center justify-between gap-2">
+              <span>{workflowsError}</span>
+              <Button variant="ghost" size="sm" onClick={() => setWorkflowsError(null)}>
+                {t('common:actions.close')}
+              </Button>
+            </AlertDescription>
           </Alert>
         ) : null}
 
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: {
-              xs: '1fr',
-              sm: 'repeat(2, 1fr)',
-              md: 'repeat(4, 1fr)',
-              lg: 'repeat(5, 1fr)',
-              xl: 'repeat(6, 1fr)',
-            },
-            gap: 1.5,
-          }}
-        >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {workflows.map((workflow) => (
             <Card
               key={workflow.id}
-              onClick={(event) => {
-                if ((event.target as HTMLElement).closest('button')) return
-                if (workflow.is_active) {
-                  navigate(`/image-generation/${workflow.id}/generate`)
-                }
-              }}
-              sx={{
-                height: '100%',
-                minHeight: 120,
-                borderLeft: `3px solid ${workflow.color || '#2196f3'}`,
-                transition: 'all 0.2s ease-in-out',
-                cursor: workflow.is_active ? 'pointer' : 'not-allowed',
-                opacity: workflow.is_active ? 1 : 0.6,
-                '&:hover': {
-                  boxShadow: workflow.is_active ? 3 : 1,
-                  transform: workflow.is_active ? 'translateY(-2px)' : 'none',
-                },
-              }}
+              className={`h-full min-h-[120px] border-l-4 py-0 transition ${workflow.is_active ? 'opacity-100 hover:-translate-y-0.5 hover:shadow-md' : 'opacity-60'}`}
+              style={{ borderLeftColor: workflow.color || '#2196f3' }}
             >
-              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                <Stack spacing={1}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Chip
-                      label={workflow.is_active ? t('workflows:card.active') : t('workflows:card.inactive')}
-                      color={workflow.is_active ? 'success' : 'default'}
-                      size="small"
-                      sx={{ height: '20px', fontSize: '0.7rem' }}
-                    />
-                    <Box sx={{ display: 'flex', gap: 0.25 }} onClick={(event) => event.stopPropagation()}>
-                      <IconButton size="small" onClick={() => navigate(`/image-generation/${workflow.id}/edit`)} sx={{ p: 0.5 }}>
-                        <Pencil className="h-4 w-4" />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => void handleDeleteWorkflow(workflow.id)} color="error" sx={{ p: 0.5 }}>
-                        <Trash2 className="h-4 w-4" />
-                      </IconButton>
-                    </Box>
-                  </Box>
+              <CardContent className="space-y-2 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant={workflow.is_active ? 'default' : 'outline'} className="h-5 text-[11px]">
+                    {workflow.is_active ? t('workflows:card.active') : t('workflows:card.inactive')}
+                  </Badge>
+                  <div className="flex gap-1">
+                    <Button size="icon-sm" variant="ghost" onClick={() => navigate(`/image-generation/${workflow.id}/edit`)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon-sm" variant="ghost" onClick={() => void handleDeleteWorkflow(workflow.id)}>
+                      <Trash2 className="text-destructive h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
 
-                  <Typography
-                    variant="body2"
-                    sx={{ fontWeight: 600, fontSize: '0.813rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                    title={workflow.name}
+                <p className="truncate text-[13px] font-semibold" title={workflow.name}>
+                  {workflow.name}
+                </p>
+
+                {workflow.description ? (
+                  <p
+                    className="text-muted-foreground line-clamp-2 text-[11px]"
+                    title={workflow.description}
                   >
-                    {workflow.name}
-                  </Typography>
+                    {workflow.description}
+                  </p>
+                ) : null}
 
-                  {workflow.description ? (
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{
-                        fontSize: '0.7rem',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                      }}
-                    >
-                      {workflow.description}
-                    </Typography>
+                <div className="text-muted-foreground flex flex-wrap items-center gap-1 text-[11px]">
+                  {workflow.marked_fields && workflow.marked_fields.length > 0 ? (
+                    <Badge variant="outline" className="h-[18px] text-[10px]">
+                      {t('workflows:card.fieldsCount', { count: workflow.marked_fields.length })}
+                    </Badge>
                   ) : null}
+                  <span>{new Date(workflow.created_date).toLocaleDateString()}</span>
+                </div>
 
-                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {workflow.marked_fields && workflow.marked_fields.length > 0 ? (
-                      <Chip
-                        label={t('workflows:card.fieldsCount', { count: workflow.marked_fields.length })}
-                        size="small"
-                        variant="outlined"
-                        sx={{ height: '18px', fontSize: '0.65rem' }}
-                      />
-                    ) : null}
-                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
-                      {new Date(workflow.created_date).toLocaleDateString()}
-                    </Typography>
-                  </Box>
-                </Stack>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full text-xs"
+                  disabled={!workflow.is_active}
+                  onClick={() => navigate(`/image-generation/${workflow.id}/generate`)}
+                >
+                  {t('workflows:actions.generate')}
+                </Button>
               </CardContent>
             </Card>
           ))}
 
-          <Box
+          <button
+            type="button"
             onClick={() => navigate('/image-generation/new')}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minHeight: 120,
-              border: '2px dashed',
-              borderColor: 'primary.main',
-              borderRadius: 2,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease-in-out',
-              bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(33, 150, 243, 0.05)' : 'rgba(33, 150, 243, 0.02)'),
-              '&:hover': {
-                bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(33, 150, 243, 0.15)' : 'rgba(33, 150, 243, 0.08)'),
-                borderColor: 'primary.dark',
-                transform: 'scale(1.02)',
-              },
-            }}
+            className="border-primary/40 bg-primary/5 hover:bg-primary/10 flex min-h-[120px] items-center justify-center rounded-xl border-2 border-dashed transition"
           >
-            <IconButton
-              color="primary"
-              sx={{
-                width: 56,
-                height: 56,
-                bgcolor: 'primary.main',
-                color: 'white',
-                '&:hover': {
-                  bgcolor: 'primary.dark',
-                  transform: 'rotate(90deg)',
-                },
-                transition: 'all 0.3s ease-in-out',
-              }}
-            >
+            <span className="bg-primary text-primary-foreground inline-flex h-14 w-14 items-center justify-center rounded-full transition hover:rotate-90">
               <Plus className="h-7 w-7" />
-            </IconButton>
-          </Box>
-        </Box>
-      </Box>
+            </span>
+          </button>
+        </div>
+      </section>
 
-      <Divider sx={{ my: 4 }} />
+      <Separator />
 
-      <Box>
-        <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+      <section className="space-y-3">
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
           <Server className="h-4 w-4" /> {t('servers:page.listTitle')}
-        </Typography>
+        </h2>
 
         {serversError ? (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setServersError(null)}>
-            {serversError}
+          <Alert variant="destructive">
+            <AlertDescription className="flex items-center justify-between gap-2">
+              <span>{serversError}</span>
+              <Button variant="ghost" size="sm" onClick={() => setServersError(null)}>
+                {t('common:actions.close')}
+              </Button>
+            </AlertDescription>
           </Alert>
         ) : null}
 
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: {
-              xs: '1fr',
-              sm: 'repeat(2, 1fr)',
-              md: 'repeat(4, 1fr)',
-              lg: 'repeat(5, 1fr)',
-              xl: 'repeat(6, 1fr)',
-            },
-            gap: 1.5,
-          }}
-        >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {servers.map((server) => (
-            <Card
-              key={server.id}
-              sx={{
-                height: '100%',
-                minHeight: 120,
-                borderLeft: '3px solid #4caf50',
-                transition: 'all 0.2s ease-in-out',
-                '&:hover': {
-                  boxShadow: 3,
-                  transform: 'translateY(-2px)',
-                },
-              }}
-            >
-              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                <Stack spacing={1}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Chip
-                      label={server.is_active ? t('servers:card.active') : t('servers:card.inactive')}
-                      color={server.is_active ? 'success' : 'default'}
-                      size="small"
-                      sx={{ height: '20px', fontSize: '0.7rem' }}
-                    />
-                    <Box sx={{ display: 'flex', gap: 0.25 }}>
-                      <IconButton size="small" onClick={() => handleOpenDialog(server)} sx={{ p: 0.5 }}>
-                        <Pencil className="h-4 w-4" />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => void handleDeleteServer(server.id)} color="error" sx={{ p: 0.5 }}>
-                        <Trash2 className="h-4 w-4" />
-                      </IconButton>
-                    </Box>
-                  </Box>
+            <Card key={server.id} className="h-full min-h-[120px] border-l-4 border-l-green-500 py-0 transition hover:-translate-y-0.5 hover:shadow-md">
+              <CardContent className="space-y-2 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant={server.is_active ? 'default' : 'outline'} className="h-5 text-[11px]">
+                    {server.is_active ? t('servers:card.active') : t('servers:card.inactive')}
+                  </Badge>
+                  <div className="flex gap-1">
+                    <Button size="icon-sm" variant="ghost" onClick={() => handleOpenDialog(server)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon-sm" variant="ghost" onClick={() => void handleDeleteServer(server.id)}>
+                      <Trash2 className="text-destructive h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
 
-                  <Typography
-                    variant="body2"
-                    sx={{ fontWeight: 600, fontSize: '0.813rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                    title={server.name}
-                  >
-                    {server.name}
-                  </Typography>
+                <p className="truncate text-[13px] font-semibold" title={server.name}>
+                  {server.name}
+                </p>
 
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontFamily: 'monospace', fontSize: '0.7rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                    title={server.endpoint}
-                  >
-                    {server.endpoint}
-                  </Typography>
+                <p className="text-muted-foreground truncate font-mono text-[11px]" title={server.endpoint}>
+                  {server.endpoint}
+                </p>
 
-                  {server.description ? (
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{
-                        fontSize: '0.7rem',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                      }}
-                    >
-                      {server.description}
-                    </Typography>
-                  ) : null}
+                {server.description ? (
+                  <p className="text-muted-foreground line-clamp-2 text-[11px]" title={server.description}>
+                    {server.description}
+                  </p>
+                ) : null}
 
-                  {connectionStatus[server.id] !== undefined ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      {connectionStatus[server.id] ? (
-                        <>
-                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-                          <Typography variant="caption" color="success.main" sx={{ fontSize: '0.7rem' }}>
-                            {t('servers:card.connectionSuccess')}
-                          </Typography>
-                        </>
-                      ) : (
-                        <>
-                          <AlertCircle className="h-3.5 w-3.5 text-red-600" />
-                          <Typography variant="caption" color="error.main" sx={{ fontSize: '0.7rem' }}>
-                            {t('servers:card.connectionFailed')}
-                          </Typography>
-                        </>
-                      )}
-                    </Box>
-                  ) : null}
+                {connectionStatus[server.id] !== undefined ? (
+                  <div className="flex items-center gap-1 text-[11px]">
+                    {connectionStatus[server.id] ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                        <span className="text-green-600">{t('servers:card.connectionSuccess')}</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-3.5 w-3.5 text-red-600" />
+                        <span className="text-red-600">{t('servers:card.connectionFailed')}</span>
+                      </>
+                    )}
+                  </div>
+                ) : null}
 
-                  <Button
-                    size="small"
-                    onClick={() => void handleTestConnection(server.id)}
-                    disabled={testingServerId === server.id}
-                    fullWidth
-                    sx={{ mt: 'auto', fontSize: '0.7rem', py: 0.5 }}
-                  >
-                    {testingServerId === server.id ? <CircularProgress size={14} /> : t('servers:card.testConnection')}
-                  </Button>
-                </Stack>
+                <Button
+                  size="sm"
+                  onClick={() => void handleTestConnection(server.id)}
+                  disabled={testingServerId === server.id}
+                  className="mt-auto w-full text-xs"
+                >
+                  {testingServerId === server.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  {t('servers:card.testConnection')}
+                </Button>
               </CardContent>
             </Card>
           ))}
 
-          <Box
+          <button
+            type="button"
             onClick={() => handleOpenDialog()}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minHeight: 120,
-              border: '2px dashed',
-              borderColor: 'success.main',
-              borderRadius: 2,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease-in-out',
-              bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.05)' : 'rgba(76, 175, 80, 0.02)'),
-              '&:hover': {
-                bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.15)' : 'rgba(76, 175, 80, 0.08)'),
-                borderColor: 'success.dark',
-                transform: 'scale(1.02)',
-              },
-            }}
+            className="border-green-500/40 bg-green-500/5 hover:bg-green-500/10 flex min-h-[120px] items-center justify-center rounded-xl border-2 border-dashed transition"
           >
-            <IconButton
-              sx={{
-                width: 56,
-                height: 56,
-                bgcolor: 'success.main',
-                color: 'white',
-                '&:hover': {
-                  bgcolor: 'success.dark',
-                  transform: 'rotate(90deg)',
-                },
-                transition: 'all 0.3s ease-in-out',
-              }}
-            >
+            <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-green-500 text-white transition hover:rotate-90">
               <Plus className="h-7 w-7" />
-            </IconButton>
-          </Box>
-        </Box>
-      </Box>
+            </span>
+          </button>
+        </div>
+      </section>
 
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>{editingServer ? t('servers:dialog.editTitle') : t('servers:dialog.addTitle')}</DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <TextField
-              label={t('servers:dialog.serverName')}
-              fullWidth
-              required
-              value={formData.name}
-              onChange={(event) => setFormData({ ...formData, name: event.target.value })}
-            />
-            <TextField
-              label={t('servers:dialog.endpointUrl')}
-              fullWidth
-              required
-              placeholder={t('servers:dialog.endpointPlaceholder')}
-              value={formData.endpoint}
-              onChange={(event) => setFormData({ ...formData, endpoint: event.target.value })}
-            />
-            <TextField
-              label={t('servers:dialog.description')}
-              fullWidth
-              multiline
-              rows={2}
-              value={formData.description}
-              onChange={(event) => setFormData({ ...formData, description: event.target.value })}
-            />
-            <FormControlLabel
-              control={<Switch checked={formData.is_active} onChange={(event) => setFormData({ ...formData, is_active: event.target.checked })} />}
-              label={t('servers:dialog.activate')}
-            />
-          </Box>
+      <Dialog open={openDialog} onOpenChange={(open) => (open ? setOpenDialog(true) : handleCloseDialog())}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{editingServer ? t('servers:dialog.editTitle') : t('servers:dialog.addTitle')}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-sm">{t('servers:dialog.serverName')}</p>
+              <Input
+                value={formData.name}
+                onChange={(event) => setFormData({ ...formData, name: event.target.value })}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm">{t('servers:dialog.endpointUrl')}</p>
+              <Input
+                value={formData.endpoint}
+                onChange={(event) => setFormData({ ...formData, endpoint: event.target.value })}
+                placeholder={t('servers:dialog.endpointPlaceholder')}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm">{t('servers:dialog.description')}</p>
+              <Textarea
+                rows={2}
+                value={formData.description}
+                onChange={(event) => setFormData({ ...formData, description: event.target.value })}
+              />
+            </div>
+
+            <div className="flex items-center gap-2 text-sm">
+              <Switch
+                checked={formData.is_active}
+                onCheckedChange={(checked) => setFormData({ ...formData, is_active: Boolean(checked) })}
+              />
+              <span>{t('servers:dialog.activate')}</span>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseDialog}>
+              {t('servers:dialog.cancel')}
+            </Button>
+            <Button onClick={() => void handleSubmit()} disabled={!formData.name || !formData.endpoint}>
+              {editingServer ? t('servers:dialog.update') : t('servers:dialog.add')}
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>{t('servers:dialog.cancel')}</Button>
-          <Button onClick={() => void handleSubmit()} variant="contained" disabled={!formData.name || !formData.endpoint}>
-            {editingServer ? t('servers:dialog.update') : t('servers:dialog.add')}
-          </Button>
-        </DialogActions>
       </Dialog>
 
-      <Divider sx={{ my: 3 }} />
+      <Separator />
       <CustomDropdownListsSection />
-    </Box>
+    </div>
   )
 }

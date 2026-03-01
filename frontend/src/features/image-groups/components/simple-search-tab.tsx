@@ -1,26 +1,17 @@
 import React from 'react'
 import {
-  Box,
-  IconButton,
-  Paper,
-  Popover,
-  Slider,
-  Stack,
-  Tooltip,
-  Typography,
-} from '@mui/material'
-import {
-  AutoAwesome as AutoAwesomeIcon,
-  Block as BlockIcon,
-  CallMerge as AndIcon,
-  CallSplit as OrIcon,
+  Sparkles as AutoAwesomeIcon,
+  Ban as BlockIcon,
   CheckCircle as CheckCircleIcon,
-  Close as CloseIcon,
-  DoNotDisturb as NotIcon,
+  CircleOff as NotIcon,
+  Minus as AndIcon,
+  Plus as OrIcon,
   Star as RatingIcon,
-} from '@mui/icons-material'
+  X as CloseIcon,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import SearchAutoComplete, { type PromptSearchResult } from './search-auto-complete'
+import { Button } from '@/components/ui/button'
 
 export interface SearchToken {
   id: string
@@ -64,7 +55,7 @@ const SimpleSearchTab: React.FC<SimpleSearchTabProps> = ({
   }
 
   return (
-    <Box sx={{ py: 2 }}>
+    <div className="py-2">
       <SearchAutoComplete
         value={searchText}
         onChange={onSearchTextChange}
@@ -73,7 +64,7 @@ const SimpleSearchTab: React.FC<SimpleSearchTabProps> = ({
         placeholder={t('search:simpleSearch.placeholder')}
       />
 
-      <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap', gap: 1 }} useFlexGap>
+      <div className="mt-2 flex flex-wrap gap-2">
         {tokens.map((token) => (
           <TokenBadge
             key={token.id}
@@ -83,8 +74,8 @@ const SimpleSearchTab: React.FC<SimpleSearchTabProps> = ({
             onUpdate={onUpdateToken}
           />
         ))}
-      </Stack>
-    </Box>
+      </div>
+    </div>
   )
 }
 
@@ -95,11 +86,11 @@ const TokenBadge: React.FC<{
   onUpdate: (id: string, updates: Partial<SearchToken>) => void
 }> = ({ token, onRemove, onCycleLogic, onUpdate }) => {
   const { t } = useTranslation(['search'])
-  const [anchorEl, setAnchorEl] = React.useState<HTMLDivElement | null>(null)
+  const [showScoreEditor, setShowScoreEditor] = React.useState(false)
 
-  const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleClick = () => {
     if (token.type === 'auto') {
-      setAnchorEl(event.currentTarget)
+      setShowScoreEditor((prev) => !prev)
     }
   }
 
@@ -113,195 +104,147 @@ const TokenBadge: React.FC<{
     onUpdate(token.id, { type: nextType, count: undefined })
   }
 
-  const handleClose = () => {
-    setAnchorEl(null)
-  }
-
   const getLogicIcon = (logic: 'OR' | 'AND' | 'NOT') => {
     switch (logic) {
       case 'OR':
-        return <OrIcon fontSize="small" />
+        return <OrIcon className="h-4 w-4" />
       case 'AND':
-        return <AndIcon fontSize="small" />
+        return <AndIcon className="h-4 w-4" />
       case 'NOT':
-        return <NotIcon fontSize="small" />
+        return <NotIcon className="h-4 w-4" />
       default:
-        return <OrIcon fontSize="small" />
+        return <OrIcon className="h-4 w-4" />
     }
   }
 
-  const getLogicColor = (logic: 'OR' | 'AND' | 'NOT') => {
+  const getLogicClass = (logic: 'OR' | 'AND' | 'NOT') => {
     switch (logic) {
       case 'OR':
-        return 'info'
+        return 'bg-sky-600 text-white'
       case 'AND':
-        return 'success'
+        return 'bg-emerald-600 text-white'
       case 'NOT':
-        return 'error'
+        return 'bg-rose-600 text-white'
       default:
-        return 'info'
+        return 'bg-sky-600 text-white'
     }
   }
 
   const getTypeColor = (type: SearchToken['type']) => {
     switch (type) {
       case 'positive':
-        return 'success'
+        return '#16a34a'
       case 'negative':
-        return 'error'
+        return '#dc2626'
       case 'auto':
-        return 'warning'
+        return '#ca8a04'
       case 'rating':
-        return 'warning'
+        return token.color || '#ca8a04'
       default:
-        return 'warning'
+        return '#ca8a04'
     }
   }
 
   const getSourceIcon = (type: SearchToken['type']) => {
     switch (type) {
       case 'positive':
-        return <CheckCircleIcon fontSize="small" color="inherit" />
+        return <CheckCircleIcon className="h-4 w-4" />
       case 'negative':
-        return <BlockIcon fontSize="small" color="inherit" />
+        return <BlockIcon className="h-4 w-4" />
       case 'auto':
-        return <AutoAwesomeIcon fontSize="small" color="inherit" />
+        return <AutoAwesomeIcon className="h-4 w-4" />
       case 'rating':
-        return <RatingIcon fontSize="small" color="inherit" />
+        return <RatingIcon className="h-4 w-4" />
       default:
-        return <CheckCircleIcon fontSize="small" color="inherit" />
+        return <CheckCircleIcon className="h-4 w-4" />
     }
   }
 
-  const open = Boolean(anchorEl)
   const minScore = token.minScore ?? 0
   const maxScore = token.maxScore ?? 1
   const showScore = token.type === 'auto' || token.type === 'rating'
 
-  const typeBoxStyle =
-    token.type === 'rating' && token.color
-      ? {
-          bgcolor: token.color,
-          color: '#fff',
-          '&:hover': { opacity: 0.9 },
-        }
-      : {
-          bgcolor: `${getTypeColor(token.type)}.main`,
-          color: `${getTypeColor(token.type)}.contrastText`,
-          '&:hover': { opacity: 0.9 },
-        }
-
   return (
-    <>
-      <Paper
-        elevation={0}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          overflow: 'hidden',
-          border: 1,
-          borderColor: 'divider',
-          borderRadius: 1,
-          bgcolor: 'background.paper',
-        }}
-      >
-        <Tooltip title={t('search:simpleSearch.tooltips.logic')}>
-          <Box
-            onClick={(event) => {
-              event.stopPropagation()
-              onCycleLogic(token.id)
-            }}
-            sx={{
-              p: 1,
-              bgcolor: `${getLogicColor(token.logic)}.main`,
-              color: `${getLogicColor(token.logic)}.contrastText`,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              '&:hover': { opacity: 0.9 },
-            }}
-          >
-            {getLogicIcon(token.logic)}
-          </Box>
-        </Tooltip>
-
-        <Tooltip title={token.type === 'rating' ? 'Rating' : t('search:simpleSearch.tooltips.type')}>
-          <Box
-            onClick={handleCycleType}
-            sx={{
-              p: 1,
-              cursor: token.type === 'rating' ? 'default' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              ...typeBoxStyle,
-            }}
-          >
-            {getSourceIcon(token.type)}
-          </Box>
-        </Tooltip>
-
-        <Box
-          onClick={handleClick}
-          sx={{
-            px: 1.5,
-            py: 0.5,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            cursor: token.type === 'auto' ? 'pointer' : 'default',
-            '&:hover': token.type === 'auto' ? { bgcolor: 'action.hover' } : {},
+    <div className="rounded-md border bg-card">
+      <div className="flex items-center overflow-hidden">
+        <button
+          type="button"
+          title={t('search:simpleSearch.tooltips.logic')}
+          onClick={(event) => {
+            event.stopPropagation()
+            onCycleLogic(token.id)
           }}
+          className={`p-2 ${getLogicClass(token.logic)}`}
         >
-          <Typography variant="body2">{token.label}</Typography>
+          {getLogicIcon(token.logic)}
+        </button>
+
+        <button
+          type="button"
+          title={token.type === 'rating' ? 'Rating' : t('search:simpleSearch.tooltips.type')}
+          onClick={handleCycleType}
+          className="p-2 text-white"
+          style={{ backgroundColor: getTypeColor(token.type), cursor: token.type === 'rating' ? 'default' : 'pointer' }}
+        >
+          {getSourceIcon(token.type)}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleClick}
+          className="hover:bg-muted/50 flex items-center gap-1 px-2 py-1"
+          style={{ cursor: token.type === 'auto' ? 'pointer' : 'default' }}
+        >
+          <span className="text-sm">{token.label}</span>
 
           {token.count !== undefined && token.count > 0 && token.type !== 'rating' ? (
-            <Typography variant="caption" color="text.secondary">
-              ({token.count})
-            </Typography>
+            <span className="text-xs text-muted-foreground">({token.count})</span>
           ) : null}
 
           {showScore ? (
-            <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 'bold' }}>
+            <span className="text-xs font-bold text-primary">
               ({minScore}~{token.maxScore === null ? '∞' : token.maxScore ?? maxScore})
-            </Typography>
+            </span>
           ) : null}
-        </Box>
+        </button>
 
-        <IconButton size="small" onClick={() => onRemove(token.id)} sx={{ mr: 0.5 }}>
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </Paper>
+        <Button variant="ghost" size="icon-xs" onClick={() => onRemove(token.id)}>
+          <CloseIcon className="h-3.5 w-3.5" />
+        </Button>
+      </div>
 
-      <Popover
-        open={open}
-        anchorEl={anchorEl}
-        onClose={handleClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-      >
-        <Box sx={{ p: 2, width: 250 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            Confidence Score Range
-          </Typography>
-          <Slider
-            value={[minScore, typeof maxScore === 'number' ? maxScore : 1]}
-            onChange={(_event, newValue) => {
-              const [min, max] = newValue as number[]
-              onUpdate(token.id, { minScore: min, maxScore: max })
-            }}
-            valueLabelDisplay="auto"
-            min={0}
-            max={1}
-            step={0.1}
-            marks
-            size="small"
-          />
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-            <Typography variant="caption">{minScore.toFixed(1)}</Typography>
-            <Typography variant="caption">{typeof maxScore === 'number' ? maxScore.toFixed(1) : '∞'}</Typography>
-          </Box>
-        </Box>
-      </Popover>
-    </>
+      {showScoreEditor ? (
+        <div className="border-t p-2">
+          <p className="mb-2 text-xs font-semibold">Confidence Score Range</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="text-xs text-muted-foreground">
+              <p>Min</p>
+              <input
+                className="border-input mt-1 h-8 w-full rounded border px-2"
+                type="number"
+                min={0}
+                max={1}
+                step={0.1}
+                value={minScore}
+                onChange={(event) => onUpdate(token.id, { minScore: Number(event.target.value) })}
+              />
+            </div>
+            <div className="text-xs text-muted-foreground">
+              <p>Max</p>
+              <input
+                className="border-input mt-1 h-8 w-full rounded border px-2"
+                type="number"
+                min={0}
+                max={1}
+                step={0.1}
+                value={typeof maxScore === 'number' ? maxScore : 1}
+                onChange={(event) => onUpdate(token.id, { maxScore: Number(event.target.value) })}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
   )
 }
 

@@ -1,5 +1,0 @@
-- `features/image-generation/tabs/comfyui-tab.tsx` now replaces direct `LegacyComfyUITab` passthrough with local page logic, so high-impact migration can proceed incrementally while preserving parity.
-- Workflow route containers under `src/features/workflows` currently show no direct `legacy` imports, so remaining migration risk is concentrated in nested components and image-generation residual tabs.
-- Final regression smoke: dev frontend on `:5666` served parity routes (`/`, `/login`, `/settings`, `/image-generation`, `/image-generation/new`) with HTTP 200 responses during this pass.
-- `features/workflows/components/workflow-header.tsx` can drop MUI primitives cleanly by mapping `IconButton -> Button (ghost/icon-sm)`, `Chip -> Badge`, and `Box/Typography -> semantic div/h1/p` with Tailwind utility classes while preserving route and i18n behavior.
-- Additional QA run confirmed the migrated `workflow-header` compiles and typechecks in production build without introducing new diagnostics.

@@ -1,6 +1,5 @@
 import { memo } from 'react'
 import { HashRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
-import CssBaseline from '@mui/material/CssBaseline'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SnackbarProvider } from 'notistack'
 
@@ -69,7 +68,6 @@ export const ParityApp = memo(function ParityApp() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <CssBaseline />
         <SnackbarProvider maxSnack={3} autoHideDuration={3000}>
           <HashRouter>
             <AuthProvider>

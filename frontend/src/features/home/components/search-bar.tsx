@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, Box, Button, Chip, IconButton, Paper, Stack, Tooltip, Typography } from '@mui/material'
 import { FolderPlus, History, Search, Shuffle, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ComplexFilter, ComplexSearchRequest, FilterCondition } from '@comfyui-image-manager/shared'
@@ -8,6 +7,9 @@ import type { PromptSearchResult } from '@/features/image-groups/components/sear
 import GroupCreateEditModal from '@/features/image-groups/components/group-create-edit-modal'
 import { useSearchHistory, type SearchHistoryItem } from '@/hooks/use-search-history'
 import { apiClient } from '@/lib/api/client'
+import { Alert } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 
 interface SearchBarProps {
   onSearch: (request: ComplexSearchRequest, options?: { shuffle?: boolean }) => void
@@ -259,12 +261,8 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
   const hasConditions = simpleSearchText.trim().length > 0 || searchTokens.length > 0
 
   return (
-    <Box sx={{ width: '100%' }}>
-      {validationError ? (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setValidationError(null)}>
-          {validationError}
-        </Alert>
-      ) : null}
+    <div className="w-full">
+      {validationError ? <Alert>{validationError}</Alert> : null}
 
       <SimpleSearchTab
         searchText={simpleSearchText}
@@ -277,140 +275,94 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
         onUpdateToken={handleUpdateToken}
       />
 
-      <Stack direction="column" spacing={1} sx={{ mt: 3 }}>
-        <Stack direction="row" spacing={1} sx={{ width: '100%' }}>
-          <Button
-            variant="contained"
-            size="medium"
-            startIcon={<Search className="h-4 w-4" />}
-            onClick={handleSearch}
-            disabled={loading}
-            sx={{ py: 1, flex: 1 }}
-          >
+      <div className="mt-3 space-y-2">
+        <div className="flex w-full gap-2">
+          <Button type="button" className="flex-1" onClick={handleSearch} disabled={loading}>
+            <Search className="h-4 w-4" />
             {loading ? t('search:searchBar.buttons.searching') : t('search:searchBar.buttons.search')}
           </Button>
 
-          <Tooltip title={t('search:searchBar.tooltips.shuffle', 'Shuffle Results')} arrow>
-            <IconButton
-              onClick={() => setIsShuffle((previous) => !previous)}
-              disabled={loading}
-              color={isShuffle ? 'primary' : 'default'}
-              sx={{
-                border: '1px solid',
-                borderColor: isShuffle ? 'primary.main' : 'divider',
-                bgcolor: isShuffle ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.1)' : 'transparent',
-                '&:hover': {
-                  backgroundColor: isShuffle ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.2)' : 'action.hover',
-                  borderColor: isShuffle ? 'primary.dark' : 'text.secondary',
-                },
-                height: 'auto',
-                borderRadius: 2,
-                aspectRatio: '1/1',
-                p: 1.25,
-              }}
-            >
-              <Shuffle className="h-4 w-4" />
-            </IconButton>
-          </Tooltip>
+          <Button
+            type="button"
+            variant={isShuffle ? 'default' : 'outline'}
+            size="icon"
+            onClick={() => setIsShuffle((previous) => !previous)}
+            disabled={loading}
+            title={t('search:searchBar.tooltips.shuffle', 'Shuffle Results')}
+          >
+            <Shuffle className="h-4 w-4" />
+          </Button>
 
-          <Tooltip title={t('search:searchBar.buttons.reset')} arrow>
-            <span>
-              <IconButton
-                onClick={handleClearSearch}
-                disabled={loading || !hasConditions}
-                color="default"
-                sx={{
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  '&:hover': {
-                    backgroundColor: 'action.hover',
-                  },
-                  height: '100%',
-                  aspectRatio: '1/1',
-                  borderRadius: 1,
-                }}
-              >
-                <X className="h-4 w-4" />
-              </IconButton>
-            </span>
-          </Tooltip>
-        </Stack>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={handleClearSearch}
+            disabled={loading || !hasConditions}
+            title={t('search:searchBar.buttons.reset')}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
 
         <Button
-          variant="outlined"
-          size="medium"
-          startIcon={<FolderPlus className="h-4 w-4" />}
+          type="button"
+          variant="outline"
+          className="w-full"
           onClick={handleCreateGroupWithFilter}
           disabled={loading || !hasConditions}
-          fullWidth
-          sx={{ py: 1 }}
         >
+          <FolderPlus className="h-4 w-4" />
           {t('search:searchBar.buttons.createGroupWithFilter')}
         </Button>
-      </Stack>
+      </div>
 
       {history.length > 0 ? (
-        <Box sx={{ mt: 4 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
-            <Typography variant="subtitle2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="flex items-center gap-1 text-sm text-muted-foreground">
               <History className="h-4 w-4" />
               {t('search:history.title', 'Recent Searches')}
-            </Typography>
-            <Button size="small" onClick={clearHistory} color="inherit" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+            </p>
+            <Button variant="ghost" size="xs" onClick={clearHistory}>
               {t('search:history.clear', 'Clear History')}
             </Button>
-          </Stack>
+          </div>
 
-          <Stack spacing={1}>
+          <div className="space-y-1">
             {history.map((item) => (
-              <Paper
+              <button
                 key={item.id}
-                variant="outlined"
-                sx={{
-                  p: 1.5,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 2,
-                  cursor: 'pointer',
-                  transition: '0.2s',
-                  '&:hover': {
-                    bgcolor: 'action.hover',
-                    borderColor: 'primary.main',
-                  },
-                }}
+                type="button"
+                className="hover:bg-muted/50 w-full rounded-md border p-2 text-left"
                 onClick={() => handleRestoreHistory(item)}
               >
-                <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', overflow: 'hidden' }}>
-                  {item.text ? <Typography variant="body2" fontWeight={500}>{item.text}</Typography> : null}
-                  {item.tokens.map((token) => (
-                    <Chip
-                      key={token.id}
-                      label={token.label}
-                      size="small"
-                      color={token.type === 'positive' ? 'success' : token.type === 'negative' ? 'error' : 'warning'}
-                      variant="outlined"
-                      sx={{ height: 20, fontSize: '0.7rem' }}
-                    />
-                  ))}
-                  {item.tokens.length === 0 && !item.text ? (
-                    <Typography variant="caption" color="text.disabled">{t('search:history.empty', 'Empty Search')}</Typography>
-                  ) : null}
-                </Box>
-
-                <Tooltip title={t('search:history.remove', 'Remove')}>
-                  <IconButton
-                    size="small"
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-1 flex-wrap items-center gap-1 overflow-hidden">
+                    {item.text ? <p className="text-sm font-medium">{item.text}</p> : null}
+                    {item.tokens.map((token) => (
+                      <Badge key={token.id} variant="outline" className="text-[10px]">{token.label}</Badge>
+                    ))}
+                    {item.tokens.length === 0 && !item.text ? (
+                      <span className="text-xs text-muted-foreground">{t('search:history.empty', 'Empty Search')}</span>
+                    ) : null}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
                     onClick={(event) => {
                       event.stopPropagation()
                       removeHistoryItem(item.id)
                     }}
+                    title={t('search:history.remove', 'Remove')}
                   >
                     <X className="h-3.5 w-3.5" />
-                  </IconButton>
-                </Tooltip>
-              </Paper>
+                  </Button>
+                </div>
+              </button>
             ))}
-          </Stack>
+          </div>
 
           <GroupCreateEditModal
             open={groupModalOpen}
@@ -418,9 +370,9 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, loading = false }) => {
             onSuccess={() => setGroupModalOpen(false)}
             initialAutoCollectConditions={groupInitialConditions}
           />
-        </Box>
+        </div>
       ) : null}
-    </Box>
+    </div>
   )
 }
 

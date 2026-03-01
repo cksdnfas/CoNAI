@@ -1,9 +1,19 @@
-import { useCallback, useState, type ReactNode } from 'react'
-import { Box, Collapse, IconButton, Tooltip, Typography } from '@mui/material'
-import { Check as CheckIcon, ContentCopy as CopyIcon, ExpandMore as ExpandMoreIcon } from '@mui/icons-material'
+import { useCallback, useState, type MouseEvent, type ReactNode } from 'react'
+import { Check, ChevronDown, Copy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 const STORAGE_KEY_PREFIX = 'promptCard_collapsed_'
+
+const COLOR_MAP: Record<string, string> = {
+  'primary.main': 'hsl(var(--primary))',
+  'error.main': 'hsl(0 72% 50%)',
+  'warning.main': 'hsl(38 92% 50%)',
+  'success.main': 'hsl(142 76% 36%)',
+}
+
+function resolveColor(color: string) {
+  return COLOR_MAP[color] ?? color
+}
 
 interface PromptCardProps {
   cardId: string
@@ -51,7 +61,7 @@ export default function PromptCard({
 
   const textToCopy = copyText || content || ''
 
-  const handleCopy = async (event: React.MouseEvent) => {
+  const handleCopy = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
     if (!textToCopy) return
 
@@ -66,99 +76,58 @@ export default function PromptCard({
 
   const hasContent = content?.trim() || children
   if (!hasContent) return null
+  const resolvedColor = resolveColor(color)
 
   return (
-    <Box
-      sx={{
-        borderRadius: 1.5,
-        border: '1px solid',
-        borderColor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'),
-        bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.015)'),
-        overflow: 'hidden',
-        flexShrink: 0,
-      }}
-    >
-      <Box
-        onClick={toggleCollapsed}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          px: 1.5,
-          py: 0.75,
-          cursor: 'pointer',
-          userSelect: 'none',
-          borderBottom: collapsed ? 'none' : '1px solid',
-          borderColor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.06)'),
-          bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)'),
-          transition: 'background-color 0.15s',
-          '&:hover': {
-            bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)'),
-          },
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
-          <ExpandMoreIcon
-            sx={{
-              fontSize: '1rem',
-              color: 'text.secondary',
-              transition: 'transform 0.2s',
-              transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
-            }}
+    <div className="overflow-hidden rounded-lg border border-border bg-card/40">
+      <div className={`flex select-none items-center justify-between px-3 py-2 transition-colors hover:bg-muted/40 ${collapsed ? '' : 'border-b border-border'}`}>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-expanded={!collapsed}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          <ChevronDown
+            className={`h-4 w-4 text-muted-foreground transition-transform ${collapsed ? '-rotate-90' : 'rotate-0'}`}
+            aria-hidden="true"
           />
-          {icon ? <Box sx={{ display: 'flex', color, fontSize: '1rem' }}>{icon}</Box> : null}
-          <Typography
-            variant="caption"
-            sx={{
-              fontWeight: 700,
-              color,
-              textTransform: 'uppercase',
-              letterSpacing: '0.04em',
-              fontSize: '0.7rem',
-            }}
+          {icon ? <span className="flex text-base" style={{ color: resolvedColor }}>{icon}</span> : null}
+          <span
+            className="text-[0.7rem] font-bold uppercase tracking-wide"
+            style={{ color: resolvedColor }}
           >
             {title}
-          </Typography>
-        </Box>
+          </span>
+        </button>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <div className="flex items-center gap-2">
           {headerExtra}
           {textToCopy ? (
-            <Tooltip title={copied ? t('promptDisplay.copied', 'Copied!') : t('promptDisplay.copy', 'Copy')}>
-              <IconButton
-                size="small"
-                onClick={handleCopy}
-                sx={{
-                  p: 0.5,
-                  color: copied ? 'success.main' : 'text.secondary',
-                  '&:hover': { color: copied ? 'success.main' : 'text.primary' },
-                }}
-              >
-                {copied ? <CheckIcon sx={{ fontSize: '0.9rem' }} /> : <CopyIcon sx={{ fontSize: '0.9rem' }} />}
-              </IconButton>
-            </Tooltip>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className={`inline-flex items-center justify-center rounded p-1 transition-colors ${copied ? 'text-emerald-600' : 'text-muted-foreground hover:text-foreground'}`}
+              title={copied ? t('promptDisplay.copied', 'Copied!') : t('promptDisplay.copy', 'Copy')}
+              aria-label={copied ? t('promptDisplay.copied', 'Copied!') : t('promptDisplay.copy', 'Copy')}
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            </button>
           ) : null}
-        </Box>
-      </Box>
+        </div>
+      </div>
 
-      <Collapse in={!collapsed}>
-        <Box sx={{ px: 1.5, py: 1.25 }}>
+      {!collapsed ? (
+        <div className="px-3 py-3">
           {children || (
-            <Typography
-              variant="body2"
-              sx={{
-                whiteSpace: 'pre-wrap',
-                lineHeight: 1.6,
-                wordBreak: 'break-word',
-                fontSize: '0.8rem',
-                color: 'text.primary',
-              }}
+            <p
+              className="text-[0.8rem] leading-relaxed text-foreground"
+              style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
             >
               {content}
-            </Typography>
+            </p>
           )}
-        </Box>
-      </Collapse>
-    </Box>
+        </div>
+      ) : null}
+    </div>
   )
 }

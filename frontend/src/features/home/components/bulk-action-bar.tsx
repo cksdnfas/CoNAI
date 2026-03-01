@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Alert, Box, CircularProgress, IconButton, Paper, Tooltip, Typography } from '@mui/material'
-import { Download, FolderOpen, Tags, Trash2, X } from 'lucide-react'
+import { AlertCircle, Download, FolderOpen, Loader2, Tags, Trash2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import type { ImageRecord } from '@/types/image'
 import GroupAssignModal from '@/features/image-groups/components/group-assign-modal'
 import { useBulkActions } from '../hooks/use-bulk-actions'
@@ -29,9 +30,7 @@ export default function BulkActionBar({
 
   const handleSetGroupDialogOpen = (isOpen: boolean) => {
     setGroupDialogOpen(isOpen)
-    if (onModalStateChange) {
-      onModalStateChange(isOpen)
-    }
+    onModalStateChange?.(isOpen)
   }
 
   const handleDelete = async () => {
@@ -53,27 +52,18 @@ export default function BulkActionBar({
 
     const success = await deleteImages(selectedIds)
     if (success) {
-      const deletedHashes = selectedImages
-        .map((img) => img.composite_hash)
-        .filter((hash): hash is string => hash !== null)
-
-      if (onActionComplete) {
-        onActionComplete(deletedHashes)
-      }
+      const deletedHashes = selectedImages.map((img) => img.composite_hash).filter((hash): hash is string => hash !== null)
+      onActionComplete?.(deletedHashes)
     }
   }
 
   const handleDownload = async () => {
-    const compositeHashes = selectedImages
-      .map((img) => img.composite_hash)
-      .filter((hash): hash is string => hash !== null)
+    const compositeHashes = selectedImages.map((img) => img.composite_hash).filter((hash): hash is string => hash !== null)
     await downloadImages(compositeHashes)
   }
 
   const handleGroupAssign = async (groupId: number) => {
-    const compositeHashes = selectedImages
-      .map((img) => img.composite_hash)
-      .filter((hash): hash is string => hash !== null)
+    const compositeHashes = selectedImages.map((img) => img.composite_hash).filter((hash): hash is string => hash !== null)
     const success = await assignToGroup(compositeHashes, groupId)
 
     if (success) {
@@ -83,9 +73,7 @@ export default function BulkActionBar({
   }
 
   const handleBatchTag = async () => {
-    const compositeHashes = selectedImages
-      .map((img) => img.composite_hash)
-      .filter((hash): hash is string => hash !== null)
+    const compositeHashes = selectedImages.map((img) => img.composite_hash).filter((hash): hash is string => hash !== null)
 
     if (compositeHashes.length === 0) return
 
@@ -122,60 +110,35 @@ export default function BulkActionBar({
 
   return (
     <>
-      <Paper
-        className="no-drag-select"
-        elevation={4}
+      <div
+        className="no-drag-select fixed bottom-6 left-1/2 z-[1100] flex min-w-[400px] -translate-x-1/2 items-center gap-2 rounded-lg border bg-background p-2 shadow-lg"
         onMouseDown={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
-        sx={{
-          position: 'fixed',
-          bottom: 24,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          p: 2,
-          zIndex: 1100,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2,
-          minWidth: 400,
-        }}
       >
-        <Typography variant="body1" sx={{ flexGrow: 1 }}>
-          {t('common:bulkActions.selectedCountImages', { count: selectedCount })}
-        </Typography>
+        <p className="flex-1 text-sm">{t('common:bulkActions.selectedCountImages', { count: selectedCount })}</p>
 
-        {loading ? <CircularProgress size={24} /> : null}
+        {loading ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : null}
 
-        <Tooltip title={t('common:bulkActions.tooltips.download')}>
-          <IconButton onClick={handleDownload} disabled={loading} color="primary">
-            <Download className="h-4 w-4" />
-          </IconButton>
-        </Tooltip>
+        <Button type="button" variant="ghost" size="icon-sm" onClick={handleDownload} disabled={loading} title={t('common:bulkActions.tooltips.download')}>
+          <Download className="h-4 w-4" />
+        </Button>
 
-        <Tooltip title={t('common:bulkActions.tooltips.addToGroup')}>
-          <IconButton onClick={() => handleSetGroupDialogOpen(true)} disabled={loading} color="primary">
-            <FolderOpen className="h-4 w-4" />
-          </IconButton>
-        </Tooltip>
+        <Button type="button" variant="ghost" size="icon-sm" onClick={() => handleSetGroupDialogOpen(true)} disabled={loading} title={t('common:bulkActions.tooltips.addToGroup')}>
+          <FolderOpen className="h-4 w-4" />
+        </Button>
 
-        <Tooltip title={t('common:bulkActions.tooltips.batchTag') || '일괄 태그 생성'}>
-          <IconButton onClick={handleBatchTag} disabled={loading} color="primary">
-            <Tags className="h-4 w-4" />
-          </IconButton>
-        </Tooltip>
+        <Button type="button" variant="ghost" size="icon-sm" onClick={handleBatchTag} disabled={loading} title={t('common:bulkActions.tooltips.batchTag') || '일괄 태그 생성'}>
+          <Tags className="h-4 w-4" />
+        </Button>
 
-        <Tooltip title={t('common:bulkActions.tooltips.delete')}>
-          <IconButton onClick={handleDelete} disabled={loading} color="error">
-            <Trash2 className="h-4 w-4" />
-          </IconButton>
-        </Tooltip>
+        <Button type="button" variant="ghost" size="icon-sm" onClick={handleDelete} disabled={loading} title={t('common:bulkActions.tooltips.delete')}>
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
 
-        <Tooltip title={t('common:bulkActions.tooltips.clearSelection')}>
-          <IconButton onClick={onSelectionClear} size="small">
-            <X className="h-4 w-4" />
-          </IconButton>
-        </Tooltip>
-      </Paper>
+        <Button type="button" variant="ghost" size="icon-sm" onClick={onSelectionClear} title={t('common:bulkActions.tooltips.clearSelection')}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
 
       <GroupAssignModal
         open={groupDialogOpen}
@@ -185,27 +148,20 @@ export default function BulkActionBar({
       />
 
       {error ? (
-        <Box
-          sx={{
-            position: 'fixed',
-            top: 24,
-            right: 24,
-            zIndex: 1001,
-            maxWidth: 400,
-          }}
-        >
-          <Alert
-            severity="error"
-            onClose={clearError}
-            action={
-              <IconButton aria-label="close" color="inherit" size="small" onClick={clearError}>
-                <X className="h-3.5 w-3.5" />
-              </IconButton>
-            }
-          >
-            {error}
+        <div className="fixed top-6 right-6 z-[1001] max-w-[400px]">
+          <Alert variant="destructive" className="pr-10">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+            <button
+              type="button"
+              aria-label="close"
+              onClick={clearError}
+              className="absolute top-2 right-2 inline-flex h-6 w-6 items-center justify-center rounded hover:bg-black/10"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </Alert>
-        </Box>
+        </div>
       ) : null}
     </>
   )

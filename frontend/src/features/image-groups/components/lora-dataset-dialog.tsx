@@ -1,15 +1,13 @@
 import React, { useState } from 'react'
-import {
-  Button,
-  Checkbox,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControlLabel,
-  Typography,
-} from '@mui/material'
 import { useTranslation } from 'react-i18next'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface LoraDatasetDialogProps {
   open: boolean
@@ -30,26 +28,28 @@ const LoraDatasetDialog: React.FC<LoraDatasetDialogProps> = ({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{t('imageGroups:download.loraDatasetTitle')}</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          {t('imageGroups:download.loraDatasetDescription')}
-        </Typography>
-        <FormControlLabel
-          control={<Checkbox checked={mergePrompt} onChange={(event) => setMergePrompt(event.target.checked)} />}
-          label={t('imageGroups:download.loraDatasetMergePrompt')}
-        />
-        <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 4 }}>
-          {t('imageGroups:download.loraDatasetMergePromptHelp')}
-        </Typography>
+    <Dialog open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose() : null)}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t('imageGroups:download.loraDatasetTitle')}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">{t('imageGroups:download.loraDatasetDescription')}</p>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={mergePrompt}
+              onChange={(event) => setMergePrompt(event.target.checked)}
+            />
+            <span>{t('imageGroups:download.loraDatasetMergePrompt')}</span>
+          </label>
+          <p className="pl-5 text-xs text-muted-foreground">{t('imageGroups:download.loraDatasetMergePromptHelp')}</p>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>{t('common:buttons.cancel')}</Button>
+          <Button type="button" onClick={handleConfirm}>{t('imageGroups:download.confirmButton')}</Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>{t('common:buttons.cancel')}</Button>
-        <Button onClick={handleConfirm} variant="contained" color="primary">
-          {t('imageGroups:download.confirmButton')}
-        </Button>
-      </DialogActions>
     </Dialog>
   )
 }

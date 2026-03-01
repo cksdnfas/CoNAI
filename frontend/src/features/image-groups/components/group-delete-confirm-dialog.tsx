@@ -1,20 +1,17 @@
 import React from 'react'
-import {
-  Alert,
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  FormControlLabel,
-  Radio,
-  RadioGroup,
-  Typography,
-} from '@mui/material'
 import { useTranslation } from 'react-i18next'
 import type { GroupWithStats } from '@comfyui-image-manager/shared'
+import { Alert } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+
+type DeleteMode = 'orphan' | 'cascade'
 
 interface GroupDeleteConfirmDialogProps {
   open: boolean
@@ -32,7 +29,7 @@ export const GroupDeleteConfirmDialog: React.FC<GroupDeleteConfirmDialogProps> =
   onConfirm,
 }) => {
   const { t } = useTranslation(['imageGroups', 'common'])
-  const [deleteMode, setDeleteMode] = React.useState<'orphan' | 'cascade'>('orphan')
+  const [deleteMode, setDeleteMode] = React.useState<DeleteMode>('orphan')
 
   const hasChildren = childCount > 0
 
@@ -43,72 +40,62 @@ export const GroupDeleteConfirmDialog: React.FC<GroupDeleteConfirmDialogProps> =
   if (!group) return null
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{t('imageGroups:deleteConfirm.title')}</DialogTitle>
-      <DialogContent>
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body1" gutterBottom>
-            {t('imageGroups:deleteConfirm.message', { name: group.name })}
-          </Typography>
-        </Box>
+    <Dialog open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose() : null)}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t('imageGroups:deleteConfirm.title')}</DialogTitle>
+        </DialogHeader>
 
-        <Box sx={{ mb: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
-          <Typography variant="body2" color="text.secondary">
-            {t('imageGroups:deleteConfirm.groupInfo.imageCount', { count: group.image_count })}
-          </Typography>
+        <div className="space-y-3">
+          <p className="text-sm">{t('imageGroups:deleteConfirm.message', { name: group.name })}</p>
+
+          <div className="bg-muted rounded-md p-3 text-sm text-muted-foreground">
+            <p>{t('imageGroups:deleteConfirm.groupInfo.imageCount', { count: group.image_count })}</p>
+            {hasChildren ? <p>{t('imageGroups:deleteConfirm.groupInfo.childCount', { count: childCount })}</p> : null}
+          </div>
+
+          <Alert>{t('imageGroups:deleteConfirm.warning.imageAssociations')}</Alert>
+
           {hasChildren ? (
-            <Typography variant="body2" color="text.secondary">
-              {t('imageGroups:deleteConfirm.groupInfo.childCount', { count: childCount })}
-            </Typography>
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-semibold">{t('imageGroups:deleteConfirm.options.title')}</legend>
+              <label className="flex cursor-pointer items-start gap-2 rounded-md border p-2">
+                <input
+                  type="radio"
+                  name="deleteMode"
+                  value="orphan"
+                  checked={deleteMode === 'orphan'}
+                  onChange={(event) => setDeleteMode(event.target.value as DeleteMode)}
+                />
+                <span>
+                  <span className="block text-sm">{t('imageGroups:deleteConfirm.options.orphan.label')}</span>
+                  <span className="block text-xs text-muted-foreground">{t('imageGroups:deleteConfirm.options.orphan.description')}</span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2 rounded-md border p-2">
+                <input
+                  type="radio"
+                  name="deleteMode"
+                  value="cascade"
+                  checked={deleteMode === 'cascade'}
+                  onChange={(event) => setDeleteMode(event.target.value as DeleteMode)}
+                />
+                <span>
+                  <span className="block text-sm text-destructive">{t('imageGroups:deleteConfirm.options.cascade.label')}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {t('imageGroups:deleteConfirm.options.cascade.description', { count: childCount })}
+                  </span>
+                </span>
+              </label>
+            </fieldset>
           ) : null}
-        </Box>
+        </div>
 
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          {t('imageGroups:deleteConfirm.warning.imageAssociations')}
-        </Alert>
-
-        {hasChildren ? (
-          <FormControl component="fieldset" fullWidth>
-            <Typography variant="subtitle2" gutterBottom>
-              {t('imageGroups:deleteConfirm.options.title')}
-            </Typography>
-            <RadioGroup value={deleteMode} onChange={(event) => setDeleteMode(event.target.value as 'orphan' | 'cascade')}>
-              <FormControlLabel
-                value="orphan"
-                control={<Radio />}
-                label={
-                  <Box>
-                    <Typography variant="body2">{t('imageGroups:deleteConfirm.options.orphan.label')}</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {t('imageGroups:deleteConfirm.options.orphan.description')}
-                    </Typography>
-                  </Box>
-                }
-              />
-              <FormControlLabel
-                value="cascade"
-                control={<Radio color="error" />}
-                label={
-                  <Box>
-                    <Typography variant="body2" color="error">
-                      {t('imageGroups:deleteConfirm.options.cascade.label')}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {t('imageGroups:deleteConfirm.options.cascade.description', { count: childCount })}
-                    </Typography>
-                  </Box>
-                }
-              />
-            </RadioGroup>
-          </FormControl>
-        ) : null}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>{t('common:cancel')}</Button>
+          <Button type="button" variant="destructive" onClick={handleConfirm}>{t('common:delete')}</Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>{t('common:cancel')}</Button>
-        <Button onClick={handleConfirm} color="error" variant="contained">
-          {t('common:delete')}
-        </Button>
-      </DialogActions>
     </Dialog>
   )
 }

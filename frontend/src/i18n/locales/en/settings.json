@@ -405,6 +405,19 @@
     "test": {
       "title": "Test",
       "description": "Test current settings with a specific image.",
+      "searchType": "Search Type",
+      "searchButton": "Run Search",
+      "searching": "Searching...",
+      "searchFailed": "Search failed",
+      "queryImage": "Query Image",
+      "resultImage": "Result Image",
+      "results": "Search Results: {{count}}",
+      "modeLabel": "Mode: {{mode}}",
+      "matchLabel": "Match: {{type}}",
+      "similarity": "Similarity: {{percent}}%",
+      "colorSimilarity": "Color Similarity: {{percent}}%",
+      "noResults": "No similar images found.",
+      "noPreview": "No preview",
       "imageHash": "Image Hash",
       "placeholderHash": "e.g., abc123def456...",
       "compositeHash": "Image Hash",
@@ -413,6 +426,28 @@
       "processing": "Processing...",
       "result": "Tagging Result:",
       "failed": "Test failed",
+      "validation": {
+        "requiredHash": "Please enter an image hash.",
+        "invalidHashFormat": "Invalid hash format. Expected 48 hexadecimal characters."
+      },
+      "types": {
+        "duplicates": "Duplicates",
+        "similar": "Similar",
+        "color": "Color"
+      },
+      "matchTypes": {
+        "exact": "Exact",
+        "nearDuplicate": "Near Duplicate",
+        "similar": "Similar",
+        "colorSimilar": "Color Similar"
+      },
+      "imageDetails": {
+        "hash": "Hash:",
+        "id": "ID:",
+        "filename": "File:",
+        "size": "Size:",
+        "aiTool": "AI Tool:"
+      },
       "hashStatus": "Hash Status",
       "rebuild": {
         "button": "Rebuild {{count}} Missing Hashes",
@@ -436,6 +471,9 @@
       "deselectAll": "Deselect All",
       "keepOne": "Keep 1",
       "keepOneDelete": "Keep first image and select rest for deletion",
+      "selectForDelete": "Select for delete (ID: {{id}})",
+      "unselectable": "Unselectable image",
+      "imageFallback": "Duplicate image {{index}}",
       "deleteSelected": "Delete {{count}} Selected",
       "deleteConfirmTitle": "Confirm Image Deletion",
       "deleteConfirmMessage": "Are you sure you want to delete {{count}} selected images?",
@@ -446,6 +484,41 @@
       "deleteSuccess": "{{count}} images deleted successfully.",
       "deletePartialSuccess": "{{success}} succeeded, {{failed}} failed",
       "deleteFailed": "Failed to delete images."
+    },
+    "thresholds": {
+      "title": "Threshold Settings",
+      "description": "Adjust sensitivity for similarity search.",
+      "duplicate": {
+        "label": "Duplicate threshold: {{value}}",
+        "description": "Lower is stricter (0=exact, 5=near-duplicate, 10=slightly different)",
+        "strict": "0 (Strict)",
+        "recommended": "5 (Recommended)",
+        "lenient": "10 (Lenient)"
+      },
+      "similar": {
+        "label": "Similar threshold: {{value}}",
+        "description": "Lower is stricter, higher finds more similar images",
+        "strict": "5 (Strict)",
+        "recommended": "15 (Recommended)",
+        "lenient": "25 (Lenient)"
+      },
+      "color": {
+        "label": "Color similarity threshold: {{value}}%",
+        "description": "Color similarity criteria (higher is stricter)",
+        "min": "70%",
+        "recommended": "85% (Recommended)",
+        "max": "100%"
+      },
+      "searchLimit": {
+        "label": "Search result limit",
+        "options": {
+          "10": "10",
+          "20": "20 (Recommended)",
+          "50": "50",
+          "100": "100"
+        }
+      },
+      "localStorageNote": "Settings are saved locally and applied in real time during search."
     }
   },
   "auth": {
@@ -713,6 +786,7 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "create": "Create",
+    "loading": "Loading...",
     "enabled": "Enabled",
     "disabled": "Disabled"
   },

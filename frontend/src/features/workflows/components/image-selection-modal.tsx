@@ -1,29 +1,25 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardActionArea,
-  CardMedia,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Grid,
-  Tab,
-  Tabs,
-  TextField,
-  Typography,
-} from '@mui/material'
-import {
-  CloudUpload as UploadIcon,
-  Folder as FolderIcon,
-  History as HistoryIcon,
-  Search as SearchIcon,
-  Tag as TagIcon,
-} from '@mui/icons-material'
+import { Alert,
+Box,
+Button,
+Card,
+CardActionArea,
+CardMedia,
+CircularProgress,
+Dialog,
+DialogActions,
+DialogContent,
+DialogTitle,
+Grid,
+Tab,
+Tabs,
+TextField,
+Typography, } from '@/features/workflows/utils/workflow-ui'
+import { CloudUpload as UploadIcon,
+Folder as FolderIcon,
+History as HistoryIcon,
+Search as SearchIcon,
+Tag as TagIcon, } from '@/features/workflows/utils/workflow-icons'
 import { useTranslation } from 'react-i18next'
 import { workflowApi } from '@/services/workflow-api'
 import { ensureAbsoluteUrl } from '@/utils/backend'

@@ -34,7 +34,18 @@
     "start:frontend": "cd frontend && npm run preview",
     "start:backend": "cd backend && npm run start",
     "clean": "rm -rf shared/dist frontend/dist backend/dist frontend/node_modules backend/node_modules shared/node_modules node_modules build-output",
-    "db:reset": "rm -f database/*.db && cd backend && npm run db:migrate"
+    "db:reset": "rm -f database/*.db && cd backend && npm run db:migrate",
+    "verify:no-banned-imports": "node scripts/verify-no-banned-imports.mjs --mode=phase1",
+    "verify:no-banned-imports:phase2": "node scripts/verify-no-banned-imports.mjs --mode=phase2",
+    "verify:no-ui-signatures:active": "node scripts/verify-no-ui-signatures.mjs --scope=active",
+    "verify:no-ui-signatures:generated": "node scripts/verify-no-ui-signatures.mjs --scope=generated",
+    "verify:no-ui-signatures:full": "node scripts/verify-no-ui-signatures.mjs --scope=full",
+    "verify:no-mui-deps": "node scripts/verify-no-mui-deps.mjs --mode=warn",
+    "verify:no-mui-deps:strict": "node scripts/verify-no-mui-deps.mjs --mode=strict",
+    "verify:policy:active-source": "node scripts/verify-repository-audit-policy.mjs --category=active-source",
+    "verify:policy:generated-artifact": "node scripts/verify-repository-audit-policy.mjs --category=generated-artifact",
+    "verify:migration": "npm run verify:policy:active-source && npm run verify:no-banned-imports:phase2 && npm run verify:no-ui-signatures:active && npm run verify:no-mui-deps:strict",
+    "verify:migration:full": "npm run verify:migration && npm run verify:policy:generated-artifact && npm run verify:no-ui-signatures:generated && npm run verify:no-ui-signatures:full"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

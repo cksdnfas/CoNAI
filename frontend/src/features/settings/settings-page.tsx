@@ -6,13 +6,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useTranslation } from 'react-i18next'
 import { GeneralSettingsPanel } from '@/features/settings/components/general-settings-panel'
 import { TaggerSettingsPanel } from '@/features/settings/components/tagger-settings-panel'
-import LegacyRatingScoreSettings from '@/bridges/settings/rating-score-settings'
-import LegacySimilaritySettings from '@/bridges/settings/similarity-settings'
-import LegacyFolderSettings from '@/bridges/settings/folder-settings'
-import { AuthSettings as LegacyAuthSettings } from '@/bridges/settings/auth-settings'
-import { ExternalApiSettings as LegacyExternalApiSettings } from '@/bridges/settings/external-api-settings'
-import { CivitaiSettings as LegacyCivitaiSettings } from '@/bridges/settings/civitai-settings'
-import { PromptExplorer as LegacyPromptExplorer } from '@/bridges/settings/prompt-explorer'
+import LegacyRatingScoreSettings from '@/features/settings/bridges/rating-score-settings'
+import LegacySimilaritySettings from '@/features/settings/bridges/similarity-settings'
+import LegacyFolderSettings from '@/features/settings/bridges/folder-settings'
+import { AuthSettings as LegacyAuthSettings } from '@/features/settings/bridges/auth-settings'
+import { ExternalApiSettings as LegacyExternalApiSettings } from '@/features/settings/bridges/external-api-settings'
+import { CivitaiSettings as LegacyCivitaiSettings } from '@/features/settings/bridges/civitai-settings'
+import { PromptExplorer as LegacyPromptExplorer } from '@/features/settings/bridges/prompt-explorer'
 import {
   settingsApi as legacySettingsApi,
   type AppSettings as LegacyAppSettings,
@@ -212,18 +212,22 @@ export function SettingsPage() {
             </TabsContent>
 
       <TabsContent value="prompts">
-              {renderSectionCard('prompts', <div className="w-full">
-                <Tabs value={promptTabValue} onValueChange={setPromptTabValue}>
-                  <TabsList className="mb-2 h-auto w-full justify-start gap-1 p-1">
-                    <TabsTrigger value="positive">{tPrompt('tabs.positive')}</TabsTrigger>
-                    <TabsTrigger value="negative">{tPrompt('tabs.negative')}</TabsTrigger>
-                    <TabsTrigger value="auto">{tPrompt('tabs.auto')}</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="positive"><LegacyPromptExplorer type="positive" /></TabsContent>
-                  <TabsContent value="negative"><LegacyPromptExplorer type="negative" /></TabsContent>
-                  <TabsContent value="auto"><LegacyPromptExplorer type="auto" /></TabsContent>
-                </Tabs>
-              </div>)}
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="w-full">
+                    <Tabs value={promptTabValue} onValueChange={setPromptTabValue}>
+                      <TabsList className="mb-2 h-auto w-full justify-start gap-1 p-1">
+                        <TabsTrigger value="positive">{tPrompt('tabs.positive')}</TabsTrigger>
+                        <TabsTrigger value="negative">{tPrompt('tabs.negative')}</TabsTrigger>
+                        <TabsTrigger value="auto">{tPrompt('tabs.auto')}</TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="positive"><LegacyPromptExplorer type="positive" /></TabsContent>
+                      <TabsContent value="negative"><LegacyPromptExplorer type="negative" /></TabsContent>
+                      <TabsContent value="auto"><LegacyPromptExplorer type="auto" /></TabsContent>
+                    </Tabs>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
       <TabsContent value="rating">

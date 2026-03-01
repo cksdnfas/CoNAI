@@ -1,19 +1,21 @@
 import { useMemo } from 'react'
-import { Alert, Box, Button, CircularProgress, Grid, LinearProgress, Paper, Typography } from '@mui/material'
-import { Sparkles } from 'lucide-react'
+import { Loader2, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import NAIAnlasDisplay from '@/bridges/image-generation/nai-anlas-display'
-import NAIBasicSettings from '@/bridges/image-generation/nai-basic-settings'
-import NAISamplingSettings from '@/bridges/image-generation/nai-sampling-settings'
-import NAIOutputSettings from '@/bridges/image-generation/nai-output-settings'
-import NAIGroupSelector from '@/bridges/image-generation/nai-group-selector'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import NAIAnlasDisplay from '@/features/image-generation/bridges/nai-anlas-display'
+import NAIBasicSettings from '@/features/image-generation/bridges/nai-basic-settings'
+import NAISamplingSettings from '@/features/image-generation/bridges/nai-sampling-settings'
+import NAIOutputSettings from '@/features/image-generation/bridges/nai-output-settings'
+import NAIGroupSelector from '@/features/image-generation/bridges/nai-group-selector'
 import RepeatControls from '@/features/workflows/components/repeat-controls'
 import { GenerationHistoryList } from '@/features/workflows/components/generation-history-list'
 import GroupAssignModal from '@/features/image-groups/components/group-assign-modal'
 import { useNAIParams } from '../hooks/use-nai-params'
 import { useNAIGroupSelection } from '../hooks/use-nai-group-selection'
-import { useRepeatExecution } from '@/bridges/image-generation/use-repeat-execution'
-import { useNAIGeneration } from '@/bridges/image-generation/use-nai-generation'
+import { useRepeatExecution } from '@/features/image-generation/bridges/use-repeat-execution'
+import { useNAIGeneration } from '@/features/image-generation/bridges/use-nai-generation'
 import { RESOLUTIONS } from '../constants/nai.constants'
 
 interface NAIImageGeneratorV2Props {
@@ -110,46 +112,50 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
   }
 
   return (
-    <Box>
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h6">{t('imageGeneration:nai.generate.title')}</Typography>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">{t('imageGeneration:nai.generate.title')}</h2>
+        <div className="flex items-center gap-2">
           <NAIAnlasDisplay token={token} />
-          <Button variant="outlined" onClick={onLogout}>
+          <Button variant="outline" onClick={onLogout}>
             {t('imageGeneration:nai.generate.logout')}
           </Button>
-        </Box>
-      </Box>
+        </div>
+      </div>
 
-      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+      {error ? (
+        <Alert variant="destructive">
+          <AlertTitle>Generation failed</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
 
-      <Grid container spacing={3}>
-        <Grid size={{ xs: 12, lg: 4 }}>
-          <form onSubmit={handleGenerate}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <Button
-                fullWidth
-                type="submit"
-                variant="contained"
-                size="large"
-                disabled={generating || !params.prompt || (Boolean(userData) && !costInfo.canGenerate)}
-                startIcon={generating ? <CircularProgress size={20} /> : <Sparkles className="h-4 w-4" />}
-              >
-                {costInfo.buttonText}
-              </Button>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+        <div>
+          <form onSubmit={handleGenerate} className="space-y-4">
+            <Button
+              className="w-full"
+              type="submit"
+              size="lg"
+              disabled={generating || !params.prompt || (Boolean(userData) && !costInfo.canGenerate)}
+            >
+              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {costInfo.buttonText}
+            </Button>
 
-              <NAIBasicSettings params={params} onChange={setParams} disabled={generating} />
-              <NAISamplingSettings params={params} onChange={setParams} disabled={generating} />
-              <NAIOutputSettings params={params} onChange={setParams} disabled={generating} />
+            <NAIBasicSettings params={params} onChange={setParams} disabled={generating} />
+            <NAISamplingSettings params={params} onChange={setParams} disabled={generating} />
+            <NAIOutputSettings params={params} onChange={setParams} disabled={generating} />
 
-              <NAIGroupSelector
-                selectedGroup={selectedGroup}
-                onOpenModal={() => setGroupModalOpen(true)}
-                onRemoveGroup={handleRemoveGroup}
-                disabled={generating}
-              />
+            <NAIGroupSelector
+              selectedGroup={selectedGroup}
+              onOpenModal={() => setGroupModalOpen(true)}
+              onRemoveGroup={handleRemoveGroup}
+              disabled={generating}
+            />
 
-              <Paper sx={{ p: 3 }}>
+            <Card className="py-0">
+              <CardContent className="p-4">
                 <RepeatControls
                   config={repeatConfig}
                   state={repeatState}
@@ -157,27 +163,31 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
                   onStop={stopRepeat}
                   namespace="imageGeneration"
                 />
-              </Paper>
+              </CardContent>
+            </Card>
 
-              <Button
-                fullWidth
-                type="submit"
-                variant="contained"
-                size="large"
-                disabled={generating || !params.prompt || (Boolean(userData) && !costInfo.canGenerate)}
-                startIcon={generating ? <CircularProgress size={20} /> : <Sparkles className="h-4 w-4" />}
-              >
-                {generating ? '생성 중...' : costInfo.buttonText}
-              </Button>
-              {generating ? <LinearProgress sx={{ mt: 1 }} /> : null}
-            </Box>
+            <Button
+              className="w-full"
+              type="submit"
+              size="lg"
+              disabled={generating || !params.prompt || (Boolean(userData) && !costInfo.canGenerate)}
+            >
+              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {generating ? '생성 중...' : costInfo.buttonText}
+            </Button>
+
+            {generating ? (
+              <div className="bg-muted h-1 w-full overflow-hidden rounded-full">
+                <div className="bg-primary h-full w-1/3 animate-pulse" />
+              </div>
+            ) : null}
           </form>
-        </Grid>
+        </div>
 
-        <Grid size={{ xs: 12, lg: 8 }}>
+        <div>
           <GenerationHistoryList serviceType="novelai" refreshKey={historyRefreshKey} />
-        </Grid>
-      </Grid>
+        </div>
+      </div>
 
       <GroupAssignModal
         open={groupModalOpen}
@@ -185,6 +195,6 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
         selectedImageCount={1}
         onAssign={handleGroupSelect}
       />
-    </Box>
+    </div>
   )
 }

@@ -1,12 +1,10 @@
 import { type ReactElement } from 'react'
-import {
-  Category as CategoryIcon,
-  Folder as FolderIcon,
-  Image as ImageIcon,
-  Save as SaveIcon,
-  TextFields as TextIcon,
-  Tune as TuneIcon,
-} from '@mui/icons-material'
+import { Category as CategoryIcon,
+Folder as FolderIcon,
+Image as ImageIcon,
+Save as SaveIcon,
+TextFields as TextIcon,
+Tune as TuneIcon, } from '@/features/workflows/utils/workflow-icons'
 
 export function getNodeColor(classType: string): string {
   if (classType.includes('Loader') || classType.includes('Load')) return '#4CAF50'

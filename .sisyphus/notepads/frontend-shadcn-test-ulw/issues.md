@@ -1,5 +1,0 @@
-- Risk: `src/legacy` coupling remains broad, so partial migrations can regress parity unless each slice is verified with route-level checks after build/test.
-- Plan-specified verification commands `npm run test -- src/features/image-generation` and `npm run test -- src/features/workflows` currently fail because `frontend-shadcn-test/package.json` does not define a `test` script.
-- `npm run dev:frontend:shadcn` returned port conflict (`5666 already in use`) during regression pass, indicating an existing running dev instance; route checks were run against the active instance.
-- Styling parity caveat: replacing MUI `Typography` variants with Tailwind semantic tags (`h1`/`p`) may show minor font-size/line-height differences, but layout and interaction behavior remain intact for this header slice.
-- Browser QA for `/#/image-generation/1/generate` was inconclusive for header interactions because backend returned 500 errors (`/api/auth/status`, `/api/workflows/1`, `/api/comfyui-servers`), so the page rendered "워크플로우를 찾을 수 없습니다" instead of the header under test.
