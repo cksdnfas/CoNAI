@@ -2,9 +2,6 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Alert,
 Box,
 Button,
-Card,
-CardActionArea,
-CardMedia,
 CircularProgress,
 Dialog,
 DialogActions,
@@ -23,6 +20,7 @@ Tag as TagIcon, } from '@/features/workflows/utils/workflow-icons'
 import { useTranslation } from 'react-i18next'
 import { workflowApi } from '@/services/workflow-api'
 import { ensureAbsoluteUrl } from '@/utils/backend'
+import { ThumbnailCard } from '@/features/image-groups/components/thumbnail-card'
 
 interface ImageSelectionModalProps {
   open: boolean
@@ -220,22 +218,12 @@ export default function ImageSelectionModal({ open, onClose, onSelect, fieldLabe
             <Grid container spacing={2}>
               {canvasImages.map((image) => (
                 <Grid size={{ xs: 6, sm: 4, md: 3 }} key={`${image.path}-${image.filename}`}>
-                  <Card>
-                    <CardActionArea onClick={() => handleSelectImage(image.path)}>
-                      <CardMedia
-                        component="img"
-                        height="140"
-                        image={ensureAbsoluteUrl(image.path)}
-                        alt={image.filename}
-                        sx={{ objectFit: 'cover' }}
-                      />
-                      <Box sx={{ p: 1 }}>
-                        <Typography variant="caption" noWrap>
-                          {image.filename}
-                        </Typography>
-                      </Box>
-                    </CardActionArea>
-                  </Card>
+                  <ThumbnailCard
+                    ariaLabel={image.filename}
+                    onClick={() => handleSelectImage(image.path)}
+                    title={image.filename}
+                    preview={<img src={ensureAbsoluteUrl(image.path)} alt={image.filename} className="h-full w-full object-cover" />}
+                  />
                 </Grid>
               ))}
             </Grid>
