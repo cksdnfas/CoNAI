@@ -19,7 +19,6 @@ interface ImageListProps {
   gridColumns?: number
   selectable?: boolean
   selection?: ImageListSelectionConfig
-  onSearchClick?: () => void
   adapter: ImageListAdapterPolicy
 }
 
@@ -135,14 +134,9 @@ export default function ImageList({
   gridColumns = 3,
   selectable = false,
   selection,
-  onSearchClick,
   adapter,
 }: ImageListProps) {
-  const { mode, infiniteScroll, pagination, total, showCollectionType, currentGroupId, contextId, isModal } = adapter
-  void showCollectionType
-  void currentGroupId
-  void contextId
-  void isModal
+  const { mode, infiniteScroll, pagination, total, capabilities } = adapter
 
   const markerColumns = Math.min(10, Math.max(1, Math.floor(gridColumns)))
   const backendOrigin = getBackendOrigin()
@@ -250,7 +244,16 @@ export default function ImageList({
       <div className="space-y-3" data-testid="image-list-root" data-layout-mode={viewMode} data-columns={markerColumns}>
         <div className="rounded-md border p-6 text-center">
           <p className="text-sm text-muted-foreground">No images available.</p>
-          {onSearchClick ? <Button type="button" variant="outline" className="mt-3" onClick={onSearchClick}>Open Search</Button> : null}
+          {capabilities?.emptyStateAction ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3"
+              onClick={capabilities.emptyStateAction.onClick}
+            >
+              {capabilities.emptyStateAction.label ?? 'Open Search'}
+            </Button>
+          ) : null}
         </div>
       </div>
     )

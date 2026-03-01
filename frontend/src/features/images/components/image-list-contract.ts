@@ -1,7 +1,5 @@
 import type { ImageRecord } from '@/types/image'
 
-export type ImageListContextId = 'home' | 'search' | 'generation_history' | 'group_modal'
-
 export interface ImageListPaginationConfig {
   currentPage: number
   totalPages: number
@@ -23,11 +21,13 @@ export interface ImageListSelectionConfig {
 }
 
 interface ImageListAdapterPolicyBase {
-  contextId: ImageListContextId
   total?: number
-  showCollectionType?: boolean
-  currentGroupId?: number
-  isModal?: boolean
+  capabilities?: {
+    emptyStateAction?: {
+      label?: string
+      onClick: () => void
+    }
+  }
 }
 
 export type ImageListAdapterPolicy =
@@ -42,14 +42,14 @@ export type ImageListAdapterPolicy =
       infiniteScroll?: undefined
     })
 
-export function createInfiniteImageListAdapter(policy: Omit<ImageListAdapterPolicyBase, 'contextId'> & { contextId: ImageListContextId; infiniteScroll: ImageListInfiniteScrollConfig }): ImageListAdapterPolicy {
+export function createInfiniteImageListAdapter(policy: ImageListAdapterPolicyBase & { infiniteScroll: ImageListInfiniteScrollConfig }): ImageListAdapterPolicy {
   return {
     ...policy,
     mode: 'infinite',
   }
 }
 
-export function createPaginationImageListAdapter(policy: Omit<ImageListAdapterPolicyBase, 'contextId'> & { contextId: ImageListContextId; pagination: ImageListPaginationConfig }): ImageListAdapterPolicy {
+export function createPaginationImageListAdapter(policy: ImageListAdapterPolicyBase & { pagination: ImageListPaginationConfig }): ImageListAdapterPolicy {
   return {
     ...policy,
     mode: 'pagination',

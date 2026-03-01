@@ -253,7 +253,6 @@ export function HomePage() {
   const imageListAdapter = isSearchMode
     ? activeMode === 'pagination'
       ? createPaginationImageListAdapter({
-          contextId: 'search',
           pagination: {
             currentPage: search.currentPage,
             totalPages: search.totalPages,
@@ -262,18 +261,28 @@ export function HomePage() {
             onPageSizeChange: (size: number) => search.changePageSize(size as PageSize),
           },
           total: search.total,
+          capabilities: {
+            emptyStateAction: {
+              label: 'Open Search',
+              onClick: handleOpenSearch,
+            },
+          },
         })
       : createInfiniteImageListAdapter({
-          contextId: 'search',
           infiniteScroll: {
             hasMore: search.hasMore,
             loadMore: search.loadMore,
           },
           total: search.total,
+          capabilities: {
+            emptyStateAction: {
+              label: 'Open Search',
+              onClick: handleOpenSearch,
+            },
+          },
         })
     : activeMode === 'pagination'
       ? createPaginationImageListAdapter({
-          contextId: 'home',
           pagination: {
             currentPage: paginatedImages.page,
             totalPages: paginatedImages.totalPages,
@@ -282,14 +291,25 @@ export function HomePage() {
             onPageSizeChange: paginatedImages.setPageSize,
           },
           total: paginatedImages.total,
+          capabilities: {
+            emptyStateAction: {
+              label: 'Open Search',
+              onClick: handleOpenSearch,
+            },
+          },
         })
       : createInfiniteImageListAdapter({
-          contextId: 'home',
           infiniteScroll: {
             hasMore: infiniteImages.hasMore,
             loadMore: infiniteImages.loadMore,
           },
           total: infiniteImages.images.length,
+          capabilities: {
+            emptyStateAction: {
+              label: 'Open Search',
+              onClick: handleOpenSearch,
+            },
+          },
         })
 
   return (
@@ -343,7 +363,6 @@ export function HomePage() {
           selectedIds,
           onSelectionChange: handleSelectionChange,
         }}
-        onSearchClick={handleOpenSearch}
         adapter={imageListAdapter}
       />
 

@@ -63,7 +63,6 @@ function makeImage(overrides: Partial<ImageRecord> = {}): ImageRecord {
 
 describe('image-list selection', () => {
   const adapter = createInfiniteImageListAdapter({
-    contextId: 'generation_history',
     infiniteScroll: {
       hasMore: false,
       loadMore: () => undefined,

@@ -204,15 +204,10 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   const canAssign = selectedImages.length > 0
   const imageListAdapter = activeMode === 'infinite'
     ? createInfiniteImageListAdapter({
-        contextId: 'group_modal',
         infiniteScroll: infiniteScroll ?? { hasMore: false, loadMore: () => undefined },
         total,
-        showCollectionType: true,
-        currentGroupId: currentGroup?.id,
-        isModal: true,
       })
     : createPaginationImageListAdapter({
-        contextId: 'group_modal',
         pagination: {
           currentPage,
           totalPages,
@@ -221,9 +216,6 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
           onPageSizeChange: (size: number) => onPageSizeChange?.(size as PageSize),
         },
         total,
-        showCollectionType: true,
-        currentGroupId: currentGroup?.id,
-        isModal: true,
       })
 
   const handleRemoveClick = () => {

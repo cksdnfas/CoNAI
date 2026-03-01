@@ -85,19 +85,24 @@ describe('image-list-contract', () => {
   })
 
   it('builds explicit mode-specific adapters', () => {
+    const openSearch = () => undefined
     const infiniteAdapter = createInfiniteImageListAdapter({
-      contextId: 'home',
       infiniteScroll: {
         hasMore: true,
         loadMore: () => undefined,
       },
       total: 12,
+      capabilities: {
+        emptyStateAction: {
+          onClick: openSearch,
+        },
+      },
     })
     expect(infiniteAdapter.mode).toBe('infinite')
     expect(infiniteAdapter.total).toBe(12)
+    expect(infiniteAdapter.capabilities?.emptyStateAction?.onClick).toBe(openSearch)
 
     const paginationAdapter = createPaginationImageListAdapter({
-      contextId: 'search',
       pagination: {
         currentPage: 2,
         totalPages: 10,

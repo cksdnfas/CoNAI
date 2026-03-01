@@ -126,7 +126,6 @@ export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: G
 
   const failedCount = records.filter((record) => record.generation_status === 'failed').length
   const imageListAdapter = createInfiniteImageListAdapter({
-    contextId: 'generation_history',
     infiniteScroll: { hasMore, loadMore: loadMoreData },
     total: imageRecords.length,
   })
@@ -165,7 +164,6 @@ export function GenerationHistoryList({ serviceType, workflowId, refreshKey }: G
             onStableSelectionChange: setSelectedStableKeys,
           }}
           adapter={imageListAdapter}
-          onSearchClick={undefined}
         />
       </div>
 
