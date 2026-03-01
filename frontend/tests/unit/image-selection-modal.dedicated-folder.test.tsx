@@ -135,4 +135,31 @@ describe('ImageSelectionModal dedicated-folder tab', () => {
       screen.getByText((content) => content.includes('/canvas/empty-folder') && content.includes('workflows:imageSelection.addImagesPrompt')),
     ).toBeInTheDocument()
   })
+
+  it('ignores malformed dedicated-folder entries and renders only valid selectable cards', async () => {
+    getCanvasImagesMock.mockResolvedValue({
+      data: [
+        { path: '/canvas/valid-image.png', filename: 'valid-image.png' },
+        { path: '/canvas/missing-filename.png' },
+        { filename: 'missing-path.png' },
+        null,
+      ],
+      canvasPath: '/canvas',
+    })
+
+    render(
+      <ImageSelectionModal
+        open={true}
+        onClose={vi.fn()}
+        onSelect={vi.fn()}
+        fieldLabel="Workflow image"
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'workflows:imageSelection.tabs.dedicatedFolder' }))
+
+    expect(await screen.findByRole('button', { name: 'valid-image.png' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'missing-filename.png' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'missing-path.png' })).toBeNull()
+  })
 })

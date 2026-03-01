@@ -303,6 +303,41 @@ describe('SimilaritySettings bridge', () => {
     expect(screen.getByTestId('thumbnail-card-preview')).toBeInTheDocument()
   })
 
+  it('keeps similarity cards readable when query/result previews are missing', async () => {
+    const validHash = 'd'.repeat(48)
+    getSimilarityQueryImageMock.mockResolvedValue({
+      composite_hash: validHash,
+      original_file_path: 'query-without-preview.png',
+      width: 640,
+      height: 480,
+      thumbnail_url: null,
+    })
+    testSimilaritySearchMock.mockResolvedValue([
+      {
+        image: {
+          file_id: 901,
+          composite_hash: null,
+          original_file_path: 'result-without-preview.png',
+          thumbnail_url: null,
+        },
+        similarity: 81,
+        matchType: 'similar',
+        colorSimilarity: 70,
+      },
+    ])
+
+    render(<SimilaritySettings />)
+
+    await screen.findByRole('switch')
+    fireEvent.change(screen.getByPlaceholderText('e.g., abc123def456...'), { target: { value: validHash } })
+    fireEvent.click(screen.getByRole('button', { name: 'Run Search' }))
+
+    const noPreviewLabels = await screen.findAllByText('No preview')
+    expect(noPreviewLabels.length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('query-without-preview.png')).toBeInTheDocument()
+    expect(screen.getByText('result-without-preview.png')).toBeInTheDocument()
+  })
+
   it('renders similarity controls and updates auto-generate setting on success', async () => {
     const deferred = createDeferred<boolean>()
     updateAutoGenerateHashOnUploadMock.mockReturnValue(deferred.promise)

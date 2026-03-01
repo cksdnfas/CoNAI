@@ -20,3 +20,5 @@
 - #T10-CLOSURE|- 2026-03-01T14:45:12Z - Closure rerun confirms adapter-driven ImageList core remains free of contextId behavioral branches ( grep no matches) with full frontend test/build pass evidence refreshed in task-10 artifacts.
 
 - #T10-CLOSURE|- 2026-03-01T14:45:18Z - Closure rerun confirms adapter-driven ImageList core has no contextId behavioral branch pattern and full frontend test/build evidence was refreshed in task-10 artifacts.
+- #T14|- 2026-03-02T00:38:00Z - Added parity regression matrix across Home, Generation History, Group Assign modal, Similarity cards, and Folder Selection modal by combining adapter-level unit tests with Playwright route-level smoke assertions.
+- #T14|- 2026-03-02T00:38:00Z - Keyboard/focus regression is now explicitly guarded in both unit (`HomePage` Escape-to-focus-return on layout FAB) and Playwright (`#/` layout panel Escape close + focus restore) tests.
