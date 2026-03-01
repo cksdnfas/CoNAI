@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import PromptDisplay, { type NaiCharacterPrompt } from '@/components/prompt-display'
 import { settingsApi } from '@/services/settings-api'
+import { buildPreviewMediaUrl } from '@/features/images/components/image-preview-url'
 import {
   type ImageListAdapterPolicy,
   type ImageListSelectionConfig,
@@ -41,21 +42,6 @@ function getImageTitle(image: ImageRecord, index: number): string {
     return image.composite_hash
   }
   return `Image ${index + 1}`
-}
-
-function getPreviewMediaUrl(image: ImageRecord, backendOrigin: string): string {
-  const originalPath = image.original_file_path || ''
-  const isProcessing = image.is_processing || !image.composite_hash
-
-  if (isProcessing) {
-    return `${backendOrigin}/api/images/by-path/${encodeURIComponent(originalPath)}`
-  }
-
-  if (image.file_type === 'video' || image.file_type === 'animated') {
-    return `${backendOrigin}/api/images/${image.composite_hash}/file`
-  }
-
-  return `${backendOrigin}/api/images/${image.composite_hash}/thumbnail`
 }
 
 function isVideoLike(image: ImageRecord): boolean {
@@ -261,7 +247,7 @@ export default function ImageList({
           const stableIdentity = getImageStableIdentity(image, index)
           const numericId = stableIdentity.numericId
           const isChecked = Boolean(selection && numericId !== null && selection.selectedIds.includes(numericId))
-          const previewUrl = getPreviewMediaUrl(image, backendOrigin)
+          const previewUrl = buildPreviewMediaUrl(image, backendOrigin)
           const isVideo = isVideoLike(image)
 
           const mediaClassName = isMasonryMode
@@ -356,7 +342,7 @@ export default function ImageList({
                   {isVideoLike(activeImage) ? (
                     <video
                       className="max-h-[74vh] w-full rounded-md border bg-black/80 object-contain"
-                      src={getPreviewMediaUrl(activeImage, backendOrigin)}
+                      src={buildPreviewMediaUrl(activeImage, backendOrigin)}
                       controls
                       autoPlay
                       playsInline
@@ -366,7 +352,7 @@ export default function ImageList({
                   ) : (
                     <img
                       className="max-h-[74vh] w-full rounded-md border bg-black/10 object-contain"
-                      src={getPreviewMediaUrl(activeImage, backendOrigin)}
+                      src={buildPreviewMediaUrl(activeImage, backendOrigin)}
                       alt={getImageTitle(activeImage, activeViewerIndex ?? 0)}
                     />
                   )}

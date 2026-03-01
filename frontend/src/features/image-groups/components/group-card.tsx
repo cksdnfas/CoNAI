@@ -5,6 +5,7 @@ import type { GroupWithStats } from '@comfyui-image-manager/shared'
 import type { ImageRecord } from '@/types/image'
 import { groupApi } from '@/services/group-api'
 import { getBackendOrigin } from '@/utils/backend'
+import { buildPreviewMediaUrl } from '@/features/images/components/image-preview-url'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
@@ -12,22 +13,6 @@ interface GroupCardProps {
   group: GroupWithStats & { child_count?: number; has_children?: boolean }
   onClick: () => void
   onSettingsClick?: (groupId: number) => void
-}
-
-function getPreviewMediaUrl(image: ImageRecord | null, backendOrigin: string) {
-  if (!image) return null
-
-  const isProcessing = image.is_processing || !image.composite_hash
-  if (isProcessing) {
-    return `${backendOrigin}/api/images/by-path/${encodeURIComponent(image.original_file_path || '')}`
-  }
-
-  if (image.file_type === 'video' || image.file_type === 'animated') {
-    return `${backendOrigin}/api/images/${image.composite_hash}/file`
-  }
-
-  const cacheBuster = image.thumbnail_path ? `?v=${Date.parse(image.first_seen_date)}` : ''
-  return `${backendOrigin}/api/images/${image.composite_hash}/thumbnail${cacheBuster}`
 }
 
 export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
@@ -59,7 +44,20 @@ export function GroupCard({ group, onClick, onSettingsClick }: GroupCardProps) {
     }
   }, [group.id])
 
-  const previewUrl = useMemo(() => getPreviewMediaUrl(preview, backendOrigin), [backendOrigin, preview])
+  const previewUrl = useMemo(() => {
+    if (!preview) {
+      return null
+    }
+
+    const mediaUrl = buildPreviewMediaUrl(preview, backendOrigin)
+    const isThumbnailCase = !preview.is_processing && Boolean(preview.composite_hash) && preview.file_type !== 'video' && preview.file_type !== 'animated'
+    if (!isThumbnailCase) {
+      return mediaUrl
+    }
+
+    const cacheBuster = preview.thumbnail_path ? `?v=${Date.parse(preview.first_seen_date)}` : ''
+    return `${mediaUrl}${cacheBuster}`
+  }, [backendOrigin, preview])
   const isVideo = preview?.file_type === 'video'
 
   const handleSettingsClick = useCallback(
