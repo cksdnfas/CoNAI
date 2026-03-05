@@ -12,7 +12,8 @@
     "folders": "文件夹管理",
     "account": "账户",
     "externalApi": "外部API认证",
-    "auto": "自动提示词"
+    "auto": "自动提示词",
+    "civitai": "Civitai"
   },
   "general": {
     "title": "常规设置",

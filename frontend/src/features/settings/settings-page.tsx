@@ -134,7 +134,7 @@ export function SettingsPage() {
     rating: t('tabs.rating'),
     similarity: t('tabs.similarity'),
     account: t('tabs.account'),
-    civitai: 'Civitai',
+    civitai: t('tabs.civitai'),
   }
 
   const renderSectionCard = (sectionKey: keyof typeof sectionTitleMap, content: ReactNode) => (
@@ -184,7 +184,7 @@ export function SettingsPage() {
                 <TabsTrigger value="rating">{t('tabs.rating')}</TabsTrigger>
                 <TabsTrigger value="similarity">{t('tabs.similarity')}</TabsTrigger>
                 <TabsTrigger value="account">{t('tabs.account')}</TabsTrigger>
-                <TabsTrigger value="civitai">Civitai</TabsTrigger>
+                <TabsTrigger value="civitai">{t('tabs.civitai')}</TabsTrigger>
               </TabsList>
 
       <TabsContent value="general">

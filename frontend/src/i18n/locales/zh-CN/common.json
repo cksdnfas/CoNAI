@@ -269,5 +269,6 @@
   "columns": "列数",
   "masonry": "瀑布流",
   "grid": "网格",
-  "fitToScreen": "适应屏幕"
+  "fitToScreen": "适应屏幕",
+  "home": "主页"
 }

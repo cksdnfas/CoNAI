@@ -271,5 +271,6 @@
   "grid": "그리드",
   "fitToScreen": "화면에 맞춤",
   "infinite": "무한 스크롤",
-  "paginationMode": "페이지네이션"
+  "paginationMode": "페이지네이션",
+  "home": "홈"
 }

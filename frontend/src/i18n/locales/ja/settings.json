@@ -12,7 +12,8 @@
     "folders": "フォルダ管理",
     "account": "アカウント",
     "externalApi": "外部API認証",
-    "auto": "自動プロンプト"
+    "auto": "自動プロンプト",
+    "civitai": "Civitai"
   },
   "general": {
     "title": "一般設定",

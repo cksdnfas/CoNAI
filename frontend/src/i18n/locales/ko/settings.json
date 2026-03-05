@@ -12,7 +12,8 @@
     "account": "계정",
     "externalApi": "외부 인증",
     "advanced": "고급 설정",
-    "auto": "자동 프롬프트"
+    "auto": "자동 프롬프트",
+    "civitai": "Civitai"
   },
   "general": {
     "title": "일반 설정",

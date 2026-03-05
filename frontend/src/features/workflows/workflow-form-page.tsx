@@ -146,9 +146,9 @@ export function WorkflowFormPage() {
         <CardContent className="space-y-3">
           <Tabs value={jsonTabValue} onValueChange={(value) => setJsonTabValue(value as 'editor' | 'graph' | 'json')}>
             <TabsList>
-              <TabsTrigger value="editor">JSON Editor</TabsTrigger>
-              <TabsTrigger value="graph" disabled={!workflowJson || Boolean(jsonError)}>Graph View</TabsTrigger>
-              <TabsTrigger value="json" disabled={!workflowJson || Boolean(jsonError)}>JSON View</TabsTrigger>
+              <TabsTrigger value="editor">{t('workflows:workflowViewer.editorView')}</TabsTrigger>
+              <TabsTrigger value="graph" disabled={!workflowJson || Boolean(jsonError)}>{t('workflows:workflowViewer.graphView')}</TabsTrigger>
+              <TabsTrigger value="json" disabled={!workflowJson || Boolean(jsonError)}>{t('workflows:workflowViewer.jsonView')}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="editor" className="space-y-2">
@@ -178,7 +178,7 @@ export function WorkflowFormPage() {
 
       <Card>
         <CardHeader><div className="flex items-center justify-between"><CardTitle>{t('workflows:markedFields.sectionTitle')}</CardTitle><Button type="button" size="sm" onClick={() => setMarkedFields((prev) => [...prev, { id: `field_${Date.now()}`, label: '', jsonPath: '', type: 'text', required: false }])}><Plus className="h-4 w-4" />{t('workflows:markedFields.addField')}</Button></div></CardHeader>
-        <CardContent className="space-y-2">{validation.errorCount > 0 || validation.warningCount > 0 ? <Alert variant={validation.errorCount > 0 ? 'destructive' : 'default'}><AlertDescription>{validation.errorCount > 0 ? `${validation.errorCount} errors` : `${validation.warningCount} warnings`}</AlertDescription></Alert> : null}<MarkedFieldsList fields={markedFields} onFieldsChange={setMarkedFields} onUpdateField={(index, updates) => setMarkedFields((prev) => prev.map((field, i) => (i === index ? { ...field, ...updates } : field)))} onDeleteField={(index) => setMarkedFields((prev) => prev.filter((_, i) => i !== index))} /></CardContent>
+        <CardContent className="space-y-2">{validation.errorCount > 0 || validation.warningCount > 0 ? <Alert variant={validation.errorCount > 0 ? 'destructive' : 'default'}><AlertDescription>{validation.errorCount > 0 ? t('workflows:markedFields.validationErrors', { count: validation.errorCount }) : t('workflows:markedFields.validationWarnings', { count: validation.warningCount })}</AlertDescription></Alert> : null}<MarkedFieldsList fields={markedFields} onFieldsChange={setMarkedFields} onUpdateField={(index, updates) => setMarkedFields((prev) => prev.map((field, i) => (i === index ? { ...field, ...updates } : field)))} onDeleteField={(index) => setMarkedFields((prev) => prev.filter((_, i) => i !== index))} /></CardContent>
       </Card>
 
       <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => navigate('/image-generation?tab=workflows')} disabled={saving}>{t('workflows:actions.cancel')}</Button><Button type="button" onClick={() => void handleSubmit()} disabled={saving || Boolean(jsonError) || !name.trim() || !workflowJson.trim()}>{saving ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground" /> : <Save className="h-4 w-4" />}{saving ? t('workflows:actions.saving') : isEditMode ? t('workflows:actions.update') : t('workflows:actions.create')}</Button></div>

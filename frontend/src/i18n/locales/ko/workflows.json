@@ -110,7 +110,9 @@
     "loadFromListTooltip": "커스텀 목록에서 불러오기",
     "loadFromListTitle": "커스텀 목록에서 불러오기",
     "noCustomLists": "등록된 커스텀 목록이 없습니다.",
-    "itemCount": "{{count}}개 항목 - "
+    "itemCount": "{{count}}개 항목 - ",
+    "validationErrors": "{{count}}개 오류",
+    "validationWarnings": "{{count}}개 경고"
   },
   "fieldForm": {
     "fieldId": "필드 ID",
@@ -254,7 +256,8 @@
   },
   "workflowViewer": {
     "graphView": "그래프 뷰",
-    "jsonView": "JSON 뷰"
+    "jsonView": "JSON 뷰",
+    "editorView": "JSON 편집"
   },
   "preview": {
     "title": "Marked Fields 미리보기",

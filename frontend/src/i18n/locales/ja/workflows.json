@@ -98,7 +98,9 @@
     "loadFromListTooltip": "カスタムリストから読み込む",
     "loadFromListTitle": "カスタムリストから読み込む",
     "noCustomLists": "登録されたカスタムリストがありません。",
-    "itemCount": "{{count}}項目 - "
+    "itemCount": "{{count}}項目 - ",
+    "validationErrors": "{{count}}件のエラー",
+    "validationWarnings": "{{count}}件の警告"
   },
   "fieldForm": {
     "fieldId": "フィールドID",
@@ -242,7 +244,8 @@
   },
   "workflowViewer": {
     "graphView": "グラフビュー",
-    "jsonView": "JSONビュー"
+    "jsonView": "JSONビュー",
+    "editorView": "JSON編集"
   },
   "colors": {
     "blue": "青（デフォルト）",

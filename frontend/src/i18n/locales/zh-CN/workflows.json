@@ -98,7 +98,9 @@
     "loadFromListTooltip": "从自定义列表加载",
     "loadFromListTitle": "从自定义列表加载",
     "noCustomLists": "没有注册的自定义列表。",
-    "itemCount": "{{count}}个项目 - "
+    "itemCount": "{{count}}个项目 - ",
+    "validationErrors": "{{count}}个错误",
+    "validationWarnings": "{{count}}个警告"
   },
   "fieldForm": {
     "fieldId": "字段ID",
@@ -242,7 +244,8 @@
   },
   "workflowViewer": {
     "graphView": "图形视图",
-    "jsonView": "JSON视图"
+    "jsonView": "JSON视图",
+    "editorView": "JSON编辑"
   },
   "colors": {
     "blue": "蓝色（默认）",

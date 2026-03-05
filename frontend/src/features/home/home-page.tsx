@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, RefreshCw, Settings2, X } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Search, Settings2, X } from 'lucide-react'
 import { Alert as UiAlert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -253,64 +253,65 @@ export function HomePage() {
   const imageListAdapter = isSearchMode
     ? activeMode === 'pagination'
       ? createPaginationImageListAdapter({
-          pagination: {
-            currentPage: search.currentPage,
-            totalPages: search.totalPages,
-            onPageChange: search.changePage,
-            pageSize: search.pageSize || 25,
-            onPageSizeChange: (size: number) => search.changePageSize(size as PageSize),
+        pagination: {
+          currentPage: search.currentPage,
+          totalPages: search.totalPages,
+          onPageChange: search.changePage,
+          pageSize: search.pageSize || 25,
+          onPageSizeChange: (size: number) => search.changePageSize(size as PageSize),
+        },
+        total: search.total,
+        capabilities: {
+          emptyStateAction: {
+            label: t('common:search'),
+            onClick: handleOpenSearch,
           },
-          total: search.total,
-          capabilities: {
-            emptyStateAction: {
-              label: 'Open Search',
-              onClick: handleOpenSearch,
-            },
-          },
-        })
+        },
+      })
       : createInfiniteImageListAdapter({
-          infiniteScroll: {
-            hasMore: search.hasMore,
-            loadMore: search.loadMore,
+        infiniteScroll: {
+          hasMore: search.hasMore,
+          loadMore: search.loadMore,
+        },
+        total: search.total,
+        capabilities: {
+          emptyStateAction: {
+            label: t('common:search'),
+            onClick: handleOpenSearch,
           },
-          total: search.total,
-          capabilities: {
-            emptyStateAction: {
-              label: 'Open Search',
-              onClick: handleOpenSearch,
-            },
-          },
-        })
+        },
+      })
     : activeMode === 'pagination'
       ? createPaginationImageListAdapter({
-          pagination: {
-            currentPage: paginatedImages.page,
-            totalPages: paginatedImages.totalPages,
-            onPageChange: paginatedImages.setPage,
-            pageSize: paginatedImages.pageSize,
-            onPageSizeChange: paginatedImages.setPageSize,
+        pagination: {
+          currentPage: paginatedImages.page,
+          totalPages: paginatedImages.totalPages,
+          onPageChange: paginatedImages.setPage,
+          pageSize: paginatedImages.pageSize,
+          onPageSizeChange: paginatedImages.setPageSize,
+        },
+        total: paginatedImages.total,
+        capabilities: {
+          emptyStateAction: {
+            label: t('common:search'),
+            onClick: handleOpenSearch,
           },
-          total: paginatedImages.total,
-          capabilities: {
-            emptyStateAction: {
-              label: 'Open Search',
-              onClick: handleOpenSearch,
-            },
-          },
-        })
+        },
+      })
       : createInfiniteImageListAdapter({
-          infiniteScroll: {
-            hasMore: infiniteImages.hasMore,
-            loadMore: infiniteImages.loadMore,
+        infiniteScroll: {
+          hasMore: infiniteImages.hasMore,
+          loadMore: infiniteImages.loadMore,
+          rawDataLength: infiniteImages.rawTotal,
+        },
+        total: infiniteImages.images.length,
+        capabilities: {
+          emptyStateAction: {
+            label: t('common:search'),
+            onClick: handleOpenSearch,
           },
-          total: infiniteImages.images.length,
-          capabilities: {
-            emptyStateAction: {
-              label: 'Open Search',
-              onClick: handleOpenSearch,
-            },
-          },
-        })
+        },
+      })
 
   return (
     <div className="w-full">
@@ -327,7 +328,7 @@ export function HomePage() {
             </button>
           ) : null}
           <h1 className="text-[1.75rem] font-semibold leading-tight sm:text-[2rem] md:text-[2.25rem]">
-            {isSearchMode ? t('search:title') : 'Home'}
+            {isSearchMode ? t('search:title') : t('common:home')}
           </h1>
         </div>
 
@@ -349,8 +350,8 @@ export function HomePage() {
 
       {currentError ? (
         <UiAlert variant="destructive" className="mb-2 sm:mb-3">
-                  <AlertDescription>{currentError}</AlertDescription>
-                </UiAlert>
+          <AlertDescription>{currentError}</AlertDescription>
+        </UiAlert>
       ) : null}
 
       <ImageList
@@ -367,7 +368,7 @@ export function HomePage() {
       />
 
       {!searchOpen ? (
-        <div className="fixed right-4 bottom-4 z-[1040] sm:right-6 sm:bottom-6">
+        <div className="fixed right-4 bottom-4 z-[1040] flex flex-col items-end gap-2 sm:right-6 sm:bottom-6 sm:gap-3">
           {layoutOptionsOpen ? (
             <div
               ref={layoutPanelRef}
@@ -377,7 +378,7 @@ export function HomePage() {
               <div className="space-y-3">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground" htmlFor="home-layout-mode-select">
-                    Layout mode
+                    {t('common:layout')}
                   </label>
                   <select
                     id="home-layout-mode-select"
@@ -386,14 +387,14 @@ export function HomePage() {
                     value={draftViewMode}
                     onChange={(event) => setDraftViewMode(event.target.value as 'grid' | 'masonry')}
                   >
-                    <option value="grid">grid</option>
-                    <option value="masonry">masonry</option>
+                    <option value="grid">{t('common:grid')}</option>
+                    <option value="masonry">{t('common:masonry')}</option>
                   </select>
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground" htmlFor="home-layout-columns-input">
-                    Columns
+                    {t('common:columns')}
                   </label>
                   <Input
                     id="home-layout-columns-input"
@@ -418,7 +419,7 @@ export function HomePage() {
                   className="w-full"
                   onClick={handleApplyLayout}
                 >
-                  Apply
+                  {t('common:buttons.apply')}
                 </Button>
               </div>
             </div>
@@ -428,10 +429,22 @@ export function HomePage() {
             type="button"
             size="icon"
             variant="default"
+            data-testid="home-search-fab"
+            onClick={handleOpenSearch}
+            aria-label={t('common:search')}
+            className="h-12 w-12 rounded-full border-2 border-background bg-primary text-primary-foreground shadow-2xl ring-2 ring-black/20 hover:bg-primary/90"
+          >
+            <Search className="h-5 w-5" />
+          </Button>
+
+          <Button
+            type="button"
+            size="icon"
+            variant="default"
             data-testid="home-layout-options-fab"
             ref={layoutFabRef}
             onClick={handleLayoutFabClick}
-            aria-label="Layout options"
+            aria-label={t('common:viewSettings')}
             className="h-12 w-12 rounded-full border-2 border-background bg-primary text-primary-foreground shadow-2xl ring-2 ring-black/20 hover:bg-primary/90"
           >
             <Settings2 className="h-5 w-5" />

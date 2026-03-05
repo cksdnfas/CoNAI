@@ -12,7 +12,8 @@
     "account": "Account",
     "externalApi": "External API",
     "advanced": "Advanced Settings",
-    "auto": "Auto Prompts"
+    "auto": "Auto Prompts",
+    "civitai": "Civitai"
   },
   "general": {
     "title": "General Settings",

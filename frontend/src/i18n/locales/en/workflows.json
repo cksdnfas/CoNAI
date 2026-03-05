@@ -110,7 +110,9 @@
     "loadFromListTooltip": "Load from custom list",
     "loadFromListTitle": "Load from Custom List",
     "noCustomLists": "No custom lists registered.",
-    "itemCount": "{{count}} items - "
+    "itemCount": "{{count}} items - ",
+    "validationErrors": "{{count}} errors",
+    "validationWarnings": "{{count}} warnings"
   },
   "fieldForm": {
     "fieldId": "Field ID",
@@ -254,7 +256,8 @@
   },
   "workflowViewer": {
     "graphView": "Graph View",
-    "jsonView": "JSON View"
+    "jsonView": "JSON View",
+    "editorView": "JSON Editor"
   },
   "preview": {
     "title": "Marked Fields Preview",

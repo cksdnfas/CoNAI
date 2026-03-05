@@ -98,7 +98,9 @@
     "loadFromListTooltip": "從自訂清單載入",
     "loadFromListTitle": "從自訂清單載入",
     "noCustomLists": "沒有註冊的自訂清單。",
-    "itemCount": "{{count}}個項目 - "
+    "itemCount": "{{count}}個項目 - ",
+    "validationErrors": "{{count}}個錯誤",
+    "validationWarnings": "{{count}}個警告"
   },
   "fieldForm": {
     "fieldId": "欄位ID",
@@ -242,7 +244,8 @@
   },
   "workflowViewer": {
     "graphView": "圖形檢視",
-    "jsonView": "JSON檢視"
+    "jsonView": "JSON檢視",
+    "editorView": "JSON編輯"
   },
   "colors": {
     "blue": "藍色（預設）",
