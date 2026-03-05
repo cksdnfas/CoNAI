@@ -45,7 +45,8 @@
     "verify:policy:active-source": "node scripts/verify-repository-audit-policy.mjs --category=active-source",
     "verify:policy:generated-artifact": "node scripts/verify-repository-audit-policy.mjs --category=generated-artifact",
     "verify:migration": "npm run verify:policy:active-source && npm run verify:no-banned-imports:phase2 && npm run verify:no-ui-signatures:active && npm run verify:no-mui-deps:strict",
-    "verify:migration:full": "npm run verify:migration && npm run verify:policy:generated-artifact && npm run verify:no-ui-signatures:generated && npm run verify:no-ui-signatures:full"
+    "verify:migration:full": "npm run verify:migration && npm run verify:policy:generated-artifact && npm run verify:no-ui-signatures:generated && npm run verify:no-ui-signatures:full",
+    "i18n:check": "node scripts/i18n-check.mjs"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
