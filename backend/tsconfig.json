@@ -26,10 +26,10 @@
       "@/*": [
         "src/*"
       ],
-      "@comfyui-image-manager/shared": [
+      "@conai/shared": [
         "../shared/src/index.ts"
       ],
-      "@comfyui-image-manager/shared/*": [
+      "@conai/shared/*": [
         "../shared/src/*"
       ]
     },

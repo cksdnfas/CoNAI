@@ -1,7 +1,7 @@
 {
-  "name": "comfyui-image-manager-backend",
+  "name": "conai-backend",
   "version": "2.1.0a",
-  "description": "Backend API server for ComfyUI Image Manager",
+  "description": "Backend API server for CoNAI",
   "main": "dist/index.js",
   "scripts": {
     "dev": "nodemon --watch src --ext ts,json --ignore 'database/**' --ignore 'uploads/**' --ignore '**/*.db' --signal SIGTERM --exec tsx src/index.ts",
@@ -11,7 +11,7 @@
     "db:migrate": "tsx src/database/migrate.ts"
   },
   "dependencies": {
-    "@comfyui-image-manager/shared": "file:../shared",
+    "@conai/shared": "file:../shared",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@types/node-cron": "^3.0.11",
     "adm-zip": "^0.5.16",

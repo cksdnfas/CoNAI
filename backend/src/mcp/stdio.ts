@@ -9,7 +9,7 @@
  *   node backend/dist/mcp/stdio.js
  *
  * Claude Code 설정:
- *   claude mcp add --transport stdio comfyui-image-manager -- npx tsx backend/src/mcp/stdio.ts
+ *   claude mcp add --transport stdio conai -- npx tsx backend/src/mcp/stdio.ts
  */
 
 import dotenv from 'dotenv';
@@ -48,7 +48,7 @@ async function main() {
 
   await server.connect(transport);
   // stderr로 출력 (stdout은 JSON-RPC 통신에 사용)
-  console.error('[MCP] ComfyUI Image Manager MCP server running on stdio');
+  console.error('[MCP] CoNAI MCP server running on stdio');
 }
 
 main().catch((error) => {

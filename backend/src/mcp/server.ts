@@ -12,7 +12,7 @@ import { registerPromptOrganizationTools } from './tools/promptOrganizationTools
  */
 export function createMcpServer(): McpServer {
   const server = new McpServer({
-    name: 'comfyui-image-manager',
+    name: 'conai',
     version: '2.1.0',
   });
 

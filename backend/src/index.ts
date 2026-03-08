@@ -3,6 +3,9 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
+const packagedExecutableNames = new Set(['conai', 'conai.exe']);
+const isPackagedRuntime = packagedExecutableNames.has(path.basename(process.execPath).toLowerCase());
+
 // Resolve path to root .env file
 // Robust path resolution for Dev, Portable, and SEA (Single Executable Application)
 const getEnvPath = () => {
@@ -13,7 +16,7 @@ const getEnvPath = () => {
 
   // 2. SEA / Packaged Executable detection
   // In SEA, __dirname is inside the blob, but .env should be next to the executable
-  if (process.execPath.includes('comfyui-image-manager') || process.env.NODE_ENV === 'production') {
+  if (isPackagedRuntime || process.env.NODE_ENV === 'production') {
     return path.join(path.dirname(process.execPath), '.env');
   }
 
@@ -29,7 +32,7 @@ console.log(`[Config] Initialized with .env from: ${rootEnvPath}`);
 
 // Configure NODE_PATH for native modules in SEA (Single Executable Application)
 // This must be done before any imports that depend on native modules
-if (process.env.NODE_ENV === 'production' || process.execPath.includes('comfyui-image-manager')) {
+if (process.env.NODE_ENV === 'production' || isPackagedRuntime) {
   const nativeModulesPath = path.join(__dirname, '..', 'node_modules');
   if (require('fs').existsSync(nativeModulesPath)) {
     process.env.NODE_PATH = nativeModulesPath;
@@ -82,7 +85,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { optionalAuth } from './middleware/authMiddleware';
 import { imageTaggerService } from './services/imageTaggerService';
 import { APIImageProcessor } from './services/APIImageProcessor';
-import { PORTS, IMAGE_PROCESSING } from '@comfyui-image-manager/shared';
+import { PORTS, IMAGE_PROCESSING } from '@conai/shared';
 import { settingsService } from './services/settingsService';
 import { AutoScanScheduler } from './services/autoScanScheduler';
 import { autoTagScheduler } from './services/autoTagScheduler';
@@ -230,7 +233,7 @@ async function initializeSessionMiddleware() {
       secure: isSecureContext && !isDevelopment, // 개발에서는 false
       sameSite: 'lax' // 개발/프로덕션 모두 lax (localhost는 동일 사이트로 간주)
     },
-    name: 'comfyui.sid' // Custom session cookie name
+    name: 'conai.sid' // Custom session cookie name
   });
 
   app.use(sessionMiddleware);
@@ -363,7 +366,7 @@ app.get('/health', (req, res) => {
 // 데이터베이스 초기화 및 서버 시작
 async function startServer() {
   try {
-    console.log('🚀 ComfyUI Image Manager Backend 시작 중...\n');
+    console.log('🚀 CoNAI Backend 시작 중...\n');
 
     // 0. Initialize i18n (language settings)
     const { initI18n } = await import('./i18n');
@@ -524,7 +527,7 @@ async function startServer() {
 
       console.log(`
 ${divider}`);
-      console.log(formatLine('🎉 ComfyUI Image Manager - Server Running!'));
+      console.log(formatLine('🎉 CoNAI - Server Running!'));
       console.log(separator);
       console.log(formatLine('📡 Access URLs:'));
       console.log(formatLine(''));
@@ -540,7 +543,9 @@ ${divider}`);
 
       if (extraLines.length > 0) {
         console.log(separator);
-        extraLines.forEach((line) => console.log(formatLine(line)));
+        extraLines.forEach((line) => {
+          console.log(formatLine(line));
+        });
       }
 
       console.log(`${footer}
@@ -752,9 +757,6 @@ ${divider}`);
 }
 
 startServer();
-
-
-
 
 
 

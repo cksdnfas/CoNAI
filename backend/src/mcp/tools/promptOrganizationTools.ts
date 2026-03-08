@@ -342,7 +342,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
 
         const backup = {
           version: '1.0',
-          app: 'comfyui-image-manager',
+          app: 'conai',
           backup_date: new Date().toISOString(),
           metadata,
           data,
