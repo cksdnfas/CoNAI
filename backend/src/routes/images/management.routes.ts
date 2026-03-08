@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { DeletionService } from '../../services/deletionService';
-import { successResponse, errorResponse } from '@comfyui-image-manager/shared';
+import { successResponse, errorResponse } from '@conai/shared';
 import { QueryCacheService } from '../../services/QueryCacheService';
 
 const router = Router();

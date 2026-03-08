@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { ImageSimilarityService } from '../../services/imageSimilarity';
 import { asyncHandler } from '../../middleware/errorHandler';
-import { successResponse, errorResponse } from '@comfyui-image-manager/shared';
+import { successResponse, errorResponse } from '@conai/shared';
 import { resolveUploadsPath } from '../../config/runtimePaths';
 import fs from 'fs/promises';
 import path from 'path';

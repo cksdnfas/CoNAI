@@ -1,8 +1,10 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import type { GroupWithHierarchy } from '@comfyui-image-manager/shared'
+import type { GroupWithHierarchy } from '@conai/shared'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { GroupParentSelector } from './group-parent-selector'
+import { cn } from '@/lib/utils'
 
 interface BasicInfoTabProps {
   formData: {
@@ -22,22 +24,22 @@ interface BasicInfoTabProps {
 }
 
 const PRESET_COLORS = [
-  '#f44336',
-  '#e91e63',
-  '#9c27b0',
-  '#673ab7',
-  '#3f51b5',
-  '#2196f3',
-  '#03a9f4',
-  '#00bcd4',
-  '#009688',
-  '#4caf50',
-  '#8bc34a',
-  '#cddc39',
-  '#ffeb3b',
-  '#ffc107',
-  '#ff9800',
-  '#ff5722',
+  '#f44336', // Red
+  '#e91e63', // Pink
+  '#9c27b0', // Purple
+  '#673ab7', // Deep Purple
+  '#3f51b5', // Indigo
+  '#2196f3', // Blue
+  '#03a9f4', // Light Blue
+  '#00bcd4', // Cyan
+  '#009688', // Teal
+  '#4caf50', // Green
+  '#8bc34a', // Light Green
+  '#cddc39', // Lime
+  '#ffeb3b', // Yellow
+  '#ffc107', // Amber
+  '#ff9800', // Orange
+  '#ff5722', // Deep Orange
 ]
 
 const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
@@ -48,8 +50,6 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
   isEditMode = false,
 }) => {
   const { t } = useTranslation(['imageGroups'])
-
-  const selectableParents = availableParents.filter((group) => !(isEditMode && currentGroupId && group.id === currentGroupId))
 
   return (
     <div className="space-y-4">
@@ -63,6 +63,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
           value={formData.name}
           onChange={(event) => onFormChange('name', event.target.value)}
           autoFocus
+          className="bg-card"
         />
       </div>
 
@@ -75,57 +76,49 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
           rows={3}
           value={formData.description}
           onChange={(event) => onFormChange('description', event.target.value)}
+          className="bg-card resize-none"
         />
       </div>
 
-      <div className="space-y-1">
-        <label className="text-sm font-medium" htmlFor="group-parent-select">
-          {t('imageGroups:modal.parentGroup')}
-        </label>
-        <select
-          id="group-parent-select"
-          className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-          value={formData.parent_id ?? ''}
-          onChange={(event) => {
-            const value = event.target.value
-            onFormChange('parent_id', value === '' ? null : Number(value))
-          }}
-        >
-          <option value="">{t('imageGroups:modal.noParent')}</option>
-          {selectableParents.map((group) => {
-            const depthPrefix = group.depth && group.depth > 0 ? `${'-- '.repeat(group.depth)}` : ''
-            return (
-              <option key={group.id} value={group.id}>
-                {depthPrefix}
-                {group.name}
-              </option>
-            )
-          })}
-        </select>
-      </div>
+      <GroupParentSelector
+        groups={availableParents}
+        selectedParentId={formData.parent_id}
+        onParentChange={(parentId) => onFormChange('parent_id', parentId)}
+        excludeIds={React.useMemo(() => (isEditMode && currentGroupId ? [currentGroupId] : []), [isEditMode, currentGroupId])}
+        label={t('imageGroups:modal.parentGroup')}
+        noParentLabel={t('imageGroups:modal.noParent')}
+      />
 
       <div>
-        <p className="text-sm font-semibold">{t('imageGroups:modal.groupColor')}</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {PRESET_COLORS.map((color) => (
-            <button
-              type="button"
-              key={color}
-              className="h-10 w-10 rounded-full border-2 transition hover:scale-110"
-              style={{
-                backgroundColor: color,
-                borderColor: formData.color === color ? '#111827' : '#d1d5db',
-                borderWidth: formData.color === color ? '3px' : '2px',
-              }}
-              onClick={() => onFormChange('color', color)}
-              aria-label={`Select color ${color}`}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  onFormChange('color', color)
-                }
-              }}
-            />
-          ))}
+        <label className="text-sm font-medium">{t('imageGroups:modal.groupColor')}</label>
+        <div className="mt-2.5 flex flex-wrap gap-2.5">
+          {PRESET_COLORS.map((color) => {
+            const isActive = formData.color === color;
+            return (
+              <button
+                type="button"
+                key={color}
+                className={cn(
+                  "h-9 w-9 rounded-full border-2 transition-all duration-200 hover:scale-110 flex items-center justify-center",
+                  isActive ? "ring-2 ring-offset-2 ring-primary border-transparent scale-110 shadow-md" : "border-background/20"
+                )}
+                style={{
+                  backgroundColor: color,
+                }}
+                onClick={() => onFormChange('color', color)}
+                aria-label={`Select color ${color}`}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    onFormChange('color', color)
+                  }
+                }}
+              >
+                {isActive && (
+                  <div className="w-2 h-2 rounded-full bg-white shadow-sm ring-1 ring-black/10" />
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { FolderPlus, History, Search, Shuffle, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { ComplexFilter, ComplexSearchRequest, FilterCondition } from '@comfyui-image-manager/shared'
+import type { ComplexFilter, ComplexSearchRequest, FilterCondition } from '@conai/shared'
 import SimpleSearchTab, { type SearchToken } from '@/features/image-groups/components/simple-search-tab'
 import type { PromptSearchResult } from '@/features/image-groups/components/search-auto-complete'
 import GroupCreateEditModal from '@/features/image-groups/components/group-create-edit-modal'

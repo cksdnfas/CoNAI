@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
-import { parsePrompt, parsePromptWithLoRAs } from '@comfyui-image-manager/shared'
+import { parsePrompt, parsePromptWithLoRAs } from '@conai/shared'
 import { extractMetadata, type ParsedMetadata } from '@/utils/metadata-reader'
 
 export default function PromptPreview() {

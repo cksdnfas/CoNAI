@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { asyncHandler } from '../../middleware/errorHandler';
-import { successResponse, errorResponse } from '@comfyui-image-manager/shared';
+import { successResponse, errorResponse } from '@conai/shared';
 import { enrichImageWithFileView } from './utils';
 
 const router = Router();

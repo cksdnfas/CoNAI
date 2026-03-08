@@ -2,16 +2,14 @@ import { PromptCollectionModel } from '../models/PromptCollection';
 import { PromptGroupModel } from '../models/PromptGroup';
 import { SynonymService } from './synonymService';
 import { PromptGroupService } from './promptGroupService';
-import {
-  parsePromptTerms,
-  normalizeSearchTerm,
-  PromptSearchResult,
-  PromptStatistics,
-  isLoRAModel,
-  cleanPromptTerm,
-  parsePromptWithLoRAs,
-  removeLoRAWeight
-} from '@comfyui-image-manager/shared';
+import { parsePromptTerms,
+normalizeSearchTerm,
+PromptSearchResult,
+PromptStatistics,
+isLoRAModel,
+cleanPromptTerm,
+parsePromptWithLoRAs,
+removeLoRAWeight } from '@conai/shared';
 
 export class PromptCollectionService {
   /**

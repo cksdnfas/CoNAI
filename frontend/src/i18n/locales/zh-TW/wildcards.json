@@ -39,6 +39,7 @@
     "noParent": "無 (根層級)",
     "includeChildren": "自動包含子萬用字元",
     "includeChildrenHelper": "啟用後，使用此萬用字元時將自動包含直接子層級的項目",
+    "onlyChildren": "僅使用子項目",
     "chainOption": "鏈選項",
     "chainOptionReplace": "替換 (Replace)",
     "chainOptionAppend": "追加 (Append)",

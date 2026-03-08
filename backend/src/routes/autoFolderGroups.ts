@@ -2,12 +2,10 @@ import { Router, Request, Response } from 'express';
 import { AutoFolderGroupService } from '../services/autoFolderGroupService';
 import { GroupDownloadService, DownloadType, CaptionMode } from '../services/groupDownloadService';
 import { AutoFolderGroupImageModel } from '../models/AutoFolderGroup';
-import {
-  validateId,
-  successResponse,
-  errorResponse,
-  PAGINATION
-} from '@comfyui-image-manager/shared';
+import { validateId,
+successResponse,
+errorResponse,
+PAGINATION } from '@conai/shared';
 import { asyncHandler } from '../middleware/errorHandler';
 import { enrichImageWithFileView } from './images/utils';
 import path from 'path';

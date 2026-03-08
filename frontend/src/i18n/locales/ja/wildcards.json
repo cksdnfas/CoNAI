@@ -39,6 +39,7 @@
     "noParent": "なし (ルートレベル)",
     "includeChildren": "子ワイルドカードを自動的に含める",
     "includeChildrenHelper": "有効にすると、このワイルドカードの使用時に直接の子の項目も自動的に含まれます",
+    "onlyChildren": "子項目のみ使用",
     "chainOption": "チェーンオプション",
     "chainOptionReplace": "置換 (Replace)",
     "chainOptionAppend": "追加 (Append)",

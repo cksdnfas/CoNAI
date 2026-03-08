@@ -39,6 +39,7 @@
     "noParent": "无 (根级别)",
     "includeChildren": "自动包含子通配符",
     "includeChildrenHelper": "启用后，使用此通配符时将自动包含直接子级的项目",
+    "onlyChildren": "仅使用子项",
     "chainOption": "链选项",
     "chainOptionReplace": "替换 (Replace)",
     "chainOptionAppend": "追加 (Append)",

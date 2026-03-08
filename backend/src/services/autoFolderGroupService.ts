@@ -8,7 +8,7 @@ import {
   FolderPathNode
 } from '../utils/folderPathParser';
 import { runtimePaths } from '../config/runtimePaths';
-import { AutoFolderGroupRebuildResult } from '@comfyui-image-manager/shared';
+import { AutoFolderGroupRebuildResult } from '@conai/shared';
 import path from 'path';
 
 /**

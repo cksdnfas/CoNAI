@@ -1,13 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { PromptCollectionService } from '../services/promptCollectionService';
-import {
-  PromptCollectionResponse,
-  successResponse,
-  errorResponse,
-  paginatedResponse,
-  PAGINATION,
-  validateId
-} from '@comfyui-image-manager/shared';
+import { PromptCollectionResponse,
+successResponse,
+errorResponse,
+paginatedResponse,
+PAGINATION,
+validateId } from '@conai/shared';
 
 const router = Router();
 

@@ -1,6 +1,6 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import type { GroupWithStats } from '@comfyui-image-manager/shared'
+import type { GroupWithStats } from '@conai/shared'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {

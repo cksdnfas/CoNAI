@@ -1,6 +1,7 @@
 import type { ImageRecord } from '@/types/image'
 import type { ImageItem } from '@/lib/api/types'
 import { buildPreviewMediaUrl } from '@/features/images/components/image-preview-url'
+import type { ViewerActionAdapter } from '@/features/images/viewer/viewer-action-adapter'
 
 export interface ImageListPaginationConfig {
   currentPage: number
@@ -13,6 +14,7 @@ export interface ImageListPaginationConfig {
 export interface ImageListInfiniteScrollConfig {
   hasMore: boolean
   loadMore: () => void
+  rawDataLength?: number
 }
 
 export interface ImageListSelectionConfig {
@@ -24,6 +26,10 @@ export interface ImageListSelectionConfig {
 
 interface ImageListAdapterPolicyBase {
   total?: number
+  viewerActions?: ViewerActionAdapter
+  viewerEditor?: {
+    onSave?: (context: { image: ImageRecord; index: number; images: ImageRecord[] }) => void | Promise<void>
+  }
   capabilities?: {
     emptyStateAction?: {
       label?: string
@@ -34,15 +40,15 @@ interface ImageListAdapterPolicyBase {
 
 export type ImageListAdapterPolicy =
   | (ImageListAdapterPolicyBase & {
-      mode: 'infinite'
-      infiniteScroll: ImageListInfiniteScrollConfig
-      pagination?: undefined
-    })
+    mode: 'infinite'
+    infiniteScroll: ImageListInfiniteScrollConfig
+    pagination?: undefined
+  })
   | (ImageListAdapterPolicyBase & {
-      mode: 'pagination'
-      pagination: ImageListPaginationConfig
-      infiniteScroll?: undefined
-    })
+    mode: 'pagination'
+    pagination: ImageListPaginationConfig
+    infiniteScroll?: undefined
+  })
 
 export function createInfiniteImageListAdapter(policy: ImageListAdapterPolicyBase & { infiniteScroll: ImageListInfiniteScrollConfig }): ImageListAdapterPolicy {
   return {

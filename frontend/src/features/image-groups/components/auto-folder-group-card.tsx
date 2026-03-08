@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { Folder } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { AutoFolderGroupWithStats } from '@comfyui-image-manager/shared'
+import type { AutoFolderGroupWithStats } from '@conai/shared'
 import { autoFolderGroupsApi } from '@/services/auto-folder-groups-api'
 import { getBackendOrigin } from '@/utils/backend'
 import { buildPreviewMediaUrl } from '@/features/images/components/image-preview-url'

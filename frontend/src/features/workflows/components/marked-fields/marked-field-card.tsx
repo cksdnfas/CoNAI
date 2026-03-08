@@ -1,28 +1,32 @@
 import { useState, type HTMLAttributes } from 'react'
-import { Card,
-CardContent,
-Box,
-TextField,
-IconButton,
-FormControlLabel,
-Switch,
-Collapse,
-Typography,
-Chip,
-alpha,
-Button,
-Dialog,
-DialogTitle,
-DialogContent,
-DialogActions,
-List,
-ListItem,
-ListItemButton,
-ListItemText, } from '@/features/workflows/utils/workflow-ui'
-import { Delete as DeleteIcon,
-ExpandMore as ExpandMoreIcon,
-DragIndicator as DragIndicatorIcon,
-PlaylistAdd as PlaylistAddIcon, } from '@/features/workflows/utils/workflow-icons'
+import {
+  Card,
+  CardContent,
+  Box,
+  TextField,
+  IconButton,
+  FormControlLabel,
+  Switch,
+  Collapse,
+  Typography,
+  Chip,
+  alpha,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+} from '@/features/workflows/utils/workflow-ui'
+import {
+  Delete as DeleteIcon,
+  ExpandMore as ExpandMoreIcon,
+  DragIndicator as DragIndicatorIcon,
+  PlaylistAdd as PlaylistAddIcon,
+} from '@/features/workflows/utils/workflow-icons'
 import { useTranslation } from 'react-i18next'
 import type { MarkedField } from '@/services/workflow-api'
 import { generateFieldId } from './utils/smart-defaults'
@@ -175,7 +179,7 @@ export function MarkedFieldCard({
             {field.jsonPath ? `${getNodeInfo(field.jsonPath)} - ${field.jsonPath}` : t('workflows:markedFields.noJsonPath')}
           </Typography>
           {fieldErrors.length > 0 ? (
-            <Box sx={{ mt: 0.5 }}>
+            <Box sx={{ mt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.2 }}>
               {fieldErrors.map((error, errorIndex) => (
                 <Typography
                   key={`${error.field}-${errorIndex}`}
@@ -184,6 +188,7 @@ export function MarkedFieldCard({
                     display: 'block',
                     color: error.severity === 'error' ? 'error.main' : 'warning.main',
                     fontSize: '0.7rem',
+                    fontWeight: 500,
                   }}
                 >
                   {error.severity === 'error' ? 'ERR' : 'WARN'} {error.message}
@@ -243,7 +248,6 @@ export function MarkedFieldCard({
               size="small"
               helperText={t('workflows:fieldForm.typeHelper')}
               sx={{ flex: 1 }}
-              SelectProps={{ native: true }}
             >
               <option value="text">{t('workflows:fieldForm.typeText')}</option>
               <option value="textarea">{t('workflows:fieldForm.typeTextarea')}</option>

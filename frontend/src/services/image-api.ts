@@ -1,6 +1,6 @@
 import { API_BASE_URL, apiClient } from '@/lib/api/client'
 import type { ImageListResponse, ImageRecord } from '@/types/image'
-import type { ComplexSearchRequest, ComplexSearchResponse } from '@comfyui-image-manager/shared'
+import type { ComplexSearchRequest, ComplexSearchResponse } from '@conai/shared'
 
 export const imageApi = {
   async getImages(
@@ -8,8 +8,13 @@ export const imageApi = {
     limit = 25,
     sortBy: 'first_seen_date' | 'width' | 'height' | 'file_size' = 'first_seen_date',
     sortOrder: 'ASC' | 'DESC' = 'DESC',
+    cursor?: { cursorDate: string; cursorHash: string },
   ): Promise<ImageListResponse> {
-    const response = await apiClient.get(`/api/images?page=${page}&limit=${limit}&sortBy=${sortBy}&sortOrder=${sortOrder}`)
+    let url = `/api/images?page=${page}&limit=${limit}&sortBy=${sortBy}&sortOrder=${sortOrder}`;
+    if (cursor) {
+      url += `&cursor_date=${encodeURIComponent(cursor.cursorDate)}&cursor_hash=${encodeURIComponent(cursor.cursorHash)}`;
+    }
+    const response = await apiClient.get(url)
     return response.data
   },
 

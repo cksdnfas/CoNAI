@@ -1,4 +1,4 @@
-import type { GenerationHistoryRecord } from '@comfyui-image-manager/shared'
+import type { GenerationHistoryRecord } from '@conai/shared'
 import type { ImageRecord } from '@/types/image'
 import { buildUploadsUrl } from '@/utils/backend'
 

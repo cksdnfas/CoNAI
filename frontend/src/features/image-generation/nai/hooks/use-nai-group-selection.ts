@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { GroupWithStats } from '@comfyui-image-manager/shared'
+import type { GroupWithStats } from '@conai/shared'
 import { apiClient } from '@/lib/api/client'
 import { GROUP_STORAGE_KEY } from '../constants/nai.constants'
 

@@ -225,6 +225,7 @@ export interface ImageListResponse {
     page: number;
     limit: number;
     totalPages: number;
+    hasMore?: boolean;
   };
   error?: string;
 }

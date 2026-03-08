@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { SUPPORTED_LANGUAGES } from '@comfyui-image-manager/shared'
+import { SUPPORTED_LANGUAGES } from '@conai/shared'
 import type { GeneralSettings, MetadataExtractionSettings, ThumbnailSettings } from '@/services/settings-api'
 import { settingsApi } from '@/services/settings-api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { RefreshCw, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { GenerationHistoryRecord, ServiceType } from '@comfyui-image-manager/shared'
+import type { GenerationHistoryRecord, ServiceType } from '@conai/shared'
 import type { ImageRecord } from '@/types/image'
 import { generationHistoryApi } from '@/services/generation-history-api'
 import { convertHistoriesToImageRecords } from '@/utils/generation-history-adapter'

@@ -5,18 +5,16 @@ import { AutoCollectionService } from '../services/autoCollectionService';
 import { ComplexFilterService } from '../services/complexFilterService';
 import { GroupDownloadService, DownloadType, CaptionMode } from '../services/groupDownloadService';
 import { getGroupHierarchyService } from '../services/groupHierarchyService';
-import {
-  GroupResponse,
-  GroupCreateData,
-  GroupUpdateData,
-  GroupMoveRequest,
-  validateId,
-  successResponse,
-  errorResponse,
-  PAGINATION,
-  ComplexFilter,
-  AutoCollectCondition
-} from '@comfyui-image-manager/shared';
+import { GroupResponse,
+GroupCreateData,
+GroupUpdateData,
+GroupMoveRequest,
+validateId,
+successResponse,
+errorResponse,
+PAGINATION,
+ComplexFilter,
+AutoCollectCondition } from '@conai/shared';
 import { asyncHandler } from '../middleware/errorHandler';
 import { enrichImageRecord, enrichImageWithFileView } from './images/utils';
 import path from 'path';

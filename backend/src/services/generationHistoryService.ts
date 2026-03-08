@@ -4,7 +4,7 @@ import { ImageGroupModel } from '../models/Group';
 import axios from 'axios';
 import FormData from 'form-data';
 import path from 'path';
-import { PORTS } from '@comfyui-image-manager/shared';
+import { PORTS } from '@conai/shared';
 
 /**
  * GenerationHistoryService

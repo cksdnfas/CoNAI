@@ -3,7 +3,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { WatchedFolderService } from '../services/watchedFolderService';
 import { FolderScanService } from '../services/folderScan';
 import { FileWatcherService } from '../services/fileWatcherService';
-import { successResponse, errorResponse } from '@comfyui-image-manager/shared';
+import { successResponse, errorResponse } from '@conai/shared';
 
 const router = Router();
 

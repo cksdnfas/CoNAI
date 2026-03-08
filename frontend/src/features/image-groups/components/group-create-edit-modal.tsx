@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react'
 import { Loader2, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { AutoCollectCondition, ComplexFilter, GroupCreateData, GroupUpdateData, GroupWithHierarchy } from '@comfyui-image-manager/shared'
+import type { AutoCollectCondition, ComplexFilter, GroupCreateData, GroupUpdateData, GroupWithHierarchy } from '@conai/shared'
 import { useAllGroupsWithHierarchy, useCreateGroup, useDeleteGroup, useUpdateGroup } from '@/hooks/use-groups'
 import BasicInfoTab from './basic-info-tab'
 import AutoCollectTab from './auto-collect-tab'

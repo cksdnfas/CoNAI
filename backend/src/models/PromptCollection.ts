@@ -1,10 +1,8 @@
 import { db } from '../database/init';
-import {
-  PromptCollectionRecord,
-  NegativePromptCollectionRecord,
-  PromptCollectionData,
-  PromptSearchResult
-} from '@comfyui-image-manager/shared';
+import { PromptCollectionRecord,
+NegativePromptCollectionRecord,
+PromptCollectionData,
+PromptSearchResult } from '@conai/shared';
 
 // Helper to get table name
 const getTableName = (type: 'positive' | 'negative' | 'auto'): string => {

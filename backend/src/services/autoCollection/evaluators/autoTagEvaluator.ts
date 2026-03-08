@@ -11,7 +11,7 @@
  * - auto_tag_rating_score
  */
 
-import { AutoCollectCondition } from '@comfyui-image-manager/shared';
+import { AutoCollectCondition } from '@conai/shared';
 import { ConditionEvaluator, EvaluableImage } from '../types';
 import { ValidatorService } from '../../validatorService';
 

@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { GroupWithStats } from '@comfyui-image-manager/shared'
+import type { GroupWithStats } from '@conai/shared'
 import { groupApi } from '@/services/group-api'
 import { ImageViewCardShell } from '@/features/image-groups/components/image-view-card-shell'
 import { createImageViewCardMeta } from '@/features/image-groups/components/image-view-card-meta'

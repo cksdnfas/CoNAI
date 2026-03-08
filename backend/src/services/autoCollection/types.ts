@@ -2,9 +2,9 @@
  * Common types for auto-collection condition evaluation
  */
 
-import { AutoCollectCondition } from '@comfyui-image-manager/shared';
+import { AutoCollectCondition } from '@conai/shared';
 import { ImageMetadataRecord } from '../../types/image';
-import { ImageRecord } from '@comfyui-image-manager/shared';
+import { ImageRecord } from '@conai/shared';
 
 /**
  * Unified image type for condition evaluation

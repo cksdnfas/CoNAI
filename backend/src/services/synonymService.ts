@@ -1,10 +1,8 @@
 import { db } from '../database/init';
 import { PromptCollectionModel } from '../models/PromptCollection';
-import {
-  PromptCollectionRecord,
-  NegativePromptCollectionRecord,
-  normalizeSearchTerm
-} from '@comfyui-image-manager/shared';
+import { PromptCollectionRecord,
+NegativePromptCollectionRecord,
+normalizeSearchTerm } from '@conai/shared';
 
 export class SynonymService {
   private static getTableName(type: 'positive' | 'negative' | 'auto'): string {

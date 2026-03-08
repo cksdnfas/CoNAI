@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { apiClient } from '@/lib/api/client'
-import type { GroupWithStats } from '@comfyui-image-manager/shared'
+import type { GroupWithStats } from '@conai/shared'
 
 export function useGroupManagement() {
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null)

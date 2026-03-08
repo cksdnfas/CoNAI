@@ -1,4 +1,4 @@
-import type { AutoFolderGroupRebuildResult, AutoFolderGroupWithStats } from '@comfyui-image-manager/shared'
+import type { AutoFolderGroupRebuildResult, AutoFolderGroupWithStats } from '@conai/shared'
 import type { ImageRecord } from '@/types/image'
 import { API_BASE_URL, apiClient } from '@/lib/api/client'
 

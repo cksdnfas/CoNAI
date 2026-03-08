@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { Folder, Settings, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { GroupWithStats } from '@comfyui-image-manager/shared'
+import type { GroupWithStats } from '@conai/shared'
 import { groupApi } from '@/services/group-api'
 import { getBackendOrigin } from '@/utils/backend'
 import { buildPreviewMediaUrl } from '@/features/images/components/image-preview-url'

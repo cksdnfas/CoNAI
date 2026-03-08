@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import { BackgroundQueueService } from '../services/backgroundQueue';
 import { autoTagScheduler } from '../services/autoTagScheduler';
-import { successResponse, errorResponse } from '@comfyui-image-manager/shared';
+import { successResponse, errorResponse } from '@conai/shared';
 
 const router = Router();
 

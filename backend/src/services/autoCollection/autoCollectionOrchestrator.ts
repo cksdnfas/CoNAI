@@ -8,12 +8,10 @@
  */
 
 import { GroupModel, ImageGroupModel } from '../../models/Group';
-import {
-  GroupRecord,
-  AutoCollectCondition,
-  AutoCollectResult,
-  ComplexFilter
-} from '@comfyui-image-manager/shared';
+import { GroupRecord,
+AutoCollectCondition,
+AutoCollectResult,
+ComplexFilter } from '@conai/shared';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ComplexFilterService } from '../complexFilterService';
 import { checkImageMatchesConditions } from './conditionEvaluator';

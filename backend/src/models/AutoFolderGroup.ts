@@ -1,9 +1,7 @@
 import { db } from '../database/init';
-import {
-  AutoFolderGroup,
-  CreateAutoFolderGroupData,
-  AutoFolderGroupWithStats
-} from '@comfyui-image-manager/shared';
+import { AutoFolderGroup,
+CreateAutoFolderGroupData,
+AutoFolderGroupWithStats } from '@conai/shared';
 import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
 
 /**

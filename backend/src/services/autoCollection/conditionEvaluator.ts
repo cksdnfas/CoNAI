@@ -5,7 +5,7 @@
  * Routes condition evaluation to appropriate strategy evaluator.
  */
 
-import { AutoCollectCondition } from '@comfyui-image-manager/shared';
+import { AutoCollectCondition } from '@conai/shared';
 import { ConditionEvaluator, EvaluableImage } from './types';
 import { RegexEvaluator, AutoTagEvaluator, DuplicateEvaluator } from './evaluators';
 

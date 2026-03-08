@@ -1,16 +1,21 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import InfiniteScroll from 'react-infinite-scroll-component'
 import type { ImageRecord } from '@/types/image'
 import { getBackendOrigin } from '@/utils/backend'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
-import PromptDisplay, { type NaiCharacterPrompt } from '@/components/prompt-display'
-import { settingsApi } from '@/services/settings-api'
+import { imageApi } from '@/services/image-api'
 import { buildPreviewMediaUrl } from '@/features/images/components/image-preview-url'
+import { ImageViewerDialog } from '@/features/images/viewer/image-viewer-dialog'
+import { ImageEditorModal } from '@/features/images/editor/image-editor-modal'
+import { getImageTitle, isVideoLike } from '@/features/images/viewer/image-viewer-helpers'
+import type { ViewerActionContext } from '@/features/images/viewer/viewer-action-adapter'
 import {
   type ImageListAdapterPolicy,
   type ImageListSelectionConfig,
+  createInfiniteImageListAdapter,
   getImageStableIdentity,
 } from './image-list-contract'
+import './image-list.css'
 
 interface ImageListProps {
   images: ImageRecord[]
@@ -19,113 +24,16 @@ interface ImageListProps {
   gridColumns?: number
   selectable?: boolean
   selection?: ImageListSelectionConfig
-  adapter: ImageListAdapterPolicy
+  adapter?: ImageListAdapterPolicy
 }
 
-interface RawNaiParametersShape {
-  v4_prompt?: {
-    caption?: {
-      char_captions?: unknown
-    }
-  }
-}
+const DEFAULT_IMAGE_LIST_ADAPTER = createInfiniteImageListAdapter({
+  infiniteScroll: {
+    hasMore: false,
+    loadMore: () => undefined,
+  },
+})
 
-function getImageTitle(image: ImageRecord, index: number): string {
-  if (image.prompt) {
-    return image.prompt.slice(0, 80)
-  }
-  if (image.model_name) {
-    return image.model_name
-  }
-  if (image.composite_hash) {
-    return image.composite_hash
-  }
-  return `Image ${index + 1}`
-}
-
-function isVideoLike(image: ImageRecord): boolean {
-  return image.file_type === 'video' || image.file_type === 'animated'
-}
-
-function formatNullable(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') {
-    return 'N/A'
-  }
-  return String(value)
-}
-
-function formatFileSize(value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return 'N/A'
-  }
-
-  const units = ['B', 'KB', 'MB', 'GB']
-  let size = value
-  let unitIndex = 0
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex += 1
-  }
-
-  const digits = unitIndex === 0 ? 0 : 2
-  return `${size.toFixed(digits)} ${units[unitIndex]}`
-}
-
-function formatDate(value: string | null | undefined): string {
-  if (!value) {
-    return 'N/A'
-  }
-
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) {
-    return value
-  }
-
-  return parsed.toLocaleString()
-}
-
-function extractCharacterPrompts(rawNaiParameters: unknown): NaiCharacterPrompt[] | undefined {
-  const rawNaiParams = rawNaiParameters as RawNaiParametersShape | null | undefined
-  const rawCaptions = rawNaiParams?.v4_prompt?.caption?.char_captions
-  if (!Array.isArray(rawCaptions)) {
-    return undefined
-  }
-
-  const normalized = rawCaptions
-    .map((entry): NaiCharacterPrompt | null => {
-      if (!entry || typeof entry !== 'object') {
-        return null
-      }
-
-      const candidate = entry as { char_caption?: unknown; centers?: unknown }
-      if (typeof candidate.char_caption !== 'string' || candidate.char_caption.trim().length === 0) {
-        return null
-      }
-
-      const centers = Array.isArray(candidate.centers)
-        ? candidate.centers.flatMap((point) => {
-            if (!point || typeof point !== 'object') {
-              return []
-            }
-
-            const typedPoint = point as { x?: unknown; y?: unknown }
-            if (typeof typedPoint.x === 'number' && typeof typedPoint.y === 'number') {
-              return [{ x: typedPoint.x, y: typedPoint.y }]
-            }
-            return []
-          })
-        : []
-
-      return {
-        char_caption: candidate.char_caption,
-        centers,
-      }
-    })
-    .filter((entry): entry is NaiCharacterPrompt => entry !== null)
-
-  return normalized.length > 0 ? normalized : undefined
-}
 
 export default function ImageList({
   images,
@@ -134,67 +42,154 @@ export default function ImageList({
   gridColumns = 3,
   selectable = false,
   selection,
-  adapter,
+  adapter = DEFAULT_IMAGE_LIST_ADAPTER,
 }: ImageListProps) {
-  const { mode, infiniteScroll, pagination, total, capabilities } = adapter
+  const { mode, infiniteScroll, pagination, total, capabilities, viewerActions, viewerEditor } = adapter
 
   const markerColumns = Math.min(10, Math.max(1, Math.floor(gridColumns)))
   const backendOrigin = getBackendOrigin()
   const isMasonryMode = viewMode === 'masonry'
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
-  const [isTaggerEnabled, setIsTaggerEnabled] = useState(false)
-
-  const listClassName = isMasonryMode ? 'm-0 list-none p-0' : 'grid gap-2'
-  const listStyle = isMasonryMode
-    ? { columnCount: markerColumns, columnGap: '0.5rem' }
-    : { gridTemplateColumns: `repeat(${markerColumns}, minmax(0, 1fr))` }
-
-  const itemClassName = isMasonryMode ? 'mb-2 inline-block w-full align-top rounded-md border p-3' : 'rounded-md border p-3'
-  const itemStyle = isMasonryMode ? { breakInside: 'avoid' as const } : undefined
-  const activeViewerIndex = viewerIndex !== null && viewerIndex >= 0 && viewerIndex < images.length ? viewerIndex : null
-  const activeImage = activeViewerIndex !== null ? images[activeViewerIndex] : null
+  const [viewerImages, setViewerImages] = useState<ImageRecord[]>(images)
+  const [editorSession, setEditorSession] = useState<{ fileId: number; compositeHash: string; index: number } | null>(null)
+  const [lastCheckedIndex, setLastCheckedIndex] = useState<number | null>(null)
 
   useEffect(() => {
-    let cancelled = false
+    setViewerImages(images)
+  }, [images])
 
-    const loadSettings = async () => {
+  const canEditImage = useCallback((image: ImageRecord) => {
+    return image.file_type === 'image' && Boolean(image.composite_hash)
+  }, [])
+
+  const handleOpenEditor = useCallback(async (context: { image: ImageRecord; index: number }) => {
+    const { image, index } = context
+    if (!canEditImage(image)) {
+      return
+    }
+
+    let resolvedImage = image
+    if (typeof resolvedImage.file_id !== 'number' || resolvedImage.file_id <= 0) {
       try {
-        const settings = await settingsApi.getSettings()
-        if (!cancelled) {
-          setIsTaggerEnabled(settings.tagger.enabled)
+        const response = await imageApi.getImage(resolvedImage.composite_hash as string)
+        if (!response.success || !response.data || typeof response.data.file_id !== 'number' || response.data.file_id <= 0) {
+          return
         }
+        resolvedImage = response.data
+        setViewerImages((current) => current.map((value, currentIndex) => (currentIndex === index ? response.data as ImageRecord : value)))
       } catch {
-        if (!cancelled) {
-          setIsTaggerEnabled(false)
-        }
+        return
       }
     }
 
-    void loadSettings()
+    setEditorSession({
+      fileId: resolvedImage.file_id as number,
+      compositeHash: resolvedImage.composite_hash as string,
+      index,
+    })
+  }, [canEditImage])
 
-    return () => {
-      cancelled = true
+  const handleEditorSaved = useCallback(async () => {
+    if (!editorSession) {
+      return
     }
-  }, [])
 
-  const activeGeneration = activeImage?.ai_metadata?.generation_params
-  const activePrompts = activeImage?.ai_metadata?.prompts
-  const activeCharacterPrompts = useMemo(() => extractCharacterPrompts(activeImage?.ai_metadata?.raw_nai_parameters), [activeImage?.ai_metadata?.raw_nai_parameters])
+    let refreshedImage: ImageRecord | null = null
+
+    try {
+      const response = await imageApi.getImage(editorSession.compositeHash)
+      if (response.success && response.data) {
+        refreshedImage = response.data
+        setViewerImages((current) => current.map((image, index) => (index === editorSession.index ? response.data as ImageRecord : image)))
+      }
+    } catch {
+      refreshedImage = null
+    }
+
+    const callbackImage = refreshedImage ?? viewerImages[editorSession.index]
+    if (callbackImage) {
+      await viewerEditor?.onSave?.({
+        image: callbackImage,
+        index: editorSession.index,
+        images: viewerImages,
+      })
+    }
+  }, [editorSession, viewerEditor, viewerImages])
+
+  const effectiveViewerActions = useMemo(() => {
+    const externalOpenEditor = viewerActions?.openEditor
+
+    return {
+      ...viewerActions,
+      canOpenEditor: (context: ViewerActionContext) => {
+        if (!canEditImage(context.image)) {
+          return false
+        }
+
+        if (viewerActions?.canOpenEditor) {
+          return viewerActions.canOpenEditor(context)
+        }
+
+        return true
+      },
+      openEditor: externalOpenEditor ?? ((context: ViewerActionContext) => {
+        handleOpenEditor({ image: context.image, index: context.index })
+      }),
+    }
+  }, [canEditImage, handleOpenEditor, viewerActions])
+
+  const listClassName = isMasonryMode ? 'grid gap-2' : 'grid gap-2'
+  const listStyle = isMasonryMode
+    ? { gridTemplateColumns: `repeat(${markerColumns}, minmax(0, 1fr))`, alignItems: 'start' as const }
+    : { gridTemplateColumns: `repeat(${markerColumns}, minmax(0, 1fr))` }
+
+  const itemStyle = undefined
+
+  // Custom Masonry Distribution
+  const masonryColumns = useMemo(() => {
+    if (!isMasonryMode) return []
+    const cols = Array.from({ length: markerColumns }, () => [] as { image: ImageRecord; index: number }[])
+    const heights = Array.from({ length: markerColumns }, () => 0)
+
+    viewerImages.forEach((image, index) => {
+      const shortestIndex = heights.indexOf(Math.min(...heights))
+      cols[shortestIndex].push({ image, index })
+      const ratio = (image.height && image.width) ? image.height / image.width : 1.5
+      heights[shortestIndex] += ratio
+    })
+    return cols
+  }, [isMasonryMode, markerColumns, viewerImages])
 
   const supportsStableSelection = Boolean(selection?.onStableSelectionChange)
 
-  const toggleSelection = (numericId: number | null, stableKey: string) => {
+  const toggleSelection = (numericId: number | null, stableKey: string, index: number, isShiftKey: boolean, isCurrentlyChecked: boolean) => {
     if (!selection) {
       return
     }
 
     if (supportsStableSelection && selection.onStableSelectionChange) {
       const currentStableKeys = selection.selectedStableKeys ?? []
-      const selected = currentStableKeys.includes(stableKey)
-      const next = selected
-        ? currentStableKeys.filter((value) => value !== stableKey)
-        : [...currentStableKeys, stableKey]
-      selection.onStableSelectionChange(next)
+      if (isShiftKey && lastCheckedIndex !== null) {
+        const start = Math.min(lastCheckedIndex, index)
+        const end = Math.max(lastCheckedIndex, index)
+        const imagesToSelect = viewerImages.slice(start, end + 1)
+        const keysToSelect = imagesToSelect.map((img, i) => getImageStableIdentity(img, start + i).stableKey)
+
+        if (isCurrentlyChecked) {
+          const keysToRemove = new Set(keysToSelect)
+          const next = currentStableKeys.filter(key => !keysToRemove.has(key))
+          selection.onStableSelectionChange(next)
+        } else {
+          const next = Array.from(new Set([...currentStableKeys, ...keysToSelect]))
+          selection.onStableSelectionChange(next)
+        }
+      } else {
+        const next = isCurrentlyChecked
+          ? currentStableKeys.filter((value) => value !== stableKey)
+          : [...currentStableKeys, stableKey]
+        selection.onStableSelectionChange(next)
+      }
+      setLastCheckedIndex(index)
       return
     }
 
@@ -202,33 +197,33 @@ export default function ImageList({
       return
     }
 
-    const selected = selection.selectedIds.includes(numericId)
-    const next = selected
-      ? selection.selectedIds.filter((value) => value !== numericId)
-      : [...selection.selectedIds, numericId]
-    selection.onSelectionChange(next)
+    if (isShiftKey && lastCheckedIndex !== null) {
+      const start = Math.min(lastCheckedIndex, index)
+      const end = Math.max(lastCheckedIndex, index)
+      const imagesToSelect = viewerImages.slice(start, end + 1)
+      const idsToSelect = imagesToSelect
+        .map((img, i) => getImageStableIdentity(img, start + i).numericId)
+        .filter((id): id is number => id !== null)
+
+      if (isCurrentlyChecked) {
+        const idsToRemove = new Set(idsToSelect)
+        const next = selection.selectedIds.filter(id => !idsToRemove.has(id))
+        selection.onSelectionChange(next)
+      } else {
+        const next = Array.from(new Set([...selection.selectedIds, ...idsToSelect]))
+        selection.onSelectionChange(next)
+      }
+    } else {
+      const next = isCurrentlyChecked
+        ? selection.selectedIds.filter((value) => value !== numericId)
+        : [...selection.selectedIds, numericId]
+      selection.onSelectionChange(next)
+    }
+    setLastCheckedIndex(index)
   }
 
   const openViewer = (index: number) => {
     setViewerIndex(index)
-  }
-
-  const closeViewer = () => {
-    setViewerIndex(null)
-  }
-
-  const showPrevious = () => {
-    if (activeViewerIndex === null || activeViewerIndex <= 0) {
-      return
-    }
-    setViewerIndex(activeViewerIndex - 1)
-  }
-
-  const showNext = () => {
-    if (activeViewerIndex === null || activeViewerIndex >= images.length - 1) {
-      return
-    }
-    setViewerIndex(activeViewerIndex + 1)
   }
 
   if (loading) {
@@ -239,7 +234,7 @@ export default function ImageList({
     )
   }
 
-  if (images.length === 0) {
+  if (viewerImages.length === 0) {
     return (
       <div className="space-y-3" data-testid="image-list-root" data-layout-mode={viewMode} data-columns={markerColumns}>
         <div className="rounded-md border p-6 text-center">
@@ -261,233 +256,230 @@ export default function ImageList({
 
   return (
     <div className="space-y-3" data-testid="image-list-root" data-layout-mode={viewMode} data-columns={markerColumns}>
-      <div className="text-xs text-muted-foreground">Total: {total ?? images.length}</div>
-      <ul className={listClassName} style={listStyle}>
-        {images.map((image, index) => {
-          const stableIdentity = getImageStableIdentity(image, index)
-          const numericId = stableIdentity.numericId
-          const isChecked = Boolean(
-            selection
-            && (supportsStableSelection
-              ? (selection.selectedStableKeys ?? []).includes(stableIdentity.stableKey)
-              : (numericId !== null && selection.selectedIds.includes(numericId))),
-          )
-          const previewUrl = buildPreviewMediaUrl(image, backendOrigin)
-          const isVideo = isVideoLike(image)
+      <div className="text-xs text-muted-foreground">Total: {total ?? viewerImages.length}</div>
+      {mode === 'infinite' ? (
+        <InfiniteScroll
+          dataLength={infiniteScroll?.rawDataLength ?? viewerImages.length}
+          next={infiniteScroll?.loadMore || (() => { })}
+          hasMore={infiniteScroll?.hasMore || false}
+          loader={
+            <div className="flex justify-center py-4">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          }
+          scrollThreshold={0.9}
+        >
+          {isMasonryMode ? (
+            <div className="flex gap-2 items-start">
+              {masonryColumns.map((column, colIdx) => (
+                <div key={colIdx} className="flex-1 flex flex-col gap-2">
+                  {column.map(({ image, index }) => {
+                    const stableIdentity = getImageStableIdentity(image, index)
+                    const numericId = stableIdentity.numericId
+                    const isChecked = Boolean(
+                      selection
+                      && (supportsStableSelection
+                        ? (selection.selectedStableKeys ?? []).includes(stableIdentity.stableKey)
+                        : (numericId !== null && selection.selectedIds.includes(numericId))),
+                    )
+                    const previewUrl = buildPreviewMediaUrl(image, backendOrigin)
+                    const isVideo = isVideoLike(image)
 
-          const mediaClassName = isMasonryMode
-            ? 'w-full h-auto object-contain'
-            : 'aspect-square w-full object-cover'
-
-          return (
-            <li
-              key={stableIdentity.stableKey}
-              className={`${itemClassName} group cursor-pointer transition-colors hover:bg-muted/30`}
-              style={itemStyle}
-              data-testid="image-list-item"
-              onClick={() => openViewer(index)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  openViewer(index)
-                }
-              }}
-            >
-              <div className="mb-2 overflow-hidden rounded-md border bg-muted/20">
-                {isVideo ? (
-                  <video className={mediaClassName} src={previewUrl} muted loop autoPlay playsInline>
-                    <track kind="captions" />
-                  </video>
-                ) : (
-                  <img className={mediaClassName} src={previewUrl} alt={getImageTitle(image, index)} loading="lazy" />
-                )}
-              </div>
-
-              <div className="flex items-start justify-between gap-2">
-                <p className="line-clamp-2 text-sm font-medium leading-snug">{getImageTitle(image, index)}</p>
-                {selectable && selection && (numericId !== null || supportsStableSelection) ? (
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onClick={(event) => event.stopPropagation()}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onChange={() => toggleSelection(numericId, stableIdentity.stableKey)}
-                    aria-label={`Select image ${numericId ?? stableIdentity.stableKey}`}
-                  />
-                ) : null}
-              </div>
-              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="rounded-full border px-2 py-0.5 uppercase tracking-wide">{image.file_type}</span>
-                <span>{image.width} x {image.height}</span>
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-
-      <Dialog open={activeImage !== null} onOpenChange={(open) => (open ? undefined : closeViewer())}>
-        <DialogContent className="max-h-[92vh] w-[min(96vw,1220px)] max-w-none overflow-hidden p-0">
-          <DialogTitle className="sr-only">
-            {activeImage ? getImageTitle(activeImage, activeViewerIndex ?? 0) : 'Image viewer'}
-          </DialogTitle>
-          <DialogDescription className="sr-only">
-            {activeViewerIndex !== null ? `Viewing image ${activeViewerIndex + 1} of ${images.length}.` : 'View image in full size.'}
-          </DialogDescription>
-          {activeImage ? (
-            <div className="flex h-[min(88vh,920px)] flex-col">
-              <div className="flex items-center justify-between gap-2 border-b px-3 py-2 sm:px-4">
-                <p className="line-clamp-1 text-sm font-semibold">{getImageTitle(activeImage, activeViewerIndex ?? 0)}</p>
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={showPrevious}
-                    disabled={activeViewerIndex === null || activeViewerIndex <= 0}
-                  >
-                    Prev
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={showNext}
-                    disabled={activeViewerIndex === null || activeViewerIndex >= images.length - 1}
-                  >
-                    Next
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={closeViewer}>
-                    Close
-                  </Button>
+                    return (
+                      <div
+                        key={stableIdentity.stableKey}
+                        className="group cursor-pointer"
+                        data-testid="image-list-item"
+                        onClick={() => openViewer(index)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            openViewer(index)
+                          }
+                        }}
+                      >
+                        <div className="relative overflow-hidden rounded-md border bg-muted/20">
+                          {selectable && selection && (numericId !== null || supportsStableSelection) ? (
+                            <div className="absolute left-2 top-2 z-10 rounded bg-background/50 p-1 opacity-70 backdrop-blur-sm transition-opacity hover:opacity-100">
+                              <input
+                                type="checkbox"
+                                className="m-0 block h-4 w-4 cursor-pointer accent-primary"
+                                checked={isChecked}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  if (event.shiftKey) {
+                                    event.preventDefault()
+                                    toggleSelection(numericId, stableIdentity.stableKey, index, true, isChecked)
+                                  }
+                                }}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onChange={() => toggleSelection(numericId, stableIdentity.stableKey, index, false, isChecked)}
+                                aria-label={`Select image ${numericId ?? stableIdentity.stableKey}`}
+                              />
+                            </div>
+                          ) : null}
+                          {isVideo ? (
+                            <video className="w-full h-auto object-contain" src={previewUrl} muted loop autoPlay playsInline>
+                              <track kind="captions" />
+                            </video>
+                          ) : (
+                            <img className="w-full h-auto object-contain" src={previewUrl} alt={getImageTitle(image, index)} loading="lazy" />
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-              </div>
+              ))}
+            </div>
+          ) : (
+            <ul className={listClassName} style={listStyle}>
+              {viewerImages.map((image, index) => {
+                const stableIdentity = getImageStableIdentity(image, index)
+                const numericId = stableIdentity.numericId
+                const isChecked = Boolean(
+                  selection
+                  && (supportsStableSelection
+                    ? (selection.selectedStableKeys ?? []).includes(stableIdentity.stableKey)
+                    : (numericId !== null && selection.selectedIds.includes(numericId))),
+                )
+                const previewUrl = buildPreviewMediaUrl(image, backendOrigin)
+                const isVideo = isVideoLike(image)
 
-              <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_350px]">
-                <div className="flex min-h-0 items-center justify-center overflow-auto bg-muted/20 p-3">
-                  {isVideoLike(activeImage) ? (
-                    <video
-                      className="max-h-[74vh] w-full rounded-md border bg-black/80 object-contain"
-                      src={buildPreviewMediaUrl(activeImage, backendOrigin)}
-                      controls
-                      autoPlay
-                      playsInline
-                    >
+                return (
+                  <li
+                    key={stableIdentity.stableKey}
+                    className="group cursor-pointer"
+                    style={itemStyle}
+                    data-testid="image-list-item"
+                    onClick={() => openViewer(index)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        openViewer(index)
+                      }
+                    }}
+                  >
+                    <div className="relative overflow-hidden rounded-md border bg-muted/20">
+                      {selectable && selection && (numericId !== null || supportsStableSelection) ? (
+                        <div className="absolute left-2 top-2 z-10 rounded bg-background/50 p-1 opacity-70 backdrop-blur-sm transition-opacity hover:opacity-100">
+                          <input
+                            type="checkbox"
+                            className="m-0 block h-4 w-4 cursor-pointer accent-primary"
+                            checked={isChecked}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              if (event.shiftKey) {
+                                event.preventDefault()
+                                toggleSelection(numericId, stableIdentity.stableKey, index, true, isChecked)
+                              }
+                            }}
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onChange={() => toggleSelection(numericId, stableIdentity.stableKey, index, false, isChecked)}
+                            aria-label={`Select image ${numericId ?? stableIdentity.stableKey}`}
+                          />
+                        </div>
+                      ) : null}
+                      {isVideo ? (
+                        <video className="aspect-square w-full object-cover" src={previewUrl} muted loop autoPlay playsInline>
+                          <track kind="captions" />
+                        </video>
+                      ) : (
+                        <img className="aspect-square w-full object-cover" src={previewUrl} alt={getImageTitle(image, index)} loading="lazy" />
+                      )}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </InfiniteScroll>
+      ) : (
+        <ul className={listClassName} style={listStyle}>
+          {viewerImages.map((image, index) => {
+            const stableIdentity = getImageStableIdentity(image, index)
+            const numericId = stableIdentity.numericId
+            const isChecked = Boolean(
+              selection
+              && (supportsStableSelection
+                ? (selection.selectedStableKeys ?? []).includes(stableIdentity.stableKey)
+                : (numericId !== null && selection.selectedIds.includes(numericId))),
+            )
+            const previewUrl = buildPreviewMediaUrl(image, backendOrigin)
+            const isVideo = isVideoLike(image)
+
+            const mediaClassName = isMasonryMode
+              ? 'w-full h-auto object-contain'
+              : 'aspect-square w-full object-cover'
+
+            return (
+              <li
+                key={stableIdentity.stableKey}
+                className="group cursor-pointer"
+                style={itemStyle}
+                data-testid="image-list-item"
+                onClick={() => openViewer(index)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    openViewer(index)
+                  }
+                }}
+              >
+                <div className="relative overflow-hidden rounded-md border bg-muted/20">
+                  {selectable && selection && (numericId !== null || supportsStableSelection) ? (
+                    <div className="absolute left-2 top-2 z-10 rounded bg-background/50 p-1 opacity-70 backdrop-blur-sm transition-opacity hover:opacity-100">
+                      <input
+                        type="checkbox"
+                        className="m-0 block h-4 w-4 cursor-pointer accent-primary"
+                        checked={isChecked}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          if (event.shiftKey) {
+                            event.preventDefault()
+                            toggleSelection(numericId, stableIdentity.stableKey, index, true, isChecked)
+                          }
+                        }}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onChange={() => toggleSelection(numericId, stableIdentity.stableKey, index, false, isChecked)}
+                        aria-label={`Select image ${numericId ?? stableIdentity.stableKey}`}
+                      />
+                    </div>
+                  ) : null}
+                  {isVideo ? (
+                    <video className={mediaClassName} src={previewUrl} muted loop autoPlay playsInline>
                       <track kind="captions" />
                     </video>
                   ) : (
-                    <img
-                      className="max-h-[74vh] w-full rounded-md border bg-black/10 object-contain"
-                      src={buildPreviewMediaUrl(activeImage, backendOrigin)}
-                      alt={getImageTitle(activeImage, activeViewerIndex ?? 0)}
-                    />
+                    <img className={mediaClassName} src={previewUrl} alt={getImageTitle(image, index)} loading="lazy" />
                   )}
                 </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
 
-                <aside className="min-h-0 overflow-y-auto border-t bg-background p-3 md:border-t-0 md:border-l">
-                  <div className="space-y-4">
-                    <section className="space-y-2">
-                      <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Prompt Details</h3>
-                      <div className="rounded-md border bg-muted/10 p-2">
-                        <PromptDisplay
-                          prompt={activePrompts?.prompt ?? activeImage.prompt}
-                          negativePrompt={activePrompts?.negative_prompt ?? activeImage.negative_prompt}
-                          showGrouped={true}
-                          imageId={activeImage.composite_hash ?? undefined}
-                          autoTags={activeImage.auto_tags}
-                          isTaggerEnabled={isTaggerEnabled}
-                          characterPrompts={activeCharacterPrompts}
-                          rawNaiParameters={activeImage.ai_metadata?.raw_nai_parameters ?? null}
-                        />
-                      </div>
-                    </section>
+      <ImageViewerDialog
+        images={viewerImages}
+        viewerIndex={viewerIndex}
+        backendOrigin={backendOrigin}
+        onViewerIndexChange={setViewerIndex}
+        actionAdapter={effectiveViewerActions}
+      />
 
-                    <section className="space-y-2">
-                      <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Generation</h3>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-md border p-2">
-                          <p className="text-muted-foreground">Model</p>
-                          <p className="font-medium break-words">{formatNullable(activeImage.ai_metadata?.model_name ?? activeImage.model_name)}</p>
-                        </div>
-                        <div className="rounded-md border p-2">
-                          <p className="text-muted-foreground">Tool</p>
-                          <p className="font-medium break-words">{formatNullable(activeImage.ai_metadata?.ai_tool ?? activeImage.ai_tool)}</p>
-                        </div>
-                        <div className="rounded-md border p-2">
-                          <p className="text-muted-foreground">Sampler</p>
-                          <p className="font-medium break-words">{formatNullable(activeGeneration?.sampler ?? activeImage.sampler)}</p>
-                        </div>
-                        <div className="rounded-md border p-2">
-                          <p className="text-muted-foreground">Scheduler</p>
-                          <p className="font-medium break-words">{formatNullable(activeGeneration?.scheduler ?? activeImage.scheduler)}</p>
-                        </div>
-                        <div className="rounded-md border p-2">
-                          <p className="text-muted-foreground">Seed</p>
-                          <p className="font-medium break-words">{formatNullable(activeGeneration?.seed ?? activeImage.seed)}</p>
-                        </div>
-                        <div className="rounded-md border p-2">
-                          <p className="text-muted-foreground">Steps</p>
-                          <p className="font-medium break-words">{formatNullable(activeGeneration?.steps ?? activeImage.steps)}</p>
-                        </div>
-                        <div className="rounded-md border p-2">
-                          <p className="text-muted-foreground">CFG</p>
-                          <p className="font-medium break-words">{formatNullable(activeGeneration?.cfg_scale ?? activeImage.cfg_scale)}</p>
-                        </div>
-                        <div className="rounded-md border p-2">
-                          <p className="text-muted-foreground">Denoise</p>
-                          <p className="font-medium break-words">{formatNullable(activeGeneration?.denoise_strength ?? activeImage.denoise_strength)}</p>
-                        </div>
-                        <div className="rounded-md border p-2">
-                          <p className="text-muted-foreground">Batch size</p>
-                          <p className="font-medium break-words">{formatNullable(activeGeneration?.batch_size ?? activeImage.batch_size)}</p>
-                        </div>
-                        <div className="rounded-md border p-2">
-                          <p className="text-muted-foreground">Batch index</p>
-                          <p className="font-medium break-words">{formatNullable(activeGeneration?.batch_index ?? activeImage.batch_index)}</p>
-                        </div>
-                        <div className="col-span-2 rounded-md border p-2">
-                          <p className="text-muted-foreground">Lora models</p>
-                          <p className="font-medium break-words">{formatNullable(activeImage.ai_metadata?.lora_models ? JSON.stringify(activeImage.ai_metadata.lora_models) : activeImage.lora_models)}</p>
-                        </div>
-                      </div>
-                    </section>
+      <ImageEditorModal
+        open={editorSession !== null}
+        fileId={editorSession?.fileId ?? null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditorSession(null)
+          }
+        }}
+        onSaved={handleEditorSaved}
+      />
 
-                    <section className="space-y-2">
-                      <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">File Details</h3>
-                      <div className="space-y-1 rounded-md border p-2 text-xs">
-                        <p><span className="text-muted-foreground">Type:</span> {formatNullable(activeImage.file_type)}</p>
-                        <p><span className="text-muted-foreground">Size:</span> {activeImage.width} x {activeImage.height}</p>
-                        <p><span className="text-muted-foreground">File size:</span> {formatFileSize(activeImage.file_size)}</p>
-                        <p><span className="text-muted-foreground">Rating score:</span> {formatNullable(activeImage.rating_score)}</p>
-                        <p><span className="text-muted-foreground">First seen:</span> {formatDate(activeImage.first_seen_date)}</p>
-                        <p><span className="text-muted-foreground">Path:</span> <span className="break-all">{formatNullable(activeImage.original_file_path)}</span></p>
-                        <p><span className="text-muted-foreground">Hash:</span> <span className="break-all">{formatNullable(activeImage.composite_hash)}</span></p>
-                        {activeImage.duration !== null ? (
-                          <p><span className="text-muted-foreground">Duration:</span> {activeImage.duration}s</p>
-                        ) : null}
-                        {activeImage.fps !== null ? (
-                          <p><span className="text-muted-foreground">FPS:</span> {activeImage.fps}</p>
-                        ) : null}
-                        {activeImage.groups && activeImage.groups.length > 0 ? (
-                          <p>
-                            <span className="text-muted-foreground">Groups:</span>{' '}
-                            {activeImage.groups.map((group) => group.name).join(', ')}
-                          </p>
-                        ) : null}
-                      </div>
-                    </section>
-                  </div>
-                </aside>
-              </div>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
-
-      {mode === 'infinite' && infiniteScroll?.hasMore ? (
-        <div className="flex justify-center">
-          <Button type="button" variant="outline" onClick={infiniteScroll.loadMore}>Load more</Button>
-        </div>
-      ) : null}
+      {/* For pagination mode, keep the old UI. InfiniteScroll handles the loader for infinite mode. */}
 
       {mode === 'pagination' && pagination ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2 text-sm">

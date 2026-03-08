@@ -1,6 +1,6 @@
 import { FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { GroupWithStats } from '@comfyui-image-manager/shared'
+import type { GroupWithStats } from '@conai/shared'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'

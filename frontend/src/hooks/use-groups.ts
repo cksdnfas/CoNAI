@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { GroupCreateData, GroupUpdateData } from '@comfyui-image-manager/shared'
+import type { GroupCreateData, GroupUpdateData } from '@conai/shared'
 import { groupApi } from '@/services/group-api'
 
 export const groupKeys = {

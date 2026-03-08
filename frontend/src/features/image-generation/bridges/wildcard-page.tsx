@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus, Play, RefreshCw } from 'lucide-react'
+import { Plus, Play, RefreshCw, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useWildcardTree } from '@/hooks/use-wildcard-tree'
 import {
@@ -215,6 +216,7 @@ export default function WildcardPage({ mode }: WildcardPageProps) {
   const [editorError, setEditorError] = useState<string | null>(null)
   const [editingNode, setEditingNode] = useState<WildcardWithItems | null>(null)
   const [form, setForm] = useState<EditorForm>(defaultForm)
+  const [editorToolTab, setEditorToolTab] = useState<WildcardTool>('comfyui')
 
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewTool, setPreviewTool] = useState<WildcardTool>('comfyui')
@@ -742,9 +744,10 @@ export default function WildcardPage({ mode }: WildcardPageProps) {
             <DialogDescription>{t('wildcards:form.itemsHelper')}</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-1">
+          <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-2 px-1">
+            {/* 기본 정보 */}
+            <div className="space-y-4">
+              <div className="space-y-1.5">
                 <label className="text-sm font-medium" htmlFor="wildcard-name-input">
                   {t('wildcards:form.name')}
                 </label>
@@ -756,7 +759,7 @@ export default function WildcardPage({ mode }: WildcardPageProps) {
                 />
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <p className="text-sm font-medium">{t('wildcards:form.parent')}</p>
                 <Select value={form.parentId} onValueChange={(value) => setForm((prev) => ({ ...prev, parentId: value }))}>
                   <SelectTrigger>
@@ -772,22 +775,23 @@ export default function WildcardPage({ mode }: WildcardPageProps) {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="wildcard-description-input">
+                  {t('wildcards:form.description')}
+                </label>
+                <Textarea
+                  id="wildcard-description-input"
+                  rows={2}
+                  value={form.description}
+                  onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
+                />
+              </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-sm font-medium" htmlFor="wildcard-description-input">
-                {t('wildcards:form.description')}
-              </label>
-              <Textarea
-                id="wildcard-description-input"
-                rows={2}
-                value={form.description}
-                onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
-              />
-            </div>
-
-            <div className="grid gap-2 md:grid-cols-2">
-              <label className="flex items-center gap-2 text-sm">
+            {/* 옵션 */}
+            <div className="flex flex-wrap gap-x-6 gap-y-2 py-1">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input
                   type="checkbox"
                   checked={form.includeChildren}
@@ -795,7 +799,7 @@ export default function WildcardPage({ mode }: WildcardPageProps) {
                 />
                 {t('wildcards:form.includeChildren')}
               </label>
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input
                   type="checkbox"
                   checked={form.onlyChildren}
@@ -807,14 +811,17 @@ export default function WildcardPage({ mode }: WildcardPageProps) {
                     }))
                   }
                 />
-                only_children
+                {t('wildcards:form.onlyChildren')}
               </label>
             </div>
 
             {mode === 'chain' ? (
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <p className="text-sm font-medium">{t('wildcards:form.chainOption')}</p>
-                <Tabs value={form.chainOption} onValueChange={(value) => setForm((prev) => ({ ...prev, chainOption: value as WildcardChainOption }))}>
+                <Tabs
+                  value={form.chainOption}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, chainOption: value as WildcardChainOption }))}
+                >
                   <TabsList>
                     <TabsTrigger value="replace">{t('wildcards:form.chainOptionReplace')}</TabsTrigger>
                     <TabsTrigger value="append">{t('wildcards:form.chainOptionAppend')}</TabsTrigger>
@@ -823,96 +830,117 @@ export default function WildcardPage({ mode }: WildcardPageProps) {
               </div>
             ) : null}
 
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">{t('wildcards:form.comfyuiItems')}</p>
-                  <Button type="button" variant="outline" size="sm" onClick={() => patchItems('comfyui', (items) => [...items, makeFormItem()])}>
-                    {t('wildcards:actions.addItem')}
-                  </Button>
-                </div>
-                {form.comfyuiItems.map((item, index) => (
-                  <div key={item.key} className="flex gap-2">
-                    <Input
-                      value={item.content}
-                      onChange={(event) =>
-                        patchItems('comfyui', (items) =>
-                          items.map((entry, entryIndex) =>
-                            entryIndex === index ? { ...entry, content: event.target.value } : entry
-                          )
-                        )
-                      }
-                      placeholder={t('wildcards:form.itemPlaceholder')}
-                    />
-                    <Input
-                      type="number"
-                      value={String(item.weight)}
-                      onChange={(event) =>
-                        patchItems('comfyui', (items) =>
-                          items.map((entry, entryIndex) =>
-                            entryIndex === index ? { ...entry, weight: Number(event.target.value) } : entry
-                          )
-                        )
-                      }
-                      className="max-w-24"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => patchItems('comfyui', (items) => items.filter((entry) => entry.key !== item.key))}
-                      disabled={form.comfyuiItems.length === 1}
-                    >
-                      -
-                    </Button>
-                  </div>
-                ))}
-              </div>
+            <Separator />
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">{t('wildcards:form.naiItems')}</p>
-                  <Button type="button" variant="outline" size="sm" onClick={() => patchItems('nai', (items) => [...items, makeFormItem()])}>
+            {/* 아이템 목록 (탭 방식) */}
+            <div className="space-y-4">
+              <Tabs value={editorToolTab} onValueChange={(v) => setEditorToolTab(v as WildcardTool)}>
+                <div className="flex items-center justify-between mb-4">
+                  <TabsList>
+                    <TabsTrigger value="comfyui">ComfyUI</TabsTrigger>
+                    <TabsTrigger value="nai">NovelAI</TabsTrigger>
+                  </TabsList>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => patchItems(editorToolTab, (items) => [...items, makeFormItem()])}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" />
                     {t('wildcards:actions.addItem')}
                   </Button>
                 </div>
-                {form.naiItems.map((item, index) => (
-                  <div key={item.key} className="flex gap-2">
-                    <Input
-                      value={item.content}
-                      onChange={(event) =>
-                        patchItems('nai', (items) =>
-                          items.map((entry, entryIndex) =>
-                            entryIndex === index ? { ...entry, content: event.target.value } : entry
+
+                <Alert className="mb-4 bg-muted/50 py-2">
+                  <AlertDescription className="text-xs">{t('wildcards:form.itemsHelper')}</AlertDescription>
+                </Alert>
+
+                <TabsContent value="comfyui" className="space-y-3 mt-0">
+                  {form.comfyuiItems.map((item, index) => (
+                    <div key={item.key} className="flex gap-2 items-center">
+                      <span className="text-xs text-muted-foreground min-w-[1.5rem]">{index + 1}.</span>
+                      <Input
+                        value={item.content}
+                        onChange={(event) =>
+                          patchItems('comfyui', (items) =>
+                            items.map((entry, entryIndex) =>
+                              entryIndex === index ? { ...entry, content: event.target.value } : entry
+                            )
                           )
-                        )
-                      }
-                      placeholder={t('wildcards:form.itemPlaceholder')}
-                    />
-                    <Input
-                      type="number"
-                      value={String(item.weight)}
-                      onChange={(event) =>
-                        patchItems('nai', (items) =>
-                          items.map((entry, entryIndex) =>
-                            entryIndex === index ? { ...entry, weight: Number(event.target.value) } : entry
+                        }
+                        placeholder={t('wildcards:form.itemPlaceholder')}
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        value={String(item.weight)}
+                        onChange={(event) =>
+                          patchItems('comfyui', (items) =>
+                            items.map((entry, entryIndex) =>
+                              entryIndex === index ? { ...entry, weight: Number(event.target.value) } : entry
+                            )
                           )
-                        )
-                      }
-                      className="max-w-24"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => patchItems('nai', (items) => items.filter((entry) => entry.key !== item.key))}
-                      disabled={form.naiItems.length === 1}
-                    >
-                      -
-                    </Button>
-                  </div>
-                ))}
-              </div>
+                        }
+                        className="w-20"
+                        step={0.1}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => patchItems('comfyui', (items) => items.filter((entry) => entry.key !== item.key))}
+                        disabled={form.comfyuiItems.length === 1}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </TabsContent>
+
+                <TabsContent value="nai" className="space-y-3 mt-0">
+                  {form.naiItems.map((item, index) => (
+                    <div key={item.key} className="flex gap-2 items-center">
+                      <span className="text-xs text-muted-foreground min-w-[1.5rem]">{index + 1}.</span>
+                      <Input
+                        value={item.content}
+                        onChange={(event) =>
+                          patchItems('nai', (items) =>
+                            items.map((entry, entryIndex) =>
+                              entryIndex === index ? { ...entry, content: event.target.value } : entry
+                            )
+                          )
+                        }
+                        placeholder={t('wildcards:form.itemPlaceholder')}
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        value={String(item.weight)}
+                        onChange={(event) =>
+                          patchItems('nai', (items) =>
+                            items.map((entry, entryIndex) =>
+                              entryIndex === index ? { ...entry, weight: Number(event.target.value) } : entry
+                            )
+                          )
+                        }
+                        className="w-20"
+                        step={0.1}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => patchItems('nai', (items) => items.filter((entry) => entry.key !== item.key))}
+                        disabled={form.naiItems.length === 1}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </TabsContent>
+              </Tabs>
             </div>
 
             {editorError ? (
@@ -921,6 +949,7 @@ export default function WildcardPage({ mode }: WildcardPageProps) {
               </Alert>
             ) : null}
           </div>
+
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>

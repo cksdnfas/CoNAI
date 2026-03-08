@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FolderTree, Loader2, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { AutoFolderGroupWithStats, GroupWithStats } from '@comfyui-image-manager/shared'
+import type { AutoFolderGroupWithStats, GroupWithStats } from '@conai/shared'
 import type { ImageRecord, PageSize } from '@/types/image'
 import { autoFolderGroupsApi } from '@/services/auto-folder-groups-api'
 import { useAutoFolderChildGroups, useAutoFolderRootGroups, useRebuildAutoFolderGroups } from '@/hooks/use-auto-folder-groups'

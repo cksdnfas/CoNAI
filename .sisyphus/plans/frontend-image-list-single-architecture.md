@@ -1,4 +1,0 @@
-- [ ] 1. Baseline setup
-- [x] 2. Adapter policy and stable identity extraction
-- [x] 3. Extract single shared media URL resolver and remove duplicate helpers
-- [x] 10. Refactor ImageList core into adapter-driven ImageSurface behavior

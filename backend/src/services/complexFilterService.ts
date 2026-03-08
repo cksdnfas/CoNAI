@@ -1,10 +1,8 @@
 import { db } from '../database/init';
-import {
-  ComplexFilter,
-  FilterCondition,
-  FilterValidationResult,
-  FilterExecutionStats
-} from '@comfyui-image-manager/shared';
+import { ComplexFilter,
+FilterCondition,
+FilterValidationResult,
+FilterExecutionStats } from '@conai/shared';
 import { RatingScoreService } from './ratingScoreService';
 import { RatingWeights } from '../types/rating';
 

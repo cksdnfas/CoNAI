@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { FileVerificationService } from '../services/fileVerificationService';
 import { SystemSettingsService } from '../services/systemSettingsService';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { successResponse } from '@comfyui-image-manager/shared';
+import { successResponse } from '@conai/shared';
 
 const router = Router();
 

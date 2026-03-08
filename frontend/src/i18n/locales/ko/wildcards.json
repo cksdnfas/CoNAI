@@ -43,6 +43,7 @@
     "noParent": "없음 (최상위)",
     "includeChildren": "하위 와일드카드 자동 포함",
     "includeChildrenHelper": "하위 그룹의 모든 항목을 자동으로 포함합니다 (중첩 포함)",
+    "onlyChildren": "하위 항목만 사용",
     "chainOption": "체인 옵션",
     "chainOptionReplace": "교체 (Replace)",
     "chainOptionAppend": "추가 (Append)",

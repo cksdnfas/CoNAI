@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Ban as NegativeIcon, CheckCircle as PositiveIcon, Search as SearchIcon, Sparkles as AutoIcon, Star as RatingIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { RatingTier } from '@comfyui-image-manager/shared'
+import type { RatingTier } from '@conai/shared'
 import { apiClient } from '@/lib/api/client'
 import { cn } from '@/lib/utils'
 

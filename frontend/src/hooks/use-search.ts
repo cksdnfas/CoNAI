@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import type { ComplexSearchRequest } from '@comfyui-image-manager/shared'
+import type { ComplexSearchRequest } from '@conai/shared'
 import type { ImageRecord, PageSize } from '@/types/image'
 import { imageApi } from '@/services/image-api'
 

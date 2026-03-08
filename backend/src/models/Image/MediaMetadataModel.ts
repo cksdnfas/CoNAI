@@ -549,6 +549,102 @@ export class MediaMetadataModel {
   }
 
   /**
+   * 커서 기반 페이지네이션으로 파일 경로 포함 조회 (무한 스크롤용)
+   * 오프셋 기반과 달리 새 이미지가 추가되어도 목록이 뒤섞이지 않음
+   *
+   * cursorDate/cursorHash가 없으면 첫 페이지 반환
+   */
+  static findAllWithFilesCursor(options: {
+    limit?: number;
+    sortOrder?: 'ASC' | 'DESC';
+    cursorDate?: string;
+    cursorHash?: string;
+  }): { items: any[], total: number, hasMore: boolean } {
+    const limit = options.limit || 50;
+    const sortOrder = options.sortOrder || 'DESC';
+    const cursorDate = options.cursorDate;
+    const cursorHash = options.cursorHash;
+
+    const countRow = db.prepare(`
+      SELECT COUNT(*) as total
+      FROM image_files
+      WHERE file_status = 'active' AND composite_hash IS NOT NULL
+    `).get() as { total: number };
+
+    let cursorCondition = '';
+    const queryParams: any[] = [];
+
+    if (cursorDate && cursorHash) {
+      if (sortOrder === 'DESC') {
+        cursorCondition = `AND (mm.first_seen_date < ? OR (mm.first_seen_date = ? AND mm.composite_hash < ?))`;
+      } else {
+        cursorCondition = `AND (mm.first_seen_date > ? OR (mm.first_seen_date = ? AND mm.composite_hash > ?))`;
+      }
+      queryParams.push(cursorDate, cursorDate, cursorHash);
+    }
+
+    const query = `
+      SELECT
+        mm.composite_hash,
+        mm.perceptual_hash,
+        mm.dhash,
+        mm.ahash,
+        mm.color_histogram,
+        mm.width,
+        mm.height,
+        mm.thumbnail_path,
+        mm.ai_tool,
+        mm.model_name,
+        mm.lora_models,
+        mm.steps,
+        mm.cfg_scale,
+        mm.sampler,
+        mm.seed,
+        mm.scheduler,
+        mm.prompt,
+        mm.negative_prompt,
+        mm.denoise_strength,
+        mm.generation_time,
+        mm.batch_size,
+        mm.batch_index,
+        mm.auto_tags,
+        mm.duration,
+        mm.fps,
+        mm.video_codec,
+        mm.audio_codec,
+        mm.bitrate,
+        mm.rating_score,
+        mm.character_prompt_text,
+        mm.raw_nai_parameters,
+        mm.first_seen_date,
+        mm.metadata_updated_date,
+        if.id,
+        if.original_file_path,
+        if.file_size,
+        if.mime_type,
+        if.file_status,
+        if.scan_date,
+        if.file_type
+      FROM image_files if
+      LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
+      WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL
+      ${cursorCondition}
+      ORDER BY mm.first_seen_date ${sortOrder}, mm.composite_hash ${sortOrder}
+      LIMIT ?
+    `;
+
+    queryParams.push(limit + 1);
+
+    const items = db.prepare(query).all(...queryParams);
+    const hasMore = items.length > limit;
+    if (hasMore) {
+      items.pop();
+    }
+
+    return { items, total: countRow.total, hasMore };
+  }
+
+  /**
    * 지정된 composite_hash 목록에 해당하는 파일 포함 상세 정보 조회
    */
   static findByHashesWithFiles(compositeHashes: string[]): any[] {

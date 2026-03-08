@@ -1,6 +1,6 @@
 import { ChevronRight, FolderOpen, Home } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { BreadcrumbItem } from '@comfyui-image-manager/shared'
+import type { BreadcrumbItem } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 
 interface GroupBreadcrumbProps {

@@ -10,7 +10,7 @@ import {
   SIMILARITY_THRESHOLDS
 } from '../../types/similarity';
 import { runtimePaths } from '../../config/runtimePaths';
-import { validateId, successResponse, errorResponse, PAGINATION } from '@comfyui-image-manager/shared';
+import { validateId, successResponse, errorResponse, PAGINATION } from '@conai/shared';
 import { db } from '../../database/init';
 import { enrichImageWithFileView } from './utils';
 

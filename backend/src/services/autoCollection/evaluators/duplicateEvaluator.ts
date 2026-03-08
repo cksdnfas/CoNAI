@@ -8,7 +8,7 @@
  * - duplicate_custom (custom Hamming distance threshold)
  */
 
-import { AutoCollectCondition } from '@comfyui-image-manager/shared';
+import { AutoCollectCondition } from '@conai/shared';
 import { ConditionEvaluator, EvaluableImage } from '../types';
 
 export class DuplicateEvaluator implements ConditionEvaluator {

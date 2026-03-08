@@ -1,9 +1,12 @@
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, Image as ImageIcon, Images as PhotoLibraryIcon, Loader2, MoveRight as MoveIcon, Text as TextSnippetIcon, Video as VideocamIcon, Download as DownloadIcon, X as CloseIcon, Trash2 as DeleteIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { GroupWithStats } from '@comfyui-image-manager/shared'
+import type { GroupWithStats } from '@conai/shared'
 import type { ImageRecord, PageSize } from '@/types/image'
+import { Settings2 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import ImageList from '@/features/images/components/image-list'
 import { createInfiniteImageListAdapter, createPaginationImageListAdapter, getImageStableIdentity } from '@/features/images/components/image-list-contract'
 import GroupAssignModal from './group-assign-modal'
@@ -56,15 +59,13 @@ const IconButton: React.FC<React.PropsWithChildren<{ onClick?: (event: React.Mou
 const Dialog: React.FC<any> = ({ open, onClose, children, PaperProps }) => {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="max-h-[90vh] w-[95vw] max-w-[1200px] overflow-hidden rounded-lg border bg-background" style={sxToStyle(PaperProps?.sx)}>
-        {onClose ? (
-          <div className="flex justify-end border-b px-2 py-1">
-            <UiButton type="button" variant="ghost" size="icon-sm" onClick={onClose}>
-              <CloseIcon className="h-4 w-4" />
-            </UiButton>
-          </div>
-        ) : null}
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && onClose) onClose()
+      }}
+    >
+      <div className="max-h-[90vh] flex flex-col w-[95vw] max-w-[1200px] overflow-hidden rounded-lg border bg-background shadow-lg" style={sxToStyle(PaperProps?.sx)}>
         {children}
       </div>
     </div>
@@ -78,7 +79,7 @@ const DialogContent: React.FC<any> = ({ children, sx }) => <div className="p-4" 
 const DialogActions: React.FC<any> = ({ children }) => <div className="flex justify-end gap-2 border-t px-4 py-3">{children}</div>
 const DialogContentText: React.FC<any> = ({ children }) => <p className="text-sm text-muted-foreground">{children}</p>
 
-const Toolbar: React.FC<any> = ({ children, sx }) => <div style={sxToStyle(sx)} className="flex items-center gap-2 px-4 py-2">{children}</div>
+
 
 const Alert: React.FC<any> = ({ severity, sx, children }) => (
   <UiAlert variant={severity === 'error' ? 'destructive' : 'default'} style={sxToStyle(sx)}>
@@ -157,8 +158,10 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   onShowSnackbar,
 }) => {
   const { t } = useTranslation(['imageGroups', 'common'])
-  const { settings } = useImageListSettings('group_modal')
+  const { settings, setViewMode, setGridColumns } = useImageListSettings('group_modal')
   const activeMode = settings.activeScrollMode || 'pagination'
+  const appliedViewMode = settings.viewMode
+  const appliedGridColumns = Math.max(1, Math.min(10, Math.floor(settings.gridColumns)))
 
   const [selectedStableKeys, setSelectedStableKeys] = useState<string[]>([])
   const [assignDialogOpen, setAssignDialogOpen] = useState(false)
@@ -169,6 +172,13 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   const [pendingDownloadType, setPendingDownloadType] = useState<'thumbnail' | 'original' | 'video' | null>(null)
   const [loraDialogOpen, setLoraDialogOpen] = useState(false)
   const [loraDialogScope, setLoraDialogScope] = useState<'all' | 'selected'>('all')
+  const [isOuterEscapeArmed, setIsOuterEscapeArmed] = useState(false)
+
+  const [layoutOptionsOpen, setLayoutOptionsOpen] = useState(false)
+  const [draftViewMode, setDraftViewMode] = useState<'grid' | 'masonry'>(appliedViewMode)
+  const [draftGridColumns, setDraftGridColumns] = useState(appliedGridColumns)
+  const layoutPanelRef = React.useRef<HTMLDivElement | null>(null)
+  const layoutFabRef = React.useRef<HTMLButtonElement | null>(null)
 
   void allGroups
 
@@ -202,21 +212,130 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
 
   const canRemove = hasManualSelected && !hasAutoSelected && selectedImages.length > 0
   const canAssign = selectedImages.length > 0
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const handleEscapeClose = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return
+      }
+
+      const nestedViewerOpen = document.querySelector('[data-testid="image-viewer-dialog"]') !== null
+      if (nestedViewerOpen) {
+        setIsOuterEscapeArmed(true)
+        return
+      }
+
+      if (layoutOptionsOpen) {
+        return
+      }
+
+      if (!isOuterEscapeArmed && event.defaultPrevented) {
+        return
+      }
+
+      event.preventDefault()
+      setIsOuterEscapeArmed(false)
+      onClose()
+    }
+
+    window.addEventListener('keydown', handleEscapeClose)
+    return () => {
+      window.removeEventListener('keydown', handleEscapeClose)
+    }
+  }, [isOuterEscapeArmed, onClose, open, layoutOptionsOpen])
+
+  useEffect(() => {
+    if (!open) {
+      setIsOuterEscapeArmed(false)
+      setLayoutOptionsOpen(false)
+    }
+  }, [open])
+
+  const closeLayoutOptions = useCallback((restoreFocus = false) => {
+    setLayoutOptionsOpen(false)
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => {
+        layoutFabRef.current?.focus()
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!layoutOptionsOpen) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeLayoutOptions(true)
+      }
+    }
+
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target
+      if (!(target instanceof Element)) {
+        return
+      }
+
+      if (layoutPanelRef.current?.contains(target)) {
+        return
+      }
+
+      if (layoutFabRef.current?.contains(target)) {
+        return
+      }
+
+      if (target.closest('[data-slot="select-content"]')) {
+        return
+      }
+
+      closeLayoutOptions(false)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('mousedown', handlePointerDown)
+    window.addEventListener('touchstart', handlePointerDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('mousedown', handlePointerDown)
+      window.removeEventListener('touchstart', handlePointerDown)
+    }
+  }, [closeLayoutOptions, layoutOptionsOpen])
+
+  const handleLayoutFabClick = () => {
+    setDraftViewMode(appliedViewMode)
+    setDraftGridColumns(appliedGridColumns)
+    setLayoutOptionsOpen((previous) => !previous)
+  }
+
+  const handleApplyLayout = () => {
+    const safeColumns = Math.max(1, Math.min(10, Math.floor(draftGridColumns)))
+    setViewMode(draftViewMode)
+    setGridColumns(safeColumns)
+    setDraftGridColumns(safeColumns)
+    closeLayoutOptions(false)
+  }
+
   const imageListAdapter = activeMode === 'infinite'
     ? createInfiniteImageListAdapter({
-        infiniteScroll: infiniteScroll ?? { hasMore: false, loadMore: () => undefined },
-        total,
-      })
+      infiniteScroll: infiniteScroll ?? { hasMore: false, loadMore: () => undefined },
+      total,
+    })
     : createPaginationImageListAdapter({
-        pagination: {
-          currentPage,
-          totalPages,
-          onPageChange: onPageChange || (() => undefined),
-          pageSize: pageSize as number,
-          onPageSizeChange: (size: number) => onPageSizeChange?.(size as PageSize),
-        },
-        total,
-      })
+      pagination: {
+        currentPage,
+        totalPages,
+        onPageChange: onPageChange || (() => undefined),
+        pageSize: pageSize as number,
+        onPageSizeChange: (size: number) => onPageSizeChange?.(size as PageSize),
+      },
+      total,
+    })
 
   const handleRemoveClick = () => {
     setRemoveDialogOpen(true)
@@ -369,98 +488,174 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
         fullWidth
         PaperProps={{
           sx: {
+            display: 'flex',
+            flexDirection: 'column',
             height: '90vh',
             maxHeight: '90vh',
           },
         }}
       >
         <DialogTitle>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="h6">
-              {t('imageGroups:imageModal.title', { name: currentGroup?.name, count: total })}
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <IconButton
-                aria-label="download"
-                onClick={handleDownloadClick}
-                disabled={loadingCounts || total === 0}
-                sx={{ color: 'primary.main' }}
-              >
-                {loadingCounts ? <CircularProgress size={24} /> : <DownloadIcon />}
-              </IconButton>
-              <IconButton
-                aria-label="close"
-                onClick={onClose}
-                sx={{ color: 'grey.500' }}
-              >
-                <CloseIcon />
-              </IconButton>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Typography variant="h6">
+                {t('imageGroups:imageModal.title', { name: currentGroup?.name, count: total })}
+              </Typography>
+              {selectedImages.length > 0 ? (
+                <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>
+                  {t('imageGroups:imageModal.selectedCount', { count: selectedImages.length })}
+                </Typography>
+              ) : null}
             </Box>
-          </Box>
-        </DialogTitle>
 
-        {selectedImages.length > 0 ? (
-          <Toolbar
-            sx={{
-              bgcolor: 'action.hover',
-              borderTop: 1,
-              borderBottom: 1,
-              borderColor: 'divider',
-            }}
-          >
-            <Typography variant="body2" sx={{ flex: 1 }}>
-              {t('imageGroups:imageModal.selectedCount', { count: selectedImages.length })}
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              {!readOnly ? (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+              {selectedImages.length > 0 && !readOnly ? (
                 <>
                   <Button
                     variant="outlined"
                     color="error"
-                    startIcon={<DeleteIcon />}
+                    startIcon={<DeleteIcon className="h-4 w-4" />}
                     onClick={handleRemoveClick}
                     disabled={!canRemove}
+                    sx={{ py: 0.5, px: 2, height: 32 }}
                   >
                     {t('imageGroups:imageModal.buttonRemove')}
                   </Button>
                   <Button
                     variant="outlined"
                     color="primary"
-                    startIcon={<MoveIcon />}
+                    startIcon={<MoveIcon className="h-4 w-4" />}
                     onClick={handleAssignClick}
                     disabled={!canAssign}
+                    sx={{ py: 0.5, px: 2, height: 32 }}
                   >
                     {t('imageGroups:imageModal.buttonAssign')}
                   </Button>
+                  <div className="h-6 w-px bg-border mx-1" />
                 </>
               ) : null}
+
+              <IconButton
+                aria-label="download"
+                onClick={handleDownloadClick}
+                disabled={loadingCounts || total === 0}
+                sx={{ color: 'primary.main', height: 32, width: 32, p: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                {loadingCounts ? <CircularProgress size={18} /> : <DownloadIcon className="h-4 w-4" />}
+              </IconButton>
+              <IconButton
+                aria-label="close"
+                onClick={onClose}
+                sx={{ color: 'grey.500', height: 32, width: 32, p: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <CloseIcon className="h-4 w-4" />
+              </IconButton>
             </Box>
-          </Toolbar>
-        ) : null}
+          </Box>
+        </DialogTitle>
 
         <DialogContent
           sx={{
-            p: 2,
-            overflow: 'auto',
+            p: 0,
+            overflow: 'hidden',
             flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
           {getSelectionMessage()}
 
-          <ImageList
-            images={images}
-            loading={loading}
-            adapter={imageListAdapter}
-            selectable={true}
-            selection={{
-              selectedIds: selectedImages
-                .map((image) => image.id)
-                .filter((id): id is number => typeof id === 'number'),
-              onSelectionChange: () => undefined,
-              selectedStableKeys,
-              onStableSelectionChange: setSelectedStableKeys,
-            }}
-          />
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="p-4 relative">
+              <ImageList
+                images={images}
+                loading={loading}
+                viewMode={appliedViewMode}
+                gridColumns={appliedGridColumns}
+                adapter={imageListAdapter}
+                selectable={true}
+                selection={{
+                  selectedIds: selectedImages
+                    .map((image) => image.id)
+                    .filter((id): id is number => typeof id === 'number'),
+                  onSelectionChange: () => undefined,
+                  selectedStableKeys,
+                  onStableSelectionChange: setSelectedStableKeys,
+                }}
+              />
+            </div>
+          </ScrollArea>
+
+          <div className="absolute right-4 bottom-4 z-[1040] flex flex-col items-end gap-2 sm:right-6 sm:bottom-6 sm:gap-3">
+            {layoutOptionsOpen ? (
+              <div
+                ref={layoutPanelRef}
+                data-testid="modal-layout-options-panel"
+                className="absolute right-0 bottom-full mb-3 w-[min(280px,calc(100vw-2rem))] rounded-lg border bg-background p-3 shadow-lg"
+              >
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground" htmlFor="modal-layout-mode-select">
+                      Layout mode
+                    </label>
+                    <select
+                      id="modal-layout-mode-select"
+                      data-testid="modal-layout-mode-select"
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      value={draftViewMode}
+                      onChange={(event) => setDraftViewMode(event.target.value as 'grid' | 'masonry')}
+                    >
+                      <option value="grid">grid</option>
+                      <option value="masonry">masonry</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground" htmlFor="modal-layout-columns-input">
+                      Columns
+                    </label>
+                    <Input
+                      id="modal-layout-columns-input"
+                      data-testid="modal-layout-columns-input"
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={draftGridColumns}
+                      onChange={(event) => {
+                        const parsed = Number(event.target.value)
+                        if (Number.isNaN(parsed)) {
+                          return
+                        }
+                        setDraftGridColumns(Math.max(1, Math.min(10, Math.floor(parsed))))
+                      }}
+                    />
+                  </div>
+
+                  <UiButton
+                    type="button"
+                    data-testid="modal-layout-apply"
+                    className="w-full"
+                    onClick={handleApplyLayout}
+                  >
+                    Apply
+                  </UiButton>
+                </div>
+              </div>
+            ) : null}
+
+            <UiButton
+              type="button"
+              size="icon"
+              variant="default"
+              data-testid="modal-layout-options-fab"
+              ref={layoutFabRef}
+              onClick={handleLayoutFabClick}
+              aria-label="Layout options"
+              className="h-12 w-12 rounded-full border-2 border-background bg-primary text-primary-foreground shadow-2xl ring-2 ring-black/20 hover:bg-primary/90"
+            >
+              <Settings2 className="h-5 w-5" />
+            </UiButton>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -550,43 +745,43 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
 
         {selectedImages.length > 0
           ? [
-              <MenuItem key="selected-header" disabled sx={{ opacity: '1 !important', mt: 1 }}>
-                <Typography variant="caption" color="text.secondary">
-                  {t('imageGroups:download.scopeSelected', { count: selectedImages.length })}
-                </Typography>
-              </MenuItem>,
-              <MenuItem key="selected-thumbnail" onClick={() => handleDownloadTypeSelect('thumbnail', 'selected')}>
-                <ListItemIcon>
-                  <ImageIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>{t('imageGroups:download.typeThumbnail')}</ListItemText>
-              </MenuItem>,
-              <MenuItem key="selected-original" onClick={() => handleDownloadTypeSelect('original', 'selected')}>
-                <ListItemIcon>
-                  <PhotoLibraryIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>{t('imageGroups:download.typeOriginal')}</ListItemText>
-              </MenuItem>,
-              <MenuItem key="selected-video" onClick={() => handleDownloadTypeSelect('video', 'selected')}>
-                <ListItemIcon>
-                  <VideocamIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>{t('imageGroups:download.typeVideo')}</ListItemText>
-              </MenuItem>,
-              <MenuItem
-                key="selected-lora-dataset"
-                onClick={() => {
-                  handleDownloadMenuClose()
-                  setLoraDialogScope('selected')
-                  setLoraDialogOpen(true)
-                }}
-              >
-                <ListItemIcon>
-                  <TextSnippetIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>{t('imageGroups:download.typeLoraDataset')}</ListItemText>
-              </MenuItem>,
-            ]
+            <MenuItem key="selected-header" disabled sx={{ opacity: '1 !important', mt: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                {t('imageGroups:download.scopeSelected', { count: selectedImages.length })}
+              </Typography>
+            </MenuItem>,
+            <MenuItem key="selected-thumbnail" onClick={() => handleDownloadTypeSelect('thumbnail', 'selected')}>
+              <ListItemIcon>
+                <ImageIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>{t('imageGroups:download.typeThumbnail')}</ListItemText>
+            </MenuItem>,
+            <MenuItem key="selected-original" onClick={() => handleDownloadTypeSelect('original', 'selected')}>
+              <ListItemIcon>
+                <PhotoLibraryIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>{t('imageGroups:download.typeOriginal')}</ListItemText>
+            </MenuItem>,
+            <MenuItem key="selected-video" onClick={() => handleDownloadTypeSelect('video', 'selected')}>
+              <ListItemIcon>
+                <VideocamIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>{t('imageGroups:download.typeVideo')}</ListItemText>
+            </MenuItem>,
+            <MenuItem
+              key="selected-lora-dataset"
+              onClick={() => {
+                handleDownloadMenuClose()
+                setLoraDialogScope('selected')
+                setLoraDialogOpen(true)
+              }}
+            >
+              <ListItemIcon>
+                <TextSnippetIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>{t('imageGroups:download.typeLoraDataset')}</ListItemText>
+            </MenuItem>,
+          ]
           : null}
       </Menu>
 

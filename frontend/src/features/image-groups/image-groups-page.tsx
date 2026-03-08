@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FolderTree, Loader2, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { BreadcrumbItem, GroupWithHierarchy, GroupWithStats } from '@comfyui-image-manager/shared'
+import type { BreadcrumbItem, GroupWithHierarchy, GroupWithStats } from '@conai/shared'
 import type { ImageRecord, PageSize } from '@/types/image'
 import { groupApi } from '@/services/group-api'
 import GroupCreateEditModal from '@/features/image-groups/components/group-create-edit-modal'

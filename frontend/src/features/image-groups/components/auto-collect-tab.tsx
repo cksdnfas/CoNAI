@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { ComplexFilter, FilterCondition } from '@comfyui-image-manager/shared'
+import type { ComplexFilter, FilterCondition } from '@conai/shared'
 import SimpleSearchTab, { type SearchToken } from './simple-search-tab'
 import type { PromptSearchResult } from './search-auto-complete'
 import { Switch } from '@/components/ui/switch'

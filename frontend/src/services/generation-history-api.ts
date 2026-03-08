@@ -6,7 +6,7 @@ import type {
   GenerationHistoryRecord,
   GenerationHistoryResponse,
   GenerationHistoryStatistics,
-} from '@comfyui-image-manager/shared'
+} from '@conai/shared'
 
 export const generationHistoryApi = {
   getAll: async (filters?: GenerationHistoryFilters & { bustCache?: boolean }): Promise<GenerationHistoryResponse> => {

@@ -34,8 +34,47 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const limit = parseInt(req.query.limit as string) || 20;
   const sortBy = (req.query.sortBy as 'first_seen_date' | 'width' | 'height' | 'file_size') || 'first_seen_date';
   const sortOrder = (req.query.sortOrder as 'ASC' | 'DESC') || 'DESC';
+  const cursorDate = req.query.cursor_date as string | undefined;
+  const cursorHash = req.query.cursor_hash as string | undefined;
+
+  // 🔍 Debug Cursor request
+  const isCursorRequest = cursorDate !== undefined || cursorHash !== undefined;
+  if (isCursorRequest) {
+    logger.debug(`🔍 [QueryRoutes] Cursor request: cursorDate=${cursorDate}, cursorHash=${cursorHash?.substring(0, 8)}, limit=${limit}`);
+  }
+
+  // API 요청은 캐시하지 않음 (304 방지)
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.removeHeader('ETag'); // ETag 제거로 304 방지
 
   try {
+    // 커서 기반 페이지네이션 (무한 스크롤용)
+    if (isCursorRequest) {
+      const result = MediaMetadataModel.findAllWithFilesCursor({
+        limit,
+        sortOrder,
+        cursorDate: cursorDate || undefined,
+        cursorHash: cursorHash || undefined,
+      });
+
+      const enrichedImages = result.items.map(enrichImageWithFileView);
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          images: enrichedImages,
+          total: result.total,
+          hasMore: result.hasMore,
+          page: 0,
+          limit,
+          totalPages: 0,
+        }
+      });
+    }
+
+    // 기존 오프셋 기반 페이지네이션 (페이지네이션 모드 호환)
     // 캐시 확인
     const cached = QueryCacheService.getGalleryCache(page, limit, sortBy, sortOrder);
     if (cached) {
@@ -81,7 +120,8 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
         total: result.total,
         page,
         limit,
-        totalPages: Math.ceil(result.total / limit)
+        totalPages: Math.ceil(result.total / limit),
+        hasMore: (page * limit) < result.total
       }
     };
 

@@ -87,13 +87,13 @@ export function Typography({ component = 'div', sx, style, ...props }: CommonPro
   return <Comp {...props} style={resolveStyle(style, sx)} />
 }
 
-export function Button({ startIcon, endIcon, children, sx, style, ...props }: { startIcon?: ReactNode; endIcon?: ReactNode; onClick?: React.MouseEventHandler<any>; [key: string]: any } & CommonProps) {
+export function Button({ startIcon, endIcon, children, sx, style, ...props }: { startIcon?: ReactNode; endIcon?: ReactNode; onClick?: React.MouseEventHandler<any>;[key: string]: any } & CommonProps) {
   return <button type="button" {...props} style={resolveStyle(style, sx)}>{startIcon}{children}{endIcon}</button>
 }
 
 export const IconButton = Button
 
-export function Chip({ label, children, sx, style, ...props }: CommonProps & { label?: ReactNode; onClick?: React.MouseEventHandler<any>; [key: string]: any }) {
+export function Chip({ label, children, sx, style, ...props }: CommonProps & { label?: ReactNode; onClick?: React.MouseEventHandler<any>;[key: string]: any }) {
   return <span {...props} style={resolveStyle({ display: 'inline-flex', alignItems: 'center', gap: 6, ...(style || {}) }, sx)}>{label ?? children}</span>
 }
 
@@ -113,12 +113,12 @@ export function Divider({ sx, style, ...props }: React.HTMLAttributes<HTMLHRElem
   return <hr {...props} style={resolveStyle(style, sx)} />
 }
 
-export function Collapse({ in: open, children }: { in?: boolean; children?: ReactNode; [key: string]: unknown }) {
+export function Collapse({ in: open, children }: { in?: boolean; children?: ReactNode;[key: string]: unknown }) {
   if (!open) return null
   return <>{children}</>
 }
 
-export function Snackbar({ open, autoHideDuration, onClose, children, ...props }: { open?: boolean; autoHideDuration?: number; onClose?: () => void; children?: ReactNode; [key: string]: unknown }) {
+export function Snackbar({ open, autoHideDuration, onClose, children, ...props }: { open?: boolean; autoHideDuration?: number; onClose?: () => void; children?: ReactNode;[key: string]: unknown }) {
   useEffect(() => {
     if (!open || !autoHideDuration || !onClose) return
     const t = window.setTimeout(() => onClose(), autoHideDuration)
@@ -128,14 +128,14 @@ export function Snackbar({ open, autoHideDuration, onClose, children, ...props }
   return <div {...props} style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 1400 }}>{children}</div>
 }
 
-export function Dialog({ open, onClose, children, ...props }: { open?: boolean; onClose?: () => void; children?: ReactNode; [key: string]: any }) {
+export function Dialog({ open, onClose, children, ...props }: { open?: boolean; onClose?: () => void; children?: ReactNode;[key: string]: any }) {
   if (!open) return null
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1300 }}>
-      <div {...props} style={{ margin: '8vh auto', maxWidth: 960, background: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 10 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div {...props} style={{ maxWidth: 960, width: '90%', maxHeight: '90vh', overflow: 'auto', background: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 10, position: 'relative' }}>
         {children}
+        {onClose ? <button type="button" onClick={onClose} style={{ position: 'absolute', top: 12, right: 12, background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'hsl(var(--muted-foreground))' }}>×</button> : null}
       </div>
-      {onClose ? <button type="button" onClick={onClose} style={{ position: 'absolute', top: 10, right: 10 }}>x</button> : null}
     </div>
   )
 }
@@ -149,7 +149,7 @@ export const InputLabel = Typography
 export const Toolbar = Box
 export const Grid = Box
 
-export function FormControlLabel({ control, label, ...props }: { control?: ReactNode; label?: ReactNode; [key: string]: any }) {
+export function FormControlLabel({ control, label, ...props }: { control?: ReactNode; label?: ReactNode;[key: string]: any }) {
   return <div {...props}>{control}{label}</div>
 }
 
@@ -160,7 +160,7 @@ export const RadioGroup = (props: React.HTMLAttributes<HTMLDivElement> & Record<
 
 export type SelectChangeEvent<T = unknown> = { target: { value: T } }
 
-export function Select<T = unknown>({ children, value, onChange, multiple, ...props }: { children?: ReactNode; value?: T; onChange?: (event: SelectChangeEvent<any>) => void; multiple?: boolean; [key: string]: any }) {
+export function Select<T = unknown>({ children, value, onChange, multiple, ...props }: { children?: ReactNode; value?: T; onChange?: (event: SelectChangeEvent<any>) => void; multiple?: boolean;[key: string]: any }) {
   return (
     <select
       {...props}
@@ -173,67 +173,107 @@ export function Select<T = unknown>({ children, value, onChange, multiple, ...pr
   )
 }
 
-export const MenuItem = ({ children, sx, style, ...props }: { children?: ReactNode; sx?: SxProp; style?: CSSProperties; [key: string]: any }) => <div {...props} style={resolveStyle(style, sx)}>{children}</div>
+export const MenuItem = ({ children, sx, style, ...props }: { children?: ReactNode; sx?: SxProp; style?: CSSProperties;[key: string]: any }) => (
+  <div
+    {...props}
+    style={resolveStyle({
+      padding: '6px 16px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      cursor: 'pointer',
+      fontSize: '0.875rem',
+      ...(style || {})
+    }, sx)}
+    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(255,255,255,0.08)' }}
+    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent' }}
+  >
+    {children}
+  </div>
+)
 
-export function TextField({ label, multiline, rows, select, InputProps, children, value, onChange, ...props }: {
+export function TextField({ label, multiline, rows, minRows, maxRows, select, InputProps, children, value, onChange, ...props }: {
   label?: ReactNode
   multiline?: boolean
   rows?: number
+  minRows?: number
+  maxRows?: number
   select?: boolean
-  InputProps?: { startAdornment?: ReactNode; endAdornment?: ReactNode; [key: string]: unknown }
+  InputProps?: { startAdornment?: ReactNode; endAdornment?: ReactNode;[key: string]: unknown }
   children?: ReactNode
   value?: string | number | readonly string[]
   onChange?: React.ChangeEventHandler<any>
   [key: string]: any
 }) {
   return (
-    <div>
-      {label ? <div>{label}</div> : null}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%', ...(props.sx as any || {}) }}>
+      {label ? <div style={{ fontSize: '0.8rem', fontWeight: 500, color: 'hsl(var(--muted-foreground))' }}>{label}</div> : null}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid hsl(var(--border))', borderRadius: 6, padding: '4px 8px', background: 'hsl(var(--background))' }}>
         {InputProps?.startAdornment}
         {select ? (
-          <select {...props} value={value} onChange={onChange}>{children}</select>
+          <select {...props} value={value} onChange={onChange} style={{ background: 'none', border: 'none', color: 'inherit', width: '100%', outline: 'none' }}>{children}</select>
         ) : multiline ? (
-          <textarea {...props} rows={rows} value={value as string | undefined} onChange={onChange} />
+          <textarea {...props} rows={rows || minRows} value={value as string | undefined} onChange={onChange} style={{ background: 'none', border: 'none', color: 'inherit', width: '100%', outline: 'none', resize: 'vertical', minHeight: minRows ? `${minRows * 1.5}em` : undefined }} />
         ) : (
-          <input {...props} value={value as string | number | readonly string[] | undefined} onChange={onChange} />
+          <input {...props} value={value as string | number | readonly string[] | undefined} onChange={onChange} style={{ background: 'none', border: 'none', color: 'inherit', width: '100%', outline: 'none' }} />
         )}
         {InputProps?.endAdornment}
       </div>
+      {props.helperText ? <div style={{ fontSize: '0.7rem', color: 'hsl(var(--muted-foreground))', marginTop: 2 }}>{props.helperText}</div> : null}
     </div>
   )
 }
 
-export const InputAdornment = ({ children, ...props }: { children?: ReactNode; [key: string]: any }) => <span {...props}>{children}</span>
+export const InputAdornment = ({ children, ...props }: { children?: ReactNode;[key: string]: any }) => <span {...props}>{children}</span>
 export const List = ({ children, ...props }: React.HTMLAttributes<HTMLUListElement> & Record<string, any>) => <ul {...props}>{children}</ul>
 export const ListItem = ({ children, ...props }: React.HTMLAttributes<HTMLLIElement> & Record<string, any>) => <li {...props}>{children}</li>
 export const ListItemButton = ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & Record<string, any>) => <button type="button" {...props}>{children}</button>
 export const ListItemIcon = ({ children, ...props }: React.HTMLAttributes<HTMLSpanElement> & Record<string, any>) => <span {...props}>{children}</span>
-export const ListItemText = ({ primary, secondary, children, ...props }: { primary?: ReactNode; secondary?: ReactNode; children?: ReactNode; [key: string]: any }) => <span {...props}>{primary ?? children}{secondary ? <small>{secondary}</small> : null}</span>
+export const ListItemText = ({ primary, secondary, children, ...props }: { primary?: ReactNode; secondary?: ReactNode; children?: ReactNode;[key: string]: any }) => <span {...props}>{primary ?? children}{secondary ? <small>{secondary}</small> : null}</span>
 
-export function Popover({ open, children }: { open?: boolean; children?: ReactNode; [key: string]: any }) {
+export function Popover({ open, children, anchorReference, anchorPosition, onClose }: { open?: boolean; children?: ReactNode; anchorReference?: string; anchorPosition?: { top: number; left: number }; onClose?: () => void;[key: string]: any }) {
   if (!open) return null
-  return <div style={{ position: 'absolute', zIndex: 1200 }}>{children}</div>
+  const style: CSSProperties = {
+    position: 'fixed',
+    zIndex: 1400,
+    background: 'hsl(var(--popover))',
+    color: 'hsl(var(--popover-foreground))',
+    border: '1px solid hsl(var(--border))',
+    borderRadius: 8,
+    boxShadow: '0 4px 12px rgba(0,0,0,.5)',
+    minWidth: 160,
+    padding: '4px 0'
+  }
+  if (anchorReference === 'anchorPosition' && anchorPosition) {
+    style.top = anchorPosition.top
+    style.left = anchorPosition.left
+  }
+  return (
+    <>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 1399 }} onClick={onClose} />
+      <div style={style}>{children}</div>
+    </>
+  )
 }
 
-export function Popper({ open, children, ...props }: { open?: boolean; children?: ReactNode | ((props: any) => ReactNode); [key: string]: any }) {
+export function Popper({ open, children, ...props }: { open?: boolean; children?: ReactNode | ((props: any) => ReactNode);[key: string]: any }) {
   if (!open) return null
-  return <div style={{ position: 'absolute', zIndex: 1200 }} {...props}>{typeof children === 'function' ? children({}) : children}</div>
+  return <div style={{ position: 'absolute', zIndex: 1400, background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: 6 }} {...props}>{typeof children === 'function' ? children({}) : children}</div>
 }
 
 export const Menu = Popover
-export const ClickAwayListener = ({ children }: { children?: ReactNode; [key: string]: any }) => <>{children}</>
-export const Fade = ({ in: open, children }: { in?: boolean; children?: ReactNode; [key: string]: any }) => (open ? <>{children}</> : null)
+export const ClickAwayListener = ({ children }: { children?: ReactNode;[key: string]: any }) => <>{children}</>
+export const Fade = ({ in: open, children }: { in?: boolean; children?: ReactNode;[key: string]: any }) => (open ? <>{children}</> : null)
 
 type TabsContextType = { value: unknown; onChange?: (event: React.SyntheticEvent, value: any) => void }
 const TabsContext = React.createContext<TabsContextType | null>(null)
 
-export function Tabs({ value, onChange, children, ...props }: { value?: unknown; onChange?: (event: React.SyntheticEvent, value: any) => void; children?: ReactNode; [key: string]: any }) {
+export function Tabs({ value, onChange, children, ...props }: { value?: unknown; onChange?: (event: React.SyntheticEvent, value: any) => void; children?: ReactNode;[key: string]: any }) {
   const context = useMemo(() => ({ value, onChange }), [value, onChange])
   return <TabsContext.Provider value={context}><div {...props}>{children}</div></TabsContext.Provider>
 }
 
-export function Tab({ value, label, icon, iconPosition = 'start', ...props }: { value?: unknown; label?: ReactNode; icon?: ReactNode; iconPosition?: 'start' | 'end' | 'top' | 'bottom'; [key: string]: any }) {
+export function Tab({ value, label, icon, iconPosition = 'start', ...props }: { value?: unknown; label?: ReactNode; icon?: ReactNode; iconPosition?: 'start' | 'end' | 'top' | 'bottom';[key: string]: any }) {
   const ctx = React.useContext(TabsContext)
   return (
     <button type="button" onClick={(event) => ctx?.onChange?.(event, value)} {...props}>
@@ -244,11 +284,11 @@ export function Tab({ value, label, icon, iconPosition = 'start', ...props }: { 
   )
 }
 
-export const Accordion = ({ children, ...props }: { children?: ReactNode; [key: string]: any }) => <details {...props}>{children}</details>
-export const AccordionSummary = ({ children, expandIcon, ...props }: { children?: ReactNode; expandIcon?: ReactNode; [key: string]: any }) => <summary {...props}>{children}{expandIcon}</summary>
+export const Accordion = ({ children, ...props }: { children?: ReactNode;[key: string]: any }) => <details {...props}>{children}</details>
+export const AccordionSummary = ({ children, expandIcon, ...props }: { children?: ReactNode; expandIcon?: ReactNode;[key: string]: any }) => <summary {...props}>{children}{expandIcon}</summary>
 export const AccordionDetails = ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>
 
-export function Slider({ value, onChange, ...props }: { value?: number | number[]; onChange?: (event: React.ChangeEvent<HTMLInputElement>, value: number) => void; [key: string]: any }) {
+export function Slider({ value, onChange, ...props }: { value?: number | number[]; onChange?: (event: React.ChangeEvent<HTMLInputElement>, value: number) => void;[key: string]: any }) {
   const current = Array.isArray(value) ? value[0] : value
   return <input type="range" value={current ?? 0} onChange={(event) => onChange?.(event, Number(event.target.value))} {...props} />
 }

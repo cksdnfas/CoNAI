@@ -1,11 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { ComplexFilterService } from '../../services/complexFilterService';
-import {
-  ComplexSearchRequest,
-  ComplexSearchResponse,
-  ComplexFilter
-} from '@comfyui-image-manager/shared';
+import { ComplexSearchRequest,
+ComplexSearchResponse,
+ComplexFilter } from '@conai/shared';
 import { enrichImageRecord } from './utils';
 
 const router = Router();

@@ -9,7 +9,7 @@ import { AutoCollectionService } from './autoCollectionService';
 import { imageTaggerService, ImageTaggerService } from './imageTaggerService';
 import { settingsService } from './settingsService';
 import { runtimePaths, resolveUploadsPath } from '../config/runtimePaths';
-import { refinePrimaryPrompt } from '@comfyui-image-manager/shared';
+import { refinePrimaryPrompt } from '@conai/shared';
 import { db } from '../database/init';
 
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;

@@ -43,6 +43,7 @@
     "noParent": "None (Root Level)",
     "includeChildren": "Automatically Include Child Wildcards",
     "includeChildrenHelper": "When enabled, using this wildcard will automatically include items from direct children",
+    "onlyChildren": "Only Children Items",
     "chainOption": "Chain Option",
     "chainOptionReplace": "Replace",
     "chainOptionAppend": "Append",
