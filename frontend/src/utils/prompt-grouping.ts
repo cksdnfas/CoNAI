@@ -1,4 +1,4 @@
-import { parsePromptWithLoRAs, cleanPromptTerm, refinePrimaryPrompt, removeLoRAWeight } from '@comfyui-image-manager/shared'
+import { parsePromptWithLoRAs, cleanPromptTerm, refinePrimaryPrompt, removeLoRAWeight } from '@conai/shared'
 import { API_BASE_URL } from '@/lib/api/client'
 
 export interface PromptGroup {

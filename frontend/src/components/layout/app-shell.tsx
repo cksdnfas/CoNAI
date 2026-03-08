@@ -55,7 +55,7 @@ export function AppShell({ children }: PropsWithChildren) {
         <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2">
             <Link to="/" className="font-semibold tracking-tight">
-              ComfyUI Image Manager
+              CoNAI
             </Link>
             <Badge variant="secondary">shadcn parity</Badge>
           </div>

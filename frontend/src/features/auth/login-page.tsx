@@ -77,7 +77,7 @@ export function LoginPage() {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <Lock className="h-7 w-7" />
           </div>
-          <CardTitle className="text-center text-2xl">ComfyUI Image Manager</CardTitle>
+          <CardTitle className="text-center text-2xl">CoNAI</CardTitle>
           <CardDescription className="text-center">Sign in to continue</CardDescription>
         </CardHeader>
 
@@ -143,7 +143,7 @@ export function LoginPage() {
 
           <div className="space-y-4 text-sm">
             <ol className="list-decimal space-y-1 pl-4 text-muted-foreground">
-              <li>Stop ComfyUI Image Manager backend.</li>
+              <li>Stop CoNAI backend.</li>
               <li>Delete the auth database file below.</li>
               <li>Restart backend and set a new account.</li>
               <li>Log in with the new credentials.</li>
