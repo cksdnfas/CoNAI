@@ -173,6 +173,21 @@ describe('home-page parity behavior', () => {
     expect(screen.getByTestId('home-search-panel')).toBeInTheDocument()
   })
 
+  it('shows fixed bottom search FAB and opens search overlay when clicked', async () => {
+    render(<HomePage />)
+
+    expect(screen.getByTestId('home-layout-options-fab')).toBeInTheDocument()
+
+    const searchFab = screen.getByTestId('home-search-fab')
+    expect(searchFab).toBeInTheDocument()
+
+    fireEvent.click(searchFab)
+
+    expect(await screen.findByText('common:search')).toBeInTheDocument()
+    expect(screen.getByTestId('home-search-panel')).toBeInTheDocument()
+    expect(screen.queryByTestId('home-search-fab')).not.toBeInTheDocument()
+  })
+
   it('closes layout options via Escape and restores keyboard focus to FAB', async () => {
     const requestAnimationFrameMock = vi
       .spyOn(window, 'requestAnimationFrame')

@@ -41,7 +41,7 @@ test('@smoke-task19 settings/login route contract remains intact after route cle
 
   await page.goto(routeUrl('#/settings'))
   await expect(page).toHaveURL(/#\/login$/)
-  await expect(page.getByText('ComfyUI Image Manager')).toBeVisible()
+  await expect(page.getByText('CoNAI')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible()
 
   await page.goto(routeUrl('#/login'))

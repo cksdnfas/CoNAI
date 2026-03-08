@@ -1,7 +1,7 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { AutoFolderGroupWithStats } from '@comfyui-image-manager/shared'
+import type { AutoFolderGroupWithStats } from '@conai/shared'
 import { AutoFolderGroupCard } from '@/features/image-groups/components/auto-folder-group-card'
 
 const mockUseGroupPreviewImage = vi.fn()

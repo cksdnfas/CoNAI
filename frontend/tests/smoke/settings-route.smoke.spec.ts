@@ -396,7 +396,7 @@ test('@smoke-settings settings route redirects credentialed unauthenticated user
   await page.goto(settingsUrl())
 
   await expect(page).toHaveURL(/#\/login$/)
-  await expect(page.getByText('ComfyUI Image Manager')).toBeVisible()
+  await expect(page.getByText('CoNAI')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible()
 })
 

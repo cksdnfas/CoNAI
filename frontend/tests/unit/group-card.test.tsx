@@ -1,7 +1,7 @@
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { GroupWithStats } from '@comfyui-image-manager/shared'
+import type { GroupWithStats } from '@conai/shared'
 import { GroupCard } from '@/features/image-groups/components/group-card'
 
 const mockUseGroupPreviewImage = vi.fn()
