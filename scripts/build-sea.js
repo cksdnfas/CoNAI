@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * ComfyUI Image Manager - SEA Build Script
+ * CoNAI - SEA Build Script
  * Node.js Single Executable Application 생성
  */
 
@@ -21,10 +21,11 @@ const PKG_OUTPUT_DIR = path.join(BUILD_OUTPUT_DIR, 'sea');
 const platform = os.platform();
 const arch = os.arch();
 const isWindows = platform === 'win32';
-const executableName = isWindows ? 'comfyui-image-manager.exe' : 'comfyui-image-manager';
+const executableName = isWindows ? 'conai.exe' : 'conai';
+const unixExecutableCommand = './conai';
 const outputExecutable = path.join(PKG_OUTPUT_DIR, executableName);
 
-console.log('🚀 ComfyUI Image Manager - SEA Builder\n');
+console.log('🚀 CoNAI - SEA Builder\n');
 console.log(`📋 Platform: ${platform} ${arch}`);
 console.log(`📦 Output: ${executableName}\n`);
 
@@ -195,14 +196,14 @@ try {
 // Step 9: Create environment template
 console.log('Step 9: Creating environment template...');
 try {
-  // Read the source .env.example from backend
-  const sourceEnvPath = path.join(__dirname, '..', 'backend', '.env.example');
+  // Read the source .env.example from root
+  const sourceEnvPath = path.join(ROOT_DIR, '.env.example');
   let envContent = fs.readFileSync(sourceEnvPath, 'utf8');
 
   // Add SEA build header
-  const seaHeader = `# ComfyUI Image Manager Configuration
+  const seaHeader = `# CoNAI Configuration
 #
-# This file was auto-generated from backend/.env.example
+# This file was auto-generated from root .env.example
 # Rename to .env to use.
 
 `;
@@ -223,7 +224,7 @@ try {
 // Step 10: Create README
 console.log('Step 10: Creating README...');
 try {
-  const readme = `# ComfyUI Image Manager
+  const readme = `# CoNAI
 
 ## 🚀 Quick Start
 
@@ -234,7 +235,7 @@ try {
 
 ### Linux/Mac
 1. Open terminal in this directory
-2. Run: \`./${executableName}\`
+2. Run: \`${unixExecutableCommand}\`
 3. Open your browser to the displayed URL
 
 ## 📝 Configuration

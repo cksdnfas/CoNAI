@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * ComfyUI Image Manager - Bundle Script
+ * CoNAI - Bundle Script
  * 모든 의존성을 단일 JavaScript 파일로 번들링
  */
 
@@ -12,13 +12,15 @@ const path = require('path');
 const ROOT_DIR = path.resolve(__dirname, '..');
 const BACKEND_DIST = path.join(ROOT_DIR, 'backend', 'dist');
 const BUNDLE_OUTPUT = path.join(BACKEND_DIST, 'bundle.js');
+const SHARED_ENTRY_POINT = path.join(ROOT_DIR, 'shared', 'src', 'index.ts');
 const ENTRY_POINT_CANDIDATES = [
   path.join(BACKEND_DIST, 'index.js'),
-  path.join(BACKEND_DIST, 'backend', 'src', 'index.js')
+  path.join(BACKEND_DIST, 'backend', 'src', 'index.js'),
+  path.join(ROOT_DIR, 'backend', 'src', 'index.ts')
 ];
 const ENTRY_POINT = ENTRY_POINT_CANDIDATES.find((candidate) => fs.existsSync(candidate));
 
-console.log('📦 ComfyUI Image Manager - Bundling\n');
+console.log('📦 CoNAI - Bundling\n');
 
 // Check if backend is built
 if (!ENTRY_POINT) {
@@ -38,6 +40,9 @@ build({
   target: 'node22',
   format: 'cjs',
   outfile: BUNDLE_OUTPUT,
+  alias: {
+    '@conai/shared': SHARED_ENTRY_POINT
+  },
   external: [
     // Native modules that cannot be bundled
     'sharp',
@@ -57,7 +62,7 @@ build({
     'process.env.NODE_ENV': '"production"'
   },
   banner: {
-    js: `// ComfyUI Image Manager - Bundled Backend
+    js: `// CoNAI - Bundled Backend
 // Generated: ${new Date().toISOString()}
 // Node.js ${process.version}
 `

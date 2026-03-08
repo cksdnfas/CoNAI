@@ -30,8 +30,8 @@ const SCOPES = {
 const FORMATS = new Set(['text', 'json']);
 const CATEGORIES = ['active-source', 'generated-artifact', 'archive-backup', 'example-upload'];
 const ROOT_DEFINITIONS = [
-  { name: 'Comfyui_Image_Manager_2', directory: PROJECT_ROOT },
-  { name: 'Comfyui_Image_Manager_Git', directory: path.join(WORKSPACE_ROOT, 'Comfyui_Image_Manager_Git') },
+  { name: 'CoNAI', directory: PROJECT_ROOT },
+  { name: 'CoNAI_Git', directory: path.join(WORKSPACE_ROOT, 'Comfyui_Image_Manager_Git') },
   { name: '_repo_cleanup_outbox', directory: path.join(WORKSPACE_ROOT, '_repo_cleanup_outbox') },
   { name: '_tmp_upload_examples', directory: path.join(WORKSPACE_ROOT, '_tmp_upload_examples') },
 ];
@@ -144,7 +144,7 @@ function isArchivePath(relativePath) {
 }
 
 function isActiveSourcePath(rootName, rootRelativePath) {
-  return rootName === 'Comfyui_Image_Manager_2' && rootRelativePath.startsWith('frontend/src/');
+  return rootName === 'CoNAI' && rootRelativePath.startsWith('frontend/src/');
 }
 
 function categorizeFinding(rootName, rootRelativePath) {
@@ -271,11 +271,11 @@ function shouldScanFileForScope(scopeName, rootName, rootRelativePath) {
   }
 
   if (scopeName === 'active') {
-    return rootName === 'Comfyui_Image_Manager_2' && rootRelativePath.startsWith('frontend/src/');
+    return rootName === 'CoNAI' && rootRelativePath.startsWith('frontend/src/');
   }
 
   if (scopeName === 'generated') {
-    return rootName === 'Comfyui_Image_Manager_2' && categorizeFinding(rootName, rootRelativePath) === 'generated-artifact' && (rootRelativePath.startsWith('frontend/dist/') || rootRelativePath.startsWith('build-output/'));
+    return rootName === 'CoNAI' && categorizeFinding(rootName, rootRelativePath) === 'generated-artifact' && (rootRelativePath.startsWith('frontend/dist/') || rootRelativePath.startsWith('build-output/'));
   }
 
   const scopeConfig = SCOPES[scopeName];

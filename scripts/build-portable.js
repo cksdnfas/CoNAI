@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * ComfyUI Image Manager - Portable Build Script
+ * CoNAI - Portable Build Script
  * Creates a portable package with Node.js runtime
  */
 
@@ -25,7 +25,7 @@ const isWindows = platform === 'win32';
 const NODE_VERSION = process.version; // Use current Node.js version
 const NODE_MAJOR = NODE_VERSION.split('.')[0];
 
-console.log('🚀 ComfyUI Image Manager - Portable Build\n');
+console.log('🚀 CoNAI - Portable Build\n');
 console.log(`📋 Platform: ${platform} ${arch}`);
 console.log(`📦 Node.js: ${NODE_VERSION}\n`);
 
@@ -133,10 +133,14 @@ const sharpPackageJson = JSON.parse(fs.readFileSync(path.join(sharpSource, 'pack
 // Collect all sharp dependencies
 const sharpDependencies = new Set();
 if (sharpPackageJson.dependencies) {
-  Object.keys(sharpPackageJson.dependencies).forEach(dep => sharpDependencies.add(dep));
+  Object.keys(sharpPackageJson.dependencies).forEach((dep) => {
+    sharpDependencies.add(dep);
+  });
 }
 if (sharpPackageJson.optionalDependencies) {
-  Object.keys(sharpPackageJson.optionalDependencies).forEach(dep => sharpDependencies.add(dep));
+  Object.keys(sharpPackageJson.optionalDependencies).forEach((dep) => {
+    sharpDependencies.add(dep);
+  });
 }
 
 console.log(`   Found ${sharpDependencies.size} direct dependencies of sharp`);
@@ -381,10 +385,10 @@ if (fs.existsSync(bootstrapSource)) {
 // Step 7.6: Create package.json for automatic dependency installation
 console.log('Step 7.6: Creating package.json for dependency management...');
 const portablePackageJson = {
-  name: "comfyui-image-manager-portable",
+  name: "conai-portable",
   version: "1.0.0",
   private: true,
-  description: "Portable distribution of ComfyUI Image Manager",
+  description: "Portable distribution of CoNAI",
   dependencies: {
     "sharp": "^0.33.0",
     "better-sqlite3": "^9.4.0",
@@ -407,7 +411,7 @@ console.log('Step 8: Creating startup scripts...');
 // Windows batch file - Use ASCII characters for maximum compatibility
 const batchScript = `@echo off
 chcp 65001 > nul
-title ComfyUI Image Manager
+title CoNAI
 cd /d "%~dp0"
 
 REM Set portable executable directory for runtime path resolution
@@ -415,7 +419,7 @@ set PORTABLE_EXECUTABLE_DIR=%~dp0
 
 echo.
 echo ========================================================================
-echo              ComfyUI Image Manager
+echo                                CoNAI
 echo ========================================================================
 echo.
 
@@ -464,7 +468,7 @@ export PORTABLE_EXECUTABLE_DIR="$(pwd)"
 
 echo ""
 echo "╔════════════════════════════════════════════════════════════════════════╗"
-echo "║                    ComfyUI Image Manager                               ║"
+echo "║                              CoNAI                                     ║"
 echo "╚════════════════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -514,12 +518,12 @@ console.log('✅ Startup scripts created\n');
 // Step 9: Create environment template
 console.log('Step 9: Creating environment template...');
 
-// Read the source .env.example from backend
+// Read the source .env.example from root
 const sourceEnvPath = path.join(ROOT_DIR, '.env.example');
 let envContent = fs.readFileSync(sourceEnvPath, 'utf8');
 
 // Add portable-specific header
-const portableHeader = `# ComfyUI Image Manager Configuration
+const portableHeader = `# CoNAI Configuration
 #
 # This file was auto-generated from .env.example
 # Rename to .env to use.
@@ -543,7 +547,7 @@ console.log('✅ Data directories created\n');
 
 // Step 11: Create README
 console.log('Step 11: Creating README...');
-const readmeContent = `# ComfyUI Image Manager - Portable Edition
+const readmeContent = `# CoNAI - Portable Edition
 
 ## 🚀 Quick Start
 
@@ -672,7 +676,7 @@ For detailed documentation:
 - Deployment Guide
 - Development Guide
 
-Visit: https://github.com/yourusername/comfyui-image-manager
+Visit: https://github.com/yourusername/conai
 
 ## 📦 Package Contents
 

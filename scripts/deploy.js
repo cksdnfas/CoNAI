@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * ComfyUI Image Manager - Deployment Helper
+ * CoNAI - Deployment Helper
  * Interactive deployment script
  */
 
@@ -23,7 +23,7 @@ function question(query) {
 }
 
 async function main() {
-  console.log('🚀 ComfyUI Image Manager - Deployment Helper\n');
+  console.log('🚀 CoNAI - Deployment Helper\n');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   console.log('Select deployment type:\n');
@@ -97,7 +97,7 @@ async function buildDocker() {
   console.log('    docker-compose up -d\n');
   console.log('  Option 2: Build Image');
   console.log('    cd build-output/docker');
-  console.log('    docker build -t comfyui-image-manager .\n');
+  console.log('    docker build -t conai .\n');
   console.log('  Option 3: Use npm script');
   console.log('    npm run deploy:docker:build\n');
 
