@@ -4,7 +4,7 @@ export default {
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './frontend/src'),
-      '@comfyui-image-manager/shared': path.resolve(__dirname, './shared/src/index.ts'),
+      '@conai/shared': path.resolve(__dirname, './shared/src/index.ts'),
     },
   },
   test: {

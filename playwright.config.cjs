@@ -1,4 +1,4 @@
-const { defineConfig, devices } = require('./frontend/node_modules/@playwright/test')
+const { defineConfig, devices } = require('@playwright/test')
 
 module.exports = defineConfig({
   testDir: './frontend/tests/smoke',

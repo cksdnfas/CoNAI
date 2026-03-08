@@ -1,7 +1,7 @@
 {
-  "name": "@comfyui-image-manager/shared",
+  "name": "@conai/shared",
   "version": "1.0.0",
-  "description": "Shared types, utilities, and constants for ComfyUI Image Manager",
+  "description": "Shared types, utilities, and constants for CoNAI",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
