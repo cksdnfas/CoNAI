@@ -1,4 +1,4 @@
-# ComfyUI Image Manager
+# CoNAI
 
 A powerful, modern AI image management system with advanced gallery features, metadata extraction, and seamless integration with ComfyUI and NovelAI workflows.
 
@@ -9,7 +9,7 @@ A powerful, modern AI image management system with advanced gallery features, me
 
 ## Overview
 
-ComfyUI Image Manager is a comprehensive image and video management solution designed for AI artists and creators. Built with React and Node.js, it provides an intuitive interface for organizing, analyzing, and managing AI-generated content with advanced features like automatic tagging, metadata extraction, and smart grouping.
+CoNAI is a comprehensive image and video management solution designed for AI artists and creators. Built with React and Node.js, it provides an intuitive interface for organizing, analyzing, and managing AI-generated content with advanced features like automatic tagging, metadata extraction, and smart grouping.
 
 ---
 
@@ -652,7 +652,7 @@ For complete API documentation, see: `/api/docs` (when running)
 **Clone and Build:**
 ```bash
 git clone <repository>
-cd comfyui-image-manager
+cd conai
 npm run install:all
 npm run build:full
 ```

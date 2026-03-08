@@ -1,6 +1,6 @@
-# frontend
+# CoNAI
 
-ComfyUI Image Manager의 기본 프론트엔드입니다.
+CoNAI의 기본 프론트엔드입니다.
 
 ## 목적
 - 기본 프론트엔드(승격된 shadcn/ui 기반) 제공

@@ -1,6 +1,6 @@
 # MCP (Model Context Protocol) Guide
 
-ComfyUI Image Manager는 MCP 서버를 내장하고 있어, Claude Code, OpenClo 등 MCP 호환 AI 클라이언트에서 프롬프트 탐색, 이미지 생성, 생성 이력 조회 등을 직접 수행할 수 있습니다.
+CoNAI는 MCP 서버를 내장하고 있어, Claude Code, OpenClo 등 MCP 호환 AI 클라이언트에서 프롬프트 탐색, 이미지 생성, 생성 이력 조회 등을 직접 수행할 수 있습니다.
 
 ## 제공 Tools
 
@@ -35,7 +35,7 @@ ComfyUI Image Manager는 MCP 서버를 내장하고 있어, Claude Code, OpenClo
 
 ### 사전 조건
 
-ComfyUI Image Manager 백엔드 서버가 실행 중이어야 합니다.
+CoNAI 백엔드 서버가 실행 중이어야 합니다.
 
 ```bash
 # 개발 모드
@@ -54,12 +54,12 @@ npm run start
 #### Claude Code에서 설정
 
 ```bash
-claude mcp add --transport http comfyui-image-manager http://localhost:1566/mcp
+claude mcp add --transport http conai http://localhost:1566/mcp
 ```
 
 외부 네트워크에서 접근하는 경우:
 ```bash
-claude mcp add --transport http comfyui-image-manager http://<서버IP>:1566/mcp
+claude mcp add --transport http conai http://<서버IP>:1566/mcp
 ```
 
 #### 설정 확인
@@ -81,12 +81,12 @@ Claude Code 내에서:
 
 ```bash
 # 프로젝트 루트에서
-claude mcp add --transport stdio comfyui-image-manager -- npx tsx backend/src/mcp/stdio.ts
+claude mcp add --transport stdio conai -- npx tsx backend/src/mcp/stdio.ts
 ```
 
 빌드된 버전 사용:
 ```bash
-claude mcp add --transport stdio comfyui-image-manager -- node backend/dist/mcp/stdio.js
+claude mcp add --transport stdio conai -- node backend/dist/mcp/stdio.js
 ```
 
 ### 방법 3: 프로젝트 설정 파일 (.mcp.json)
@@ -96,7 +96,7 @@ claude mcp add --transport stdio comfyui-image-manager -- node backend/dist/mcp/
 ```json
 {
   "mcpServers": {
-    "comfyui-image-manager": {
+    "conai": {
       "type": "http",
       "url": "http://localhost:1677/mcp"
     }
@@ -108,7 +108,7 @@ stdio 방식:
 ```json
 {
   "mcpServers": {
-    "comfyui-image-manager": {
+    "conai": {
       "type": "stdio",
       "command": "npx",
       "args": ["tsx", "backend/src/mcp/stdio.ts"]
@@ -232,7 +232,7 @@ MCP Tool 호출:
 ## MCP 서버 제거
 
 ```bash
-claude mcp remove comfyui-image-manager
+claude mcp remove conai
 ```
 
 ## 문제 해결
