@@ -5,7 +5,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@comfyui-image-manager/shared': path.resolve(__dirname, '../shared/src/index.ts'),
+      '@conai/shared': path.resolve(__dirname, '../shared/src/index.ts'),
     },
   },
   test: {

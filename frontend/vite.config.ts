@@ -11,7 +11,7 @@ export default defineConfig({
     extensions: ['.ts', '.tsx', '.mjs', '.js', '.mts', '.jsx', '.json'],
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@comfyui-image-manager/shared': path.resolve(__dirname, '../shared/src/index.ts'),
+      '@conai/shared': path.resolve(__dirname, '../shared/src/index.ts'),
     },
     dedupe: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
   },
