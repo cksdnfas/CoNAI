@@ -1,5 +1,5 @@
 import { db } from '../database/init';
-import { GroupRecord, ImageGroupRecord, GroupCreateData, GroupUpdateData, GroupWithStats, AutoCollectCondition } from '@comfyui-image-manager/shared';
+import { GroupRecord, ImageGroupRecord, GroupCreateData, GroupUpdateData, GroupWithStats, AutoCollectCondition } from '@conai/shared';
 import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 import { getGroupHierarchyService } from '../services/groupHierarchyService';

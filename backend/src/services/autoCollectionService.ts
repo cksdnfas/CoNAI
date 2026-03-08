@@ -13,9 +13,9 @@
  * - ✅ Factory pattern → autoCollection/conditionEvaluator.ts
  */
 
-import { AutoCollectCondition, AutoCollectResult } from '@comfyui-image-manager/shared';
+import { AutoCollectCondition, AutoCollectResult } from '@conai/shared';
 import { ImageMetadataRecord } from '../types/image';
-import { ImageRecord } from '@comfyui-image-manager/shared';
+import { ImageRecord } from '@conai/shared';
 import { AutoCollectionOrchestrator, checkImageMatchesConditions } from './autoCollection';
 
 /**
