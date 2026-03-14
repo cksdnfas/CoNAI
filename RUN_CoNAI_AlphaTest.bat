@@ -1,0 +1,62 @@
+@echo off
+setlocal
+cd /d "%~dp0"
+
+echo ========================================
+echo CoNAI AlphaTest Quick Start
+echo ========================================
+echo.
+
+where node >nul 2>nul
+if errorlevel 1 (
+  echo [ERROR] Node.js is not installed or not in PATH.
+  echo Please install Node.js 18+ first.
+  pause
+  exit /b 1
+)
+
+where npm >nul 2>nul
+if errorlevel 1 (
+  echo [ERROR] npm is not available in PATH.
+  pause
+  exit /b 1
+)
+
+echo [1/4] Checking .env...
+if not exist ".env" (
+  if exist ".env.example" (
+    copy /Y ".env.example" ".env" >nul
+    echo   - .env created from .env.example
+  ) else (
+    echo   - .env.example not found, skipping
+  )
+) else (
+  echo   - .env already exists
+)
+
+echo.
+echo [2/4] Installing root dependencies...
+call npm install
+if errorlevel 1 goto :fail
+
+echo.
+echo [3/4] Installing workspace dependencies...
+call npm run install:all
+if errorlevel 1 goto :fail
+
+echo.
+echo [4/4] Starting CoNAI dev servers...
+echo   - Backend:  http://localhost:1666
+echo   - Frontend: http://localhost:1677
+echo.
+call npm run dev
+if errorlevel 1 goto :fail
+
+goto :eof
+
+:fail
+echo.
+echo [ERROR] CoNAI startup failed.
+echo Check the log output above.
+pause
+exit /b 1
