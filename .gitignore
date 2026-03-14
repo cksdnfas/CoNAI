@@ -32,6 +32,8 @@ backend/database/
 
 #test
 test/
+test-results/
+frontend/test-results/
 
 # Uploaded images
 uploads/
@@ -43,6 +45,16 @@ config/user/
 # Logs
 *.log
 logs/
+
+# Generated root artifact junk
+/frontend@*
+/comfyui-image-manager@*
+/node
+/npm
+/playwright
+/tsc
+/vitest
+*.tsbuildinfo
 
 # Runtime data
 pids/
@@ -103,3 +115,10 @@ models/models--*/
 
 # Runtime user data
 user/
+
+# Shared package build outputs (source tree should stay TS-only)
+shared/src/**/*.js
+shared/src/**/*.js.map
+shared/src/**/*.d.ts
+shared/src/**/*.d.ts.map
+shared/tsconfig.tsbuildinfo
