@@ -196,6 +196,13 @@
       "downloading": "Checking download info...",
       "checkDependencies": "Check Python Dependencies",
       "checking": "Checking dependencies..."
+    },
+    "kaloscope": {
+      "dependencyWarning": {
+        "title": "Kaloscope Python dependency issue",
+        "missingPackages": "Missing packages: {{packages}}",
+        "hint": "Run the command above in the current project environment, then refresh the status or retry the test."
+      }
     }
   },
   "rating": {

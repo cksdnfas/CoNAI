@@ -113,4 +113,8 @@ export interface KaloscopeServerStatus {
   modelCached: boolean;
   modelRepo: string;
   modelFile: string;
+  dependenciesAvailable: boolean;
+  missingPackages: string[];
+  statusMessage: string;
+  installCommand?: string;
 }

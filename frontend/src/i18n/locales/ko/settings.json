@@ -173,6 +173,13 @@
       "save": "저장",
       "cancel": "취소"
     },
+    "kaloscope": {
+      "dependencyWarning": {
+        "title": "Kaloscope Python 의존성 문제",
+        "missingPackages": "누락 패키지: {{packages}}",
+        "hint": "위 명령을 현재 프로젝트 환경에서 실행한 뒤, 상태를 새로고침하거나 테스트를 다시 시도하시옵소서."
+      }
+    },
     "alerts": {
       "modelDownloaded": "{{model}} 모델이 다운로드되어 있습니다.",
       "modelNotDownloaded": "{{model}} 모델이 다운로드되지 않았습니다. 첫 사용 시 자동으로 다운로드됩니다.",

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, CloudDownload, CloudOff, CloudUpload, Loader2, RefreshCw, TestTube2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, CloudDownload, CloudOff, CloudUpload, Loader2, RefreshCw, TestTube2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { taggerBatchApi } from '@/services/tagger-batch-api'
 import { settingsApi, type DependencyCheckResult, type KaloscopeServerStatus, type KaloscopeSettings, type TaggerModel, type TaggerServerStatus, type TaggerSettings } from '@/services/settings-api'
-import { Alert as UiAlert, AlertDescription } from '@/components/ui/alert'
+import { Alert as UiAlert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -137,6 +137,18 @@ export function TaggerSettingsPanel({ settings, kaloscopeSettings, onUpdate, onU
   }, [local.enabled, localKaloscope.enabled, loadKaloscopeStatus, loadModelStatus])
 
   const selectedModel = useMemo(() => models.find((model) => model.name === local.model), [local.model, models])
+
+  const kaloscopeDependencyProblem = useMemo(() => {
+    if (!kaloscopeStatus || kaloscopeStatus.dependenciesAvailable) {
+      return null
+    }
+
+    return {
+      message: kaloscopeStatus.statusMessage,
+      installCommand: kaloscopeStatus.installCommand,
+      missingPackages: kaloscopeStatus.missingPackages ?? [],
+    }
+  }, [kaloscopeStatus])
 
   const handleSave = async () => {
     setSaving(true)
@@ -505,9 +517,10 @@ export function TaggerSettingsPanel({ settings, kaloscopeSettings, onUpdate, onU
               {kaloscopeStatus?.topK ? <Badge variant="outline">TopK {kaloscopeStatus.topK}</Badge> : null}
             </div>
             {kaloscopeStatus ? (
-              <p className="text-xs text-muted-foreground">
-                {kaloscopeStatus.modelRepo} / {kaloscopeStatus.modelFile}
-              </p>
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <p>{kaloscopeStatus.modelRepo} / {kaloscopeStatus.modelFile}</p>
+                <p>{kaloscopeStatus.statusMessage}</p>
+              </div>
             ) : null}
           </div>
         </div>

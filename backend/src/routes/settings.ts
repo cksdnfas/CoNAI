@@ -179,6 +179,7 @@ router.get(
     const modelRepo = process.env.KALOSCOPE_MODEL_REPO || 'DraconicDragon/Kaloscope-onnx';
     const modelFile = process.env.KALOSCOPE_MODEL_FILE || 'v2.0/kaloscope_2-0.onnx';
     const scriptPath = path.join(__dirname, '..', '..', 'python', 'kaloscope_tagger.py');
+    const dependencyStatus = await kaloscopeTaggerService.checkDependencies();
 
     const status: KaloscopeServerStatus = {
       enabled: settings.kaloscope.enabled,
@@ -189,6 +190,10 @@ router.get(
       modelCached: isKaloscopeModelCached(modelRepo, modelFile),
       modelRepo,
       modelFile,
+      dependenciesAvailable: dependencyStatus.available,
+      missingPackages: dependencyStatus.missingPackages,
+      statusMessage: dependencyStatus.message,
+      installCommand: dependencyStatus.installCommand,
     };
 
     res.json({

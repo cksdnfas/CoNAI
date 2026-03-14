@@ -10,6 +10,13 @@ interface KaloscopeServiceOptions {
   topk?: number;
 }
 
+interface KaloscopeDependencyStatus {
+  available: boolean;
+  missingPackages: string[];
+  message: string;
+  installCommand?: string;
+}
+
 export class KaloscopeTaggerService {
   private readonly scriptPath: string;
 
@@ -39,6 +46,84 @@ export class KaloscopeTaggerService {
     return process.env.KALOSCOPE_MODEL_FILE || 'v2.0/kaloscope_2-0.onnx';
   }
 
+  async checkDependencies(): Promise<KaloscopeDependencyStatus> {
+    const pythonPath = this.getPythonPath();
+    const requirementsPath = path.join(path.dirname(this.scriptPath), 'requirements.txt');
+    const installCommand = `"${pythonPath}" -m pip install -r "${requirementsPath}"`;
+
+    return await new Promise<KaloscopeDependencyStatus>((resolve) => {
+      const child = spawn(pythonPath, ['-c', 'import importlib.util; import json; mods=["onnxruntime","numpy","PIL","huggingface_hub"]; missing=[m for m in mods if importlib.util.find_spec(m) is None]; print(json.dumps({"missing": missing}))'], {
+        cwd: path.dirname(this.scriptPath),
+        env: {
+          ...process.env,
+          PYTHONUNBUFFERED: '1',
+          PYTHONIOENCODING: 'utf-8'
+        }
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      child.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      child.on('error', (error) => {
+        resolve({
+          available: false,
+          missingPackages: ['python'],
+          message: `Python 실행 실패: ${error.message}`,
+          installCommand,
+        });
+      });
+
+      child.on('close', () => {
+        const raw = stdout.trim();
+        if (!raw) {
+          resolve({
+            available: false,
+            missingPackages: ['unknown'],
+            message: stderr.trim() || 'Kaloscope Python 의존성 확인에 실패했습니다.',
+            installCommand,
+          });
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(raw) as { missing?: string[] };
+          const missingPackages = Array.isArray(parsed.missing) ? parsed.missing : [];
+          if (missingPackages.length === 0) {
+            resolve({
+              available: true,
+              missingPackages: [],
+              message: 'Kaloscope Python 의존성이 모두 준비되었습니다.',
+              installCommand,
+            });
+            return;
+          }
+
+          resolve({
+            available: false,
+            missingPackages,
+            message: `Kaloscope 실행에 필요한 Python 패키지가 없습니다: ${missingPackages.join(', ')}`,
+            installCommand,
+          });
+        } catch {
+          resolve({
+            available: false,
+            missingPackages: ['unknown'],
+            message: stderr.trim() || `Kaloscope Python 의존성 확인 결과를 해석하지 못했습니다: ${raw.slice(0, 300)}`,
+            installCommand,
+          });
+        }
+      });
+    });
+  }
+
   async tagImage(imagePath: string, options?: KaloscopeServiceOptions): Promise<KaloscopeResult> {
     if (!this.isEnabled()) {
       return {
@@ -61,6 +146,15 @@ export class KaloscopeTaggerService {
         success: false,
         error: `Image not found: ${imagePath}`,
         error_type: 'FileNotFound'
+      };
+    }
+
+    const dependencyStatus = await this.checkDependencies();
+    if (!dependencyStatus.available) {
+      return {
+        success: false,
+        error: `${dependencyStatus.message}${dependencyStatus.installCommand ? `\n해결: ${dependencyStatus.installCommand}` : ''}`,
+        error_type: 'MissingDependency'
       };
     }
 
