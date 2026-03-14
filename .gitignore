@@ -32,8 +32,15 @@ backend/database/
 
 #test
 test/
+tests/
+frontend/tests/
 test-results/
 frontend/test-results/
+playwright.config.*
+frontend/playwright.config.*
+vitest.config.ts
+frontend/vitest.config.ts
+frontend/.playwright-dev.log
 
 # Uploaded images
 uploads/
