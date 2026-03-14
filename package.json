@@ -1,6 +1,6 @@
 {
   "name": "conai",
-  "version": "2.1.0a",
+  "version": "26.3.14",
   "description": "React-based image viewer and manager for ComfyUI",
   "private": true,
   "workspaces": [

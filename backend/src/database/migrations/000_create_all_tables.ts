@@ -406,7 +406,7 @@ export const up = async (db: Database.Database): Promise<void> => {
     INSERT OR IGNORE INTO watched_folders
     (folder_path, folder_name, auto_scan, scan_interval, recursive, is_active, watcher_enabled, is_default)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(defaultUploadPath, 'Upload', 1, 60, 1, 1, 1, 0);
+  `).run(defaultUploadPath, 'Upload', 1, 60, 1, 1, 1, 1);
 
   console.log('  ✅ 폴더 테이블 3개 + 인덱스 + 기본 폴더 1개 생성 완료\n');
 

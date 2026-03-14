@@ -1,6 +1,17 @@
 import { db } from '../database/init';
 import path from 'path';
 import fs from 'fs';
+import { runtimePaths } from '../config/runtimePaths';
+
+const DEFAULT_UPLOAD_FOLDER_NAME = 'Upload';
+
+type ServiceError = Error & { statusCode?: number };
+
+function createServiceError(message: string, statusCode: number): ServiceError {
+  const error = new Error(message) as ServiceError;
+  error.statusCode = statusCode;
+  return error;
+}
 
 export interface WatchedFolder {
   id: number;
@@ -48,6 +59,81 @@ export interface WatchedFolderUpdate {
 }
 
 export class WatchedFolderService {
+  static async reconcileDefaultUploadFolder(): Promise<WatchedFolder> {
+    const runtimeUploadsPath = path.resolve(runtimePaths.uploadsDir);
+    const timestamp = new Date().toISOString();
+
+    const existingRuntimeFolder = db.prepare(`
+      SELECT * FROM watched_folders WHERE folder_path = ?
+    `).get(runtimeUploadsPath) as WatchedFolder | undefined;
+
+    const existingDefaultUploadFolder = db.prepare(`
+      SELECT * FROM watched_folders
+      WHERE folder_name = ?
+      ORDER BY
+        CASE
+          WHEN folder_path = ? THEN 0
+          WHEN is_default = 1 THEN 1
+          ELSE 2
+        END,
+        id ASC
+      LIMIT 1
+    `).get(DEFAULT_UPLOAD_FOLDER_NAME, runtimeUploadsPath) as WatchedFolder | undefined;
+
+    const targetFolder = existingRuntimeFolder ?? existingDefaultUploadFolder;
+
+    if (!targetFolder) {
+      const info = db.prepare(`
+        INSERT INTO watched_folders (
+          folder_path, folder_name, auto_scan, scan_interval,
+          recursive, is_active, watcher_enabled, is_default, created_date, updated_date
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        runtimeUploadsPath,
+        DEFAULT_UPLOAD_FOLDER_NAME,
+        1,
+        60,
+        1,
+        1,
+        1,
+        1,
+        timestamp,
+        timestamp
+      );
+
+      const insertedFolder = await this.getFolder(info.lastInsertRowid as number);
+      if (!insertedFolder) {
+        throw new Error('기본 Upload 폴더를 조회할 수 없습니다');
+      }
+
+      return insertedFolder;
+    }
+
+    const reconcileDefaultUploadFolder = db.transaction(() => {
+      db.prepare(`
+        UPDATE watched_folders
+        SET is_default = 0, updated_date = ?
+        WHERE id != ? AND folder_name = ? AND is_default = 1
+      `).run(timestamp, targetFolder.id, DEFAULT_UPLOAD_FOLDER_NAME);
+
+      db.prepare(`
+        UPDATE watched_folders
+        SET folder_path = ?, folder_name = ?, auto_scan = 1, recursive = 1,
+            watcher_enabled = 1, is_active = 1, is_default = 1, updated_date = ?
+        WHERE id = ?
+      `).run(runtimeUploadsPath, DEFAULT_UPLOAD_FOLDER_NAME, timestamp, targetFolder.id);
+    });
+
+    reconcileDefaultUploadFolder();
+
+    const reconciledFolder = await this.getFolder(targetFolder.id);
+    if (!reconciledFolder) {
+      throw new Error('기본 Upload 폴더를 조회할 수 없습니다');
+    }
+
+    return reconciledFolder;
+  }
+
   /**
    * 폴더 등록
    */
@@ -203,6 +289,18 @@ export class WatchedFolderService {
    * 폴더 삭제
    */
   static async deleteFolder(id: number, deleteFiles: boolean = false): Promise<boolean> {
+    const folder = db.prepare(`
+      SELECT id, folder_name, is_default FROM watched_folders WHERE id = ?
+    `).get(id) as Pick<WatchedFolder, 'id' | 'folder_name' | 'is_default'> | undefined;
+
+    if (!folder) {
+      return false;
+    }
+
+    if (folder.is_default === 1 && folder.folder_name === DEFAULT_UPLOAD_FOLDER_NAME) {
+      throw createServiceError('기본 Upload 폴더는 삭제할 수 없습니다', 400);
+    }
+
     if (deleteFiles) {
       // image_files에서도 삭제 (CASCADE로 자동 처리됨)
       // 하지만 media_metadata는 유지 (다른 폴더에서 참조 가능)

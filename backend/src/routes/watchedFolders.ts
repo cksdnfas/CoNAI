@@ -266,6 +266,16 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
   }
 
+  const folder = await WatchedFolderService.getFolder(id);
+
+  if (!folder) {
+    return res.status(404).json(errorResponse('폴더를 찾을 수 없습니다'));
+  }
+
+  if (folder.is_default === 1 && folder.folder_name === 'Upload') {
+    return res.status(400).json(errorResponse('기본 Upload 폴더는 삭제할 수 없습니다'));
+  }
+
   // Stop watcher before deletion to clean up in-memory state
   try {
     await FileWatcherService.stopWatcher(id);

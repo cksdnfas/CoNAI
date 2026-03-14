@@ -90,6 +90,7 @@ import { settingsService } from './services/settingsService';
 import { AutoScanScheduler } from './services/autoScanScheduler';
 import { autoTagScheduler } from './services/autoTagScheduler';
 import { QueryCacheService } from './services/QueryCacheService';
+import { WatchedFolderService } from './services/watchedFolderService';
 
 const app = express();
 const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;
@@ -388,6 +389,10 @@ async function startServer() {
     const isNewDatabase = !fs.existsSync(runtimePaths.databaseFile);
     await initializeDatabase();
     console.log('✅ Database initialized successfully');
+
+    console.log('📂 기본 Upload 감시 폴더 동기화 중...');
+    const defaultUploadFolder = await WatchedFolderService.reconcileDefaultUploadFolder();
+    console.log(`✅ Default Upload watched folder ready: ${defaultUploadFolder.folder_path}`);
 
     // 3-1. 첫 실행 안내
     if (isNewDatabase) {
@@ -757,7 +762,6 @@ ${divider}`);
 }
 
 startServer();
-
 
 
 
