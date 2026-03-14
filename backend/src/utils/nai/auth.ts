@@ -1,6 +1,5 @@
 import argon2 from 'argon2';
-// @ts-ignore - no types available
-import { createHash } from 'blake2';
+import { createHash } from 'node:crypto';
 
 // 세션 토큰 저장 (메모리)
 let currentToken: string | null = null;
@@ -30,9 +29,9 @@ export async function generateAccessKey(username: string, password: string): Pro
     console.log('Pre-salt:', preSalt);
 
     // 2단계: BLAKE2b로 Salt 생성 (16바이트)
-    // Python의 blake2b(digest_size=16)와 정확히 동일
-    const blake2Hash = createHash('blake2b', { digestLength: 16 });
-    blake2Hash.update(Buffer.from(preSalt));
+    // Node 내장 crypto의 blake2b512 + outputLength로 Python blake2b(digest_size=16)와 맞춘다
+    const blake2Hash = createHash('blake2b512', { outputLength: 16 });
+    blake2Hash.update(preSalt, 'utf8');
     const salt = blake2Hash.digest();
     console.log('Salt (hex):', salt.toString('hex'));
 

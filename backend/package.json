@@ -20,7 +20,6 @@
     "better-queue": "^3.8.12",
     "better-sqlite3": "^12.8.0",
     "better-sqlite3-session-store": "^0.1.0",
-    "blake2": "^5.0.0",
     "chokidar": "^4.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
