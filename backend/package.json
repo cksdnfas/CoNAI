@@ -18,7 +18,7 @@
     "argon2": "^0.44.0",
     "axios": "^1.12.2",
     "better-queue": "^3.8.12",
-    "better-sqlite3": "^9.4.0",
+    "better-sqlite3": "^12.8.0",
     "better-sqlite3-session-store": "^0.1.0",
     "blake2": "^5.0.0",
     "chokidar": "^4.0.3",

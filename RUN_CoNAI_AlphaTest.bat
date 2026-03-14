@@ -22,6 +22,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
+for /f "tokens=1 delims=." %%i in ('node -p "process.versions.node"') do set NODE_MAJOR=%%i
+if "%NODE_MAJOR%"=="24" (
+  echo [WARN] Node 24 detected. CoNAI now tests against newer better-sqlite3,
+  echo        but if install fails, please retry with Node 22 LTS.
+  echo.
+)
+
 echo [1/4] Checking .env...
 if not exist ".env" (
   if exist ".env.example" (
