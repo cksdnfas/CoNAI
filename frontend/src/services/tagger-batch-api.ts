@@ -2,7 +2,7 @@ import { apiClient } from '@/lib/api/client'
 
 export const taggerBatchApi = {
   async testImage(imageId: string): Promise<unknown> {
-    const response = await apiClient.post<{ success: boolean; data: unknown }>(`/api/images/${imageId}/tag`)
+    const response = await apiClient.post<{ success: boolean; data: unknown }>('/api/settings/tagger/test', { imageId })
     return response.data.data
   },
 

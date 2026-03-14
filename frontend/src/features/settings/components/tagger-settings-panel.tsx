@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, CloudDownload, CloudOff, CloudUpload, Loader2, RefreshCw, TestTube2 } from 'lucide-react'
+import { CheckCircle2, CloudDownload, CloudOff, CloudUpload, Loader2, RefreshCw, TestTube2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { taggerBatchApi } from '@/services/tagger-batch-api'
 import { settingsApi, type DependencyCheckResult, type KaloscopeServerStatus, type KaloscopeSettings, type TaggerModel, type TaggerServerStatus, type TaggerSettings } from '@/services/settings-api'
@@ -40,6 +40,8 @@ export function TaggerSettingsPanel({ settings, kaloscopeSettings, onUpdate, onU
   const [kaloscopeTestLoading, setKaloscopeTestLoading] = useState(false)
   const [batchLoading, setBatchLoading] = useState(false)
   const [banner, setBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  const formatLabel = useCallback((value: string) => value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()), [])
 
   useEffect(() => {
     setLocal(settings)
@@ -267,7 +269,7 @@ export function TaggerSettingsPanel({ settings, kaloscopeSettings, onUpdate, onU
     try {
       setTestLoading(true)
       setTestResult(null)
-      const result = await taggerBatchApi.testImage(imageId)
+      const result = await settingsApi.testTagger(imageId)
       setTestResult(result)
       setSuccessBanner(t('tagger.test.success', { defaultValue: 'Tagger test completed' }))
     } catch (error) {
@@ -316,6 +318,88 @@ export function TaggerSettingsPanel({ settings, kaloscopeSettings, onUpdate, onU
 
     const diffDays = Math.floor(diffHours / 24)
     return t('tagger.modelStatus.daysAgo', { days: diffDays })
+  }
+
+  const renderResultValue = (value: unknown) => {
+    if (value == null) {
+      return <span className="text-muted-foreground">-</span>
+    }
+
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        return <span className="text-muted-foreground">-</span>
+      }
+
+      return (
+        <div className="flex flex-wrap gap-1">
+          {value.map((item, index) => (
+            <Badge key={`${String(item)}-${index}`} variant="secondary" className="max-w-full break-all">{String(item)}</Badge>
+          ))}
+        </div>
+      )
+    }
+
+    if (typeof value === 'object') {
+      const entries = Object.entries(value as Record<string, unknown>)
+      if (entries.length === 0) {
+        return <span className="text-muted-foreground">-</span>
+      }
+
+      const numericEntries = entries.every(([, entryValue]) => typeof entryValue === 'number')
+      if (numericEntries) {
+        return (
+          <div className="space-y-2">
+            {entries.map(([key, entryValue]) => (
+              <div key={key} className="space-y-1">
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="truncate text-foreground">{key}</span>
+                  <span className="shrink-0 text-muted-foreground">{Number(entryValue).toFixed(4)}</span>
+                </div>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(2, Math.min(Number(entryValue) * 100, 100))}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      }
+
+      return (
+        <div className="space-y-3">
+          {entries.map(([key, entryValue]) => (
+            <div key={key} className="space-y-1 rounded-md border bg-background/60 p-3">
+              <p className="text-xs font-medium text-muted-foreground">{formatLabel(key)}</p>
+              {renderResultValue(entryValue)}
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    return <span className="break-all text-sm text-foreground">{String(value)}</span>
+  }
+
+  const renderResultPanel = (title: string, result: unknown) => {
+    if (!result || typeof result !== 'object') {
+      return null
+    }
+
+    return (
+      <div className="rounded-lg border bg-muted/20 p-3">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <p className="text-sm font-medium">{title}</p>
+          <Badge variant="outline">Structured Result</Badge>
+        </div>
+        <div className="max-h-80 space-y-3 overflow-y-auto pr-2">
+          {Object.entries(result as Record<string, unknown>).map(([key, value]) => (
+            <div key={key} className="space-y-1 rounded-md border bg-background p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{formatLabel(key)}</p>
+              {renderResultValue(value)}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -575,9 +659,7 @@ export function TaggerSettingsPanel({ settings, kaloscopeSettings, onUpdate, onU
               {testLoading ? t('tagger.test.processing') : t('tagger.test.button')}
             </Button>
           </div>
-          {testResult ? (
-            <pre className="max-h-56 overflow-auto rounded-md border bg-muted p-2 text-xs">{JSON.stringify(testResult, null, 2)}</pre>
-          ) : null}
+          {testResult ? renderResultPanel(t('tagger.test.title'), testResult) : null}
         </div>
 
         <div className="space-y-3 rounded-md border p-3">
@@ -594,9 +676,7 @@ export function TaggerSettingsPanel({ settings, kaloscopeSettings, onUpdate, onU
               {kaloscopeTestLoading ? t('tagger.test.processing') : t('tagger.kaloscope.test.button', { defaultValue: 'Run Kaloscope Test' })}
             </Button>
           </div>
-          {kaloscopeTestResult ? (
-            <pre className="max-h-56 overflow-auto rounded-md border bg-muted p-2 text-xs">{JSON.stringify(kaloscopeTestResult, null, 2)}</pre>
-          ) : null}
+          {kaloscopeTestResult ? renderResultPanel(t('tagger.kaloscope.test.title', { defaultValue: 'Kaloscope Test' }), kaloscopeTestResult) : null}
         </div>
 
         <Separator />

@@ -132,6 +132,11 @@ export const settingsApi = {
     return response.data.data
   },
 
+  async testTagger(imageId: string): Promise<unknown> {
+    const response = await apiClient.post<{ success: boolean; data: unknown }>('/api/settings/tagger/test', { imageId })
+    return response.data.data
+  },
+
   async testKaloscope(imageId: string): Promise<unknown> {
     const response = await apiClient.post<{ success: boolean; data: unknown }>('/api/settings/kaloscope/test', { imageId })
     return response.data.data

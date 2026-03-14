@@ -224,13 +224,12 @@ router.post(
       SELECT
         mm.composite_hash,
         if_.original_file_path,
-        if_.mime_type as file_mime_type,
-        mm.mime_type
+        if_.mime_type as file_mime_type
       FROM media_metadata mm
       LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash AND if_.file_status = 'active'
       WHERE mm.composite_hash = ?
       LIMIT 1
-    `).get(imageId) as { composite_hash: string; original_file_path: string | null; file_mime_type: string | null; mime_type: string | null } | undefined;
+    `).get(imageId) as { composite_hash: string; original_file_path: string | null; file_mime_type: string | null } | undefined;
 
     if (!imageData || !imageData.original_file_path) {
       res.status(404).json({
@@ -249,7 +248,7 @@ router.post(
       return;
     }
 
-    const mimeType = imageData.file_mime_type || imageData.mime_type || undefined;
+    const mimeType = imageData.file_mime_type || undefined;
     if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
       res.status(400).json({
         success: false,
