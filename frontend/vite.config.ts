@@ -3,6 +3,25 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+function resolveFrontendPort(): number {
+  const frontendUrl = process.env.FRONTEND_URL;
+
+  if (frontendUrl) {
+    try {
+      const port = Number(new URL(frontendUrl).port);
+      if (Number.isInteger(port) && port > 0) {
+        return port;
+      }
+    } catch {
+      // Fallback to default below when FRONTEND_URL is malformed
+    }
+  }
+
+  return 1677;
+}
+
+const frontendPort = resolveFrontendPort();
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -17,7 +36,7 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    port: 5666,
+    port: frontendPort,
     strictPort: true,
     fs: {
       allow: [

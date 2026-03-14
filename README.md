@@ -77,7 +77,7 @@ npm run dev
 ```
 
 - Backend: `http://localhost:1666`
-- Frontend (Vite): `http://localhost:1677`
+- Frontend (Vite): `FRONTEND_URL` 기준 (기본: `http://localhost:1677`)
 
 ## 프로덕션 빌드
 

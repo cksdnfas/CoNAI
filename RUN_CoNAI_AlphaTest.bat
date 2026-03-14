@@ -54,7 +54,9 @@ if errorlevel 1 goto :fail
 echo.
 echo [4/4] Starting CoNAI dev servers...
 echo   - Backend:  http://localhost:1666
-echo   - Frontend: http://localhost:1677
+for /f "tokens=2 delims==" %%a in ('findstr /b /c:"FRONTEND_URL=" ".env"') do set FRONTEND_URL=%%a
+if not defined FRONTEND_URL set FRONTEND_URL=http://localhost:1677
+echo   - Frontend: %FRONTEND_URL%
 echo.
 call npm run dev
 if errorlevel 1 goto :fail
