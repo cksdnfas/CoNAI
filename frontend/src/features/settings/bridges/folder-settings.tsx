@@ -160,7 +160,7 @@ export default function FolderSettings() {
 
     try {
       const loadedFolders = await folderApi.getFolders()
-      setFolders(loadedFolders.filter((folder) => !toBoolean(folder.is_default, false)))
+      setFolders(loadedFolders)
     } catch (loadError) {
       setError(getErrorMessage(loadError))
     } finally {
@@ -598,6 +598,7 @@ export default function FolderSettings() {
               const isWatching = folder.watcher_status === 'watching'
               const watcherEnabled = toBoolean(folder.watcher_enabled, true)
               const folderActive = toBoolean(folder.is_active, toBoolean(folder.active, true))
+              const isDefaultFolder = toBoolean(folder.is_default, false)
 
               return (
                 <div key={folder.id} className="space-y-2 rounded-md border p-3">
@@ -613,6 +614,7 @@ export default function FolderSettings() {
                     {toBoolean(folder.auto_scan, false) ? (
                       <Badge variant="outline">{t('folderSettings.watchedFolders.autoScanInterval', { interval: folder.scan_interval ?? 60 })}</Badge>
                     ) : null}
+                    {isDefaultFolder ? <Badge variant="outline">Default</Badge> : null}
                     {folder.last_scan_status ? <Badge variant="outline">{t('folderSettings.watchedFolders.scanStatus')}</Badge> : null}
                     {watcherEnabled ? (
                       <Badge variant={isWatching ? 'default' : 'outline'}>{folder.watcher_status || t('folderSettings.watchedFolders.watcherStatus.inactive')}</Badge>
@@ -651,7 +653,7 @@ export default function FolderSettings() {
                       <Button type="button" size="sm" variant="outline" onClick={() => openEditDialog(folder)}>
                         {t('folderSettings.watchedFolders.tooltips.edit')}
                       </Button>
-                      <Button type="button" size="sm" variant="destructive" onClick={() => void handleDeleteFolder(folder)} disabled={isBusy}>
+                      <Button type="button" size="sm" variant="destructive" onClick={() => void handleDeleteFolder(folder)} disabled={isBusy || isDefaultFolder}>
                         {t('folderSettings.watchedFolders.tooltips.delete')}
                       </Button>
                     </div>
