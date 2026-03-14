@@ -56,8 +56,8 @@ export class SettingsService {
         autoUnloadMinutes: 5,      // 기본값: 5분 후 자동 언로드
       },
       kaloscope: {
-        enabled: process.env.KALOSCOPE_ENABLED === undefined ? true : process.env.KALOSCOPE_ENABLED === 'true',
-        autoTagOnUpload: true,
+        enabled: process.env.KALOSCOPE_ENABLED === 'true',
+        autoTagOnUpload: false,
         device: ((process.env.KALOSCOPE_DEVICE as 'auto' | 'cpu' | 'cuda') || 'auto'),
         topK: Number.parseInt(process.env.KALOSCOPE_TOPK || '15', 10),
       },

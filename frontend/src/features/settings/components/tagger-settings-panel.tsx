@@ -72,10 +72,10 @@ export function TaggerSettingsPanel({ settings, kaloscopeSettings, onUpdate, onU
       'data' in error.response &&
       error.response.data &&
       typeof error.response.data === 'object' &&
-      'error' in error.response &&
-      typeof error.response.error === 'string'
+      'error' in error.response.data &&
+      typeof error.response.data.error === 'string'
     ) {
-      return error.response.error
+      return error.response.data.error
     }
 
     return fallback

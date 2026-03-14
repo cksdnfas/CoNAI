@@ -319,6 +319,21 @@ router.put(
       }
     }
 
+    const currentSettings = settingsService.loadSettings();
+    const nextEnabled = taggerSettings.enabled ?? currentSettings.tagger.enabled;
+    const wasEnabled = currentSettings.tagger.enabled;
+
+    if (!wasEnabled && nextEnabled) {
+      const dependencyStatus = await imageTaggerService.checkPythonDependencies();
+      if (!dependencyStatus.available) {
+        res.status(400).json({
+          success: false,
+          error: dependencyStatus.message,
+        });
+        return;
+      }
+    }
+
     // Update settings
     const updatedSettings = settingsService.updateTaggerSettings(taggerSettings);
 

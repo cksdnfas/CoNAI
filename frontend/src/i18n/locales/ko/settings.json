@@ -110,7 +110,7 @@
   },
   "tagger": {
     "title": "WD Tagger 설정",
-    "description": "AI 기반 이미지 자동 태깅 기능을 설정합니다.",
+    "description": "AI 기반 이미지 자동 태깅 기능을 설정합니다. 기본값은 비활성이며, 활성화 시 필요한 환경을 먼저 점검합니다.",
     "enabled": "Tagger 활성화",
     "autoTagOnUpload": "업로드 시 자동 태깅",
     "enableAutoTagging": "자동 태깅 활성화",

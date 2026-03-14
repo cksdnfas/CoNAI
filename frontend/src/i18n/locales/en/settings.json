@@ -111,7 +111,7 @@
   },
   "tagger": {
     "title": "WD Tagger Settings",
-    "description": "Configure AI-based automatic image tagging",
+    "description": "Configure AI-based automatic image tagging. Disabled by default, and dependencies are checked before enabling.",
     "enabled": "Enable Tagger",
     "autoTagOnUpload": "Auto-tag on upload",
     "enableAutoTagging": "Enable Auto-Tagging",
