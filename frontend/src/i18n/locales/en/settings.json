@@ -685,7 +685,8 @@
         "delete": "Delete",
         "watcherStart": "Start watching",
         "watcherStop": "Stop watching",
-        "processing": "Processing..."
+        "processing": "Processing...",
+        "defaultWatcherLocked": "The default upload folder watcher cannot be turned off"
       },
       "messages": {
         "loadFailed": "Failed to load folder list",

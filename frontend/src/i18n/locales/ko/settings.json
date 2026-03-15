@@ -726,7 +726,8 @@
         "delete": "삭제",
         "watcherStart": "감시 시작",
         "watcherStop": "감시 중지",
-        "processing": "처리 중..."
+        "processing": "처리 중...",
+        "defaultWatcherLocked": "기본 업로드 폴더의 감시는 중지할 수 없습니다"
       },
       "messages": {
         "loadFailed": "폴더 목록을 불러오는데 실패했습니다",

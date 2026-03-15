@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { backgroundQueueApi, type BackgroundQueueStatus, type HashStats } from '@/services/background-queue-api'
 import { fileVerificationApi, type FileVerificationSettings, type VerificationProgress, type VerificationStats } from '@/services/file-verification-api'
 import { folderApi, type FolderScanLog, type WatchedFolder, type WatchedFolderCreate, type WatchedFolderUpdate } from '@/services/folder-api'
@@ -154,9 +155,11 @@ export default function FolderSettings() {
   const [rebuildingHashes, setRebuildingHashes] = useState(false)
   const [savingVerifySettings, setSavingVerifySettings] = useState(false)
 
-  const loadFolders = useCallback(async () => {
-    setError(null)
-    setLoading(true)
+  const loadFolders = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) {
+      setError(null)
+      setLoading(true)
+    }
 
     try {
       const loadedFolders = await folderApi.getFolders()
@@ -164,7 +167,9 @@ export default function FolderSettings() {
     } catch (loadError) {
       setError(getErrorMessage(loadError))
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }, [])
 
@@ -631,16 +636,28 @@ export default function FolderSettings() {
 
                   <div className="flex items-center justify-between">
                     {watcherEnabled ? (
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={isWatching}
-                          onCheckedChange={(checked) => void handleWatcherToggle(folder, Boolean(checked))}
-                          disabled={isWatcherBusy}
-                        />
-                        <span className="text-xs text-muted-foreground">
-                          {isWatcherBusy ? t('folderSettings.watchedFolders.tooltips.processing') : (isWatching ? t('folderSettings.watchedFolders.tooltips.watcherStop') : t('folderSettings.watchedFolders.tooltips.watcherStart'))}
-                        </span>
-                      </div>
+                      <TooltipProvider>
+                        <div className="flex items-center gap-2">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div>
+                                <Switch
+                                  checked={isWatching}
+                                  onCheckedChange={(checked) => void handleWatcherToggle(folder, Boolean(checked))}
+                                  disabled={isWatcherBusy || isDefaultFolder}
+                                />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {isDefaultFolder
+                                ? t('folderSettings.watchedFolders.tooltips.defaultWatcherLocked')
+                                : isWatcherBusy
+                                  ? t('folderSettings.watchedFolders.tooltips.processing')
+                                  : (isWatching ? t('folderSettings.watchedFolders.tooltips.watcherStop') : t('folderSettings.watchedFolders.tooltips.watcherStart'))}
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TooltipProvider>
                     ) : <div />}
 
                     <div className="flex gap-1">
