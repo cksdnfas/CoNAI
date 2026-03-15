@@ -587,7 +587,7 @@ ${divider}`);
     let server: import('http').Server | import('https').Server;
 
     if (isSecureContext) {
-      const httpsOptions = prepareHttpsOptions();
+      const httpsOptions = await prepareHttpsOptions();
 
       if (httpsOptions) {
         const extraLines: string[] = [];

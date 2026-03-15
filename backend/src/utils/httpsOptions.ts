@@ -17,12 +17,15 @@ const parseAltNameList = (raw?: string | null): string[] => {
     .filter((entry) => entry.length > 0);
 };
 
-const buildAltNameObjects = (values: string[]): Array<{ type: 2 | 7; value: string }> => {
-  const unique = new Map<string, { type: 2 | 7; value: string }>();
+const buildAltNameObjects = (values: string[]): Array<{ type: 2; value: string } | { type: 7; ip: string }> => {
+  const unique = new Map<string, { type: 2; value: string } | { type: 7; ip: string }>();
 
   for (const value of values) {
-    const type = isIp(value) ? 7 : 2;
-    unique.set(value, { type, value });
+    if (isIp(value)) {
+      unique.set(value, { type: 7, ip: value });
+    } else {
+      unique.set(value, { type: 2, value });
+    }
   }
 
   return Array.from(unique.values());
@@ -30,7 +33,7 @@ const buildAltNameObjects = (values: string[]): Array<{ type: 2 | 7; value: stri
 
 export type HttpsOptions = https.ServerOptions & { generatedCertPath?: string; generatedKeyPath?: string };
 
-export function prepareHttpsOptions(): HttpsOptions | null {
+export async function prepareHttpsOptions(): Promise<HttpsOptions | null> {
   const certPath = process.env.SSL_CERT_FILE;
   const keyPath = process.env.SSL_KEY_FILE;
   const allowSelfSigned = (process.env.ENABLE_SELF_SIGNED_TLS || 'true').toLowerCase() !== 'false';
@@ -82,16 +85,21 @@ export function prepareHttpsOptions(): HttpsOptions | null {
     const extensions = altNames.length
       ? [
           {
-            name: 'subjectAltName',
+            name: 'subjectAltName' as const,
             altNames,
           },
         ]
       : undefined;
 
-    const pems = selfsigned.generate(attrs, {
+    const validityDays = Number(process.env.SELF_SIGNED_DAYS || 365);
+    const notBeforeDate = new Date();
+    const notAfterDate = new Date(notBeforeDate.getTime() + validityDays * 24 * 60 * 60 * 1000);
+
+    const pems = await selfsigned.generate(attrs, {
       algorithm: 'sha256',
-      days: Number(process.env.SELF_SIGNED_DAYS || 365),
       keySize: 2048,
+      notBeforeDate,
+      notAfterDate,
       extensions,
     });
 
