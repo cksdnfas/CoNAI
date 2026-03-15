@@ -19,15 +19,6 @@ const ensureProtocol = (value: string): string => {
   return `http://${value}`
 }
 
-const readElectronOrigin = (): string | undefined => {
-  if (typeof window === 'undefined') {
-    return undefined
-  }
-
-  const api = (window as Window & { electronAPI?: { backendOrigin?: string; publicBaseUrl?: string } }).electronAPI
-  return api?.backendOrigin || api?.publicBaseUrl
-}
-
 const readEnvOrigin = (): string | undefined => {
   const candidates = [
     import.meta.env.VITE_API_BASE_URL as string | undefined,
@@ -45,7 +36,7 @@ export const getBackendOrigin = (): string => {
     return cachedBackendOrigin
   }
 
-  const source = readElectronOrigin() || readEnvOrigin()
+  const source = readEnvOrigin()
 
   if (!source) {
     cachedBackendOrigin = resolveDefaultBackendOrigin()
