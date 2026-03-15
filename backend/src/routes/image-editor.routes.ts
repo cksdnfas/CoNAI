@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from './routeParam';
 import { asyncHandler } from '../middleware/errorHandler';
 import { ImageEditorService } from '../services/imageEditorService';
 import { TempImageService, EditOptions } from '../services/tempImageService';
@@ -15,7 +16,7 @@ const router = Router();
  * GET /api/image-editor/:id/webp
  */
 router.get('/:id/webp', asyncHandler(async (req: Request, res: Response) => {
-  const imageId = parseInt(req.params.id);
+  const imageId = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(imageId)) {
     return res.status(400).json({
@@ -64,7 +65,7 @@ router.get('/:id/webp', asyncHandler(async (req: Request, res: Response) => {
  * POST /api/image-editor/:id/temp
  */
 router.post('/:id/temp', asyncHandler(async (req: Request, res: Response) => {
-  const imageId = parseInt(req.params.id);
+  const imageId = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(imageId)) {
     return res.status(400).json({
@@ -104,7 +105,7 @@ router.post('/:id/temp', asyncHandler(async (req: Request, res: Response) => {
  * Body: { imageData: base64 string, maskData?: base64 string }
  */
 router.post('/:id/save', asyncHandler(async (req: Request, res: Response) => {
-  const imageId = parseInt(req.params.id);
+  const imageId = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(imageId)) {
     return res.status(400).json({
@@ -160,7 +161,7 @@ router.post('/:id/save', asyncHandler(async (req: Request, res: Response) => {
  * Body: { imageData: base64 string, quality?: number (default 90) }
  */
 router.post('/:id/save-webp', asyncHandler(async (req: Request, res: Response) => {
-  const imageId = parseInt(req.params.id);
+  const imageId = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(imageId)) {
     return res.status(400).json({
@@ -203,7 +204,7 @@ router.post('/:id/save-webp', asyncHandler(async (req: Request, res: Response) =
  * DELETE /api/image-editor/temp/:tempId
  */
 router.delete('/temp/:tempId', asyncHandler(async (req: Request, res: Response) => {
-  const { tempId } = req.params;
+  const tempId = routeParam(req.params.tempId);
 
   try {
     await TempImageService.deleteTempFile(tempId);
@@ -226,7 +227,7 @@ router.delete('/temp/:tempId', asyncHandler(async (req: Request, res: Response) 
  * GET /api/image-editor/temp/:tempId/image
  */
 router.get('/temp/:tempId/image', asyncHandler(async (req: Request, res: Response) => {
-  const { tempId } = req.params;
+  const tempId = routeParam(req.params.tempId);
 
   const tempInfo = TempImageService.getTempFileInfo(tempId);
 
@@ -263,7 +264,7 @@ router.get('/temp/:tempId/image', asyncHandler(async (req: Request, res: Respons
  * GET /api/image-editor/temp/:tempId/mask
  */
 router.get('/temp/:tempId/mask', asyncHandler(async (req: Request, res: Response) => {
-  const { tempId } = req.params;
+  const tempId = routeParam(req.params.tempId);
 
   const tempInfo = TempImageService.getTempFileInfo(tempId);
 
@@ -354,7 +355,7 @@ router.post('/mask/blank', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/image-editor/canvas/:filename/webp
  */
 router.get('/canvas/:filename/webp', asyncHandler(async (req: Request, res: Response) => {
-  const { filename } = req.params;
+  const filename = routeParam(req.params.filename);
 
   try {
     const canvasDir = path.join(runtimePaths.tempDir, 'canvas');
@@ -401,7 +402,7 @@ router.get('/canvas/:filename/webp', asyncHandler(async (req: Request, res: Resp
  * Body: { imageData: base64 string, quality?: number, createNew?: boolean }
  */
 router.post('/canvas/:filename/save-webp', asyncHandler(async (req: Request, res: Response) => {
-  const { filename } = req.params;
+  const filename = routeParam(req.params.filename);
   const { imageData, quality = 90, createNew = false } = req.body;
 
   if (!imageData) {
@@ -556,7 +557,7 @@ router.get('/canvas', asyncHandler(async (req: Request, res: Response) => {
  * DELETE /api/image-editor/canvas/:filename
  */
 router.delete('/canvas/:filename', asyncHandler(async (req: Request, res: Response) => {
-  const { filename } = req.params;
+  const filename = routeParam(req.params.filename);
 
   try {
     const canvasDir = path.join(runtimePaths.tempDir, 'canvas');

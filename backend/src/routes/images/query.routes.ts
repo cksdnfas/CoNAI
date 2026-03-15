@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from '../routeParam';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -353,7 +354,7 @@ router.post('/search/ids', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/images/:compositeHash
  */
 router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) => {
-  const compositeHash = req.params.compositeHash;
+  const compositeHash = routeParam(routeParam(req.params.compositeHash));
 
   if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
     return res.status(400).json({
@@ -412,7 +413,8 @@ router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) =
  * GET /api/images/date/:startDate/:endDate
  */
 router.get('/date/:startDate/:endDate', asyncHandler(async (req: Request, res: Response) => {
-  const { startDate, endDate } = req.params;
+  const startDate = routeParam(req.params.startDate);
+  const endDate = routeParam(req.params.endDate);
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 20;
 
@@ -619,7 +621,7 @@ router.get('/batch/thumbnails', asyncHandler(async (req: Request, res: Response)
  * GIF와 비디오는 썸네일을 생성하지 않고 원본 파일을 직접 제공
  */
 router.get('/:compositeHash/file', asyncHandler(async (req: Request, res: Response) => {
-  const compositeHash = req.params.compositeHash;
+  const compositeHash = routeParam(routeParam(req.params.compositeHash));
 
   if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
     return res.status(400).json({
@@ -723,7 +725,7 @@ router.get('/:compositeHash/file', asyncHandler(async (req: Request, res: Respon
  * GET /api/images/:compositeHash/thumbnail
  */
 router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: Response) => {
-  const compositeHash = req.params.compositeHash;
+  const compositeHash = routeParam(routeParam(req.params.compositeHash));
 
   if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
     return res.status(400).json({
@@ -913,7 +915,7 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
  * GET /api/images/:compositeHash/download/original
  */
 router.get('/:compositeHash/download/original', asyncHandler(async (req: Request, res: Response) => {
-  const compositeHash = req.params.compositeHash;
+  const compositeHash = routeParam(routeParam(req.params.compositeHash));
 
   if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
     return res.status(400).json({
@@ -972,7 +974,7 @@ router.get('/:compositeHash/download/original', asyncHandler(async (req: Request
  * Phase 1에서 composite_hash가 없는 이미지를 위한 엔드포인트
  */
 router.get('/by-path/:encodedPath', asyncHandler(async (req: Request, res: Response) => {
-  const encodedPath = req.params.encodedPath;
+  const encodedPath = routeParam(routeParam(req.params.encodedPath));
 
   try {
     // URL 디코딩

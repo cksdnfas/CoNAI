@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from './routeParam';
 import { ExternalApiProvider } from '../models/ExternalApiProvider';
 import { ExternalApiService } from '../services/externalApiService';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -33,7 +34,7 @@ router.get('/providers', asyncHandler(async (req: Request, res: Response) => {
  * Returns masked API key
  */
 router.get('/providers/:name', asyncHandler(async (req: Request, res: Response) => {
-  const { name } = req.params;
+  const name = routeParam(req.params.name);
   const provider = ExternalApiProvider.findByName(name);
 
   if (!provider) {
@@ -101,7 +102,7 @@ router.post('/providers', asyncHandler(async (req: Request, res: Response) => {
  * Body: { display_name?, api_key?, api_secret?, base_url?, additional_config?, is_enabled? }
  */
 router.put('/providers/:name', asyncHandler(async (req: Request, res: Response) => {
-  const { name } = req.params;
+  const name = routeParam(req.params.name);
   const input: UpdateExternalApiProviderInput = req.body;
 
   // Check if provider exists
@@ -137,7 +138,7 @@ router.put('/providers/:name', asyncHandler(async (req: Request, res: Response) 
  * DELETE /api/external-api/providers/:name
  */
 router.delete('/providers/:name', asyncHandler(async (req: Request, res: Response) => {
-  const { name } = req.params;
+  const name = routeParam(req.params.name);
 
   const deleted = ExternalApiProvider.delete(name);
 
@@ -161,7 +162,7 @@ router.delete('/providers/:name', asyncHandler(async (req: Request, res: Respons
  * Body: { is_enabled: boolean }
  */
 router.patch('/providers/:name/toggle', asyncHandler(async (req: Request, res: Response) => {
-  const { name } = req.params;
+  const name = routeParam(req.params.name);
   const { is_enabled } = req.body;
 
   if (typeof is_enabled !== 'boolean') {
@@ -209,7 +210,7 @@ router.patch('/providers/:name/toggle', asyncHandler(async (req: Request, res: R
  * Tests the connection with the stored API key
  */
 router.post('/providers/:name/test', asyncHandler(async (req: Request, res: Response) => {
-  const { name } = req.params;
+  const name = routeParam(req.params.name);
 
   // Get provider info
   const provider = ExternalApiProvider.findByName(name);

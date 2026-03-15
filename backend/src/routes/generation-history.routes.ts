@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import { routeParam } from './routeParam';
 import multer from 'multer';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { asyncHandler } from '../middleware/errorHandler';
@@ -94,7 +95,7 @@ router.get(
 router.get(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
     const record = await GenerationHistoryService.getHistory(parseInt(id));
 
     if (!record) {
@@ -245,7 +246,7 @@ router.post(
   '/:id/upload-image',
   upload.single('image'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
 
     // Check if image was uploaded (handled by multer middleware in main app)
     if (!req.file) {
@@ -292,7 +293,7 @@ router.post(
 router.delete(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
     const deleteFiles = req.query.deleteFiles === 'true';
 
     // Import DeletionService dynamically
@@ -321,7 +322,7 @@ router.delete(
 router.get(
   '/workflow/:workflowId',
   asyncHandler(async (req: Request, res: Response) => {
-    const { workflowId } = req.params;
+    const workflowId = routeParam(req.params.workflowId);
     const {
       generation_status,
       limit = '50',
@@ -360,7 +361,7 @@ router.get(
 router.get(
   '/workflow/:workflowId/statistics',
   asyncHandler(async (req: Request, res: Response) => {
-    const { workflowId } = req.params;
+    const workflowId = routeParam(req.params.workflowId);
     const stats = await GenerationHistoryService.getWorkflowStatistics(parseInt(workflowId));
 
     res.json({
@@ -447,7 +448,7 @@ router.post(
 router.get(
   '/job/:jobId',
   asyncHandler(async (req: Request, res: Response) => {
-    const { jobId } = req.params;
+    const jobId = routeParam(req.params.jobId);
 
     const { JobTracker } = await import('../services/jobTracker');
     const job = JobTracker.getJob(jobId);

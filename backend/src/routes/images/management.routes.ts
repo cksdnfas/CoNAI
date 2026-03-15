@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from '../routeParam';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { DeletionService } from '../../services/deletionService';
 import { successResponse, errorResponse } from '@conai/shared';
@@ -16,7 +17,7 @@ const router = Router();
  * - RecycleBin 설정에 따라 파일 보호 또는 완전 삭제
  */
 router.delete('/:compositeHash', asyncHandler(async (req: Request, res: Response) => {
-  const { compositeHash } = req.params;
+  const compositeHash = routeParam(req.params.compositeHash);
 
   // 통합 삭제 서비스 호출
   await DeletionService.deleteImage(compositeHash);

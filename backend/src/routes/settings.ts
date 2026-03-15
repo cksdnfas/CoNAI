@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from './routeParam';
 import fs from 'fs';
 import { asyncHandler } from '../middleware/errorHandler';
 import { settingsService } from '../services/settingsService';
@@ -702,7 +703,7 @@ router.post(
 router.put(
   '/rating/tiers/:id',
   asyncHandler(async (req: Request, res: Response) => {
-    const tierId = parseInt(req.params.id, 10);
+    const tierId = parseInt(routeParam(routeParam(req.params.id)), 10);
     const tierData: Partial<RatingTierInput> = req.body;
 
     if (isNaN(tierId)) {
@@ -737,7 +738,7 @@ router.put(
 router.delete(
   '/rating/tiers/:id',
   asyncHandler(async (req: Request, res: Response) => {
-    const tierId = parseInt(req.params.id, 10);
+    const tierId = parseInt(routeParam(routeParam(req.params.id)), 10);
 
     if (isNaN(tierId)) {
       res.status(400).json({

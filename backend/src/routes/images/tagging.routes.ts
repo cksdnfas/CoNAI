@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from '../routeParam';
 import path from 'path';
 import fs from 'fs';
 import { asyncHandler } from '../../middleware/errorHandler';
@@ -72,11 +73,11 @@ async function buildMergedAutoTags(
  * 단일 이미지 태깅 (WD v3 Tagger)
  */
 router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
-  const compositeHash = req.params.id;
+  const compositeHash = routeParam(routeParam(req.params.id));
 
   console.log('[TagRoute] POST /:id/tag hit!');
   logger.debug('[TagRoute] POST /:id/tag hit!');
-  logger.debug(`[TagRoute] req.params.id: ${compositeHash}`);
+  logger.debug(`[TagRoute] routeParam(routeParam(req.params.id)): ${compositeHash}`);
   logger.debug(`[TagRoute] req.url: ${req.url}`);
   logger.debug(`[TagRoute] req.path: ${req.path}`);
 

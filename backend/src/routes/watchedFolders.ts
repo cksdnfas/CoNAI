@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from './routeParam';
 import { asyncHandler } from '../middleware/errorHandler';
 import { WatchedFolderService } from '../services/watchedFolderService';
 import { FolderScanService } from '../services/folderScan';
@@ -37,7 +38,7 @@ router.get('/scan-logs/recent', asyncHandler(async (req: Request, res: Response)
  * 중요: 파라미터 라우트는 특정 문자열 경로 뒤에 정의되어야 합니다.
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
@@ -162,7 +163,7 @@ router.post('/validate-path', asyncHandler(async (req: Request, res: Response) =
  * 폴더 설정 업데이트
  */
 router.patch('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
@@ -238,7 +239,7 @@ router.patch('/:id', asyncHandler(async (req: Request, res: Response) => {
  * 폴더 스캔 실행
  */
 router.post('/:id/scan', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
   const fullRescan = req.query.full === 'true';
 
   if (isNaN(id)) {
@@ -259,7 +260,7 @@ router.post('/:id/scan', asyncHandler(async (req: Request, res: Response) => {
  * 폴더 삭제
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
   const deleteFiles = req.query.delete_files === 'true';
 
   if (isNaN(id)) {
@@ -303,7 +304,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
  * 특정 폴더의 스캔 로그 조회
  */
 router.get('/:id/scan-logs', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
   const limit = parseInt(req.query.limit as string) || 50;
 
   if (isNaN(id)) {
@@ -321,7 +322,7 @@ router.get('/:id/scan-logs', asyncHandler(async (req: Request, res: Response) =>
  * 워처 상태 조회
  */
 router.get('/:id/watcher/status', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
@@ -356,7 +357,7 @@ router.get('/:id/watcher/status', asyncHandler(async (req: Request, res: Respons
  * 워처 시작
  */
 router.post('/:id/watcher/start', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
@@ -396,7 +397,7 @@ router.post('/:id/watcher/start', asyncHandler(async (req: Request, res: Respons
  * 워처 중지
  */
 router.post('/:id/watcher/stop', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
@@ -424,7 +425,7 @@ router.post('/:id/watcher/stop', asyncHandler(async (req: Request, res: Response
  * 워처 재시작
  */
 router.post('/:id/watcher/restart', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));

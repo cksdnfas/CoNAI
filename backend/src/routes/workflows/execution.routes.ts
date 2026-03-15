@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from '../routeParam';
 import { WorkflowModel } from '../../models/Workflow';
 import { createComfyUIService } from '../../services/comfyuiService';
 import { WorkflowResponse, GenerationStatusResponse } from '../../types/workflow';
@@ -17,7 +18,7 @@ const router = Router();
  * POST /api/workflows/:id/generate
  */
 router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
   const { prompt_data, server_id, groupId, source_image } = req.body;
 
   if (isNaN(id) || !prompt_data) {
@@ -262,7 +263,7 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
  * GET /api/workflows/:id/history
  */
 router.get('/:id/history', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 20;
 
@@ -310,7 +311,7 @@ router.get('/:id/history', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/workflows/history/:historyId
  */
 router.get('/history/:historyId', asyncHandler(async (req: Request, res: Response) => {
-  const historyId = parseInt(req.params.historyId);
+  const historyId = parseInt(routeParam(routeParam(req.params.historyId)));
 
   if (isNaN(historyId)) {
     return res.status(400).json({
@@ -364,7 +365,7 @@ router.get('/history/:historyId', asyncHandler(async (req: Request, res: Respons
  * GET /api/workflows/:id/test-connection
  */
 router.get('/:id/test-connection', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json({

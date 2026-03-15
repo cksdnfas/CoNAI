@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from '../routeParam';
 import { WorkflowModel } from '../../models/Workflow';
 import { WorkflowResponse, WorkflowCreateData, WorkflowUpdateData } from '../../types/workflow';
 import { asyncHandler } from '../../middleware/errorHandler';
@@ -41,7 +42,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/workflows/:id
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -152,7 +153,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  * PUT /api/workflows/:id
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
   const { name, description, workflow_json, marked_fields, api_endpoint, is_active, color } = req.body;
 
   if (isNaN(id)) {
@@ -228,7 +229,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
  * DELETE /api/workflows/:id
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json({

@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from './routeParam';
 import { GroupModel, ImageGroupModel } from '../models/Group';
 import { db } from '../database/init';
 import { AutoCollectionService } from '../services/autoCollectionService';
@@ -59,7 +60,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(req.params.id, 'Group ID');
+    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
 
     const randomImage = await ImageGroupModel.findRandomImageForGroup(id);
 
@@ -119,7 +120,7 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
  */
 router.get('/:id/preview-images', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(req.params.id, 'Group ID');
+    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const count = parseInt(req.query.count as string) || 8;
     const includeChildren = req.query.includeChildren !== 'false'; // 기본값 true
 
@@ -146,7 +147,7 @@ router.get('/:id/preview-images', asyncHandler(async (req: Request, res: Respons
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(req.params.id, 'Group ID');
+    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
 
     // 통계 정보를 포함한 그룹 조회
     const query = `
@@ -251,7 +252,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(req.params.id, 'Group ID');
+    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions } = req.body;
 
     // 계층 구조 유효성 검사 (parent_id가 변경되는 경우)
@@ -317,7 +318,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(req.params.id, 'Group ID');
+    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const cascade = req.query.cascade === 'true';
 
     const deleted = await GroupModel.delete(id, cascade);
@@ -341,7 +342,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(req.params.id, 'Group ID');
+    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const page = parseInt(req.query.page as string) || PAGINATION.DEFAULT_PAGE;
     const limit = parseInt(req.query.limit as string) || PAGINATION.GROUP_IMAGES_LIMIT;
     const collectionType = req.query.collection_type as 'manual' | 'auto';
@@ -400,7 +401,7 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
  */
 router.post('/:id/images', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const groupId = validateId(req.params.id, 'Group ID');
+    const groupId = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const { composite_hash, order_index = 0 } = req.body;
 
     if (!composite_hash) {
@@ -448,7 +449,7 @@ router.post('/:id/images', asyncHandler(async (req: Request, res: Response) => {
  */
 router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const groupId = validateId(req.params.id, 'Group ID');
+    const groupId = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const { composite_hashes } = req.body;
 
     if (!composite_hashes || !Array.isArray(composite_hashes) || composite_hashes.length === 0) {
@@ -509,8 +510,8 @@ router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response)
  */
 router.delete('/:id/images/:imageId', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const groupId = validateId(req.params.id, 'Group ID');
-    const compositeHash = req.params.imageId; // composite_hash로 사용
+    const groupId = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const compositeHash = routeParam(routeParam(req.params.imageId)); // composite_hash로 사용
 
     const removed = await ImageGroupModel.removeImageFromGroup(groupId, compositeHash);
 
@@ -533,7 +534,7 @@ router.delete('/:id/images/:imageId', asyncHandler(async (req: Request, res: Res
  */
 router.post('/:id/auto-collect', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(req.params.id, 'Group ID');
+    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
 
     const result = await AutoCollectionService.runAutoCollectionForGroup(id);
 
@@ -576,7 +577,7 @@ router.post('/auto-collect-all', asyncHandler(async (req: Request, res: Response
  */
 router.get('/:id/image-ids', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(req.params.id, 'Group ID');
+    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
 
     const fileIds = await ImageGroupModel.getImageFileIdsForGroup(id);
 
@@ -598,7 +599,7 @@ router.get('/:id/image-ids', asyncHandler(async (req: Request, res: Response) =>
  */
 router.get('/:id/random-image', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(req.params.id, 'Group ID');
+    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
 
     const randomImage = await ImageGroupModel.findRandomImageForGroup(id);
 
@@ -625,7 +626,7 @@ router.get('/:id/random-image', asyncHandler(async (req: Request, res: Response)
  */
 router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const groupId = validateId(req.params.id, 'Group ID');
+    const groupId = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const downloadType = (req.query.type as DownloadType) || 'thumbnail';
 
     // 선택된 이미지 해시 파싱 (옵션)
@@ -708,7 +709,7 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
  */
 router.get('/:id/file-counts', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(req.params.id, 'Group ID');
+    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
 
     const counts = await GroupDownloadService.getFileCountByType(id, 'custom');
 
@@ -743,7 +744,7 @@ router.get('/hierarchy/roots', asyncHandler(async (req: Request, res: Response) 
  */
 router.get('/:id/children', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(req.params.id, 'Group ID');
+    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const groups = await GroupModel.findChildrenWithHierarchy(id);
     return res.json(successResponse(groups));
   } catch (error) {
@@ -760,7 +761,7 @@ router.get('/:id/children', asyncHandler(async (req: Request, res: Response) => 
  */
 router.get('/:id/breadcrumb', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(req.params.id, 'Group ID');
+    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const breadcrumb = await GroupModel.getBreadcrumbPath(id);
     return res.json(successResponse(breadcrumb));
   } catch (error) {
@@ -777,7 +778,7 @@ router.get('/:id/breadcrumb', asyncHandler(async (req: Request, res: Response) =
  */
 router.post('/:id/move', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(req.params.id, 'Group ID');
+    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const { parent_id } = req.body as GroupMoveRequest;
 
     // 계층 구조 유효성 검사
@@ -810,7 +811,7 @@ router.post('/:id/move', asyncHandler(async (req: Request, res: Response) => {
  */
 router.post('/:id/validate-hierarchy', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(req.params.id, 'Group ID');
+    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const { parent_id } = req.body;
 
     const hierarchyService = getGroupHierarchyService();

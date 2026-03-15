@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from './routeParam';
 import path from 'path';
 import fs from 'fs';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -98,7 +99,7 @@ router.get('/models', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/civitai/models/:hash
  */
 router.get('/models/:hash', asyncHandler(async (req: Request, res: Response) => {
-  const { hash } = req.params;
+  const hash = routeParam(req.params.hash);
   const model = ModelInfo.findByHash(hash);
 
   if (!model) {
@@ -120,7 +121,7 @@ router.get('/models/:hash', asyncHandler(async (req: Request, res: Response) => 
  * GET /api/civitai/images/:compositeHash/models
  */
 router.get('/images/:compositeHash/models', asyncHandler(async (req: Request, res: Response) => {
-  const { compositeHash } = req.params;
+  const compositeHash = routeParam(req.params.compositeHash);
   const imageModels = ImageModel.findByCompositeHash(compositeHash);
 
   // Enrich with model info
@@ -143,7 +144,7 @@ router.get('/images/:compositeHash/models', asyncHandler(async (req: Request, re
  * POST /api/civitai/lookup/:hash
  */
 router.post('/lookup/:hash', asyncHandler(async (req: Request, res: Response) => {
-  const { hash } = req.params;
+  const hash = routeParam(req.params.hash);
 
   // 활성화 상태 확인
   const settings = CivitaiSettings.get();
@@ -248,7 +249,7 @@ router.post('/create-intent', asyncHandler(async (req: Request, res: Response) =
  * This endpoint is accessed by Civitai servers to fetch the image
  */
 router.get('/temp-image/:token', asyncHandler(async (req: Request, res: Response) => {
-  const { token } = req.params;
+  const token = routeParam(req.params.token);
 
   // Find valid (non-expired) temp URL
   const tempUrl = CivitaiTempUrl.findValidByToken(token);

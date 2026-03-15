@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from './routeParam';
 import { PromptGroupService } from '../services/promptGroupService';
 import { PromptGroupResponse } from '../types/promptGroup';
 
@@ -179,7 +180,7 @@ router.put('/move-prompt', async (req: Request, res: Response) => {
  */
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
     const { type = 'positive' } = req.query;
 
     const groupId = id === '0' ? null : parseInt(id);
@@ -225,7 +226,7 @@ router.get('/:id', async (req: Request, res: Response) => {
  */
 router.get('/:id/prompts', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
     const {
       type = 'positive',
       page = '1',
@@ -326,7 +327,7 @@ router.post('/', async (req: Request, res: Response) => {
  */
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
     const { group_name, display_order, is_visible, type = 'positive' } = req.body;
 
     const groupId = parseInt(id);
@@ -375,7 +376,7 @@ router.put('/:id', async (req: Request, res: Response) => {
  */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
     const { type = 'positive' } = req.query;
 
     const groupId = parseInt(id);

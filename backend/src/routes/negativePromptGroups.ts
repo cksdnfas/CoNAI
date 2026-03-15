@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from './routeParam';
 import { PromptGroupService } from '../services/promptGroupService';
 import { PromptGroupResponse } from '../types/promptGroup';
 
@@ -40,7 +41,7 @@ router.get('/', async (req: Request, res: Response) => {
  */
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
     const groupId = id === '0' ? null : parseInt(id);
 
     if (groupId !== null && isNaN(groupId)) {
@@ -84,7 +85,7 @@ router.get('/:id', async (req: Request, res: Response) => {
  */
 router.get('/:id/prompts', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
     const { page = '1', limit = '20' } = req.query;
 
     const groupId = id === '0' ? null : parseInt(id);
@@ -180,7 +181,7 @@ router.post('/', async (req: Request, res: Response) => {
  */
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
     const { group_name, display_order, is_visible } = req.body;
 
     const groupId = parseInt(id);
@@ -229,7 +230,7 @@ router.put('/:id', async (req: Request, res: Response) => {
  */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
     const groupId = parseInt(id);
 
     if (isNaN(groupId)) {

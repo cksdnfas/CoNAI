@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from './routeParam';
 import { ComfyUIServerModel, WorkflowServerModel } from '../models/ComfyUIServer';
 import { ParallelGenerationService } from '../services/comfyuiService';
 import { ComfyUIServerResponse, ComfyUIServerCreateData, ComfyUIServerUpdateData } from '../types/comfyuiServer';
@@ -75,7 +76,7 @@ router.get('/test-all-connections', asyncHandler(async (req: Request, res: Respo
  * NOTE: Must be defined before /:id route
  */
 router.get('/:id/test-connection', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -119,7 +120,7 @@ router.get('/:id/test-connection', asyncHandler(async (req: Request, res: Respon
  * NOTE: Must be defined before /:id route
  */
 router.get('/:id/workflows', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -153,7 +154,7 @@ router.get('/:id/workflows', asyncHandler(async (req: Request, res: Response) =>
  * NOTE: Must be defined after specific routes
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -251,7 +252,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  * PUT /api/comfyui-servers/:id
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
   const { name, endpoint, description, is_active } = req.body;
 
   if (isNaN(id)) {
@@ -312,7 +313,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
  * DELETE /api/comfyui-servers/:id
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json({

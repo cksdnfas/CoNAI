@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from './routeParam';
 import { PromptCollectionService } from '../services/promptCollectionService';
 import { PromptCollectionResponse,
 successResponse,
@@ -123,7 +124,7 @@ router.get('/top', async (req: Request, res: Response) => {
  */
 router.get('/group/:groupId', async (req: Request, res: Response) => {
   try {
-    const groupId = validateId(req.params.groupId, 'Group ID');
+    const groupId = validateId(routeParam(routeParam(req.params.groupId)), 'Group ID');
     const { type = 'positive' } = req.query;
 
     const result = await PromptCollectionService.getGroupPrompts(
@@ -175,7 +176,7 @@ router.post('/synonyms', async (req: Request, res: Response) => {
  */
 router.delete('/synonyms/:promptId', async (req: Request, res: Response) => {
   try {
-    const promptId = validateId(req.params.promptId, 'Prompt ID');
+    const promptId = validateId(routeParam(routeParam(req.params.promptId)), 'Prompt ID');
     const { synonym, type = 'positive' } = req.body;
 
     if (!synonym) {
@@ -206,7 +207,7 @@ router.delete('/synonyms/:promptId', async (req: Request, res: Response) => {
  */
 router.delete('/:promptId', async (req: Request, res: Response) => {
   try {
-    const promptId = validateId(req.params.promptId, 'Prompt ID');
+    const promptId = validateId(routeParam(routeParam(req.params.promptId)), 'Prompt ID');
     const { type = 'positive' } = req.query;
 
     const result = await PromptCollectionService.deletePrompt(

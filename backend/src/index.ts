@@ -327,7 +327,7 @@ async function registerRoutes() {
     app.use(express.static(frontendDistPath));
 
     // SPA fallback - serve index.html for all non-API routes
-    app.get('*', (req, res, next) => {
+    app.get('/{*path}', (req, res, next) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/temp')) {
         next();
         return;
@@ -350,7 +350,7 @@ async function registerRoutes() {
   app.use(errorHandler);
 
   // 404 handler (must be the LAST middleware)
-  app.use('*', (req, res) => {
+  app.use((req, res) => {
     res.status(404).json({ error: 'Not Found' });
   });
 }

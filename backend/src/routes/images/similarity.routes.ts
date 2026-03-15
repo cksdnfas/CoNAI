@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from '../routeParam';
 import path from 'path';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
@@ -39,7 +40,7 @@ function parseImageIdentifier(id: string): { isHash: boolean; value: string | nu
  */
 router.get('/:id/duplicates', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { isHash, value } = parseImageIdentifier(req.params.id);
+    const { isHash, value } = parseImageIdentifier(routeParam(routeParam(req.params.id)));
     const threshold = parseInt(req.query.threshold as string) || SIMILARITY_THRESHOLDS.NEAR_DUPLICATE;
     const includeMetadata = req.query.includeMetadata !== 'false';
 
@@ -109,7 +110,7 @@ router.get('/:id/duplicates', asyncHandler(async (req: Request, res: Response) =
  */
 router.get('/:id/similar', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { isHash, value } = parseImageIdentifier(req.params.id);
+    const { isHash, value } = parseImageIdentifier(routeParam(routeParam(req.params.id)));
     const threshold = parseInt(req.query.threshold as string) || SIMILARITY_THRESHOLDS.SIMILAR;
     const limit = parseInt(req.query.limit as string) || PAGINATION.GROUP_IMAGES_LIMIT;
     const includeColorSimilarity = req.query.includeColorSimilarity === 'true';
@@ -188,7 +189,7 @@ router.get('/:id/similar', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/:id/similar-color', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { isHash, value } = parseImageIdentifier(req.params.id);
+    const { isHash, value } = parseImageIdentifier(routeParam(routeParam(req.params.id)));
     const threshold = parseFloat(req.query.threshold as string) || (SIMILARITY_THRESHOLDS.COLOR_SIMILAR * 100);
     const limit = parseInt(req.query.limit as string) || PAGINATION.GROUP_IMAGES_LIMIT;
 

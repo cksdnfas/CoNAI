@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from './routeParam';
 import { asyncHandler } from '../middleware/errorHandler';
 import { WildcardModel, WildcardCreateData, WildcardUpdateData } from '../models/Wildcard';
 import { WildcardService } from '../services/wildcardService';
@@ -79,7 +80,7 @@ router.get('/last-scan-log', asyncHandler(async (req: Request, res: Response) =>
  * GET /api/wildcards/:id/children
  */
 router.get('/:id/children', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -108,7 +109,7 @@ router.get('/:id/children', asyncHandler(async (req: Request, res: Response) => 
  * GET /api/wildcards/:id/path
  */
 router.get('/:id/path', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -137,7 +138,7 @@ router.get('/:id/path', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/wildcards/:id
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -257,7 +258,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  * Body: WildcardUpdateData
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -343,7 +344,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
  *     false: 선택한 와일드카드만 삭제하고 자식들을 한 단계 위로 이동
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
   const cascade = req.query.cascade === 'true';
 
   if (isNaN(id)) {
@@ -448,7 +449,7 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
  * GET /api/wildcards/:id/circular-check
  */
 router.get('/:id/circular-check', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
     return res.status(400).json({

@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { routeParam } from '../routeParam';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { asyncHandler } from '../../middleware/errorHandler';
@@ -16,7 +17,7 @@ const router = Router();
  * - 32자: 비디오/애니메이션 (MD5)
  */
 router.get('/:composite_hash', asyncHandler(async (req: Request, res: Response) => {
-  const { composite_hash } = req.params;
+  const composite_hash = routeParam(req.params.composite_hash);
 
   if (!composite_hash) {
     return res.status(400).json(errorResponse('Composite hash is required'));
