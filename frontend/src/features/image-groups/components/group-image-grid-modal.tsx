@@ -490,12 +490,19 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
         maxWidth="xl"
         fullWidth
         PaperProps={{
-          sx: {
-            display: 'flex',
-            flexDirection: 'column',
-            height: '90vh',
-            maxHeight: '90vh',
-          },
+          sx: embedded
+            ? {
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                minHeight: 0,
+              }
+            : {
+                display: 'flex',
+                flexDirection: 'column',
+                height: '90vh',
+                maxHeight: '90vh',
+              },
         }}
       >
         <DialogTitle>

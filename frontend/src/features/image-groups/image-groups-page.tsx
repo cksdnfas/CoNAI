@@ -346,6 +346,10 @@ export function ImageGroupsPage() {
             ) : (
               <div className="grid min-h-[640px] gap-4 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
                 <div className="min-h-0 rounded-lg border bg-card">
+                  <div className="border-b px-4 py-3">
+                    <p className="text-sm font-semibold text-foreground">그룹 탐색</p>
+                    <p className="text-xs text-muted-foreground">폴더처럼 그룹을 따라 내려가며 이미지를 여나이다.</p>
+                  </div>
                   <ScrollArea className="h-full max-h-[calc(100vh-220px)]">
                     <div className="space-y-4 p-4">
                       {hasVisibleCards ? (
@@ -378,6 +382,12 @@ export function ImageGroupsPage() {
                 </div>
 
                 <div className="min-h-0">
+                  {!selectedGroupForImages ? (
+                    <div className="mb-3 rounded-lg border border-dashed bg-muted/10 px-4 py-3">
+                      <p className="text-sm font-semibold text-foreground">이미지 탐색 패널</p>
+                      <p className="text-xs text-muted-foreground">좌측에서 그룹을 고르면 이곳에 기존 이미지 목록이 펼쳐지나이다.</p>
+                    </div>
+                  ) : null}
                   {selectedGroupForImages ? (
                     <GroupImageGridModal
                       key={`group-panel-${selectedGroupForImages.id}-${groupImagesPage}`}
