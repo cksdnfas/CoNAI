@@ -1,7 +1,10 @@
 {
   "page": {
     "title": "이미지 생성",
-    "subtitle": "ComfyUI 워크플로우를 관리하고 이미지를 생성합니다"
+    "subtitle": "ComfyUI 워크플로우를 관리하고 이미지를 생성합니다",
+    "mobileControllerOpen": "컨트롤 열기",
+    "mobileControllerTitle": "생성 컨트롤",
+    "mobileControllerDescription": "히스토리를 보다가 필요할 때 생성 설정을 아래에서 열어 조정하나이다."
   },
   "tabs": {
     "novelai": "NovelAI",

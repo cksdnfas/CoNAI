@@ -17,6 +17,7 @@ import { useNAIGroupSelection } from '../hooks/use-nai-group-selection'
 import { useRepeatExecution } from '@/features/image-generation/bridges/use-repeat-execution'
 import { useNAIGeneration } from '@/features/image-generation/bridges/use-nai-generation'
 import { RESOLUTIONS } from '../constants/nai.constants'
+import { ResponsiveGenerationShell } from '@/features/image-generation/components/responsive-generation-shell'
 
 interface NAIImageGeneratorV2Props {
   token: string
@@ -130,8 +131,11 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
         </Alert>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <div>
+      <ResponsiveGenerationShell
+        mobileTriggerLabel={t('imageGeneration:page.mobileControllerOpen')}
+        mobileControllerTitle={t('imageGeneration:page.mobileControllerTitle')}
+        mobileControllerDescription={t('imageGeneration:page.mobileControllerDescription')}
+        controller={
           <form onSubmit={handleGenerate} className="space-y-4">
             <Button
               className="w-full"
@@ -182,12 +186,9 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
               </div>
             ) : null}
           </form>
-        </div>
-
-        <div>
-          <GenerationHistoryList serviceType="novelai" refreshKey={historyRefreshKey} />
-        </div>
-      </div>
+        }
+        history={<GenerationHistoryList serviceType="novelai" refreshKey={historyRefreshKey} />}
+      />
 
       <GroupAssignModal
         open={groupModalOpen}

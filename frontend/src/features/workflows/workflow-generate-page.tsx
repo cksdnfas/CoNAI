@@ -20,6 +20,7 @@ import { GroupAssignment } from './components/group-assignment'
 import { RepeatExecutionStatus } from './components/repeat-execution-status'
 import { ServerStatusList } from './components/server-status-list'
 import type { PromptParseResult } from './types/prompt.types'
+import { ResponsiveGenerationShell } from '@/features/image-generation/components/responsive-generation-shell'
 
 export function WorkflowGeneratePage() {
   const { id } = useParams<{ id: string }>()
@@ -126,64 +127,66 @@ export function WorkflowGeneratePage() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-3 lg:grid-cols-12">
-        <div className="space-y-3 lg:col-span-4">
-          <WorkflowFormFields workflow={workflow} formData={formData} onFieldChange={handleFieldChange} promptData={promptData.data} />
+      <ResponsiveGenerationShell
+        mobileTriggerLabel={t('workflows:page.mobileControllerOpen')}
+        mobileControllerTitle={t('workflows:page.mobileControllerTitle')}
+        mobileControllerDescription={t('workflows:page.mobileControllerDescription')}
+        controller={
+          <div className="space-y-3">
+            <WorkflowFormFields workflow={workflow} formData={formData} onFieldChange={handleFieldChange} promptData={promptData.data} />
 
-          <GroupAssignment selectedGroup={selectedGroup} onOpenModal={() => setGroupModalOpen(true)} onRemove={handleRemoveGroup} />
+            <GroupAssignment selectedGroup={selectedGroup} onOpenModal={() => setGroupModalOpen(true)} onRemove={handleRemoveGroup} />
 
-          <Card className="p-3">
-            <RepeatControls
-              config={repeatConfig}
-              state={{
-                isRunning: Object.keys(serverRepeatStates).length > 0,
-                currentIteration: 0,
-                totalIterations: 0,
-              }}
-              onConfigChange={setRepeatConfig}
-              onStop={() => {
-                Object.keys(serverRepeatStates).forEach((serverId) => {
-                  handleStopServerRepeat(Number(serverId))
-                })
-              }}
-              namespace="workflows"
+            <Card className="p-3">
+              <RepeatControls
+                config={repeatConfig}
+                state={{
+                  isRunning: Object.keys(serverRepeatStates).length > 0,
+                  currentIteration: 0,
+                  totalIterations: 0,
+                }}
+                onConfigChange={setRepeatConfig}
+                onStop={() => {
+                  Object.keys(serverRepeatStates).forEach((serverId) => {
+                    handleStopServerRepeat(Number(serverId))
+                  })
+                }}
+                namespace="workflows"
+              />
+            </Card>
+
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={handleGenerateOnAllServers}
+              disabled={connectedServers.length === 0 || !workflow.is_active || Object.keys(serverRepeatStates).length > 0}
+            >
+              <Play className="h-4 w-4" />
+              {t('workflows:generate.generateAll', { count: connectedServers.length })}
+            </Button>
+
+            <RepeatExecutionStatus servers={servers} serverRepeatStates={serverRepeatStates} />
+
+            <ServerStatusList
+              workflow={workflow}
+              servers={servers}
+              serverStatus={serverStatus}
+              generationStatus={generationStatus}
+              serverRepeatStates={serverRepeatStates}
+              onGenerate={handleGenerateOnServer}
+              onStartRepeat={handleStartServerRepeat}
+              onStopRepeat={handleStopServerRepeat}
             />
-          </Card>
 
-          <Button
-            className="w-full"
-            size="lg"
-            onClick={handleGenerateOnAllServers}
-            disabled={connectedServers.length === 0 || !workflow.is_active || Object.keys(serverRepeatStates).length > 0}
-          >
-            <Play className="h-4 w-4" />
-            {t('workflows:generate.generateAll', { count: connectedServers.length })}
-          </Button>
-
-          <RepeatExecutionStatus servers={servers} serverRepeatStates={serverRepeatStates} />
-
-          <ServerStatusList
-            workflow={workflow}
-            servers={servers}
-            serverStatus={serverStatus}
-            generationStatus={generationStatus}
-            serverRepeatStates={serverRepeatStates}
-            onGenerate={handleGenerateOnServer}
-            onStartRepeat={handleStartServerRepeat}
-            onStopRepeat={handleStopServerRepeat}
-          />
-
-          {!workflow.is_active ? (
-            <Alert>
-              <AlertDescription>{t('workflows:alerts.inactiveWarning')}</AlertDescription>
-            </Alert>
-          ) : null}
-        </div>
-
-        <div className="lg:col-span-8">
-          <GenerationHistoryList serviceType="comfyui" workflowId={id ? Number(id) : 0} refreshKey={historyRefreshKey} />
-        </div>
-      </div>
+            {!workflow.is_active ? (
+              <Alert>
+                <AlertDescription>{t('workflows:alerts.inactiveWarning')}</AlertDescription>
+              </Alert>
+            ) : null}
+          </div>
+        }
+        history={<GenerationHistoryList serviceType="comfyui" workflowId={id ? Number(id) : 0} refreshKey={historyRefreshKey} />}
+      />
 
       <GroupAssignModal open={groupModalOpen} onClose={() => setGroupModalOpen(false)} selectedImageCount={1} onAssign={handleGroupSelect} />
     </div>

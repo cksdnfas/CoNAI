@@ -10,7 +10,10 @@
     "editTitle": "워크플로우 편집",
     "createTitle": "워크플로우 추가",
     "noWorkflows": "등록된 워크플로우가 없습니다",
-    "noWorkflowsDesc": "\"워크플로우 추가\" 버튼을 클릭하여 ComfyUI 워크플로우를 추가하세요"
+    "noWorkflowsDesc": "\"워크플로우 추가\" 버튼을 클릭하여 ComfyUI 워크플로우를 추가하세요",
+    "mobileControllerOpen": "컨트롤 열기",
+    "mobileControllerTitle": "생성 컨트롤",
+    "mobileControllerDescription": "히스토리를 보다가 필요할 때 생성 설정을 아래에서 열어 조정하나이다."
   },
   "card": {
     "active": "활성",
