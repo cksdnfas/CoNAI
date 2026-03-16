@@ -8,6 +8,7 @@ import { useAutoFolderChildGroups, useAutoFolderRootGroups, useRebuildAutoFolder
 import { useImageListSettings } from '@/hooks/use-image-list-settings'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { GroupBreadcrumb } from './group-breadcrumb'
 import { AutoFolderGroupCard } from './auto-folder-group-card'
 import { AutoFolderImageViewCard } from './auto-folder-image-view-card'
@@ -201,10 +202,7 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
       }
 
       if (group.image_count > 0) {
-        setSelectedGroupForImages(group)
-        setGroupImagesModalOpen(true)
-        setGroupImagesPage(1)
-        void fetchGroupImages(group.id, 1, groupImagesPageSize, false)
+        openGroupImagePanel(group)
         return
       }
 
@@ -218,6 +216,13 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
     setSelectedGroupForImages(null)
     setGroupImages([])
     setGroupImagesPage(1)
+  }
+
+  const openGroupImagePanel = (group: AutoFolderGroupWithStats) => {
+    setSelectedGroupForImages(group)
+    setGroupImagesModalOpen(false)
+    setGroupImagesPage(1)
+    void fetchGroupImages(group.id, 1, groupImagesPageSize, false)
   }
 
   const handleGroupImagesLoadMore = () => {
@@ -273,61 +278,79 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
         <div className="flex min-h-[220px] items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-      ) : hasVisibleCards ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
-          {!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0 ? (
-            <AutoFolderImageViewCard
-              key={`auto-folder-image-view-${currentParentId}`}
-              group={currentGroupInfo}
-              onClick={() => {
-                setSelectedGroupForImages(currentGroupInfo)
-                setGroupImagesModalOpen(true)
-                setGroupImagesPage(1)
-                void fetchGroupImages(currentGroupInfo.id, 1, groupImagesPageSize, false)
-              }}
-            />
-          ) : null}
-
-          {groups.map((group) => (
-            <AutoFolderGroupCard key={group.id} group={group} onClick={() => handleGroupClick(group)} />
-          ))}
-        </div>
       ) : (
-        <div className="py-10 text-center">
-          <FolderTree className="mx-auto mb-2 h-12 w-12 text-muted-foreground" />
-          <p className="text-base text-muted-foreground">
-            {isGroupListView ? t('imageGroups:autoFolder.emptyState.noGroups') : t('imageGroups:autoFolder.emptyState.noSubfolders')}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {isGroupListView ? t('imageGroups:autoFolder.emptyState.refreshPrompt') : t('imageGroups:autoFolder.emptyState.noSubfoldersHelp')}
-          </p>
+        <div className="grid min-h-[640px] gap-4 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
+          <div className="min-h-0 rounded-lg border bg-card">
+            <ScrollArea className="h-full max-h-[calc(100vh-260px)]">
+              <div className="space-y-4 p-4">
+                {hasVisibleCards ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0 ? (
+                      <AutoFolderImageViewCard
+                        key={`auto-folder-image-view-${currentParentId}`}
+                        group={currentGroupInfo}
+                        onClick={() => openGroupImagePanel(currentGroupInfo)}
+                      />
+                    ) : null}
+
+                    {groups.map((group) => (
+                      <AutoFolderGroupCard key={group.id} group={group} onClick={() => handleGroupClick(group)} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-10 text-center">
+                    <FolderTree className="mx-auto mb-2 h-12 w-12 text-muted-foreground" />
+                    <p className="text-base text-muted-foreground">
+                      {isGroupListView ? t('imageGroups:autoFolder.emptyState.noGroups') : t('imageGroups:autoFolder.emptyState.noSubfolders')}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {isGroupListView ? t('imageGroups:autoFolder.emptyState.refreshPrompt') : t('imageGroups:autoFolder.emptyState.noSubfoldersHelp')}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+
+          <div className="min-h-0">
+            {selectedGroupForImages ? (
+              <GroupImageGridModal
+                key={`auto-folder-panel-${selectedGroupForImages.id}-${groupImagesPage}`}
+                open={true}
+                embedded={true}
+                onClose={handleGroupImagesModalClose}
+                images={groupImages}
+                loading={groupImagesLoading}
+                currentGroup={modalCurrentGroup}
+                allGroups={[]}
+                pageSize={groupImagesPageSize}
+                onPageSizeChange={handleGroupImagesPageSizeChange}
+                currentPage={groupImagesPage}
+                totalPages={groupImagesTotalPages}
+                total={groupImagesTotal}
+                onPageChange={handleGroupImagesPageChange}
+                infiniteScroll={{
+                  hasMore: groupImagesPage < groupImagesTotalPages,
+                  loadMore: handleGroupImagesLoadMore,
+                }}
+                onImagesRemoved={handleImagesRemoved}
+                onImagesAssigned={handleImagesAssigned}
+                readOnly={true}
+                groupType="auto-folder"
+                onShowSnackbar={onShowSnackbar}
+              />
+            ) : (
+              <div className="flex h-full min-h-[640px] items-center justify-center rounded-lg border border-dashed bg-muted/20 p-8 text-center">
+                <div className="space-y-2">
+                  <FolderTree className="mx-auto h-12 w-12 text-muted-foreground" />
+                  <p className="text-base font-medium">{t('imageGroups:page.autoFolderGroupsTab')}</p>
+                  <p className="text-sm text-muted-foreground">그룹을 고르시면 우측에서 이미지를 탐색할 수 있나이다.</p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
-
-      <GroupImageGridModal
-        key={`auto-folder-modal-${groupImagesModalOpen ? 'open' : 'closed'}-${selectedGroupForImages?.id ?? 'none'}-${groupImagesPage}`}
-        open={groupImagesModalOpen}
-        onClose={handleGroupImagesModalClose}
-        images={groupImages}
-        loading={groupImagesLoading}
-        currentGroup={modalCurrentGroup}
-        allGroups={[]}
-        pageSize={groupImagesPageSize}
-        onPageSizeChange={handleGroupImagesPageSizeChange}
-        currentPage={groupImagesPage}
-        totalPages={groupImagesTotalPages}
-        total={groupImagesTotal}
-        onPageChange={handleGroupImagesPageChange}
-        infiniteScroll={{
-          hasMore: groupImagesPage < groupImagesTotalPages,
-          loadMore: handleGroupImagesLoadMore,
-        }}
-        onImagesRemoved={handleImagesRemoved}
-        onImagesAssigned={handleImagesAssigned}
-        readOnly={true}
-        groupType="auto-folder"
-        onShowSnackbar={onShowSnackbar}
-      />
     </div>
   )
 }
