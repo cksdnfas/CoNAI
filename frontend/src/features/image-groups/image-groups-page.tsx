@@ -15,6 +15,7 @@ import { useImageListSettings } from '@/hooks/use-image-list-settings'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 type SnackbarSeverity = 'success' | 'error' | 'info' | 'warning'
@@ -335,62 +336,143 @@ export function ImageGroupsPage() {
           </TabsList>
 
           <TabsContent value="custom" className="space-y-4 pt-2">
-            {!isGroupListView ? (
-              <GroupBreadcrumb breadcrumb={breadcrumb} onNavigate={handleBreadcrumbNavigate} showGroupListRoot={true} />
-            ) : null}
+            <Sheet
+              open={Boolean(selectedGroupForImages)}
+              onOpenChange={(open) => {
+                if (!open) {
+                  handleGroupImagesModalClose()
+                }
+              }}
+            >
+              {!isGroupListView ? (
+                <GroupBreadcrumb breadcrumb={breadcrumb} onNavigate={handleBreadcrumbNavigate} showGroupListRoot={true} />
+              ) : null}
 
-            {loading ? (
-              <div className="flex min-h-[220px] items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <div className="grid min-h-[640px] gap-4 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
-                <div className="min-h-0 rounded-lg border bg-card">
-                  <div className="border-b px-4 py-3">
-                    <p className="text-sm font-semibold text-foreground">그룹 탐색</p>
-                    <p className="text-xs text-muted-foreground">폴더처럼 그룹을 따라 내려가며 이미지를 여나이다.</p>
-                  </div>
-                  <ScrollArea className="h-full max-h-[calc(100vh-220px)]">
-                    <div className="space-y-4 p-4">
-                      {hasVisibleCards ? (
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                          {!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0 ? (
-                            <ImageViewCard
-                              key={`image-view-${currentParentId}`}
-                              group={currentGroupInfo}
-                              onClick={() => openGroupImagePanel(currentGroupInfo)}
-                            />
-                          ) : null}
-
-                          {groups.map((group) => (
-                            <GroupCard key={group.id} group={group} onClick={() => handleGroupClick(group)} onSettingsClick={handleGroupSettings} />
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="py-10 text-center">
-                          <FolderTree className="mx-auto mb-2 h-12 w-12 text-muted-foreground" />
-                          <p className="text-base text-muted-foreground">
-                            {isGroupListView ? t('imageGroups:emptyState.noGroups') : t('imageGroups:emptyState.noSubgroups')}
-                          </p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {isGroupListView ? t('imageGroups:emptyState.createPrompt') : t('imageGroups:emptyState.noSubgroupsHelp')}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </ScrollArea>
+              {loading ? (
+                <div className="flex min-h-[220px] items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
-
-                <div className="min-h-0">
-                  {!selectedGroupForImages ? (
-                    <div className="mb-3 rounded-lg border border-dashed bg-muted/10 px-4 py-3">
-                      <p className="text-sm font-semibold text-foreground">이미지 탐색 패널</p>
-                      <p className="text-xs text-muted-foreground">좌측에서 그룹을 고르면 이곳에 기존 이미지 목록이 펼쳐지나이다.</p>
+              ) : (
+                <div className="grid min-h-[640px] gap-4 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
+                  <div className="min-h-0 rounded-lg border bg-card">
+                    <div className="border-b px-4 py-3">
+                      <p className="text-sm font-semibold text-foreground">그룹 탐색</p>
+                      <p className="text-xs text-muted-foreground">폴더처럼 그룹을 따라 내려가며 이미지를 여나이다.</p>
                     </div>
-                  ) : null}
+                    <ScrollArea className="h-full max-h-[calc(100vh-220px)]">
+                      <div className="space-y-4 p-4">
+                        {hasVisibleCards ? (
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                            {!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0 ? (
+                              <ImageViewCard
+                                key={`image-view-${currentParentId}`}
+                                group={currentGroupInfo}
+                                onClick={() => openGroupImagePanel(currentGroupInfo)}
+                              />
+                            ) : null}
+
+                            {groups.map((group) => (
+                              <GroupCard key={group.id} group={group} onClick={() => handleGroupClick(group)} onSettingsClick={handleGroupSettings} />
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="py-10 text-center">
+                            <FolderTree className="mx-auto mb-2 h-12 w-12 text-muted-foreground" />
+                            <p className="text-base text-muted-foreground">
+                              {isGroupListView ? t('imageGroups:emptyState.noGroups') : t('imageGroups:emptyState.noSubgroups')}
+                            </p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {isGroupListView ? t('imageGroups:emptyState.createPrompt') : t('imageGroups:emptyState.noSubgroupsHelp')}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </div>
+
+                  <div className="hidden min-h-0 lg:block">
+                    {!selectedGroupForImages ? (
+                      <div className="mb-3 rounded-lg border border-dashed bg-muted/10 px-4 py-3">
+                        <p className="text-sm font-semibold text-foreground">이미지 탐색 패널</p>
+                        <p className="text-xs text-muted-foreground">좌측에서 그룹을 고르면 이곳에 기존 이미지 목록이 펼쳐지나이다.</p>
+                      </div>
+                    ) : null}
+                    {selectedGroupForImages ? (
+                      <GroupImageGridModal
+                        key={`group-panel-${selectedGroupForImages.id}-${groupImagesPage}`}
+                        open={true}
+                        embedded={true}
+                        onClose={handleGroupImagesModalClose}
+                        images={groupImages}
+                        loading={groupImagesLoading}
+                        currentGroup={selectedGroupForImages}
+                        allGroups={groups}
+                        pageSize={groupImagesPageSize}
+                        onPageSizeChange={handleGroupImagesPageSizeChange}
+                        currentPage={groupImagesPage}
+                        totalPages={groupImagesTotalPages}
+                        total={groupImagesTotal}
+                        onPageChange={handleGroupImagesPageChange}
+                        infiniteScroll={{
+                          hasMore: groupImagesPage < groupImagesTotalPages,
+                          loadMore: handleGroupImagesLoadMore,
+                        }}
+                        onImagesRemoved={handleImagesRemoved}
+                        onImagesAssigned={handleImagesAssigned}
+                        groupType="custom"
+                        onShowSnackbar={showSnackbar}
+                      />
+                    ) : (
+                      <div className="flex h-full min-h-[640px] items-center justify-center rounded-lg border border-dashed bg-muted/20 p-8 text-center">
+                        <div className="space-y-2">
+                          <FolderTree className="mx-auto h-12 w-12 text-muted-foreground" />
+                          <p className="text-base font-medium">{t('imageGroups:page.title')}</p>
+                          <p className="text-sm text-muted-foreground">그룹을 고르시면 우측에서 이미지를 탐색할 수 있나이다.</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <Button
+                className="fixed right-6 bottom-6 z-40 h-12 w-12 rounded-full p-0 shadow-lg"
+                onClick={() => setIsCreateModalOpen(true)}
+                aria-label="add group"
+              >
+                <Plus className="h-5 w-5" />
+              </Button>
+
+              <GroupCreateEditModal
+                key={`create-${isCreateModalOpen ? 'open' : 'closed'}`}
+                open={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
+                onSuccess={handleGroupCreated}
+              />
+
+              {selectedGroup ? (
+                <GroupCreateEditModal
+                  key={`edit-${selectedGroup.id}-${isEditModalOpen ? 'open' : 'closed'}`}
+                  open={isEditModalOpen}
+                  onClose={() => {
+                    setIsEditModalOpen(false)
+                    setSelectedGroup(null)
+                  }}
+                  onSuccess={handleGroupUpdated}
+                  group={selectedGroup}
+                />
+              ) : null}
+
+              <SheetContent side="bottom" className="flex h-[85vh] max-h-[85vh] flex-col rounded-t-2xl p-0 lg:hidden" showCloseButton={true}>
+                <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-muted" />
+                <div className="border-b px-4 py-3">
+                  <p className="text-sm font-semibold text-foreground">이미지 탐색</p>
+                  <p className="text-xs text-muted-foreground">선택한 그룹의 이미지를 아래 패널에서 탐색하나이다.</p>
+                </div>
+                <div className="min-h-0 flex-1 overflow-hidden p-3">
                   {selectedGroupForImages ? (
                     <GroupImageGridModal
-                      key={`group-panel-${selectedGroupForImages.id}-${groupImagesPage}`}
+                      key={`group-mobile-panel-${selectedGroupForImages.id}-${groupImagesPage}`}
                       open={true}
                       embedded={true}
                       onClose={handleGroupImagesModalClose}
@@ -413,47 +495,10 @@ export function ImageGroupsPage() {
                       groupType="custom"
                       onShowSnackbar={showSnackbar}
                     />
-                  ) : (
-                    <div className="flex h-full min-h-[640px] items-center justify-center rounded-lg border border-dashed bg-muted/20 p-8 text-center">
-                      <div className="space-y-2">
-                        <FolderTree className="mx-auto h-12 w-12 text-muted-foreground" />
-                        <p className="text-base font-medium">{t('imageGroups:page.title')}</p>
-                        <p className="text-sm text-muted-foreground">그룹을 고르시면 우측에서 이미지를 탐색할 수 있나이다.</p>
-                      </div>
-                    </div>
-                  )}
+                  ) : null}
                 </div>
-              </div>
-            )}
-
-            <Button
-              className="fixed right-6 bottom-6 z-40 h-12 w-12 rounded-full p-0 shadow-lg"
-              onClick={() => setIsCreateModalOpen(true)}
-              aria-label="add group"
-            >
-              <Plus className="h-5 w-5" />
-            </Button>
-
-            <GroupCreateEditModal
-              key={`create-${isCreateModalOpen ? 'open' : 'closed'}`}
-              open={isCreateModalOpen}
-              onClose={() => setIsCreateModalOpen(false)}
-              onSuccess={handleGroupCreated}
-            />
-
-            {selectedGroup ? (
-              <GroupCreateEditModal
-                key={`edit-${selectedGroup.id}-${isEditModalOpen ? 'open' : 'closed'}`}
-                open={isEditModalOpen}
-                onClose={() => {
-                  setIsEditModalOpen(false)
-                  setSelectedGroup(null)
-                }}
-                onSuccess={handleGroupUpdated}
-                group={selectedGroup}
-              />
-            ) : null}
-
+              </SheetContent>
+            </Sheet>
           </TabsContent>
 
           <TabsContent value="auto-folder" className="pt-2">
