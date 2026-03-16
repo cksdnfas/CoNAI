@@ -116,6 +116,7 @@ const ListItemText: React.FC<any> = ({ children }) => <span>{children}</span>
 interface GroupImageGridModalProps {
   open: boolean
   onClose: () => void
+  embedded?: boolean
   images: ImageRecord[]
   loading?: boolean
   currentGroup: GroupWithStats | null
@@ -156,6 +157,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   onImagesAssigned,
   groupType = 'custom',
   onShowSnackbar,
+  embedded = false,
 }) => {
   const { t } = useTranslation(['imageGroups', 'common'])
   const { settings, setViewMode, setGridColumns } = useImageListSettings('group_modal')
@@ -214,7 +216,7 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   const canAssign = selectedImages.length > 0
 
   useEffect(() => {
-    if (!open) {
+    if (!open && !embedded) {
       return
     }
 
@@ -482,7 +484,8 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
   return (
     <>
       <Dialog
-        open={open}
+        open={embedded || open}
+        embedded={embedded}
         onClose={onClose}
         maxWidth="xl"
         fullWidth
