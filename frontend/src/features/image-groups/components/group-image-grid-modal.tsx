@@ -56,8 +56,17 @@ const IconButton: React.FC<React.PropsWithChildren<{ onClick?: (event: React.Mou
   </button>
 )
 
-const Dialog: React.FC<any> = ({ open, onClose, children, PaperProps }) => {
+const Dialog: React.FC<any> = ({ open, onClose, children, PaperProps, embedded = false }) => {
   if (!open) return null
+
+  if (embedded) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-background shadow-lg" style={sxToStyle(PaperProps?.sx)}>
+        {children}
+      </div>
+    )
+  }
+
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
