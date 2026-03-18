@@ -9,6 +9,7 @@ import { useImageListSettings } from '@/hooks/use-image-list-settings'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { GroupBreadcrumb } from './group-breadcrumb'
+import { GroupExplorerImageBrowser } from './group-explorer-image-browser'
 import { GroupExplorerImagePanel } from './group-explorer-image-panel'
 import { GroupExplorerLayout } from './group-explorer-layout'
 import { AutoFolderGroupCard } from './auto-folder-group-card'
@@ -338,33 +339,29 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
             setMobileImageSheetOpen(true)
           }
         }}
-        mobileSheetContent={selectedGroupForImages ? (
-          <GroupImageGridModal
-            key={`auto-folder-mobile-panel-${selectedGroupForImages.id}-${groupImagesPage}`}
-            open={true}
-            embedded={true}
-            onClose={handleGroupImagesModalClose}
-            images={groupImages}
-            loading={groupImagesLoading}
+        mobileSheetContent={
+          <GroupExplorerImageBrowser
+            panelKey={`auto-folder-mobile-panel-${selectedGroupForImages?.id ?? 'none'}-${groupImagesPage}`}
             currentGroup={modalCurrentGroup}
             allGroups={[]}
+            images={groupImages}
+            loading={groupImagesLoading}
             pageSize={groupImagesPageSize}
-            onPageSizeChange={handleGroupImagesPageSizeChange}
             currentPage={groupImagesPage}
             totalPages={groupImagesTotalPages}
             total={groupImagesTotal}
+            onClose={handleGroupImagesModalClose}
+            onPageSizeChange={handleGroupImagesPageSizeChange}
             onPageChange={handleGroupImagesPageChange}
-            infiniteScroll={{
-              hasMore: groupImagesPage < groupImagesTotalPages,
-              loadMore: handleGroupImagesLoadMore,
-            }}
+            hasMore={groupImagesPage < groupImagesTotalPages}
+            onLoadMore={handleGroupImagesLoadMore}
             onImagesRemoved={handleImagesRemoved}
             onImagesAssigned={handleImagesAssigned}
             readOnly={true}
             groupType="auto-folder"
             onShowSnackbar={onShowSnackbar}
           />
-        ) : null}
+        }
       />
     </div>
   )

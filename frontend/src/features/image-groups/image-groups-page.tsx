@@ -7,6 +7,7 @@ import { groupApi } from '@/services/group-api'
 import GroupCreateEditModal from '@/features/image-groups/components/group-create-edit-modal'
 import { GroupBreadcrumb } from '@/features/image-groups/components/group-breadcrumb'
 import { GroupExplorerLayout } from '@/features/image-groups/components/group-explorer-layout'
+import { GroupExplorerImageBrowser } from '@/features/image-groups/components/group-explorer-image-browser'
 import { GroupExplorerImagePanel } from '@/features/image-groups/components/group-explorer-image-panel'
 import AutoFolderGroupsContent from '@/features/image-groups/components/auto-folder-groups-content'
 import { GroupCard } from '@/features/image-groups/components/group-card'
@@ -404,32 +405,28 @@ export function ImageGroupsPage() {
                   setMobileImageSheetOpen(true)
                 }
               }}
-              mobileSheetContent={selectedGroupForImages ? (
-                <GroupImageGridModal
-                  key={`group-mobile-panel-${selectedGroupForImages.id}-${groupImagesPage}`}
-                  open={true}
-                  embedded={true}
-                  onClose={handleGroupImagesModalClose}
-                  images={groupImages}
-                  loading={groupImagesLoading}
+              mobileSheetContent={
+                <GroupExplorerImageBrowser
+                  panelKey={`group-mobile-panel-${selectedGroupForImages?.id ?? 'none'}-${groupImagesPage}`}
                   currentGroup={selectedGroupForImages}
                   allGroups={groups}
+                  images={groupImages}
+                  loading={groupImagesLoading}
                   pageSize={groupImagesPageSize}
-                  onPageSizeChange={handleGroupImagesPageSizeChange}
                   currentPage={groupImagesPage}
                   totalPages={groupImagesTotalPages}
                   total={groupImagesTotal}
+                  onClose={handleGroupImagesModalClose}
+                  onPageSizeChange={handleGroupImagesPageSizeChange}
                   onPageChange={handleGroupImagesPageChange}
-                  infiniteScroll={{
-                    hasMore: groupImagesPage < groupImagesTotalPages,
-                    loadMore: handleGroupImagesLoadMore,
-                  }}
+                  hasMore={groupImagesPage < groupImagesTotalPages}
+                  onLoadMore={handleGroupImagesLoadMore}
                   onImagesRemoved={handleImagesRemoved}
                   onImagesAssigned={handleImagesAssigned}
                   groupType="custom"
                   onShowSnackbar={showSnackbar}
                 />
-              ) : null}
+              }
             />
 
             <Button
