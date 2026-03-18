@@ -490,78 +490,57 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
     return null
   }
 
-  return (
+  const browserContent = (
     <>
-      <Dialog
-        open={embedded || open}
-        embedded={embedded}
-        onClose={onClose}
-        maxWidth="xl"
-        fullWidth
-        PaperProps={{
-          sx: embedded
-            ? {
-                display: 'flex',
-                flexDirection: 'column',
-                height: '100%',
-                minHeight: 0,
-              }
-            : {
-                display: 'flex',
-                flexDirection: 'column',
-                height: '90vh',
-                maxHeight: '90vh',
-              },
-        }}
-      >
-        <DialogTitle>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Typography variant="h6">
-                {t('imageGroups:imageModal.title', { name: currentGroup?.name, count: total })}
+      <DialogTitle>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="h6">
+              {t('imageGroups:imageModal.title', { name: currentGroup?.name, count: total })}
+            </Typography>
+            {selectedImages.length > 0 ? (
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>
+                {t('imageGroups:imageModal.selectedCount', { count: selectedImages.length })}
               </Typography>
-              {selectedImages.length > 0 ? (
-                <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>
-                  {t('imageGroups:imageModal.selectedCount', { count: selectedImages.length })}
-                </Typography>
-              ) : null}
-            </Box>
+            ) : null}
+          </Box>
 
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
-              {selectedImages.length > 0 && !readOnly ? (
-                <>
-                  <Button
-                    variant="outlined"
-                    color="error"
-                    startIcon={<DeleteIcon className="h-4 w-4" />}
-                    onClick={handleRemoveClick}
-                    disabled={!canRemove}
-                    sx={{ py: 0.5, px: 2, height: 32 }}
-                  >
-                    {t('imageGroups:imageModal.buttonRemove')}
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    color="primary"
-                    startIcon={<MoveIcon className="h-4 w-4" />}
-                    onClick={handleAssignClick}
-                    disabled={!canAssign}
-                    sx={{ py: 0.5, px: 2, height: 32 }}
-                  >
-                    {t('imageGroups:imageModal.buttonAssign')}
-                  </Button>
-                  <div className="h-6 w-px bg-border mx-1" />
-                </>
-              ) : null}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+            {selectedImages.length > 0 && !readOnly ? (
+              <>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={<DeleteIcon className="h-4 w-4" />}
+                  onClick={handleRemoveClick}
+                  disabled={!canRemove}
+                  sx={{ py: 0.5, px: 2, height: 32 }}
+                >
+                  {t('imageGroups:imageModal.buttonRemove')}
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  startIcon={<MoveIcon className="h-4 w-4" />}
+                  onClick={handleAssignClick}
+                  disabled={!canAssign}
+                  sx={{ py: 0.5, px: 2, height: 32 }}
+                >
+                  {t('imageGroups:imageModal.buttonAssign')}
+                </Button>
+                <div className="h-6 w-px bg-border mx-1" />
+              </>
+            ) : null}
 
-              <IconButton
-                aria-label="download"
-                onClick={handleDownloadClick}
-                disabled={loadingCounts || total === 0}
-                sx={{ color: 'primary.main', height: 32, width: 32, p: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                {loadingCounts ? <CircularProgress size={18} /> : <DownloadIcon className="h-4 w-4" />}
-              </IconButton>
+            <IconButton
+              aria-label="download"
+              onClick={handleDownloadClick}
+              disabled={loadingCounts || total === 0}
+              sx={{ color: 'primary.main', height: 32, width: 32, p: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              {loadingCounts ? <CircularProgress size={18} /> : <DownloadIcon className="h-4 w-4" />}
+            </IconButton>
+            {!embedded ? (
               <IconButton
                 aria-label="close"
                 onClick={onClose}
@@ -569,114 +548,142 @@ const GroupImageGridModal: React.FC<GroupImageGridModalProps> = ({
               >
                 <CloseIcon className="h-4 w-4" />
               </IconButton>
-            </Box>
+            ) : null}
           </Box>
-        </DialogTitle>
+        </Box>
+      </DialogTitle>
 
-        <DialogContent
-          sx={{
-            p: 0,
-            overflow: 'hidden',
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
+      <DialogContent
+        sx={{
+          p: 0,
+          overflow: 'hidden',
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+        className={embedded ? 'rounded-b-lg border bg-background' : ''}
+      >
+        {getSelectionMessage()}
+
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="p-4 relative">
+            <ImageList
+              images={images}
+              loading={loading}
+              viewMode={appliedViewMode}
+              gridColumns={appliedGridColumns}
+              adapter={imageListAdapter}
+              selectable={true}
+              selection={{
+                selectedIds: selectedImages
+                  .map((image) => image.id)
+                  .filter((id): id is number => typeof id === 'number'),
+                onSelectionChange: () => undefined,
+                selectedStableKeys,
+                onStableSelectionChange: setSelectedStableKeys,
+              }}
+            />
+          </div>
+        </ScrollArea>
+
+        <div className="absolute right-4 bottom-4 z-[1040] flex flex-col items-end gap-2 sm:right-6 sm:bottom-6 sm:gap-3">
+          {layoutOptionsOpen ? (
+            <div
+              ref={layoutPanelRef}
+              data-testid="modal-layout-options-panel"
+              className="absolute right-0 bottom-full mb-3 w-[min(280px,calc(100vw-2rem))] rounded-lg border bg-background p-3 shadow-lg"
+            >
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground" htmlFor="modal-layout-mode-select">
+                    Layout mode
+                  </label>
+                  <select
+                    id="modal-layout-mode-select"
+                    data-testid="modal-layout-mode-select"
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    value={draftViewMode}
+                    onChange={(event) => setDraftViewMode(event.target.value as 'grid' | 'masonry')}
+                  >
+                    <option value="grid">grid</option>
+                    <option value="masonry">masonry</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground" htmlFor="modal-layout-columns-input">
+                    Columns
+                  </label>
+                  <Input
+                    id="modal-layout-columns-input"
+                    data-testid="modal-layout-columns-input"
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={draftGridColumns}
+                    onChange={(event) => {
+                      const parsed = Number(event.target.value)
+                      if (Number.isNaN(parsed)) {
+                        return
+                      }
+                      setDraftGridColumns(Math.max(1, Math.min(10, Math.floor(parsed))))
+                    }}
+                  />
+                </div>
+
+                <UiButton
+                  type="button"
+                  data-testid="modal-layout-apply"
+                  className="w-full"
+                  onClick={handleApplyLayout}
+                >
+                  Apply
+                </UiButton>
+              </div>
+            </div>
+          ) : null}
+
+          <UiButton
+            type="button"
+            size="icon"
+            variant="default"
+            data-testid="modal-layout-options-fab"
+            ref={layoutFabRef}
+            onClick={handleLayoutFabClick}
+            aria-label="Layout options"
+            className="h-12 w-12 rounded-full border-2 border-background bg-primary text-primary-foreground shadow-2xl ring-2 ring-black/20 hover:bg-primary/90"
+          >
+            <Settings2 className="h-5 w-5" />
+          </UiButton>
+        </div>
+      </DialogContent>
+    </>
+  )
+
+  return (
+    <>
+      {embedded ? (
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-background shadow-sm">
+          {browserContent}
+        </div>
+      ) : (
+        <Dialog
+          open={open}
+          onClose={onClose}
+          maxWidth="xl"
+          fullWidth
+          PaperProps={{
+            sx: {
+              display: 'flex',
+              flexDirection: 'column',
+              height: '90vh',
+              maxHeight: '90vh',
+            },
           }}
         >
-          {getSelectionMessage()}
-
-          <ScrollArea className="flex-1 min-h-0">
-            <div className="p-4 relative">
-              <ImageList
-                images={images}
-                loading={loading}
-                viewMode={appliedViewMode}
-                gridColumns={appliedGridColumns}
-                adapter={imageListAdapter}
-                selectable={true}
-                selection={{
-                  selectedIds: selectedImages
-                    .map((image) => image.id)
-                    .filter((id): id is number => typeof id === 'number'),
-                  onSelectionChange: () => undefined,
-                  selectedStableKeys,
-                  onStableSelectionChange: setSelectedStableKeys,
-                }}
-              />
-            </div>
-          </ScrollArea>
-
-          <div className="absolute right-4 bottom-4 z-[1040] flex flex-col items-end gap-2 sm:right-6 sm:bottom-6 sm:gap-3">
-            {layoutOptionsOpen ? (
-              <div
-                ref={layoutPanelRef}
-                data-testid="modal-layout-options-panel"
-                className="absolute right-0 bottom-full mb-3 w-[min(280px,calc(100vw-2rem))] rounded-lg border bg-background p-3 shadow-lg"
-              >
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground" htmlFor="modal-layout-mode-select">
-                      Layout mode
-                    </label>
-                    <select
-                      id="modal-layout-mode-select"
-                      data-testid="modal-layout-mode-select"
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      value={draftViewMode}
-                      onChange={(event) => setDraftViewMode(event.target.value as 'grid' | 'masonry')}
-                    >
-                      <option value="grid">grid</option>
-                      <option value="masonry">masonry</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground" htmlFor="modal-layout-columns-input">
-                      Columns
-                    </label>
-                    <Input
-                      id="modal-layout-columns-input"
-                      data-testid="modal-layout-columns-input"
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={draftGridColumns}
-                      onChange={(event) => {
-                        const parsed = Number(event.target.value)
-                        if (Number.isNaN(parsed)) {
-                          return
-                        }
-                        setDraftGridColumns(Math.max(1, Math.min(10, Math.floor(parsed))))
-                      }}
-                    />
-                  </div>
-
-                  <UiButton
-                    type="button"
-                    data-testid="modal-layout-apply"
-                    className="w-full"
-                    onClick={handleApplyLayout}
-                  >
-                    Apply
-                  </UiButton>
-                </div>
-              </div>
-            ) : null}
-
-            <UiButton
-              type="button"
-              size="icon"
-              variant="default"
-              data-testid="modal-layout-options-fab"
-              ref={layoutFabRef}
-              onClick={handleLayoutFabClick}
-              aria-label="Layout options"
-              className="h-12 w-12 rounded-full border-2 border-background bg-primary text-primary-foreground shadow-2xl ring-2 ring-black/20 hover:bg-primary/90"
-            >
-              <Settings2 className="h-5 w-5" />
-            </UiButton>
-          </div>
-        </DialogContent>
-      </Dialog>
+          {browserContent}
+        </Dialog>
+      )}
 
       <ConfirmDialog open={removeDialogOpen} onClose={() => setRemoveDialogOpen(false)}>
         <DialogTitle>{t('imageGroups:imageModal.confirmRemoveTitle')}</DialogTitle>
