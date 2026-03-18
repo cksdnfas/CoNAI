@@ -261,10 +261,12 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
 
   return (
     <Sheet
-      open={Boolean(selectedGroupForImages)}
+      open={mobileImageSheetOpen}
       onOpenChange={(open) => {
         if (!open) {
           handleGroupImagesModalClose()
+        } else {
+          setMobileImageSheetOpen(true)
         }
       }}
     >

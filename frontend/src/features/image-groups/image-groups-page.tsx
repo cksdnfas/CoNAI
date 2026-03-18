@@ -53,7 +53,7 @@ export function ImageGroupsPage() {
   )
   const loading = currentParentId === null ? rootGroupsLoading : childGroupsLoading
 
-  const [, setGroupImagesModalOpen] = useState(false)
+  const [mobileImageSheetOpen, setMobileImageSheetOpen] = useState(false)
   const [selectedGroupForImages, setSelectedGroupForImages] = useState<GroupWithStats | null>(null)
   const [groupImages, setGroupImages] = useState<ImageRecord[]>([])
   const [groupImagesLoading, setGroupImagesLoading] = useState(false)
@@ -213,15 +213,16 @@ export function ImageGroupsPage() {
   }
 
   const handleGroupImagesModalClose = () => {
-    setGroupImagesModalOpen(false)
+    setMobileImageSheetOpen(false)
     setSelectedGroupForImages(null)
     setGroupImages([])
     setGroupImagesPage(1)
   }
 
   const openGroupImagePanel = (group: GroupWithStats) => {
+    const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches
     setSelectedGroupForImages(group)
-    setGroupImagesModalOpen(false)
+    setMobileImageSheetOpen(isMobile)
     setGroupImagesPage(1)
     void fetchGroupImages(group.id, 1, groupImagesPageSize, false)
   }
@@ -337,10 +338,12 @@ export function ImageGroupsPage() {
 
           <TabsContent value="custom" className="space-y-4 pt-2">
             <Sheet
-              open={Boolean(selectedGroupForImages)}
+              open={mobileImageSheetOpen}
               onOpenChange={(open) => {
                 if (!open) {
                   handleGroupImagesModalClose()
+                } else {
+                  setMobileImageSheetOpen(true)
                 }
               }}
             >
