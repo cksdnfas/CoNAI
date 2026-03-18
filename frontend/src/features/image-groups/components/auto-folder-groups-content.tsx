@@ -8,9 +8,9 @@ import { useAutoFolderChildGroups, useAutoFolderRootGroups, useRebuildAutoFolder
 import { useImageListSettings } from '@/hooks/use-image-list-settings'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { GroupBreadcrumb } from './group-breadcrumb'
+import { GroupExplorerImagePanel } from './group-explorer-image-panel'
+import { GroupExplorerLayout } from './group-explorer-layout'
 import { AutoFolderGroupCard } from './auto-folder-group-card'
 import { AutoFolderImageViewCard } from './auto-folder-image-view-card'
 import GroupImageGridModal from './group-image-grid-modal'
@@ -260,157 +260,112 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
     (!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0) || groups.length > 0
 
   return (
-    <Sheet
-      open={mobileImageSheetOpen}
-      onOpenChange={(open) => {
-        if (!open) {
-          handleGroupImagesModalClose()
-        } else {
-          setMobileImageSheetOpen(true)
-        }
-      }}
-    >
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <Alert>
-            <AlertDescription>{t('imageGroups:autoFolder.readOnlyMessage')}</AlertDescription>
-          </Alert>
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <Alert>
+          <AlertDescription>{t('imageGroups:autoFolder.readOnlyMessage')}</AlertDescription>
+        </Alert>
 
-          <Button onClick={() => void handleRebuild()} disabled={rebuildMutation.isPending}>
-            {rebuildMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            {rebuildMutation.isPending ? t('imageGroups:autoFolder.rebuilding') : t('imageGroups:autoFolder.refresh')}
-          </Button>
-        </div>
-
-        {!isGroupListView ? (
-          <GroupBreadcrumb breadcrumb={breadcrumb} onNavigate={handleBreadcrumbNavigate} showGroupListRoot={true} />
-        ) : null}
-
-        {loading ? (
-          <div className="flex min-h-[220px] items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <div className="grid min-h-[640px] gap-4 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
-            <div className="min-h-0 rounded-lg border bg-card">
-              <div className="border-b px-4 py-3">
-                <p className="text-sm font-semibold text-foreground">그룹 탐색</p>
-                <p className="text-xs text-muted-foreground">자동 분류된 폴더 그룹을 따라 내려가며 이미지를 여나이다.</p>
-              </div>
-              <ScrollArea className="h-full max-h-[calc(100vh-260px)]">
-                <div className="space-y-4 p-4">
-                  {hasVisibleCards ? (
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      {!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0 ? (
-                        <AutoFolderImageViewCard
-                          key={`auto-folder-image-view-${currentParentId}`}
-                          group={currentGroupInfo}
-                          onClick={() => openGroupImagePanel(currentGroupInfo)}
-                        />
-                      ) : null}
-
-                      {groups.map((group) => (
-                        <AutoFolderGroupCard key={group.id} group={group} onClick={() => handleGroupClick(group)} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="py-10 text-center">
-                      <FolderTree className="mx-auto mb-2 h-12 w-12 text-muted-foreground" />
-                      <p className="text-base text-muted-foreground">
-                        {isGroupListView ? t('imageGroups:autoFolder.emptyState.noGroups') : t('imageGroups:autoFolder.emptyState.noSubfolders')}
-                      </p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {isGroupListView ? t('imageGroups:autoFolder.emptyState.refreshPrompt') : t('imageGroups:autoFolder.emptyState.noSubfoldersHelp')}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </ScrollArea>
-            </div>
-
-            <div className="hidden min-h-0 lg:block">
-              {!selectedGroupForImages ? (
-                <div className="mb-3 rounded-lg border border-dashed bg-muted/10 px-4 py-3">
-                  <p className="text-sm font-semibold text-foreground">이미지 탐색 패널</p>
-                  <p className="text-xs text-muted-foreground">좌측에서 그룹을 고르면 이곳에 기존 이미지 목록이 펼쳐지나이다.</p>
-                </div>
-              ) : null}
-              {selectedGroupForImages ? (
-                <GroupImageGridModal
-                  key={`auto-folder-panel-${selectedGroupForImages.id}-${groupImagesPage}`}
-                  open={true}
-                  embedded={true}
-                  onClose={handleGroupImagesModalClose}
-                  images={groupImages}
-                  loading={groupImagesLoading}
-                  currentGroup={modalCurrentGroup}
-                  allGroups={[]}
-                  pageSize={groupImagesPageSize}
-                  onPageSizeChange={handleGroupImagesPageSizeChange}
-                  currentPage={groupImagesPage}
-                  totalPages={groupImagesTotalPages}
-                  total={groupImagesTotal}
-                  onPageChange={handleGroupImagesPageChange}
-                  infiniteScroll={{
-                    hasMore: groupImagesPage < groupImagesTotalPages,
-                    loadMore: handleGroupImagesLoadMore,
-                  }}
-                  onImagesRemoved={handleImagesRemoved}
-                  onImagesAssigned={handleImagesAssigned}
-                  readOnly={true}
-                  groupType="auto-folder"
-                  onShowSnackbar={onShowSnackbar}
-                />
-              ) : (
-                <div className="flex h-full min-h-[640px] items-center justify-center rounded-lg border border-dashed bg-muted/20 p-8 text-center">
-                  <div className="space-y-2">
-                    <FolderTree className="mx-auto h-12 w-12 text-muted-foreground" />
-                    <p className="text-base font-medium">{t('imageGroups:page.autoFolderGroupsTab')}</p>
-                    <p className="text-sm text-muted-foreground">그룹을 고르시면 우측에서 이미지를 탐색할 수 있나이다.</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        <Button onClick={() => void handleRebuild()} disabled={rebuildMutation.isPending}>
+          {rebuildMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {rebuildMutation.isPending ? t('imageGroups:autoFolder.rebuilding') : t('imageGroups:autoFolder.refresh')}
+        </Button>
       </div>
 
-      <SheetContent side="bottom" className="flex h-[85vh] max-h-[85vh] flex-col rounded-t-2xl p-0 lg:hidden" showCloseButton={true}>
-        <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-muted" />
-        <div className="border-b px-4 py-3">
-          <p className="text-sm font-semibold text-foreground">이미지 탐색</p>
-          <p className="text-xs text-muted-foreground">선택한 그룹의 이미지를 아래 패널에서 탐색하나이다.</p>
-        </div>
-        <div className="min-h-0 flex-1 overflow-hidden p-3">
-          {selectedGroupForImages ? (
-            <GroupImageGridModal
-              key={`auto-folder-mobile-panel-${selectedGroupForImages.id}-${groupImagesPage}`}
-              open={true}
-              embedded={true}
-              onClose={handleGroupImagesModalClose}
-              images={groupImages}
-              loading={groupImagesLoading}
-              currentGroup={modalCurrentGroup}
-              allGroups={[]}
-              pageSize={groupImagesPageSize}
-              onPageSizeChange={handleGroupImagesPageSizeChange}
-              currentPage={groupImagesPage}
-              totalPages={groupImagesTotalPages}
-              total={groupImagesTotal}
-              onPageChange={handleGroupImagesPageChange}
-              infiniteScroll={{
-                hasMore: groupImagesPage < groupImagesTotalPages,
-                loadMore: handleGroupImagesLoadMore,
-              }}
-              onImagesRemoved={handleImagesRemoved}
-              onImagesAssigned={handleImagesAssigned}
-              readOnly={true}
-              groupType="auto-folder"
-              onShowSnackbar={onShowSnackbar}
-            />
-          ) : null}
-        </div>
-      </SheetContent>
-    </Sheet>
+      <GroupExplorerLayout
+        breadcrumb={!isGroupListView ? (
+          <GroupBreadcrumb breadcrumb={breadcrumb} onNavigate={handleBreadcrumbNavigate} showGroupListRoot={true} />
+        ) : undefined}
+        loading={loading}
+        explorerTitle="그룹 탐색"
+        explorerDescription="자동 분류된 폴더 그룹을 따라 내려가며 이미지를 여나이다."
+        emptyTitle={isGroupListView ? t('imageGroups:autoFolder.emptyState.noGroups') : t('imageGroups:autoFolder.emptyState.noSubfolders')}
+        emptyDescription={isGroupListView ? t('imageGroups:autoFolder.emptyState.refreshPrompt') : t('imageGroups:autoFolder.emptyState.noSubfoldersHelp')}
+        hasVisibleCards={hasVisibleCards}
+        cards={
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0 ? (
+              <AutoFolderImageViewCard
+                key={`auto-folder-image-view-${currentParentId}`}
+                group={currentGroupInfo}
+                onClick={() => openGroupImagePanel(currentGroupInfo)}
+              />
+            ) : null}
+
+            {groups.map((group) => (
+              <AutoFolderGroupCard key={group.id} group={group} onClick={() => handleGroupClick(group)} />
+            ))}
+          </div>
+        }
+        desktopPanel={
+          <GroupExplorerImagePanel
+            title="이미지 탐색 패널"
+            description="좌측에서 그룹을 고르면 이곳에 기존 이미지 목록이 펼쳐지나이다."
+            content={selectedGroupForImages ? (
+              <GroupImageGridModal
+                key={`auto-folder-panel-${selectedGroupForImages.id}-${groupImagesPage}`}
+                open={true}
+                embedded={true}
+                onClose={handleGroupImagesModalClose}
+                images={groupImages}
+                loading={groupImagesLoading}
+                currentGroup={modalCurrentGroup}
+                allGroups={[]}
+                pageSize={groupImagesPageSize}
+                onPageSizeChange={handleGroupImagesPageSizeChange}
+                currentPage={groupImagesPage}
+                totalPages={groupImagesTotalPages}
+                total={groupImagesTotal}
+                onPageChange={handleGroupImagesPageChange}
+                infiniteScroll={{
+                  hasMore: groupImagesPage < groupImagesTotalPages,
+                  loadMore: handleGroupImagesLoadMore,
+                }}
+                onImagesRemoved={handleImagesRemoved}
+                onImagesAssigned={handleImagesAssigned}
+                readOnly={true}
+                groupType="auto-folder"
+                onShowSnackbar={onShowSnackbar}
+              />
+            ) : null}
+          />
+        }
+        mobileSheetOpen={mobileImageSheetOpen}
+        onMobileSheetOpenChange={(open) => {
+          if (!open) {
+            handleGroupImagesModalClose()
+          } else {
+            setMobileImageSheetOpen(true)
+          }
+        }}
+        mobileSheetContent={selectedGroupForImages ? (
+          <GroupImageGridModal
+            key={`auto-folder-mobile-panel-${selectedGroupForImages.id}-${groupImagesPage}`}
+            open={true}
+            embedded={true}
+            onClose={handleGroupImagesModalClose}
+            images={groupImages}
+            loading={groupImagesLoading}
+            currentGroup={modalCurrentGroup}
+            allGroups={[]}
+            pageSize={groupImagesPageSize}
+            onPageSizeChange={handleGroupImagesPageSizeChange}
+            currentPage={groupImagesPage}
+            totalPages={groupImagesTotalPages}
+            total={groupImagesTotal}
+            onPageChange={handleGroupImagesPageChange}
+            infiniteScroll={{
+              hasMore: groupImagesPage < groupImagesTotalPages,
+              loadMore: handleGroupImagesLoadMore,
+            }}
+            onImagesRemoved={handleImagesRemoved}
+            onImagesAssigned={handleImagesAssigned}
+            readOnly={true}
+            groupType="auto-folder"
+            onShowSnackbar={onShowSnackbar}
+          />
+        ) : null}
+      />
+    </div>
   )
 }
