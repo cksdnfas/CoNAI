@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FolderTree, Loader2, RefreshCw } from 'lucide-react'
+import { Loader2, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AutoFolderGroupWithStats, GroupWithStats } from '@conai/shared'
 import type { ImageRecord, PageSize } from '@/types/image'

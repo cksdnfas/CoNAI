@@ -17,8 +17,6 @@ import { useRootGroups, useChildGroups } from '@/hooks/use-groups'
 import { useImageListSettings } from '@/hooks/use-image-list-settings'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 type SnackbarSeverity = 'success' | 'error' | 'info' | 'warning'
