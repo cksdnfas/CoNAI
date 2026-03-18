@@ -63,7 +63,7 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
   )
   const loading = currentParentId === null ? rootGroupsLoading : childGroupsLoading
 
-  const [groupImagesModalOpen, setGroupImagesModalOpen] = useState(false)
+  const [mobileImageSheetOpen, setMobileImageSheetOpen] = useState(false)
   const [selectedGroupForImages, setSelectedGroupForImages] = useState<AutoFolderGroupWithStats | null>(null)
   const [groupImages, setGroupImages] = useState<ImageRecord[]>([])
   const [groupImagesLoading, setGroupImagesLoading] = useState(false)
@@ -213,15 +213,16 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
   )
 
   const handleGroupImagesModalClose = () => {
-    setGroupImagesModalOpen(false)
+    setMobileImageSheetOpen(false)
     setSelectedGroupForImages(null)
     setGroupImages([])
     setGroupImagesPage(1)
   }
 
   const openGroupImagePanel = (group: AutoFolderGroupWithStats) => {
+    const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches
     setSelectedGroupForImages(group)
-    setGroupImagesModalOpen(false)
+    setMobileImageSheetOpen(isMobile)
     setGroupImagesPage(1)
     void fetchGroupImages(group.id, 1, groupImagesPageSize, false)
   }
