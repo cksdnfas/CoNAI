@@ -28,6 +28,8 @@ function getInitialParams(): NAIParams {
         seed: savedParams.seed ?? DEFAULT_PARAMS.seed,
         strength: savedParams.strength ?? DEFAULT_PARAMS.strength,
         noise: savedParams.noise ?? DEFAULT_PARAMS.noise,
+        source_image: savedParams.source_image ?? DEFAULT_PARAMS.source_image,
+        mask_image: savedParams.mask_image ?? DEFAULT_PARAMS.mask_image,
         resolutionConfig: savedParams.resolutionConfig || DEFAULT_RESOLUTION_CONFIG,
         prompt: '',
         negative_prompt: '',

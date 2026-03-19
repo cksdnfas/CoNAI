@@ -73,4 +73,6 @@ export const DEFAULT_PARAMS = {
   seed: null,
   strength: 0.7,
   noise: 0.0,
+  source_image: null,
+  mask_image: null,
 } as const

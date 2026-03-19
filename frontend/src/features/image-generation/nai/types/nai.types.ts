@@ -34,6 +34,8 @@ export interface NAIParams {
   seed: number | null
   strength: number
   noise: number
+  source_image: string | null
+  mask_image: string | null
 }
 
 export interface NAIUserData {

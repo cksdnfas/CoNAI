@@ -185,20 +185,10 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
         Apply model quality tags automatically
       </label>
 
-      <div className="rounded-md border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
-        <p className="font-medium text-foreground">Auto-apply preview</p>
-        <p className="mt-2">
-          <span className="font-medium text-foreground">Quality tags:</span> {qualityTagsPreview || 'Disabled'}
-        </p>
-        <p className="mt-1">
-          <span className="font-medium text-foreground">UC preset:</span> {ucPresetPreview || 'None'}
-        </p>
-        <p className="mt-1">
-          <span className="font-medium text-foreground">Model support:</span> {modelSupport}
-        </p>
-        <p className="mt-1">
-          <span className="font-medium text-foreground">Note:</span> wildcard parsing stays on your original prompt/negative prompt first, then presets are appended.
-        </p>
+      <div className="grid gap-2 rounded-md border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
+        <div><span className="font-medium text-foreground">Quality</span> {qualityTagsPreview || 'Off'}</div>
+        <div><span className="font-medium text-foreground">UC</span> {ucPresetPreview || 'None'}</div>
+        <div><span className="font-medium text-foreground">Support</span> {modelSupport}</div>
       </div>
     </section>
   )

@@ -188,6 +188,7 @@ export function useNAIGeneration({ token, onLogout }: UseNAIGenerationOptions) {
           prompt: finalPrompt,
           negative_prompt: finalNegativePrompt,
           model: params.model,
+          action: params.action,
           width: resolution.width,
           height: resolution.height,
           steps: params.steps,
