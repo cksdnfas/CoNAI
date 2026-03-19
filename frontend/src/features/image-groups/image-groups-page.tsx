@@ -343,8 +343,6 @@ export function ImageGroupsPage() {
                 <GroupBreadcrumb breadcrumb={breadcrumb} onNavigate={handleBreadcrumbNavigate} showGroupListRoot={true} />
               ) : undefined}
               loading={loading}
-              explorerTitle="그룹 탐색"
-              explorerDescription="폴더처럼 그룹을 따라 내려가며 이미지를 여나이다."
               emptyTitle={isGroupListView ? t('imageGroups:emptyState.noGroups') : t('imageGroups:emptyState.noSubgroups')}
               emptyDescription={isGroupListView ? t('imageGroups:emptyState.createPrompt') : t('imageGroups:emptyState.noSubgroupsHelp')}
               hasVisibleCards={hasVisibleCards}
@@ -365,8 +363,6 @@ export function ImageGroupsPage() {
               }
               desktopPanel={
                 <GroupExplorerImagePanel
-                  title="이미지 탐색 패널"
-                  description="좌측에서 그룹을 고르면 이곳에 기존 이미지 목록이 펼쳐지나이다."
                   content={selectedGroupForImages ? (
                     <GroupImageGridModal
                       key={`group-panel-${selectedGroupForImages.id}-${groupImagesPage}`}

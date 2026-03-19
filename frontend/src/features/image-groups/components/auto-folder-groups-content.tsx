@@ -278,8 +278,6 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
           <GroupBreadcrumb breadcrumb={breadcrumb} onNavigate={handleBreadcrumbNavigate} showGroupListRoot={true} />
         ) : undefined}
         loading={loading}
-        explorerTitle="그룹 탐색"
-        explorerDescription="자동 분류된 폴더 그룹을 따라 내려가며 이미지를 여나이다."
         emptyTitle={isGroupListView ? t('imageGroups:autoFolder.emptyState.noGroups') : t('imageGroups:autoFolder.emptyState.noSubfolders')}
         emptyDescription={isGroupListView ? t('imageGroups:autoFolder.emptyState.refreshPrompt') : t('imageGroups:autoFolder.emptyState.noSubfoldersHelp')}
         hasVisibleCards={hasVisibleCards}
@@ -300,8 +298,6 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
         }
         desktopPanel={
           <GroupExplorerImagePanel
-            title="이미지 탐색 패널"
-            description="좌측에서 그룹을 고르면 이곳에 기존 이미지 목록이 펼쳐지나이다."
             content={selectedGroupForImages ? (
               <GroupImageGridModal
                 key={`auto-folder-panel-${selectedGroupForImages.id}-${groupImagesPage}`}

@@ -6,8 +6,6 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 interface GroupExplorerLayoutProps {
   breadcrumb?: ReactNode
   loading: boolean
-  explorerTitle: string
-  explorerDescription: string
   emptyTitle: string
   emptyDescription: string
   hasVisibleCards: boolean
@@ -21,8 +19,6 @@ interface GroupExplorerLayoutProps {
 export function GroupExplorerLayout({
   breadcrumb,
   loading,
-  explorerTitle,
-  explorerDescription,
   emptyTitle,
   emptyDescription,
   hasVisibleCards,
@@ -41,14 +37,10 @@ export function GroupExplorerLayout({
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <div className="grid min-h-[640px] gap-4 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
-          <div className="min-h-0 rounded-lg border bg-card">
-            <div className="border-b px-4 py-3">
-              <p className="text-sm font-semibold text-foreground">{explorerTitle}</p>
-              <p className="text-xs text-muted-foreground">{explorerDescription}</p>
-            </div>
+        <div className="grid min-h-[640px] gap-4 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)] lg:gap-0">
+          <div className="min-h-0 lg:pr-4 lg:border-r">
             <ScrollArea className="h-full max-h-[calc(100vh-220px)]">
-              <div className="space-y-4 p-4">
+              <div className="space-y-4 py-1 lg:pr-4">
                 {hasVisibleCards ? (
                   cards
                 ) : (
@@ -62,7 +54,7 @@ export function GroupExplorerLayout({
             </ScrollArea>
           </div>
 
-          <div className="hidden min-h-0 lg:block">{desktopPanel}</div>
+          <div className="hidden min-h-0 lg:block lg:pl-4">{desktopPanel}</div>
         </div>
       )}
 
