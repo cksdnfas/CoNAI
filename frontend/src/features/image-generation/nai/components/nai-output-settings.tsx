@@ -1,4 +1,5 @@
 import type { ChangeEvent, Dispatch, SetStateAction } from 'react'
+import { X } from 'lucide-react'
 import type { NAIParams } from '../types/nai.types'
 
 interface NAIOutputSettingsProps {
@@ -55,24 +56,61 @@ export default function NAIOutputSettings({ params, onChange, disabled = false }
 
       {params.action !== 'generate' ? (
         <div className="space-y-3 rounded-md border border-dashed p-3">
-          <p className="text-sm font-medium">Image inputs</p>
-
           <label htmlFor="nai-source-image" className="block space-y-1 text-sm">
             <span>Source image</span>
-            <input id="nai-source-image" type="file" accept="image/*" disabled={disabled} onChange={(event) => void handleImageFile(event, 'source_image')} />
+            <input
+              id="nai-source-image"
+              type="file"
+              accept="image/*"
+              disabled={disabled}
+              onChange={(event) => void handleImageFile(event, 'source_image')}
+            />
           </label>
 
-          {params.action === 'infill' ? (
-            <label htmlFor="nai-mask-image" className="block space-y-1 text-sm">
-              <span>Mask image</span>
-              <input id="nai-mask-image" type="file" accept="image/*" disabled={disabled} onChange={(event) => void handleImageFile(event, 'mask_image')} />
-            </label>
+          {params.source_image ? (
+            <div className="relative overflow-hidden rounded-md border bg-muted/20 p-2">
+              <img src={params.source_image} alt="Source preview" className="max-h-48 w-full rounded object-contain" />
+              <button
+                type="button"
+                className="absolute top-2 right-2 rounded-full border bg-background/80 p-1"
+                onClick={() => onChange((previous) => ({ ...previous, source_image: null }))}
+                disabled={disabled}
+                aria-label="Clear source image"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           ) : null}
 
-          <div className="text-xs text-muted-foreground">
-            <p>Source {params.source_image ? 'loaded' : 'empty'}</p>
-            {params.action === 'infill' ? <p>Mask {params.mask_image ? 'loaded' : 'empty'}</p> : null}
-          </div>
+          {params.action === 'infill' ? (
+            <>
+              <label htmlFor="nai-mask-image" className="block space-y-1 text-sm">
+                <span>Mask image</span>
+                <input
+                  id="nai-mask-image"
+                  type="file"
+                  accept="image/*"
+                  disabled={disabled}
+                  onChange={(event) => void handleImageFile(event, 'mask_image')}
+                />
+              </label>
+
+              {params.mask_image ? (
+                <div className="relative overflow-hidden rounded-md border bg-muted/20 p-2">
+                  <img src={params.mask_image} alt="Mask preview" className="max-h-48 w-full rounded object-contain" />
+                  <button
+                    type="button"
+                    className="absolute top-2 right-2 rounded-full border bg-background/80 p-1"
+                    onClick={() => onChange((previous) => ({ ...previous, mask_image: null }))}
+                    disabled={disabled}
+                    aria-label="Clear mask image"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </div>
       ) : null}
     </section>

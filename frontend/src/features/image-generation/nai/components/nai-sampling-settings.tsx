@@ -32,24 +32,26 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
         </select>
       </label>
 
-      <label htmlFor="nai-noise-schedule" className="block space-y-1 text-sm">
-        <span>Noise schedule</span>
-        <select
-          id="nai-noise-schedule"
-          value={params.noise_schedule}
-          disabled={disabled}
-          onChange={(event) =>
-            onChange((previous) => ({
-              ...previous,
-              noise_schedule: event.target.value,
-            }))
-          }
-        >
-          <option value="karras">Karras</option>
-          <option value="native">Native</option>
-          <option value="exponential">Exponential</option>
-        </select>
-      </label>
+      {params.action === 'generate' ? (
+        <label htmlFor="nai-noise-schedule" className="block space-y-1 text-sm">
+          <span>Noise schedule</span>
+          <select
+            id="nai-noise-schedule"
+            value={params.noise_schedule}
+            disabled={disabled}
+            onChange={(event) =>
+              onChange((previous) => ({
+                ...previous,
+                noise_schedule: event.target.value,
+              }))
+            }
+          >
+            <option value="karras">Karras</option>
+            <option value="native">Native</option>
+            <option value="exponential">Exponential</option>
+          </select>
+        </label>
+      ) : null}
 
       <label htmlFor="nai-seed" className="block space-y-1 text-sm">
         <span>Seed</span>
