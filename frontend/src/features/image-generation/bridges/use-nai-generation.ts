@@ -198,6 +198,9 @@ export function useNAIGeneration({ token, onLogout }: UseNAIGenerationOptions) {
           cfg_rescale: params.cfg_rescale,
           noise_schedule: params.noise_schedule,
           uncond_scale: params.uncond_scale,
+          seed: params.seed ?? undefined,
+          strength: params.action === 'generate' ? undefined : params.strength,
+          noise: params.action === 'generate' ? undefined : params.noise,
           groupId: selectedGroupId || undefined,
         })
 

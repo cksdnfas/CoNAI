@@ -54,6 +54,7 @@ export const DEFAULT_RESOLUTION_CONFIG = {
 
 export const DEFAULT_PARAMS = {
   model: 'nai-diffusion-4-5-curated',
+  action: 'generate',
   prompt: '',
   negative_prompt: '',
   auto_quality_tags: true,
@@ -69,4 +70,7 @@ export const DEFAULT_PARAMS = {
   cfg_rescale: 0.7,
   noise_schedule: 'karras',
   uncond_scale: 1,
+  seed: null,
+  strength: 0.7,
+  noise: 0.0,
 } as const

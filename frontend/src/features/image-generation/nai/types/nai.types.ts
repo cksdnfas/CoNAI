@@ -15,6 +15,7 @@ export interface ResolutionConfig {
 
 export interface NAIParams {
   model: string
+  action: 'generate' | 'img2img' | 'infill'
   prompt: string
   negative_prompt: string
   auto_quality_tags: boolean
@@ -30,6 +31,9 @@ export interface NAIParams {
   cfg_rescale: number
   noise_schedule: string
   uncond_scale: number
+  seed: number | null
+  strength: number
+  noise: number
 }
 
 export interface NAIUserData {

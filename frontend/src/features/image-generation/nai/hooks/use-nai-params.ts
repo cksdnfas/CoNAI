@@ -21,9 +21,13 @@ function getInitialParams(): NAIParams {
       return {
         ...DEFAULT_PARAMS,
         ...savedParams,
+        action: savedParams.action ?? DEFAULT_PARAMS.action,
         auto_quality_tags: savedParams.auto_quality_tags ?? DEFAULT_PARAMS.auto_quality_tags,
         uc_preset: savedParams.uc_preset ?? DEFAULT_PARAMS.uc_preset,
         rating_preset: savedParams.rating_preset ?? DEFAULT_PARAMS.rating_preset,
+        seed: savedParams.seed ?? DEFAULT_PARAMS.seed,
+        strength: savedParams.strength ?? DEFAULT_PARAMS.strength,
+        noise: savedParams.noise ?? DEFAULT_PARAMS.noise,
         resolutionConfig: savedParams.resolutionConfig || DEFAULT_RESOLUTION_CONFIG,
         prompt: '',
         negative_prompt: '',

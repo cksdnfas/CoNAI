@@ -44,6 +44,7 @@ export const naiApi = {
       prompt: string
       negative_prompt?: string
       model?: string
+      action?: 'generate' | 'img2img' | 'infill'
       width?: number
       height?: number
       steps?: number

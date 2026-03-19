@@ -48,6 +48,25 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
           </select>
         </label>
 
+        <label htmlFor="nai-action" className="block space-y-1 text-sm">
+          <span>Mode</span>
+          <select
+            id="nai-action"
+            value={params.action}
+            disabled={disabled}
+            onChange={(event) =>
+              onChange((previous) => ({
+                ...previous,
+                action: event.target.value as NAIParams['action'],
+              }))
+            }
+          >
+            <option value="generate">Text to image</option>
+            <option value="img2img">Image to image (prep)</option>
+            <option value="infill">Infill (prep)</option>
+          </select>
+        </label>
+
         <label htmlFor="nai-resolution-fixed" className="block space-y-1 text-sm">
           <span>Resolution</span>
           <select

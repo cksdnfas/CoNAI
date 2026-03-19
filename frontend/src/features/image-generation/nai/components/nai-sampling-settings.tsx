@@ -51,6 +51,23 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
         </select>
       </label>
 
+      <label htmlFor="nai-seed" className="block space-y-1 text-sm">
+        <span>Seed</span>
+        <input
+          id="nai-seed"
+          type="number"
+          value={params.seed ?? ''}
+          disabled={disabled}
+          placeholder="Random"
+          onChange={(event) =>
+            onChange((previous) => ({
+              ...previous,
+              seed: event.target.value.trim() === '' ? null : Number(event.target.value),
+            }))
+          }
+        />
+      </label>
+
       <label htmlFor="nai-steps" className="block space-y-1 text-sm">
         <span>Steps</span>
         <input
@@ -127,6 +144,48 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
         />
       </label>
 
+      {params.action !== 'generate' ? (
+        <>
+          <label htmlFor="nai-strength" className="block space-y-1 text-sm">
+            <span>Strength</span>
+            <input
+              id="nai-strength"
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              value={params.strength}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange((previous) => ({
+                  ...previous,
+                  strength: Number(event.target.value),
+                }))
+              }
+            />
+          </label>
+
+          <label htmlFor="nai-noise" className="block space-y-1 text-sm">
+            <span>Noise</span>
+            <input
+              id="nai-noise"
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              value={params.noise}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange((previous) => ({
+                  ...previous,
+                  noise: Number(event.target.value),
+                }))
+              }
+            />
+          </label>
+        </>
+      ) : null}
+
       <label htmlFor="nai-variety-plus" className="flex items-center gap-2 text-sm">
         <input
           id="nai-variety-plus"
@@ -142,7 +201,6 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
         />
         Variety plus
       </label>
-
     </section>
   )
 }
