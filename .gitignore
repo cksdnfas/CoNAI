@@ -107,6 +107,7 @@ Thumbs.db
 tmp/
 temp/
 _shots/
+테스트/
 
 # Windows nul files
 nul

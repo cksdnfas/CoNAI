@@ -21,6 +21,9 @@ function getInitialParams(): NAIParams {
       return {
         ...DEFAULT_PARAMS,
         ...savedParams,
+        auto_quality_tags: savedParams.auto_quality_tags ?? DEFAULT_PARAMS.auto_quality_tags,
+        uc_preset: savedParams.uc_preset ?? DEFAULT_PARAMS.uc_preset,
+        rating_preset: savedParams.rating_preset ?? DEFAULT_PARAMS.rating_preset,
         resolutionConfig: savedParams.resolutionConfig || DEFAULT_RESOLUTION_CONFIG,
         prompt: '',
         negative_prompt: '',

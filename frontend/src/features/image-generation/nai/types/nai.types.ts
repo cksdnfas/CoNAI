@@ -17,6 +17,9 @@ export interface NAIParams {
   model: string
   prompt: string
   negative_prompt: string
+  auto_quality_tags: boolean
+  uc_preset: 'none' | 'light' | 'heavy' | 'human_focus'
+  rating_preset: 'general' | 'sensitive' | 'questionable' | 'explicit'
   resolution: string
   resolutionConfig: ResolutionConfig
   steps: number

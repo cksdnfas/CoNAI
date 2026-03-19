@@ -143,18 +143,6 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
         Variety plus
       </label>
 
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() =>
-          onChange((previous) => ({
-            ...previous,
-            steps: 42,
-          }))
-        }
-      >
-        Update sampling steps
-      </button>
     </section>
   )
 }

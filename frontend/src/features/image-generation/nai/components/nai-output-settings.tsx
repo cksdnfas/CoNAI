@@ -31,18 +31,6 @@ export default function NAIOutputSettings({ params, onChange, disabled = false }
         />
       </label>
 
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() =>
-          onChange((previous) => ({
-            ...previous,
-            n_samples: 3,
-          }))
-        }
-      >
-        Update output samples
-      </button>
     </section>
   )
 }

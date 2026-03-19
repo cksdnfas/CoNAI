@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { parseWildcards } from '@/utils/wildcard-parser'
 import { cleanPrompt, isPromptEmpty } from '@/utils/prompt-cleaner'
 import { naiApi } from '@/services/nai-api'
-import { RESOLUTIONS } from '../nai/constants/nai.constants'
+import { NAI_QUALITY_TAGS, NAI_UC_PRESETS, RESOLUTIONS } from '../nai/constants/nai.constants'
 import type { NAIParams, NAIUserData } from '@/features/image-generation/nai/types/nai.types'
 
 interface UseNAIGenerationOptions {
@@ -28,6 +28,28 @@ function getBaseCost(input: CostInput): number {
 
 function getRandomInt(max: number): number {
   return Math.floor(Math.random() * Math.max(max, 1))
+}
+
+function joinPromptParts(parts: Array<string | null | undefined>): string {
+  return cleanPrompt(parts.filter((part): part is string => Boolean(part && part.trim())).join(', '))
+}
+
+function getRatingPrompt(rating: NAIParams['rating_preset']): string {
+  switch (rating) {
+    case 'general':
+      return 'rating:general, safe'
+    case 'questionable':
+      return 'rating:questionable'
+    case 'explicit':
+      return 'rating:explicit'
+    case 'sensitive':
+    default:
+      return 'rating:sensitive'
+  }
+}
+
+function getRatingNegative(rating: NAIParams['rating_preset']): string {
+  return rating === 'general' ? 'nsfw' : ''
 }
 
 export function useNAIGeneration({ token, onLogout }: UseNAIGenerationOptions) {
@@ -143,7 +165,15 @@ export function useNAIGeneration({ token, onLogout }: UseNAIGenerationOptions) {
         const parsedPrompt = cleanPrompt(parsedPromptResult.text)
         const parsedNegativePrompt = cleanPrompt(parsedNegativeResult.text)
 
-        if (isPromptEmpty(parsedPrompt)) {
+        const qualityTags = params.auto_quality_tags ? NAI_QUALITY_TAGS[params.model] || '' : ''
+        const ucPreset = params.uc_preset !== 'none' ? NAI_UC_PRESETS[params.model]?.[params.uc_preset] || '' : ''
+        const ratingPrompt = getRatingPrompt(params.rating_preset)
+        const ratingNegative = getRatingNegative(params.rating_preset)
+
+        const finalPrompt = joinPromptParts([parsedPrompt, ratingPrompt, qualityTags])
+        const finalNegativePrompt = joinPromptParts([parsedNegativePrompt, ucPreset, ratingNegative])
+
+        if (isPromptEmpty(finalPrompt)) {
           setError('Prompt cannot be empty.')
           return
         }
@@ -155,8 +185,8 @@ export function useNAIGeneration({ token, onLogout }: UseNAIGenerationOptions) {
         const resolution = getResolution(params)
 
         await naiApi.generateImage(token, {
-          prompt: parsedPrompt,
-          negative_prompt: parsedNegativePrompt,
+          prompt: finalPrompt,
+          negative_prompt: finalNegativePrompt,
           model: params.model,
           width: resolution.width,
           height: resolution.height,
