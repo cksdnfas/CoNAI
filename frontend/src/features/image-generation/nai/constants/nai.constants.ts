@@ -15,9 +15,9 @@ export const PARAMS_STORAGE_KEY = 'nai_generation_params'
 export const GROUP_STORAGE_KEY = 'nai_selected_group_id'
 
 export const NAI_MODEL_OPTIONS = [
-  { value: 'nai-diffusion-4-5-curated', label: 'NAI Diffusion 4.5 Curated' },
-  { value: 'nai-diffusion-4-5-full', label: 'NAI Diffusion 4.5 Full' },
-  { value: 'nai-diffusion-3', label: 'NAI Diffusion 3' },
+  { value: 'nai-diffusion-4-5-curated', label: 'NAI Diffusion 4.5 Curated', supportsVibe: true, supportsCharacterRef: true },
+  { value: 'nai-diffusion-4-5-full', label: 'NAI Diffusion 4.5 Full', supportsVibe: true, supportsCharacterRef: true },
+  { value: 'nai-diffusion-3', label: 'NAI Diffusion 3', supportsVibe: false, supportsCharacterRef: false },
 ] as const
 
 export const NAI_QUALITY_TAGS: Record<string, string> = {

@@ -12,6 +12,7 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
   const resolutionOptions = Object.keys(RESOLUTIONS)
   const qualityTagsPreview = params.auto_quality_tags ? NAI_QUALITY_TAGS[params.model] || '' : ''
   const ucPresetPreview = params.uc_preset !== 'none' ? NAI_UC_PRESETS[params.model]?.[params.uc_preset] || '' : ''
+  const selectedModel = NAI_MODEL_OPTIONS.find((option) => option.value === params.model)
 
   return (
     <section className="space-y-3 rounded-md border p-3">
@@ -160,6 +161,10 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
         </p>
         <p className="mt-1">
           <span className="font-medium text-foreground">UC preset:</span> {ucPresetPreview || 'None'}
+        </p>
+        <p className="mt-1">
+          <span className="font-medium text-foreground">Model support:</span>{' '}
+          {selectedModel ? [selectedModel.supportsVibe ? 'Vibe' : null, selectedModel.supportsCharacterRef ? 'Character Ref' : null].filter(Boolean).join(', ') || 'Basic generate only' : 'Unknown'}
         </p>
         <p className="mt-1">
           <span className="font-medium text-foreground">Note:</span> wildcard parsing stays on your original prompt/negative prompt first, then presets are appended.
