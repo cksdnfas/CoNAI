@@ -347,7 +347,7 @@ export function ImageGroupsPage() {
               emptyDescription={isGroupListView ? t('imageGroups:emptyState.createPrompt') : t('imageGroups:emptyState.noSubgroupsHelp')}
               hasVisibleCards={hasVisibleCards}
               cards={
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
                   {!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0 ? (
                     <ImageViewCard
                       key={`image-view-${currentParentId}`}

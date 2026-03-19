@@ -1,4 +1,13 @@
 import type { Dispatch, SetStateAction } from 'react'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { NAI_MODEL_OPTIONS, NAI_QUALITY_TAGS, NAI_UC_PRESETS, RESOLUTIONS } from '../constants/nai.constants'
 import type { NAIParams } from '../types/nai.types'
 
@@ -23,77 +32,89 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
     <section className="space-y-4 rounded-md border p-3">
       <h3 className="text-sm font-semibold">NAI Basic Settings</h3>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <label htmlFor="nai-model" className="block space-y-1 text-sm">
+      <div className="grid gap-4 md:grid-cols-3">
+        <label htmlFor="nai-model" className="grid gap-2 text-sm">
           <span>Model</span>
-          <select
-            id="nai-model"
+          <Select
             value={params.model}
-            disabled={disabled}
-            onChange={(event) =>
+            onValueChange={(value) =>
               onChange((previous) => ({
                 ...previous,
-                model: event.target.value,
+                model: value,
               }))
             }
+            disabled={disabled}
           >
-            {NAI_MODEL_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="nai-model" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {NAI_MODEL_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
 
-        <label htmlFor="nai-action" className="block space-y-1 text-sm">
+        <label htmlFor="nai-action" className="grid gap-2 text-sm">
           <span>Mode</span>
-          <select
-            id="nai-action"
+          <Select
             value={params.action}
-            disabled={disabled}
-            onChange={(event) =>
+            onValueChange={(value) =>
               onChange((previous) => ({
                 ...previous,
-                action: event.target.value as NAIParams['action'],
+                action: value as NAIParams['action'],
               }))
             }
+            disabled={disabled}
           >
-            <option value="generate">Text to image</option>
-            <option value="img2img">Image to image</option>
-            <option value="infill">Infill</option>
-          </select>
+            <SelectTrigger id="nai-action" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="generate">Text to image</SelectItem>
+              <SelectItem value="img2img">Image to image</SelectItem>
+              <SelectItem value="infill">Infill</SelectItem>
+            </SelectContent>
+          </Select>
         </label>
 
-        <label htmlFor="nai-resolution-fixed" className="block space-y-1 text-sm">
+        <label htmlFor="nai-resolution-fixed" className="grid gap-2 text-sm">
           <span>Resolution</span>
-          <select
-            id="nai-resolution-fixed"
+          <Select
             value={params.resolutionConfig.fixed}
-            disabled={disabled || params.action !== 'generate'}
-            onChange={(event) =>
+            onValueChange={(value) =>
               onChange((previous) => ({
                 ...previous,
-                resolution: event.target.value,
+                resolution: value,
                 resolutionConfig: {
                   ...previous.resolutionConfig,
                   mode: 'fixed',
-                  fixed: event.target.value,
+                  fixed: value,
                 },
               }))
             }
+            disabled={disabled || params.action !== 'generate'}
           >
-            {resolutionOptions.map((resolutionKey) => (
-              <option key={resolutionKey} value={resolutionKey}>
-                {resolutionKey}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="nai-resolution-fixed" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {resolutionOptions.map((resolutionKey) => (
+                <SelectItem key={resolutionKey} value={resolutionKey}>
+                  {resolutionKey}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
       </div>
 
-      <label htmlFor="nai-prompt" className="block space-y-1 text-sm">
+      <label htmlFor="nai-prompt" className="grid gap-2 text-sm">
         <span>Prompt</span>
-        <textarea
+        <Textarea
           id="nai-prompt"
           aria-label="NAI prompt"
           rows={4}
@@ -108,9 +129,9 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
         />
       </label>
 
-      <label htmlFor="nai-negative-prompt" className="block space-y-1 text-sm">
+      <label htmlFor="nai-negative-prompt" className="grid gap-2 text-sm">
         <span>Negative prompt</span>
-        <textarea
+        <Textarea
           id="nai-negative-prompt"
           rows={2}
           value={params.negative_prompt}
@@ -124,62 +145,69 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
         />
       </label>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <label htmlFor="nai-uc-preset" className="block space-y-1 text-sm">
+      <div className="grid gap-4 md:grid-cols-2">
+        <label htmlFor="nai-uc-preset" className="grid gap-2 text-sm">
           <span>UC preset</span>
-          <select
-            id="nai-uc-preset"
+          <Select
             value={params.uc_preset}
-            disabled={disabled}
-            onChange={(event) =>
+            onValueChange={(value) =>
               onChange((previous) => ({
                 ...previous,
-                uc_preset: event.target.value as NAIParams['uc_preset'],
+                uc_preset: value as NAIParams['uc_preset'],
               }))
             }
+            disabled={disabled}
           >
-            <option value="none">None</option>
-            <option value="light">Light</option>
-            <option value="heavy">Heavy</option>
-            <option value="human_focus">Human focus</option>
-          </select>
+            <SelectTrigger id="nai-uc-preset" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              <SelectItem value="light">Light</SelectItem>
+              <SelectItem value="heavy">Heavy</SelectItem>
+              <SelectItem value="human_focus">Human focus</SelectItem>
+            </SelectContent>
+          </Select>
         </label>
 
-        <label htmlFor="nai-rating-preset" className="block space-y-1 text-sm">
+        <label htmlFor="nai-rating-preset" className="grid gap-2 text-sm">
           <span>Rating</span>
-          <select
-            id="nai-rating-preset"
+          <Select
             value={params.rating_preset}
-            disabled={disabled}
-            onChange={(event) =>
+            onValueChange={(value) =>
               onChange((previous) => ({
                 ...previous,
-                rating_preset: event.target.value as NAIParams['rating_preset'],
+                rating_preset: value as NAIParams['rating_preset'],
               }))
             }
+            disabled={disabled}
           >
-            <option value="general">General</option>
-            <option value="sensitive">Sensitive</option>
-            <option value="questionable">Questionable</option>
-            <option value="explicit">Explicit</option>
-          </select>
+            <SelectTrigger id="nai-rating-preset" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="general">General</SelectItem>
+              <SelectItem value="sensitive">Sensitive</SelectItem>
+              <SelectItem value="questionable">Questionable</SelectItem>
+              <SelectItem value="explicit">Explicit</SelectItem>
+            </SelectContent>
+          </Select>
         </label>
       </div>
 
-      <label htmlFor="nai-auto-quality-tags" className="flex items-center gap-2 text-sm">
-        <input
-          id="nai-auto-quality-tags"
-          type="checkbox"
+      <label htmlFor="nai-auto-quality-tags" className="flex items-center justify-between gap-3 py-1 text-sm">
+        <span>Apply model quality tags automatically</span>
+        <Switch
+          aria-label="Apply model quality tags automatically"
           checked={params.auto_quality_tags}
           disabled={disabled}
-          onChange={(event) =>
+          onCheckedChange={(checked) =>
             onChange((previous) => ({
               ...previous,
-              auto_quality_tags: event.target.checked,
+              auto_quality_tags: checked,
             }))
           }
         />
-        Apply model quality tags automatically
       </label>
 
       <div className="grid gap-2 rounded-md border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">

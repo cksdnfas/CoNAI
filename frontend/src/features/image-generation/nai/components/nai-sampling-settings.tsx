@@ -1,4 +1,13 @@
 import type { Dispatch, SetStateAction } from 'react'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import type { NAIParams } from '../types/nai.types'
 
 interface NAISamplingSettingsProps {
@@ -12,53 +21,61 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
     <section className="space-y-4 rounded-md border p-3">
       <h3 className="text-sm font-semibold">NAI Sampling Settings</h3>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <label htmlFor="nai-sampler" className="block space-y-1 text-sm">
+      <div className="grid gap-4 md:grid-cols-2">
+        <label htmlFor="nai-sampler" className="grid gap-2 text-sm">
           <span>Sampler</span>
-          <select
-            id="nai-sampler"
+          <Select
             value={params.sampler}
-            disabled={disabled}
-            onChange={(event) =>
+            onValueChange={(value) =>
               onChange((previous) => ({
                 ...previous,
-                sampler: event.target.value,
+                sampler: value,
               }))
             }
+            disabled={disabled}
           >
-            <option value="k_euler">Euler</option>
-            <option value="k_euler_ancestral">Euler Ancestral</option>
-            <option value="k_dpmpp_2m">DPM++ 2M</option>
-            <option value="ddim">DDIM</option>
-          </select>
+            <SelectTrigger id="nai-sampler" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="k_euler">Euler</SelectItem>
+              <SelectItem value="k_euler_ancestral">Euler Ancestral</SelectItem>
+              <SelectItem value="k_dpmpp_2m">DPM++ 2M</SelectItem>
+              <SelectItem value="ddim">DDIM</SelectItem>
+            </SelectContent>
+          </Select>
         </label>
 
         {params.action === 'generate' ? (
-          <label htmlFor="nai-noise-schedule" className="block space-y-1 text-sm">
+          <label htmlFor="nai-noise-schedule" className="grid gap-2 text-sm">
             <span>Noise schedule</span>
-            <select
-              id="nai-noise-schedule"
+            <Select
               value={params.noise_schedule}
-              disabled={disabled}
-              onChange={(event) =>
+              onValueChange={(value) =>
                 onChange((previous) => ({
                   ...previous,
-                  noise_schedule: event.target.value,
+                  noise_schedule: value,
                 }))
               }
+              disabled={disabled}
             >
-              <option value="karras">Karras</option>
-              <option value="native">Native</option>
-              <option value="exponential">Exponential</option>
-            </select>
+              <SelectTrigger id="nai-noise-schedule" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="karras">Karras</SelectItem>
+                <SelectItem value="native">Native</SelectItem>
+                <SelectItem value="exponential">Exponential</SelectItem>
+              </SelectContent>
+            </Select>
           </label>
         ) : (
           <div />
         )}
 
-        <label htmlFor="nai-seed" className="block space-y-1 text-sm">
+        <label htmlFor="nai-seed" className="grid gap-2 text-sm">
           <span>Seed</span>
-          <input
+          <Input
             id="nai-seed"
             type="number"
             value={params.seed ?? ''}
@@ -73,9 +90,9 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
           />
         </label>
 
-        <label htmlFor="nai-steps" className="block space-y-1 text-sm">
+        <label htmlFor="nai-steps" className="grid gap-2 text-sm">
           <span>Steps</span>
-          <input
+          <Input
             id="nai-steps"
             aria-label="NAI steps"
             type="number"
@@ -92,9 +109,9 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
           />
         </label>
 
-        <label htmlFor="nai-scale" className="block space-y-1 text-sm">
+        <label htmlFor="nai-scale" className="grid gap-2 text-sm">
           <span>Guidance scale</span>
-          <input
+          <Input
             id="nai-scale"
             type="number"
             min={0}
@@ -111,9 +128,9 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
           />
         </label>
 
-        <label htmlFor="nai-cfg-rescale" className="block space-y-1 text-sm">
+        <label htmlFor="nai-cfg-rescale" className="grid gap-2 text-sm">
           <span>CFG rescale</span>
-          <input
+          <Input
             id="nai-cfg-rescale"
             type="number"
             min={0}
@@ -130,9 +147,9 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
           />
         </label>
 
-        <label htmlFor="nai-uncond-scale" className="block space-y-1 text-sm">
+        <label htmlFor="nai-uncond-scale" className="grid gap-2 text-sm">
           <span>Uncond scale</span>
-          <input
+          <Input
             id="nai-uncond-scale"
             type="number"
             min={0}
@@ -151,9 +168,9 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
 
         {params.action !== 'generate' ? (
           <>
-            <label htmlFor="nai-strength" className="block space-y-1 text-sm">
+            <label htmlFor="nai-strength" className="grid gap-2 text-sm">
               <span>Strength</span>
-              <input
+              <Input
                 id="nai-strength"
                 type="number"
                 min={0}
@@ -170,9 +187,9 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
               />
             </label>
 
-            <label htmlFor="nai-noise" className="block space-y-1 text-sm">
+            <label htmlFor="nai-noise" className="grid gap-2 text-sm">
               <span>Noise</span>
-              <input
+              <Input
                 id="nai-noise"
                 type="number"
                 min={0}
@@ -192,20 +209,19 @@ export default function NAISamplingSettings({ params, onChange, disabled = false
         ) : null}
       </div>
 
-      <label htmlFor="nai-variety-plus" className="flex items-center gap-2 text-sm">
-        <input
-          id="nai-variety-plus"
-          type="checkbox"
+      <label htmlFor="nai-variety-plus" className="flex items-center justify-between gap-3 py-1 text-sm">
+        <span>Variety plus</span>
+        <Switch
+          aria-label="Variety plus"
           checked={params.variety_plus}
           disabled={disabled}
-          onChange={(event) =>
+          onCheckedChange={(checked) =>
             onChange((previous) => ({
               ...previous,
-              variety_plus: event.target.checked,
+              variety_plus: checked,
             }))
           }
         />
-        Variety plus
       </label>
     </section>
   )

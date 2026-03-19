@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AutoFolderGroupWithStats, GroupWithStats } from '@conai/shared'
@@ -6,7 +6,6 @@ import type { ImageRecord, PageSize } from '@/types/image'
 import { autoFolderGroupsApi } from '@/services/auto-folder-groups-api'
 import { useAutoFolderChildGroups, useAutoFolderRootGroups, useRebuildAutoFolderGroups } from '@/hooks/use-auto-folder-groups'
 import { useImageListSettings } from '@/hooks/use-image-list-settings'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { GroupBreadcrumb } from './group-breadcrumb'
 import { GroupExplorerImageBrowser } from './group-explorer-image-browser'
@@ -57,6 +56,7 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
   const { data: rootGroupsData, isLoading: rootGroupsLoading } = useAutoFolderRootGroups()
   const { data: childGroupsData, isLoading: childGroupsLoading } = useAutoFolderChildGroups(currentParentId)
   const rebuildMutation = useRebuildAutoFolderGroups()
+  const lastAutoNavigatedId = useRef<number | null>(null)
 
   const groups = useMemo(
     () => (currentParentId === null ? rootGroupsData : childGroupsData) || [],
@@ -159,9 +159,10 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
   )
 
   useEffect(() => {
-    if (groups.length === 1 && currentParentId !== null) {
+    if (groups.length === 1 && currentParentId !== null && lastAutoNavigatedId.current !== currentParentId) {
       const singleGroup = groups[0]
       if (singleGroup.image_count === 0 && (singleGroup.child_count || 0) === 1) {
+        lastAutoNavigatedId.current = currentParentId
         onShowSnackbar(
           t('imageGroups:autoNavigate', {
             from: currentGroupInfo?.display_name || t('imageGroups:defaultGroupName'),
@@ -193,6 +194,7 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
 
   const handleGroupClick = useCallback(
     (group: AutoFolderGroupWithStats) => {
+      lastAutoNavigatedId.current = null
       if (isGroupListView) {
         void navigateToGroup(group)
         return
@@ -210,7 +212,7 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
 
       onShowSnackbar(t('imageGroups:messages.emptyGroup'), 'info')
     },
-    [fetchGroupImages, groupImagesPageSize, isGroupListView, navigateToGroup, onShowSnackbar, t],
+    [isGroupListView, navigateToGroup, onShowSnackbar, t],
   )
 
   const handleGroupImagesModalClose = () => {
@@ -262,11 +264,7 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <Alert>
-          <AlertDescription>{t('imageGroups:autoFolder.readOnlyMessage')}</AlertDescription>
-        </Alert>
-
+      <div className="flex items-center justify-end">
         <Button onClick={() => void handleRebuild()} disabled={rebuildMutation.isPending}>
           {rebuildMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           {rebuildMutation.isPending ? t('imageGroups:autoFolder.rebuilding') : t('imageGroups:autoFolder.refresh')}
@@ -282,7 +280,7 @@ export default function AutoFolderGroupsContent({ onShowSnackbar }: AutoFolderGr
         emptyDescription={isGroupListView ? t('imageGroups:autoFolder.emptyState.refreshPrompt') : t('imageGroups:autoFolder.emptyState.noSubfoldersHelp')}
         hasVisibleCards={hasVisibleCards}
         cards={
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
             {!isGroupListView && currentParentId !== null && currentGroupInfo && currentGroupInfo.image_count > 0 ? (
               <AutoFolderImageViewCard
                 key={`auto-folder-image-view-${currentParentId}`}

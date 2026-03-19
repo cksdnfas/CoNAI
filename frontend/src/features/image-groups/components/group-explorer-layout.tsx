@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react'
-import { FolderTree, Loader2 } from 'lucide-react'
+import { FolderTree, Loader2, X as CloseIcon } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { Button } from '@/components/ui/button'
+import { VisuallyHidden } from 'radix-ui'
 
 interface GroupExplorerLayoutProps {
   breadcrumb?: ReactNode
@@ -58,13 +60,23 @@ export function GroupExplorerLayout({
         </div>
       )}
 
-      <SheetContent side="bottom" className="flex h-[85vh] max-h-[85vh] flex-col rounded-t-2xl p-0 lg:hidden" showCloseButton={true}>
+      <SheetContent side="bottom" className="flex h-[85vh] max-h-[85vh] flex-col rounded-t-2xl p-0 lg:hidden" showCloseButton={false}>
+        <VisuallyHidden.Root>
+          <SheetTitle>그룹 이미지</SheetTitle>
+        </VisuallyHidden.Root>
         <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-muted" />
-        <div className="border-b px-4 py-3">
-          <p className="text-sm font-semibold text-foreground">이미지 탐색</p>
-          <p className="text-xs text-muted-foreground">선택한 그룹의 이미지를 아래 패널에서 탐색하나이다.</p>
+        <div className="min-h-0 flex-1 overflow-hidden">{mobileSheetContent}</div>
+        <div className="border-t px-4 py-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => onMobileSheetOpenChange(false)}
+          >
+            <CloseIcon className="mr-2 h-4 w-4" />
+            닫기
+          </Button>
         </div>
-        <div className="min-h-0 flex-1 overflow-hidden p-3">{mobileSheetContent}</div>
       </SheetContent>
     </Sheet>
   )

@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import InfiniteScroll from 'react-infinite-scroll-component'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ImageRecord } from '@/types/image'
 import { getBackendOrigin } from '@/utils/backend'
 import { Button } from '@/components/ui/button'
@@ -53,6 +52,30 @@ export default function ImageList({
   const [viewerImages, setViewerImages] = useState<ImageRecord[]>(images)
   const [editorSession, setEditorSession] = useState<{ fileId: number; compositeHash: string; index: number } | null>(null)
   const [lastCheckedIndex, setLastCheckedIndex] = useState<number | null>(null)
+
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (mode !== 'infinite') return
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const hasMore = infiniteScroll?.hasMore ?? false
+    const loadMore = infiniteScroll?.loadMore
+    if (!hasMore || !loadMore || loading) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadMore()
+        }
+      },
+      { threshold: 0.1 },
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [mode, infiniteScroll?.hasMore, infiniteScroll?.loadMore, loading])
 
   useEffect(() => {
     setViewerImages(images)
@@ -226,7 +249,7 @@ export default function ImageList({
     setViewerIndex(index)
   }
 
-  if (loading) {
+  if (loading && viewerImages.length === 0) {
     return (
       <div className="space-y-3" data-testid="image-list-root" data-layout-mode={viewMode} data-columns={markerColumns}>
         <div className="py-10 text-center text-sm text-muted-foreground">Loading images...</div>
@@ -258,17 +281,7 @@ export default function ImageList({
     <div className="space-y-3" data-testid="image-list-root" data-layout-mode={viewMode} data-columns={markerColumns}>
       <div className="text-xs text-muted-foreground">Total: {total ?? viewerImages.length}</div>
       {mode === 'infinite' ? (
-        <InfiniteScroll
-          dataLength={infiniteScroll?.rawDataLength ?? viewerImages.length}
-          next={infiniteScroll?.loadMore || (() => { })}
-          hasMore={infiniteScroll?.hasMore || false}
-          loader={
-            <div className="flex justify-center py-4">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            </div>
-          }
-          scrollThreshold={0.9}
-        >
+        <>
           {isMasonryMode ? (
             <div className="flex gap-2 items-start">
               {masonryColumns.map((column, colIdx) => (
@@ -393,7 +406,12 @@ export default function ImageList({
               })}
             </ul>
           )}
-        </InfiniteScroll>
+          {(infiniteScroll?.hasMore ?? false) ? (
+            <div ref={sentinelRef} className="flex justify-center py-4">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          ) : null}
+        </>
       ) : (
         <ul className={listClassName} style={listStyle}>
           {viewerImages.map((image, index) => {

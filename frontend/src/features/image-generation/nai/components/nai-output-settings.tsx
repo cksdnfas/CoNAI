@@ -1,5 +1,6 @@
 import type { ChangeEvent, Dispatch, SetStateAction } from 'react'
 import { X } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import type { NAIParams } from '../types/nai.types'
 
 interface NAIOutputSettingsProps {
@@ -35,9 +36,9 @@ export default function NAIOutputSettings({ params, onChange, disabled = false }
     <section className="space-y-4 rounded-md border p-3">
       <h3 className="text-sm font-semibold">NAI Output Settings</h3>
 
-      <label htmlFor="nai-output-samples" className="block max-w-[180px] space-y-1 text-sm">
+      <label htmlFor="nai-output-samples" className="grid max-w-[180px] gap-2 text-sm">
         <span>Samples</span>
-        <input
+        <Input
           id="nai-output-samples"
           aria-label="NAI output samples"
           type="number"
@@ -55,11 +56,11 @@ export default function NAIOutputSettings({ params, onChange, disabled = false }
       </label>
 
       {params.action !== 'generate' ? (
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="space-y-2 rounded-md border border-dashed p-3">
-            <label htmlFor="nai-source-image" className="block space-y-1 text-sm">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-3 rounded-md border border-dashed p-3">
+            <label htmlFor="nai-source-image" className="grid gap-2 text-sm">
               <span>Source</span>
-              <input
+              <Input
                 id="nai-source-image"
                 type="file"
                 accept="image/*"
@@ -85,10 +86,10 @@ export default function NAIOutputSettings({ params, onChange, disabled = false }
           </div>
 
           {params.action === 'infill' ? (
-            <div className="space-y-2 rounded-md border border-dashed p-3">
-              <label htmlFor="nai-mask-image" className="block space-y-1 text-sm">
+            <div className="space-y-3 rounded-md border border-dashed p-3">
+              <label htmlFor="nai-mask-image" className="grid gap-2 text-sm">
                 <span>Mask</span>
-                <input
+                <Input
                   id="nai-mask-image"
                   type="file"
                   accept="image/*"

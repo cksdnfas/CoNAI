@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface ResponsiveGenerationShellProps {
@@ -10,6 +10,7 @@ interface ResponsiveGenerationShellProps {
   mobileControllerTitle: string
   mobileControllerDescription: string
   mobileTriggerLabel: string
+  mobileFooter?: ReactNode
 }
 
 export function ResponsiveGenerationShell({
@@ -18,7 +19,10 @@ export function ResponsiveGenerationShell({
   mobileControllerTitle,
   mobileControllerDescription,
   mobileTriggerLabel,
+  mobileFooter,
 }: ResponsiveGenerationShellProps) {
+  const hasMobileHeader = Boolean(mobileControllerTitle || mobileControllerDescription)
+
   return (
     <>
       <div className="hidden gap-6 lg:grid lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] lg:items-start">
@@ -40,15 +44,18 @@ export function ResponsiveGenerationShell({
               {mobileTriggerLabel}
             </Button>
           </SheetTrigger>
-          <SheetContent side="bottom" className="flex h-[85vh] max-h-[85vh] flex-col rounded-t-2xl p-0" showCloseButton={true}>
+          <SheetContent side="bottom" className="flex h-[85vh] max-h-[85vh] flex-col rounded-t-2xl p-0" showCloseButton={!mobileFooter}>
             <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-muted" />
-            <SheetHeader className="border-b px-4 py-3 text-left">
-              <SheetTitle>{mobileControllerTitle}</SheetTitle>
-              <SheetDescription>{mobileControllerDescription}</SheetDescription>
-            </SheetHeader>
+            {hasMobileHeader ? (
+              <SheetHeader className="border-b px-4 py-3 text-left">
+                <SheetTitle>{mobileControllerTitle}</SheetTitle>
+                <SheetDescription>{mobileControllerDescription}</SheetDescription>
+              </SheetHeader>
+            ) : null}
             <ScrollArea className="min-h-0 flex-1">
               <div className="p-4 pb-8">{controller}</div>
             </ScrollArea>
+            {mobileFooter ? <SheetFooter className="border-t px-4 py-3">{mobileFooter}</SheetFooter> : null}
           </SheetContent>
         </Sheet>
       </div>

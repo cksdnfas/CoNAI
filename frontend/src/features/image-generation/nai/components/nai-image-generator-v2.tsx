@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { SheetClose } from '@/components/ui/sheet'
 import NAIAnlasDisplay from '@/features/image-generation/bridges/nai-anlas-display'
 import NAIBasicSettings from '@/features/image-generation/bridges/nai-basic-settings'
 import NAISamplingSettings from '@/features/image-generation/bridges/nai-sampling-settings'
@@ -12,12 +13,12 @@ import NAIGroupSelector from '@/features/image-generation/bridges/nai-group-sele
 import RepeatControls from '@/features/workflows/components/repeat-controls'
 import { GenerationHistoryList } from '@/features/workflows/components/generation-history-list'
 import GroupAssignModal from '@/features/image-groups/components/group-assign-modal'
-import { useNAIParams } from '../hooks/use-nai-params'
-import { useNAIGroupSelection } from '../hooks/use-nai-group-selection'
+import { ResponsiveGenerationShell } from '@/features/image-generation/components/responsive-generation-shell'
 import { useRepeatExecution } from '@/features/image-generation/bridges/use-repeat-execution'
 import { useNAIGeneration } from '@/features/image-generation/bridges/use-nai-generation'
 import { RESOLUTIONS } from '../constants/nai.constants'
-import { ResponsiveGenerationShell } from '@/features/image-generation/components/responsive-generation-shell'
+import { useNAIGroupSelection } from '../hooks/use-nai-group-selection'
+import { useNAIParams } from '../hooks/use-nai-params'
 
 interface NAIImageGeneratorV2Props {
   token: string
@@ -59,6 +60,7 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
         return custom ? { width: custom.width, height: custom.height } : null
       })
       .filter(Boolean) as Array<{ width: number; height: number }>
+
     if (resolutions.length === 0) {
       resolutions.push({ width: 832, height: 1216 })
     }
@@ -97,6 +99,8 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
     return { minCost, maxCost, balance, canGenerate, buttonText }
   }, [userData, params.resolutionConfig, params.steps, params.n_samples, params.uncond_scale, calculateCost])
 
+  const canSubmit = !generating && Boolean(params.prompt) && (!userData || costInfo.canGenerate)
+
   const handleGenerate = async (event?: React.FormEvent) => {
     if (event) {
       event.preventDefault()
@@ -133,22 +137,23 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
 
       <ResponsiveGenerationShell
         mobileTriggerLabel={t('imageGeneration:page.mobileControllerOpen')}
-        mobileControllerTitle={t('imageGeneration:page.mobileControllerTitle')}
+        mobileControllerTitle=""
         mobileControllerDescription=""
-        controller={
-          <form onSubmit={handleGenerate} className="space-y-4">
-            <div className="sticky top-0 z-10 -mx-1 rounded-md bg-background/95 px-1 py-1 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-              <Button
-                className="w-full"
-                type="submit"
-                size="lg"
-                disabled={generating || !params.prompt || (Boolean(userData) && !costInfo.canGenerate)}
-              >
-                {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {costInfo.buttonText}
+        mobileFooter={
+          <div className="grid w-full grid-cols-[1fr_auto] gap-2">
+            <Button type="submit" form="nai-generation-form" size="lg" disabled={!canSubmit}>
+              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {generating ? '생성 중...' : costInfo.buttonText}
+            </Button>
+            <SheetClose asChild>
+              <Button type="button" size="lg" variant="outline">
+                X
               </Button>
-            </div>
-
+            </SheetClose>
+          </div>
+        }
+        controller={
+          <form id="nai-generation-form" onSubmit={handleGenerate} className="space-y-4">
             <NAIBasicSettings params={params} onChange={setParams} disabled={generating} />
             <NAISamplingSettings params={params} onChange={setParams} disabled={generating} />
             <NAIOutputSettings params={params} onChange={setParams} disabled={generating} />
@@ -172,12 +177,7 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
               </CardContent>
             </Card>
 
-            <Button
-              className="w-full"
-              type="submit"
-              size="lg"
-              disabled={generating || !params.prompt || (Boolean(userData) && !costInfo.canGenerate)}
-            >
+            <Button className="hidden w-full lg:flex" type="submit" size="lg" disabled={!canSubmit}>
               {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {generating ? '생성 중...' : costInfo.buttonText}
             </Button>
