@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import { NAI_MODEL_OPTIONS, RESOLUTIONS } from '../constants/nai.constants'
+import { NAI_MODEL_OPTIONS, NAI_QUALITY_TAGS, NAI_UC_PRESETS, RESOLUTIONS } from '../constants/nai.constants'
 import type { NAIParams } from '../types/nai.types'
 
 interface NAIBasicSettingsProps {
@@ -10,6 +10,8 @@ interface NAIBasicSettingsProps {
 
 export default function NAIBasicSettings({ params, onChange, disabled = false }: NAIBasicSettingsProps) {
   const resolutionOptions = Object.keys(RESOLUTIONS)
+  const qualityTagsPreview = params.auto_quality_tags ? NAI_QUALITY_TAGS[params.model] || '' : ''
+  const ucPresetPreview = params.uc_preset !== 'none' ? NAI_UC_PRESETS[params.model]?.[params.uc_preset] || '' : ''
 
   return (
     <section className="space-y-3 rounded-md border p-3">
@@ -150,6 +152,19 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
         />
         Apply model quality tags automatically
       </label>
+
+      <div className="rounded-md border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
+        <p className="font-medium text-foreground">Auto-apply preview</p>
+        <p className="mt-2">
+          <span className="font-medium text-foreground">Quality tags:</span> {qualityTagsPreview || 'Disabled'}
+        </p>
+        <p className="mt-1">
+          <span className="font-medium text-foreground">UC preset:</span> {ucPresetPreview || 'None'}
+        </p>
+        <p className="mt-1">
+          <span className="font-medium text-foreground">Note:</span> wildcard parsing stays on your original prompt/negative prompt first, then presets are appended.
+        </p>
+      </div>
     </section>
   )
 }
