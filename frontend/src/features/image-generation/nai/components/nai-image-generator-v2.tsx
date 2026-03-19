@@ -137,15 +137,17 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
         mobileControllerDescription=""
         controller={
           <form onSubmit={handleGenerate} className="space-y-4">
-            <Button
-              className="w-full"
-              type="submit"
-              size="lg"
-              disabled={generating || !params.prompt || (Boolean(userData) && !costInfo.canGenerate)}
-            >
-              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {costInfo.buttonText}
-            </Button>
+            <div className="sticky top-0 z-10 -mx-1 rounded-md bg-background/95 px-1 py-1 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+              <Button
+                className="w-full"
+                type="submit"
+                size="lg"
+                disabled={generating || !params.prompt || (Boolean(userData) && !costInfo.canGenerate)}
+              >
+                {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {costInfo.buttonText}
+              </Button>
+            </div>
 
             <NAIBasicSettings params={params} onChange={setParams} disabled={generating} />
             <NAISamplingSettings params={params} onChange={setParams} disabled={generating} />

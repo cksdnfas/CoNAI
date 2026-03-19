@@ -32,11 +32,11 @@ export default function NAIOutputSettings({ params, onChange, disabled = false }
   }
 
   return (
-    <section className="space-y-3 rounded-md border p-3">
-      <h3>NAI Output Settings</h3>
+    <section className="space-y-4 rounded-md border p-3">
+      <h3 className="text-sm font-semibold">NAI Output Settings</h3>
 
-      <label htmlFor="nai-output-samples" className="block space-y-1 text-sm">
-        <span>Number of samples</span>
+      <label htmlFor="nai-output-samples" className="block max-w-[180px] space-y-1 text-sm">
+        <span>Samples</span>
         <input
           id="nai-output-samples"
           aria-label="NAI output samples"
@@ -55,37 +55,39 @@ export default function NAIOutputSettings({ params, onChange, disabled = false }
       </label>
 
       {params.action !== 'generate' ? (
-        <div className="space-y-3 rounded-md border border-dashed p-3">
-          <label htmlFor="nai-source-image" className="block space-y-1 text-sm">
-            <span>Source image</span>
-            <input
-              id="nai-source-image"
-              type="file"
-              accept="image/*"
-              disabled={disabled}
-              onChange={(event) => void handleImageFile(event, 'source_image')}
-            />
-          </label>
-
-          {params.source_image ? (
-            <div className="relative overflow-hidden rounded-md border bg-muted/20 p-2">
-              <img src={params.source_image} alt="Source preview" className="max-h-48 w-full rounded object-contain" />
-              <button
-                type="button"
-                className="absolute top-2 right-2 rounded-full border bg-background/80 p-1"
-                onClick={() => onChange((previous) => ({ ...previous, source_image: null }))}
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-2 rounded-md border border-dashed p-3">
+            <label htmlFor="nai-source-image" className="block space-y-1 text-sm">
+              <span>Source</span>
+              <input
+                id="nai-source-image"
+                type="file"
+                accept="image/*"
                 disabled={disabled}
-                aria-label="Clear source image"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          ) : null}
+                onChange={(event) => void handleImageFile(event, 'source_image')}
+              />
+            </label>
+
+            {params.source_image ? (
+              <div className="relative overflow-hidden rounded-md border bg-muted/20 p-2">
+                <img src={params.source_image} alt="Source preview" className="max-h-48 w-full rounded object-contain" />
+                <button
+                  type="button"
+                  className="absolute top-2 right-2 rounded-full border bg-background/80 p-1"
+                  onClick={() => onChange((previous) => ({ ...previous, source_image: null }))}
+                  disabled={disabled}
+                  aria-label="Clear source image"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : null}
+          </div>
 
           {params.action === 'infill' ? (
-            <>
+            <div className="space-y-2 rounded-md border border-dashed p-3">
               <label htmlFor="nai-mask-image" className="block space-y-1 text-sm">
-                <span>Mask image</span>
+                <span>Mask</span>
                 <input
                   id="nai-mask-image"
                   type="file"
@@ -109,7 +111,7 @@ export default function NAIOutputSettings({ params, onChange, disabled = false }
                   </button>
                 </div>
               ) : null}
-            </>
+            </div>
           ) : null}
         </div>
       ) : null}
