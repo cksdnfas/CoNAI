@@ -134,7 +134,7 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
       <ResponsiveGenerationShell
         mobileTriggerLabel={t('imageGeneration:page.mobileControllerOpen')}
         mobileControllerTitle={t('imageGeneration:page.mobileControllerTitle')}
-        mobileControllerDescription={t('imageGeneration:page.mobileControllerDescription')}
+        mobileControllerDescription=""
         controller={
           <form onSubmit={handleGenerate} className="space-y-4">
             <Button

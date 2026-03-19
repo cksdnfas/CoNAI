@@ -21,12 +21,9 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
 
   return (
     <section className="space-y-4 rounded-md border p-3">
-      <div className="space-y-1">
-        <h3 className="text-sm font-semibold">NAI Basic Settings</h3>
-        <p className="text-xs text-muted-foreground">프롬프트 입력은 그대로 두고, 모델별 보정과 프리셋만 안전하게 덧붙이옵니다.</p>
-      </div>
+      <h3 className="text-sm font-semibold">NAI Basic Settings</h3>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-3">
         <label htmlFor="nai-model" className="block space-y-1 text-sm">
           <span>Model</span>
           <select
@@ -62,8 +59,8 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
             }
           >
             <option value="generate">Text to image</option>
-            <option value="img2img">Image to image (prep)</option>
-            <option value="infill">Infill (prep)</option>
+            <option value="img2img">Image to image</option>
+            <option value="infill">Infill</option>
           </select>
         </label>
 
@@ -72,7 +69,7 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
           <select
             id="nai-resolution-fixed"
             value={params.resolutionConfig.fixed}
-            disabled={disabled}
+            disabled={disabled || params.action !== 'generate'}
             onChange={(event) =>
               onChange((previous) => ({
                 ...previous,
@@ -149,7 +146,7 @@ export default function NAIBasicSettings({ params, onChange, disabled = false }:
         </label>
 
         <label htmlFor="nai-rating-preset" className="block space-y-1 text-sm">
-          <span>Rating preset</span>
+          <span>Rating</span>
           <select
             id="nai-rating-preset"
             value={params.rating_preset}
