@@ -66,6 +66,12 @@ export const naiApi = {
       mask?: string
       reference_image_multiple?: string[]
       reference_strength_multiple?: number[]
+      characters?: Array<{
+        prompt: string
+        uc?: string
+        center_x?: number
+        center_y?: number
+      }>
     },
   ): Promise<{
     historyIds: number[]

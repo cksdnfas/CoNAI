@@ -45,6 +45,12 @@ export function ResponsiveGenerationShell({
             </Button>
           </SheetTrigger>
           <SheetContent side="bottom" className="flex h-[85vh] max-h-[85vh] flex-col rounded-t-2xl p-0" showCloseButton={!mobileFooter}>
+            {!hasMobileHeader && (
+              <>
+                <SheetTitle className="sr-only">{mobileTriggerLabel}</SheetTitle>
+                <SheetDescription className="sr-only">생성 설정 패널</SheetDescription>
+              </>
+            )}
             <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-muted" />
             {hasMobileHeader ? (
               <SheetHeader className="border-b px-4 py-3 text-left">

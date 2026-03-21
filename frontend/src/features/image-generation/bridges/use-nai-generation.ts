@@ -183,6 +183,14 @@ export function useNAIGeneration({ token, onLogout }: UseNAIGenerationOptions) {
         }
 
         const resolution = getResolution(params)
+        const characters = params.character_prompts
+          .filter((entry) => entry.prompt.trim().length > 0)
+          .map((entry) => ({
+            prompt: entry.prompt.trim(),
+            uc: entry.uc.trim(),
+            center_x: entry.center_x,
+            center_y: entry.center_y,
+          }))
 
         await naiApi.generateImage(token, {
           prompt: finalPrompt,
@@ -203,6 +211,7 @@ export function useNAIGeneration({ token, onLogout }: UseNAIGenerationOptions) {
           strength: params.action === 'generate' ? undefined : params.strength,
           noise: params.action === 'generate' ? undefined : params.noise,
           groupId: selectedGroupId || undefined,
+          characters: characters.length > 0 ? characters : undefined,
         })
 
         await fetchUserData()

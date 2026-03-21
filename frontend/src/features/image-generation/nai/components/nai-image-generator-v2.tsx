@@ -10,6 +10,8 @@ import NAIBasicSettings from '@/features/image-generation/bridges/nai-basic-sett
 import NAISamplingSettings from '@/features/image-generation/bridges/nai-sampling-settings'
 import NAIOutputSettings from '@/features/image-generation/bridges/nai-output-settings'
 import NAIGroupSelector from '@/features/image-generation/bridges/nai-group-selector'
+import NAICharacterPrompts from './nai-character-prompts'
+import NAIInputImages from './nai-input-images'
 import RepeatControls from '@/features/workflows/components/repeat-controls'
 import { GenerationHistoryList } from '@/features/workflows/components/generation-history-list'
 import GroupAssignModal from '@/features/image-groups/components/group-assign-modal'
@@ -155,6 +157,8 @@ export default function NAIImageGeneratorV2({ token, onLogout }: NAIImageGenerat
         controller={
           <form id="nai-generation-form" onSubmit={handleGenerate} className="space-y-4">
             <NAIBasicSettings params={params} onChange={setParams} disabled={generating} />
+            <NAICharacterPrompts params={params} onChange={setParams} disabled={generating} />
+            <NAIInputImages params={params} onChange={setParams} disabled={generating} />
             <NAISamplingSettings params={params} onChange={setParams} disabled={generating} />
             <NAIOutputSettings params={params} onChange={setParams} disabled={generating} />
 

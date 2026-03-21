@@ -54,6 +54,12 @@ export default function ImageList({
   const [lastCheckedIndex, setLastCheckedIndex] = useState<number | null>(null)
 
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const infiniteScrollCycleKey = infiniteScroll?.rawDataLength ?? viewerImages.length
+
+  const infiniteScrollStateRef = useRef({ loadMore: infiniteScroll?.loadMore, loading })
+  useEffect(() => {
+    infiniteScrollStateRef.current = { loadMore: infiniteScroll?.loadMore, loading }
+  }, [infiniteScroll?.loadMore, loading])
 
   useEffect(() => {
     if (mode !== 'infinite') return
@@ -61,21 +67,25 @@ export default function ImageList({
     if (!sentinel) return
 
     const hasMore = infiniteScroll?.hasMore ?? false
-    const loadMore = infiniteScroll?.loadMore
-    if (!hasMore || !loadMore || loading) return
+    if (!hasMore) return
+
+    const rootElement = sentinel.closest('[data-slot="scroll-area-viewport"], [data-radix-scroll-area-viewport]') || null
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          loadMore()
+          const { loadMore, loading: currentLoading } = infiniteScrollStateRef.current
+          if (loadMore && !currentLoading) {
+            loadMore()
+          }
         }
       },
-      { threshold: 0.1 },
+      { root: rootElement, rootMargin: '400px', threshold: 0 },
     )
 
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [mode, infiniteScroll?.hasMore, infiniteScroll?.loadMore, loading])
+  }, [infiniteScrollCycleKey, mode, infiniteScroll?.hasMore])
 
   useEffect(() => {
     setViewerImages(images)

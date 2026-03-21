@@ -30,6 +30,13 @@ interface NAIMetadataParams {
   reference_image_multiple?: string[];
   reference_information_extracted_multiple?: number[];
   reference_strength_multiple?: number[];
+  // Character Prompts (V4+)
+  characters?: Array<{
+    prompt: string;
+    uc?: string;
+    center_x?: number;
+    center_y?: number;
+  }>;
   // Group Assignment
   groupId?: number;
 }

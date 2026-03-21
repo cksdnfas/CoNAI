@@ -1,3 +1,5 @@
+import type { NAIParams } from '../types/nai.types'
+
 export const RESOLUTIONS = {
   '512×768': { width: 512, height: 768 },
   '768×512': { width: 768, height: 512 },
@@ -52,7 +54,7 @@ export const DEFAULT_RESOLUTION_CONFIG = {
   swapDimensions: false,
 }
 
-export const DEFAULT_PARAMS = {
+export const DEFAULT_PARAMS: NAIParams = {
   model: 'nai-diffusion-4-5-curated',
   action: 'generate',
   prompt: '',
@@ -75,4 +77,5 @@ export const DEFAULT_PARAMS = {
   noise: 0.0,
   source_image: null,
   mask_image: null,
+  character_prompts: [],
 } as const

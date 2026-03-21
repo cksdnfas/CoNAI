@@ -22,13 +22,9 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
       return;
     }
 
-    // 메타데이터 전처리
     const metadata = preprocessMetadata(req.body);
-
-    // v4.5 모델 여부 확인
     const isV4_5 = metadata.model?.includes('nai-diffusion-4-5');
 
-    // V4.5 최소 필수 파라미터로 시작
     const baseParams: any = {
       params_version: 3,
       width: metadata.width,
@@ -39,73 +35,83 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
       n_samples: metadata.n_samples,
       seed: metadata.seed,
       noise_schedule: metadata.noise_schedule,
-      legacy: false
+      legacy: false,
     };
 
-    // V4/V4.5 전용 파라미터 - v4_prompt 구조 사용
     if (isV4_5 || metadata.model?.includes('nai-diffusion-4')) {
-      // SMEA 비활성화 (고정값)
       baseParams.autoSmea = false;
-
-      // Variety+ 설정
       baseParams.variety_plus = metadata.variety_plus ?? false;
-
-      // 기타 V4 파라미터
       baseParams.uncond_scale = metadata.uncond_scale ?? 1.0;
       baseParams.cfg_rescale = metadata.cfg_rescale ?? 0.7;
       baseParams.dynamic_thresholding = false;
       baseParams.controlnet_strength = 1.0;
       baseParams.ucPreset = metadata.ucPreset || 0;
       baseParams.add_original_image = true;
-
-      // 추가 필수 파라미터
       baseParams.legacy_v3_extend = false;
       baseParams.skip_cfg_above_sigma = null;
       baseParams.use_coords = false;
       baseParams.normalize_reference_strength_multiple = true;
       baseParams.inpaintImg2ImgStrength = 1;
       baseParams.legacy_uc = false;
-      baseParams.characterPrompts = [];
       baseParams.deliberate_euler_ancestral_bug = false;
       baseParams.prefer_brownian = true;
       baseParams.stream = 'msgpack';
       baseParams.negative_prompt = metadata.negative_prompt || '';
 
-      // V4 프롬프트 구조
+      const characterPrompts = (metadata.characters || [])
+        .filter((entry) => typeof entry.prompt === 'string' && entry.prompt.trim().length > 0)
+        .map((entry) => {
+          const center = {
+            x: typeof entry.center_x === 'number' ? entry.center_x : 0.5,
+            y: typeof entry.center_y === 'number' ? entry.center_y : 0.5,
+          };
+
+          return {
+            prompt: entry.prompt.trim(),
+            uc: (entry.uc || '').trim(),
+            center,
+          };
+        });
+
+      baseParams.characterPrompts = characterPrompts;
+      baseParams.use_coords = characterPrompts.length > 0;
+
       baseParams.v4_prompt = {
         caption: {
           base_caption: metadata.prompt,
-          char_captions: []
+          char_captions: characterPrompts.map((entry) => ({
+            char_caption: entry.prompt,
+            centers: [entry.center],
+          })),
         },
-        use_coords: false,
-        use_order: true
+        use_coords: characterPrompts.length > 0,
+        use_order: true,
       };
 
-      // V4 네거티브 프롬프트 구조
       baseParams.v4_negative_prompt = {
         caption: {
           base_caption: metadata.negative_prompt || '',
-          char_captions: []
+          char_captions: characterPrompts.map((entry) => ({
+            char_caption: entry.uc,
+            centers: [entry.center],
+          })),
         },
-        legacy_uc: false
+        legacy_uc: false,
       };
     } else {
-      // V3 파라미터
       baseParams.params_version = 1;
       baseParams.ucPreset = metadata.ucPreset || 0;
       baseParams.negative_prompt = metadata.negative_prompt || '';
     }
 
-    // 요청 body 구성
     const requestBody: any = {
-      input: metadata.prompt, // V4도 input에 프롬프트 필요
+      input: metadata.prompt,
       model: metadata.model,
       action: metadata.action,
       parameters: baseParams,
-      use_new_shared_trial: true
+      use_new_shared_trial: true,
     };
 
-    // img2img/inpaint 추가 파라미터
     if (metadata.image) {
       requestBody.parameters.image = metadata.image;
       requestBody.parameters.strength = metadata.strength;
@@ -118,7 +124,6 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
       requestBody.parameters.mask = metadata.mask;
     }
 
-    // Vibe Transfer
     if (metadata.reference_image_multiple) {
       requestBody.parameters.reference_image_multiple = metadata.reference_image_multiple;
       requestBody.parameters.reference_information_extracted_multiple =
@@ -134,86 +139,79 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
       sampler: metadata.sampler,
       scale: metadata.scale,
       n_samples: metadata.n_samples,
+      characterCount: baseParams.characterPrompts?.length || 0,
       tokenLength: token.length,
-      tokenPrefix: token.substring(0, 10) + '...'
+      tokenPrefix: token.substring(0, 10) + '...',
     });
 
-    // NovelAI API 호출
     const response = await axios.post(
       'https://image.novelai.net/ai/generate-image',
       requestBody,
       {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'Origin': 'https://novelai.net',
-          'Referer': 'https://novelai.net'
+          Origin: 'https://novelai.net',
+          Referer: 'https://novelai.net',
         },
         responseType: 'arraybuffer',
-        timeout: 120000 // 2분 타임아웃
-      }
+        timeout: 120000,
+      },
     );
 
-    // ZIP 파일 파싱
     const zip = new AdmZip(Buffer.from(response.data));
     const zipEntries = zip.getEntries();
 
     const images = zipEntries.map((entry: any, index: number) => ({
       filename: `nai_${Date.now()}_${index}.png`,
-      data: entry.getData().toString('base64') // Base64 인코딩
+      data: entry.getData().toString('base64'),
     }));
 
-    // ✅ Generation History 저장 및 백그라운드 업로드
     const historyIds: number[] = [];
 
     try {
-      // Extract groupId from request body (optional)
       const groupId = metadata.groupId;
 
-      // 배치 생성 시 모든 이미지에 대해 히스토리 생성
       for (let i = 0; i < images.length; i++) {
         const historyId = await GenerationHistoryService.createNAIHistory({
           model: metadata.model || 'unknown',
           sampler: metadata.sampler || 'unknown',
-          seed: (metadata.seed || 0) + i, // 배치의 각 이미지는 seed가 증가함
+          seed: (metadata.seed || 0) + i,
           steps: metadata.steps || 28,
           scale: metadata.scale || 7.0,
-          parameters: requestBody.parameters, // 전체 파라미터 저장
+          parameters: requestBody.parameters,
           positivePrompt: metadata.prompt,
           negativePrompt: metadata.negative_prompt,
           width: metadata.width || 1024,
           height: metadata.height || 1024,
-          groupId: groupId, // User-selected group for automatic assignment
+          groupId,
           metadata: {
             action: metadata.action,
             n_samples: metadata.n_samples,
-            batch_index: i, // 배치 내 인덱스
-            noise_schedule: metadata.noise_schedule
-          }
+            batch_index: i,
+            noise_schedule: metadata.noise_schedule,
+          },
         });
 
         historyIds.push(historyId);
 
-        // 이미지 버퍼로 변환 후 업로드 (백그라운드 - await하지 않음)
         const imageBuffer = Buffer.from(images[i].data, 'base64');
         GenerationHistoryService.processAndUploadImage(historyId, imageBuffer, 'novelai')
-          .catch(err => console.error(`[NAI Generate] Background upload failed for history ${historyId}:`, err));
+          .catch((err) => console.error(`[NAI Generate] Background upload failed for history ${historyId}:`, err));
 
         console.log(`[NAI Generate] History ${historyId} created and queued for background upload (${i + 1}/${images.length})`);
       }
     } catch (historyError) {
-      // 히스토리 저장 실패 시 에러 반환
       console.error('[NAI Generate] Failed to create history:', historyError);
       res.status(500).json({
         error: 'Failed to create generation history',
-        details: historyError instanceof Error ? historyError.message : 'Unknown error'
+        details: historyError instanceof Error ? historyError.message : 'Unknown error',
       });
       return;
     }
 
-    // 히스토리 ID 배열만 반환 (이미지는 백그라운드에서 업로드됨)
     res.json({
-      historyIds: historyIds,
+      historyIds,
       count: historyIds.length,
       metadata: {
         prompt: metadata.prompt,
@@ -223,12 +221,10 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
         steps: metadata.steps,
         scale: metadata.scale,
         sampler: metadata.sampler,
-        model: metadata.model
-      }
+        model: metadata.model,
+      },
     });
-
   } catch (error: any) {
-    // 에러 응답 파싱 (Buffer일 경우 JSON으로 변환)
     let errorMessage = error.message;
 
     console.error('[NAI Generate] Full error:', {
@@ -236,7 +232,7 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
       status: error.response?.status,
       statusText: error.response?.statusText,
       hasData: !!error.response?.data,
-      code: error.code
+      code: error.code,
     });
 
     if (error.response?.data) {
@@ -274,9 +270,8 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
 
     res.status(500).json({
       error: 'Image generation failed',
-      details: errorMessage
+      details: errorMessage,
     });
-    return;
   }
 });
 

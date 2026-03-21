@@ -13,6 +13,14 @@ export interface ResolutionConfig {
   swapDimensions: boolean
 }
 
+export interface NAICharacterPrompt {
+  id: string
+  prompt: string
+  uc: string
+  center_x: number
+  center_y: number
+}
+
 export interface NAIParams {
   model: string
   action: 'generate' | 'img2img' | 'infill'
@@ -36,6 +44,7 @@ export interface NAIParams {
   noise: number
   source_image: string | null
   mask_image: string | null
+  character_prompts: NAICharacterPrompt[]
 }
 
 export interface NAIUserData {
