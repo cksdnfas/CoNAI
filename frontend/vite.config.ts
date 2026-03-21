@@ -18,7 +18,6 @@ function resolveFrontendPort(frontendUrl?: string): number {
   return 1677
 }
 
-// https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const envDir = path.resolve(__dirname, '..')
   const env = loadEnv(mode, envDir, '')
@@ -29,23 +28,15 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss()],
     base: './',
     resolve: {
-      extensions: ['.ts', '.tsx', '.mjs', '.js', '.mts', '.jsx', '.json'],
       alias: {
         '@': path.resolve(__dirname, './src'),
-        '@conai/shared': path.resolve(__dirname, '../shared/src/index.ts'),
       },
-      dedupe: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
+      dedupe: ['react', 'react-dom'],
     },
     server: {
       host: '0.0.0.0',
       port: frontendPort,
       strictPort: true,
-      fs: {
-        allow: [
-          path.resolve(__dirname, '.'),
-          path.resolve(__dirname, '../shared/src'),
-        ],
-      },
       proxy: {
         '/api': {
           target: 'http://localhost:1666',
