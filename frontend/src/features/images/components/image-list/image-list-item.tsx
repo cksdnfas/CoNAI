@@ -14,6 +14,8 @@ interface ImageListItemProps {
   image: ImageRecord
   href?: string
   selected?: boolean
+  selectionMode?: boolean
+  onToggleSelect?: (imageId: string) => void
 }
 
 /** Prevent native media/link dragging so drag gestures can be used for selection. */
@@ -22,7 +24,13 @@ function preventNativeDrag(event: DragEvent<HTMLElement>) {
 }
 
 /** Render a reusable image list cell that supports image, GIF, and video previews. */
-export function ImageListItem({ image, href, selected = false }: ImageListItemProps) {
+export function ImageListItem({
+  image,
+  href,
+  selected = false,
+  selectionMode = false,
+  onToggleSelect,
+}: ImageListItemProps) {
   const previewUrl = getImageListPreviewUrl(image)
   const posterUrl = getImageListPosterUrl(image)
   const mediaKind = getImageListMediaKind(image)
@@ -68,6 +76,23 @@ export function ImageListItem({ image, href, selected = false }: ImageListItemPr
   )
 
   const inner = <div className="bg-surface-lowest select-none">{content}</div>
+
+  if (selectionMode) {
+    return (
+      <button
+        type="button"
+        className={cn(className, 'w-full cursor-default text-left')}
+        data-image-id={imageId}
+        data-selected={selected ? 'true' : 'false'}
+        aria-label={`${getImageListDisplayName(image)} select`}
+        draggable={false}
+        onDragStart={preventNativeDrag}
+        onClick={() => onToggleSelect?.(imageId)}
+      >
+        {inner}
+      </button>
+    )
+  }
 
   if (!href) {
     return (

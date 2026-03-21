@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Masonry, type RenderComponentProps, useInfiniteLoader } from 'masonic'
 import Selecto from 'react-selecto'
 import { cn } from '@/lib/utils'
@@ -27,6 +27,7 @@ export function ImageList({
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null)
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const selectionEnabled = selectable && Boolean(onSelectedIdsChange)
+  const selectionMode = selectionEnabled && selectedIds.length > 0
 
   /** Bridge visible render progress to the parent paging mechanism. */
   const loadMoreItems = useCallback(() => {
@@ -63,11 +64,42 @@ export function ImageList({
     [onSelectedIdsChange, selectedIdSet, selectionEnabled],
   )
 
+  /** Toggle a single selected image id while selection mode is active. */
+  const handleToggleSelect = useCallback(
+    (imageId: string) => {
+      if (!selectionEnabled || !onSelectedIdsChange) return
+
+      const nextSelectedIds = new Set(selectedIdSet)
+      if (nextSelectedIds.has(imageId)) {
+        nextSelectedIds.delete(imageId)
+      } else {
+        nextSelectedIds.add(imageId)
+      }
+
+      onSelectedIdsChange(Array.from(nextSelectedIds))
+    },
+    [onSelectedIdsChange, selectedIdSet, selectionEnabled],
+  )
+
   /** Block drag gestures from interactive elements that should not start selection. */
   const dragCondition = useCallback((event: { inputEvent?: MouseEvent | TouchEvent }) => {
     const target = event.inputEvent?.target
     return !(target instanceof HTMLElement && target.closest('[data-no-select-drag="true"]'))
   }, [])
+
+  /** Clear active selection when the user presses Escape. */
+  useEffect(() => {
+    if (!selectionMode || !onSelectedIdsChange) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onSelectedIdsChange([])
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onSelectedIdsChange, selectionMode])
 
   /** Render an individual image list cell for Masonic. */
   const renderImageListItem = useCallback(
@@ -76,16 +108,26 @@ export function ImageList({
       return (
         <ImageListItem
           image={data}
-          href={getItemHref?.(data)}
+          href={selectionMode ? undefined : getItemHref?.(data)}
           selected={selectedIdSet.has(imageId)}
+          selectionMode={selectionMode}
+          onToggleSelect={handleToggleSelect}
         />
       )
     },
-    [getItemHref, selectedIdSet],
+    [getItemHref, handleToggleSelect, selectedIdSet, selectionMode],
   )
 
   return (
-    <div ref={setContainerElement} className={cn('relative', className)}>
+    <div
+      ref={setContainerElement}
+      className={cn('relative', className)}
+      onMouseDown={(event) => {
+        if (selectionMode && event.target === event.currentTarget) {
+          onSelectedIdsChange?.([])
+        }
+      }}
+    >
       {selectionEnabled && containerElement ? (
         <Selecto
           container={containerElement}

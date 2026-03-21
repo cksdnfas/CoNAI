@@ -1,4 +1,5 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -9,6 +10,8 @@ const curatedFilters = ['All Works', 'Cinematic', 'Architectural', 'Portrait', '
 
 /** Render the Home page with the reusable virtualized image list module. */
 export function HomePage() {
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+
   const imagesQuery = useInfiniteQuery({
     queryKey: ['home-images'],
     initialPageParam: 1,
@@ -65,6 +68,9 @@ export function HomePage() {
         <ImageList
           items={images}
           getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
+          selectable={true}
+          selectedIds={selectedIds}
+          onSelectedIdsChange={setSelectedIds}
           hasMore={Boolean(imagesQuery.hasNextPage)}
           isLoadingMore={imagesQuery.isFetchingNextPage}
           onLoadMore={imagesQuery.fetchNextPage}
