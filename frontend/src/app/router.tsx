@@ -1,6 +1,7 @@
 import { createHashRouter } from 'react-router-dom'
 import { AppShell } from '@/components/layout/app-shell'
 import { LoginPage } from '@/features/auth/login-page'
+import { GroupPage } from '@/features/groups/group-page'
 import { HomePage } from '@/features/home/home-page'
 import { ImageDetailPage } from '@/features/images/image-detail-page'
 import { SettingsPage } from '@/features/settings/settings-page'
@@ -19,6 +20,14 @@ export const appRouter = createHashRouter([
       {
         index: true,
         element: <HomePage />,
+      },
+      {
+        path: 'groups',
+        element: <GroupPage />,
+      },
+      {
+        path: 'groups/:groupId',
+        element: <GroupPage />,
       },
       {
         path: 'images/:compositeHash',
