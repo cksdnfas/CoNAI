@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Masonry, type RenderComponentProps, useInfiniteLoader } from 'masonic'
 import Selecto from 'react-selecto'
 import { cn } from '@/lib/utils'
@@ -22,6 +22,20 @@ function hasSelectedIdChange(currentSelectedIds: string[], nextSelectedIdSet: Se
   return false
 }
 
+/** Build a stable selected id set from rendered DOM elements. */
+function getSelectedIdSetFromElements(elements: Element[]) {
+  const nextSelectedIds = new Set<string>()
+
+  for (const element of elements) {
+    const imageId = (element as HTMLElement).dataset.imageId
+    if (imageId) {
+      nextSelectedIds.add(imageId)
+    }
+  }
+
+  return nextSelectedIds
+}
+
 /** Render a reusable virtualized image list with optional drag selection support. */
 export function ImageList({
   items,
@@ -43,6 +57,7 @@ export function ImageList({
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const selectionEnabled = selectable && Boolean(onSelectedIdsChange)
   const selectionMode = selectionEnabled && selectedIds.length > 0
+  const pendingSelectedIdSetRef = useRef<Set<string> | null>(null)
 
   /** Bridge visible render progress to the parent paging mechanism. */
   const loadMoreItems = useCallback(() => {
@@ -57,22 +72,22 @@ export function ImageList({
     totalItems: hasMore ? items.length + 24 : items.length,
   })
 
-  /** Convert drag-selected DOM nodes into stable image ids. */
+  /** Update the pending selection set during drag without forcing React updates every frame. */
   const handleSelect = useCallback(
-    (event: { added: Element[]; removed: Element[] }) => {
+    (event: { selected: Element[] }) => {
+      if (!selectionEnabled) return
+      pendingSelectedIdSetRef.current = getSelectedIdSetFromElements(event.selected)
+    },
+    [selectionEnabled],
+  )
+
+  /** Commit the final selection only after drag selection ends. */
+  const handleSelectEnd = useCallback(
+    (event: { selected: Element[] }) => {
       if (!selectionEnabled || !onSelectedIdsChange) return
 
-      const nextSelectedIds = new Set(selectedIdSet)
-
-      for (const element of event.added) {
-        const imageId = (element as HTMLElement).dataset.imageId
-        if (imageId) nextSelectedIds.add(imageId)
-      }
-
-      for (const element of event.removed) {
-        const imageId = (element as HTMLElement).dataset.imageId
-        if (imageId) nextSelectedIds.delete(imageId)
-      }
+      const nextSelectedIds = pendingSelectedIdSetRef.current ?? getSelectedIdSetFromElements(event.selected)
+      pendingSelectedIdSetRef.current = null
 
       if (!hasSelectedIdChange(selectedIds, nextSelectedIds)) {
         return
@@ -80,7 +95,7 @@ export function ImageList({
 
       onSelectedIdsChange(Array.from(nextSelectedIds))
     },
-    [onSelectedIdsChange, selectedIdSet, selectedIds, selectionEnabled],
+    [onSelectedIdsChange, selectedIds, selectionEnabled],
   )
 
   /** Toggle a single selected image id while selection mode is active. */
@@ -167,6 +182,7 @@ export function ImageList({
           toggleContinueSelect="shift"
           dragCondition={dragCondition}
           onSelect={handleSelect}
+          onSelectEnd={handleSelectEnd}
         />
       ) : null}
 

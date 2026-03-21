@@ -105,7 +105,7 @@ export function HomePage() {
           columnGutter={24}
           rowGutter={24}
           itemHeightEstimate={320}
-          overscanBy={2}
+          overscanBy={4}
         />
       ) : null}
 

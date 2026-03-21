@@ -33,14 +33,13 @@ export function getImageListMediaKind(image: ImageRecord): ImageListMediaKind {
 export function getImageListPreviewUrl(image: ImageRecord): string | null {
   const mediaKind = getImageListMediaKind(image)
 
-  if (mediaKind === 'video' || mediaKind === 'gif') {
+  if (mediaKind === 'video') {
+    return image.thumbnail_url || image.image_url || null
+  }
+
+  if (mediaKind === 'gif') {
     return image.image_url || image.thumbnail_url || null
   }
 
   return image.thumbnail_url || image.image_url || null
-}
-
-/** Return the preferred poster URL for video previews. */
-export function getImageListPosterUrl(image: ImageRecord): string | null {
-  return image.thumbnail_url || null
 }
