@@ -1,7 +1,10 @@
 import type { ImageRecord } from '@/types/image'
 
+export type ImageListLayoutMode = 'grid' | 'masonry'
+
 export interface ImageListProps {
   items: ImageRecord[]
+  layout?: ImageListLayoutMode
   getItemHref?: (image: ImageRecord) => string | undefined
   selectable?: boolean
   selectedIds?: string[]
@@ -9,10 +12,9 @@ export interface ImageListProps {
   hasMore?: boolean
   isLoadingMore?: boolean
   onLoadMore?: () => Promise<unknown> | void
-  columnWidth?: number
-  columnGutter?: number
-  rowGutter?: number
-  itemHeightEstimate?: number
-  overscanBy?: number
+  minColumnWidth?: number
+  columnGap?: number
+  rowGap?: number
+  gridItemHeight?: number
   className?: string
 }

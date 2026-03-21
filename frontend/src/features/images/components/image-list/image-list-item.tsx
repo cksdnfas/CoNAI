@@ -1,5 +1,4 @@
 import { memo, type DragEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import {
@@ -14,7 +13,8 @@ interface ImageListItemProps {
   href?: string
   selected?: boolean
   selectionMode?: boolean
-  onToggleSelect?: (imageId: string) => void
+  gridItemHeight?: number
+  onActivate?: (imageId: string, href?: string) => void
 }
 
 /** Prevent native media dragging so drag gestures can be used for selection. */
@@ -28,9 +28,9 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   href,
   selected = false,
   selectionMode = false,
-  onToggleSelect,
+  gridItemHeight,
+  onActivate,
 }: ImageListItemProps) {
-  const navigate = useNavigate()
   const previewUrl = getImageListPreviewUrl(image)
   const mediaKind = getImageListMediaKind(image)
   const imageId = getImageListItemId(image)
@@ -41,7 +41,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       <video
         src={previewUrl}
         className="block w-full object-cover"
-        style={aspectRatio ? { aspectRatio } : undefined}
+        style={gridItemHeight ? { height: gridItemHeight } : aspectRatio ? { aspectRatio } : undefined}
         muted
         loop
         autoPlay
@@ -58,7 +58,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
         src={previewUrl}
         alt={getImageListDisplayName(image)}
         className="w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-        style={aspectRatio ? { aspectRatio } : undefined}
+        style={gridItemHeight ? { height: gridItemHeight } : aspectRatio ? { aspectRatio } : undefined}
         loading="lazy"
         draggable={false}
         onDragStart={preventNativeDrag}
@@ -68,47 +68,22 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
     <div className="flex min-h-[280px] items-center justify-center text-sm text-muted-foreground">미리보기 없음</div>
   )
 
-  const className = cn(
-    'image-list-item group block overflow-hidden rounded-sm bg-surface-low shadow-[0_0_40px_rgba(14,14,14,0.18)] transition-transform duration-300',
-    selected && 'ring-[3px] ring-primary/80 ring-offset-2 ring-offset-background shadow-[0_0_0_1px_rgba(255,181,154,0.16),0_0_32px_rgba(249,94,20,0.22)]',
-  )
-
-  const inner = <div className="bg-surface-lowest select-none">{content}</div>
-
-  if (!href && !selectionMode) {
-    return (
-      <div
-        className={className}
-        data-image-id={imageId}
-        data-selected={selected ? 'true' : 'false'}
-        onDragStart={preventNativeDrag}
-      >
-        {inner}
-      </div>
-    )
-  }
-
   return (
     <button
       type="button"
-      className={cn(className, 'w-full text-left', selectionMode ? 'cursor-default' : 'cursor-pointer')}
+      className={cn(
+        'image-list-selectable group block w-full overflow-hidden rounded-sm bg-surface-low text-left shadow-[0_0_40px_rgba(14,14,14,0.18)] transition-transform duration-300',
+        selected && 'is-selected ring-[3px] ring-primary/80 ring-offset-2 ring-offset-background shadow-[0_0_0_1px_rgba(255,181,154,0.16),0_0_32px_rgba(249,94,20,0.22)]',
+        selectionMode ? 'cursor-default' : 'cursor-pointer',
+      )}
       data-image-id={imageId}
       data-selected={selected ? 'true' : 'false'}
       aria-label={`${getImageListDisplayName(image)} ${selectionMode ? 'select' : 'detail'}`}
       draggable={false}
       onDragStart={preventNativeDrag}
-      onClick={() => {
-        if (selectionMode) {
-          onToggleSelect?.(imageId)
-          return
-        }
-
-        if (href) {
-          navigate(href)
-        }
-      }}
+      onClick={() => onActivate?.(imageId, href)}
     >
-      {inner}
+      <div className="bg-surface-lowest select-none">{content}</div>
     </button>
   )
 })

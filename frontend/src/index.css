@@ -112,3 +112,30 @@
     image-rendering: auto;
   }
 }
+
+@layer components {
+  .image-list-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--image-list-min-column-width, 300px), 1fr));
+    gap: var(--image-list-row-gap, 24px) var(--image-list-column-gap, 24px);
+    align-items: start;
+  }
+
+  .image-list-grid-item {
+    display: flex;
+  }
+
+  .image-list-selection-area {
+    background: rgb(249 94 20 / 0.10);
+    border: 2px solid rgb(255 181 154 / 0.72);
+    border-radius: 0.2rem;
+    backdrop-filter: blur(2px);
+  }
+
+  .image-list-selectable.is-selection-preview {
+    box-shadow:
+      0 0 0 1px rgb(255 181 154 / 0.16),
+      0 0 0 3px rgb(249 94 20 / 0.82),
+      0 0 30px rgb(249 94 20 / 0.18);
+  }
+}

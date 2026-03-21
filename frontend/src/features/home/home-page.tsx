@@ -9,7 +9,7 @@ import { downloadImageSelection, getImages } from '@/lib/api'
 
 const curatedFilters = ['All Works', 'Cinematic', 'Architectural', 'Portrait', 'Abstract']
 
-/** Render the Home page with the reusable virtualized image list module. */
+/** Render the Home page with the reusable Virtuoso + ViSelect image list module. */
 export function HomePage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isDownloading, setIsDownloading] = useState(false)
@@ -94,6 +94,7 @@ export function HomePage() {
       {!imagesQuery.isPending && !imagesQuery.isError && images.length > 0 ? (
         <ImageList
           items={images}
+          layout="masonry"
           getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
           selectable={true}
           selectedIds={selectedIds}
@@ -101,11 +102,10 @@ export function HomePage() {
           hasMore={Boolean(imagesQuery.hasNextPage)}
           isLoadingMore={imagesQuery.isFetchingNextPage}
           onLoadMore={imagesQuery.fetchNextPage}
-          columnWidth={320}
-          columnGutter={24}
-          rowGutter={24}
-          itemHeightEstimate={320}
-          overscanBy={4}
+          minColumnWidth={300}
+          columnGap={24}
+          rowGap={24}
+          gridItemHeight={280}
         />
       ) : null}
 
