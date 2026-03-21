@@ -62,7 +62,12 @@ export class SettingsService {
         topK: Number.parseInt(process.env.KALOSCOPE_TOPK || '15', 10),
       },
       similarity: {
-        autoGenerateHashOnUpload: true,  // 기본값: 자동 해시 생성
+        autoGenerateHashOnUpload: true,   // 기본값: 자동 해시 생성
+        detailSimilarThreshold: 15,       // 기본값: 보통 범위
+        detailSimilarLimit: 24,           // 기본값: 24개
+        detailSimilarIncludeColorSimilarity: false,
+        detailSimilarSortBy: 'similarity',
+        detailSimilarSortOrder: 'DESC',
       },
       metadataExtraction: {
         enableSecondaryExtraction: true,      // 기본값: Secondary Extraction 활성화

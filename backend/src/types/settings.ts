@@ -49,7 +49,12 @@ export interface KaloscopeSettings {
 }
 
 export interface SimilaritySettings {
-  autoGenerateHashOnUpload: boolean;  // 업로드 시 자동 해시 생성 여부
+  autoGenerateHashOnUpload: boolean;      // 업로드 시 자동 해시 생성 여부
+  detailSimilarThreshold: number;         // 상세 페이지 유사 이미지 범위 (Hamming distance)
+  detailSimilarLimit: number;             // 상세 페이지 유사 이미지 최대 개수
+  detailSimilarIncludeColorSimilarity: boolean; // 색상 유사도 포함 여부
+  detailSimilarSortBy: 'similarity' | 'upload_date' | 'file_size';
+  detailSimilarSortOrder: 'ASC' | 'DESC';
 }
 
 export type ThumbnailSize = 'original' | '2048' | '1080' | '720' | '512';

@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
+import { markHomeScrollRestorePending } from '@/features/home/use-home-scroll-restoration'
 import { ImageListGrid } from './image-list-grid'
 import { ImageListMasonry } from './image-list-masonry'
 import type { ImageListProps } from './image-list-types'
@@ -25,6 +26,7 @@ export function ImageList({
   className,
 }: ImageListProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null)
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
   const selectionMode = selectable && selectedIds.length > 0
@@ -58,10 +60,19 @@ export function ImageList({
       }
 
       if (href) {
-        navigate(href, { state: { fromFeed: true } })
+        if (location.pathname === '/') {
+          markHomeScrollRestorePending()
+        }
+
+        navigate(href, {
+          state: {
+            fromFeed: location.pathname === '/',
+            sourcePath: location.pathname,
+          },
+        })
       }
     },
-    [navigate, onSelectedIdsChange, selectedIds, selectionMode, shouldSuppressClick],
+    [location.pathname, navigate, onSelectedIdsChange, selectedIds, selectionMode, shouldSuppressClick],
   )
 
   return (

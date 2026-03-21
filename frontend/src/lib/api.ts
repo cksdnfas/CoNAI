@@ -1,3 +1,5 @@
+import type { AppSettings, SimilaritySettings, SimilaritySortBy, SimilaritySortOrder } from '@/types/settings'
+import type { SimilarityQueryResult } from '@/types/similarity'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
@@ -58,6 +60,66 @@ export async function getImage(compositeHash: string) {
   const response = await fetchJson<ApiResponse<ImageRecord>>(`/api/images/${compositeHash}`)
   if (!response.success) {
     throw new Error(response.error || '이미지를 불러오지 못했어.')
+  }
+  return response.data
+}
+
+export async function getAppSettings() {
+  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings')
+  if (!response.success) {
+    throw new Error(response.error || '설정을 불러오지 못했어.')
+  }
+  return response.data
+}
+
+export async function updateSimilaritySettings(settings: Partial<SimilaritySettings>) {
+  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/similarity', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(settings),
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '유사도 설정을 저장하지 못했어.')
+  }
+
+  return response.data
+}
+
+export async function getImageDuplicates(compositeHash: string, threshold = 5) {
+  const response = await fetchJson<ApiResponse<SimilarityQueryResult>>(
+    `/api/images/${compositeHash}/duplicates?threshold=${threshold}`,
+  )
+  if (!response.success) {
+    throw new Error(response.error || '중복 이미지를 불러오지 못했어.')
+  }
+  return response.data
+}
+
+export async function getSimilarImages(
+  compositeHash: string,
+  params?: {
+    threshold?: number
+    limit?: number
+    includeColorSimilarity?: boolean
+    sortBy?: SimilaritySortBy
+    sortOrder?: SimilaritySortOrder
+  },
+) {
+  const searchParams = new URLSearchParams()
+  searchParams.set('threshold', String(params?.threshold ?? 15))
+  searchParams.set('limit', String(params?.limit ?? 24))
+  searchParams.set('includeColorSimilarity', String(params?.includeColorSimilarity ?? false))
+  searchParams.set('sortBy', params?.sortBy ?? 'similarity')
+  searchParams.set('sortOrder', params?.sortOrder ?? 'DESC')
+
+  const response = await fetchJson<ApiResponse<SimilarityQueryResult>>(
+    `/api/images/${compositeHash}/similar?${searchParams.toString()}`,
+  )
+  if (!response.success) {
+    throw new Error(response.error || '유사 이미지를 불러오지 못했어.')
   }
   return response.data
 }

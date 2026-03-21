@@ -495,6 +495,64 @@ router.put(
   asyncHandler(async (req: Request, res: Response) => {
     const similaritySettings: Partial<SimilaritySettings> = req.body;
 
+    if (similaritySettings.autoGenerateHashOnUpload !== undefined && typeof similaritySettings.autoGenerateHashOnUpload !== 'boolean') {
+      res.status(400).json({
+        success: false,
+        error: 'autoGenerateHashOnUpload must be a boolean',
+      });
+      return;
+    }
+
+    if (similaritySettings.detailSimilarThreshold !== undefined) {
+      if (!Number.isInteger(similaritySettings.detailSimilarThreshold) || similaritySettings.detailSimilarThreshold < 1 || similaritySettings.detailSimilarThreshold > 64) {
+        res.status(400).json({
+          success: false,
+          error: 'detailSimilarThreshold must be an integer between 1 and 64',
+        });
+        return;
+      }
+    }
+
+    if (similaritySettings.detailSimilarLimit !== undefined) {
+      if (!Number.isInteger(similaritySettings.detailSimilarLimit) || similaritySettings.detailSimilarLimit < 1 || similaritySettings.detailSimilarLimit > 100) {
+        res.status(400).json({
+          success: false,
+          error: 'detailSimilarLimit must be an integer between 1 and 100',
+        });
+        return;
+      }
+    }
+
+    if (similaritySettings.detailSimilarIncludeColorSimilarity !== undefined && typeof similaritySettings.detailSimilarIncludeColorSimilarity !== 'boolean') {
+      res.status(400).json({
+        success: false,
+        error: 'detailSimilarIncludeColorSimilarity must be a boolean',
+      });
+      return;
+    }
+
+    if (similaritySettings.detailSimilarSortBy !== undefined) {
+      const validSortBy = ['similarity', 'upload_date', 'file_size'];
+      if (!validSortBy.includes(similaritySettings.detailSimilarSortBy)) {
+        res.status(400).json({
+          success: false,
+          error: `detailSimilarSortBy must be one of: ${validSortBy.join(', ')}`,
+        });
+        return;
+      }
+    }
+
+    if (similaritySettings.detailSimilarSortOrder !== undefined) {
+      const validSortOrder = ['ASC', 'DESC'];
+      if (!validSortOrder.includes(similaritySettings.detailSimilarSortOrder)) {
+        res.status(400).json({
+          success: false,
+          error: `detailSimilarSortOrder must be one of: ${validSortOrder.join(', ')}`,
+        });
+        return;
+      }
+    }
+
     // Update settings
     const updatedSettings = settingsService.updateSimilaritySettings(similaritySettings);
 

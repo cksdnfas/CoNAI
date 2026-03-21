@@ -6,6 +6,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/ca
 import { Skeleton } from '@/components/ui/skeleton'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageList } from '@/features/images/components/image-list/image-list'
+import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'
 import { downloadImageSelection, getImages } from '@/lib/api'
 
 const curatedFilters = ['All Works', 'Cinematic', 'Architectural', 'Portrait', 'Abstract']
@@ -26,6 +27,14 @@ export function HomePage() {
     () => (imagesQuery.data?.pages ?? []).flatMap((page) => page.images),
     [imagesQuery.data?.pages],
   )
+
+  useHomeScrollRestoration({
+    enabled: !imagesQuery.isPending && !imagesQuery.isError,
+    itemCount: images.length,
+    canLoadMore: Boolean(imagesQuery.hasNextPage),
+    isLoadingMore: imagesQuery.isFetchingNextPage,
+    onLoadMore: imagesQuery.fetchNextPage,
+  })
 
   const downloadableCompositeHashes = useMemo(
     () =>
