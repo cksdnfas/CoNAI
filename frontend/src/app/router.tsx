@@ -4,6 +4,7 @@ import { LoginPage } from '@/features/auth/login-page'
 import { GroupPage } from '@/features/groups/group-page'
 import { HomePage } from '@/features/home/home-page'
 import { ImageDetailPage } from '@/features/images/image-detail-page'
+import { PromptPage } from '@/features/prompts/prompt-page'
 import { SettingsPage } from '@/features/settings/settings-page'
 import { NotFoundPage } from '@/features/system/not-found-page'
 import { UploadPage } from '@/features/upload/upload-page'
@@ -28,6 +29,10 @@ export const appRouter = createHashRouter([
       {
         path: 'groups/:groupId',
         element: <GroupPage />,
+      },
+      {
+        path: 'prompts',
+        element: <PromptPage />,
       },
       {
         path: 'images/:compositeHash',
