@@ -1,6 +1,5 @@
-import { Bell, DatabaseZap, ExternalLink, History, Image, LogIn, Search } from 'lucide-react'
+import { Bell, History, Image, Search } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -52,19 +51,6 @@ export function AppShell() {
             <button className="text-foreground/60 transition-colors hover:text-primary" aria-label="History">
               <History className="h-5 w-5" />
             </button>
-            <Button asChild size="sm" variant="outline">
-              <a href="http://localhost:1666/health" target="_blank" rel="noreferrer">
-                <DatabaseZap className="h-4 w-4" />
-                Health
-                <ExternalLink className="h-4 w-4" />
-              </a>
-            </Button>
-            <Button asChild size="sm" variant="ghost">
-              <NavLink to="/login">
-                <LogIn className="h-4 w-4" />
-                Login
-              </NavLink>
-            </Button>
           </div>
         </div>
       </header>
