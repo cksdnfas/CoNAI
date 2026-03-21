@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, ExternalLink, RefreshCcw } from 'lucide-react'
+import { ArrowLeft, Download, RefreshCcw } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +21,16 @@ function formatBytes(value?: number | null) {
   return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
 }
 
+function getDownloadName(path?: string | null, compositeHash?: string | null) {
+  if (path) {
+    const normalized = path.replace(/\\/g, '/')
+    const name = normalized.split('/').at(-1)
+    if (name) return name
+  }
+
+  return compositeHash ? `${compositeHash}.png` : 'image'
+}
+
 export function ImageDetailPage() {
   const { compositeHash } = useParams<{ compositeHash: string }>()
 
@@ -32,6 +42,7 @@ export function ImageDetailPage() {
 
   const image = imageQuery.data
   const previewUrl = image?.image_url || image?.thumbnail_url
+  const downloadName = getDownloadName(image?.original_file_path, image?.composite_hash)
 
   return (
     <div className="space-y-10">
@@ -53,9 +64,9 @@ export function ImageDetailPage() {
             </Button>
             {previewUrl ? (
               <Button asChild>
-                <a href={previewUrl} target="_blank" rel="noreferrer">
-                  Open original
-                  <ExternalLink className="h-4 w-4" />
+                <a href={previewUrl} download={downloadName}>
+                  <Download className="h-4 w-4" />
+                  Download
                 </a>
               </Button>
             ) : null}
