@@ -54,10 +54,12 @@ export function ImageList({
   className,
 }: ImageListProps) {
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null)
-  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const [previewSelectedIds, setPreviewSelectedIds] = useState<string[] | null>(null)
+  const isDraggingSelectionRef = useRef(false)
   const selectionEnabled = selectable && Boolean(onSelectedIdsChange)
-  const selectionMode = selectionEnabled && selectedIds.length > 0
-  const pendingSelectedIdSetRef = useRef<Set<string> | null>(null)
+  const activeSelectedIds = previewSelectedIds ?? selectedIds
+  const activeSelectedIdSet = useMemo(() => new Set(activeSelectedIds), [activeSelectedIds])
+  const selectionMode = selectionEnabled && activeSelectedIds.length > 0
 
   /** Bridge visible render progress to the parent paging mechanism. */
   const loadMoreItems = useCallback(() => {
@@ -72,28 +74,41 @@ export function ImageList({
     totalItems: hasMore ? items.length + 24 : items.length,
   })
 
-  /** Update the pending selection set during drag without forcing React updates every frame. */
+  /** Start live preview selection when the user begins dragging. */
+  const handleSelectStart = useCallback(() => {
+    if (!selectionEnabled) return
+    isDraggingSelectionRef.current = true
+    setPreviewSelectedIds(selectedIds)
+  }, [selectedIds, selectionEnabled])
+
+  /** Update the visible selection live during drag. */
   const handleSelect = useCallback(
     (event: { selected: Element[] }) => {
       if (!selectionEnabled) return
-      pendingSelectedIdSetRef.current = getSelectedIdSetFromElements(event.selected)
+      const nextSelectedIds = Array.from(getSelectedIdSetFromElements(event.selected))
+      setPreviewSelectedIds(nextSelectedIds)
     },
     [selectionEnabled],
   )
 
-  /** Commit the final selection only after drag selection ends. */
+  /** Commit the final selection once drag selection ends. */
   const handleSelectEnd = useCallback(
     (event: { selected: Element[] }) => {
       if (!selectionEnabled || !onSelectedIdsChange) return
 
-      const nextSelectedIds = pendingSelectedIdSetRef.current ?? getSelectedIdSetFromElements(event.selected)
-      pendingSelectedIdSetRef.current = null
+      const nextSelectedIds = getSelectedIdSetFromElements(event.selected)
+      isDraggingSelectionRef.current = false
 
-      if (!hasSelectedIdChange(selectedIds, nextSelectedIds)) {
-        return
-      }
+      setPreviewSelectedIds((currentPreviewSelectedIds) => {
+        const fallbackSelectedIds = currentPreviewSelectedIds ?? Array.from(nextSelectedIds)
+        const finalSelectedIds = new Set(fallbackSelectedIds)
 
-      onSelectedIdsChange(Array.from(nextSelectedIds))
+        if (hasSelectedIdChange(selectedIds, finalSelectedIds)) {
+          onSelectedIdsChange(Array.from(finalSelectedIds))
+        }
+
+        return null
+      })
     },
     [onSelectedIdsChange, selectedIds, selectionEnabled],
   )
@@ -103,20 +118,23 @@ export function ImageList({
     (imageId: string) => {
       if (!selectionEnabled || !onSelectedIdsChange) return
 
-      const nextSelectedIds = new Set(selectedIdSet)
+      const nextSelectedIds = new Set(activeSelectedIdSet)
       if (nextSelectedIds.has(imageId)) {
         nextSelectedIds.delete(imageId)
       } else {
         nextSelectedIds.add(imageId)
       }
 
+      const nextSelectedIdArray = Array.from(nextSelectedIds)
+      setPreviewSelectedIds(null)
+
       if (!hasSelectedIdChange(selectedIds, nextSelectedIds)) {
         return
       }
 
-      onSelectedIdsChange(Array.from(nextSelectedIds))
+      onSelectedIdsChange(nextSelectedIdArray)
     },
-    [onSelectedIdsChange, selectedIdSet, selectedIds, selectionEnabled],
+    [activeSelectedIdSet, onSelectedIdsChange, selectedIds, selectionEnabled],
   )
 
   /** Block drag gestures from interactive elements that should not start selection. */
@@ -131,6 +149,7 @@ export function ImageList({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        setPreviewSelectedIds(null)
         onSelectedIdsChange([])
       }
     }
@@ -147,13 +166,13 @@ export function ImageList({
         <ImageListItem
           image={data}
           href={getItemHref?.(data)}
-          selected={selectedIdSet.has(imageId)}
+          selected={activeSelectedIdSet.has(imageId)}
           selectionMode={selectionMode}
           onToggleSelect={handleToggleSelect}
         />
       )
     },
-    [getItemHref, handleToggleSelect, selectedIdSet, selectionMode],
+    [activeSelectedIdSet, getItemHref, handleToggleSelect, selectionMode],
   )
 
   return (
@@ -161,7 +180,8 @@ export function ImageList({
       ref={setContainerElement}
       className={cn('relative', className)}
       onMouseDown={(event) => {
-        if (selectionMode && event.target === event.currentTarget) {
+        if (selectionMode && !isDraggingSelectionRef.current && event.target === event.currentTarget) {
+          setPreviewSelectedIds(null)
           onSelectedIdsChange?.([])
         }
       }}
@@ -177,10 +197,11 @@ export function ImageList({
           selectFromInside={true}
           preventDragFromInside={true}
           preventDefault={true}
-          preventClickEventOnDragStart={true}
+          preventClickEventOnDragStart={false}
           preventClickEventOnDrag={true}
           toggleContinueSelect="shift"
           dragCondition={dragCondition}
+          onSelectStart={handleSelectStart}
           onSelect={handleSelect}
           onSelectEnd={handleSelectEnd}
         />
