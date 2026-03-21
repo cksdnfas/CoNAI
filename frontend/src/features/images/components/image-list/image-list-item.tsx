@@ -1,12 +1,11 @@
-import type { DragEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { memo, type DragEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import {
   getImageListDisplayName,
   getImageListItemId,
   getImageListMediaKind,
-  getImageListPosterUrl,
   getImageListPreviewUrl,
 } from './image-list-utils'
 
@@ -18,21 +17,21 @@ interface ImageListItemProps {
   onToggleSelect?: (imageId: string) => void
 }
 
-/** Prevent native media/link dragging so drag gestures can be used for selection. */
+/** Prevent native media dragging so drag gestures can be used for selection. */
 function preventNativeDrag(event: DragEvent<HTMLElement>) {
   event.preventDefault()
 }
 
 /** Render a reusable image list cell that supports image, GIF, and video previews. */
-export function ImageListItem({
+const ImageListItemComponent = memo(function ImageListItemComponent({
   image,
   href,
   selected = false,
   selectionMode = false,
   onToggleSelect,
 }: ImageListItemProps) {
+  const navigate = useNavigate()
   const previewUrl = getImageListPreviewUrl(image)
-  const posterUrl = getImageListPosterUrl(image)
   const mediaKind = getImageListMediaKind(image)
   const imageId = getImageListItemId(image)
   const aspectRatio = image.width && image.height ? `${image.width} / ${image.height}` : undefined
@@ -41,7 +40,6 @@ export function ImageListItem({
     mediaKind === 'video' ? (
       <video
         src={previewUrl}
-        poster={posterUrl ?? undefined}
         className="block w-full object-cover"
         style={aspectRatio ? { aspectRatio } : undefined}
         muted
@@ -77,24 +75,7 @@ export function ImageListItem({
 
   const inner = <div className="bg-surface-lowest select-none">{content}</div>
 
-  if (selectionMode) {
-    return (
-      <button
-        type="button"
-        className={cn(className, 'w-full cursor-default text-left')}
-        data-image-id={imageId}
-        data-selected={selected ? 'true' : 'false'}
-        aria-label={`${getImageListDisplayName(image)} select`}
-        draggable={false}
-        onDragStart={preventNativeDrag}
-        onClick={() => onToggleSelect?.(imageId)}
-      >
-        {inner}
-      </button>
-    )
-  }
-
-  if (!href) {
+  if (!href && !selectionMode) {
     return (
       <div
         className={className}
@@ -108,16 +89,30 @@ export function ImageListItem({
   }
 
   return (
-    <Link
-      to={href}
-      className={className}
+    <button
+      type="button"
+      className={cn(className, 'w-full text-left', selectionMode ? 'cursor-default' : 'cursor-pointer')}
       data-image-id={imageId}
       data-selected={selected ? 'true' : 'false'}
-      aria-label={`${getImageListDisplayName(image)} detail`}
+      aria-label={`${getImageListDisplayName(image)} ${selectionMode ? 'select' : 'detail'}`}
       draggable={false}
       onDragStart={preventNativeDrag}
+      onClick={() => {
+        if (selectionMode) {
+          onToggleSelect?.(imageId)
+          return
+        }
+
+        if (href) {
+          navigate(href)
+        }
+      }}
     >
       {inner}
-    </Link>
+    </button>
   )
-}
+})
+
+ImageListItemComponent.displayName = 'ImageListItem'
+
+export { ImageListItemComponent as ImageListItem }

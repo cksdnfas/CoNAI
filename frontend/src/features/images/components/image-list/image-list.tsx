@@ -7,6 +7,21 @@ import { ImageListItem } from './image-list-item'
 import { getImageListItemId } from './image-list-utils'
 import type { ImageListProps } from './image-list-types'
 
+/** Check whether the selected id state actually changed before updating React state. */
+function hasSelectedIdChange(currentSelectedIds: string[], nextSelectedIdSet: Set<string>) {
+  if (currentSelectedIds.length !== nextSelectedIdSet.size) {
+    return true
+  }
+
+  for (const selectedId of currentSelectedIds) {
+    if (!nextSelectedIdSet.has(selectedId)) {
+      return true
+    }
+  }
+
+  return false
+}
+
 /** Render a reusable virtualized image list with optional drag selection support. */
 export function ImageList({
   items,
@@ -59,9 +74,13 @@ export function ImageList({
         if (imageId) nextSelectedIds.delete(imageId)
       }
 
+      if (!hasSelectedIdChange(selectedIds, nextSelectedIds)) {
+        return
+      }
+
       onSelectedIdsChange(Array.from(nextSelectedIds))
     },
-    [onSelectedIdsChange, selectedIdSet, selectionEnabled],
+    [onSelectedIdsChange, selectedIdSet, selectedIds, selectionEnabled],
   )
 
   /** Toggle a single selected image id while selection mode is active. */
@@ -76,9 +95,13 @@ export function ImageList({
         nextSelectedIds.add(imageId)
       }
 
+      if (!hasSelectedIdChange(selectedIds, nextSelectedIds)) {
+        return
+      }
+
       onSelectedIdsChange(Array.from(nextSelectedIds))
     },
-    [onSelectedIdsChange, selectedIdSet, selectionEnabled],
+    [onSelectedIdsChange, selectedIdSet, selectedIds, selectionEnabled],
   )
 
   /** Block drag gestures from interactive elements that should not start selection. */
@@ -108,7 +131,7 @@ export function ImageList({
       return (
         <ImageListItem
           image={data}
-          href={selectionMode ? undefined : getItemHref?.(data)}
+          href={getItemHref?.(data)}
           selected={selectedIdSet.has(imageId)}
           selectionMode={selectionMode}
           onToggleSelect={handleToggleSelect}
