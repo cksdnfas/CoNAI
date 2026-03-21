@@ -8,15 +8,25 @@
 - 유지한 것:
   - Vite + React + TypeScript 빌드 체인
   - Tailwind CSS 4 기반 스타일 엔트리
-  - shadcn/ui 스타일 컴포넌트 시작점
+  - shadcn/ui 기반 컴포넌트 체계
+  - React Compiler(자동 메모이제이션) 활성화
   - 백엔드 프록시 설정 (`/api`, `/uploads`, `/temp` -> `:1666`)
 
-## 디자인 베이스라인
+## 고정 기준
+- 프론트 dev 포트: `1677`
 - Primary: `#2563EB`
 - Secondary: `#14B8A6`
 - Style reference: `Clean, modern operator dashboard with crisp typography, disciplined spacing, and restrained accent usage.`
 
 상세 규칙은 `RESET_BASELINE.md` 참고.
+
+## 기술 스택
+- React 19
+- Vite 8
+- TypeScript 5
+- Tailwind CSS 4
+- shadcn CLI v4 / shadcn/ui 컴포넌트 흐름
+- React Compiler (`babel-plugin-react-compiler` + Vite 8 plugin-react 경로)
 
 ## 실행
 ```bash
