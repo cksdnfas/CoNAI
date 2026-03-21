@@ -26,6 +26,7 @@ export function ImageList({
 }: ImageListProps) {
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null)
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const selectionEnabled = selectable && Boolean(onSelectedIdsChange)
 
   /** Bridge visible render progress to the parent paging mechanism. */
   const loadMoreItems = useCallback(() => {
@@ -43,7 +44,7 @@ export function ImageList({
   /** Convert drag-selected DOM nodes into stable image ids. */
   const handleSelect = useCallback(
     (event: { added: Element[]; removed: Element[] }) => {
-      if (!selectable || !onSelectedIdsChange) return
+      if (!selectionEnabled || !onSelectedIdsChange) return
 
       const nextSelectedIds = new Set(selectedIdSet)
 
@@ -59,8 +60,14 @@ export function ImageList({
 
       onSelectedIdsChange(Array.from(nextSelectedIds))
     },
-    [onSelectedIdsChange, selectable, selectedIdSet],
+    [onSelectedIdsChange, selectedIdSet, selectionEnabled],
   )
+
+  /** Block drag gestures from interactive elements that should not start selection. */
+  const dragCondition = useCallback((event: { inputEvent?: MouseEvent | TouchEvent }) => {
+    const target = event.inputEvent?.target
+    return !(target instanceof HTMLElement && target.closest('[data-no-select-drag="true"]'))
+  }, [])
 
   /** Render an individual image list cell for Masonic. */
   const renderImageListItem = useCallback(
@@ -79,14 +86,21 @@ export function ImageList({
 
   return (
     <div ref={setContainerElement} className={cn('relative', className)}>
-      {selectable && containerElement ? (
+      {selectionEnabled && containerElement ? (
         <Selecto
+          container={containerElement}
+          rootContainer={containerElement}
           dragContainer={containerElement}
           selectableTargets={['.image-list-item']}
           hitRate={20}
           selectByClick={false}
           selectFromInside={true}
+          preventDragFromInside={true}
+          preventDefault={true}
+          preventClickEventOnDragStart={true}
+          preventClickEventOnDrag={true}
           toggleContinueSelect="shift"
+          dragCondition={dragCondition}
           onSelect={handleSelect}
         />
       ) : null}

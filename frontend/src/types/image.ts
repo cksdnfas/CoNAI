@@ -11,6 +11,7 @@ export interface ImageRecord {
   width?: number | null
   height?: number | null
   mime_type?: string | null
+  file_type?: string | null
   file_size?: number | null
   first_seen_date?: string | null
   is_processing?: boolean
