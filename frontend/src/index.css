@@ -113,6 +113,29 @@
   }
 }
 
+@keyframes image-list-selection-pulse {
+  0% {
+    box-shadow:
+      inset 0 0 0 4px rgb(249 94 20 / 0.84),
+      0 0 0 1px rgb(255 181 154 / 0.18),
+      0 0 16px rgb(249 94 20 / 0.14);
+  }
+
+  50% {
+    box-shadow:
+      inset 0 0 0 5px rgb(249 94 20 / 0.98),
+      0 0 0 1px rgb(255 181 154 / 0.24),
+      0 0 24px rgb(249 94 20 / 0.24);
+  }
+
+  100% {
+    box-shadow:
+      inset 0 0 0 4px rgb(249 94 20 / 0.84),
+      0 0 0 1px rgb(255 181 154 / 0.18),
+      0 0 16px rgb(249 94 20 / 0.14);
+  }
+}
+
 @layer components {
   .image-list-grid {
     display: grid;
@@ -132,10 +155,22 @@
     backdrop-filter: blur(2px);
   }
 
-  .image-list-selectable.is-selection-preview {
+  .image-list-selection-frame {
+    opacity: 0;
+    transition: opacity 140ms ease, box-shadow 140ms ease;
+  }
+
+  .image-list-selectable.is-selection-preview .image-list-selection-frame {
+    opacity: 1;
     box-shadow:
-      0 0 0 1px rgb(255 181 154 / 0.16),
-      0 0 0 3px rgb(249 94 20 / 0.82),
-      0 0 30px rgb(249 94 20 / 0.18);
+      inset 0 0 0 5px rgb(249 94 20 / 0.98),
+      0 0 0 1px rgb(255 181 154 / 0.22),
+      0 0 28px rgb(249 94 20 / 0.26);
+  }
+
+  .image-list-selectable.is-selected .image-list-selection-frame,
+  .image-list-selectable[data-selected='true'] .image-list-selection-frame {
+    opacity: 1;
+    animation: image-list-selection-pulse 1.7s ease-in-out infinite;
   }
 }

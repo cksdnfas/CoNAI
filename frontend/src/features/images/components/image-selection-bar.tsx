@@ -1,4 +1,4 @@
-import { Download } from 'lucide-react'
+import { Download, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -7,6 +7,7 @@ interface ImageSelectionBarProps {
   downloadableCount: number
   isDownloading?: boolean
   onDownload: () => void
+  onClear?: () => void
 }
 
 /** Render a minimal bottom action bar for image selection workflows. */
@@ -15,6 +16,7 @@ export function ImageSelectionBar({
   downloadableCount,
   isDownloading = false,
   onDownload,
+  onClear,
 }: ImageSelectionBarProps) {
   if (selectedCount <= 0) {
     return null
@@ -24,17 +26,24 @@ export function ImageSelectionBar({
     <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
       <div
         className={cn(
-          'pointer-events-auto flex items-center gap-4 rounded-full bg-surface-container/92 px-5 py-3 text-sm text-foreground shadow-[0_0_40px_rgba(14,14,14,0.28)] backdrop-blur-[18px]',
+          'pointer-events-auto flex items-center gap-3 rounded-full bg-surface-container/92 px-5 py-3 text-sm text-foreground shadow-[0_0_40px_rgba(14,14,14,0.28)] backdrop-blur-[18px]',
         )}
       >
         <div className="flex flex-col leading-tight">
-          <span className="font-semibold">{selectedCount.toLocaleString('ko-KR')} selected</span>
+          <span className="font-semibold">{selectedCount.toLocaleString('ko-KR')}개 선택됨</span>
           <span className="text-xs text-muted-foreground">
             {downloadableCount > 0
-              ? `${downloadableCount.toLocaleString('ko-KR')} downloadable`
-              : 'No downloadable items'}
+              ? `${downloadableCount.toLocaleString('ko-KR')}개 다운로드 가능`
+              : '다운로드 가능한 항목이 없어'}
           </span>
         </div>
+
+        {onClear ? (
+          <Button size="sm" variant="secondary" onClick={onClear} data-no-select-drag="true">
+            <X className="h-4 w-4" />
+            선택 해제
+          </Button>
+        ) : null}
 
         <Button
           size="sm"
@@ -43,7 +52,7 @@ export function ImageSelectionBar({
           data-no-select-drag="true"
         >
           <Download className="h-4 w-4" />
-          {isDownloading ? 'Preparing…' : downloadableCount > 1 ? 'Download ZIP' : 'Download'}
+          {isDownloading ? '준비 중…' : downloadableCount > 1 ? 'ZIP 다운로드' : '다운로드'}
         </Button>
       </div>
     </div>

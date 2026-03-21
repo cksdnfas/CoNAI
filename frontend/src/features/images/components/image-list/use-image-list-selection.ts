@@ -19,12 +19,7 @@ export function useImageListSelection({
 }: UseImageListSelectionParams) {
   const selectionRef = useRef<SelectionArea | null>(null)
   const previewElementsRef = useRef<Set<HTMLElement>>(new Set())
-  const selectedIdsRef = useRef(selectedIds)
   const suppressClickUntilRef = useRef(0)
-
-  useEffect(() => {
-    selectedIdsRef.current = selectedIds
-  }, [selectedIds])
 
   useEffect(() => {
     const container = containerElement
@@ -113,17 +108,34 @@ export function useImageListSelection({
   }, [containerElement, onDragStateChange, onSelectedIdsChange, selectable])
 
   useEffect(() => {
-    if (!containerElement) return
+    const container = containerElement
+    if (!container || !selectable) return
 
-    const selectableElements = Array.from(
-      containerElement.querySelectorAll<HTMLElement>('.image-list-selectable'),
-    )
+    const syncSelectedState = () => {
+      const selectedIdSet = new Set(selectedIds)
+      const selectableElements = container.querySelectorAll<HTMLElement>('.image-list-selectable')
 
-    for (const element of selectableElements) {
-      const isSelected = selectedIds.includes(element.dataset.imageId ?? '')
-      element.dataset.selected = isSelected ? 'true' : 'false'
+      for (const element of selectableElements) {
+        const imageId = element.dataset.imageId ?? ''
+        const isSelected = selectedIdSet.has(imageId)
+        element.dataset.selected = isSelected ? 'true' : 'false'
+        element.classList.toggle('is-selected', isSelected)
+      }
     }
-  }, [containerElement, selectedIds])
+
+    syncSelectedState()
+
+    const observer = new MutationObserver(() => {
+      syncSelectedState()
+    })
+
+    observer.observe(container, {
+      childList: true,
+      subtree: true,
+    })
+
+    return () => observer.disconnect()
+  }, [containerElement, selectable, selectedIds])
 
   return {
     shouldSuppressClick: () => performance.now() < suppressClickUntilRef.current,

@@ -9,6 +9,19 @@ interface UseImageListLoadMoreParams {
 /** Trigger infinite loading when the sentinel becomes visible in the viewport. */
 export function useImageListLoadMore({ hasMore, isLoadingMore, onLoadMore }: UseImageListLoadMoreParams) {
   const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const isLoadMorePendingRef = useRef(false)
+
+  useEffect(() => {
+    if (!hasMore || !onLoadMore) {
+      isLoadMorePendingRef.current = false
+    }
+  }, [hasMore, onLoadMore])
+
+  useEffect(() => {
+    if (!isLoadingMore) {
+      isLoadMorePendingRef.current = false
+    }
+  }, [isLoadingMore])
 
   useEffect(() => {
     const sentinel = sentinelRef.current
@@ -17,8 +30,16 @@ export function useImageListLoadMore({ hasMore, isLoadingMore, onLoadMore }: Use
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0]
-        if (!entry?.isIntersecting || isLoadingMore) return
-        void onLoadMore()
+        if (!entry?.isIntersecting || isLoadingMore || isLoadMorePendingRef.current) return
+
+        isLoadMorePendingRef.current = true
+        void Promise.resolve(onLoadMore()).finally(() => {
+          requestAnimationFrame(() => {
+            if (!isLoadingMore) {
+              isLoadMorePendingRef.current = false
+            }
+          })
+        })
       },
       {
         root: null,

@@ -34,7 +34,8 @@ export function ImageListMasonry({
       data={items}
       useWindowScroll
       columnCount={columnCount}
-      style={{ gap: `${rowGap}px` }}
+      initialItemCount={Math.min(items.length, Math.max(columnCount * 2, 8))}
+      style={{ columnGap: `${columnGap}px` }}
       ItemContent={({ data: image }) => (
         <div style={{ paddingBottom: `${rowGap}px` }}>
           <ImageListItem

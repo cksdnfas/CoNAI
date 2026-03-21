@@ -34,14 +34,20 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   const previewUrl = getImageListPreviewUrl(image)
   const mediaKind = getImageListMediaKind(image)
   const imageId = getImageListItemId(image)
+  const displayName = getImageListDisplayName(image)
   const aspectRatio = image.width && image.height ? `${image.width} / ${image.height}` : undefined
+  const mediaFrameStyle = gridItemHeight
+    ? { height: gridItemHeight }
+    : aspectRatio
+      ? { aspectRatio }
+      : { aspectRatio: '4 / 5', minHeight: 240 }
 
   const content = previewUrl ? (
     mediaKind === 'video' ? (
       <video
         src={previewUrl}
-        className="block w-full object-cover"
-        style={gridItemHeight ? { height: gridItemHeight } : aspectRatio ? { aspectRatio } : undefined}
+        className="block h-full w-full object-cover"
+        style={mediaFrameStyle}
         muted
         loop
         autoPlay
@@ -56,34 +62,43 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
     ) : (
       <img
         src={previewUrl}
-        alt={getImageListDisplayName(image)}
-        className="w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-        style={gridItemHeight ? { height: gridItemHeight } : aspectRatio ? { aspectRatio } : undefined}
+        alt={displayName}
+        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+        style={mediaFrameStyle}
         loading="lazy"
         draggable={false}
         onDragStart={preventNativeDrag}
       />
     )
   ) : (
-    <div className="flex min-h-[280px] items-center justify-center text-sm text-muted-foreground">미리보기 없음</div>
+    <div
+      className="flex items-center justify-center text-sm text-muted-foreground"
+      style={mediaFrameStyle}
+    >
+      미리보기 없음
+    </div>
   )
 
   return (
     <button
       type="button"
       className={cn(
-        'image-list-selectable group block w-full overflow-hidden rounded-sm bg-surface-low text-left shadow-[0_0_40px_rgba(14,14,14,0.18)] transition-transform duration-300',
-        selected && 'is-selected ring-[3px] ring-primary/80 ring-offset-2 ring-offset-background shadow-[0_0_0_1px_rgba(255,181,154,0.16),0_0_32px_rgba(249,94,20,0.22)]',
+        'image-list-selectable group relative isolate block w-full overflow-hidden rounded-sm bg-surface-low text-left shadow-[0_0_40px_rgba(14,14,14,0.18)] transition-transform duration-300',
+        selected && 'is-selected',
         selectionMode ? 'cursor-default' : 'cursor-pointer',
       )}
       data-image-id={imageId}
       data-selected={selected ? 'true' : 'false'}
-      aria-label={`${getImageListDisplayName(image)} ${selectionMode ? 'select' : 'detail'}`}
+      aria-label={`${displayName} ${selectionMode ? 'select' : 'detail'}`}
+      aria-pressed={selected}
       draggable={false}
       onDragStart={preventNativeDrag}
       onClick={() => onActivate?.(imageId, href)}
     >
-      <div className="bg-surface-lowest select-none">{content}</div>
+      <div className="relative bg-surface-lowest select-none">
+        {content}
+        <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-sm" />
+      </div>
     </button>
   )
 })
