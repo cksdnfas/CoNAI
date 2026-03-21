@@ -1,58 +1,22 @@
-import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getImages } from '@/lib/api'
-import type { ImageRecord } from '@/types/image'
+import { ImageList } from '@/features/images/components/image-list/image-list'
 
 const curatedFilters = ['All Works', 'Cinematic', 'Architectural', 'Portrait', 'Abstract']
 
-function getDisplayName(image: ImageRecord) {
-  const raw = image.original_file_path || image.composite_hash || String(image.id)
-  const normalized = raw.replace(/\\/g, '/')
-  return normalized.split('/').at(-1) || raw
-}
-
-function ImageCard({ image }: { image: ImageRecord }) {
-  const previewUrl = image.thumbnail_url || image.image_url
-  const imageElement = previewUrl ? (
-    <img
-      src={previewUrl}
-      alt={getDisplayName(image)}
-      className="w-full object-cover transition-transform duration-700 group-hover:scale-[1.02]"
-      loading="lazy"
-    />
-  ) : (
-    <div className="flex min-h-[280px] items-center justify-center text-sm text-muted-foreground">미리보기 없음</div>
-  )
-
-  if (!image.composite_hash) {
-    return (
-      <div className="group mb-6 break-inside-avoid overflow-hidden rounded-sm bg-surface-low shadow-[0_0_40px_rgba(14,14,14,0.18)]">
-        <div className="bg-surface-lowest">{imageElement}</div>
-      </div>
-    )
-  }
-
-  return (
-    <Link
-      to={`/images/${image.composite_hash}`}
-      className="group mb-6 block break-inside-avoid overflow-hidden rounded-sm bg-surface-low shadow-[0_0_40px_rgba(14,14,14,0.18)]"
-      aria-label={`${getDisplayName(image)} 상세 보기`}
-    >
-      <div className="bg-surface-lowest">{imageElement}</div>
-    </Link>
-  )
-}
-
+/** Render the Home page with the reusable virtualized image list module. */
 export function HomePage() {
-  const imagesQuery = useQuery({
+  const imagesQuery = useInfiniteQuery({
     queryKey: ['home-images'],
-    queryFn: () => getImages({ page: 1, limit: 12 }),
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) => getImages({ page: pageParam, limit: 40 }),
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
   })
 
-  const images = imagesQuery.data?.images ?? []
+  const images = imagesQuery.data?.pages.flatMap((page) => page.images) ?? []
 
   return (
     <div className="space-y-8">
@@ -78,7 +42,7 @@ export function HomePage() {
         </Alert>
       ) : null}
 
-      {imagesQuery.isLoading ? (
+      {imagesQuery.isPending ? (
         <section className="columns-1 gap-6 sm:columns-2 xl:columns-3 2xl:columns-4">
           {Array.from({ length: 8 }).map((_, index) => (
             <div key={index} className="mb-6 break-inside-avoid overflow-hidden rounded-sm bg-surface-low">
@@ -88,7 +52,7 @@ export function HomePage() {
         </section>
       ) : null}
 
-      {!imagesQuery.isLoading && !imagesQuery.isError && images.length === 0 ? (
+      {!imagesQuery.isPending && !imagesQuery.isError && images.length === 0 ? (
         <Card className="bg-surface-container">
           <CardHeader>
             <CardTitle>표시할 이미지가 아직 없어</CardTitle>
@@ -97,12 +61,19 @@ export function HomePage() {
         </Card>
       ) : null}
 
-      {!imagesQuery.isLoading && !imagesQuery.isError && images.length > 0 ? (
-        <section className="columns-1 gap-6 sm:columns-2 xl:columns-3 2xl:columns-4">
-          {images.map((image) => (
-            <ImageCard key={String(image.id)} image={image} />
-          ))}
-        </section>
+      {!imagesQuery.isPending && !imagesQuery.isError && images.length > 0 ? (
+        <ImageList
+          items={images}
+          getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
+          hasMore={Boolean(imagesQuery.hasNextPage)}
+          isLoadingMore={imagesQuery.isFetchingNextPage}
+          onLoadMore={imagesQuery.fetchNextPage}
+          columnWidth={320}
+          columnGutter={24}
+          rowGutter={24}
+          itemHeightEstimate={320}
+          overscanBy={2}
+        />
       ) : null}
     </div>
   )
