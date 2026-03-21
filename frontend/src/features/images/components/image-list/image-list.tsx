@@ -58,7 +58,7 @@ export function ImageList({
       }
 
       if (href) {
-        navigate(href)
+        navigate(href, { state: { fromFeed: true } })
       }
     },
     [navigate, onSelectedIdsChange, selectedIds, selectionMode, shouldSuppressClick],

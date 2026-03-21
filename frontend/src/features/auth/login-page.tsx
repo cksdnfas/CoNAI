@@ -15,7 +15,7 @@ export function LoginPage() {
           description="지금은 인증 화면 자리를 먼저 확보한 상태야. 실제 계정 흐름은 앱 셸과 홈 MVP를 안정화한 뒤 연결할 거야."
         />
 
-        <Card className="border-primary/15 bg-linear-to-br from-primary/8 via-card to-secondary/8">
+        <Card className="border-primary/15 bg-card">
           <CardHeader>
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-primary/12 p-3 text-primary">

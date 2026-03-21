@@ -1,12 +1,12 @@
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Download, RefreshCcw } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { PageHeader } from '@/components/common/page-header'
 import { getImage } from '@/lib/api'
 
 function formatBytes(value?: number | null) {
@@ -31,8 +31,19 @@ function getDownloadName(path?: string | null, compositeHash?: string | null) {
   return compositeHash ? `${compositeHash}.png` : 'image'
 }
 
+interface DetailLocationState {
+  fromFeed?: boolean
+}
+
 export function ImageDetailPage() {
   const { compositeHash } = useParams<{ compositeHash: string }>()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const locationState = location.state as DetailLocationState | null
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })
+  }, [compositeHash])
 
   const imageQuery = useQuery({
     queryKey: ['image-detail', compositeHash],
@@ -44,35 +55,35 @@ export function ImageDetailPage() {
   const previewUrl = image?.image_url || image?.thumbnail_url
   const downloadName = getDownloadName(image?.original_file_path, image?.composite_hash)
 
+  const handleBackToFeed = () => {
+    if (locationState?.fromFeed && window.history.state?.idx > 0) {
+      navigate(-1)
+      return
+    }
+
+    navigate('/')
+  }
+
   return (
-    <div className="space-y-10">
-      <PageHeader
-        eyebrow="Artwork Detail"
-        title="이미지 상세도 툴 패널보다 전시 벽처럼 보여야 해"
-        description="핵심 정보는 분명하게 보여주되, 작품 감상을 방해하지 않도록 조용한 레이어 위에 배치한다."
-        actions={(
-          <>
-            <Button asChild variant="secondary">
-              <Link to="/">
-                <ArrowLeft className="h-4 w-4" />
-                Back to feed
-              </Link>
-            </Button>
-            <Button variant="outline" onClick={() => imageQuery.refetch()} disabled={imageQuery.isFetching}>
-              <RefreshCcw className="h-4 w-4" />
-              Refresh
-            </Button>
-            {previewUrl ? (
-              <Button asChild>
-                <a href={previewUrl} download={downloadName}>
-                  <Download className="h-4 w-4" />
-                  Download
-                </a>
-              </Button>
-            ) : null}
-          </>
-        )}
-      />
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="secondary" onClick={handleBackToFeed}>
+          <ArrowLeft className="h-4 w-4" />
+          피드로 돌아가기
+        </Button>
+        <Button variant="outline" onClick={() => imageQuery.refetch()} disabled={imageQuery.isFetching}>
+          <RefreshCcw className="h-4 w-4" />
+          새로고침
+        </Button>
+        {previewUrl ? (
+          <Button asChild>
+            <a href={previewUrl} download={downloadName}>
+              <Download className="h-4 w-4" />
+              다운로드
+            </a>
+          </Button>
+        ) : null}
+      </div>
 
       {imageQuery.isLoading ? (
         <div className="grid gap-8 xl:grid-cols-[1.2fr_0.8fr]">
@@ -80,9 +91,9 @@ export function ImageDetailPage() {
           <div className="space-y-6">
             <Card className="bg-surface-container">
               <CardContent className="space-y-4 px-6 py-6">
-                <Skeleton className="h-5 w-2/3" />
-                <Skeleton className="h-20 w-full" />
-                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
               </CardContent>
             </Card>
           </div>
@@ -103,56 +114,56 @@ export function ImageDetailPage() {
           <div className="overflow-hidden rounded-sm bg-surface-low shadow-[0_0_40px_rgba(14,14,14,0.22)]">
             <div className="flex min-h-[540px] items-center justify-center bg-surface-lowest">
               {previewUrl ? (
-                <img src={previewUrl} alt={image.composite_hash || String(image.id)} className="max-h-[80vh] w-full object-contain" />
+                <img
+                  src={previewUrl}
+                  alt={image.composite_hash || String(image.id)}
+                  className="max-h-[80vh] w-full object-contain"
+                />
               ) : (
                 <div className="text-sm text-muted-foreground">표시할 이미지가 없어</div>
               )}
             </div>
           </div>
 
-          <div className="space-y-6">
-            <Card className="bg-surface-container">
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between gap-3">
-                  <span className="truncate">Metadata</span>
-                  {image.is_processing ? <Badge variant="secondary">Processing</Badge> : <Badge variant="outline">Ready</Badge>}
-                </CardTitle>
-                <CardDescription>실제 작업에 필요한 핵심 메타데이터만 먼저 조용하게 노출한다.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <div className="rounded-sm bg-surface-high p-4">
-                  <p className="text-[11px] uppercase tracking-[0.18em]">Composite hash</p>
-                  <p className="mt-2 break-all font-mono text-foreground">{image.composite_hash || '—'}</p>
+          <Card className="bg-surface-container">
+            <CardContent className="space-y-3 p-6 text-sm text-muted-foreground">
+              {image.is_processing ? (
+                <div className="flex items-center justify-end">
+                  <Badge variant="secondary">Processing</Badge>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-sm bg-surface-high p-4">
-                    <p className="text-[11px] uppercase tracking-[0.18em]">Dimensions</p>
-                    <p className="mt-2 text-foreground">{image.width && image.height ? `${image.width} × ${image.height}` : '—'}</p>
-                  </div>
-                  <div className="rounded-sm bg-surface-high p-4">
-                    <p className="text-[11px] uppercase tracking-[0.18em]">File size</p>
-                    <p className="mt-2 text-foreground">{formatBytes(image.file_size)}</p>
-                  </div>
+              ) : null}
+
+              <div className="rounded-sm bg-surface-high p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em]">Composite hash</p>
+                <p className="mt-2 break-all font-mono text-foreground">{image.composite_hash || '—'}</p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-sm bg-surface-high p-4">
+                  <p className="text-[11px] uppercase tracking-[0.18em]">Dimensions</p>
+                  <p className="mt-2 text-foreground">
+                    {image.width && image.height ? `${image.width} × ${image.height}` : '—'}
+                  </p>
+                </div>
+                <div className="rounded-sm bg-surface-high p-4">
+                  <p className="text-[11px] uppercase tracking-[0.18em]">File size</p>
+                  <p className="mt-2 text-foreground">{formatBytes(image.file_size)}</p>
+                </div>
+                {image.ai_metadata?.model_name ? (
                   <div className="rounded-sm bg-surface-high p-4 sm:col-span-2">
                     <p className="text-[11px] uppercase tracking-[0.18em]">Model</p>
-                    <p className="mt-2 text-foreground">{image.ai_metadata?.model_name || '모델 정보 없음'}</p>
+                    <p className="mt-2 text-foreground">{image.ai_metadata.model_name}</p>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-surface-low">
-              <CardHeader>
-                <CardTitle>Original path</CardTitle>
-                <CardDescription>원본 경로 확인은 가능하되, 시각적 주인공은 작품이어야 한다.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-sm bg-surface-lowest p-4 font-mono text-xs break-all text-muted-foreground">
-                  {image.original_file_path || '—'}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                ) : null}
+                {image.original_file_path ? (
+                  <div className="rounded-sm bg-surface-high p-4 sm:col-span-2">
+                    <p className="text-[11px] uppercase tracking-[0.18em]">Path</p>
+                    <p className="mt-2 break-all font-mono text-xs text-foreground/88">{image.original_file_path}</p>
+                  </div>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       ) : null}
     </div>

@@ -1,5 +1,5 @@
 import { Bell, History, Image, Search } from 'lucide-react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, ScrollRestoration } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -58,6 +58,8 @@ export function AppShell() {
       <main className="mx-auto w-full max-w-[1680px] px-6 pb-16 pt-24 md:px-10">
         <Outlet />
       </main>
+
+      <ScrollRestoration getKey={(location) => `${location.pathname}${location.search}`} />
     </div>
   )
 }
