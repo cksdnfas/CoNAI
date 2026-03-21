@@ -34,27 +34,27 @@ export function ImageDetailPage() {
   const previewUrl = image?.image_url || image?.thumbnail_url
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <PageHeader
-        eyebrow="Image Detail"
-        title="이미지 상세 MVP"
-        description="홈에서 진입한 이미지를 바로 검토할 수 있도록 최소 상세 화면을 먼저 복구했다."
+        eyebrow="Artwork Detail"
+        title="이미지 상세도 툴 패널보다 전시 벽처럼 보여야 해"
+        description="핵심 정보는 분명하게 보여주되, 작품 감상을 방해하지 않도록 조용한 레이어 위에 배치한다."
         actions={(
           <>
-            <Button asChild variant="outline">
+            <Button asChild variant="secondary">
               <Link to="/">
                 <ArrowLeft className="h-4 w-4" />
-                홈으로
+                Back to feed
               </Link>
             </Button>
             <Button variant="outline" onClick={() => imageQuery.refetch()} disabled={imageQuery.isFetching}>
               <RefreshCcw className="h-4 w-4" />
-              다시 불러오기
+              Refresh
             </Button>
             {previewUrl ? (
               <Button asChild>
                 <a href={previewUrl} target="_blank" rel="noreferrer">
-                  원본 열기
+                  Open original
                   <ExternalLink className="h-4 w-4" />
                 </a>
               </Button>
@@ -64,15 +64,17 @@ export function ImageDetailPage() {
       />
 
       {imageQuery.isLoading ? (
-        <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <Skeleton className="min-h-[420px] w-full rounded-3xl" />
-          <Card>
-            <CardContent className="space-y-4 px-6 py-6">
-              <Skeleton className="h-5 w-2/3" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-            </CardContent>
-          </Card>
+        <div className="grid gap-8 xl:grid-cols-[1.2fr_0.8fr]">
+          <Skeleton className="min-h-[540px] w-full rounded-sm" />
+          <div className="space-y-6">
+            <Card className="bg-surface-container">
+              <CardContent className="space-y-4 px-6 py-6">
+                <Skeleton className="h-5 w-2/3" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+              </CardContent>
+            </Card>
+          </div>
         </div>
       ) : null}
 
@@ -86,55 +88,55 @@ export function ImageDetailPage() {
       ) : null}
 
       {!imageQuery.isLoading && !imageQuery.isError && image ? (
-        <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <Card className="overflow-hidden py-0">
-            <div className="flex min-h-[420px] items-center justify-center bg-muted">
+        <div className="grid gap-8 xl:grid-cols-[1.25fr_0.75fr]">
+          <div className="overflow-hidden rounded-sm bg-surface-low shadow-[0_0_40px_rgba(14,14,14,0.22)]">
+            <div className="flex min-h-[540px] items-center justify-center bg-surface-lowest">
               {previewUrl ? (
-                <img src={previewUrl} alt={image.composite_hash || String(image.id)} className="max-h-[70vh] w-full object-contain" />
+                <img src={previewUrl} alt={image.composite_hash || String(image.id)} className="max-h-[80vh] w-full object-contain" />
               ) : (
                 <div className="text-sm text-muted-foreground">표시할 이미지가 없어</div>
               )}
             </div>
-          </Card>
+          </div>
 
           <div className="space-y-6">
-            <Card>
+            <Card className="bg-surface-container">
               <CardHeader>
                 <CardTitle className="flex items-center justify-between gap-3">
-                  <span className="truncate">핵심 메타데이터</span>
+                  <span className="truncate">Metadata</span>
                   {image.is_processing ? <Badge variant="secondary">Processing</Badge> : <Badge variant="outline">Ready</Badge>}
                 </CardTitle>
-                <CardDescription>Phase 1 상세 화면은 실제 업무에 필요한 핵심 필드만 먼저 보여준다.</CardDescription>
+                <CardDescription>실제 작업에 필요한 핵심 메타데이터만 먼저 조용하게 노출한다.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <div className="rounded-2xl bg-muted/50 p-4">
-                  <p className="text-xs uppercase tracking-wide">Composite hash</p>
+                <div className="rounded-sm bg-surface-high p-4">
+                  <p className="text-[11px] uppercase tracking-[0.18em]">Composite hash</p>
                   <p className="mt-2 break-all font-mono text-foreground">{image.composite_hash || '—'}</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl bg-muted/50 p-4">
-                    <p className="text-xs uppercase tracking-wide">Dimensions</p>
+                  <div className="rounded-sm bg-surface-high p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em]">Dimensions</p>
                     <p className="mt-2 text-foreground">{image.width && image.height ? `${image.width} × ${image.height}` : '—'}</p>
                   </div>
-                  <div className="rounded-2xl bg-muted/50 p-4">
-                    <p className="text-xs uppercase tracking-wide">File size</p>
+                  <div className="rounded-sm bg-surface-high p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em]">File size</p>
                     <p className="mt-2 text-foreground">{formatBytes(image.file_size)}</p>
                   </div>
-                  <div className="rounded-2xl bg-muted/50 p-4 sm:col-span-2">
-                    <p className="text-xs uppercase tracking-wide">Model</p>
+                  <div className="rounded-sm bg-surface-high p-4 sm:col-span-2">
+                    <p className="text-[11px] uppercase tracking-[0.18em]">Model</p>
                     <p className="mt-2 text-foreground">{image.ai_metadata?.model_name || '모델 정보 없음'}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="bg-surface-low">
               <CardHeader>
-                <CardTitle>파일 경로</CardTitle>
-                <CardDescription>원본 경로를 바로 확인할 수 있도록 최소 표시만 제공한다.</CardDescription>
+                <CardTitle>Original path</CardTitle>
+                <CardDescription>원본 경로 확인은 가능하되, 시각적 주인공은 작품이어야 한다.</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="rounded-2xl bg-muted/50 p-4 font-mono text-xs break-all text-muted-foreground">
+                <div className="rounded-sm bg-surface-lowest p-4 font-mono text-xs break-all text-muted-foreground">
                   {image.original_file_path || '—'}
                 </div>
               </CardContent>

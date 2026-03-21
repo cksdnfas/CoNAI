@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -5,6 +6,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -24,43 +26,63 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-surface-lowest: var(--surface-lowest);
+  --color-surface-low: var(--surface-low);
+  --color-surface-container: var(--surface-container);
+  --color-surface-high: var(--surface-high);
+  --color-surface-highest: var(--surface-highest);
+  --color-surface-bright: var(--surface-bright);
 }
 
 :root {
-  --radius: 1rem;
-  --background: #f6f8fb;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --primary: #2563eb;
-  --primary-foreground: #ffffff;
-  --secondary: #14b8a6;
-  --secondary-foreground: #083344;
-  --muted: #eef2f7;
-  --muted-foreground: #475569;
-  --accent: #e2e8f0;
-  --accent-foreground: #0f172a;
-  --border: #dbe4ee;
-  --input: #dbe4ee;
-  --ring: #2563eb;
+  color-scheme: dark;
+  --radius: 0.5rem;
+  --background: #131313;
+  --foreground: #e5e2e1;
+  --card: #1c1b1b;
+  --card-foreground: #e5e2e1;
+  --primary: #f95e14;
+  --primary-foreground: #380d00;
+  --secondary: #ffb59a;
+  --secondary-foreground: #380d00;
+  --muted: #201f1f;
+  --muted-foreground: #e3bfb2;
+  --accent: #2a2a2a;
+  --accent-foreground: #e5e2e1;
+  --border: rgb(90 65 56 / 0.15);
+  --input: #0e0e0e;
+  --ring: #ffb59a;
+  --surface-lowest: #0e0e0e;
+  --surface-low: #1c1b1b;
+  --surface-container: #201f1f;
+  --surface-high: #2a2a2a;
+  --surface-highest: #353534;
+  --surface-bright: #393939;
 }
 
-.dark {
-  --background: #08111f;
-  --foreground: #e5eefc;
-  --card: #0f1b2e;
-  --card-foreground: #e5eefc;
-  --primary: #60a5fa;
-  --primary-foreground: #08111f;
-  --secondary: #2dd4bf;
-  --secondary-foreground: #052e2b;
-  --muted: #162235;
-  --muted-foreground: #94a3b8;
-  --accent: #1e293b;
-  --accent-foreground: #e5eefc;
-  --border: #22314b;
-  --input: #22314b;
-  --ring: #60a5fa;
+.light {
+  color-scheme: light;
+  --background: #f5f2f1;
+  --foreground: #241814;
+  --card: #ffffff;
+  --card-foreground: #241814;
+  --primary: #f95e14;
+  --primary-foreground: #ffffff;
+  --secondary: #ffdbcf;
+  --secondary-foreground: #5b1b00;
+  --muted: #efe6e2;
+  --muted-foreground: #7b5f55;
+  --accent: #f7ece8;
+  --accent-foreground: #241814;
+  --border: rgb(90 65 56 / 0.12);
+  --input: #ede3df;
+  --ring: #f95e14;
+  --surface-lowest: #ffffff;
+  --surface-low: #f8f3f1;
+  --surface-container: #f2ebe8;
+  --surface-high: #e9dfdb;
+  --surface-highest: #e1d3ce;
+  --surface-bright: #faf6f4;
 }
 
 @layer base {
@@ -74,11 +96,19 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
     font-feature-settings: 'rlig' 1, 'calt' 1;
+    background-image:
+      radial-gradient(circle at top, rgb(249 94 20 / 0.08), transparent 26%),
+      linear-gradient(180deg, rgb(255 255 255 / 0.01), transparent 18%);
   }
 
   ::selection {
-    background: color-mix(in srgb, var(--primary) 20%, white);
-    color: var(--foreground);
+    background: color-mix(in srgb, var(--secondary) 30%, var(--primary) 70%);
+    color: #2a0d00;
+  }
+
+  img {
+    image-rendering: auto;
   }
 }

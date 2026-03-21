@@ -14,11 +14,14 @@
 
 ## 고정 기준
 - 프론트 dev 포트: `1677`
-- Primary: `#2563EB`
-- Secondary: `#14B8A6`
-- Style reference: `Clean, modern operator dashboard with crisp typography, disciplined spacing, and restrained accent usage.`
+- Primary: `#F95E14`
+- Secondary: `#FFB59A`
+- Style reference: `The Silent Curator — a premium dark editorial gallery where the interface recedes and the artwork takes the spotlight.`
 
-상세 규칙은 `RESET_BASELINE.md` 참고.
+## 디자인 기준 문서
+- `RESET_BASELINE.md`
+- `DESIGN_PRESET.md`
+- `APP_ARCHITECTURE.md`
 
 ## 기술 스택
 - React 19
@@ -40,8 +43,7 @@ npm run dev:frontend
 ```
 
 ## 다음 권장 작업
-1. 정보구조(IA) 확정
-2. 라우트 맵 정의
-3. 공통 앱 셸 설계
-4. 인증/홈/상세/업로드 순으로 MVP 재구축
-5. 그룹/설정/생성/워크플로우는 후순위 분리 구현
+1. 디자인 프리셋 기반 컴포넌트 통일
+2. 홈/상세/업로드 3개 화면의 톤 일치 검증
+3. 업로드/인증/설정 순으로 MVP 복구
+4. 그룹/설정 고도화/생성/워크플로우는 후순위 분리 구현

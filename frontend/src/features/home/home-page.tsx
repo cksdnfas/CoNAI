@@ -1,14 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, ExternalLink, RefreshCcw } from 'lucide-react'
+import { Download, ExternalLink, Heart, RefreshCcw, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/common/page-header'
 import { getImages } from '@/lib/api'
 import type { ImageRecord } from '@/types/image'
+
+const curatedFilters = ['All Works', 'Cinematic', 'Architectural', 'Portrait', 'Abstract']
 
 function formatBytes(value?: number | null) {
   if (!value) return '—'
@@ -45,42 +47,62 @@ function ImageCard({ image }: { image: ImageRecord }) {
   const previewUrl = image.thumbnail_url || image.image_url
 
   return (
-    <Card className="overflow-hidden border-border/80 py-0 transition-transform hover:-translate-y-0.5 hover:shadow-md">
-      <div className="aspect-[4/3] bg-muted">
+    <div className="group mb-6 break-inside-avoid overflow-hidden rounded-sm bg-surface-low shadow-[0_0_40px_rgba(14,14,14,0.18)]">
+      <div className="relative overflow-hidden bg-surface-lowest">
         {previewUrl ? (
-          <img src={previewUrl} alt={getDisplayName(image)} className="h-full w-full object-cover" loading="lazy" />
+          <img src={previewUrl} alt={getDisplayName(image)} className="w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]" loading="lazy" />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">미리보기 없음</div>
+          <div className="flex min-h-[280px] items-center justify-center text-sm text-muted-foreground">미리보기 없음</div>
         )}
+
+        <div className="absolute inset-0 flex flex-col justify-end bg-linear-to-t from-black/85 via-black/15 to-transparent p-5 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+          <p className="mb-1 text-[10px] font-bold tracking-[0.18em] text-secondary uppercase">
+            {image.is_processing ? 'Processing' : 'Curated Feed'}
+          </p>
+          <h3 className="mb-3 text-lg font-semibold leading-tight text-foreground">{getDisplayName(image)}</h3>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex gap-2">
+              <button className="rounded-sm bg-white/10 p-2 text-white/80 backdrop-blur-md transition-colors hover:bg-primary hover:text-primary-foreground" aria-label="Favorite">
+                <Heart className="h-4 w-4" />
+              </button>
+              {previewUrl ? (
+                <a
+                  className="rounded-sm bg-white/10 p-2 text-white/80 backdrop-blur-md transition-colors hover:bg-primary hover:text-primary-foreground"
+                  href={previewUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Open original"
+                >
+                  <Download className="h-4 w-4" />
+                </a>
+              ) : null}
+            </div>
+            <span className="text-[10px] font-medium text-white/60">{image.ai_metadata?.model_name || 'Unknown model'}</span>
+          </div>
+        </div>
       </div>
 
-      <CardContent className="space-y-3 px-4 py-4">
+      <div className="space-y-3 px-4 py-4 text-sm">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
-            <p className="truncate text-sm font-medium text-foreground">{getDisplayName(image)}</p>
-            <p className="text-xs text-muted-foreground">{image.ai_metadata?.model_name || '모델 정보 없음'}</p>
+            <p className="truncate font-medium text-foreground">{getDisplayName(image)}</p>
+            <p className="text-xs text-muted-foreground">{formatDate(image.first_seen_date)}</p>
           </div>
           {image.is_processing ? <Badge variant="secondary">Processing</Badge> : <Badge variant="outline">Ready</Badge>}
         </div>
 
-        <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-          <div className="rounded-xl bg-muted/60 px-3 py-2">크기: {image.width && image.height ? `${image.width}×${image.height}` : '—'}</div>
-          <div className="rounded-xl bg-muted/60 px-3 py-2">용량: {formatBytes(image.file_size)}</div>
+        <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+          <span className="rounded-sm bg-surface-high px-2.5 py-1">{image.width && image.height ? `${image.width}×${image.height}` : 'Unknown size'}</span>
+          <span className="rounded-sm bg-surface-high px-2.5 py-1">{formatBytes(image.file_size)}</span>
         </div>
 
-        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span className="truncate">{formatDate(image.first_seen_date)}</span>
-          {image.composite_hash ? (
-            <Button asChild size="sm" variant="ghost">
-              <Link to={`/images/${image.composite_hash}`}>
-                상세
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          ) : null}
-        </div>
-      </CardContent>
-    </Card>
+        {image.composite_hash ? (
+          <Button asChild size="sm" variant="ghost" className="px-0 text-secondary hover:bg-transparent hover:text-secondary/85">
+            <Link to={`/images/${image.composite_hash}`}>작품 열기</Link>
+          </Button>
+        ) : null}
+      </div>
+    </div>
   )
 }
 
@@ -94,20 +116,20 @@ export function HomePage() {
   const total = imagesQuery.data?.total ?? 0
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <PageHeader
-        eyebrow="Home MVP"
-        title="새 프론트 첫 번째 실데이터 화면"
-        description="홈은 지금 프론트가 살아 있는지 확인하는 기준 화면이야. 목록 조회, 상태 처리, 상세 이동까지 먼저 안정화한다."
+        eyebrow="Curated Feed"
+        title="조용한 갤러리처럼, 작품이 먼저 보이는 홈 화면"
+        description="이 홈은 운영 패널보다 큐레이션 피드에 가까워야 해. UI는 한 발 뒤로 물러나고, 이미지와 선택 순간만 강조한다."
         actions={(
           <>
-            <Button variant="outline" onClick={() => imagesQuery.refetch()} disabled={imagesQuery.isFetching}>
+            <Button variant="secondary" onClick={() => imagesQuery.refetch()} disabled={imagesQuery.isFetching}>
               <RefreshCcw className="h-4 w-4" />
-              새로고침
+              Refresh feed
             </Button>
             <Button asChild>
               <a href="http://localhost:1666/health" target="_blank" rel="noreferrer">
-                백엔드 체크
+                Backend health
                 <ExternalLink className="h-4 w-4" />
               </a>
             </Button>
@@ -115,25 +137,37 @@ export function HomePage() {
         )}
       />
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardDescription>현재 피드 상태</CardDescription>
-            <CardTitle>{imagesQuery.isLoading ? '로딩 중' : imagesQuery.isError ? '에러' : '정상 연결'}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>표시 중인 카드</CardDescription>
-            <CardTitle>{imagesQuery.isLoading ? '—' : images.length.toLocaleString('ko-KR')}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>백엔드 총 이미지 수</CardDescription>
-            <CardTitle>{imagesQuery.isLoading ? '—' : total.toLocaleString('ko-KR')}</CardTitle>
-          </CardHeader>
-        </Card>
+      <section className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            {curatedFilters.map((filter, index) => (
+              <span
+                key={filter}
+                className={index === 0 ? 'cursor-default rounded-sm bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground' : 'cursor-default rounded-sm bg-surface-highest px-4 py-1.5 text-xs font-medium text-muted-foreground'}
+              >
+                {filter}
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-6 text-sm font-medium text-muted-foreground">
+            <span className="inline-flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-secondary" />
+              총 {total.toLocaleString('ko-KR')}개의 작품이 백엔드에 있어
+            </span>
+            <span>현재 표시: {images.length.toLocaleString('ko-KR')}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 text-sm font-medium text-muted-foreground">
+          <span className="inline-flex items-center gap-2 transition-colors hover:text-secondary">
+            <SlidersHorizontal className="h-4 w-4" />
+            Sort: Recent
+          </span>
+          <span className="inline-flex items-center gap-2 transition-colors hover:text-secondary">
+            <SlidersHorizontal className="h-4 w-4" />
+            Filters
+          </span>
+        </div>
       </section>
 
       {imagesQuery.isError ? (
@@ -146,25 +180,25 @@ export function HomePage() {
       ) : null}
 
       {imagesQuery.isLoading ? (
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <Card key={index} className="overflow-hidden py-0">
-              <Skeleton className="aspect-[4/3] w-full rounded-none" />
-              <CardContent className="space-y-3 px-4 py-4">
+        <section className="columns-1 gap-6 sm:columns-2 xl:columns-3 2xl:columns-4">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div key={index} className="mb-6 break-inside-avoid overflow-hidden rounded-sm bg-surface-low">
+              <Skeleton className="min-h-[280px] w-full rounded-none" />
+              <div className="space-y-3 px-4 py-4">
                 <Skeleton className="h-4 w-2/3" />
                 <Skeleton className="h-3 w-1/2" />
-                <div className="grid grid-cols-2 gap-2">
-                  <Skeleton className="h-9 w-full" />
-                  <Skeleton className="h-9 w-full" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-7 w-20" />
+                  <Skeleton className="h-7 w-20" />
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </section>
       ) : null}
 
       {!imagesQuery.isLoading && !imagesQuery.isError && images.length === 0 ? (
-        <Card>
+        <Card className="bg-surface-container">
           <CardHeader>
             <CardTitle>표시할 이미지가 아직 없어</CardTitle>
             <CardDescription>업로드를 연결하거나 백엔드 데이터 상태를 먼저 확인하면 돼.</CardDescription>
@@ -173,7 +207,7 @@ export function HomePage() {
       ) : null}
 
       {!imagesQuery.isLoading && !imagesQuery.isError && images.length > 0 ? (
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <section className="columns-1 gap-6 sm:columns-2 xl:columns-3 2xl:columns-4">
           {images.map((image) => (
             <ImageCard key={String(image.id)} image={image} />
           ))}
