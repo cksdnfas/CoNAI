@@ -18,6 +18,28 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
+/** Trigger a browser download from the current frontend context. */
+function triggerBrowserDownload(url: string, filename?: string) {
+  const anchor = document.createElement('a')
+  anchor.href = url
+  if (filename) {
+    anchor.download = filename
+  }
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+}
+
+/** Trigger a Blob download using a temporary object URL. */
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const objectUrl = URL.createObjectURL(blob)
+  try {
+    triggerBrowserDownload(objectUrl, filename)
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000)
+  }
+}
+
 export async function getImages(params?: { page?: number; limit?: number }) {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
@@ -38,4 +60,32 @@ export async function getImage(compositeHash: string) {
     throw new Error(response.error || '이미지를 불러오지 못했어.')
   }
   return response.data
+}
+
+/** Download one or many image originals, using ZIP for multi-select. */
+export async function downloadImageSelection(compositeHashes: string[]) {
+  if (compositeHashes.length === 0) {
+    return
+  }
+
+  if (compositeHashes.length === 1) {
+    triggerBrowserDownload(`${API_BASE}/api/images/${compositeHashes[0]}/download/original`)
+    return
+  }
+
+  const response = await fetch(`${API_BASE}/api/images/download/batch`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/zip',
+    },
+    body: JSON.stringify({ compositeHashes }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Batch download failed: ${response.status}`)
+  }
+
+  const blob = await response.blob()
+  triggerBlobDownload(blob, `conai-images-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.zip`)
 }

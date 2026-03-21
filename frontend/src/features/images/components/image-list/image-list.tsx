@@ -134,7 +134,7 @@ export function ImageList({
           rootContainer={containerElement}
           dragContainer={containerElement}
           selectableTargets={['.image-list-item']}
-          hitRate={20}
+          hitRate={8}
           selectByClick={false}
           selectFromInside={true}
           preventDragFromInside={true}

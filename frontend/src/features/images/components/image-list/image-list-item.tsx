@@ -72,7 +72,7 @@ export function ImageListItem({
 
   const className = cn(
     'image-list-item group block overflow-hidden rounded-sm bg-surface-low shadow-[0_0_40px_rgba(14,14,14,0.18)] transition-transform duration-300',
-    selected && 'ring-2 ring-primary/70 ring-offset-2 ring-offset-background',
+    selected && 'ring-[3px] ring-primary/80 ring-offset-2 ring-offset-background shadow-[0_0_0_1px_rgba(255,181,154,0.16),0_0_32px_rgba(249,94,20,0.22)]',
   )
 
   const inner = <div className="bg-surface-lowest select-none">{content}</div>

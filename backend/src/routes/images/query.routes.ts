@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import AdmZip from 'adm-zip';
 import { routeParam } from '../routeParam';
 import path from 'path';
 import fs from 'fs';
@@ -907,6 +908,77 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
       error: error instanceof Error ? error.message : 'Failed to serve thumbnail'
     });
     return;
+  }
+}));
+
+/**
+ * Batch original download as ZIP (composite_hash list)
+ * POST /api/images/download/batch
+ */
+router.post('/download/batch', asyncHandler(async (req: Request, res: Response) => {
+  const compositeHashes = Array.isArray(req.body?.compositeHashes)
+    ? req.body.compositeHashes.filter((value: unknown): value is string => typeof value === 'string')
+    : [];
+
+  const uniqueHashes = Array.from(new Set<string>(compositeHashes)).filter((hash: string) => hash.length === 48 || hash.length === 32);
+
+  if (uniqueHashes.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'No valid composite hashes provided'
+    });
+  }
+
+  try {
+    const zip = new AdmZip();
+    const usedNames = new Map<string, number>();
+    let addedCount = 0;
+
+    for (const compositeHash of uniqueHashes) {
+      const files = ImageFileModel.findActiveByHash(compositeHash);
+      if (files.length === 0) {
+        continue;
+      }
+
+      const file = files[0];
+      const filePath = resolveUploadsPath(file.original_file_path);
+      if (!fs.existsSync(filePath)) {
+        continue;
+      }
+
+      const parsedName = path.parse(file.original_file_path);
+      const originalName = parsedName.base || `${compositeHash}`;
+      const duplicateCount = usedNames.get(originalName) || 0;
+      usedNames.set(originalName, duplicateCount + 1);
+      const finalName = duplicateCount === 0
+        ? originalName
+        : `${parsedName.name}-${duplicateCount}${parsedName.ext}`;
+
+      zip.addLocalFile(filePath, '', finalName);
+      addedCount += 1;
+    }
+
+    if (addedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No downloadable files were found'
+      });
+    }
+
+    const zipBuffer = zip.toBuffer();
+    const archiveName = `conai-images-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`;
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Length', zipBuffer.length);
+    res.setHeader('Content-Disposition', `attachment; filename="${archiveName}"; filename*=UTF-8''${encodeURIComponent(archiveName)}`);
+    res.send(zipBuffer);
+    return;
+  } catch (error) {
+    console.error('Batch download error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to create download archive'
+    });
   }
 }));
 

@@ -1,16 +1,18 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getImages } from '@/lib/api'
+import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageList } from '@/features/images/components/image-list/image-list'
+import { downloadImageSelection, getImages } from '@/lib/api'
 
 const curatedFilters = ['All Works', 'Cinematic', 'Architectural', 'Portrait', 'Abstract']
 
 /** Render the Home page with the reusable virtualized image list module. */
 export function HomePage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [isDownloading, setIsDownloading] = useState(false)
 
   const imagesQuery = useInfiniteQuery({
     queryKey: ['home-images'],
@@ -19,7 +21,32 @@ export function HomePage() {
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
   })
 
-  const images = imagesQuery.data?.pages.flatMap((page) => page.images) ?? []
+  const images = useMemo(
+    () => (imagesQuery.data?.pages ?? []).flatMap((page) => page.images),
+    [imagesQuery.data?.pages],
+  )
+
+  const downloadableCompositeHashes = useMemo(
+    () =>
+      images
+        .filter((image) => selectedIds.includes(String(image.composite_hash ?? image.id)))
+        .map((image) => image.composite_hash)
+        .filter((value): value is string => typeof value === 'string' && value.length > 0),
+    [images, selectedIds],
+  )
+
+  const handleDownloadSelected = async () => {
+    if (downloadableCompositeHashes.length === 0 || isDownloading) {
+      return
+    }
+
+    try {
+      setIsDownloading(true)
+      await downloadImageSelection(downloadableCompositeHashes)
+    } finally {
+      setIsDownloading(false)
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -81,6 +108,13 @@ export function HomePage() {
           overscanBy={2}
         />
       ) : null}
+
+      <ImageSelectionBar
+        selectedCount={selectedIds.length}
+        downloadableCount={downloadableCompositeHashes.length}
+        isDownloading={isDownloading}
+        onDownload={handleDownloadSelected}
+      />
     </div>
   )
 }
