@@ -1,18 +1,20 @@
 import { createHashRouter } from 'react-router-dom'
 import { AppShell } from '@/components/layout/app-shell'
-import { LoginPage } from '@/features/auth/login-page'
-import { GroupPage } from '@/features/groups/group-page'
-import { HomePage } from '@/features/home/home-page'
-import { ImageDetailPage } from '@/features/images/image-detail-page'
-import { PromptPage } from '@/features/prompts/prompt-page'
-import { SettingsPage } from '@/features/settings/settings-page'
-import { NotFoundPage } from '@/features/system/not-found-page'
-import { UploadPage } from '@/features/upload/upload-page'
+import {
+  GroupRoute,
+  HomeRoute,
+  ImageDetailRoute,
+  LoginRoute,
+  NotFoundRoute,
+  PromptRoute,
+  SettingsRoute,
+  UploadRoute,
+} from '@/app/lazy-routes'
 
 export const appRouter = createHashRouter([
   {
     path: '/login',
-    element: <LoginPage />,
+    element: <LoginRoute />,
   },
   {
     path: '/',
@@ -20,35 +22,35 @@ export const appRouter = createHashRouter([
     children: [
       {
         index: true,
-        element: <HomePage />,
+        element: <HomeRoute />,
       },
       {
         path: 'groups',
-        element: <GroupPage />,
+        element: <GroupRoute />,
       },
       {
         path: 'groups/:groupId',
-        element: <GroupPage />,
+        element: <GroupRoute />,
       },
       {
         path: 'prompts',
-        element: <PromptPage />,
+        element: <PromptRoute />,
       },
       {
         path: 'images/:compositeHash',
-        element: <ImageDetailPage />,
+        element: <ImageDetailRoute />,
       },
       {
         path: 'upload',
-        element: <UploadPage />,
+        element: <UploadRoute />,
       },
       {
         path: 'settings',
-        element: <SettingsPage />,
+        element: <SettingsRoute />,
       },
       {
         path: '*',
-        element: <NotFoundPage />,
+        element: <NotFoundRoute />,
       },
     ],
   },
