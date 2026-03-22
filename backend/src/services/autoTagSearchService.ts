@@ -6,60 +6,21 @@ import {
   QueryBuilderResult
 } from '../types/autoTag';
 import { RatingScoreService } from './ratingScoreService';
+import {
+  AUTO_TAG_CHARACTER_JSON_PATHS,
+  AUTO_TAG_GENERAL_JSON_PATHS,
+  AUTO_TAG_MODEL_JSON_PATHS,
+  buildAutoTagExistsForPaths,
+  buildAutoTagModelExpr,
+  buildAutoTagRatingExpr,
+  pushAutoTagPathMatchParams,
+} from './autoTagSqlShared';
 
 /**
  * 자동태그 검색 서비스
  * SQLite JSON 함수를 활용한 동적 쿼리 빌더
  */
 export class AutoTagSearchService {
-  private static readonly generalJsonPaths = [
-    '$.general',
-    '$.tagger.general',
-    '$.kaloscope.general',
-    '$.kaloscope.artists',
-    '$.kaloscope.artist'
-  ] as const;
-
-  private static readonly characterJsonPaths = [
-    '$.character',
-    '$.tagger.character'
-  ] as const;
-
-  private static readonly modelJsonPaths = [
-    '$.model',
-    '$.tagger.model',
-    '$.kaloscope.model'
-  ] as const;
-
-  private static ratingExpr(ratingType: 'general' | 'sensitive' | 'questionable' | 'explicit'): string {
-    return `COALESCE(json_extract(i.auto_tags, '$.rating.${ratingType}'), json_extract(i.auto_tags, '$.tagger.rating.${ratingType}'))`;
-  }
-
-  private static modelExpr(): string {
-    return `COALESCE(json_extract(i.auto_tags, '$.model'), json_extract(i.auto_tags, '$.tagger.model'), json_extract(i.auto_tags, '$.kaloscope.model'))`;
-  }
-
-  private static buildExistsForPaths(paths: readonly string[], valueConditionSql: string): string {
-    return `(${paths.map((path) => `EXISTS (SELECT 1 FROM json_each(i.auto_tags, '${path}') WHERE ${valueConditionSql})`).join(' OR ')})`;
-  }
-
-  private static pushPathMatchParams(
-    params: any[],
-    pathCount: number,
-    variant: string,
-    minScore?: number,
-    maxScore?: number
-  ): void {
-    for (let i = 0; i < pathCount; i++) {
-      params.push(`%${variant}%`);
-      if (minScore !== undefined) {
-        params.push(minScore);
-      }
-      if (maxScore !== undefined) {
-        params.push(maxScore);
-      }
-    }
-  }
 
   /**
    * 자동태그 검색 파라미터를 SQL WHERE 조건으로 변환
@@ -159,7 +120,7 @@ export class AutoTagSearchService {
 
     // 5. Model 필터
     if (searchParams.model) {
-      conditions.push(`${this.modelExpr()} = ?`);
+      conditions.push(`${buildAutoTagModelExpr('i')} = ?`);
       params.push(searchParams.model);
     }
 
@@ -201,12 +162,12 @@ export class AutoTagSearchService {
       if (!filter) continue;
 
       if (filter.min !== undefined) {
-        conditions.push(`${this.ratingExpr(type)} >= ?`);
+        conditions.push(`${buildAutoTagRatingExpr('i', type)} >= ?`);
         params.push(filter.min);
       }
 
       if (filter.max !== undefined) {
-        conditions.push(`${this.ratingExpr(type)} <= ?`);
+        conditions.push(`${buildAutoTagRatingExpr('i', type)} <= ?`);
         params.push(filter.max);
       }
     }
@@ -233,13 +194,14 @@ export class AutoTagSearchService {
 
       for (const variant of searchVariants) {
         // SQLite JSON 키 검색: json_each로 키를 순회하며 LIKE 패턴 매칭
-        const keyMatchCondition = this.buildExistsForPaths(
-          this.generalJsonPaths,
+        const keyMatchCondition = buildAutoTagExistsForPaths(
+          'i',
+          AUTO_TAG_GENERAL_JSON_PATHS,
           'LOWER(key) LIKE ?'
         );
 
         tagOrConditions.push(keyMatchCondition);
-        this.pushPathMatchParams(params, this.generalJsonPaths.length, variant);
+        pushAutoTagPathMatchParams(params, AUTO_TAG_GENERAL_JSON_PATHS.length, variant);
       }
 
       // 매칭되는 키가 하나라도 있으면 통과 (OR 조건)
@@ -267,17 +229,18 @@ export class AutoTagSearchService {
             ? ` AND ${scoreCheck.join(' AND ')}`
             : '';
 
-          const scoreCondition = this.buildExistsForPaths(
-            this.generalJsonPaths,
+          const scoreCondition = buildAutoTagExistsForPaths(
+            'i',
+            AUTO_TAG_GENERAL_JSON_PATHS,
             `LOWER(key) LIKE ?${scoreCheckStr}`
           );
 
           scoreConditions.push(scoreCondition);
 
           // 파라미터 순서: 문자열(key LIKE), 숫자(min), 숫자(max)
-          this.pushPathMatchParams(
+          pushAutoTagPathMatchParams(
             params,
-            this.generalJsonPaths.length,
+            AUTO_TAG_GENERAL_JSON_PATHS.length,
             variant,
             hasMinFilter ? tagFilter.min_score : undefined,
             hasMaxFilter ? tagFilter.max_score : undefined
@@ -313,24 +276,26 @@ export class AutoTagSearchService {
 
       for (const variant of searchVariants) {
         // 1. General 태그 검색 조건
-        const generalCondition = this.buildExistsForPaths(
-          this.generalJsonPaths,
+        const generalCondition = buildAutoTagExistsForPaths(
+          'i',
+          AUTO_TAG_GENERAL_JSON_PATHS,
           'LOWER(key) LIKE ?'
         );
 
         // 2. Character 태그 검색 조건
-        const characterCondition = this.buildExistsForPaths(
-          this.characterJsonPaths,
+        const characterCondition = buildAutoTagExistsForPaths(
+          'i',
+          AUTO_TAG_CHARACTER_JSON_PATHS,
           'LOWER(key) LIKE ?'
         );
 
         variantConditions.push(`(${generalCondition} OR ${characterCondition})`);
 
         // 파라미터 추가 (json path 개수에 맞춰 반복)
-        for (let i = 0; i < this.generalJsonPaths.length; i++) {
+        for (let i = 0; i < AUTO_TAG_GENERAL_JSON_PATHS.length; i++) {
           params.push(`%${variant}%`);
         }
-        for (let i = 0; i < this.characterJsonPaths.length; i++) {
+        for (let i = 0; i < AUTO_TAG_CHARACTER_JSON_PATHS.length; i++) {
           params.push(`%${variant}%`);
         }
       }
@@ -380,13 +345,14 @@ export class AutoTagSearchService {
 
       for (const variant of searchVariants) {
         // SQLite JSON 키 검색: json_each로 키를 순회하며 LIKE 패턴 매칭
-        const keyMatchCondition = this.buildExistsForPaths(
-          this.characterJsonPaths,
+        const keyMatchCondition = buildAutoTagExistsForPaths(
+          'i',
+          AUTO_TAG_CHARACTER_JSON_PATHS,
           'LOWER(key) LIKE ?'
         );
 
         charOrConditions.push(keyMatchCondition);
-        this.pushPathMatchParams(params, this.characterJsonPaths.length, variant);
+        pushAutoTagPathMatchParams(params, AUTO_TAG_CHARACTER_JSON_PATHS.length, variant);
       }
 
       // 매칭되는 키가 하나라도 있으면 통과 (OR 조건)
@@ -418,8 +384,9 @@ export class AutoTagSearchService {
             ? ` AND ${scoreCheck.join(' AND ')}`
             : '';
 
-          const scoreCondition = this.buildExistsForPaths(
-            this.characterJsonPaths,
+          const scoreCondition = buildAutoTagExistsForPaths(
+            'i',
+            AUTO_TAG_CHARACTER_JSON_PATHS,
             `LOWER(key) LIKE ?${scoreCheckStr}`
           );
 
@@ -428,9 +395,9 @@ export class AutoTagSearchService {
           scoreConditions.push(scoreCondition);
 
           // 파라미터 순서: 문자열(key LIKE), 숫자(min), 숫자(max)
-          this.pushPathMatchParams(
+          pushAutoTagPathMatchParams(
             params,
-            this.characterJsonPaths.length,
+            AUTO_TAG_CHARACTER_JSON_PATHS.length,
             variant,
             hasMinFilter ? character.min_score : undefined,
             hasMaxFilter ? character.max_score : undefined
@@ -845,3 +812,4 @@ export class AutoTagSearchService {
     return true;
   }
 }
+

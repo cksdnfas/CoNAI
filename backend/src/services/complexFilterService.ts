@@ -5,6 +5,14 @@ FilterValidationResult,
 FilterExecutionStats } from '@conai/shared';
 import { RatingScoreService } from './ratingScoreService';
 import { RatingWeights } from '../types/rating';
+import {
+  AUTO_TAG_CHARACTER_JSON_PATHS,
+  AUTO_TAG_GENERAL_JSON_PATHS,
+  buildAutoTagExistsForPaths,
+  buildAutoTagModelExpr,
+  buildAutoTagRatingExpr,
+  pushAutoTagPathMatchParams,
+} from './autoTagSqlShared';
 
 /**
  * Complex Filter Service
@@ -20,48 +28,6 @@ import { RatingWeights } from '../types/rating';
  * Final result = (OR results ∩ AND results) - Exclude results
  */
 export class ComplexFilterService {
-  private static readonly generalJsonPaths = [
-    '$.general',
-    '$.tagger.general',
-    '$.kaloscope.general',
-    '$.kaloscope.artists',
-    '$.kaloscope.artist'
-  ] as const;
-
-  private static readonly characterJsonPaths = [
-    '$.character',
-    '$.tagger.character'
-  ] as const;
-
-  private static ratingExpr(alias: string, ratingType: 'general' | 'sensitive' | 'questionable' | 'explicit'): string {
-    return `COALESCE(json_extract(${alias}.auto_tags, '$.rating.${ratingType}'), json_extract(${alias}.auto_tags, '$.tagger.rating.${ratingType}'))`;
-  }
-
-  private static modelExpr(alias: string): string {
-    return `COALESCE(json_extract(${alias}.auto_tags, '$.model'), json_extract(${alias}.auto_tags, '$.tagger.model'), json_extract(${alias}.auto_tags, '$.kaloscope.model'))`;
-  }
-
-  private static buildExistsForPaths(alias: string, paths: readonly string[], valueConditionSql: string): string {
-    return `(${paths.map((path) => `EXISTS (SELECT 1 FROM json_each(${alias}.auto_tags, '${path}') WHERE ${valueConditionSql})`).join(' OR ')})`;
-  }
-
-  private static pushPathMatchParams(
-    params: any[],
-    pathCount: number,
-    variant: string,
-    minScore?: number,
-    maxScore?: number
-  ): void {
-    for (let i = 0; i < pathCount; i++) {
-      params.push(`%${variant}%`);
-      if (minScore !== undefined) {
-        params.push(minScore);
-      }
-      if (maxScore !== undefined) {
-        params.push(maxScore);
-      }
-    }
-  }
 
   /**
    * Build complex search query with CTE (Common Table Expression)
@@ -382,11 +348,11 @@ export class ComplexFilterService {
 
       if (condition.min_score !== undefined) {
         params.push(condition.min_score);
-        conditions.push(`${this.ratingExpr('im', condition.rating_type as 'general' | 'sensitive' | 'questionable' | 'explicit')} >= ?`);
+        conditions.push(`${buildAutoTagRatingExpr('im', condition.rating_type as 'general' | 'sensitive' | 'questionable' | 'explicit')} >= ?`);
       }
       if (condition.max_score !== undefined) {
         params.push(condition.max_score);
-        conditions.push(`${this.ratingExpr('im', condition.rating_type as 'general' | 'sensitive' | 'questionable' | 'explicit')} <= ?`);
+        conditions.push(`${buildAutoTagRatingExpr('im', condition.rating_type as 'general' | 'sensitive' | 'questionable' | 'explicit')} <= ?`);
       }
 
       return conditions.length > 0 ? conditions.join(' AND ') : null;
@@ -423,16 +389,16 @@ export class ComplexFilterService {
 
       const tagConditions: string[] = [];
       for (const variant of variants) {
-        const existsCondition = this.buildExistsForPaths(
+        const existsCondition = buildAutoTagExistsForPaths(
           'im',
-          this.generalJsonPaths,
+          AUTO_TAG_GENERAL_JSON_PATHS,
           `LOWER(key) LIKE ?${condition.min_score !== undefined ? ' AND value >= ?' : ''}${condition.max_score !== undefined ? ' AND value <= ?' : ''}`
         );
 
         tagConditions.push(existsCondition);
-        this.pushPathMatchParams(
+        pushAutoTagPathMatchParams(
           params,
-          this.generalJsonPaths.length,
+          AUTO_TAG_GENERAL_JSON_PATHS.length,
           variant,
           condition.min_score,
           condition.max_score
@@ -449,16 +415,16 @@ export class ComplexFilterService {
 
       const charConditions: string[] = [];
       for (const variant of variants) {
-        const existsCondition = this.buildExistsForPaths(
+        const existsCondition = buildAutoTagExistsForPaths(
           'im',
-          this.characterJsonPaths,
+          AUTO_TAG_CHARACTER_JSON_PATHS,
           `LOWER(key) LIKE ?${condition.min_score !== undefined ? ' AND value >= ?' : ''}${condition.max_score !== undefined ? ' AND value <= ?' : ''}`
         );
 
         charConditions.push(existsCondition);
-        this.pushPathMatchParams(
+        pushAutoTagPathMatchParams(
           params,
-          this.characterJsonPaths.length,
+          AUTO_TAG_CHARACTER_JSON_PATHS.length,
           variant,
           condition.min_score,
           condition.max_score
@@ -471,7 +437,7 @@ export class ComplexFilterService {
     // Model
     if (condition.type === 'auto_tag_model') {
       params.push(condition.value);
-      return `${this.modelExpr('im')} = ?`;
+      return `${buildAutoTagModelExpr('im')} = ?`;
     }
 
     // Any Tag (General + Character)
@@ -481,32 +447,32 @@ export class ComplexFilterService {
 
       const anyConditions: string[] = [];
       for (const variant of variants) {
-        const generalCondition = this.buildExistsForPaths(
+        const generalCondition = buildAutoTagExistsForPaths(
           'im',
-          this.generalJsonPaths,
+          AUTO_TAG_GENERAL_JSON_PATHS,
           `LOWER(key) LIKE ?${condition.min_score !== undefined ? ' AND value >= ?' : ''}${condition.max_score !== undefined ? ' AND value <= ?' : ''}`
         );
 
-        const characterCondition = this.buildExistsForPaths(
+        const characterCondition = buildAutoTagExistsForPaths(
           'im',
-          this.characterJsonPaths,
+          AUTO_TAG_CHARACTER_JSON_PATHS,
           `LOWER(key) LIKE ?${condition.min_score !== undefined ? ' AND value >= ?' : ''}${condition.max_score !== undefined ? ' AND value <= ?' : ''}`
         );
 
         // OR condition for each variant
         anyConditions.push(`(${generalCondition} OR ${characterCondition})`);
 
-        this.pushPathMatchParams(
+        pushAutoTagPathMatchParams(
           params,
-          this.generalJsonPaths.length,
+          AUTO_TAG_GENERAL_JSON_PATHS.length,
           variant,
           condition.min_score,
           condition.max_score
         );
 
-        this.pushPathMatchParams(
+        pushAutoTagPathMatchParams(
           params,
-          this.characterJsonPaths.length,
+          AUTO_TAG_CHARACTER_JSON_PATHS.length,
           variant,
           condition.min_score,
           condition.max_score
@@ -748,3 +714,4 @@ export class ComplexFilterService {
   }
 
 }
+
