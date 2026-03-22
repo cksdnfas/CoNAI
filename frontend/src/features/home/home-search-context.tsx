@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, useContext, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { clearSearchHistory, deleteSearchHistory, getRatingTiers, getSearchHistory, saveSearchHistory, searchPromptCollection } from '@/lib/api'
 import type { PromptCollectionItem } from '@/types/prompt'
@@ -41,6 +42,7 @@ const HomeSearchContext = createContext<HomeSearchContextValue | null>(null)
 /** Provide shared home-search state for the header search box, drawer, and image feed. */
 export function HomeSearchProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const { showSnackbar } = useSnackbar()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [searchScope, setSearchScopeState] = useState<SearchScope>('positive')
@@ -224,6 +226,8 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    navigate('/')
+
     void saveHistoryMutation.mutateAsync({
       label: buildSearchHistoryLabel(nextChips),
       chips: nextChips,
@@ -253,6 +257,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     setAppliedChips(entry.chips)
     setSearchInputState('')
     openDrawer()
+    navigate('/')
     showSnackbar({ message: '저장된 검색을 다시 적용했어.', tone: 'info' })
   }
 

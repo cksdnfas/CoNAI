@@ -1,5 +1,5 @@
 import { Image } from 'lucide-react'
-import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, ScrollRestoration } from 'react-router-dom'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
 import { HomeSearchDrawer, HomeSearchHeaderBox } from '@/features/home/components/home-search-ui'
 import { cn } from '@/lib/utils'
@@ -21,9 +21,6 @@ export function AppShell() {
 }
 
 function AppShellLayout() {
-  const location = useLocation()
-  const isHomeRoute = location.pathname === '/'
-
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="fixed inset-x-0 top-0 z-50 bg-background/70 backdrop-blur-[24px]">
@@ -56,7 +53,7 @@ function AppShellLayout() {
           </div>
 
           <div className="flex items-center gap-4">
-            <HomeSearchHeaderBox active={isHomeRoute} />
+            <HomeSearchHeaderBox active={true} />
           </div>
         </div>
       </header>
@@ -65,7 +62,7 @@ function AppShellLayout() {
         <Outlet />
       </main>
 
-      <HomeSearchDrawer active={isHomeRoute} />
+      <HomeSearchDrawer active={true} />
       <ScrollRestoration getKey={(location) => `${location.pathname}${location.search}`} />
     </div>
   )

@@ -253,14 +253,31 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
               <div className="rounded-sm border border-white/5 bg-surface-lowest px-4 py-4 text-sm text-muted-foreground">No history</div>
             ) : null}
             {!historyLoading && historyEntries.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {historyEntries.map((entry) => (
-                  <div key={entry.id} className="flex items-start gap-3 rounded-sm border border-white/5 bg-surface-lowest px-4 py-3">
+                  <div key={entry.id} className="flex items-start gap-3 rounded-sm border border-white/10 bg-surface-lowest px-4 py-3">
                     <button type="button" onClick={() => selectHistoryEntry(entry)} className="min-w-0 flex-1 text-left">
-                      <div className="truncate text-sm font-medium text-foreground">{entry.label}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">{new Date(entry.updatedAt).toLocaleString('ko-KR')}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {entry.chips.map((chip) => {
+                          const scopeBadge = SEARCH_SCOPE_BADGE[chip.scope]
+
+                          return (
+                            <span key={chip.id} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-background px-2.5 py-1.5 text-xs text-foreground">
+                              <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em]', scopeBadge.className)}>
+                                {scopeBadge.label}
+                              </span>
+                              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.14em] text-primary">
+                                {chip.operator}
+                              </span>
+                              <span className="truncate" style={chip.color ? { color: chip.color } : undefined}>
+                                {chip.label}
+                              </span>
+                            </span>
+                          )
+                        })}
+                      </div>
                     </button>
-                    <button type="button" onClick={() => void deleteHistoryEntry(entry.id)} className="text-muted-foreground transition hover:text-foreground" aria-label="검색 히스토리 삭제">
+                    <button type="button" onClick={() => void deleteHistoryEntry(entry.id)} className="mt-1 text-muted-foreground transition hover:text-foreground" aria-label="검색 히스토리 삭제">
                       <X className="h-4 w-4" />
                     </button>
                   </div>
