@@ -1,53 +1,67 @@
+import path from 'path';
 import { db } from '../database/init';
 import { taggerDaemon } from './taggerDaemon';
 import { settingsService } from './settingsService';
-import { imageTaggerService, ImageTaggerService } from './imageTaggerService';
+import { imageTaggerService } from './imageTaggerService';
 import { SystemSettingsService } from './systemSettingsService';
 import { RatingScoreService } from './ratingScoreService';
 import { PromptCollectionService } from './promptCollectionService';
-import path from 'path';
 import { AutoTagsComposeService } from './autoTagsComposeService';
 import { kaloscopeTaggerService } from './kaloscopeTaggerService';
 import { RatingData } from '../types/autoTag';
 
+interface PendingAutoTagMedia {
+  composite_hash: string;
+  auto_tags: string | null;
+  original_file_path: string;
+  media_type: string;
+}
+
+interface AutoTagCapabilities {
+  taggerAutoEnabled: boolean;
+  kaloscopeAutoEnabled: boolean;
+}
+
 /**
  * 자동 태깅 스케줄러
- * - media_metadata 테이블에서 auto_tags가 NULL인 항목 검색
+ * - media_metadata 테이블에서 auto_tags가 NULL이거나 일부 결과가 비어있는 항목 검색
  * - 발견된 이미지들을 순차적으로 태깅 처리
  * - 주기적으로 반복 실행
  */
 export class AutoTagScheduler {
-  private isRunning = false; // Overall scheduler status
-  private isProcessing = false; // Flag to prevent concurrent processing
+  private isRunning = false;
+  private isProcessing = false;
   private pollingTimer: NodeJS.Timeout | null = null;
-  private readonly PROCESSING_DELAY_MS = 1000; // 이미지 간 처리 간격 (1초)
+  private readonly PROCESSING_DELAY_MS = 1000;
 
-  /**
-   * 폴링 간격 조회 (밀리초) - 1초 고정
-   */
   private getPollingIntervalMs(): number {
-    return 1000;
+    return SystemSettingsService.getAutoTagPollingInterval() * 1000;
   }
 
-  /**
-   * 배치 크기 조회
-   */
   private getBatchSize(): number {
     return SystemSettingsService.getAutoTagBatchSize();
   }
 
-  /**
-   * 스케줄러 시작
-   */
+  private getCapabilities(): AutoTagCapabilities {
+    const settings = settingsService.loadSettings();
+    return {
+      taggerAutoEnabled: settings.tagger.enabled,
+      kaloscopeAutoEnabled: settings.kaloscope.enabled && settings.kaloscope.autoTagOnUpload,
+    };
+  }
+
+  private hasEnabledProcessor(capabilities: AutoTagCapabilities): boolean {
+    return capabilities.taggerAutoEnabled || capabilities.kaloscopeAutoEnabled;
+  }
+
   start(): void {
     if (this.isRunning) {
       console.log('[AutoTagScheduler] Already running');
       return;
     }
 
-    const settings = settingsService.loadSettings();
-    const autoTagEnabled = settings.tagger.enabled || (settings.kaloscope.enabled && settings.kaloscope.autoTagOnUpload);
-    if (!autoTagEnabled) {
+    const capabilities = this.getCapabilities();
+    if (!this.hasEnabledProcessor(capabilities)) {
       console.log('[AutoTagScheduler] Auto-tagging is disabled in settings (tagger/kaloscope)');
       return;
     }
@@ -57,27 +71,22 @@ export class AutoTagScheduler {
 
     console.log('[AutoTagScheduler] Starting auto-tag scheduler...');
     console.log(`[AutoTagScheduler] Polling interval: ${pollingIntervalMs / 1000}s`);
-    // console.log(`[AutoTagScheduler] Batch size: ${batchSize}`); // Removed this log
+    console.log(`[AutoTagScheduler] Batch size: ${batchSize}`);
 
     this.isRunning = true;
+    void this.processPendingMedia();
 
-    // 즉시 한 번 실행
-    this.processUntaggedImages();
-
-    // 주기적 실행 시작 (기존 타이머 제거 후 새로 설정)
-    if (this.pollingTimer) clearInterval(this.pollingTimer);
+    if (this.pollingTimer) {
+      clearInterval(this.pollingTimer);
+    }
 
     this.pollingTimer = setInterval(() => {
-      this.processUntaggedImages();
+      void this.processPendingMedia();
     }, pollingIntervalMs);
   }
 
-  /**
-   * 스케줄러 중지
-   */
   stop(): void {
     console.log('[AutoTagScheduler] Stopping auto-tag scheduler...');
-
     this.isRunning = false;
 
     if (this.pollingTimer) {
@@ -85,14 +94,9 @@ export class AutoTagScheduler {
       this.pollingTimer = null;
     }
 
-    // processingTimer 제거됨
-
     console.log('[AutoTagScheduler] Stopped');
   }
 
-  /**
-   * 태깅되지 않은 이미지 처리
-   */
   private extractRatingData(raw: unknown): RatingData | null {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
       return null;
@@ -116,125 +120,98 @@ export class AutoTagScheduler {
     return { general, sensitive, questionable, explicit };
   }
 
-  private async processUntaggedImages(): Promise<void> {
+  private getPendingMedia(capabilities: AutoTagCapabilities, batchSize: number): PendingAutoTagMedia[] {
+    return db.prepare(`
+      SELECT
+        mm.composite_hash,
+        mm.auto_tags,
+        if_.original_file_path,
+        if_.file_type as media_type
+      FROM media_metadata mm
+      LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
+      WHERE (
+        mm.auto_tags IS NULL
+        OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
+        OR (? = 1 AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL)
+      )
+        AND if_.original_file_path IS NOT NULL
+        AND if_.file_status = 'active'
+      LIMIT ?
+    `).all(capabilities.taggerAutoEnabled ? 1 : 0, capabilities.kaloscopeAutoEnabled ? 1 : 0, batchSize) as PendingAutoTagMedia[];
+  }
+
+  private countPendingMedia(capabilities: AutoTagCapabilities): number {
+    const result = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM media_metadata mm
+      LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
+      WHERE (
+        mm.auto_tags IS NULL
+        OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
+        OR (? = 1 AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL)
+      )
+        AND if_.original_file_path IS NOT NULL
+        AND if_.file_status = 'active'
+    `).get(capabilities.taggerAutoEnabled ? 1 : 0, capabilities.kaloscopeAutoEnabled ? 1 : 0) as { count: number };
+
+    return result.count;
+  }
+
+  private async processPendingMedia(): Promise<void> {
     if (this.isProcessing) {
       return;
     }
 
-    // 설정 재확인 (실행 중 설정 변경 가능)
-    const settings = settingsService.loadSettings();
-    const taggerAutoEnabled = settings.tagger.enabled;
-    const kaloscopeAutoEnabled = settings.kaloscope.enabled && settings.kaloscope.autoTagOnUpload;
-    if (!taggerAutoEnabled && !kaloscopeAutoEnabled) {
+    const capabilities = this.getCapabilities();
+    if (!this.hasEnabledProcessor(capabilities)) {
       return;
     }
 
     this.isProcessing = true;
 
     try {
-      // 배치 크기만큼 반복 처리 (한 번에 다 가져오지 않고, 하나씩 처리하거나 배치로 가져와서 순차 처리)
-      // 여기서는 배치로 가져와서 처리
-      const batchSize = this.getBatchSize();
-
-      // 태깅되지 않은 이미지/비디오 조회 (image_files에서 active한 파일 경로 가져오기)
-      // file_type은 태깅 방식 결정
-      const untaggedImages = db.prepare(`
-        SELECT
-          mm.composite_hash,
-          mm.auto_tags,
-          if_.original_file_path,
-          if_.file_type as media_type
-        FROM media_metadata mm
-        LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
-        WHERE (
-          mm.auto_tags IS NULL
-          OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
-          OR (
-            ? = 1
-            AND if_.file_type != 'video'
-            AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL
-          )
-        )
-          AND if_.original_file_path IS NOT NULL
-          AND if_.file_status = 'active'
-        LIMIT ?
-      `).all(taggerAutoEnabled ? 1 : 0, kaloscopeAutoEnabled ? 1 : 0, batchSize) as Array<{ composite_hash: string; auto_tags: string | null; original_file_path: string; media_type: string }>;
-
-      // 총 미태깅 개수도 확인 (Removed this part)
-      // const totalUntagged = db.prepare(`
-      //   SELECT COUNT(*) as count
-      //   FROM media_metadata mm
-      //   LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
-      //   WHERE mm.auto_tags IS NULL
-      //     AND if_.original_file_path IS NOT NULL
-      //     AND if_.file_status = 'active'
-      // `).get() as { count: number };
-
-      if (untaggedImages.length === 0) {
-        // 처리할 항목 없음 (조용히 대기)
+      const pendingMedia = this.getPendingMedia(capabilities, this.getBatchSize());
+      if (pendingMedia.length === 0) {
         return;
       }
 
-      // 로그 레벨 조정: 매번 발견했다는 로그는 불필요할 수 있음. 정말 필요하면 debug 레벨로.
-      // console.log(`[AutoTagScheduler] Found ${untaggedImages.length} untagged images (total: ${totalUntagged.count})`);
+      for (let index = 0; index < pendingMedia.length; index += 1) {
+        if (!this.isRunning) {
+          break;
+        }
 
-      // 순차적으로 처리
-      for (let i = 0; i < untaggedImages.length; i++) {
-        // 중간에 중지 요청이 들어오면 중단
-        if (!this.isRunning) break;
-
-        const image = untaggedImages[i];
+        const media = pendingMedia[index];
 
         try {
-          await this.tagSingleImage(image.composite_hash, image.original_file_path, image.media_type, image.auto_tags || null);
+          await this.tagSingleMedia(media, capabilities);
 
-          // 마지막 이미지가 아니면 대기
-          if (i < untaggedImages.length - 1) {
+          if (index < pendingMedia.length - 1) {
             await this.delay(this.PROCESSING_DELAY_MS);
           }
         } catch (error) {
           console.error(
-            `[AutoTagScheduler] Failed to tag image: ${path.basename(image.original_file_path)}`,
-            error instanceof Error ? error.message : error
+            `[AutoTagScheduler] Failed to tag media: ${path.basename(media.original_file_path)}`,
+            error instanceof Error ? error.message : error,
           );
-          // 에러가 발생해도 다음 이미지 계속 처리
         }
       }
 
-      console.log(`[AutoTagScheduler] Batch processing completed (${untaggedImages.length} images)`);
-
-      // 재귀 호출 제거 -> setInterval에 의존
-      // this.processingTimer = setTimeout(() => {
-      //   this.processUntaggedImages();
-      // }, 2000); // 2초 후 재확인
-
+      console.log(`[AutoTagScheduler] Batch processing completed (${pendingMedia.length} items)`);
     } catch (error) {
-      console.error('[AutoTagScheduler] Error in processUntaggedImages:', error);
+      console.error('[AutoTagScheduler] Error in processPendingMedia:', error);
     } finally {
       this.isProcessing = false;
     }
   }
 
-  /**
-   * 단일 이미지/비디오 태깅
-   */
-  private async tagSingleImage(
-    compositeHash: string,
-    filePath: string,
-    mediaType: string,
-    existingAutoTags: string | null
-  ): Promise<void> {
-    console.log(`[AutoTagScheduler] Tagging (${mediaType}): ${path.basename(filePath)}`);
-
-    // file_type='video'만 비디오 태깅 사용, 'image'와 'animated'는 이미지 태깅 사용
+  private async tagSingleMedia(media: PendingAutoTagMedia, capabilities: AutoTagCapabilities): Promise<void> {
+    const { composite_hash: compositeHash, original_file_path: filePath, media_type: mediaType, auto_tags: existingAutoTags } = media;
     const isVideo = mediaType === 'video';
 
-    const settings = settingsService.loadSettings();
-    const taggerAutoEnabled = settings.tagger.enabled;
-    const kaloscopeAutoEnabled = settings.kaloscope.enabled && settings.kaloscope.autoTagOnUpload;
+    console.log(`[AutoTagScheduler] Tagging (${mediaType}): ${path.basename(filePath)}`);
 
-    const needsTagger = taggerAutoEnabled && !AutoTagsComposeService.hasTagger(existingAutoTags);
-    const needsKaloscope = kaloscopeAutoEnabled && !isVideo && !AutoTagsComposeService.hasKaloscope(existingAutoTags);
+    const needsTagger = capabilities.taggerAutoEnabled && !AutoTagsComposeService.hasTagger(existingAutoTags);
+    const needsKaloscope = capabilities.kaloscopeAutoEnabled && !AutoTagsComposeService.hasKaloscope(existingAutoTags);
 
     if (!needsTagger && !needsKaloscope) {
       return;
@@ -245,21 +222,24 @@ export class AutoTagScheduler {
     let ratingData: RatingData | null = null;
 
     if (needsTagger) {
-      const result = isVideo
+      const taggerResult = isVideo
         ? await imageTaggerService.tagVideo(filePath)
         : await taggerDaemon.tagImage(filePath);
 
-      if (!result.success) {
-        throw new Error(result.error || 'Unknown tagging error');
+      if (!taggerResult.success) {
+        throw new Error(taggerResult.error || 'Unknown tagging error');
       }
 
-      autoTags = AutoTagsComposeService.mergeTagger(autoTags, result);
-      taggerTaglist = result.taglist || '';
-      ratingData = this.extractRatingData(result.rating);
+      autoTags = AutoTagsComposeService.mergeTagger(autoTags, taggerResult);
+      taggerTaglist = taggerResult.taglist || '';
+      ratingData = this.extractRatingData(taggerResult.rating);
     }
 
     if (needsKaloscope) {
-      const kaloscopeResult = await kaloscopeTaggerService.tagImage(filePath);
+      const kaloscopeResult = isVideo
+        ? await kaloscopeTaggerService.tagVideo(filePath)
+        : await kaloscopeTaggerService.tagImage(filePath);
+
       if (kaloscopeResult.success) {
         autoTags = AutoTagsComposeService.mergeKaloscope(autoTags, kaloscopeResult);
       } else {
@@ -267,55 +247,62 @@ export class AutoTagScheduler {
       }
     }
 
-    // Calculate rating_score if rating data is available
-    let ratingScore = 0;
-    if (ratingData) {
-      try {
-        const scoreResult = await RatingScoreService.calculateScore(ratingData);
-        ratingScore = scoreResult.score;
-      } catch (error) {
-        console.error('[AutoTagScheduler] Failed to calculate rating_score:', error);
-      }
-    }
-
     if (!autoTags) {
       return;
     }
 
-    // media_metadata 테이블 업데이트
+    const ratingScore = await this.calculateRatingScore(ratingData);
+    this.persistAutoTags(compositeHash, autoTags, ratingScore);
+    await this.collectAutoPrompts(taggerTaglist);
+  }
+
+  private async calculateRatingScore(ratingData: RatingData | null): Promise<number> {
+    if (!ratingData) {
+      return 0;
+    }
+
+    try {
+      const scoreResult = await RatingScoreService.calculateScore(ratingData);
+      return scoreResult.score;
+    } catch (error) {
+      console.error('[AutoTagScheduler] Failed to calculate rating_score:', error);
+      return 0;
+    }
+  }
+
+  private persistAutoTags(compositeHash: string, autoTags: string, ratingScore: number): void {
     db.prepare(`
       UPDATE media_metadata
       SET auto_tags = ?, rating_score = ?
       WHERE composite_hash = ?
     `).run(autoTags, ratingScore, compositeHash);
+  }
 
-    // Auto Prompt 수집
-    if (taggerTaglist) {
-      try {
-        const tags = taggerTaglist.split(',').map(t => t.trim()).filter(t => t.length > 0);
-        if (tags.length > 0) {
-          const autoPrompts = tags.map(tag => ({ prompt: tag }));
-          await PromptCollectionService.batchAddOrIncrementAuto(autoPrompts);
-        }
-      } catch (error) {
-        console.error('[AutoTagScheduler] Failed to collect auto prompts:', error);
-      }
+  private async collectAutoPrompts(taggerTaglist: string): Promise<void> {
+    if (!taggerTaglist) {
+      return;
     }
 
-    // 성공 로그는 남김 (사용자가 진행상황을 알 수 있도록)
-    // console.log(`[AutoTagScheduler] ✅ Tagged (${mediaType}): ${path.basename(filePath)}`);
+    try {
+      const tags = taggerTaglist
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0);
+
+      if (tags.length === 0) {
+        return;
+      }
+
+      await PromptCollectionService.batchAddOrIncrementAuto(tags.map((tag) => ({ prompt: tag })));
+    } catch (error) {
+      console.error('[AutoTagScheduler] Failed to collect auto prompts:', error);
+    }
   }
 
-  /**
-   * 대기 헬퍼
-   */
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  /**
-   * 현재 상태 조회
-   */
   getStatus(): {
     isRunning: boolean;
     pollingIntervalSeconds: number;
@@ -325,28 +312,7 @@ export class AutoTagScheduler {
     let untaggedCount = 0;
 
     try {
-      const settings = settingsService.loadSettings();
-      const taggerAutoEnabled = settings.tagger.enabled;
-      const kaloscopeAutoEnabled = settings.kaloscope.enabled && settings.kaloscope.autoTagOnUpload;
-
-      const result = db.prepare(`
-        SELECT COUNT(*) as count
-        FROM media_metadata mm
-        LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
-        WHERE (
-          mm.auto_tags IS NULL
-          OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
-          OR (
-            ? = 1
-            AND if_.file_type != 'video'
-            AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL
-          )
-        )
-          AND if_.original_file_path IS NOT NULL
-          AND if_.file_status = 'active'
-      `).get(taggerAutoEnabled ? 1 : 0, kaloscopeAutoEnabled ? 1 : 0) as { count: number };
-
-      untaggedCount = result.count;
+      untaggedCount = this.countPendingMedia(this.getCapabilities());
     } catch (error) {
       console.error('[AutoTagScheduler] Failed to get untagged count:', error);
     }
@@ -355,29 +321,22 @@ export class AutoTagScheduler {
       isRunning: this.isRunning,
       pollingIntervalSeconds: this.getPollingIntervalMs() / 1000,
       batchSize: this.getBatchSize(),
-      untaggedCount
+      untaggedCount,
     };
   }
 
-  /**
-   * 스케줄러 재시작 (설정 변경 시)
-   */
   restart(): void {
     if (this.isRunning) {
       this.stop();
     }
-    // 약간의 지연 후 재시작 (또는 시작)
+
     setTimeout(() => this.start(), 100);
   }
 
-  /**
-   * 수동으로 미태깅 이미지 처리 트리거
-   */
   async triggerManualProcessing(): Promise<void> {
     console.log('[AutoTagScheduler] Manual processing triggered');
-    await this.processUntaggedImages();
+    await this.processPendingMedia();
   }
 }
 
-// Export singleton instance
 export const autoTagScheduler = new AutoTagScheduler();
