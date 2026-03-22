@@ -1,4 +1,4 @@
-import { Bell, History, Image, Search } from 'lucide-react'
+import { Image, Search } from 'lucide-react'
 import { NavLink, Outlet, ScrollRestoration } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 
@@ -47,12 +47,6 @@ export function AppShell() {
               <Search className="mr-2 h-4 w-4" />
               <span className="w-44 truncate">Search gallery…</span>
             </div>
-            <button className="text-foreground/60 transition-colors hover:text-primary" aria-label="Notifications">
-              <Bell className="h-5 w-5" />
-            </button>
-            <button className="text-foreground/60 transition-colors hover:text-primary" aria-label="History">
-              <History className="h-5 w-5" />
-            </button>
           </div>
         </div>
       </header>
