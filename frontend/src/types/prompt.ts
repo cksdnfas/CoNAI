@@ -1,4 +1,4 @@
-export type PromptTypeFilter = 'positive' | 'negative' | 'both'
+export type PromptTypeFilter = 'positive' | 'negative' | 'auto'
 export type PromptSortBy = 'usage_count' | 'created_at' | 'prompt'
 export type PromptSortOrder = 'ASC' | 'DESC'
 
