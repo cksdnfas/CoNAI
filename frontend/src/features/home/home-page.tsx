@@ -1,25 +1,37 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useHomeSearch } from '@/features/home/home-search-context'
+import { buildComplexFilterPayload } from '@/features/home/search-utils'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'
-import { downloadImageSelection, getImages } from '@/lib/api'
+import { downloadImageSelection, getImages, searchImagesComplex } from '@/lib/api'
 
-const curatedFilters = ['All Works', 'Cinematic', 'Architectural', 'Portrait', 'Abstract']
-
-/** Render the Home page with the reusable Virtuoso + ViSelect image list module. */
+/** Render the Home page with the reusable image list and header-driven search results. */
 export function HomePage() {
+  const { appliedChips } = useHomeSearch()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isDownloading, setIsDownloading] = useState(false)
 
+  const isSearchMode = appliedChips.length > 0
+
   const imagesQuery = useInfiniteQuery({
-    queryKey: ['home-images'],
+    queryKey: ['home-images', appliedChips],
     initialPageParam: 1,
-    queryFn: ({ pageParam }) => getImages({ page: pageParam, limit: 40 }),
+    queryFn: ({ pageParam }) =>
+      isSearchMode
+        ? searchImagesComplex({
+            complex_filter: buildComplexFilterPayload(appliedChips),
+            page: pageParam,
+            limit: 40,
+            sortBy: 'upload_date',
+            sortOrder: 'DESC',
+          })
+        : getImages({ page: pageParam, limit: 40 }),
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
   })
 
@@ -28,8 +40,12 @@ export function HomePage() {
     [imagesQuery.data?.pages],
   )
 
+  useEffect(() => {
+    setSelectedIds([])
+  }, [appliedChips])
+
   useHomeScrollRestoration({
-    enabled: !imagesQuery.isPending && !imagesQuery.isError,
+    enabled: !imagesQuery.isPending && !imagesQuery.isError && !isSearchMode,
     itemCount: images.length,
     canLoadMore: Boolean(imagesQuery.hasNextPage),
     isLoadingMore: imagesQuery.isFetchingNextPage,
@@ -71,28 +87,20 @@ export function HomePage() {
     }
   }
 
+  const emptyStateTitle = isSearchMode ? '검색 결과가 없어' : '표시할 이미지가 아직 없어'
+  const emptyStateDescription = isSearchMode
+    ? '상단 검색창을 눌러 필터를 바꾸거나 히스토리를 다시 불러와봐.'
+    : '업로드를 연결하거나 백엔드 데이터 상태를 먼저 확인하면 돼.'
+
+  const errorTitle = isSearchMode ? '검색 결과를 불러오지 못했어' : '홈 피드를 불러오지 못했어'
+
   return (
     <div className="space-y-8">
-      <section className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex flex-wrap gap-3">
-          {curatedFilters.map((filter, index) => (
-            <span
-              key={filter}
-              className={index === 0 ? 'cursor-default rounded-sm bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground' : 'cursor-default rounded-sm bg-surface-highest px-4 py-1.5 text-xs font-medium text-muted-foreground'}
-            >
-              {filter}
-            </span>
-          ))}
-        </div>
-      </section>
-
       {imagesQuery.isError ? (
         <Alert variant="destructive">
-          <AlertTitle>홈 피드를 불러오지 못했어</AlertTitle>
+          <AlertTitle>{errorTitle}</AlertTitle>
           <AlertDescription className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              {imagesQuery.error instanceof Error ? imagesQuery.error.message : '알 수 없는 오류가 발생했어.'}
-            </span>
+            <span>{imagesQuery.error instanceof Error ? imagesQuery.error.message : '알 수 없는 오류가 발생했어.'}</span>
             <Button size="sm" variant="outline" onClick={handleRetryInitialLoad}>
               다시 시도
             </Button>
@@ -113,8 +121,8 @@ export function HomePage() {
       {!imagesQuery.isPending && !imagesQuery.isError && images.length === 0 ? (
         <Card className="bg-surface-container">
           <CardHeader>
-            <CardTitle>표시할 이미지가 아직 없어</CardTitle>
-            <CardDescription>업로드를 연결하거나 백엔드 데이터 상태를 먼저 확인하면 돼.</CardDescription>
+            <CardTitle>{emptyStateTitle}</CardTitle>
+            <CardDescription>{emptyStateDescription}</CardDescription>
           </CardHeader>
         </Card>
       ) : null}

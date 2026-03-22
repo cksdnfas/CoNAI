@@ -76,6 +76,7 @@ import fileVerificationRoutes from './routes/fileVerification';
 import { thumbnailRoutes } from './routes/thumbnails';
 import externalApiRoutes from './routes/externalApi.routes';
 import civitaiRoutes from './routes/civitai.routes';
+import searchHistoryRoutes from './routes/search-history.routes';
 import { mcpRoutes } from './mcp';
 import { initializeDatabase } from './database/init';
 import { initializeUserSettingsDb } from './database/userSettingsDb';
@@ -306,6 +307,7 @@ async function registerRoutes() {
   app.use('/api/generation-history', readOnlyLimiter, optionalAuth, generationHistoryRoutes);
   app.use('/api/wildcards', optionalAuth, wildcardRoutes);
   app.use('/api/folders', optionalAuth, watchedFoldersRoutes);
+  app.use('/api/search-history', optionalAuth, searchHistoryRoutes);
   app.use('/api/background-queue', optionalAuth, backgroundQueueRoutes);
   app.use('/api/system', optionalAuth, systemRoutes);
   app.use('/api/image-editor', uploadLimiter, optionalAuth, imageEditorRoutes); // Upload endpoint

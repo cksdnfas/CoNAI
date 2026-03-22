@@ -3,6 +3,18 @@ import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
 import type { SimilaritySortBy, SimilaritySortOrder } from '@/types/settings'
 import type { SimilarityQueryResult } from '@/types/similarity'
 
+interface ComplexImageSearchRequest {
+  complex_filter: {
+    exclude_group?: Array<Record<string, unknown>>
+    or_group?: Array<Record<string, unknown>>
+    and_group?: Array<Record<string, unknown>>
+  }
+  page?: number
+  limit?: number
+  sortBy?: 'upload_date' | 'filename' | 'file_size' | 'width' | 'height'
+  sortOrder?: 'ASC' | 'DESC'
+}
+
 export async function getImages(params?: { page?: number; limit?: number }) {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
@@ -15,6 +27,25 @@ export async function getImages(params?: { page?: number; limit?: number }) {
     throw new Error(response.error || '이미지 목록을 불러오지 못했어.')
   }
   return response.data
+}
+
+export async function searchImagesComplex(input: ComplexImageSearchRequest) {
+  const response = await fetchJson<ApiResponse<Omit<ImageListPayload, 'hasMore'>>>(`/api/images/search/complex`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '검색 결과를 불러오지 못했어.')
+  }
+
+  return {
+    ...response.data,
+    hasMore: response.data.page < response.data.totalPages,
+  }
 }
 
 export async function getImage(compositeHash: string) {
