@@ -95,6 +95,7 @@ import { WatchedFolderService } from './services/watchedFolderService';
 const app = express();
 const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;
 const isDevelopment = process.env.NODE_ENV !== 'production';
+const isSafeSmokeMode = process.env.SAFE_SMOKE_MODE === 'true';
 
 // Rate limiting for login endpoint (prevent brute-force attacks)
 const loginLimiter = rateLimit({
@@ -390,9 +391,13 @@ async function startServer() {
     await initializeDatabase();
     console.log('✅ Database initialized successfully');
 
-    console.log('📂 기본 Upload 감시 폴더 동기화 중...');
-    const defaultUploadFolder = await WatchedFolderService.reconcileDefaultUploadFolder();
-    console.log(`✅ Default Upload watched folder ready: ${defaultUploadFolder.folder_path}`);
+    if (!isSafeSmokeMode) {
+      console.log('📂 기본 Upload 감시 폴더 동기화 중...');
+      const defaultUploadFolder = await WatchedFolderService.reconcileDefaultUploadFolder();
+      console.log(`✅ Default Upload watched folder ready: ${defaultUploadFolder.folder_path}`);
+    } else {
+      console.log('🧪 SAFE_SMOKE_MODE enabled - skipping watched folder reconciliation');
+    }
 
     // 3-1. 첫 실행 안내
     if (isNewDatabase) {
@@ -439,55 +444,55 @@ async function startServer() {
     console.log('📁 API 이미지 디렉토리 생성 중...');
     await APIImageProcessor.ensureDirectories();
 
-    // 7. Tagger daemon 자동 시작 (설정이 활성화된 경우)
+    // 7-11. Runtime side-effect services
     const settings = settingsService.loadSettings();
-    if (settings.tagger.enabled) {
-      console.log('🤖 Starting tagger daemon...');
-      try {
-        await imageTaggerService.startDaemon();
-        console.log('✅ Tagger daemon started successfully');
-      } catch (error) {
-        console.warn('⚠️  Failed to start tagger daemon:', error instanceof Error ? error.message : error);
-        console.warn('   Tagger will be started on first use');
-      }
+    if (isSafeSmokeMode) {
+      console.log('🧪 SAFE_SMOKE_MODE enabled - skipping daemon, watcher, and scheduler startup');
     } else {
-      console.log('⏭️  Tagger is disabled - skipping daemon startup');
-    }
-
-    // 8. 파일 워처 서비스 시작 (실시간 파일 모니터링)
-    if (process.env.ENABLE_FILE_WATCHING !== 'false') {
-      try {
-        console.log('👀 Starting file watcher service...');
-        const { FileWatcherService } = await import('./services/fileWatcherService');
-        await FileWatcherService.initialize();
-        console.log('✅ File watcher service started successfully');
-      } catch (error) {
-        console.warn('⚠️  Failed to start file watcher service:', error instanceof Error ? error.message : error);
-        console.warn('   Falling back to scheduled scans only');
+      if (settings.tagger.enabled) {
+        console.log('🤖 Starting tagger daemon...');
+        try {
+          await imageTaggerService.startDaemon();
+          console.log('✅ Tagger daemon started successfully');
+        } catch (error) {
+          console.warn('⚠️  Failed to start tagger daemon:', error instanceof Error ? error.message : error);
+          console.warn('   Tagger will be started on first use');
+        }
+      } else {
+        console.log('⏭️  Tagger is disabled - skipping daemon startup');
       }
-    } else {
-      console.log('⏭️  File watching is disabled - using scheduled scans only');
-    }
 
-    // 9. 자동 스캔 스케줄러 시작
-    console.log('🤖 Starting auto-scan scheduler...');
-    AutoScanScheduler.start();
-    console.log('✅ Auto-scan scheduler started successfully');
+      if (process.env.ENABLE_FILE_WATCHING !== 'false') {
+        try {
+          console.log('👀 Starting file watcher service...');
+          const { FileWatcherService } = await import('./services/fileWatcherService');
+          await FileWatcherService.initialize();
+          console.log('✅ File watcher service started successfully');
+        } catch (error) {
+          console.warn('⚠️  Failed to start file watcher service:', error instanceof Error ? error.message : error);
+          console.warn('   Falling back to scheduled scans only');
+        }
+      } else {
+        console.log('⏭️  File watching is disabled - using scheduled scans only');
+      }
 
-    // 10. 자동 태깅 스케줄러 시작
-    console.log('🤖 Starting auto-tag scheduler...');
-    autoTagScheduler.start();
-    console.log('✅ Auto-tag scheduler started successfully');
+      console.log('🤖 Starting auto-scan scheduler...');
+      AutoScanScheduler.start();
+      console.log('✅ Auto-scan scheduler started successfully');
 
-    // 11. 임시 이미지 정리 스케줄러 시작
-    try {
-      console.log('🧹 Starting temp image cleanup scheduler...');
-      const { TempImageCleanupScheduler } = await import('./cron/tempImageCleanup');
-      TempImageCleanupScheduler.start();
-      console.log('✅ Temp image cleanup scheduler started successfully');
-    } catch (error) {
-      console.warn('⚠️  Failed to start temp image cleanup scheduler:', error instanceof Error ? error.message : error);
-      console.warn('   Temp files will not be automatically cleaned up');
+      console.log('🤖 Starting auto-tag scheduler...');
+      autoTagScheduler.start();
+      console.log('✅ Auto-tag scheduler started successfully');
+
+      try {
+        console.log('🧹 Starting temp image cleanup scheduler...');
+        const { TempImageCleanupScheduler } = await import('./cron/tempImageCleanup');
+        TempImageCleanupScheduler.start();
+        console.log('✅ Temp image cleanup scheduler started successfully');
+      } catch (error) {
+        console.warn('⚠️  Failed to start temp image cleanup scheduler:', error instanceof Error ? error.message : error);
+        console.warn('   Temp files will not be automatically cleaned up');
+      }
     }
 
     const extractHost = (value?: string | null): string | undefined => {
@@ -545,6 +550,9 @@ ${divider}`);
       console.log(separator);
       console.log(formatLine(`📦 Data Root: ${runtimePaths.basePath}`));
       console.log(formatLine(`📁 Uploads: ${uploadsPathRelative}`));
+      if (isSafeSmokeMode) {
+        console.log(formatLine('🧪 SAFE_SMOKE_MODE: runtime jobs disabled'));
+      }
 
       if (extraLines.length > 0) {
         console.log(separator);
@@ -639,38 +647,40 @@ ${divider}`);
       isShuttingDown = true;
       console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
 
-      // Stop file watcher service (first to prevent new events)
-      try {
-        const { FileWatcherService } = await import('./services/fileWatcherService');
-        await FileWatcherService.stopAll();
-        console.log('✅ File watcher service stopped');
-      } catch (error) {
-        console.warn('⚠️  Error stopping file watcher service:', error);
-      }
+      if (!isSafeSmokeMode) {
+        // Stop file watcher service (first to prevent new events)
+        try {
+          const { FileWatcherService } = await import('./services/fileWatcherService');
+          await FileWatcherService.stopAll();
+          console.log('✅ File watcher service stopped');
+        } catch (error) {
+          console.warn('⚠️  Error stopping file watcher service:', error);
+        }
 
-      // Stop auto-scan scheduler
-      try {
-        AutoScanScheduler.stop();
-        console.log('✅ Auto-scan scheduler stopped');
-      } catch (error) {
-        console.warn('⚠️  Error stopping auto-scan scheduler:', error);
-      }
+        // Stop auto-scan scheduler
+        try {
+          AutoScanScheduler.stop();
+          console.log('✅ Auto-scan scheduler stopped');
+        } catch (error) {
+          console.warn('⚠️  Error stopping auto-scan scheduler:', error);
+        }
 
-      // Stop auto-tag scheduler
-      try {
-        autoTagScheduler.stop();
-        console.log('✅ Auto-tag scheduler stopped');
-      } catch (error) {
-        console.warn('⚠️  Error stopping auto-tag scheduler:', error);
-      }
+        // Stop auto-tag scheduler
+        try {
+          autoTagScheduler.stop();
+          console.log('✅ Auto-tag scheduler stopped');
+        } catch (error) {
+          console.warn('⚠️  Error stopping auto-tag scheduler:', error);
+        }
 
-      // Stop temp image cleanup scheduler
-      try {
-        const { TempImageCleanupScheduler } = await import('./cron/tempImageCleanup');
-        TempImageCleanupScheduler.stop();
-        console.log('✅ Temp image cleanup scheduler stopped');
-      } catch (error) {
-        console.warn('⚠️  Error stopping temp image cleanup scheduler:', error);
+        // Stop temp image cleanup scheduler
+        try {
+          const { TempImageCleanupScheduler } = await import('./cron/tempImageCleanup');
+          TempImageCleanupScheduler.stop();
+          console.log('✅ Temp image cleanup scheduler stopped');
+        } catch (error) {
+          console.warn('⚠️  Error stopping temp image cleanup scheduler:', error);
+        }
       }
 
       // Cleanup all temp files on shutdown
@@ -688,12 +698,14 @@ ${divider}`);
         console.warn('⚠️  Error cleaning up temp files:', error);
       }
 
-      // Stop tagger daemon
-      try {
-        await imageTaggerService.stopDaemon();
-        console.log('✅ Tagger daemon stopped');
-      } catch (error) {
-        console.warn('⚠️  Error stopping tagger daemon:', error);
+      if (!isSafeSmokeMode) {
+        // Stop tagger daemon
+        try {
+          await imageTaggerService.stopDaemon();
+          console.log('✅ Tagger daemon stopped');
+        } catch (error) {
+          console.warn('⚠️  Error stopping tagger daemon:', error);
+        }
       }
 
       // Stop job tracker
