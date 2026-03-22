@@ -19,7 +19,6 @@ export interface AutoTabProps {
   onPatchKaloscope: (patch: Partial<KaloscopeSettings>) => void
   onSaveTagger: () => void
   onSaveKaloscope: () => void
-  onCheckTaggerDependencies: () => void
   isSavingTagger: boolean
   isSavingKaloscope: boolean
   isCheckingTaggerDependencies: boolean

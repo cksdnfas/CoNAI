@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { MetadataExtractionSettings } from '@/types/settings'
+import { settingsControlClassName } from './settings-control-classes'
+import { SettingsField, SettingsToggleRow } from './settings-primitives'
 
 interface MetadataTabProps {
   metadataDraft: MetadataExtractionSettings | null
@@ -27,67 +29,64 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving }
         <CardContent className="grid gap-4 md:grid-cols-2">
           {metadataDraft ? (
             <>
-              <label className="flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground md:col-span-2">
+              <SettingsToggleRow className="md:col-span-2">
                 <input
                   type="checkbox"
                   checked={metadataDraft.enableSecondaryExtraction}
                   onChange={(event) => onPatchMetadata({ enableSecondaryExtraction: event.target.checked })}
                 />
                 Secondary extraction 활성화
-              </label>
+              </SettingsToggleRow>
 
-              <label className="space-y-2 text-sm">
-                <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">Stealth scan mode</span>
+              <SettingsField label="Stealth scan mode">
                 <select
                   value={metadataDraft.stealthScanMode}
                   onChange={(event) => onPatchMetadata({ stealthScanMode: event.target.value as MetadataExtractionSettings['stealthScanMode'] })}
-                  className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+                  className={settingsControlClassName}
                 >
                   <option value="fast">fast</option>
                   <option value="full">full</option>
                   <option value="skip">skip</option>
                 </select>
-              </label>
+              </SettingsField>
 
-              <label className="space-y-2 text-sm">
-                <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">최대 파일 크기(MB)</span>
+              <SettingsField label="최대 파일 크기(MB)">
                 <input
                   type="number"
                   min={1}
                   value={metadataDraft.stealthMaxFileSizeMB}
                   onChange={(event) => onPatchMetadata({ stealthMaxFileSizeMB: Number(event.target.value) || 1 })}
-                  className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+                  className={settingsControlClassName}
                 />
-              </label>
+              </SettingsField>
 
-              <label className="space-y-2 text-sm">
-                <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">최대 해상도(MP)</span>
+              <SettingsField label="최대 해상도(MP)">
                 <input
                   type="number"
                   min={1}
                   value={metadataDraft.stealthMaxResolutionMP}
                   onChange={(event) => onPatchMetadata({ stealthMaxResolutionMP: Number(event.target.value) || 1 })}
-                  className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+                  className={settingsControlClassName}
                 />
-              </label>
+              </SettingsField>
 
-              <label className="flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground">
+              <SettingsToggleRow>
                 <input
                   type="checkbox"
                   checked={metadataDraft.skipStealthForComfyUI}
                   onChange={(event) => onPatchMetadata({ skipStealthForComfyUI: event.target.checked })}
                 />
                 ComfyUI 스킵
-              </label>
+              </SettingsToggleRow>
 
-              <label className="flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground">
+              <SettingsToggleRow>
                 <input
                   type="checkbox"
                   checked={metadataDraft.skipStealthForWebUI}
                   onChange={(event) => onPatchMetadata({ skipStealthForWebUI: event.target.checked })}
                 />
                 WebUI 스킵
-              </label>
+              </SettingsToggleRow>
             </>
           ) : (
             <Skeleton className="h-48 w-full rounded-sm md:col-span-2" />

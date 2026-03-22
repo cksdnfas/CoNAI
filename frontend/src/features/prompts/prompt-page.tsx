@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -12,6 +13,7 @@ import { PromptSidebar } from './components/prompt-sidebar'
 import { PromptToolbar } from './components/prompt-toolbar'
 
 export function PromptPage() {
+  const { showSnackbar } = useSnackbar()
   const [promptType, setPromptType] = useState<PromptTypeFilter>('positive')
   const [selectedGroupId, setSelectedGroupId] = useState<number | null | undefined>(undefined)
   const [searchInput, setSearchInput] = useState('')
@@ -19,7 +21,6 @@ export function PromptPage() {
   const [sortBy, setSortBy] = useState<PromptSortBy>('usage_count')
   const [sortOrder, setSortOrder] = useState<PromptSortOrder>('DESC')
   const [page, setPage] = useState(1)
-  const [copyNotice, setCopyNotice] = useState<string | null>(null)
 
   const groupsQuery = useQuery({
     queryKey: ['prompt-groups', promptType],
@@ -47,11 +48,9 @@ export function PromptPage() {
   const handleCopyPrompt = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)
-      setCopyNotice('프롬프트를 클립보드에 복사했어.')
-      window.setTimeout(() => setCopyNotice(null), 1800)
+      showSnackbar({ message: '프롬프트를 클립보드에 복사했어.', tone: 'info' })
     } catch {
-      setCopyNotice('복사에 실패했어.')
-      window.setTimeout(() => setCopyNotice(null), 1800)
+      showSnackbar({ message: '복사에 실패했어.', tone: 'error' })
     }
   }
 
@@ -69,13 +68,6 @@ export function PromptPage() {
   return (
     <div className="space-y-8">
       <PageHeader title={currentGroupName ?? 'Prompt Explorer'} />
-
-      {copyNotice ? (
-        <Alert>
-          <AlertTitle>Prompt</AlertTitle>
-          <AlertDescription>{copyNotice}</AlertDescription>
-        </Alert>
-      ) : null}
 
       <div className="grid gap-8 min-[800px]:grid-cols-[260px_minmax(0,1fr)]">
         <PromptSidebar
@@ -118,12 +110,14 @@ export function PromptPage() {
           ) : null}
 
           {promptType === 'auto' && !promptSearchQuery.isLoading && items.length === 0 ? (
-            <Alert>
-              <AlertTitle>Auto prompts are empty</AlertTitle>
-              <AlertDescription>
-                현재 DB에는 auto_tags 기반 프롬프트가 아직 수집되지 않았어. auto/artist 항목은 백엔드 sync 이후에 실제 값이 보여.
-              </AlertDescription>
-            </Alert>
+            <Card className="bg-surface-container">
+              <CardContent className="space-y-2 p-6">
+                <div className="text-sm font-semibold text-foreground">Auto prompts are empty</div>
+                <div className="text-sm text-muted-foreground">
+                  현재 DB에는 auto_tags 기반 프롬프트가 아직 수집되지 않았어. auto/artist 항목은 백엔드 sync 이후에 실제 값이 보여.
+                </div>
+              </CardContent>
+            </Card>
           ) : null}
 
           <div className="space-y-1">

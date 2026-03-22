@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { PageHeader } from '@/components/common/page-header'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   addWatchedFolder,
   checkTaggerDependencies,
@@ -45,15 +45,15 @@ import { createNewWatchedFolderDraft, parseCommaSeparatedInput } from './setting
 
 export function SettingsPage() {
   const queryClient = useQueryClient()
+  const { showSnackbar } = useSnackbar()
   const [activeTab, setActiveTab] = useState<SettingsTab>('folders')
-  const [notice, setNotice] = useState<string | null>(null)
-  const [noticeTone, setNoticeTone] = useState<'info' | 'error'>('info')
   const [newFolder, setNewFolder] = useState(createNewWatchedFolderDraft)
   const [pathValidationMessage, setPathValidationMessage] = useState<string | null>(null)
   const [metadataDraft, setMetadataDraft] = useState<MetadataExtractionSettings | null>(null)
   const [taggerDraft, setTaggerDraft] = useState<TaggerSettings | null>(null)
   const [kaloscopeDraft, setKaloscopeDraft] = useState<KaloscopeSettings | null>(null)
   const [taggerDependencyResult, setTaggerDependencyResult] = useState<TaggerDependencyCheckResult | null>(null)
+  const hasAutoCheckedTaggerDependenciesRef = useRef(false)
   const [autoTestHashInput, setAutoTestHashInput] = useState('')
   const [autoTestMedia, setAutoTestMedia] = useState<AutoTestMediaRecord | null>(null)
   const [taggerTestResult, setTaggerTestResult] = useState<AutoTestTaggerResult | null>(null)
@@ -91,6 +91,14 @@ export function SettingsPage() {
   const effectiveMetadataDraft = metadataDraft ?? settingsQuery.data?.metadataExtraction ?? null
   const effectiveTaggerDraft = taggerDraft ?? settingsQuery.data?.tagger ?? null
   const effectiveKaloscopeDraft = kaloscopeDraft ?? settingsQuery.data?.kaloscope ?? null
+
+  const notifyInfo = (message: string) => {
+    showSnackbar({ message, tone: 'info' })
+  }
+
+  const notifyError = (message: string) => {
+    showSnackbar({ message, tone: 'error' })
+  }
 
   const folderWatcherMap = useMemo(() => {
     const map = new Map<number, string>()
@@ -131,15 +139,13 @@ export function SettingsPage() {
   const addFolderMutation = useMutation({
     mutationFn: addWatchedFolder,
     onSuccess: async () => {
-      setNoticeTone('info')
-      setNotice('감시 폴더를 추가했어.')
+      notifyInfo('감시 폴더를 추가했어.')
       setNewFolder(createNewWatchedFolderDraft())
       setPathValidationMessage(null)
       await refreshFolderQueries()
     },
     onError: (error) => {
-      setNoticeTone('error')
-      setNotice(error instanceof Error ? error.message : '감시 폴더 추가에 실패했어.')
+      notifyError(error instanceof Error ? error.message : '감시 폴더 추가에 실패했어.')
     },
   })
 
@@ -147,13 +153,11 @@ export function SettingsPage() {
     mutationFn: validateWatchedFolderPath,
     onSuccess: (data) => {
       setPathValidationMessage(data.message)
-      setNoticeTone('info')
-      setNotice('폴더 경로가 유효해.')
+      notifyInfo('폴더 경로가 유효해.')
     },
     onError: (error) => {
       setPathValidationMessage(null)
-      setNoticeTone('error')
-      setNotice(error instanceof Error ? error.message : '폴더 경로 검증에 실패했어.')
+      notifyError(error instanceof Error ? error.message : '폴더 경로 검증에 실패했어.')
     },
   })
 
@@ -162,12 +166,10 @@ export function SettingsPage() {
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setMetadataDraft(settings.metadataExtraction)
-      setNoticeTone('info')
-      setNotice('메타데이터 추출 설정을 저장했어.')
+      notifyInfo('메타데이터 추출 설정을 저장했어.')
     },
     onError: (error) => {
-      setNoticeTone('error')
-      setNotice(error instanceof Error ? error.message : '메타데이터 설정 저장에 실패했어.')
+      notifyError(error instanceof Error ? error.message : '메타데이터 설정 저장에 실패했어.')
     },
   })
 
@@ -176,13 +178,13 @@ export function SettingsPage() {
     onSuccess: async (settings) => {
       syncSettingsCache(settings)
       setTaggerDraft(settings.tagger)
+      setTaggerDependencyResult(null)
+      hasAutoCheckedTaggerDependenciesRef.current = false
       await queryClient.invalidateQueries({ queryKey: ['tagger-status'] })
-      setNoticeTone('info')
-      setNotice('프롬프트 추출 태거 설정을 저장했어.')
+      notifyInfo('프롬프트 추출 태거 설정을 저장했어.')
     },
     onError: (error) => {
-      setNoticeTone('error')
-      setNotice(error instanceof Error ? error.message : '태거 설정 저장에 실패했어.')
+      notifyError(error instanceof Error ? error.message : '태거 설정 저장에 실패했어.')
     },
   })
 
@@ -192,12 +194,10 @@ export function SettingsPage() {
       syncSettingsCache(settings)
       setKaloscopeDraft(settings.kaloscope)
       await refreshAutoQueries()
-      setNoticeTone('info')
-      setNotice('자동 프롬프트 추출 설정을 저장했어.')
+      notifyInfo('자동 프롬프트 추출 설정을 저장했어.')
     },
     onError: (error) => {
-      setNoticeTone('error')
-      setNotice(error instanceof Error ? error.message : 'Kaloscope 설정 저장에 실패했어.')
+      notifyError(error instanceof Error ? error.message : 'Kaloscope 설정 저장에 실패했어.')
     },
   })
 
@@ -205,28 +205,35 @@ export function SettingsPage() {
     mutationFn: checkTaggerDependencies,
     onSuccess: (result) => {
       setTaggerDependencyResult(result)
-      setNoticeTone(result.available ? 'info' : 'error')
-      setNotice(result.message)
     },
     onError: (error) => {
-      setNoticeTone('error')
-      setNotice(error instanceof Error ? error.message : '태거 의존성 확인에 실패했어.')
+      notifyError(error instanceof Error ? error.message : '태거 의존성 확인에 실패했어.')
     },
   })
+
+  useEffect(() => {
+    if (activeTab !== 'auto') return
+    if (hasAutoCheckedTaggerDependenciesRef.current || taggerDependencyMutation.isPending) return
+
+    hasAutoCheckedTaggerDependenciesRef.current = true
+    void taggerDependencyMutation.mutateAsync()
+  }, [activeTab, taggerDependencyMutation])
 
   const autoTestResolveMutation = useMutation({
     mutationFn: resolveAutoTestMedia,
     onSuccess: (media) => {
       applyAutoTestMedia(media)
-      setNoticeTone(media.existsOnDisk ? 'info' : 'error')
-      setNotice(media.existsOnDisk ? '테스트 대상을 확인했어.' : '대상은 찾았지만 디스크에서 파일을 확인하지 못했어.')
+      if (media.existsOnDisk) {
+        notifyInfo('테스트 대상을 확인했어.')
+      } else {
+        notifyError('대상은 찾았지만 디스크에서 파일을 확인하지 못했어.')
+      }
     },
     onError: (error) => {
       setAutoTestMedia(null)
       setTaggerTestResult(null)
       setKaloscopeTestResult(null)
-      setNoticeTone('error')
-      setNotice(error instanceof Error ? error.message : '테스트 대상을 찾지 못했어.')
+      notifyError(error instanceof Error ? error.message : '테스트 대상을 찾지 못했어.')
     },
   })
 
@@ -234,12 +241,14 @@ export function SettingsPage() {
     mutationFn: getRandomAutoTestMedia,
     onSuccess: (media) => {
       applyAutoTestMedia(media)
-      setNoticeTone(media.existsOnDisk ? 'info' : 'error')
-      setNotice(media.existsOnDisk ? '랜덤 테스트 대상을 골랐어.' : '랜덤 대상은 찾았지만 디스크에서 파일을 확인하지 못했어.')
+      if (media.existsOnDisk) {
+        notifyInfo('랜덤 테스트 대상을 골랐어.')
+      } else {
+        notifyError('랜덤 대상은 찾았지만 디스크에서 파일을 확인하지 못했어.')
+      }
     },
     onError: (error) => {
-      setNoticeTone('error')
-      setNotice(error instanceof Error ? error.message : '랜덤 테스트 대상을 고르지 못했어.')
+      notifyError(error instanceof Error ? error.message : '랜덤 테스트 대상을 고르지 못했어.')
     },
   })
 
@@ -247,13 +256,11 @@ export function SettingsPage() {
     mutationFn: runTaggerAutoTest,
     onSuccess: (result) => {
       setTaggerTestResult(result)
-      setNoticeTone('info')
-      setNotice('태거 테스트가 끝났어.')
+      notifyInfo('태거 테스트가 끝났어.')
     },
     onError: (error) => {
       setTaggerTestResult(null)
-      setNoticeTone('error')
-      setNotice(error instanceof Error ? error.message : '태거 테스트에 실패했어.')
+      notifyError(error instanceof Error ? error.message : '태거 테스트에 실패했어.')
     },
   })
 
@@ -261,13 +268,11 @@ export function SettingsPage() {
     mutationFn: runKaloscopeAutoTest,
     onSuccess: (result) => {
       setKaloscopeTestResult(result)
-      setNoticeTone('info')
-      setNotice('Kaloscope 테스트가 끝났어.')
+      notifyInfo('Kaloscope 테스트가 끝났어.')
     },
     onError: (error) => {
       setKaloscopeTestResult(null)
-      setNoticeTone('error')
-      setNotice(error instanceof Error ? error.message : 'Kaloscope 테스트에 실패했어.')
+      notifyError(error instanceof Error ? error.message : 'Kaloscope 테스트에 실패했어.')
     },
   })
 
@@ -288,34 +293,29 @@ export function SettingsPage() {
 
   const handleFolderSave = async (folderId: number, input: WatchedFolderUpdateInput) => {
     await updateWatchedFolder(folderId, input)
-    setNoticeTone('info')
-    setNotice('감시 폴더 설정을 저장했어.')
+    notifyInfo('감시 폴더 설정을 저장했어.')
     await refreshFolderQueries()
   }
 
   const handleFolderDelete = async (folderId: number) => {
     await deleteWatchedFolder(folderId)
-    setNoticeTone('info')
-    setNotice('감시 폴더를 제거했어.')
+    notifyInfo('감시 폴더를 제거했어.')
     await refreshFolderQueries()
   }
 
   const handleFolderScan = async (folderId: number, full = false) => {
     await scanWatchedFolder(folderId, full)
-    setNoticeTone('info')
-    setNotice(full ? '전체 재스캔을 시작했어.' : '폴더 스캔을 시작했어.')
+    notifyInfo(full ? '전체 재스캔을 시작했어.' : '폴더 스캔을 시작했어.')
     await refreshFolderQueries()
   }
 
   const handleScanAllFolders = async () => {
     try {
       const summary = await scanAllWatchedFolders()
-      setNoticeTone('info')
-      setNotice(`전체 스캔 완료: 폴더 ${summary.totalFolders}개, 신규 ${summary.totalNew}개, 기존 ${summary.totalExisting}개`)
+      notifyInfo(`전체 스캔 완료: 폴더 ${summary.totalFolders}개, 신규 ${summary.totalNew}개, 기존 ${summary.totalExisting}개`)
       await refreshFolderQueries()
     } catch (error) {
-      setNoticeTone('error')
-      setNotice(error instanceof Error ? error.message : '전체 스캔에 실패했어.')
+      notifyError(error instanceof Error ? error.message : '전체 스캔에 실패했어.')
     }
   }
 
@@ -329,12 +329,10 @@ export function SettingsPage() {
         await restartFolderWatcher(folderId)
       }
 
-      setNoticeTone('info')
-      setNotice(`watcher를 ${action === 'start' ? '시작' : action === 'stop' ? '중지' : '재시작'}했어.`)
+      notifyInfo(`watcher를 ${action === 'start' ? '시작' : action === 'stop' ? '중지' : '재시작'}했어.`)
       await refreshFolderQueries()
     } catch (error) {
-      setNoticeTone('error')
-      setNotice(error instanceof Error ? error.message : 'watcher 제어에 실패했어.')
+      notifyError(error instanceof Error ? error.message : 'watcher 제어에 실패했어.')
     }
   }
 
@@ -378,13 +376,6 @@ export function SettingsPage() {
         <SettingsTabNav activeTab={activeTab} onChange={setActiveTab} />
 
         <section className="space-y-8">
-          {notice ? (
-            <Alert variant={noticeTone === 'error' ? 'destructive' : 'default'}>
-              <AlertTitle>{noticeTone === 'error' ? '문제가 생겼어' : '상태 업데이트'}</AlertTitle>
-              <AlertDescription>{notice}</AlertDescription>
-            </Alert>
-          ) : null}
-
           {activeTab === 'folders' ? (
             <FoldersTab
               newFolder={newFolder}
@@ -430,7 +421,6 @@ export function SettingsPage() {
               onPatchKaloscope={patchKaloscopeDraft}
               onSaveTagger={() => effectiveTaggerDraft && void taggerMutation.mutateAsync(effectiveTaggerDraft)}
               onSaveKaloscope={() => effectiveKaloscopeDraft && void kaloscopeMutation.mutateAsync(effectiveKaloscopeDraft)}
-              onCheckTaggerDependencies={() => void taggerDependencyMutation.mutateAsync()}
               isSavingTagger={taggerMutation.isPending}
               isSavingKaloscope={kaloscopeMutation.isPending}
               isCheckingTaggerDependencies={taggerDependencyMutation.isPending}

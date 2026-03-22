@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { WatchedFolder, WatchedFolderUpdateInput } from '@/types/folder'
 import { parseCommaSeparatedInput, parseJsonArray, toCommaSeparatedInput } from '../settings-utils'
+import { settingsControlClassName } from './settings-control-classes'
+import { SettingsField, SettingsToggleRow } from './settings-primitives'
 
 interface WatchedFolderCardProps {
   folder: WatchedFolder
@@ -95,81 +97,65 @@ export function WatchedFolderCard({
 
       <CardContent className="space-y-5">
         <div className="grid gap-4 lg:grid-cols-2">
-          <label className="space-y-2 text-sm">
-            <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">표시 이름</span>
+          <SettingsField label="표시 이름">
             <input
               value={draft.folder_name}
               onChange={(event) => setDraft((current) => ({ ...current, folder_name: event.target.value }))}
-              className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+              className={settingsControlClassName}
             />
-          </label>
+          </SettingsField>
 
-          <label className="space-y-2 text-sm">
-            <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">스캔 주기(분)</span>
+          <SettingsField label="스캔 주기(분)">
             <input
               type="number"
               min={1}
               value={draft.scan_interval}
               onChange={(event) => setDraft((current) => ({ ...current, scan_interval: Number(event.target.value) || 1 }))}
-              className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+              className={settingsControlClassName}
             />
-          </label>
+          </SettingsField>
 
-          <label className="space-y-2 text-sm">
-            <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">제외 확장자</span>
+          <SettingsField label="제외 확장자">
             <input
               value={draft.exclude_extensions}
               onChange={(event) => setDraft((current) => ({ ...current, exclude_extensions: event.target.value }))}
               placeholder="tmp, db, txt"
-              className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+              className={settingsControlClassName}
             />
-          </label>
+          </SettingsField>
 
-          <label className="space-y-2 text-sm">
-            <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">제외 패턴</span>
+          <SettingsField label="제외 패턴">
             <input
               value={draft.exclude_patterns}
               onChange={(event) => setDraft((current) => ({ ...current, exclude_patterns: event.target.value }))}
               placeholder="@eaDir, thumbs, cache"
-              className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+              className={settingsControlClassName}
             />
-          </label>
+          </SettingsField>
 
-          <label className="flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={draft.auto_scan}
-              onChange={(event) => setDraft((current) => ({ ...current, auto_scan: event.target.checked }))}
-            />
+          <SettingsToggleRow>
+            <input type="checkbox" checked={draft.auto_scan} onChange={(event) => setDraft((current) => ({ ...current, auto_scan: event.target.checked }))} />
             자동 스캔
-          </label>
+          </SettingsToggleRow>
 
-          <label className="flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={draft.recursive}
-              onChange={(event) => setDraft((current) => ({ ...current, recursive: event.target.checked }))}
-            />
+          <SettingsToggleRow>
+            <input type="checkbox" checked={draft.recursive} onChange={(event) => setDraft((current) => ({ ...current, recursive: event.target.checked }))} />
             하위 폴더 포함
-          </label>
+          </SettingsToggleRow>
 
-          <label className="flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground">
+          <SettingsToggleRow>
             <input
               type="checkbox"
               checked={draft.watcher_enabled}
               onChange={(event) => setDraft((current) => ({ ...current, watcher_enabled: event.target.checked }))}
             />
             watcher 사용
-          </label>
+          </SettingsToggleRow>
 
-          <label className="flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={draft.is_active}
-              onChange={(event) => setDraft((current) => ({ ...current, is_active: event.target.checked }))}
-            />
+          <SettingsToggleRow>
+            <input type="checkbox" checked={draft.is_active} onChange={(event) => setDraft((current) => ({ ...current, is_active: event.target.checked }))} />
             폴더 활성화
-          </label>
+          </SettingsToggleRow>
         </div>
 
         <div className="flex flex-col gap-2 text-xs text-muted-foreground">

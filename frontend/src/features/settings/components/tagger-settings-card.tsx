@@ -1,16 +1,15 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { cn } from '@/lib/utils'
-import type { TaggerDependencyCheckResult, TaggerModelInfo, TaggerSettings } from '@/types/settings'
+import type { TaggerModelInfo, TaggerSettings } from '@/types/settings'
+import { settingsControlClassName } from './settings-control-classes'
+import { SettingsField, SettingsToggleRow } from './settings-primitives'
 
 interface TaggerSettingsCardProps {
   taggerDraft: TaggerSettings | null
   taggerModels: TaggerModelInfo[]
-  taggerDependencyResult: TaggerDependencyCheckResult | null
   onPatchTagger: (patch: Partial<TaggerSettings>) => void
   onSaveTagger: () => void
-  onCheckTaggerDependencies: () => void
   isSavingTagger: boolean
   isCheckingTaggerDependencies: boolean
 }
@@ -18,10 +17,8 @@ interface TaggerSettingsCardProps {
 export function TaggerSettingsCard({
   taggerDraft,
   taggerModels,
-  taggerDependencyResult,
   onPatchTagger,
   onSaveTagger,
-  onCheckTaggerDependencies,
   isSavingTagger,
   isCheckingTaggerDependencies,
 }: TaggerSettingsCardProps) {
@@ -31,11 +28,8 @@ export function TaggerSettingsCard({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle>WD Tagger</CardTitle>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={onCheckTaggerDependencies} disabled={isCheckingTaggerDependencies}>
-              의존성 확인
-            </Button>
-            <Button size="sm" onClick={onSaveTagger} disabled={!taggerDraft || isSavingTagger}>
-              저장
+            <Button size="sm" onClick={onSaveTagger} disabled={!taggerDraft || isSavingTagger || isCheckingTaggerDependencies}>
+              {isCheckingTaggerDependencies ? '의존성 확인 중…' : '저장'}
             </Button>
           </div>
         </div>
@@ -43,26 +37,25 @@ export function TaggerSettingsCard({
       <CardContent className="grid gap-4 md:grid-cols-2">
         {taggerDraft ? (
           <>
-            <label className="flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground md:col-span-2">
+            <SettingsToggleRow className="md:col-span-2">
               <input type="checkbox" checked={taggerDraft.enabled} onChange={(event) => onPatchTagger({ enabled: event.target.checked })} />
               WD Tagger 활성화
-            </label>
+            </SettingsToggleRow>
 
-            <label className="flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground md:col-span-2">
+            <SettingsToggleRow className="md:col-span-2">
               <input
                 type="checkbox"
                 checked={taggerDraft.autoTagOnUpload}
                 onChange={(event) => onPatchTagger({ autoTagOnUpload: event.target.checked })}
               />
               업로드 시 자동 태깅
-            </label>
+            </SettingsToggleRow>
 
-            <label className="space-y-2 text-sm">
-              <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">모델</span>
+            <SettingsField label="모델">
               <select
                 value={taggerDraft.model}
                 onChange={(event) => onPatchTagger({ model: event.target.value as TaggerSettings['model'] })}
-                className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+                className={settingsControlClassName}
               >
                 {taggerModels.map((model) => (
                   <option key={model.name} value={model.name}>
@@ -70,23 +63,21 @@ export function TaggerSettingsCard({
                   </option>
                 ))}
               </select>
-            </label>
+            </SettingsField>
 
-            <label className="space-y-2 text-sm">
-              <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">디바이스</span>
+            <SettingsField label="디바이스">
               <select
                 value={taggerDraft.device}
                 onChange={(event) => onPatchTagger({ device: event.target.value as TaggerSettings['device'] })}
-                className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+                className={settingsControlClassName}
               >
                 <option value="auto">auto</option>
                 <option value="cpu">cpu</option>
                 <option value="cuda">cuda</option>
               </select>
-            </label>
+            </SettingsField>
 
-            <label className="space-y-2 text-sm">
-              <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">General threshold</span>
+            <SettingsField label="General threshold">
               <input
                 type="number"
                 min={0}
@@ -94,12 +85,11 @@ export function TaggerSettingsCard({
                 step={0.01}
                 value={taggerDraft.generalThreshold}
                 onChange={(event) => onPatchTagger({ generalThreshold: Number(event.target.value) || 0 })}
-                className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+                className={settingsControlClassName}
               />
-            </label>
+            </SettingsField>
 
-            <label className="space-y-2 text-sm">
-              <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">Character threshold</span>
+            <SettingsField label="Character threshold">
               <input
                 type="number"
                 min={0}
@@ -107,53 +97,36 @@ export function TaggerSettingsCard({
                 step={0.01}
                 value={taggerDraft.characterThreshold}
                 onChange={(event) => onPatchTagger({ characterThreshold: Number(event.target.value) || 0 })}
-                className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+                className={settingsControlClassName}
               />
-            </label>
+            </SettingsField>
 
-            <label className="space-y-2 text-sm md:col-span-2">
-              <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">Python path</span>
-              <input
-                value={taggerDraft.pythonPath}
-                onChange={(event) => onPatchTagger({ pythonPath: event.target.value })}
-                className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
-              />
-            </label>
+            <SettingsField label="Python path" className="md:col-span-2">
+              <input value={taggerDraft.pythonPath} onChange={(event) => onPatchTagger({ pythonPath: event.target.value })} className={settingsControlClassName} />
+            </SettingsField>
 
-            <label className="flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground">
+            <SettingsToggleRow>
               <input
                 type="checkbox"
                 checked={taggerDraft.keepModelLoaded}
                 onChange={(event) => onPatchTagger({ keepModelLoaded: event.target.checked })}
               />
               모델 메모리 유지
-            </label>
+            </SettingsToggleRow>
 
-            <label className="space-y-2 text-sm">
-              <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">자동 언로드(분)</span>
+            <SettingsField label="자동 언로드(분)">
               <input
                 type="number"
                 min={1}
                 value={taggerDraft.autoUnloadMinutes}
                 onChange={(event) => onPatchTagger({ autoUnloadMinutes: Number(event.target.value) || 1 })}
-                className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+                className={settingsControlClassName}
               />
-            </label>
+            </SettingsField>
           </>
         ) : (
           <Skeleton className="h-48 w-full rounded-sm md:col-span-2" />
         )}
-
-        {taggerDependencyResult ? (
-          <div
-            className={cn(
-              'rounded-sm px-4 py-3 text-sm md:col-span-2',
-              taggerDependencyResult.available ? 'bg-surface-low text-foreground' : 'bg-destructive/12 text-destructive',
-            )}
-          >
-            {taggerDependencyResult.message}
-          </div>
-        ) : null}
       </CardContent>
     </Card>
   )

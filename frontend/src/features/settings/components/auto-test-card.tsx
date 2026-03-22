@@ -1,8 +1,11 @@
-import { Badge } from '@/components/ui/badge'
+import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
+import { WDTaggerResultBlock } from '@/components/common/wd-tagger-result-block'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult } from '@/lib/api'
 import { formatFileSize } from '../settings-utils'
+import { settingsMonoControlClassName } from './settings-control-classes'
+import { SettingsField, SettingsValueTile } from './settings-primitives'
 
 interface AutoTestCardProps {
   autoTestHashInput: string
@@ -51,8 +54,7 @@ export function AutoTestCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <label className="space-y-2 text-sm">
-          <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">Composite hash</span>
+        <SettingsField label="Composite hash">
           <input
             value={autoTestHashInput}
             onChange={(event) => onAutoTestHashInputChange(event.target.value)}
@@ -63,52 +65,44 @@ export function AutoTestCard({
               onResolveAutoTestMedia()
             }}
             placeholder="image hash"
-            className="h-10 w-full rounded-sm bg-surface-lowest px-3 font-mono text-foreground outline-none focus:ring-1 focus:ring-primary"
+            className={settingsMonoControlClassName}
           />
-        </label>
+        </SettingsField>
 
         {autoTestMedia ? (
-          <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="overflow-hidden rounded-sm bg-surface-low">
-              {autoTestMedia.fileType === 'video' && autoTestMedia.imageUrl ? (
-                <video src={autoTestMedia.imageUrl} controls preload="metadata" className="aspect-square w-full bg-black object-contain" />
-              ) : autoTestMedia.thumbnailUrl || autoTestMedia.imageUrl ? (
-                <img
-                  src={autoTestMedia.thumbnailUrl ?? autoTestMedia.imageUrl ?? undefined}
-                  alt={autoTestMedia.fileName ?? autoTestMedia.compositeHash}
-                  className="aspect-square w-full object-cover"
-                />
-              ) : (
-                <div className="flex aspect-square items-center justify-center px-4 text-sm text-muted-foreground">
-                  미리보기를 준비하지 못했어.
-                </div>
-              )}
-            </div>
+          <div className="pt-2">
+            <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+              <div className="overflow-hidden rounded-sm bg-surface-low">
+                {autoTestMedia.fileType === 'video' && autoTestMedia.imageUrl ? (
+                  <video src={autoTestMedia.imageUrl} controls preload="metadata" className="aspect-square w-full bg-black object-contain" />
+                ) : autoTestMedia.thumbnailUrl || autoTestMedia.imageUrl ? (
+                  <img
+                    src={autoTestMedia.thumbnailUrl ?? autoTestMedia.imageUrl ?? undefined}
+                    alt={autoTestMedia.fileName ?? autoTestMedia.compositeHash}
+                    className="aspect-square w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex aspect-square items-center justify-center px-4 text-sm text-muted-foreground">미리보기를 준비하지 못했어.</div>
+                )}
+              </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-sm bg-surface-low px-4 py-3">
-                <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">type</div>
-                <div className="mt-2 text-sm font-semibold text-foreground">{autoTestMedia.fileType ?? '—'}</div>
-              </div>
-              <div className="rounded-sm bg-surface-low px-4 py-3">
-                <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">file</div>
-                <div className="mt-2 text-sm font-semibold text-foreground">{autoTestMedia.fileName ?? '—'}</div>
-              </div>
-              <div className="rounded-sm bg-surface-low px-4 py-3">
-                <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">exists</div>
-                <div className="mt-2 text-sm font-semibold text-foreground">{autoTestMedia.existsOnDisk ? 'yes' : 'no'}</div>
-              </div>
-              <div className="rounded-sm bg-surface-low px-4 py-3">
-                <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">size</div>
-                <div className="mt-2 text-sm font-semibold text-foreground">{formatFileSize(autoTestMedia.fileSize)}</div>
-              </div>
-              <div className="rounded-sm bg-surface-low px-4 py-3 md:col-span-2">
-                <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">hash</div>
-                <div className="mt-2 break-all font-mono text-xs text-foreground">{autoTestMedia.compositeHash}</div>
-              </div>
-              <div className="rounded-sm bg-surface-low px-4 py-3 md:col-span-2">
-                <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">path</div>
-                <div className="mt-2 break-all font-mono text-xs text-foreground">{autoTestMedia.originalFilePath ?? '—'}</div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <SettingsValueTile label="type" value={autoTestMedia.fileType ?? '—'} />
+                <SettingsValueTile label="file" value={autoTestMedia.fileName ?? '—'} valueClassName="break-all" />
+                <SettingsValueTile label="exists" value={autoTestMedia.existsOnDisk ? 'yes' : 'no'} />
+                <SettingsValueTile label="size" value={formatFileSize(autoTestMedia.fileSize)} />
+                <SettingsValueTile
+                  label="hash"
+                  value={autoTestMedia.compositeHash}
+                  className="md:col-span-2"
+                  valueClassName="break-all font-mono text-xs"
+                />
+                <SettingsValueTile
+                  label="path"
+                  value={autoTestMedia.originalFilePath ?? '—'}
+                  className="md:col-span-2"
+                  valueClassName="break-all font-mono text-xs"
+                />
               </div>
             </div>
           </div>
@@ -127,51 +121,8 @@ export function AutoTestCard({
           </Button>
         </div>
 
-        {taggerTestResult ? (
-          <div className="rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="font-medium">WD Tagger 결과</div>
-              {taggerTestResult.model ? <Badge variant="outline">{taggerTestResult.model}</Badge> : null}
-            </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <div>
-                <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">general</div>
-                <div className="mt-2 text-sm font-semibold">{Object.keys(taggerTestResult.general ?? {}).length}</div>
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">character</div>
-                <div className="mt-2 text-sm font-semibold">{Object.keys(taggerTestResult.character ?? {}).length}</div>
-              </div>
-            </div>
-            {taggerTestResult.taglist ? (
-              <div className="mt-3 break-words rounded-sm bg-surface-lowest px-3 py-2 text-xs text-foreground">
-                {taggerTestResult.taglist}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {kaloscopeTestResult ? (
-          <div className="rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="font-medium">Kaloscope 결과</div>
-              {kaloscopeTestResult.model ? <Badge variant="outline">{kaloscopeTestResult.model}</Badge> : null}
-            </div>
-            <div className="mt-3 grid gap-2">
-              {Object.entries(kaloscopeTestResult.artists ?? {}).slice(0, 10).map(([artist, score]) => (
-                <div key={artist} className="flex items-center justify-between gap-3 rounded-sm bg-surface-lowest px-3 py-2 text-xs">
-                  <span className="truncate text-foreground">{artist}</span>
-                  <span className="font-mono text-muted-foreground">{Number(score).toFixed(4)}</span>
-                </div>
-              ))}
-            </div>
-            {kaloscopeTestResult.taglist ? (
-              <div className="mt-3 break-words rounded-sm bg-surface-lowest px-3 py-2 text-xs text-foreground">
-                {kaloscopeTestResult.taglist}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        {kaloscopeTestResult ? <KaloscopeResultBlock result={kaloscopeTestResult} /> : null}
+        {taggerTestResult ? <WDTaggerResultBlock result={taggerTestResult} /> : null}
       </CardContent>
     </Card>
   )

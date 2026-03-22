@@ -15,7 +15,6 @@ export function AutoTab({
   onPatchKaloscope,
   onSaveTagger,
   onSaveKaloscope,
-  onCheckTaggerDependencies,
   isSavingTagger,
   isSavingKaloscope,
   isCheckingTaggerDependencies,
@@ -35,16 +34,10 @@ export function AutoTab({
 }: AutoTabProps) {
   return (
     <div className="space-y-8">
-      <AutoOverviewCard taggerStatus={taggerStatus} kaloscopeStatus={kaloscopeStatus} />
-
-      <TaggerSettingsCard
-        taggerDraft={taggerDraft}
-        taggerModels={taggerModels}
+      <AutoOverviewCard
+        taggerStatus={taggerStatus}
         taggerDependencyResult={taggerDependencyResult}
-        onPatchTagger={onPatchTagger}
-        onSaveTagger={onSaveTagger}
-        onCheckTaggerDependencies={onCheckTaggerDependencies}
-        isSavingTagger={isSavingTagger}
+        kaloscopeStatus={kaloscopeStatus}
         isCheckingTaggerDependencies={isCheckingTaggerDependencies}
       />
 
@@ -54,6 +47,15 @@ export function AutoTab({
         onPatchKaloscope={onPatchKaloscope}
         onSaveKaloscope={onSaveKaloscope}
         isSavingKaloscope={isSavingKaloscope}
+      />
+
+      <TaggerSettingsCard
+        taggerDraft={taggerDraft}
+        taggerModels={taggerModels}
+        onPatchTagger={onPatchTagger}
+        onSaveTagger={onSaveTagger}
+        isSavingTagger={isSavingTagger}
+        isCheckingTaggerDependencies={isCheckingTaggerDependencies}
       />
 
       <AutoTestCard

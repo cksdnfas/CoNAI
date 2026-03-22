@@ -1,30 +1,58 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import type { KaloscopeServerStatus, TaggerServerStatus } from '@/types/settings'
+import type { KaloscopeServerStatus, TaggerDependencyCheckResult, TaggerServerStatus } from '@/types/settings'
+import { SettingsValueTile } from './settings-primitives'
 
 interface AutoOverviewCardProps {
   taggerStatus: TaggerServerStatus | undefined
+  taggerDependencyResult: TaggerDependencyCheckResult | null
   kaloscopeStatus: KaloscopeServerStatus | undefined
+  isCheckingTaggerDependencies: boolean
 }
 
-export function AutoOverviewCard({ taggerStatus, kaloscopeStatus }: AutoOverviewCardProps) {
+function renderDependencyStatus({
+  ready,
+  pending,
+  fallback = '—',
+}: {
+  ready: boolean | null
+  pending?: boolean
+  fallback?: string
+}) {
+  if (pending) {
+    return <span className="text-muted-foreground">확인 중…</span>
+  }
+
+  if (ready == null) {
+    return <span className="text-muted-foreground">{fallback}</span>
+  }
+
+  return <span className={ready ? 'text-primary' : 'text-destructive'}>{ready ? '준비 OK' : '확인 필요'}</span>
+}
+
+export function AutoOverviewCard({
+  taggerStatus,
+  taggerDependencyResult,
+  kaloscopeStatus,
+  isCheckingTaggerDependencies,
+}: AutoOverviewCardProps) {
+  const kaloscopeReady = kaloscopeStatus ? kaloscopeStatus.scriptExists && kaloscopeStatus.dependenciesAvailable : null
+
   return (
     <Card className="bg-surface-container">
       <CardHeader>
         <CardTitle>Auto</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-sm bg-surface-low px-4 py-3">
-          <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">loaded model</div>
-          <div className="mt-2 text-sm font-semibold text-foreground">{taggerStatus?.currentModel ?? '—'}</div>
-        </div>
-        <div className="rounded-sm bg-surface-low px-4 py-3">
-          <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">current device</div>
-          <div className="mt-2 text-sm font-semibold text-foreground">{taggerStatus?.currentDevice ?? '—'}</div>
-        </div>
-        <div className="rounded-sm bg-surface-low px-4 py-3">
-          <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">kaloscope</div>
-          <div className="mt-2 text-sm font-semibold text-foreground">{kaloscopeStatus?.statusMessage ?? '—'}</div>
-        </div>
+      <CardContent className="grid gap-4 min-[900px]:grid-cols-4">
+        <SettingsValueTile label="loaded model" value={taggerStatus?.currentModel ?? '—'} />
+        <SettingsValueTile label="current device" value={taggerStatus?.currentDevice ?? '—'} />
+        <SettingsValueTile
+          label="wd tagger"
+          value={renderDependencyStatus({
+            ready: taggerDependencyResult?.available ?? null,
+            pending: isCheckingTaggerDependencies,
+          })}
+        />
+        <SettingsValueTile label="kaloscope" value={renderDependencyStatus({ ready: kaloscopeReady })} />
       </CardContent>
     </Card>
   )

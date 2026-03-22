@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { FolderScanLog, WatchedFolder, WatchedFolderUpdateInput, WatchersHealthSummary } from '@/types/folder'
 import { formatDateTime, type NewWatchedFolderDraft } from '../settings-utils'
+import { settingsControlClassName } from './settings-control-classes'
+import { SettingsField, SettingsToggleRow, SettingsValueTile } from './settings-primitives'
 import { WatchedFolderCard } from './watched-folder-card'
 
 interface FoldersTabProps {
@@ -76,26 +78,11 @@ export function FoldersTab({
           </div>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm md:grid-cols-5">
-          <div className="rounded-sm bg-surface-low px-4 py-3">
-            <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">folders</div>
-            <div className="mt-2 text-xl font-semibold text-foreground">{folders.length}</div>
-          </div>
-          <div className="rounded-sm bg-surface-low px-4 py-3">
-            <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">watching</div>
-            <div className="mt-2 text-xl font-semibold text-foreground">{watchersHealth?.watching ?? 0}</div>
-          </div>
-          <div className="rounded-sm bg-surface-low px-4 py-3">
-            <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">errors</div>
-            <div className="mt-2 text-xl font-semibold text-foreground">{watchersHealth?.error ?? 0}</div>
-          </div>
-          <div className="rounded-sm bg-surface-low px-4 py-3">
-            <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">events 24h</div>
-            <div className="mt-2 text-xl font-semibold text-foreground">{watchersHealth?.totalEvents24h ?? 0}</div>
-          </div>
-          <div className="rounded-sm bg-surface-low px-4 py-3">
-            <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">latest scan log</div>
-            <div className="mt-2 text-sm font-semibold text-foreground">{scanLogs[0]?.folder_name ?? '—'}</div>
-          </div>
+          <SettingsValueTile label="folders" value={folders.length} valueClassName="text-xl" />
+          <SettingsValueTile label="watching" value={watchersHealth?.watching ?? 0} valueClassName="text-xl" />
+          <SettingsValueTile label="errors" value={watchersHealth?.error ?? 0} valueClassName="text-xl" />
+          <SettingsValueTile label="events 24h" value={watchersHealth?.totalEvents24h ?? 0} valueClassName="text-xl" />
+          <SettingsValueTile label="latest scan log" value={scanLogs[0]?.folder_name ?? '—'} />
         </CardContent>
       </Card>
 
@@ -105,94 +92,80 @@ export function FoldersTab({
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid gap-4 lg:grid-cols-2">
-            <label className="space-y-2 text-sm">
-              <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">폴더 경로</span>
+            <SettingsField label="폴더 경로">
               <input
                 value={newFolder.folder_path}
                 onChange={(event) => onNewFolderChange({ folder_path: event.target.value })}
                 placeholder="D:\\Images\\Incoming"
-                className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+                className={settingsControlClassName}
               />
-            </label>
+            </SettingsField>
 
-            <label className="space-y-2 text-sm">
-              <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">표시 이름</span>
+            <SettingsField label="표시 이름">
               <input
                 value={newFolder.folder_name}
                 onChange={(event) => onNewFolderChange({ folder_name: event.target.value })}
                 placeholder="Incoming"
-                className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+                className={settingsControlClassName}
               />
-            </label>
+            </SettingsField>
 
-            <label className="space-y-2 text-sm">
-              <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">스캔 주기(분)</span>
+            <SettingsField label="스캔 주기(분)">
               <input
                 type="number"
                 min={1}
                 value={newFolder.scan_interval}
                 onChange={(event) => onNewFolderChange({ scan_interval: Number(event.target.value) || 1 })}
-                className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+                className={settingsControlClassName}
               />
-            </label>
+            </SettingsField>
 
-            <label className="space-y-2 text-sm">
-              <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">watcher polling(ms)</span>
+            <SettingsField label="watcher polling(ms)">
               <input
                 type="number"
                 min={100}
                 value={newFolder.watcher_polling_interval}
                 onChange={(event) => onNewFolderChange({ watcher_polling_interval: Number(event.target.value) || 100 })}
-                className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+                className={settingsControlClassName}
               />
-            </label>
+            </SettingsField>
 
-            <label className="space-y-2 text-sm">
-              <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">제외 확장자</span>
+            <SettingsField label="제외 확장자">
               <input
                 value={newFolder.exclude_extensions}
                 onChange={(event) => onNewFolderChange({ exclude_extensions: event.target.value })}
                 placeholder="tmp, db"
-                className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+                className={settingsControlClassName}
               />
-            </label>
+            </SettingsField>
 
-            <label className="space-y-2 text-sm">
-              <span className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">제외 패턴</span>
+            <SettingsField label="제외 패턴">
               <input
                 value={newFolder.exclude_patterns}
                 onChange={(event) => onNewFolderChange({ exclude_patterns: event.target.value })}
                 placeholder="@eaDir, cache"
-                className="h-10 w-full rounded-sm bg-surface-lowest px-3 text-foreground outline-none focus:ring-1 focus:ring-primary"
+                className={settingsControlClassName}
               />
-            </label>
+            </SettingsField>
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
-            <label className="flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground">
-              <input
-                type="checkbox"
-                checked={newFolder.auto_scan}
-                onChange={(event) => onNewFolderChange({ auto_scan: event.target.checked })}
-              />
+            <SettingsToggleRow>
+              <input type="checkbox" checked={newFolder.auto_scan} onChange={(event) => onNewFolderChange({ auto_scan: event.target.checked })} />
               자동 스캔
-            </label>
-            <label className="flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground">
-              <input
-                type="checkbox"
-                checked={newFolder.recursive}
-                onChange={(event) => onNewFolderChange({ recursive: event.target.checked })}
-              />
+            </SettingsToggleRow>
+            <SettingsToggleRow>
+              <input type="checkbox" checked={newFolder.recursive} onChange={(event) => onNewFolderChange({ recursive: event.target.checked })} />
               하위 폴더 포함
-            </label>
-            <label className="flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 text-sm text-foreground">
+            </SettingsToggleRow>
+            <SettingsToggleRow>
               <input
                 type="checkbox"
                 checked={newFolder.watcher_enabled}
                 onChange={(event) => onNewFolderChange({ watcher_enabled: event.target.checked })}
               />
               watcher 시작
-            </label>
+            </SettingsToggleRow>
           </div>
 
           {pathValidationMessage ? <p className="text-sm text-primary">{pathValidationMessage}</p> : null}
@@ -262,9 +235,7 @@ export function FoldersTab({
             </div>
           ) : null}
 
-          {!scanLogsLoading && scanLogs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">아직 최근 스캔 로그가 없어.</p>
-          ) : null}
+          {!scanLogsLoading && scanLogs.length === 0 ? <p className="text-sm text-muted-foreground">아직 최근 스캔 로그가 없어.</p> : null}
 
           {scanLogs.map((log) => (
             <div key={log.id} className="rounded-sm bg-surface-low px-4 py-3 text-sm">
