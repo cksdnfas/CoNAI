@@ -34,3 +34,42 @@ export interface SimilaritySettingsDraft {
   detailSimilarSortBy: SimilaritySettings['detailSimilarSortBy']
   detailSimilarSortOrder: SimilaritySettings['detailSimilarSortOrder']
 }
+
+function getSortedTagEntries(scores?: Record<string, number> | null) {
+  return Object.entries(scores ?? {}).sort(([, left], [, right]) => right - left)
+}
+
+/** Build extracted auto prompt content for the detail metadata card. */
+export function getImageAutoPromptContent(image: ImageRecord) {
+  const tagger = image.auto_tags?.tagger
+  const ratingEntries = getSortedTagEntries(tagger?.rating ?? image.auto_tags?.rating)
+  const characterEntries = getSortedTagEntries(tagger?.character ?? image.auto_tags?.character)
+  const generalEntries = getSortedTagEntries(tagger?.general ?? image.auto_tags?.general)
+
+  if (ratingEntries.length === 0 && characterEntries.length === 0 && generalEntries.length === 0) {
+    return null
+  }
+
+  return {
+    ratingEntries,
+    characterEntries,
+    generalTags: generalEntries.map(([tag]) => tag),
+    generalEntries,
+  }
+}
+
+/** Build extracted artist prompt tag data for the detail metadata card. */
+export function getImageArtistPromptSection(image: ImageRecord) {
+  const kaloscopeArtists = image.auto_tags?.kaloscope?.artists ?? image.auto_tags?.kaloscope?.artist
+  const entries = getSortedTagEntries(kaloscopeArtists)
+
+  if (entries.length === 0) {
+    return null
+  }
+
+  return {
+    label: 'artist',
+    tags: entries.map(([tag]) => tag),
+    entries,
+  }
+}

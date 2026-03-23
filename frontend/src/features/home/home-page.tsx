@@ -45,7 +45,7 @@ export function HomePage() {
   }, [appliedChips])
 
   useHomeScrollRestoration({
-    enabled: !imagesQuery.isPending && !imagesQuery.isError && !isSearchMode,
+    enabled: !imagesQuery.isPending && !imagesQuery.isError,
     itemCount: images.length,
     canLoadMore: Boolean(imagesQuery.hasNextPage),
     isLoadingMore: imagesQuery.isFetchingNextPage,
