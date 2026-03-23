@@ -1,4 +1,9 @@
-import { CollapsibleScoreMeterList, ScoreMeterList, StackedRatingBar, TagBundleSection } from '@/components/common/tag-result-ui'
+import {
+  ArtistPromptSection,
+  CharacterPromptSection,
+  GeneralPromptSection,
+  RatingPromptSection,
+} from '@/components/common/prompt-result-sections'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import type { ImageRecord } from '@/types/image'
@@ -51,23 +56,22 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
             <div className="rounded-sm bg-surface-high p-4 sm:col-span-2">
               <p className="text-[11px] uppercase tracking-[0.18em]">Auto prompt</p>
               <div className="mt-3 space-y-3">
-                {autoPromptContent.ratingEntries.length > 0 ? <StackedRatingBar title="rating" entries={autoPromptContent.ratingEntries} /> : null}
-                {autoPromptContent.characterEntries.length > 0 ? (
-                  <ScoreMeterList title="character" entries={autoPromptContent.characterEntries} accentClassName="bg-primary/60" />
-                ) : null}
-                {autoPromptContent.generalTags.length > 0 ? <TagBundleSection label="general" tags={autoPromptContent.generalTags} /> : null}
-                {autoPromptContent.generalEntries.length > 0 ? (
-                  <CollapsibleScoreMeterList title="general" entries={autoPromptContent.generalEntries} accentClassName="bg-primary/80" />
-                ) : null}
+                <RatingPromptSection entries={autoPromptContent.ratingEntries} />
+                <CharacterPromptSection entries={autoPromptContent.characterEntries} />
+                <GeneralPromptSection tags={autoPromptContent.generalTags} entries={autoPromptContent.generalEntries} collapsibleScores />
               </div>
             </div>
           ) : null}
           {artistPromptSection ? (
             <div className="rounded-sm bg-surface-high p-4 sm:col-span-2">
               <p className="text-[11px] uppercase tracking-[0.18em]">Artist prompt</p>
-              <div className="mt-3 space-y-3">
-                <TagBundleSection label={artistPromptSection.label} tags={artistPromptSection.tags} />
-                <CollapsibleScoreMeterList title={artistPromptSection.label} entries={artistPromptSection.entries} accentClassName="bg-primary/80" />
+              <div className="mt-3">
+                <ArtistPromptSection
+                  label={artistPromptSection.label}
+                  tags={artistPromptSection.tags}
+                  entries={artistPromptSection.entries}
+                  collapsibleScores
+                />
               </div>
             </div>
           ) : null}
