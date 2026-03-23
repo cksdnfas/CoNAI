@@ -1,8 +1,11 @@
+import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
 import { WDTaggerResultBlock } from '@/components/common/wd-tagger-result-block'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
 import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult } from '@/lib/api'
+import type { ImageRecord } from '@/types/image'
 import { formatFileSize } from '../settings-utils'
 import { settingsMonoControlClassName } from './settings-control-classes'
 import { SettingsField, SettingsValueTile } from './settings-primitives'
@@ -10,6 +13,8 @@ import { SettingsField, SettingsValueTile } from './settings-primitives'
 interface AutoTestCardProps {
   autoTestHashInput: string
   autoTestMedia: AutoTestMediaRecord | null
+  autoTestImage: ImageRecord | null
+  isLoadingAutoTestImage: boolean
   taggerTestResult: AutoTestTaggerResult | null
   kaloscopeTestResult: AutoTestKaloscopeResult | null
   onAutoTestHashInputChange: (value: string) => void
@@ -26,6 +31,8 @@ interface AutoTestCardProps {
 export function AutoTestCard({
   autoTestHashInput,
   autoTestMedia,
+  autoTestImage,
+  isLoadingAutoTestImage,
   taggerTestResult,
   kaloscopeTestResult,
   onAutoTestHashInputChange,
@@ -38,6 +45,8 @@ export function AutoTestCard({
   isRunningTaggerAutoTest,
   isRunningKaloscopeAutoTest,
 }: AutoTestCardProps) {
+  const extractedPromptCards = autoTestImage ? getImageExtractedPromptCards(autoTestImage) : []
+
   return (
     <Card className="bg-surface-container">
       <CardHeader>
@@ -111,6 +120,21 @@ export function AutoTestCard({
             해시를 확인하거나 랜덤으로 하나 골라줘. 파일이 실제로 확인된 대상만 테스트 버튼이 열려.
           </div>
         )}
+
+        {isLoadingAutoTestImage ? (
+          <div className="rounded-sm bg-surface-low px-4 py-3 text-sm text-muted-foreground">
+            추출 프롬프트를 불러오는 중이야…
+          </div>
+        ) : null}
+
+        {extractedPromptCards.length > 0 ? (
+          <div className="rounded-sm bg-surface-low px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Extracted prompt</div>
+            <div className="mt-3">
+              <ExtractedPromptSections items={extractedPromptCards} />
+            </div>
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={onRunTaggerAutoTest} disabled={!autoTestMedia?.existsOnDisk || isRunningTaggerAutoTest}>

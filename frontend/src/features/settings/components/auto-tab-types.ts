@@ -1,4 +1,5 @@
 import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult } from '@/lib/api'
+import type { ImageRecord } from '@/types/image'
 import type {
   KaloscopeServerStatus,
   KaloscopeSettings,
@@ -25,6 +26,8 @@ export interface AutoTabProps {
   autoTestHashInput: string
   onAutoTestHashInputChange: (value: string) => void
   autoTestMedia: AutoTestMediaRecord | null
+  autoTestImage: ImageRecord | null
+  isLoadingAutoTestImage: boolean
   taggerTestResult: AutoTestTaggerResult | null
   kaloscopeTestResult: AutoTestKaloscopeResult | null
   onResolveAutoTestMedia: () => void

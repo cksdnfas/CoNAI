@@ -1,3 +1,4 @@
+import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import {
   ArtistPromptSection,
   CharacterPromptSection,
@@ -6,6 +7,7 @@ import {
 } from '@/components/common/prompt-result-sections'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
 import type { ImageRecord } from '@/types/image'
 import { formatBytes, getImageArtistPromptSection, getImageAutoPromptContent } from './image-detail-utils'
 
@@ -14,6 +16,7 @@ interface ImageDetailMetaCardProps {
 }
 
 export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
+  const extractedPromptCards = getImageExtractedPromptCards(image)
   const autoPromptContent = getImageAutoPromptContent(image)
   const artistPromptSection = getImageArtistPromptSection(image)
 
@@ -50,6 +53,14 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
             <div className="rounded-sm bg-surface-high p-4 sm:col-span-2">
               <p className="text-[11px] uppercase tracking-[0.18em]">Path</p>
               <p className="mt-2 break-all font-mono text-xs text-foreground/88">{image.original_file_path}</p>
+            </div>
+          ) : null}
+          {extractedPromptCards.length > 0 ? (
+            <div className="rounded-sm bg-surface-high p-4 sm:col-span-2">
+              <p className="text-[11px] uppercase tracking-[0.18em]">Extracted prompt</p>
+              <div className="mt-3">
+                <ExtractedPromptSections items={extractedPromptCards} />
+              </div>
             </div>
           ) : null}
           {autoPromptContent ? (

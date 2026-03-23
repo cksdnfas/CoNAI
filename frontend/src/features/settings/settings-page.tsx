@@ -7,6 +7,7 @@ import {
   checkTaggerDependencies,
   deleteWatchedFolder,
   getAppSettings,
+  getImage,
   getKaloscopeStatus,
   getRandomAutoTestMedia,
   getRecentFolderScanLogs,
@@ -29,6 +30,7 @@ import {
   validateWatchedFolderPath,
 } from '@/lib/api'
 import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult } from '@/lib/api'
+import type { ImageRecord } from '@/types/image'
 import type { WatchedFolderUpdateInput } from '@/types/folder'
 import type {
   KaloscopeSettings,
@@ -86,6 +88,11 @@ export function SettingsPage() {
   const kaloscopeStatusQuery = useQuery({
     queryKey: ['kaloscope-status'],
     queryFn: getKaloscopeStatus,
+  })
+  const autoTestImageQuery = useQuery({
+    queryKey: ['auto-test-image-detail', autoTestMedia?.compositeHash],
+    queryFn: () => getImage(autoTestMedia!.compositeHash),
+    enabled: Boolean(autoTestMedia?.compositeHash),
   })
 
   const effectiveMetadataDraft = metadataDraft ?? settingsQuery.data?.metadataExtraction ?? null
@@ -432,6 +439,8 @@ export function SettingsPage() {
                 setKaloscopeTestResult(null)
               }}
               autoTestMedia={autoTestMedia}
+              autoTestImage={(autoTestImageQuery.data as ImageRecord | undefined) ?? null}
+              isLoadingAutoTestImage={autoTestImageQuery.isLoading}
               taggerTestResult={taggerTestResult}
               kaloscopeTestResult={kaloscopeTestResult}
               onResolveAutoTestMedia={handleResolveAutoTestMedia}

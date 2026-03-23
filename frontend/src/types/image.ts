@@ -2,11 +2,33 @@ export interface ImageAiPromptMetadata {
   prompt?: string | null
   negative_prompt?: string | null
   character_prompt_text?: string | null
+  characters?: string[] | null
+}
+
+export interface ImageAiRawNaiCharacterCaption {
+  char_caption?: string | null
+}
+
+export interface ImageAiRawNaiPromptCaption {
+  base_caption?: string | null
+  char_captions?: ImageAiRawNaiCharacterCaption[] | null
+}
+
+export interface ImageAiRawNaiPromptPayload {
+  caption?: ImageAiRawNaiPromptCaption | null
+}
+
+export interface ImageAiRawNaiParameters {
+  prompt?: string | null
+  uc?: string | null
+  v4_prompt?: ImageAiRawNaiPromptPayload | null
+  v4_negative_prompt?: ImageAiRawNaiPromptPayload | null
 }
 
 export interface ImageAiMetadata {
   model_name?: string | null
   prompts?: ImageAiPromptMetadata | null
+  raw_nai_parameters?: ImageAiRawNaiParameters | null
 }
 
 export interface ImageAutoTaggerPayload {

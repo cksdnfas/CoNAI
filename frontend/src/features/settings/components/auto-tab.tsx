@@ -21,6 +21,8 @@ export function AutoTab({
   autoTestHashInput,
   onAutoTestHashInputChange,
   autoTestMedia,
+  autoTestImage,
+  isLoadingAutoTestImage,
   taggerTestResult,
   kaloscopeTestResult,
   onResolveAutoTestMedia,
@@ -61,6 +63,8 @@ export function AutoTab({
       <AutoTestCard
         autoTestHashInput={autoTestHashInput}
         autoTestMedia={autoTestMedia}
+        autoTestImage={autoTestImage}
+        isLoadingAutoTestImage={isLoadingAutoTestImage}
         taggerTestResult={taggerTestResult}
         kaloscopeTestResult={kaloscopeTestResult}
         onAutoTestHashInputChange={onAutoTestHashInputChange}
