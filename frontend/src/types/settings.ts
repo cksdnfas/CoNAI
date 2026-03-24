@@ -46,6 +46,16 @@ export interface SimilaritySettings {
   detailSimilarSortOrder: SimilaritySortOrder
 }
 
+export type ThemeMode = 'dark' | 'light'
+export type AppearancePreset = 'conai' | 'ocean' | 'forest' | 'custom'
+
+export interface AppearanceSettings {
+  themeMode: ThemeMode
+  accentPreset: AppearancePreset
+  customPrimaryColor: string
+  customSecondaryColor: string
+}
+
 export interface MetadataExtractionSettings {
   enableSecondaryExtraction: boolean
   stealthScanMode: StealthScanMode
@@ -65,6 +75,7 @@ export interface AppSettings {
   tagger: TaggerSettings
   kaloscope: KaloscopeSettings
   similarity: SimilaritySettings
+  appearance: AppearanceSettings
   metadataExtraction: MetadataExtractionSettings
   thumbnail: ThumbnailSettings
 }

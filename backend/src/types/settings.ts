@@ -57,6 +57,16 @@ export interface SimilaritySettings {
   detailSimilarSortOrder: 'ASC' | 'DESC';
 }
 
+export type ThemeMode = 'dark' | 'light';
+export type AppearancePreset = 'conai' | 'ocean' | 'forest' | 'custom';
+
+export interface AppearanceSettings {
+  themeMode: ThemeMode;
+  accentPreset: AppearancePreset;
+  customPrimaryColor: string;
+  customSecondaryColor: string;
+}
+
 export type ThumbnailSize = 'original' | '2048' | '1080' | '720' | '512';
 
 export interface ThumbnailSettings {
@@ -69,6 +79,7 @@ export interface AppSettings {
   tagger: TaggerSettings;
   kaloscope: KaloscopeSettings;
   similarity: SimilaritySettings;
+  appearance: AppearanceSettings;
   metadataExtraction: MetadataExtractionSettings;
   thumbnail: ThumbnailSettings;
 }

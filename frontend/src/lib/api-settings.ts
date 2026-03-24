@@ -1,6 +1,7 @@
 import { fetchJson } from '@/lib/api-client'
 import type { ApiResponse } from '@/types/image'
 import type {
+  AppearanceSettings,
   AppSettings,
   KaloscopeServerStatus,
   KaloscopeSettings,
@@ -66,6 +67,22 @@ export async function updateMetadataSettings(settings: Partial<MetadataExtractio
 
   if (!response.success) {
     throw new Error(response.error || '메타데이터 추출 설정을 저장하지 못했어.')
+  }
+
+  return response.data
+}
+
+export async function updateAppearanceSettings(settings: Partial<AppearanceSettings>) {
+  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/appearance', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(settings),
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '화면 설정을 저장하지 못했어.')
   }
 
   return response.data

@@ -1,4 +1,4 @@
-export type SettingsTab = 'folders' | 'auto' | 'metadata'
+export type SettingsTab = 'folders' | 'appearance' | 'auto' | 'metadata'
 
 export interface SettingsTabItem {
   value: SettingsTab
@@ -7,6 +7,7 @@ export interface SettingsTabItem {
 
 export const SETTINGS_TAB_ITEMS: SettingsTabItem[] = [
   { value: 'folders', label: 'Watch Folders' },
+  { value: 'appearance', label: 'Appearance' },
   { value: 'auto', label: 'Auto' },
   { value: 'metadata', label: 'Metadata' },
 ]

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
-import { AppSettings, GeneralSettings, TaggerSettings, KaloscopeSettings, SimilaritySettings, MetadataExtractionSettings, ThumbnailSettings, TaggerModel, TaggerModelInfo, TaggerDevice, SupportedLanguage } from '../types/settings';
+import { AppSettings, GeneralSettings, TaggerSettings, KaloscopeSettings, SimilaritySettings, AppearanceSettings, MetadataExtractionSettings, ThumbnailSettings, TaggerModel, TaggerModelInfo, TaggerDevice, SupportedLanguage } from '../types/settings';
 
 const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
 
@@ -69,6 +69,12 @@ export class SettingsService {
         detailSimilarSortBy: 'similarity',
         detailSimilarSortOrder: 'DESC',
       },
+      appearance: {
+        themeMode: 'dark',
+        accentPreset: 'conai',
+        customPrimaryColor: '#f95e14',
+        customSecondaryColor: '#ffb59a',
+      },
       metadataExtraction: {
         enableSecondaryExtraction: true,      // 기본값: Secondary Extraction 활성화
         stealthScanMode: 'fast',              // 기본값: 빠른 스캔 (권장)
@@ -131,6 +137,10 @@ export class SettingsService {
           similarity: {
             ...defaults.similarity,
             ...loadedSettings.similarity,
+          },
+          appearance: {
+            ...defaults.appearance,
+            ...loadedSettings.appearance,
           },
           metadataExtraction: {
             ...defaults.metadataExtraction,
@@ -204,6 +214,14 @@ export class SettingsService {
     for (const key of Object.keys(defaults.kaloscope)) {
       if (!(key in (loaded.kaloscope || {}))) {
         console.log(`[SettingsService] Missing field: kaloscope.${key}`);
+        return true;
+      }
+    }
+
+    // Check appearance fields
+    for (const key of Object.keys(defaults.appearance)) {
+      if (!(key in (loaded.appearance || {}))) {
+        console.log(`[SettingsService] Missing field: appearance.${key}`);
         return true;
       }
     }
@@ -304,6 +322,22 @@ export class SettingsService {
       similarity: {
         ...currentSettings.similarity,
         ...similaritySettings,
+      },
+    };
+    this.saveSettings(updatedSettings);
+    return updatedSettings;
+  }
+
+  /**
+   * Update appearance settings
+   */
+  updateAppearanceSettings(appearanceSettings: Partial<AppearanceSettings>): AppSettings {
+    const currentSettings = this.loadSettings();
+    const updatedSettings: AppSettings = {
+      ...currentSettings,
+      appearance: {
+        ...currentSettings.appearance,
+        ...appearanceSettings,
       },
     };
     this.saveSettings(updatedSettings);

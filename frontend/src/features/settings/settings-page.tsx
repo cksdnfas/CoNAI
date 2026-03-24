@@ -23,6 +23,7 @@ import {
   scanWatchedFolder,
   startFolderWatcher,
   stopFolderWatcher,
+  updateAppearanceSettings,
   updateKaloscopeSettings,
   updateMetadataSettings,
   updateTaggerSettings,
@@ -33,16 +34,19 @@ import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult
 import type { ImageRecord } from '@/types/image'
 import type { WatchedFolderUpdateInput } from '@/types/folder'
 import type {
+  AppearanceSettings,
   KaloscopeSettings,
   MetadataExtractionSettings,
   TaggerDependencyCheckResult,
   TaggerSettings,
 } from '@/types/settings'
 import { AutoTab } from './components/auto-tab'
+import { AppearanceTab } from './components/appearance-tab'
 import { FoldersTab } from './components/folders-tab'
 import { MetadataTab } from './components/metadata-tab'
 import { SettingsTabNav } from './components/settings-tab-nav'
 import type { SettingsTab } from './settings-tabs'
+import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { createNewWatchedFolderDraft, parseCommaSeparatedInput } from './settings-utils'
 
 export function SettingsPage() {
@@ -51,6 +55,7 @@ export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('folders')
   const [newFolder, setNewFolder] = useState(createNewWatchedFolderDraft)
   const [pathValidationMessage, setPathValidationMessage] = useState<string | null>(null)
+  const [appearanceDraft, setAppearanceDraft] = useState<AppearanceSettings | null>(null)
   const [metadataDraft, setMetadataDraft] = useState<MetadataExtractionSettings | null>(null)
   const [taggerDraft, setTaggerDraft] = useState<TaggerSettings | null>(null)
   const [kaloscopeDraft, setKaloscopeDraft] = useState<KaloscopeSettings | null>(null)
@@ -95,6 +100,7 @@ export function SettingsPage() {
     enabled: Boolean(autoTestMedia?.compositeHash),
   })
 
+  const effectiveAppearanceDraft = appearanceDraft ?? settingsQuery.data?.appearance ?? null
   const effectiveMetadataDraft = metadataDraft ?? settingsQuery.data?.metadataExtraction ?? null
   const effectiveTaggerDraft = taggerDraft ?? settingsQuery.data?.tagger ?? null
   const effectiveKaloscopeDraft = kaloscopeDraft ?? settingsQuery.data?.kaloscope ?? null
@@ -177,6 +183,18 @@ export function SettingsPage() {
     },
     onError: (error) => {
       notifyError(error instanceof Error ? error.message : '메타데이터 설정 저장에 실패했어.')
+    },
+  })
+
+  const appearanceMutation = useMutation({
+    mutationFn: updateAppearanceSettings,
+    onSuccess: (settings) => {
+      syncSettingsCache(settings)
+      setAppearanceDraft(settings.appearance)
+      notifyInfo('화면 설정을 저장했어.')
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '화면 설정 저장에 실패했어.')
     },
   })
 
@@ -286,6 +304,11 @@ export function SettingsPage() {
   const patchMetadataDraft = (patch: Partial<MetadataExtractionSettings>) => {
     if (!effectiveMetadataDraft) return
     setMetadataDraft({ ...effectiveMetadataDraft, ...patch })
+  }
+
+  const patchAppearanceDraft = (patch: Partial<AppearanceSettings>) => {
+    if (!effectiveAppearanceDraft) return
+    setAppearanceDraft({ ...effectiveAppearanceDraft, ...patch })
   }
 
   const patchTaggerDraft = (patch: Partial<TaggerSettings>) => {
@@ -413,6 +436,16 @@ export function SettingsPage() {
               scanLogs={scanLogsQuery.data ?? []}
               scanLogsLoading={scanLogsQuery.isLoading}
               watchersHealth={watchersHealthQuery.data}
+            />
+          ) : null}
+
+          {activeTab === 'appearance' ? (
+            <AppearanceTab
+              appearanceDraft={effectiveAppearanceDraft}
+              onPatchAppearance={patchAppearanceDraft}
+              onReset={() => setAppearanceDraft(DEFAULT_APPEARANCE_SETTINGS)}
+              onSave={() => effectiveAppearanceDraft && void appearanceMutation.mutateAsync(effectiveAppearanceDraft)}
+              isSaving={appearanceMutation.isPending}
             />
           ) : null}
 

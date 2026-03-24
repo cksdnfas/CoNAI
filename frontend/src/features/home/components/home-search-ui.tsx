@@ -51,7 +51,7 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
 
   return (
     <div className="relative hidden md:block">
-      <div className="flex h-10 w-[380px] items-center rounded-sm border border-white/10 bg-surface-lowest px-3 text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_rgba(249,94,20,0.35)]">
+      <div className="flex h-10 w-[380px] items-center rounded-sm border border-white/10 bg-surface-lowest px-3 text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]">
         <Search className="mr-2 h-4 w-4 text-muted-foreground" />
         <input
           value={searchInput}
@@ -212,7 +212,7 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
                       <button
                         type="button"
                         onClick={() => cycleChipOperator(chip.id)}
-                        className="rounded-sm border border-primary/35 bg-primary/10 px-2.5 py-1 text-[11px] font-bold tracking-[0.16em] text-primary shadow-[inset_0_0_0_1px_rgba(249,94,20,0.08)] transition hover:bg-primary/18 hover:border-primary/55 active:scale-[0.98]"
+                        className="rounded-sm border border-primary/35 bg-primary/10 px-2.5 py-1 text-[11px] font-bold tracking-[0.16em] text-primary shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_8%,transparent)] transition hover:bg-primary/18 hover:border-primary/55 active:scale-[0.98]"
                         aria-label={`${chip.label} 연산자 변경`}
                         title="클릭해서 OR / AND / NOT 전환"
                       >

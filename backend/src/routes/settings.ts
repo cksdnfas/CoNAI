@@ -5,13 +5,20 @@ import { settingsService } from '../services/settingsService';
 import { imageTaggerService } from '../services/imageTaggerService';
 import { autoTagScheduler } from '../services/autoTagScheduler';
 import { kaloscopeTaggerService } from '../services/kaloscopeTaggerService';
-import { GeneralSettings, TaggerSettings, KaloscopeSettings, TaggerDevice, TaggerModel, SupportedLanguage } from '../types/settings';
+import { GeneralSettings, TaggerSettings, KaloscopeSettings, AppearanceSettings, TaggerDevice, TaggerModel, SupportedLanguage } from '../types/settings';
 import { autoTestMediaService } from '../services/autoTestMediaService';
 import { mediaSettingsRoutes } from './settings/media-settings.routes';
 import { ratingSettingsRoutes } from './settings/rating.routes';
 import { runtimeSettingsRoutes } from './settings/runtime.routes';
 
 const router = Router();
+const validLanguages: SupportedLanguage[] = ['ko', 'en', 'ja', 'zh-CN', 'zh-TW'];
+const validAppearanceModes = ['dark', 'light'];
+const validAppearancePresets = ['conai', 'ocean', 'forest', 'custom'];
+
+function isHexColor(value: unknown): value is string {
+  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
+}
 
 /**
  * GET /api/settings
@@ -42,7 +49,6 @@ router.put(
 
     // Validate language if provided
     if (generalSettings.language !== undefined) {
-      const validLanguages: SupportedLanguage[] = ['ko', 'en', 'ja', 'zh-CN', 'zh-TW'];
       if (!validLanguages.includes(generalSettings.language)) {
         res.status(400).json({
           success: false,
@@ -59,6 +65,74 @@ router.put(
       success: true,
       data: updatedSettings,
       message: 'General settings updated successfully',
+    });
+    return;
+  })
+);
+
+/**
+ * PUT /api/settings/appearance
+ * Update appearance settings
+ */
+router.put(
+  '/appearance',
+  asyncHandler(async (req: Request, res: Response) => {
+    const appearanceSettings: Partial<AppearanceSettings> = req.body;
+
+    if (appearanceSettings.themeMode !== undefined && !validAppearanceModes.includes(appearanceSettings.themeMode)) {
+      res.status(400).json({
+        success: false,
+        error: `Invalid theme mode. Must be one of: ${validAppearanceModes.join(', ')}`,
+      });
+      return;
+    }
+
+    if (appearanceSettings.accentPreset !== undefined && !validAppearancePresets.includes(appearanceSettings.accentPreset)) {
+      res.status(400).json({
+        success: false,
+        error: `Invalid accent preset. Must be one of: ${validAppearancePresets.join(', ')}`,
+      });
+      return;
+    }
+
+    if (appearanceSettings.customPrimaryColor !== undefined && !isHexColor(appearanceSettings.customPrimaryColor)) {
+      res.status(400).json({
+        success: false,
+        error: 'customPrimaryColor must be a hex color like #f95e14',
+      });
+      return;
+    }
+
+    if (appearanceSettings.customSecondaryColor !== undefined && !isHexColor(appearanceSettings.customSecondaryColor)) {
+      res.status(400).json({
+        success: false,
+        error: 'customSecondaryColor must be a hex color like #ffb59a',
+      });
+      return;
+    }
+
+    const currentSettings = settingsService.loadSettings();
+    const nextAppearance = {
+      ...currentSettings.appearance,
+      ...appearanceSettings,
+    };
+
+    if (nextAppearance.accentPreset === 'custom') {
+      if (!isHexColor(nextAppearance.customPrimaryColor) || !isHexColor(nextAppearance.customSecondaryColor)) {
+        res.status(400).json({
+          success: false,
+          error: 'Custom preset requires valid customPrimaryColor and customSecondaryColor values',
+        });
+        return;
+      }
+    }
+
+    const updatedSettings = settingsService.updateAppearanceSettings(appearanceSettings);
+
+    res.json({
+      success: true,
+      data: updatedSettings,
+      message: 'Appearance settings updated successfully',
     });
     return;
   })
