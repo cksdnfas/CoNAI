@@ -1,11 +1,14 @@
+import fs from 'fs';
 import { Router, Request, Response } from 'express';
-import path from 'path';
+import { successResponse, errorResponse } from '@conai/shared';
 import { uploadSingle, uploadMultiple } from '../../middleware/upload';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { ImageProcessor } from '../../services/imageProcessor';
 import { VideoProcessor } from '../../services/videoProcessor';
+import { imageTaggerService } from '../../services/imageTaggerService';
+import { kaloscopeTaggerService } from '../../services/kaloscopeTaggerService';
 import { UploadResponse } from '../../types/image';
-import { runtimePaths, toUploadsUrl } from '../../config/runtimePaths';
+import { runtimePaths } from '../../config/runtimePaths';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
@@ -22,6 +25,64 @@ function isVideoFile(mimeType: string): boolean {
  */
 function isImageFile(mimeType: string): boolean {
   return mimeType.startsWith('image/');
+}
+
+function parseMaybeJson(value: unknown) {
+  if (typeof value !== 'string') {
+    return value ?? null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function buildExtractedImagePreview(
+  file: Express.Multer.File,
+  metadata: Awaited<ReturnType<typeof ImageProcessor.extractMetadata>>,
+  imageInfo: Awaited<ReturnType<typeof ImageProcessor.getImageInfo>>,
+) {
+  const aiInfo = (metadata.ai_info || {}) as Record<string, any>;
+
+  const preview = {
+    id: `extract:${file.filename || file.originalname}`,
+    width: imageInfo.width || aiInfo.width || null,
+    height: imageInfo.height || aiInfo.height || null,
+    file_size: file.size,
+    mime_type: file.mimetype,
+    ai_metadata: {
+      ai_tool: aiInfo.ai_tool || null,
+      model_name: aiInfo.model || null,
+      lora_models: Array.isArray(aiInfo.lora_models) ? aiInfo.lora_models : null,
+      prompts: {
+        prompt: aiInfo.prompt || aiInfo.positive_prompt || null,
+        negative_prompt: aiInfo.negative_prompt || null,
+        character_prompt_text: aiInfo.character_prompt_text || null,
+      },
+      raw_nai_parameters: parseMaybeJson(aiInfo.raw_nai_parameters),
+    },
+  };
+
+  return preview;
+}
+
+function getSingleUploadedFile(req: Request) {
+  const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+  return files?.['image']?.[0] || files?.['file']?.[0] || null;
+}
+
+async function cleanupTemporaryUpload(file: Express.Multer.File | null) {
+  if (!file?.path || !fs.existsSync(file.path)) {
+    return;
+  }
+
+  try {
+    await fs.promises.unlink(file.path);
+  } catch (cleanupError) {
+    console.warn('Failed to cleanup temp extraction file:', file.path, cleanupError);
+  }
 }
 
 /**
@@ -205,6 +266,107 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
       success: false,
       error: error instanceof Error ? error.message : 'Multiple upload failed'
     });
+  }
+}));
+
+/**
+ * 이미지 저장 없이 메타데이터/프롬프트만 추출
+ */
+router.post('/extract-metadata', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
+  const file = getSingleUploadedFile(req);
+
+  if (!file) {
+    return res.status(400).json(errorResponse('No file uploaded'));
+  }
+
+  if (!isImageFile(file.mimetype)) {
+    return res.status(400).json(errorResponse('Only image files can be extracted without upload'));
+  }
+
+  if (!file.path) {
+    return res.status(500).json(errorResponse('Temporary upload path is missing'));
+  }
+
+  try {
+    const [metadata, imageInfo] = await Promise.all([
+      ImageProcessor.extractMetadata(file.path),
+      ImageProcessor.getImageInfo(file.path),
+    ]);
+
+    return res.json(successResponse(buildExtractedImagePreview(file, metadata, imageInfo)));
+  } catch (error) {
+    console.error('❌ Extract metadata error:', error);
+    return res.status(500).json(errorResponse(error instanceof Error ? error.message : 'Metadata extraction failed'));
+  } finally {
+    await cleanupTemporaryUpload(file);
+  }
+}));
+
+/**
+ * 이미지 저장 없이 자동 태그 추출
+ */
+router.post('/extract-tagger', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
+  const file = getSingleUploadedFile(req);
+
+  if (!file) {
+    return res.status(400).json(errorResponse('No file uploaded'));
+  }
+
+  if (!isImageFile(file.mimetype)) {
+    return res.status(400).json(errorResponse('Only image files can be tag-extracted without upload'));
+  }
+
+  if (!file.path) {
+    return res.status(500).json(errorResponse('Temporary upload path is missing'));
+  }
+
+  try {
+    const result = await imageTaggerService.tagImage(file.path);
+
+    if (!result.success) {
+      return res.status(500).json(errorResponse(result.error || 'Tagger extraction failed'));
+    }
+
+    return res.json(successResponse(result));
+  } catch (error) {
+    console.error('❌ Extract tagger error:', error);
+    return res.status(500).json(errorResponse(error instanceof Error ? error.message : 'Tagger extraction failed'));
+  } finally {
+    await cleanupTemporaryUpload(file);
+  }
+}));
+
+/**
+ * 이미지 저장 없이 작가 추출
+ */
+router.post('/extract-kaloscope', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
+  const file = getSingleUploadedFile(req);
+
+  if (!file) {
+    return res.status(400).json(errorResponse('No file uploaded'));
+  }
+
+  if (!isImageFile(file.mimetype)) {
+    return res.status(400).json(errorResponse('Only image files can be artist-extracted without upload'));
+  }
+
+  if (!file.path) {
+    return res.status(500).json(errorResponse('Temporary upload path is missing'));
+  }
+
+  try {
+    const result = await kaloscopeTaggerService.tagImage(file.path);
+
+    if (!result.success) {
+      return res.status(500).json(errorResponse(result.error || 'Kaloscope extraction failed'));
+    }
+
+    return res.json(successResponse(result));
+  } catch (error) {
+    console.error('❌ Extract kaloscope error:', error);
+    return res.status(500).json(errorResponse(error instanceof Error ? error.message : 'Kaloscope extraction failed'));
+  } finally {
+    await cleanupTemporaryUpload(file);
   }
 }));
 

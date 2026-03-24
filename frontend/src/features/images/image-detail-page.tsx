@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getAppSettings, getImage, getImageDuplicates, getSimilarImages, updateSimilaritySettings } from '@/lib/api'
 import type { ImageRecord } from '@/types/image'
@@ -158,16 +157,18 @@ export function ImageDetailPage() {
       />
 
       {imageQuery.isLoading ? (
-        <div className="grid gap-8 xl:grid-cols-[1.2fr_0.8fr]">
-          <Skeleton className="min-h-[540px] w-full rounded-sm" />
-          <div className="space-y-6">
-            <Card className="bg-surface-container">
-              <CardContent className="space-y-4 px-6 py-6">
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-              </CardContent>
-            </Card>
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] xl:items-start">
+          <div className="space-y-8">
+            <Skeleton className="min-h-[540px] w-full rounded-sm" />
+            <div className="grid gap-4 md:grid-cols-2">
+              <Skeleton className="h-[220px] w-full rounded-sm" />
+              <Skeleton className="h-[220px] w-full rounded-sm" />
+            </div>
+          </div>
+          <div className="space-y-3">
+            <Skeleton className="h-16 w-full rounded-sm" />
+            <Skeleton className="h-16 w-full rounded-sm" />
+            <Skeleton className="h-16 w-full rounded-sm" />
           </div>
         </div>
       ) : null}
@@ -180,8 +181,8 @@ export function ImageDetailPage() {
       ) : null}
 
       {!imageQuery.isLoading && !imageQuery.isError && image ? (
-        <>
-          <div className="grid gap-8 xl:grid-cols-[1.25fr_0.75fr]">
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] xl:items-start">
+          <div className="space-y-8">
             <div className="overflow-hidden rounded-sm bg-surface-low shadow-[0_0_40px_rgba(14,14,14,0.22)]">
               <div className="flex min-h-[540px] items-center justify-center bg-surface-lowest">
                 {previewUrl ? (
@@ -192,42 +193,44 @@ export function ImageDetailPage() {
               </div>
             </div>
 
-            <ImageDetailMetaCard image={image as ImageRecord} />
+            {duplicateImages.length > 0 ? (
+              <RelatedImageGallerySection
+                title="중복 이미지"
+                items={duplicateImages}
+                isLoading={false}
+                errorMessage={null}
+                emptyMessage="현재 중복 이미지가 없어."
+              />
+            ) : null}
+
+            <RelatedImageGallerySection
+              title="유사 이미지"
+              items={similarImages}
+              isLoading={similarQuery.isLoading || settingsQuery.isLoading}
+              errorMessage={similarQuery.isError ? getErrorMessage(similarQuery.error, '알 수 없는 오류가 발생했어.') : null}
+              emptyMessage="현재 설정에서는 표시할 유사 이미지가 없어."
+              actions={
+                <SimilaritySettingsPanel
+                  isOpen={isSimilaritySettingsOpen}
+                  draft={similarityDraft}
+                  isSaving={saveSimilaritySettingsMutation.isPending}
+                  errorMessage={
+                    saveSimilaritySettingsMutation.isError
+                      ? getErrorMessage(saveSimilaritySettingsMutation.error, '설정 저장 중 오류가 발생했어.')
+                      : null
+                  }
+                  onToggle={handleToggleSimilaritySettings}
+                  onPatchDraft={handlePatchSimilarityDraft}
+                  onApply={handleApplySimilaritySettings}
+                />
+              }
+            />
           </div>
 
-          {duplicateImages.length > 0 ? (
-            <RelatedImageGallerySection
-              title="중복 이미지"
-              items={duplicateImages}
-              isLoading={false}
-              errorMessage={null}
-              emptyMessage="현재 중복 이미지가 없어."
-            />
-          ) : null}
-
-          <RelatedImageGallerySection
-            title="유사 이미지"
-            items={similarImages}
-            isLoading={similarQuery.isLoading || settingsQuery.isLoading}
-            errorMessage={similarQuery.isError ? getErrorMessage(similarQuery.error, '알 수 없는 오류가 발생했어.') : null}
-            emptyMessage="현재 설정에서는 표시할 유사 이미지가 없어."
-            actions={
-              <SimilaritySettingsPanel
-                isOpen={isSimilaritySettingsOpen}
-                draft={similarityDraft}
-                isSaving={saveSimilaritySettingsMutation.isPending}
-                errorMessage={
-                  saveSimilaritySettingsMutation.isError
-                    ? getErrorMessage(saveSimilaritySettingsMutation.error, '설정 저장 중 오류가 발생했어.')
-                    : null
-                }
-                onToggle={handleToggleSimilaritySettings}
-                onPatchDraft={handlePatchSimilarityDraft}
-                onApply={handleApplySimilaritySettings}
-              />
-            }
-          />
-        </>
+          <div className="xl:self-start">
+            <ImageDetailMetaCard image={image as ImageRecord} />
+          </div>
+        </div>
       ) : null}
     </div>
   )

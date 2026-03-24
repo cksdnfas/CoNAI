@@ -26,7 +26,9 @@ export interface ImageAiRawNaiParameters {
 }
 
 export interface ImageAiMetadata {
+  ai_tool?: string | null
   model_name?: string | null
+  lora_models?: string[] | null
   prompts?: ImageAiPromptMetadata | null
   raw_nai_parameters?: ImageAiRawNaiParameters | null
 }

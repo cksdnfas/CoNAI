@@ -2,6 +2,7 @@ import { buildApiUrl, fetchJson, triggerBlobDownload, triggerBrowserDownload } f
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
 import type { SimilaritySortBy, SimilaritySortOrder } from '@/types/settings'
 import type { SimilarityQueryResult } from '@/types/similarity'
+import type { AutoTestKaloscopeResult, AutoTestTaggerResult } from './api-settings'
 
 interface ComplexImageSearchRequest {
   complex_filter: {
@@ -113,4 +114,138 @@ export async function downloadImageSelection(compositeHashes: string[]) {
 
   const blob = await response.blob()
   triggerBlobDownload(blob, `conai-images-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.zip`)
+}
+
+export interface UploadBatchResultItem {
+  id: number | string
+  filename: string
+  original_name: string
+  thumbnail_url: string
+  file_size: number
+  mime_type: string
+  width: number | null
+  height: number | null
+  upload_date: string
+}
+
+export interface UploadBatchFailure {
+  filename: string
+  error: string
+}
+
+export interface UploadBatchResult {
+  uploaded: UploadBatchResultItem[]
+  failed: UploadBatchFailure[]
+  total: number
+  successful: number
+  failed_count: number
+}
+
+export interface UploadTransferProgress {
+  loaded: number
+  total: number | null
+  percent: number | null
+}
+
+async function readApiPayload<T>(response: Response) {
+  const payload = (await response.json()) as ApiResponse<T>
+
+  if (!response.ok || !payload.success) {
+    throw new Error(payload.error || `Request failed: ${response.status}`)
+  }
+
+  return payload.data
+}
+
+function uploadFormDataWithProgress<T>(path: string, formData: FormData, onProgress?: (progress: UploadTransferProgress) => void) {
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', buildApiUrl(path))
+    xhr.setRequestHeader('Accept', 'application/json')
+
+    xhr.upload.onprogress = (event) => {
+      if (!onProgress) {
+        return
+      }
+
+      onProgress({
+        loaded: event.loaded,
+        total: event.lengthComputable ? event.total : null,
+        percent: event.lengthComputable && event.total > 0 ? Math.min(100, Math.round((event.loaded / event.total) * 100)) : null,
+      })
+    }
+
+    xhr.onerror = () => {
+      reject(new Error('Network request failed'))
+    }
+
+    xhr.onload = () => {
+      try {
+        const payload = JSON.parse(xhr.responseText || '{}') as ApiResponse<T>
+
+        if (xhr.status < 200 || xhr.status >= 300 || !payload.success) {
+          reject(new Error(payload.error || `Request failed: ${xhr.status}`))
+          return
+        }
+
+        resolve(payload.data)
+      } catch {
+        reject(new Error('Invalid server response'))
+      }
+    }
+
+    xhr.send(formData)
+  })
+}
+
+export async function uploadMultipleImages(files: File[], onProgress?: (progress: UploadTransferProgress) => void) {
+  const formData = new FormData()
+  files.forEach((file) => formData.append('images', file))
+
+  return uploadFormDataWithProgress<UploadBatchResult>('/api/images/upload-multiple', formData, onProgress)
+}
+
+export async function extractImageMetadataPreview(file: File) {
+  const formData = new FormData()
+  formData.append('image', file)
+
+  const response = await fetch(buildApiUrl('/api/images/extract-metadata'), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+    },
+    body: formData,
+  })
+
+  return readApiPayload<ImageRecord>(response)
+}
+
+export async function extractImageTaggerPreview(file: File) {
+  const formData = new FormData()
+  formData.append('image', file)
+
+  const response = await fetch(buildApiUrl('/api/images/extract-tagger'), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+    },
+    body: formData,
+  })
+
+  return readApiPayload<AutoTestTaggerResult>(response)
+}
+
+export async function extractImageKaloscopePreview(file: File) {
+  const formData = new FormData()
+  formData.append('image', file)
+
+  const response = await fetch(buildApiUrl('/api/images/extract-kaloscope'), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+    },
+    body: formData,
+  })
+
+  return readApiPayload<AutoTestKaloscopeResult>(response)
 }
