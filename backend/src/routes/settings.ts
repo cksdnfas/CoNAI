@@ -19,6 +19,7 @@ const validSurfacePresets = ['studio', 'midnight', 'paper'];
 const validRadiusPresets = ['sharp', 'balanced', 'soft'];
 const validGlassPresets = ['subtle', 'balanced', 'immersive'];
 const validShadowPresets = ['soft', 'balanced', 'dramatic'];
+const validDensityPresets = ['compact', 'comfortable', 'spacious'];
 
 function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
@@ -143,6 +144,14 @@ router.put(
       res.status(400).json({
         success: false,
         error: `Invalid shadow preset. Must be one of: ${validShadowPresets.join(', ')}`,
+      });
+      return;
+    }
+
+    if (appearanceSettings.density !== undefined && !validDensityPresets.includes(appearanceSettings.density)) {
+      res.status(400).json({
+        success: false,
+        error: `Invalid density preset. Must be one of: ${validDensityPresets.join(', ')}`,
       });
       return;
     }

@@ -51,7 +51,7 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
 
   return (
     <div className="relative hidden md:block">
-      <div className="flex h-10 w-[380px] items-center rounded-sm border border-white/10 bg-surface-lowest px-3 text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]">
+      <div className="theme-settings-control flex w-[380px] items-center rounded-sm border border-white/10 bg-surface-lowest text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]">
         <Search className="mr-2 h-4 w-4 text-muted-foreground" />
         <input
           value={searchInput}
@@ -70,8 +70,8 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
       </div>
 
       {showSuggestionMenu ? (
-        <div className="theme-floating-panel absolute right-0 top-12 z-[70] w-[380px] overflow-hidden rounded-sm">
-          <div className="flex items-center gap-1 border-b border-white/5 px-2 py-2">
+        <div className="theme-floating-panel absolute right-0 top-[calc(var(--theme-shell-header-height)+0.5rem)] z-[70] w-[380px] overflow-hidden rounded-sm">
+          <div className="flex items-center gap-1 border-b border-white/5 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
             {SEARCH_SCOPE_TABS.map((tab) => (
               <button
                 key={tab.value}
@@ -176,7 +176,7 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
     <>
       <div
         className={cn(
-          'fixed inset-x-0 bottom-0 top-16 z-40 bg-black/40 transition-opacity',
+          'fixed inset-x-0 bottom-0 top-[var(--theme-shell-header-height)] z-40 bg-black/40 transition-opacity',
           isDrawerOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
         onClick={closeDrawer}
@@ -184,18 +184,18 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
 
       <aside
         className={cn(
-          'theme-floating-panel fixed bottom-0 right-0 top-16 z-40 flex h-[calc(100vh-4rem)] w-[420px] max-w-full flex-col transition-transform duration-300',
+          'theme-floating-panel fixed bottom-0 right-0 top-[var(--theme-shell-header-height)] z-40 flex h-[calc(100vh-var(--theme-shell-header-height))] w-[420px] max-w-full flex-col transition-transform duration-300',
           isDrawerOpen ? 'translate-x-0' : 'translate-x-full',
         )}
       >
-        <div className="flex items-center justify-between border-b border-white/5 px-5 py-4">
+        <div className="theme-drawer-header flex items-center justify-between border-b border-white/5">
           <div className="text-2xl font-semibold tracking-tight text-foreground">search</div>
           <button type="button" onClick={closeDrawer} className="rounded-sm p-2 text-muted-foreground transition hover:bg-surface-high hover:text-foreground" aria-label="검색 드로어 닫기">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
+        <div className="theme-drawer-body flex-1 space-y-6 overflow-y-auto">
           <section className="space-y-3">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Current filters</div>
             {draftChips.length === 0 ? <div className="rounded-sm border border-white/5 bg-surface-lowest px-4 py-4 text-sm text-muted-foreground">No filters</div> : null}

@@ -78,6 +78,7 @@ export class SettingsService {
         radiusPreset: 'balanced',
         glassPreset: 'balanced',
         shadowPreset: 'balanced',
+        density: 'comfortable',
       },
       metadataExtraction: {
         enableSecondaryExtraction: true,      // 기본값: Secondary Extraction 활성화

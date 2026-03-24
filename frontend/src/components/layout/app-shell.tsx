@@ -27,7 +27,7 @@ function AppShellLayout() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="theme-shell-header fixed inset-x-0 top-0 z-50">
-        <div className="mx-auto flex h-16 w-full max-w-[1680px] items-center justify-between px-6 md:px-10">
+        <div className="theme-shell-inner mx-auto flex w-full max-w-[1680px] items-center justify-between">
           <div className="flex items-center gap-10">
             <div className="flex items-center gap-3">
               <div className="rounded-sm bg-surface-high p-2 text-secondary">
@@ -61,7 +61,7 @@ function AppShellLayout() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[1680px] px-6 pb-16 pt-24 md:px-10">
+      <main className="theme-shell-main mx-auto w-full max-w-[1680px]">
         <Outlet />
       </main>
 

@@ -69,6 +69,23 @@
   --theme-card-shadow: 0 0 40px rgb(14 14 14 / 0.18);
   --theme-list-shadow: 0 0 40px rgb(14 14 14 / 0.18);
   --theme-floating-shadow: 0 0 40px rgb(14 14 14 / 0.28);
+  --theme-shell-header-height: 4rem;
+  --theme-shell-inline-padding: 1.5rem;
+  --theme-shell-main-padding-bottom: 4rem;
+  --theme-card-padding-x: 1.5rem;
+  --theme-card-padding-y: 1.5rem;
+  --theme-card-gap: 1.5rem;
+  --theme-field-gap: 0.5rem;
+  --theme-control-height: 2.5rem;
+  --theme-control-padding-x: 0.75rem;
+  --theme-panel-padding-x: 1rem;
+  --theme-panel-padding-y: 0.75rem;
+  --theme-drawer-header-padding-x: 1.25rem;
+  --theme-drawer-header-padding-y: 1rem;
+  --theme-drawer-body-padding-x: 1.25rem;
+  --theme-drawer-body-padding-y: 1.25rem;
+  --theme-selection-bar-padding-x: 1.25rem;
+  --theme-selection-bar-padding-y: 0.75rem;
 }
 
 .light {
@@ -176,6 +193,64 @@
 
   .theme-list-shadow {
     box-shadow: var(--theme-list-shadow);
+  }
+
+  .theme-shell-inner {
+    height: var(--theme-shell-header-height);
+    padding-inline: var(--theme-shell-inline-padding);
+  }
+
+  .theme-shell-main {
+    padding-inline: var(--theme-shell-inline-padding);
+    padding-top: calc(var(--theme-shell-header-height) + 1.5rem);
+    padding-bottom: var(--theme-shell-main-padding-bottom);
+  }
+
+  .theme-card {
+    gap: var(--theme-card-gap);
+    padding-block: var(--theme-card-padding-y);
+  }
+
+  .theme-card-header {
+    gap: calc(var(--theme-card-gap) / 3);
+    padding-inline: var(--theme-card-padding-x);
+  }
+
+  .theme-card-content {
+    padding-inline: var(--theme-card-padding-x);
+  }
+
+  .theme-card-footer {
+    padding-inline: var(--theme-card-padding-x);
+  }
+
+  .theme-settings-field {
+    gap: var(--theme-field-gap);
+  }
+
+  .theme-settings-control {
+    min-height: var(--theme-control-height);
+    padding-inline: var(--theme-control-padding-x);
+  }
+
+  .theme-settings-panel {
+    padding-inline: var(--theme-panel-padding-x);
+    padding-block: var(--theme-panel-padding-y);
+  }
+
+  .theme-drawer-header {
+    padding-inline: var(--theme-drawer-header-padding-x);
+    padding-block: var(--theme-drawer-header-padding-y);
+  }
+
+  .theme-drawer-body {
+    padding-inline: var(--theme-drawer-body-padding-x);
+    padding-block: var(--theme-drawer-body-padding-y);
+  }
+
+  .theme-selection-bar {
+    padding-inline: var(--theme-selection-bar-padding-x);
+    padding-block: var(--theme-selection-bar-padding-y);
   }
 
   .image-list-grid {

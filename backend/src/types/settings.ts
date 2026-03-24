@@ -63,6 +63,7 @@ export type SurfacePreset = 'studio' | 'midnight' | 'paper';
 export type RadiusPreset = 'sharp' | 'balanced' | 'soft';
 export type GlassPreset = 'subtle' | 'balanced' | 'immersive';
 export type ShadowPreset = 'soft' | 'balanced' | 'dramatic';
+export type DensityPreset = 'compact' | 'comfortable' | 'spacious';
 
 export interface AppearanceSettings {
   themeMode: ThemeMode;
@@ -73,6 +74,7 @@ export interface AppearanceSettings {
   radiusPreset: RadiusPreset;
   glassPreset: GlassPreset;
   shadowPreset: ShadowPreset;
+  density: DensityPreset;
 }
 
 export type ThumbnailSize = 'original' | '2048' | '1080' | '720' | '512';

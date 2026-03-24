@@ -1,9 +1,11 @@
-import { RotateCcw, Sparkles } from 'lucide-react'
+import { useRef } from 'react'
+import { Download, RotateCcw, Sparkles, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   APPEARANCE_PRESETS,
   DEFAULT_APPEARANCE_SETTINGS,
+  DENSITY_PRESETS,
   GLASS_PRESETS,
   RADIUS_PRESETS,
   resolveAppearanceColors,
@@ -18,9 +20,14 @@ import { SettingsField, SettingsValueTile } from './settings-primitives'
 
 interface AppearanceTabProps {
   appearanceDraft: AppearanceSettings | null
+  savedAppearance: AppearanceSettings
+  isDirty: boolean
   onPatchAppearance: (patch: Partial<AppearanceSettings>) => void
   onReset: () => void
+  onCancel: () => void
   onSave: () => void
+  onExport: () => void
+  onImport: (file: File) => void | Promise<void>
   isSaving: boolean
 }
 
@@ -30,11 +37,17 @@ function isHexColor(value: string) {
 
 export function AppearanceTab({
   appearanceDraft,
+  savedAppearance,
+  isDirty,
   onPatchAppearance,
   onReset,
+  onCancel,
   onSave,
+  onExport,
+  onImport,
   isSaving,
 }: AppearanceTabProps) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const resolvedColors = appearanceDraft ? resolveAppearanceColors(appearanceDraft) : null
   const resolvedSurface = appearanceDraft ? resolveSurfacePalette(appearanceDraft) : null
   const customPrimaryColorValue = appearanceDraft && isHexColor(appearanceDraft.customPrimaryColor)
@@ -51,14 +64,26 @@ export function AppearanceTab({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-1">
               <CardTitle>Appearance</CardTitle>
-              <CardDescription>앱 전체 테마의 색감, 표면 무드, 모서리, 글래스/그림자 깊이를 저장해.</CardDescription>
+              <CardDescription>앱 전체 테마의 색감, 표면 무드, 밀도, 마감값을 조정하고 JSON으로 가져오거나 내보낼 수 있어.</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={onExport} disabled={isSaving}>
+                <Download className="h-4 w-4" />
+                내보내기
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSaving}>
+                <Upload className="h-4 w-4" />
+                가져오기
+              </Button>
               <Button type="button" size="sm" variant="outline" onClick={onReset} disabled={!appearanceDraft || isSaving}>
                 <RotateCcw className="h-4 w-4" />
                 기본값
               </Button>
-              <Button type="button" size="sm" onClick={onSave} disabled={!appearanceDraft || isSaving}>
+              <Button type="button" size="sm" variant="outline" onClick={onCancel} disabled={!isDirty || isSaving}>
+                <X className="h-4 w-4" />
+                취소
+              </Button>
+              <Button type="button" size="sm" onClick={onSave} disabled={!appearanceDraft || !isDirty || isSaving}>
                 <Sparkles className="h-4 w-4" />
                 저장
               </Button>
@@ -66,8 +91,38 @@ export function AppearanceTab({
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (file) {
+                void onImport(file)
+              }
+              event.target.value = ''
+            }}
+          />
           {appearanceDraft ? (
             <>
+              <div className="theme-settings-panel rounded-sm border border-border bg-surface-low">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">Live preview</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      변경값은 즉시 전체 UI에 미리보기로 반영돼. 저장하지 않으면 마지막 저장 상태는 유지돼.
+                    </div>
+                  </div>
+                  <div className={cn(
+                    'rounded-full px-3 py-1 text-xs font-semibold',
+                    isDirty ? 'bg-primary/12 text-primary' : 'bg-surface-high text-muted-foreground',
+                  )}>
+                    {isDirty ? 'Unsaved draft' : 'Saved'}
+                  </div>
+                </div>
+              </div>
+
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <SettingsValueTile label="Mode" value={appearanceDraft.themeMode} />
                 <SettingsValueTile label="Accent" value={appearanceDraft.accentPreset} />
@@ -75,6 +130,7 @@ export function AppearanceTab({
                 <SettingsValueTile label="Radius" value={appearanceDraft.radiusPreset} />
                 <SettingsValueTile label="Glass" value={appearanceDraft.glassPreset} />
                 <SettingsValueTile label="Shadow" value={appearanceDraft.shadowPreset} />
+                <SettingsValueTile label="Density" value={appearanceDraft.density} />
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -87,6 +143,21 @@ export function AppearanceTab({
                     <option value="dark">dark</option>
                     <option value="light">light</option>
                   </select>
+                </SettingsField>
+
+                <SettingsField label="Density">
+                  <select
+                    value={appearanceDraft.density}
+                    onChange={(event) => onPatchAppearance({ density: event.target.value as AppearanceSettings['density'] })}
+                    className={settingsControlClassName}
+                  >
+                    {Object.entries(DENSITY_PRESETS).map(([presetKey, preset]) => (
+                      <option key={presetKey} value={presetKey}>{preset.label}</option>
+                    ))}
+                  </select>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    {DENSITY_PRESETS[appearanceDraft.density].description}
+                  </div>
                 </SettingsField>
               </div>
 
@@ -293,6 +364,10 @@ export function AppearanceTab({
                 <SettingsValueTile
                   label="Current Finish"
                   value={`${RADIUS_PRESETS[appearanceDraft.radiusPreset].label} · ${GLASS_PRESETS[appearanceDraft.glassPreset].label} · ${SHADOW_PRESETS[appearanceDraft.shadowPreset].label}`}
+                />
+                <SettingsValueTile
+                  label="Saved Baseline"
+                  value={`${savedAppearance.themeMode} · ${savedAppearance.surfacePreset} · ${savedAppearance.density}`}
                 />
               </div>
             </>

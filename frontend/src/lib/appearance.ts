@@ -2,6 +2,7 @@ import type {
   AppearancePreset,
   AppearanceSettings,
   GlassPreset,
+  DensityPreset,
   RadiusPreset,
   ShadowPreset,
   SurfacePreset,
@@ -63,6 +64,28 @@ interface ShadowPresetDefinition {
   listOpacity: number
   floatingBlur: number
   floatingOpacity: number
+}
+
+interface DensityPresetDefinition {
+  label: string
+  description: string
+  shellHeaderHeight: string
+  shellInlinePadding: string
+  shellMainPaddingBottom: string
+  cardPaddingX: string
+  cardPaddingY: string
+  cardGap: string
+  fieldGap: string
+  controlHeight: string
+  controlPaddingX: string
+  panelPaddingX: string
+  panelPaddingY: string
+  drawerHeaderPaddingX: string
+  drawerHeaderPaddingY: string
+  drawerBodyPaddingX: string
+  drawerBodyPaddingY: string
+  selectionBarPaddingX: string
+  selectionBarPaddingY: string
 }
 
 export const APPEARANCE_PRESETS: Record<Exclude<AppearancePreset, 'custom'>, AccentPresetDefinition> = {
@@ -290,6 +313,72 @@ export const SHADOW_PRESETS: Record<ShadowPreset, ShadowPresetDefinition> = {
   },
 }
 
+export const DENSITY_PRESETS: Record<DensityPreset, DensityPresetDefinition> = {
+  compact: {
+    label: 'Compact',
+    description: '패널과 컨트롤 높이를 줄여 더 촘촘하게 본다',
+    shellHeaderHeight: '3.5rem',
+    shellInlinePadding: '1.25rem',
+    shellMainPaddingBottom: '3rem',
+    cardPaddingX: '1.1rem',
+    cardPaddingY: '1.1rem',
+    cardGap: '1rem',
+    fieldGap: '0.4rem',
+    controlHeight: '2.4rem',
+    controlPaddingX: '0.75rem',
+    panelPaddingX: '0.9rem',
+    panelPaddingY: '0.75rem',
+    drawerHeaderPaddingX: '1rem',
+    drawerHeaderPaddingY: '0.8rem',
+    drawerBodyPaddingX: '1rem',
+    drawerBodyPaddingY: '1rem',
+    selectionBarPaddingX: '1rem',
+    selectionBarPaddingY: '0.7rem',
+  },
+  comfortable: {
+    label: 'Comfortable',
+    description: '기본 CoNAI 밸런스에 가까운 밀도',
+    shellHeaderHeight: '4rem',
+    shellInlinePadding: '1.5rem',
+    shellMainPaddingBottom: '4rem',
+    cardPaddingX: '1.5rem',
+    cardPaddingY: '1.5rem',
+    cardGap: '1.5rem',
+    fieldGap: '0.5rem',
+    controlHeight: '2.5rem',
+    controlPaddingX: '0.75rem',
+    panelPaddingX: '1rem',
+    panelPaddingY: '0.75rem',
+    drawerHeaderPaddingX: '1.25rem',
+    drawerHeaderPaddingY: '1rem',
+    drawerBodyPaddingX: '1.25rem',
+    drawerBodyPaddingY: '1.25rem',
+    selectionBarPaddingX: '1.25rem',
+    selectionBarPaddingY: '0.75rem',
+  },
+  spacious: {
+    label: 'Spacious',
+    description: '패널 간 여백과 컨트롤 높이를 넉넉하게 확보한다',
+    shellHeaderHeight: '4.5rem',
+    shellInlinePadding: '1.9rem',
+    shellMainPaddingBottom: '5rem',
+    cardPaddingX: '1.85rem',
+    cardPaddingY: '1.85rem',
+    cardGap: '1.85rem',
+    fieldGap: '0.65rem',
+    controlHeight: '2.9rem',
+    controlPaddingX: '0.95rem',
+    panelPaddingX: '1.15rem',
+    panelPaddingY: '0.95rem',
+    drawerHeaderPaddingX: '1.4rem',
+    drawerHeaderPaddingY: '1.1rem',
+    drawerBodyPaddingX: '1.4rem',
+    drawerBodyPaddingY: '1.4rem',
+    selectionBarPaddingX: '1.4rem',
+    selectionBarPaddingY: '0.95rem',
+  },
+}
+
 export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
   themeMode: 'dark',
   accentPreset: 'conai',
@@ -299,6 +388,7 @@ export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
   radiusPreset: 'balanced',
   glassPreset: 'balanced',
   shadowPreset: 'balanced',
+  density: 'comfortable',
 }
 
 /** Clamp a numeric value into a safe range for theme math. */
@@ -398,6 +488,7 @@ export function buildAppearanceVariables(appearance: AppearanceSettings) {
   const secondaryTintRatio = appearance.themeMode === 'light' ? 0.38 : 0.18
   const glassPreset = GLASS_PRESETS[appearance.glassPreset]
   const shadowPreset = SHADOW_PRESETS[appearance.shadowPreset]
+  const densityPreset = DENSITY_PRESETS[appearance.density]
   const shadowBase = appearance.themeMode === 'light' ? '#6b5146' : '#050505'
 
   return {
@@ -434,7 +525,94 @@ export function buildAppearanceVariables(appearance: AppearanceSettings) {
     '--theme-card-shadow': `0 0 ${shadowPreset.cardBlur}px ${toAlphaColor(shadowBase, shadowPreset.cardOpacity)}`,
     '--theme-list-shadow': `0 0 ${shadowPreset.listBlur}px ${toAlphaColor(shadowBase, shadowPreset.listOpacity)}`,
     '--theme-floating-shadow': `0 0 ${shadowPreset.floatingBlur}px ${toAlphaColor(shadowBase, shadowPreset.floatingOpacity)}`,
+    '--theme-shell-header-height': densityPreset.shellHeaderHeight,
+    '--theme-shell-inline-padding': densityPreset.shellInlinePadding,
+    '--theme-shell-main-padding-bottom': densityPreset.shellMainPaddingBottom,
+    '--theme-card-padding-x': densityPreset.cardPaddingX,
+    '--theme-card-padding-y': densityPreset.cardPaddingY,
+    '--theme-card-gap': densityPreset.cardGap,
+    '--theme-field-gap': densityPreset.fieldGap,
+    '--theme-control-height': densityPreset.controlHeight,
+    '--theme-control-padding-x': densityPreset.controlPaddingX,
+    '--theme-panel-padding-x': densityPreset.panelPaddingX,
+    '--theme-panel-padding-y': densityPreset.panelPaddingY,
+    '--theme-drawer-header-padding-x': densityPreset.drawerHeaderPaddingX,
+    '--theme-drawer-header-padding-y': densityPreset.drawerHeaderPaddingY,
+    '--theme-drawer-body-padding-x': densityPreset.drawerBodyPaddingX,
+    '--theme-drawer-body-padding-y': densityPreset.drawerBodyPaddingY,
+    '--theme-selection-bar-padding-x': densityPreset.selectionBarPaddingX,
+    '--theme-selection-bar-padding-y': densityPreset.selectionBarPaddingY,
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isEnumValue<T extends string>(value: unknown, options: readonly T[]): value is T {
+  return typeof value === 'string' && options.includes(value as T)
+}
+
+export function normalizeAppearanceImport(raw: unknown, fallback: AppearanceSettings): AppearanceSettings | null {
+  if (!isRecord(raw)) {
+    return null
+  }
+
+  const source = isRecord(raw.appearance) ? raw.appearance : raw
+  const next: AppearanceSettings = { ...fallback }
+
+  if (source.themeMode !== undefined) {
+    if (!isEnumValue(source.themeMode, ['dark', 'light'])) return null
+    next.themeMode = source.themeMode
+  }
+
+  if (source.accentPreset !== undefined) {
+    if (!isEnumValue(source.accentPreset, ['conai', 'ocean', 'forest', 'custom'])) return null
+    next.accentPreset = source.accentPreset
+  }
+
+  if (source.customPrimaryColor !== undefined) {
+    if (typeof source.customPrimaryColor !== 'string' || !normalizeHexPair(source.customPrimaryColor)) return null
+    next.customPrimaryColor = source.customPrimaryColor
+  }
+
+  if (source.customSecondaryColor !== undefined) {
+    if (typeof source.customSecondaryColor !== 'string' || !normalizeHexPair(source.customSecondaryColor)) return null
+    next.customSecondaryColor = source.customSecondaryColor
+  }
+
+  if (source.surfacePreset !== undefined) {
+    if (!isEnumValue(source.surfacePreset, ['studio', 'midnight', 'paper'])) return null
+    next.surfacePreset = source.surfacePreset
+  }
+
+  if (source.radiusPreset !== undefined) {
+    if (!isEnumValue(source.radiusPreset, ['sharp', 'balanced', 'soft'])) return null
+    next.radiusPreset = source.radiusPreset
+  }
+
+  if (source.glassPreset !== undefined) {
+    if (!isEnumValue(source.glassPreset, ['subtle', 'balanced', 'immersive'])) return null
+    next.glassPreset = source.glassPreset
+  }
+
+  if (source.shadowPreset !== undefined) {
+    if (!isEnumValue(source.shadowPreset, ['soft', 'balanced', 'dramatic'])) return null
+    next.shadowPreset = source.shadowPreset
+  }
+
+  if (source.density !== undefined) {
+    if (!isEnumValue(source.density, ['compact', 'comfortable', 'spacious'])) return null
+    next.density = source.density
+  }
+
+  if (next.accentPreset === 'custom') {
+    if (!normalizeHexPair(next.customPrimaryColor) || !normalizeHexPair(next.customSecondaryColor)) {
+      return null
+    }
+  }
+
+  return next
 }
 
 /** Apply the saved appearance values to document-level CSS variables. */

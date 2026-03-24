@@ -47,6 +47,7 @@ import { MetadataTab } from './components/metadata-tab'
 import { SettingsTabNav } from './components/settings-tab-nav'
 import type { SettingsTab } from './settings-tabs'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
+import { applyAppearanceTheme, normalizeAppearanceImport } from '@/lib/appearance'
 import { createNewWatchedFolderDraft, parseCommaSeparatedInput } from './settings-utils'
 
 export function SettingsPage() {
@@ -101,6 +102,7 @@ export function SettingsPage() {
   })
 
   const effectiveAppearanceDraft = appearanceDraft ?? settingsQuery.data?.appearance ?? null
+  const savedAppearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
   const effectiveMetadataDraft = metadataDraft ?? settingsQuery.data?.metadataExtraction ?? null
   const effectiveTaggerDraft = taggerDraft ?? settingsQuery.data?.tagger ?? null
   const effectiveKaloscopeDraft = kaloscopeDraft ?? settingsQuery.data?.kaloscope ?? null
@@ -244,6 +246,15 @@ export function SettingsPage() {
     void taggerDependencyMutation.mutateAsync()
   }, [activeTab, taggerDependencyMutation])
 
+  useEffect(() => {
+    if (activeTab === 'appearance') {
+      applyAppearanceTheme(effectiveAppearanceDraft ?? savedAppearance)
+      return
+    }
+
+    applyAppearanceTheme(savedAppearance)
+  }, [activeTab, effectiveAppearanceDraft, savedAppearance])
+
   const autoTestResolveMutation = useMutation({
     mutationFn: resolveAutoTestMedia,
     onSuccess: (media) => {
@@ -309,6 +320,53 @@ export function SettingsPage() {
   const patchAppearanceDraft = (patch: Partial<AppearanceSettings>) => {
     if (!effectiveAppearanceDraft) return
     setAppearanceDraft({ ...effectiveAppearanceDraft, ...patch })
+  }
+
+  const isAppearanceDirty =
+    JSON.stringify(effectiveAppearanceDraft ?? savedAppearance) !== JSON.stringify(savedAppearance)
+
+  const handleAppearanceReset = () => {
+    setAppearanceDraft(DEFAULT_APPEARANCE_SETTINGS)
+  }
+
+  const handleAppearanceCancel = () => {
+    setAppearanceDraft(savedAppearance)
+    applyAppearanceTheme(savedAppearance)
+  }
+
+  const handleAppearanceSave = () => {
+    if (!effectiveAppearanceDraft) return
+    void appearanceMutation.mutateAsync(effectiveAppearanceDraft)
+  }
+
+  const handleAppearanceExport = () => {
+    const appearanceToExport = effectiveAppearanceDraft ?? savedAppearance
+    const blob = new Blob([JSON.stringify(appearanceToExport, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `conai-appearance-${appearanceToExport.accentPreset}-${appearanceToExport.themeMode}.json`
+    document.body.append(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+    notifyInfo('현재 화면 설정을 JSON으로 내보냈어.')
+  }
+
+  const handleAppearanceImport = async (file: File) => {
+    try {
+      const raw = JSON.parse(await file.text()) as unknown
+      const importedAppearance = normalizeAppearanceImport(raw, savedAppearance)
+
+      if (!importedAppearance) {
+        throw new Error('Appearance JSON 구조를 확인하지 못했어.')
+      }
+
+      await appearanceMutation.mutateAsync(importedAppearance)
+      notifyInfo('화면 설정 파일을 불러와 저장했어.')
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : '화면 설정 파일을 불러오지 못했어.')
+    }
   }
 
   const patchTaggerDraft = (patch: Partial<TaggerSettings>) => {
@@ -442,9 +500,14 @@ export function SettingsPage() {
           {activeTab === 'appearance' ? (
             <AppearanceTab
               appearanceDraft={effectiveAppearanceDraft}
+              savedAppearance={savedAppearance}
+              isDirty={isAppearanceDirty}
               onPatchAppearance={patchAppearanceDraft}
-              onReset={() => setAppearanceDraft(DEFAULT_APPEARANCE_SETTINGS)}
-              onSave={() => effectiveAppearanceDraft && void appearanceMutation.mutateAsync(effectiveAppearanceDraft)}
+              onReset={handleAppearanceReset}
+              onCancel={handleAppearanceCancel}
+              onSave={handleAppearanceSave}
+              onExport={handleAppearanceExport}
+              onImport={handleAppearanceImport}
               isSaving={appearanceMutation.isPending}
             />
           ) : null}
