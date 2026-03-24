@@ -147,13 +147,13 @@ export function HomePage() {
 
           <div className="flex flex-col items-center gap-3 pb-6">
             {imagesQuery.isFetchingNextPage ? (
-              <div className="rounded-full bg-surface-low/88 px-4 py-2 text-xs text-muted-foreground shadow-[0_0_24px_rgba(14,14,14,0.16)] backdrop-blur-sm">
+              <div className="theme-floating-panel rounded-full px-4 py-2 text-xs text-muted-foreground">
                 이미지를 더 불러오는 중…
               </div>
             ) : null}
 
             {imagesQuery.isFetchNextPageError ? (
-              <div className="flex flex-col items-center gap-2 rounded-2xl bg-surface-container/92 px-5 py-4 text-center shadow-[0_0_32px_rgba(14,14,14,0.22)] backdrop-blur-sm">
+              <div className="theme-floating-panel flex flex-col items-center gap-2 rounded-2xl px-5 py-4 text-center">
                 <p className="text-sm font-semibold">목록을 끝까지 불러오지 못했어</p>
                 <p className="max-w-xl text-xs text-muted-foreground">{loadMoreErrorMessage}</p>
                 <Button size="sm" variant="outline" onClick={handleRetryNextPage}>

@@ -15,6 +15,10 @@ const router = Router();
 const validLanguages: SupportedLanguage[] = ['ko', 'en', 'ja', 'zh-CN', 'zh-TW'];
 const validAppearanceModes = ['dark', 'light'];
 const validAppearancePresets = ['conai', 'ocean', 'forest', 'custom'];
+const validSurfacePresets = ['studio', 'midnight', 'paper'];
+const validRadiusPresets = ['sharp', 'balanced', 'soft'];
+const validGlassPresets = ['subtle', 'balanced', 'immersive'];
+const validShadowPresets = ['soft', 'balanced', 'dramatic'];
 
 function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
@@ -107,6 +111,38 @@ router.put(
       res.status(400).json({
         success: false,
         error: 'customSecondaryColor must be a hex color like #ffb59a',
+      });
+      return;
+    }
+
+    if (appearanceSettings.surfacePreset !== undefined && !validSurfacePresets.includes(appearanceSettings.surfacePreset)) {
+      res.status(400).json({
+        success: false,
+        error: `Invalid surface preset. Must be one of: ${validSurfacePresets.join(', ')}`,
+      });
+      return;
+    }
+
+    if (appearanceSettings.radiusPreset !== undefined && !validRadiusPresets.includes(appearanceSettings.radiusPreset)) {
+      res.status(400).json({
+        success: false,
+        error: `Invalid radius preset. Must be one of: ${validRadiusPresets.join(', ')}`,
+      });
+      return;
+    }
+
+    if (appearanceSettings.glassPreset !== undefined && !validGlassPresets.includes(appearanceSettings.glassPreset)) {
+      res.status(400).json({
+        success: false,
+        error: `Invalid glass preset. Must be one of: ${validGlassPresets.join(', ')}`,
+      });
+      return;
+    }
+
+    if (appearanceSettings.shadowPreset !== undefined && !validShadowPresets.includes(appearanceSettings.shadowPreset)) {
+      res.status(400).json({
+        success: false,
+        error: `Invalid shadow preset. Must be one of: ${validShadowPresets.join(', ')}`,
       });
       return;
     }

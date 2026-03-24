@@ -74,6 +74,10 @@ export class SettingsService {
         accentPreset: 'conai',
         customPrimaryColor: '#f95e14',
         customSecondaryColor: '#ffb59a',
+        surfacePreset: 'studio',
+        radiusPreset: 'balanced',
+        glassPreset: 'balanced',
+        shadowPreset: 'balanced',
       },
       metadataExtraction: {
         enableSecondaryExtraction: true,      // 기본값: Secondary Extraction 활성화

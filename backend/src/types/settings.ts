@@ -59,12 +59,20 @@ export interface SimilaritySettings {
 
 export type ThemeMode = 'dark' | 'light';
 export type AppearancePreset = 'conai' | 'ocean' | 'forest' | 'custom';
+export type SurfacePreset = 'studio' | 'midnight' | 'paper';
+export type RadiusPreset = 'sharp' | 'balanced' | 'soft';
+export type GlassPreset = 'subtle' | 'balanced' | 'immersive';
+export type ShadowPreset = 'soft' | 'balanced' | 'dramatic';
 
 export interface AppearanceSettings {
   themeMode: ThemeMode;
   accentPreset: AppearancePreset;
   customPrimaryColor: string;
   customSecondaryColor: string;
+  surfacePreset: SurfacePreset;
+  radiusPreset: RadiusPreset;
+  glassPreset: GlassPreset;
+  shadowPreset: ShadowPreset;
 }
 
 export type ThumbnailSize = 'original' | '2048' | '1080' | '720' | '512';

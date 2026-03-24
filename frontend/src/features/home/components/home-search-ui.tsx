@@ -70,7 +70,7 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
       </div>
 
       {showSuggestionMenu ? (
-        <div className="absolute right-0 top-12 z-[70] w-[380px] overflow-hidden rounded-sm border border-white/10 bg-background shadow-[0_18px_50px_rgba(0,0,0,0.45)]">
+        <div className="theme-floating-panel absolute right-0 top-12 z-[70] w-[380px] overflow-hidden rounded-sm">
           <div className="flex items-center gap-1 border-b border-white/5 px-2 py-2">
             {SEARCH_SCOPE_TABS.map((tab) => (
               <button
@@ -184,7 +184,7 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
 
       <aside
         className={cn(
-          'fixed bottom-0 right-0 top-16 z-40 flex h-[calc(100vh-4rem)] w-[420px] max-w-full flex-col border-l border-white/10 bg-background shadow-[0_0_40px_rgba(0,0,0,0.4)] transition-transform duration-300',
+          'theme-floating-panel fixed bottom-0 right-0 top-16 z-40 flex h-[calc(100vh-4rem)] w-[420px] max-w-full flex-col transition-transform duration-300',
           isDrawerOpen ? 'translate-x-0' : 'translate-x-full',
         )}
       >

@@ -83,7 +83,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
     <button
       type="button"
       className={cn(
-        'image-list-selectable group relative isolate block w-full overflow-hidden rounded-sm bg-surface-low text-left shadow-[0_0_40px_rgba(14,14,14,0.18)] transition-transform duration-300',
+        'theme-list-shadow image-list-selectable group relative isolate block w-full overflow-hidden rounded-sm bg-surface-low text-left transition-transform duration-300',
         selected && 'is-selected',
         selectionMode ? 'cursor-default' : 'cursor-pointer',
       )}
