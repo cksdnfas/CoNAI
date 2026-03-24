@@ -1,7 +1,22 @@
 import fs from 'fs';
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
-import { AppSettings, GeneralSettings, TaggerSettings, KaloscopeSettings, SimilaritySettings, AppearanceSettings, MetadataExtractionSettings, ThumbnailSettings, TaggerModel, TaggerModelInfo, TaggerDevice, SupportedLanguage } from '../types/settings';
+import {
+  AppSettings,
+  GeneralSettings,
+  TaggerSettings,
+  KaloscopeSettings,
+  SimilaritySettings,
+  AppearanceSettings,
+  AppearancePresetSlot,
+  AppearanceThemeSettings,
+  MetadataExtractionSettings,
+  ThumbnailSettings,
+  TaggerModel,
+  TaggerModelInfo,
+  TaggerDevice,
+  SupportedLanguage,
+} from '../types/settings';
 
 const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
 
@@ -25,6 +40,70 @@ const MODEL_INFO: Record<TaggerModel, { label: string; description: string }> = 
     description: '빠른 속도, 높은 정확도 - 빠른 처리가 필요한 경우',
   },
 };
+
+const APPEARANCE_PRESET_SLOT_IDS = ['slot-1', 'slot-2', 'slot-3'] as const;
+
+function getDefaultAppearanceTheme(): AppearanceThemeSettings {
+  return {
+    themeMode: 'dark',
+    accentPreset: 'conai',
+    customPrimaryColor: '#f95e14',
+    customSecondaryColor: '#ffb59a',
+    surfacePreset: 'studio',
+    radiusPreset: 'balanced',
+    glassPreset: 'balanced',
+    shadowPreset: 'balanced',
+    density: 'comfortable',
+  };
+}
+
+function getDefaultAppearancePresetSlots(): AppearancePresetSlot[] {
+  return APPEARANCE_PRESET_SLOT_IDS.map((id, index) => ({
+    id,
+    label: `Slot ${index + 1}`,
+    appearance: null,
+    updatedAt: null,
+  }));
+}
+
+function normalizeAppearancePresetSlots(rawSlots: unknown): AppearancePresetSlot[] {
+  const defaults = getDefaultAppearancePresetSlots();
+
+  if (!Array.isArray(rawSlots)) {
+    return defaults;
+  }
+
+  return defaults.map((fallbackSlot, index) => {
+    const rawSlot = rawSlots[index];
+    if (!rawSlot || typeof rawSlot !== 'object') {
+      return fallbackSlot;
+    }
+
+    const slotRecord = rawSlot as Record<string, unknown>;
+    const appearanceSource = slotRecord.appearance;
+    const defaultAppearance = getDefaultAppearanceTheme();
+    const normalizedAppearance =
+      appearanceSource && typeof appearanceSource === 'object'
+        ? {
+            ...defaultAppearance,
+            ...appearanceSource,
+          }
+        : appearanceSource === null
+          ? null
+          : fallbackSlot.appearance;
+
+    return {
+      id: fallbackSlot.id,
+      label: typeof slotRecord.label === 'string' && slotRecord.label.trim().length > 0
+        ? slotRecord.label.trim().slice(0, 32)
+        : fallbackSlot.label,
+      appearance: normalizedAppearance,
+      updatedAt: typeof slotRecord.updatedAt === 'string' || slotRecord.updatedAt === null
+        ? slotRecord.updatedAt
+        : fallbackSlot.updatedAt,
+    };
+  });
+}
 
 export class SettingsService {
   private settings: AppSettings | null = null;
@@ -70,15 +149,8 @@ export class SettingsService {
         detailSimilarSortOrder: 'DESC',
       },
       appearance: {
-        themeMode: 'dark',
-        accentPreset: 'conai',
-        customPrimaryColor: '#f95e14',
-        customSecondaryColor: '#ffb59a',
-        surfacePreset: 'studio',
-        radiusPreset: 'balanced',
-        glassPreset: 'balanced',
-        shadowPreset: 'balanced',
-        density: 'comfortable',
+        ...getDefaultAppearanceTheme(),
+        presetSlots: getDefaultAppearancePresetSlots(),
       },
       metadataExtraction: {
         enableSecondaryExtraction: true,      // 기본값: Secondary Extraction 활성화
@@ -146,6 +218,7 @@ export class SettingsService {
           appearance: {
             ...defaults.appearance,
             ...loadedSettings.appearance,
+            presetSlots: normalizeAppearancePresetSlots(loadedSettings.appearance?.presetSlots),
           },
           metadataExtraction: {
             ...defaults.metadataExtraction,

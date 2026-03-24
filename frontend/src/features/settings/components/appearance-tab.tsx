@@ -1,5 +1,6 @@
 import { useRef } from 'react'
-import { Download, RotateCcw, Sparkles, Upload, X } from 'lucide-react'
+import { AlertTriangle, Download, RotateCcw, Save, Sparkles, Upload, X } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -7,14 +8,16 @@ import {
   DEFAULT_APPEARANCE_SETTINGS,
   DENSITY_PRESETS,
   GLASS_PRESETS,
+  getAppearanceContrastIssues,
   RADIUS_PRESETS,
+  extractAppearanceTheme,
   resolveAppearanceColors,
   resolveSurfacePalette,
   SHADOW_PRESETS,
   SURFACE_PRESETS,
 } from '@/lib/appearance'
 import { cn } from '@/lib/utils'
-import type { AppearanceSettings } from '@/types/settings'
+import type { AppearancePresetSlot, AppearanceSettings } from '@/types/settings'
 import { settingsControlClassName } from './settings-control-classes'
 import { SettingsField, SettingsValueTile } from './settings-primitives'
 
@@ -28,6 +31,7 @@ interface AppearanceTabProps {
   onSave: () => void
   onExport: () => void
   onImport: (file: File) => void | Promise<void>
+  onSavePresetSlots: (presetSlots: AppearancePresetSlot[]) => void
   isSaving: boolean
 }
 
@@ -45,11 +49,13 @@ export function AppearanceTab({
   onSave,
   onExport,
   onImport,
+  onSavePresetSlots,
   isSaving,
 }: AppearanceTabProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const resolvedColors = appearanceDraft ? resolveAppearanceColors(appearanceDraft) : null
   const resolvedSurface = appearanceDraft ? resolveSurfacePalette(appearanceDraft) : null
+  const contrastIssues = appearanceDraft ? getAppearanceContrastIssues(appearanceDraft) : []
   const customPrimaryColorValue = appearanceDraft && isHexColor(appearanceDraft.customPrimaryColor)
     ? appearanceDraft.customPrimaryColor
     : DEFAULT_APPEARANCE_SETTINGS.customPrimaryColor
@@ -123,6 +129,23 @@ export function AppearanceTab({
                 </div>
               </div>
 
+              {contrastIssues.length > 0 ? (
+                <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Contrast guardrail</AlertTitle>
+                  <AlertDescription>
+                    <p>현재 조합은 일부 텍스트/상태 색 대비가 약해 보여. 저장 전 확인하는 편이 좋아.</p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {contrastIssues.map((issue) => (
+                        <span key={issue.id} className="rounded-full border border-amber-500/30 bg-background/70 px-2 py-1 text-xs text-foreground">
+                          {issue.label}: {issue.ratio}:1
+                        </span>
+                      ))}
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <SettingsValueTile label="Mode" value={appearanceDraft.themeMode} />
                 <SettingsValueTile label="Accent" value={appearanceDraft.accentPreset} />
@@ -131,6 +154,104 @@ export function AppearanceTab({
                 <SettingsValueTile label="Glass" value={appearanceDraft.glassPreset} />
                 <SettingsValueTile label="Shadow" value={appearanceDraft.shadowPreset} />
                 <SettingsValueTile label="Density" value={appearanceDraft.density} />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">Saved theme slots</div>
+                  <div className="text-xs text-muted-foreground">현재 draft를 저장하거나 저장된 슬롯을 미리보기에 다시 불러올 수 있어.</div>
+                </div>
+                <div className="grid gap-3 xl:grid-cols-3">
+                  {appearanceDraft.presetSlots.map((slot, index) => {
+                    const slotTheme = slot.appearance
+                    const slotColors = slotTheme ? resolveAppearanceColors(slotTheme) : null
+                    const slotSurface = slotTheme ? resolveSurfacePalette(slotTheme) : null
+
+                    return (
+                      <div key={slot.id} className="rounded-sm border border-border bg-surface-low p-4">
+                        <div className="space-y-3">
+                          <input
+                            type="text"
+                            value={slot.label}
+                            onChange={(event) =>
+                              onPatchAppearance({
+                                presetSlots: appearanceDraft.presetSlots.map((candidate) =>
+                                  candidate.id === slot.id
+                                    ? { ...candidate, label: event.target.value }
+                                    : candidate,
+                                ),
+                              })
+                            }
+                            className={settingsControlClassName}
+                            maxLength={32}
+                            placeholder="Slot name"
+                          />
+
+                          {slotTheme ? (
+                            <div className="space-y-2 text-xs text-muted-foreground">
+                              <div className="flex items-center gap-2">
+                                <span className="h-4 w-4 rounded-full border border-border" style={{ backgroundColor: slotColors?.primary }} />
+                                <span className="h-4 w-4 rounded-full border border-border" style={{ backgroundColor: slotColors?.secondary }} />
+                                <span>{slotTheme.themeMode} · {slotTheme.surfacePreset} · {slotTheme.density}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="h-4 w-4 rounded-full border border-border" style={{ backgroundColor: slotSurface?.background }} />
+                                <span className="h-4 w-4 rounded-full border border-border" style={{ backgroundColor: slotSurface?.surfaceContainer }} />
+                                <span className="h-4 w-4 rounded-full border border-border" style={{ backgroundColor: slotSurface?.surfaceHigh }} />
+                                <span>{slot.updatedAt ? new Date(slot.updatedAt).toLocaleString() : '저장 시간 없음'}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="rounded-sm border border-dashed border-border px-3 py-4 text-xs text-muted-foreground">
+                              아직 저장된 테마가 없어.
+                            </div>
+                          )}
+
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="flex-1"
+                              disabled={!slotTheme || isSaving}
+                              onClick={() => {
+                                if (!slotTheme) return
+                                onPatchAppearance({
+                                  ...extractAppearanceTheme(slotTheme),
+                                  presetSlots: appearanceDraft.presetSlots,
+                                })
+                              }}
+                            >
+                              불러오기
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="flex-1"
+                              disabled={isSaving}
+                              onClick={() => {
+                                const nextPresetSlots = appearanceDraft.presetSlots.map((candidate) =>
+                                  candidate.id === slot.id
+                                    ? {
+                                        ...candidate,
+                                        label: candidate.label.trim() || `Slot ${index + 1}`,
+                                        appearance: extractAppearanceTheme(appearanceDraft),
+                                        updatedAt: new Date().toISOString(),
+                                      }
+                                    : candidate,
+                                )
+                                onSavePresetSlots(nextPresetSlots)
+                              }}
+                            >
+                              <Save className="h-4 w-4" />
+                              현재값 저장
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">

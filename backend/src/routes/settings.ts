@@ -5,7 +5,17 @@ import { settingsService } from '../services/settingsService';
 import { imageTaggerService } from '../services/imageTaggerService';
 import { autoTagScheduler } from '../services/autoTagScheduler';
 import { kaloscopeTaggerService } from '../services/kaloscopeTaggerService';
-import { GeneralSettings, TaggerSettings, KaloscopeSettings, AppearanceSettings, TaggerDevice, TaggerModel, SupportedLanguage } from '../types/settings';
+import {
+  GeneralSettings,
+  TaggerSettings,
+  KaloscopeSettings,
+  AppearancePresetSlot,
+  AppearanceSettings,
+  AppearanceThemeSettings,
+  TaggerDevice,
+  TaggerModel,
+  SupportedLanguage,
+} from '../types/settings';
 import { autoTestMediaService } from '../services/autoTestMediaService';
 import { mediaSettingsRoutes } from './settings/media-settings.routes';
 import { ratingSettingsRoutes } from './settings/rating.routes';
@@ -20,9 +30,92 @@ const validRadiusPresets = ['sharp', 'balanced', 'soft'];
 const validGlassPresets = ['subtle', 'balanced', 'immersive'];
 const validShadowPresets = ['soft', 'balanced', 'dramatic'];
 const validDensityPresets = ['compact', 'comfortable', 'spacious'];
+const validAppearancePresetSlotIds = ['slot-1', 'slot-2', 'slot-3'];
 
 function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceThemeSettings>): string | null {
+  if (appearanceSettings.themeMode !== undefined && !validAppearanceModes.includes(appearanceSettings.themeMode)) {
+    return `Invalid theme mode. Must be one of: ${validAppearanceModes.join(', ')}`;
+  }
+
+  if (appearanceSettings.accentPreset !== undefined && !validAppearancePresets.includes(appearanceSettings.accentPreset)) {
+    return `Invalid accent preset. Must be one of: ${validAppearancePresets.join(', ')}`;
+  }
+
+  if (appearanceSettings.customPrimaryColor !== undefined && !isHexColor(appearanceSettings.customPrimaryColor)) {
+    return 'customPrimaryColor must be a hex color like #f95e14';
+  }
+
+  if (appearanceSettings.customSecondaryColor !== undefined && !isHexColor(appearanceSettings.customSecondaryColor)) {
+    return 'customSecondaryColor must be a hex color like #ffb59a';
+  }
+
+  if (appearanceSettings.surfacePreset !== undefined && !validSurfacePresets.includes(appearanceSettings.surfacePreset)) {
+    return `Invalid surface preset. Must be one of: ${validSurfacePresets.join(', ')}`;
+  }
+
+  if (appearanceSettings.radiusPreset !== undefined && !validRadiusPresets.includes(appearanceSettings.radiusPreset)) {
+    return `Invalid radius preset. Must be one of: ${validRadiusPresets.join(', ')}`;
+  }
+
+  if (appearanceSettings.glassPreset !== undefined && !validGlassPresets.includes(appearanceSettings.glassPreset)) {
+    return `Invalid glass preset. Must be one of: ${validGlassPresets.join(', ')}`;
+  }
+
+  if (appearanceSettings.shadowPreset !== undefined && !validShadowPresets.includes(appearanceSettings.shadowPreset)) {
+    return `Invalid shadow preset. Must be one of: ${validShadowPresets.join(', ')}`;
+  }
+
+  if (appearanceSettings.density !== undefined && !validDensityPresets.includes(appearanceSettings.density)) {
+    return `Invalid density preset. Must be one of: ${validDensityPresets.join(', ')}`;
+  }
+
+  return null;
+}
+
+function validateAppearancePresetSlots(presetSlots: unknown): string | null {
+  if (!Array.isArray(presetSlots) || presetSlots.length !== validAppearancePresetSlotIds.length) {
+    return `presetSlots must be an array of ${validAppearancePresetSlotIds.length} items`;
+  }
+
+  for (const [index, slot] of presetSlots.entries()) {
+    if (!slot || typeof slot !== 'object') {
+      return `presetSlots[${index}] must be an object`;
+    }
+
+    const record = slot as Record<string, unknown>;
+
+    if (record.id !== validAppearancePresetSlotIds[index]) {
+      return `presetSlots[${index}].id must be ${validAppearancePresetSlotIds[index]}`;
+    }
+
+    if (typeof record.label !== 'string' || record.label.trim().length === 0 || record.label.trim().length > 32) {
+      return `presetSlots[${index}].label must be a non-empty string up to 32 characters`;
+    }
+
+    if (record.updatedAt !== null && typeof record.updatedAt !== 'string') {
+      return `presetSlots[${index}].updatedAt must be a string or null`;
+    }
+
+    if (record.appearance !== null && record.appearance !== undefined) {
+      const validationError = validateAppearanceThemeSettings(record.appearance as Partial<AppearanceThemeSettings>);
+      if (validationError) {
+        return `presetSlots[${index}].appearance: ${validationError}`;
+      }
+
+      const nextAppearance = record.appearance as AppearanceThemeSettings;
+      if (nextAppearance.accentPreset === 'custom') {
+        if (!isHexColor(nextAppearance.customPrimaryColor) || !isHexColor(nextAppearance.customSecondaryColor)) {
+          return `presetSlots[${index}].appearance requires valid custom colors`;
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -83,83 +176,31 @@ router.put(
   '/appearance',
   asyncHandler(async (req: Request, res: Response) => {
     const appearanceSettings: Partial<AppearanceSettings> = req.body;
-
-    if (appearanceSettings.themeMode !== undefined && !validAppearanceModes.includes(appearanceSettings.themeMode)) {
+    const appearanceValidationError = validateAppearanceThemeSettings(appearanceSettings);
+    if (appearanceValidationError) {
       res.status(400).json({
         success: false,
-        error: `Invalid theme mode. Must be one of: ${validAppearanceModes.join(', ')}`,
+        error: appearanceValidationError,
       });
       return;
     }
 
-    if (appearanceSettings.accentPreset !== undefined && !validAppearancePresets.includes(appearanceSettings.accentPreset)) {
-      res.status(400).json({
-        success: false,
-        error: `Invalid accent preset. Must be one of: ${validAppearancePresets.join(', ')}`,
-      });
-      return;
-    }
-
-    if (appearanceSettings.customPrimaryColor !== undefined && !isHexColor(appearanceSettings.customPrimaryColor)) {
-      res.status(400).json({
-        success: false,
-        error: 'customPrimaryColor must be a hex color like #f95e14',
-      });
-      return;
-    }
-
-    if (appearanceSettings.customSecondaryColor !== undefined && !isHexColor(appearanceSettings.customSecondaryColor)) {
-      res.status(400).json({
-        success: false,
-        error: 'customSecondaryColor must be a hex color like #ffb59a',
-      });
-      return;
-    }
-
-    if (appearanceSettings.surfacePreset !== undefined && !validSurfacePresets.includes(appearanceSettings.surfacePreset)) {
-      res.status(400).json({
-        success: false,
-        error: `Invalid surface preset. Must be one of: ${validSurfacePresets.join(', ')}`,
-      });
-      return;
-    }
-
-    if (appearanceSettings.radiusPreset !== undefined && !validRadiusPresets.includes(appearanceSettings.radiusPreset)) {
-      res.status(400).json({
-        success: false,
-        error: `Invalid radius preset. Must be one of: ${validRadiusPresets.join(', ')}`,
-      });
-      return;
-    }
-
-    if (appearanceSettings.glassPreset !== undefined && !validGlassPresets.includes(appearanceSettings.glassPreset)) {
-      res.status(400).json({
-        success: false,
-        error: `Invalid glass preset. Must be one of: ${validGlassPresets.join(', ')}`,
-      });
-      return;
-    }
-
-    if (appearanceSettings.shadowPreset !== undefined && !validShadowPresets.includes(appearanceSettings.shadowPreset)) {
-      res.status(400).json({
-        success: false,
-        error: `Invalid shadow preset. Must be one of: ${validShadowPresets.join(', ')}`,
-      });
-      return;
-    }
-
-    if (appearanceSettings.density !== undefined && !validDensityPresets.includes(appearanceSettings.density)) {
-      res.status(400).json({
-        success: false,
-        error: `Invalid density preset. Must be one of: ${validDensityPresets.join(', ')}`,
-      });
-      return;
+    if (appearanceSettings.presetSlots !== undefined) {
+      const presetSlotsValidationError = validateAppearancePresetSlots(appearanceSettings.presetSlots);
+      if (presetSlotsValidationError) {
+        res.status(400).json({
+          success: false,
+          error: presetSlotsValidationError,
+        });
+        return;
+      }
     }
 
     const currentSettings = settingsService.loadSettings();
-    const nextAppearance = {
+    const nextAppearance: AppearanceSettings = {
       ...currentSettings.appearance,
       ...appearanceSettings,
+      presetSlots: appearanceSettings.presetSlots ?? currentSettings.appearance.presetSlots,
     };
 
     if (nextAppearance.accentPreset === 'custom') {
@@ -169,6 +210,18 @@ router.put(
           error: 'Custom preset requires valid customPrimaryColor and customSecondaryColor values',
         });
         return;
+      }
+    }
+
+    for (const slot of nextAppearance.presetSlots as AppearancePresetSlot[]) {
+      if (slot.appearance?.accentPreset === 'custom') {
+        if (!isHexColor(slot.appearance.customPrimaryColor) || !isHexColor(slot.appearance.customSecondaryColor)) {
+          res.status(400).json({
+            success: false,
+            error: `${slot.id} requires valid custom colors when using the custom accent preset`,
+          });
+          return;
+        }
       }
     }
 

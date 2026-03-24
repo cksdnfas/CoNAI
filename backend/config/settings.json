@@ -40,5 +40,36 @@
   "thumbnail": {
     "size": "1080",
     "quality": 80
+  },
+  "appearance": {
+    "themeMode": "dark",
+    "accentPreset": "conai",
+    "customPrimaryColor": "#f95e14",
+    "customSecondaryColor": "#ffb59a",
+    "surfacePreset": "studio",
+    "radiusPreset": "balanced",
+    "glassPreset": "balanced",
+    "shadowPreset": "balanced",
+    "density": "comfortable",
+    "presetSlots": [
+      {
+        "id": "slot-1",
+        "label": "Slot 1",
+        "appearance": null,
+        "updatedAt": null
+      },
+      {
+        "id": "slot-2",
+        "label": "Slot 2",
+        "appearance": null,
+        "updatedAt": null
+      },
+      {
+        "id": "slot-3",
+        "label": "Slot 3",
+        "appearance": null,
+        "updatedAt": null
+      }
+    ]
   }
 }

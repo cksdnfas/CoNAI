@@ -1,6 +1,8 @@
 import type {
   AppearancePreset,
+  AppearancePresetSlot,
   AppearanceSettings,
+  AppearanceThemeSettings,
   GlassPreset,
   DensityPreset,
   RadiusPreset,
@@ -86,6 +88,14 @@ interface DensityPresetDefinition {
   drawerBodyPaddingY: string
   selectionBarPaddingX: string
   selectionBarPaddingY: string
+}
+
+export interface AppearanceContrastIssue {
+  id: 'primary-text' | 'secondary-text' | 'primary-surface' | 'secondary-surface'
+  label: string
+  ratio: number
+  recommendedRatio: number
+  severity: 'warning'
 }
 
 export const APPEARANCE_PRESETS: Record<Exclude<AppearancePreset, 'custom'>, AccentPresetDefinition> = {
@@ -379,7 +389,7 @@ export const DENSITY_PRESETS: Record<DensityPreset, DensityPresetDefinition> = {
   },
 }
 
-export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
+export const DEFAULT_APPEARANCE_THEME: AppearanceThemeSettings = {
   themeMode: 'dark',
   accentPreset: 'conai',
   customPrimaryColor: APPEARANCE_PRESETS.conai.primary,
@@ -389,6 +399,22 @@ export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
   glassPreset: 'balanced',
   shadowPreset: 'balanced',
   density: 'comfortable',
+}
+
+export const APPEARANCE_PRESET_SLOT_IDS = ['slot-1', 'slot-2', 'slot-3'] as const
+
+export function createDefaultAppearancePresetSlots(): AppearancePresetSlot[] {
+  return APPEARANCE_PRESET_SLOT_IDS.map((id, index) => ({
+    id,
+    label: `Slot ${index + 1}`,
+    appearance: null,
+    updatedAt: null,
+  }))
+}
+
+export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
+  ...DEFAULT_APPEARANCE_THEME,
+  presetSlots: createDefaultAppearancePresetSlots(),
 }
 
 /** Clamp a numeric value into a safe range for theme math. */
@@ -444,7 +470,7 @@ function getRelativeLuminance(channel: number) {
 }
 
 /** Choose light or dark text based on a background color. */
-function getContrastTextColor(background: string) {
+export function getContrastTextColor(background: string) {
   const color = normalizeHexPair(background)
   if (!color) return '#ffffff'
 
@@ -457,7 +483,7 @@ function getContrastTextColor(background: string) {
 }
 
 /** Resolve the active accent pair from preset or custom inputs. */
-export function resolveAppearanceColors(appearance: AppearanceSettings) {
+export function resolveAppearanceColors(appearance: AppearanceThemeSettings) {
   if (appearance.accentPreset === 'custom') {
     return {
       primary: appearance.customPrimaryColor,
@@ -473,12 +499,12 @@ export function resolveAppearanceColors(appearance: AppearanceSettings) {
 }
 
 /** Resolve the active surface palette for the selected mode and mood preset. */
-export function resolveSurfacePalette(appearance: AppearanceSettings) {
+export function resolveSurfacePalette(appearance: AppearanceThemeSettings) {
   return SURFACE_PRESETS[appearance.surfacePreset].modes[appearance.themeMode]
 }
 
 /** Build all CSS custom properties consumed by the app theme layer. */
-export function buildAppearanceVariables(appearance: AppearanceSettings) {
+export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
   const { primary, secondary } = resolveAppearanceColors(appearance)
   const surfacePalette = resolveSurfacePalette(appearance)
   const primaryForeground = getContrastTextColor(primary)
@@ -553,13 +579,27 @@ function isEnumValue<T extends string>(value: unknown, options: readonly T[]): v
   return typeof value === 'string' && options.includes(value as T)
 }
 
-export function normalizeAppearanceImport(raw: unknown, fallback: AppearanceSettings): AppearanceSettings | null {
+export function extractAppearanceTheme(appearance: AppearanceSettings | AppearanceThemeSettings): AppearanceThemeSettings {
+  return {
+    themeMode: appearance.themeMode,
+    accentPreset: appearance.accentPreset,
+    customPrimaryColor: appearance.customPrimaryColor,
+    customSecondaryColor: appearance.customSecondaryColor,
+    surfacePreset: appearance.surfacePreset,
+    radiusPreset: appearance.radiusPreset,
+    glassPreset: appearance.glassPreset,
+    shadowPreset: appearance.shadowPreset,
+    density: appearance.density,
+  }
+}
+
+function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeSettings): AppearanceThemeSettings | null {
   if (!isRecord(raw)) {
     return null
   }
 
   const source = isRecord(raw.appearance) ? raw.appearance : raw
-  const next: AppearanceSettings = { ...fallback }
+  const next: AppearanceThemeSettings = { ...fallback }
 
   if (source.themeMode !== undefined) {
     if (!isEnumValue(source.themeMode, ['dark', 'light'])) return null
@@ -615,8 +655,137 @@ export function normalizeAppearanceImport(raw: unknown, fallback: AppearanceSett
   return next
 }
 
+function normalizeAppearancePresetSlot(raw: unknown, fallback: AppearancePresetSlot): AppearancePresetSlot | null {
+  if (!isRecord(raw)) {
+    return null
+  }
+
+  const label = typeof raw.label === 'string' && raw.label.trim().length > 0
+    ? raw.label.trim().slice(0, 32)
+    : fallback.label
+  const updatedAt = typeof raw.updatedAt === 'string' || raw.updatedAt === null ? raw.updatedAt : fallback.updatedAt
+  const appearance = raw.appearance === null
+    ? null
+    : normalizeAppearanceThemeImport(raw.appearance, fallback.appearance ?? DEFAULT_APPEARANCE_THEME)
+
+  if (raw.appearance !== null && appearance === null) {
+    return null
+  }
+
+  return {
+    id: fallback.id,
+    label,
+    appearance,
+    updatedAt,
+  }
+}
+
+export function normalizeAppearanceSettings(raw: unknown, fallback: AppearanceSettings): AppearanceSettings | null {
+  const appearance = normalizeAppearanceThemeImport(raw, extractAppearanceTheme(fallback))
+  if (!appearance) {
+    return null
+  }
+
+  const source = isRecord(raw) && isRecord(raw.appearance) ? raw.appearance : raw
+  const fallbackSlots = fallback.presetSlots.length > 0 ? fallback.presetSlots : createDefaultAppearancePresetSlots()
+
+  let presetSlots = fallbackSlots
+  if (isRecord(source) && source.presetSlots !== undefined) {
+    if (!Array.isArray(source.presetSlots) || source.presetSlots.length !== fallbackSlots.length) {
+      return null
+    }
+
+    const normalizedSlots = source.presetSlots.map((slot, index) =>
+      normalizeAppearancePresetSlot(slot, fallbackSlots[index] ?? createDefaultAppearancePresetSlots()[index]),
+    )
+
+    if (normalizedSlots.some((slot) => slot === null)) {
+      return null
+    }
+
+    presetSlots = normalizedSlots as AppearancePresetSlot[]
+  }
+
+  return {
+    ...appearance,
+    presetSlots,
+  }
+}
+
+export function normalizeAppearanceImport(raw: unknown, fallback: AppearanceSettings): AppearanceSettings | null {
+  const appearance = normalizeAppearanceThemeImport(raw, extractAppearanceTheme(fallback))
+  if (!appearance) {
+    return null
+  }
+
+  return {
+    ...appearance,
+    presetSlots: fallback.presetSlots,
+  }
+}
+
+export function getContrastRatio(foreground: string, background: string) {
+  const fg = normalizeHexPair(foreground)
+  const bg = normalizeHexPair(background)
+  if (!fg || !bg) {
+    return null
+  }
+
+  const luminance = (color: { r: number; g: number; b: number }) =>
+    0.2126 * getRelativeLuminance(color.r) +
+    0.7152 * getRelativeLuminance(color.g) +
+    0.0722 * getRelativeLuminance(color.b)
+
+  const lighter = Math.max(luminance(fg), luminance(bg))
+  const darker = Math.min(luminance(fg), luminance(bg))
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+export function getAppearanceContrastIssues(appearance: AppearanceThemeSettings): AppearanceContrastIssue[] {
+  const { primary, secondary } = resolveAppearanceColors(appearance)
+  const surface = resolveSurfacePalette(appearance)
+  const checks = [
+    {
+      id: 'primary-text' as const,
+      label: 'Primary text on primary accent',
+      ratio: getContrastRatio(getContrastTextColor(primary), primary),
+      recommendedRatio: 4.5,
+    },
+    {
+      id: 'secondary-text' as const,
+      label: 'Text on secondary accent',
+      ratio: getContrastRatio(getContrastTextColor(secondary), secondary),
+      recommendedRatio: 4.5,
+    },
+    {
+      id: 'primary-surface' as const,
+      label: 'Primary accent against current surface',
+      ratio: getContrastRatio(primary, surface.surfaceContainer),
+      recommendedRatio: 2.4,
+    },
+    {
+      id: 'secondary-surface' as const,
+      label: 'Secondary accent against current surface',
+      ratio: getContrastRatio(secondary, surface.surfaceContainer),
+      recommendedRatio: 1.8,
+    },
+  ]
+
+  return checks.flatMap((check) => {
+    if (check.ratio === null || check.ratio >= check.recommendedRatio) {
+      return []
+    }
+
+    return [{
+      ...check,
+      ratio: Number(check.ratio.toFixed(2)),
+      severity: 'warning' as const,
+    }]
+  })
+}
+
 /** Apply the saved appearance values to document-level CSS variables. */
-export function applyAppearanceTheme(appearance: AppearanceSettings) {
+export function applyAppearanceTheme(appearance: AppearanceThemeSettings) {
   if (typeof document === 'undefined') {
     return
   }

@@ -53,8 +53,9 @@ export type RadiusPreset = 'sharp' | 'balanced' | 'soft'
 export type GlassPreset = 'subtle' | 'balanced' | 'immersive'
 export type ShadowPreset = 'soft' | 'balanced' | 'dramatic'
 export type DensityPreset = 'compact' | 'comfortable' | 'spacious'
+export type AppearancePresetSlotId = 'slot-1' | 'slot-2' | 'slot-3'
 
-export interface AppearanceSettings {
+export interface AppearanceThemeSettings {
   themeMode: ThemeMode
   accentPreset: AppearancePreset
   customPrimaryColor: string
@@ -64,6 +65,17 @@ export interface AppearanceSettings {
   glassPreset: GlassPreset
   shadowPreset: ShadowPreset
   density: DensityPreset
+}
+
+export interface AppearancePresetSlot {
+  id: AppearancePresetSlotId
+  label: string
+  appearance: AppearanceThemeSettings | null
+  updatedAt: string | null
+}
+
+export interface AppearanceSettings extends AppearanceThemeSettings {
+  presetSlots: AppearancePresetSlot[]
 }
 
 export interface MetadataExtractionSettings {

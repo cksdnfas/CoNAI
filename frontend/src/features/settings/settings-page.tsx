@@ -34,6 +34,7 @@ import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult
 import type { ImageRecord } from '@/types/image'
 import type { WatchedFolderUpdateInput } from '@/types/folder'
 import type {
+  AppearancePresetSlot,
   AppearanceSettings,
   KaloscopeSettings,
   MetadataExtractionSettings,
@@ -47,7 +48,7 @@ import { MetadataTab } from './components/metadata-tab'
 import { SettingsTabNav } from './components/settings-tab-nav'
 import type { SettingsTab } from './settings-tabs'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
-import { applyAppearanceTheme, normalizeAppearanceImport } from '@/lib/appearance'
+import { applyAppearanceTheme, extractAppearanceTheme, normalizeAppearanceImport } from '@/lib/appearance'
 import { createNewWatchedFolderDraft, parseCommaSeparatedInput } from './settings-utils'
 
 export function SettingsPage() {
@@ -200,6 +201,22 @@ export function SettingsPage() {
     },
   })
 
+  const appearancePresetSlotsMutation = useMutation({
+    mutationFn: (presetSlots: AppearancePresetSlot[]) => updateAppearanceSettings({ presetSlots }),
+    onSuccess: (settings) => {
+      syncSettingsCache(settings)
+      setAppearanceDraft((current) =>
+        current
+          ? { ...current, presetSlots: settings.appearance.presetSlots }
+          : settings.appearance,
+      )
+      notifyInfo('테마 슬롯을 저장했어.')
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '테마 슬롯 저장에 실패했어.')
+    },
+  })
+
   const taggerMutation = useMutation({
     mutationFn: updateTaggerSettings,
     onSuccess: async (settings) => {
@@ -322,11 +339,20 @@ export function SettingsPage() {
     setAppearanceDraft({ ...effectiveAppearanceDraft, ...patch })
   }
 
+  const normalizePresetSlotsForSave = (presetSlots: AppearancePresetSlot[]) =>
+    presetSlots.map((slot, index) => ({
+      ...slot,
+      label: slot.label.trim() || `Slot ${index + 1}`,
+    }))
+
   const isAppearanceDirty =
     JSON.stringify(effectiveAppearanceDraft ?? savedAppearance) !== JSON.stringify(savedAppearance)
 
   const handleAppearanceReset = () => {
-    setAppearanceDraft(DEFAULT_APPEARANCE_SETTINGS)
+    setAppearanceDraft((current) => ({
+      ...DEFAULT_APPEARANCE_SETTINGS,
+      presetSlots: current?.presetSlots ?? savedAppearance.presetSlots,
+    }))
   }
 
   const handleAppearanceCancel = () => {
@@ -336,11 +362,14 @@ export function SettingsPage() {
 
   const handleAppearanceSave = () => {
     if (!effectiveAppearanceDraft) return
-    void appearanceMutation.mutateAsync(effectiveAppearanceDraft)
+    void appearanceMutation.mutateAsync({
+      ...effectiveAppearanceDraft,
+      presetSlots: normalizePresetSlotsForSave(effectiveAppearanceDraft.presetSlots),
+    })
   }
 
   const handleAppearanceExport = () => {
-    const appearanceToExport = effectiveAppearanceDraft ?? savedAppearance
+    const appearanceToExport = extractAppearanceTheme(effectiveAppearanceDraft ?? savedAppearance)
     const blob = new Blob([JSON.stringify(appearanceToExport, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
@@ -367,6 +396,12 @@ export function SettingsPage() {
     } catch (error) {
       notifyError(error instanceof Error ? error.message : '화면 설정 파일을 불러오지 못했어.')
     }
+  }
+
+  const handleAppearancePresetSlotsSave = (presetSlots: AppearancePresetSlot[]) => {
+    const normalizedPresetSlots = normalizePresetSlotsForSave(presetSlots)
+    setAppearanceDraft((current) => (current ? { ...current, presetSlots: normalizedPresetSlots } : current))
+    void appearancePresetSlotsMutation.mutateAsync(normalizedPresetSlots)
   }
 
   const patchTaggerDraft = (patch: Partial<TaggerSettings>) => {
@@ -508,7 +543,8 @@ export function SettingsPage() {
               onSave={handleAppearanceSave}
               onExport={handleAppearanceExport}
               onImport={handleAppearanceImport}
-              isSaving={appearanceMutation.isPending}
+              onSavePresetSlots={handleAppearancePresetSlotsSave}
+              isSaving={appearanceMutation.isPending || appearancePresetSlotsMutation.isPending}
             />
           ) : null}
 
