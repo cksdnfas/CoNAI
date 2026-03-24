@@ -1,7 +1,7 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload, triggerBrowserDownload } from '@/lib/api-client'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
 import type { SimilaritySortBy, SimilaritySortOrder } from '@/types/settings'
-import type { SimilarityQueryResult } from '@/types/similarity'
+import type { PromptSimilarityQueryResult, SimilarityQueryResult } from '@/types/similarity'
 import type { AutoTestKaloscopeResult, AutoTestTaggerResult } from './api-settings'
 
 interface ComplexImageSearchRequest {
@@ -85,6 +85,14 @@ export async function getSimilarImages(
   const response = await fetchJson<ApiResponse<SimilarityQueryResult>>(`/api/images/${compositeHash}/similar?${searchParams.toString()}`)
   if (!response.success) {
     throw new Error(response.error || '유사 이미지를 불러오지 못했어.')
+  }
+  return response.data
+}
+
+export async function getPromptSimilarImages(compositeHash: string) {
+  const response = await fetchJson<ApiResponse<PromptSimilarityQueryResult>>(`/api/images/prompt-similarity/by-image/${compositeHash}`)
+  if (!response.success) {
+    throw new Error(response.error || '텍스트 기반 유사 이미지를 불러오지 못했어.')
   }
   return response.data
 }

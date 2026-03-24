@@ -52,6 +52,17 @@ export interface ImageMetadataRecord {
   // NovelAI 원본 생성 파라미터 (JSON)
   raw_nai_parameters: string | null;
 
+  // Prompt similarity search fields
+  prompt_similarity_algorithm?: 'simhash' | 'minhash' | null;
+  prompt_similarity_version?: number | null;
+  pos_prompt_normalized?: string | null;
+  neg_prompt_normalized?: string | null;
+  auto_prompt_normalized?: string | null;
+  pos_prompt_fingerprint?: string | null;
+  neg_prompt_fingerprint?: string | null;
+  auto_prompt_fingerprint?: string | null;
+  prompt_similarity_updated_date?: string | null;
+
   // 비디오 메타데이터
   duration: number | null;
   fps: number | null;

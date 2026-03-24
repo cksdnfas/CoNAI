@@ -242,7 +242,11 @@ export async function runKaloscopeAutoTest(imageId: string) {
   return response.data
 }
 
-export async function updateSimilaritySettings(settings: Partial<SimilaritySettings>) {
+type SimilaritySettingsUpdateInput = Partial<Omit<SimilaritySettings, 'promptSimilarity'>> & {
+  promptSimilarity?: Partial<SimilaritySettings['promptSimilarity']>
+}
+
+export async function updateSimilaritySettings(settings: SimilaritySettingsUpdateInput) {
   const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/similarity', {
     method: 'PUT',
     headers: {

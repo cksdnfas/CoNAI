@@ -68,6 +68,80 @@ router.put(
       }
     }
 
+    if (similaritySettings.promptSimilarity !== undefined) {
+      const promptSimilarity = similaritySettings.promptSimilarity;
+
+      if (promptSimilarity.enabled !== undefined && typeof promptSimilarity.enabled !== 'boolean') {
+        res.status(400).json({
+          success: false,
+          error: 'promptSimilarity.enabled must be a boolean',
+        });
+        return;
+      }
+
+      if (promptSimilarity.algorithm !== undefined) {
+        const validAlgorithms = ['simhash', 'minhash'];
+        if (!validAlgorithms.includes(promptSimilarity.algorithm)) {
+          res.status(400).json({
+            success: false,
+            error: `promptSimilarity.algorithm must be one of: ${validAlgorithms.join(', ')}`,
+          });
+          return;
+        }
+      }
+
+      if (promptSimilarity.autoBuildOnMetadataUpdate !== undefined && typeof promptSimilarity.autoBuildOnMetadataUpdate !== 'boolean') {
+        res.status(400).json({
+          success: false,
+          error: 'promptSimilarity.autoBuildOnMetadataUpdate must be a boolean',
+        });
+        return;
+      }
+
+      if (promptSimilarity.resultLimit !== undefined) {
+        if (!Number.isInteger(promptSimilarity.resultLimit) || promptSimilarity.resultLimit < 1 || promptSimilarity.resultLimit > 100) {
+          res.status(400).json({
+            success: false,
+            error: 'promptSimilarity.resultLimit must be an integer between 1 and 100',
+          });
+          return;
+        }
+      }
+
+      if (promptSimilarity.combinedThreshold !== undefined) {
+        if (!Number.isFinite(promptSimilarity.combinedThreshold) || promptSimilarity.combinedThreshold < 0 || promptSimilarity.combinedThreshold > 100) {
+          res.status(400).json({
+            success: false,
+            error: 'promptSimilarity.combinedThreshold must be between 0 and 100',
+          });
+          return;
+        }
+      }
+
+      const validateWeight = (value: unknown, label: string) => {
+        if (value !== undefined && (!Number.isFinite(value as number) || Number(value) < 0 || Number(value) > 100)) {
+          res.status(400).json({
+            success: false,
+            error: `${label} must be between 0 and 100`,
+          });
+          return false;
+        }
+        return true;
+      };
+
+      if (promptSimilarity.weights) {
+        if (!validateWeight(promptSimilarity.weights.positive, 'promptSimilarity.weights.positive')) return;
+        if (!validateWeight(promptSimilarity.weights.negative, 'promptSimilarity.weights.negative')) return;
+        if (!validateWeight(promptSimilarity.weights.auto, 'promptSimilarity.weights.auto')) return;
+      }
+
+      if (promptSimilarity.fieldThresholds) {
+        if (!validateWeight(promptSimilarity.fieldThresholds.positive, 'promptSimilarity.fieldThresholds.positive')) return;
+        if (!validateWeight(promptSimilarity.fieldThresholds.negative, 'promptSimilarity.fieldThresholds.negative')) return;
+        if (!validateWeight(promptSimilarity.fieldThresholds.auto, 'promptSimilarity.fieldThresholds.auto')) return;
+      }
+    }
+
     const updatedSettings = settingsService.updateSimilaritySettings(similaritySettings);
 
     res.json({

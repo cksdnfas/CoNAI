@@ -17,3 +17,28 @@ export interface SimilarityQueryResult {
     limit: number
   }
 }
+
+export interface PromptSimilarityFieldScore {
+  similarity: number
+  threshold: number
+  passed: boolean
+  exact: boolean
+  hasSource: boolean
+  hasTarget: boolean
+}
+
+export interface PromptSimilarImage {
+  image: ImageRecord
+  combinedSimilarity: number
+  positive: PromptSimilarityFieldScore
+  negative: PromptSimilarityFieldScore
+  auto: PromptSimilarityFieldScore
+}
+
+export interface PromptSimilarityQueryResult {
+  items: PromptSimilarImage[]
+  total: number
+  source: {
+    compositeHash: string
+  }
+}

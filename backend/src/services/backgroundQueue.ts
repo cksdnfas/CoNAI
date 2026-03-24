@@ -9,6 +9,7 @@ import { AutoCollectionService } from './autoCollectionService';
 import { MetadataExtractionError } from '../types/errors';
 import { CivitaiService } from './civitaiService';
 import { ImageModel, ModelRole } from '../models/ImageModel';
+import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { CivitaiSettings } from '../models/CivitaiSettings';
 import type { ModelReference } from './metadata/types';
 
@@ -224,45 +225,24 @@ export class BackgroundQueueService {
 
     // media_metadata 업데이트
     try {
-      db.prepare(`
-        UPDATE media_metadata
-        SET
-          ai_tool = ?,
-          model_name = ?,
-          steps = ?,
-          cfg_scale = ?,
-          sampler = ?,
-          seed = ?,
-          scheduler = ?,
-          prompt = ?,
-          negative_prompt = ?,
-          denoise_strength = ?,
-          generation_time = ?,
-          batch_size = ?,
-          batch_index = ?,
-          model_references = ?,
-          character_prompt_text = ?,
-          raw_nai_parameters = ?
-        WHERE composite_hash = ?
-      `).run(
-        aiInfo.ai_tool || null,
-        aiInfo.model || null,
-        aiInfo.steps || null,
-        aiInfo.cfg_scale || null,
-        aiInfo.sampler || null,
-        aiInfo.seed || null,
-        aiInfo.scheduler || null,
-        aiInfo.prompt || null,
-        aiInfo.negative_prompt || null,
-        aiInfo.denoise_strength || null,
-        aiInfo.generation_time || null,
-        aiInfo.batch_size || null,
-        aiInfo.batch_index || null,
-        modelReferencesJson,
-        aiInfo.character_prompt_text || null,
-        aiInfo.raw_nai_parameters || null,
-        task.compositeHash
-      );
+      MediaMetadataModel.update(task.compositeHash, {
+        ai_tool: aiInfo.ai_tool || null,
+        model_name: aiInfo.model || null,
+        steps: aiInfo.steps || null,
+        cfg_scale: aiInfo.cfg_scale || null,
+        sampler: aiInfo.sampler || null,
+        seed: aiInfo.seed || null,
+        scheduler: aiInfo.scheduler || null,
+        prompt: aiInfo.prompt || null,
+        negative_prompt: aiInfo.negative_prompt || null,
+        denoise_strength: aiInfo.denoise_strength || null,
+        generation_time: aiInfo.generation_time || null,
+        batch_size: aiInfo.batch_size || null,
+        batch_index: aiInfo.batch_index || null,
+        model_references: modelReferencesJson,
+        character_prompt_text: aiInfo.character_prompt_text || null,
+        raw_nai_parameters: aiInfo.raw_nai_parameters || null,
+      });
     } catch (error) {
       if (error instanceof RangeError) {
         logger.error(`  ❌ RangeError during metadata update (skipping): ${path.basename(task.filePath)}`);

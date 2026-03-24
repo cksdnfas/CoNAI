@@ -7,6 +7,7 @@ import { similarityRoutes } from './similarity.routes';
 import complexSearchRoutes from './complex-search.routes';
 import metadataRoutes from './metadata.routes';
 import hashRoutes from './hash.routes';
+import promptSimilarityRoutes from './prompt-similarity.routes';
 import { logger } from '../../utils/logger';
 
 const router = Router();
@@ -28,6 +29,9 @@ router.use('/metadata', metadataRoutes);
 
 // Hash generation routes (안전장치: 해시 생성)
 router.use('/', hashRoutes);
+
+// Prompt similarity routes
+router.use('/prompt-similarity', promptSimilarityRoutes);
 
 // Query and download routes
 router.use('/', queryRoutes);

@@ -1,4 +1,6 @@
 import { db } from '../../database/init';
+import { settingsService } from '../../services/settingsService';
+import { PromptSimilarityService } from '../../services/promptSimilarityService';
 import { ImageMetadataRecord } from '../../types/image';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../../utils/dynamicUpdate';
 
@@ -67,6 +69,21 @@ export class MediaMetadataModel {
    * 메타데이터 생성
    */
   static create(data: Omit<ImageMetadataRecord, 'first_seen_date' | 'metadata_updated_date'>): string {
+    const promptSimilaritySettings = settingsService.loadSettings().similarity.promptSimilarity;
+    const promptSimilarityFields = (promptSimilaritySettings.enabled && promptSimilaritySettings.autoBuildOnMetadataUpdate)
+      ? PromptSimilarityService.buildPreparedFields(data, promptSimilaritySettings.algorithm)
+      : {
+          prompt_similarity_algorithm: null,
+          prompt_similarity_version: null,
+          pos_prompt_normalized: null,
+          neg_prompt_normalized: null,
+          auto_prompt_normalized: null,
+          pos_prompt_fingerprint: null,
+          neg_prompt_fingerprint: null,
+          auto_prompt_fingerprint: null,
+          prompt_similarity_updated_date: null,
+        };
+
     db.prepare(`
       INSERT INTO media_metadata (
         composite_hash, perceptual_hash, dhash, ahash, color_histogram,
@@ -74,8 +91,12 @@ export class MediaMetadataModel {
         ai_tool, model_name, lora_models, steps, cfg_scale, sampler, seed, scheduler,
         prompt, negative_prompt, denoise_strength, generation_time, batch_size, batch_index,
         auto_tags, duration, fps, video_codec, audio_codec, bitrate, rating_score, model_references,
-        character_prompt_text, raw_nai_parameters
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        character_prompt_text, raw_nai_parameters,
+        prompt_similarity_algorithm, prompt_similarity_version,
+        pos_prompt_normalized, neg_prompt_normalized, auto_prompt_normalized,
+        pos_prompt_fingerprint, neg_prompt_fingerprint, auto_prompt_fingerprint,
+        prompt_similarity_updated_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.composite_hash, data.perceptual_hash, data.dhash, data.ahash, data.color_histogram,
       data.width, data.height, data.thumbnail_path,
@@ -84,7 +105,11 @@ export class MediaMetadataModel {
       data.denoise_strength, data.generation_time, data.batch_size, data.batch_index,
       data.auto_tags, data.duration, data.fps, data.video_codec, data.audio_codec,
       data.bitrate, data.rating_score, data.model_references,
-      data.character_prompt_text, data.raw_nai_parameters
+      data.character_prompt_text, data.raw_nai_parameters,
+      promptSimilarityFields.prompt_similarity_algorithm, promptSimilarityFields.prompt_similarity_version,
+      promptSimilarityFields.pos_prompt_normalized, promptSimilarityFields.neg_prompt_normalized, promptSimilarityFields.auto_prompt_normalized,
+      promptSimilarityFields.pos_prompt_fingerprint, promptSimilarityFields.neg_prompt_fingerprint, promptSimilarityFields.auto_prompt_fingerprint,
+      promptSimilarityFields.prompt_similarity_updated_date
     );
 
     return data.composite_hash;
@@ -101,7 +126,11 @@ export class MediaMetadataModel {
       'sampler', 'seed', 'scheduler', 'denoise_strength',
       'generation_time', 'batch_size', 'batch_index',
       'thumbnail_path', 'width', 'height', 'model_references',
-      'character_prompt_text', 'raw_nai_parameters'
+      'character_prompt_text', 'raw_nai_parameters',
+      'prompt_similarity_algorithm', 'prompt_similarity_version',
+      'pos_prompt_normalized', 'neg_prompt_normalized', 'auto_prompt_normalized',
+      'pos_prompt_fingerprint', 'neg_prompt_fingerprint', 'auto_prompt_fingerprint',
+      'prompt_similarity_updated_date'
     ];
 
     const cleanUpdates = Object.fromEntries(
@@ -111,6 +140,33 @@ export class MediaMetadataModel {
     const filteredUpdates = filterDefined(cleanUpdates);
 
     if (Object.keys(filteredUpdates).length === 0) return false;
+
+    const shouldBuildPromptSimilarity = ['prompt', 'negative_prompt', 'auto_tags'].some((field) => field in filteredUpdates);
+    if (shouldBuildPromptSimilarity) {
+      const currentRecord = this.findByHash(compositeHash);
+      if (currentRecord) {
+        const nextRecord = {
+          ...currentRecord,
+          ...filteredUpdates,
+        } as ImageMetadataRecord;
+        const promptSimilaritySettings = settingsService.loadSettings().similarity.promptSimilarity;
+        const promptSimilarityFields = (promptSimilaritySettings.enabled && promptSimilaritySettings.autoBuildOnMetadataUpdate)
+          ? PromptSimilarityService.buildPreparedFields(nextRecord, promptSimilaritySettings.algorithm)
+          : {
+              prompt_similarity_algorithm: null,
+              prompt_similarity_version: null,
+              pos_prompt_normalized: null,
+              neg_prompt_normalized: null,
+              auto_prompt_normalized: null,
+              pos_prompt_fingerprint: null,
+              neg_prompt_fingerprint: null,
+              auto_prompt_fingerprint: null,
+              prompt_similarity_updated_date: null,
+            };
+
+        Object.assign(filteredUpdates, promptSimilarityFields);
+      }
+    }
 
     // metadata_updated_date는 SQL 함수로 직접 삽입
     const finalUpdates = {

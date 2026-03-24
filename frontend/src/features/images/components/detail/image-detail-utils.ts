@@ -35,6 +35,21 @@ export interface SimilaritySettingsDraft {
   detailSimilarSortOrder: SimilaritySettings['detailSimilarSortOrder']
 }
 
+export interface PromptSimilaritySettingsDraft {
+  resultLimit: number
+  combinedThreshold: number
+  weights: {
+    positive: number
+    negative: number
+    auto: number
+  }
+  fieldThresholds: {
+    positive: number
+    negative: number
+    auto: number
+  }
+}
+
 function getSortedTagEntries(scores?: Record<string, number> | null) {
   return Object.entries(scores ?? {}).sort(([, left], [, right]) => right - left)
 }

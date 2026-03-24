@@ -28,7 +28,7 @@ export function SimilaritySettingsPanel({
       <div className="relative">
         <Button size="sm" variant="outline" onClick={onToggle}>
           <Settings2 className="h-4 w-4" />
-          유사도 설정
+          이미지 유사도 설정
         </Button>
 
         {isOpen && draft ? (

@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getAppSettings, getImage, getImageDuplicates, getSimilarImages, updateSimilaritySettings } from '@/lib/api'
+import { getAppSettings, getImage, getImageDuplicates, getPromptSimilarImages, getSimilarImages, updateSimilaritySettings } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import { ImageDetailActions } from './components/detail/image-detail-actions'
 import { ImageDetailMetaCard } from './components/detail/image-detail-meta-card'
-import { getDownloadName, getValidImageRecords, type SimilaritySettingsDraft } from './components/detail/image-detail-utils'
+import { getDownloadName, getValidImageRecords, type PromptSimilaritySettingsDraft, type SimilaritySettingsDraft } from './components/detail/image-detail-utils'
+import { PromptSimilaritySettingsPanel } from './components/detail/prompt-similarity-settings-panel'
 import { RelatedImageGallerySection } from './components/detail/related-image-gallery-section'
 import { SimilaritySettingsPanel } from './components/detail/similarity-settings-panel'
 
@@ -16,14 +19,29 @@ interface DetailLocationState {
   sourcePath?: string
 }
 
+type SimilarImageTab = 'image' | 'text'
+
+const SIMILAR_IMAGE_SECTION_TITLE_LABELS: Record<SimilarImageTab, string> = {
+  image: '유사 이미지 [이미지]',
+  text: '유사 이미지 [텍스트]',
+}
+
+const SIMILAR_IMAGE_TAB_BUTTON_LABELS: Record<SimilarImageTab, string> = {
+  image: '이미지',
+  text: '텍스트',
+}
+
 export function ImageDetailPage() {
   const { compositeHash } = useParams<{ compositeHash: string }>()
   const navigate = useNavigate()
   const location = useLocation()
   const queryClient = useQueryClient()
   const locationState = location.state as DetailLocationState | null
+  const [activeSimilarImageTab, setActiveSimilarImageTab] = useState<SimilarImageTab>('image')
   const [isSimilaritySettingsOpen, setIsSimilaritySettingsOpen] = useState(false)
+  const [isPromptSimilaritySettingsOpen, setIsPromptSimilaritySettingsOpen] = useState(false)
   const [similarityDraft, setSimilarityDraft] = useState<SimilaritySettingsDraft | null>(null)
+  const [promptSimilarityDraft, setPromptSimilarityDraft] = useState<PromptSimilaritySettingsDraft | null>(null)
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })
@@ -69,11 +87,46 @@ export function ImageDetailPage() {
     enabled: Boolean(compositeHash) && Boolean(effectiveSimilaritySettings),
   })
 
+  const promptSimilarQuery = useQuery({
+    queryKey: [
+      'image-prompt-similar',
+      compositeHash,
+      effectiveSimilaritySettings?.promptSimilarity?.enabled ?? true,
+      effectiveSimilaritySettings?.promptSimilarity?.algorithm ?? 'simhash',
+      effectiveSimilaritySettings?.promptSimilarity?.combinedThreshold ?? 50,
+      effectiveSimilaritySettings?.promptSimilarity?.resultLimit ?? 60,
+      effectiveSimilaritySettings?.promptSimilarity?.weights?.positive ?? 1,
+      effectiveSimilaritySettings?.promptSimilarity?.weights?.negative ?? 0,
+      effectiveSimilaritySettings?.promptSimilarity?.weights?.auto ?? 0,
+      effectiveSimilaritySettings?.promptSimilarity?.fieldThresholds?.positive ?? 50,
+      effectiveSimilaritySettings?.promptSimilarity?.fieldThresholds?.negative ?? 50,
+      effectiveSimilaritySettings?.promptSimilarity?.fieldThresholds?.auto ?? 50,
+    ],
+    queryFn: () => getPromptSimilarImages(compositeHash!),
+    enabled: Boolean(compositeHash) && Boolean(effectiveSimilaritySettings),
+  })
+
   const saveSimilaritySettingsMutation = useMutation({
     mutationFn: (settings: SimilaritySettingsDraft) => updateSimilaritySettings(settings),
     onSuccess: (settings) => {
       queryClient.setQueryData(['app-settings'], settings)
       setIsSimilaritySettingsOpen(false)
+    },
+  })
+
+  const savePromptSimilaritySettingsMutation = useMutation({
+    mutationFn: (settings: PromptSimilaritySettingsDraft) =>
+      updateSimilaritySettings({
+        promptSimilarity: {
+          resultLimit: settings.resultLimit,
+          combinedThreshold: settings.combinedThreshold,
+          weights: settings.weights,
+          fieldThresholds: settings.fieldThresholds,
+        },
+      }),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['app-settings'], settings)
+      setIsPromptSimilaritySettingsOpen(false)
     },
   })
 
@@ -94,6 +147,14 @@ export function ImageDetailPage() {
         (item) => !duplicateHashSet.has(item.composite_hash as string),
       ),
     [duplicateHashSet, similarQuery.data?.similar],
+  )
+
+  const promptSimilarImages = useMemo(
+    () =>
+      getValidImageRecords((promptSimilarQuery.data?.items ?? []).map((item) => item.image)).filter(
+        (item) => !duplicateHashSet.has(item.composite_hash as string),
+      ),
+    [duplicateHashSet, promptSimilarQuery.data?.items],
   )
 
   const handleBackToFeed = () => {
@@ -123,7 +184,37 @@ export function ImageDetailPage() {
       detailSimilarSortBy: similarity.detailSimilarSortBy,
       detailSimilarSortOrder: similarity.detailSimilarSortOrder,
     })
+    setIsPromptSimilaritySettingsOpen(false)
     setIsSimilaritySettingsOpen(true)
+  }
+
+  const handleTogglePromptSimilaritySettings = () => {
+    if (isPromptSimilaritySettingsOpen) {
+      setIsPromptSimilaritySettingsOpen(false)
+      return
+    }
+
+    const promptSimilarity = settingsQuery.data?.similarity?.promptSimilarity
+    if (!promptSimilarity) {
+      return
+    }
+
+    setPromptSimilarityDraft({
+      resultLimit: promptSimilarity.resultLimit,
+      combinedThreshold: promptSimilarity.combinedThreshold,
+      weights: {
+        positive: promptSimilarity.weights.positive,
+        negative: promptSimilarity.weights.negative,
+        auto: promptSimilarity.weights.auto,
+      },
+      fieldThresholds: {
+        positive: promptSimilarity.fieldThresholds.positive,
+        negative: promptSimilarity.fieldThresholds.negative,
+        auto: promptSimilarity.fieldThresholds.auto,
+      },
+    })
+    setIsSimilaritySettingsOpen(false)
+    setIsPromptSimilaritySettingsOpen(true)
   }
 
   const handleApplySimilaritySettings = () => {
@@ -144,7 +235,105 @@ export function ImageDetailPage() {
     setSimilarityDraft((current) => (current ? { ...current, ...patch } : current))
   }
 
+  const handleApplyPromptSimilaritySettings = () => {
+    if (!promptSimilarityDraft || savePromptSimilaritySettingsMutation.isPending) {
+      return
+    }
+
+    savePromptSimilaritySettingsMutation.mutate({
+      resultLimit: Math.max(1, Math.min(100, Math.round(promptSimilarityDraft.resultLimit))),
+      combinedThreshold: Math.max(0, Math.min(100, Math.round(promptSimilarityDraft.combinedThreshold))),
+      weights: {
+        positive: Math.max(0, Math.min(100, Number(promptSimilarityDraft.weights.positive))),
+        negative: Math.max(0, Math.min(100, Number(promptSimilarityDraft.weights.negative))),
+        auto: Math.max(0, Math.min(100, Number(promptSimilarityDraft.weights.auto))),
+      },
+      fieldThresholds: {
+        positive: Math.max(0, Math.min(100, Math.round(promptSimilarityDraft.fieldThresholds.positive))),
+        negative: Math.max(0, Math.min(100, Math.round(promptSimilarityDraft.fieldThresholds.negative))),
+        auto: Math.max(0, Math.min(100, Math.round(promptSimilarityDraft.fieldThresholds.auto))),
+      },
+    })
+  }
+
+  const handlePatchPromptSimilarityDraft = (patch: Partial<PromptSimilaritySettingsDraft>) => {
+    setPromptSimilarityDraft((current) => (current ? { ...current, ...patch } : current))
+  }
+
   const getErrorMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback)
+
+  const similarSectionTitle = SIMILAR_IMAGE_SECTION_TITLE_LABELS[activeSimilarImageTab]
+  const similarSectionItems = activeSimilarImageTab === 'image' ? similarImages : promptSimilarImages
+  const similarSectionIsLoading = activeSimilarImageTab === 'image'
+    ? similarQuery.isLoading || settingsQuery.isLoading
+    : promptSimilarQuery.isLoading || settingsQuery.isLoading
+  const similarSectionErrorMessage = activeSimilarImageTab === 'image'
+    ? (similarQuery.isError ? getErrorMessage(similarQuery.error, '알 수 없는 오류가 발생했어.') : null)
+    : (promptSimilarQuery.isError ? getErrorMessage(promptSimilarQuery.error, '알 수 없는 오류가 발생했어.') : null)
+  const similarSectionEmptyMessage = activeSimilarImageTab === 'image'
+    ? '현재 설정에서는 표시할 유사 이미지가 없어.'
+    : '현재 텍스트 기준에서는 표시할 유사 이미지가 없어.'
+
+  const similarSectionActions = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="inline-flex items-center rounded-sm border border-border bg-surface-high p-1">
+        {(['image', 'text'] as SimilarImageTab[]).map((tab) => (
+          <Button
+            key={tab}
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setActiveSimilarImageTab(tab)
+              if (tab !== 'image') {
+                setIsSimilaritySettingsOpen(false)
+              }
+              if (tab !== 'text') {
+                setIsPromptSimilaritySettingsOpen(false)
+              }
+            }}
+            className={cn(
+              'h-8 px-3 text-xs font-semibold',
+              activeSimilarImageTab === tab ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {SIMILAR_IMAGE_TAB_BUTTON_LABELS[tab]}
+          </Button>
+        ))}
+      </div>
+
+      {activeSimilarImageTab === 'image' ? (
+        <SimilaritySettingsPanel
+          isOpen={isSimilaritySettingsOpen}
+          draft={similarityDraft}
+          isSaving={saveSimilaritySettingsMutation.isPending}
+          errorMessage={
+            saveSimilaritySettingsMutation.isError
+              ? getErrorMessage(saveSimilaritySettingsMutation.error, '설정 저장 중 오류가 발생했어.')
+              : null
+          }
+          onToggle={handleToggleSimilaritySettings}
+          onPatchDraft={handlePatchSimilarityDraft}
+          onApply={handleApplySimilaritySettings}
+        />
+      ) : null}
+
+      {activeSimilarImageTab === 'text' ? (
+        <PromptSimilaritySettingsPanel
+          isOpen={isPromptSimilaritySettingsOpen}
+          draft={promptSimilarityDraft}
+          isSaving={savePromptSimilaritySettingsMutation.isPending}
+          errorMessage={
+            savePromptSimilaritySettingsMutation.isError
+              ? getErrorMessage(savePromptSimilaritySettingsMutation.error, '설정 저장 중 오류가 발생했어.')
+              : null
+          }
+          onToggle={handleTogglePromptSimilaritySettings}
+          onPatchDraft={handlePatchPromptSimilarityDraft}
+          onApply={handleApplyPromptSimilaritySettings}
+        />
+      ) : null}
+    </div>
+  )
 
   return (
     <div className="space-y-8">
@@ -204,26 +393,12 @@ export function ImageDetailPage() {
             ) : null}
 
             <RelatedImageGallerySection
-              title="유사 이미지"
-              items={similarImages}
-              isLoading={similarQuery.isLoading || settingsQuery.isLoading}
-              errorMessage={similarQuery.isError ? getErrorMessage(similarQuery.error, '알 수 없는 오류가 발생했어.') : null}
-              emptyMessage="현재 설정에서는 표시할 유사 이미지가 없어."
-              actions={
-                <SimilaritySettingsPanel
-                  isOpen={isSimilaritySettingsOpen}
-                  draft={similarityDraft}
-                  isSaving={saveSimilaritySettingsMutation.isPending}
-                  errorMessage={
-                    saveSimilaritySettingsMutation.isError
-                      ? getErrorMessage(saveSimilaritySettingsMutation.error, '설정 저장 중 오류가 발생했어.')
-                      : null
-                  }
-                  onToggle={handleToggleSimilaritySettings}
-                  onPatchDraft={handlePatchSimilarityDraft}
-                  onApply={handleApplySimilaritySettings}
-                />
-              }
+              title={similarSectionTitle}
+              items={similarSectionItems}
+              isLoading={similarSectionIsLoading}
+              errorMessage={similarSectionErrorMessage}
+              emptyMessage={similarSectionEmptyMessage}
+              actions={similarSectionActions}
             />
           </div>
 

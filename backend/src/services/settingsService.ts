@@ -111,7 +111,7 @@ export class SettingsService {
   /**
    * Get default settings from environment variables
    */
-  private getDefaultSettings(): AppSettings {
+  getDefaultSettings(): AppSettings {
     return {
       general: {
         language: 'ko',  // 기본 언어: 한국어
@@ -147,6 +147,23 @@ export class SettingsService {
         detailSimilarIncludeColorSimilarity: false,
         detailSimilarSortBy: 'similarity',
         detailSimilarSortOrder: 'DESC',
+        promptSimilarity: {
+          enabled: true,
+          algorithm: 'simhash',
+          autoBuildOnMetadataUpdate: true,
+          resultLimit: 60,
+          combinedThreshold: 50,
+          weights: {
+            positive: 1,
+            negative: 0,
+            auto: 0,
+          },
+          fieldThresholds: {
+            positive: 50,
+            negative: 50,
+            auto: 50,
+          },
+        },
       },
       appearance: {
         ...getDefaultAppearanceTheme(),
@@ -214,6 +231,18 @@ export class SettingsService {
           similarity: {
             ...defaults.similarity,
             ...loadedSettings.similarity,
+            promptSimilarity: {
+              ...defaults.similarity.promptSimilarity,
+              ...loadedSettings.similarity?.promptSimilarity,
+              weights: {
+                ...defaults.similarity.promptSimilarity.weights,
+                ...loadedSettings.similarity?.promptSimilarity?.weights,
+              },
+              fieldThresholds: {
+                ...defaults.similarity.promptSimilarity.fieldThresholds,
+                ...loadedSettings.similarity?.promptSimilarity?.fieldThresholds,
+              },
+            },
           },
           appearance: {
             ...defaults.appearance,
@@ -400,6 +429,18 @@ export class SettingsService {
       similarity: {
         ...currentSettings.similarity,
         ...similaritySettings,
+        promptSimilarity: {
+          ...currentSettings.similarity.promptSimilarity,
+          ...similaritySettings.promptSimilarity,
+          weights: {
+            ...currentSettings.similarity.promptSimilarity.weights,
+            ...similaritySettings.promptSimilarity?.weights,
+          },
+          fieldThresholds: {
+            ...currentSettings.similarity.promptSimilarity.fieldThresholds,
+            ...similaritySettings.promptSimilarity?.fieldThresholds,
+          },
+        },
       },
     };
     this.saveSettings(updatedSettings);

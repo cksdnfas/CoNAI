@@ -3,6 +3,7 @@ export type SimilaritySortOrder = 'ASC' | 'DESC'
 export type TaggerModel = 'vit' | 'swinv2' | 'convnext'
 export type TaggerDevice = 'auto' | 'cpu' | 'cuda'
 export type KaloscopeDevice = 'auto' | 'cpu' | 'cuda'
+export type PromptSimilarityAlgorithm = 'simhash' | 'minhash'
 export type StealthScanMode = 'full' | 'fast' | 'skip'
 
 export interface DeleteProtectionSettings {
@@ -37,6 +38,28 @@ export interface KaloscopeSettings {
   topK: number
 }
 
+export interface PromptSimilarityWeights {
+  positive: number
+  negative: number
+  auto: number
+}
+
+export interface PromptSimilarityFieldThresholds {
+  positive: number
+  negative: number
+  auto: number
+}
+
+export interface PromptSimilaritySettings {
+  enabled: boolean
+  algorithm: PromptSimilarityAlgorithm
+  autoBuildOnMetadataUpdate: boolean
+  resultLimit: number
+  combinedThreshold: number
+  weights: PromptSimilarityWeights
+  fieldThresholds: PromptSimilarityFieldThresholds
+}
+
 export interface SimilaritySettings {
   autoGenerateHashOnUpload: boolean
   detailSimilarThreshold: number
@@ -44,6 +67,7 @@ export interface SimilaritySettings {
   detailSimilarIncludeColorSimilarity: boolean
   detailSimilarSortBy: SimilaritySortBy
   detailSimilarSortOrder: SimilaritySortOrder
+  promptSimilarity: PromptSimilaritySettings
 }
 
 export type ThemeMode = 'dark' | 'light'

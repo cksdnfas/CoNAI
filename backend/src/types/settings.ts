@@ -28,6 +28,7 @@ export type TaggerModel = 'vit' | 'swinv2' | 'convnext';
 export type TaggerDevice = 'auto' | 'cpu' | 'cuda';
 
 export type KaloscopeDevice = 'auto' | 'cpu' | 'cuda';
+export type PromptSimilarityAlgorithm = 'simhash' | 'minhash';
 
 export interface TaggerSettings {
   enabled: boolean;                // Tagger 활성화 (활성화 시 자동으로 미처리 이미지 태깅)
@@ -48,6 +49,28 @@ export interface KaloscopeSettings {
   topK: number;                    // 추출할 아티스트 태그 수
 }
 
+export interface PromptSimilarityWeights {
+  positive: number;
+  negative: number;
+  auto: number;
+}
+
+export interface PromptSimilarityFieldThresholds {
+  positive: number;
+  negative: number;
+  auto: number;
+}
+
+export interface PromptSimilaritySettings {
+  enabled: boolean;
+  algorithm: PromptSimilarityAlgorithm;
+  autoBuildOnMetadataUpdate: boolean;
+  resultLimit: number;
+  combinedThreshold: number;
+  weights: PromptSimilarityWeights;
+  fieldThresholds: PromptSimilarityFieldThresholds;
+}
+
 export interface SimilaritySettings {
   autoGenerateHashOnUpload: boolean;      // 업로드 시 자동 해시 생성 여부
   detailSimilarThreshold: number;         // 상세 페이지 유사 이미지 범위 (Hamming distance)
@@ -55,6 +78,7 @@ export interface SimilaritySettings {
   detailSimilarIncludeColorSimilarity: boolean; // 색상 유사도 포함 여부
   detailSimilarSortBy: 'similarity' | 'upload_date' | 'file_size';
   detailSimilarSortOrder: 'ASC' | 'DESC';
+  promptSimilarity: PromptSimilaritySettings;
 }
 
 export type ThemeMode = 'dark' | 'light';
