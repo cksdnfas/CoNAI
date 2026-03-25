@@ -49,7 +49,7 @@ export function ImageViewThumbnailStrip({
   return (
     <div
       className={cn(
-        'image-view-thumbnail-strip overflow-x-auto overflow-y-hidden py-2',
+        'image-view-thumbnail-strip snap-x snap-mandatory overflow-x-auto overflow-y-hidden py-2',
         isScrollActive && 'is-scroll-active',
       )}
       onScroll={onScroll}
@@ -74,10 +74,10 @@ export function ImageViewThumbnailStrip({
               }}
               type="button"
               className={cn(
-                'group relative h-18 w-18 shrink-0 overflow-hidden rounded-sm border bg-surface-low text-left transition-all duration-200',
+                'group relative h-18 w-18 shrink-0 snap-center overflow-hidden rounded-sm border bg-surface-low text-left transition-all duration-200',
                 isActive
-                  ? 'border-primary shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_58%,transparent)]'
-                  : 'border-border hover:border-secondary/60',
+                  ? 'border-primary scale-[1.03] shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_58%,transparent)]'
+                  : 'border-border hover:border-secondary/60 hover:scale-[1.02]',
               )}
               onClick={() => onSelect(compositeHash)}
               title={`${index + 1}. ${displayName}`}

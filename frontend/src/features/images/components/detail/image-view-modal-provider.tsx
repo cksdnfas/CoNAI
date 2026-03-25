@@ -248,6 +248,34 @@ function ImageViewModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[90] bg-black/72 p-4 md:p-6" onMouseDown={onClose}>
+      {canViewPrevious ? (
+        <button
+          type="button"
+          className="absolute inset-y-0 left-0 z-[91] hidden w-20 items-center justify-start bg-gradient-to-r from-black/34 via-black/12 to-transparent pl-3 text-white/72 transition hover:text-white xl:flex"
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={onViewPrevious}
+          aria-label="이전 이미지"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/18 bg-black/20 backdrop-blur-sm">
+            <ChevronLeft className="h-6 w-6" />
+          </span>
+        </button>
+      ) : null}
+
+      {canViewNext ? (
+        <button
+          type="button"
+          className="absolute inset-y-0 right-0 z-[91] hidden w-20 items-center justify-end bg-gradient-to-l from-black/34 via-black/12 to-transparent pr-3 text-white/72 transition hover:text-white xl:flex"
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={onViewNext}
+          aria-label="다음 이미지"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/18 bg-black/20 backdrop-blur-sm">
+            <ChevronRight className="h-6 w-6" />
+          </span>
+        </button>
+      ) : null}
+
       <div
         ref={containerRef}
         role="dialog"
