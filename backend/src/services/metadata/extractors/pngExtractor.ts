@@ -1,19 +1,18 @@
 /**
  * PNG Metadata Extractor
- * Extracts metadata from PNG tEXt/zTXt chunks
+ * Extracts metadata from PNG text chunks and standard EXIF/XMP carriers.
  */
 
 import zlib from 'zlib';
 import { RawPngMetadata, AIMetadata } from '../types';
 import { logger } from '../../../utils/logger';
+import { StandardMetadataExtractor } from './standardMetadataExtractor';
 
 export class PngExtractor {
   /**
-   * Extract metadata from PNG buffer
+   * Extract metadata from PNG buffer and optional file-backed metadata carriers.
    */
-  static extract(buffer: Buffer): AIMetadata {
-    const aiInfo: AIMetadata = {};
-
+  static async extract(buffer: Buffer, filePath?: string): Promise<AIMetadata> {
     try {
       const { textChunks, rawStrings } = this.extractRawPngMetadata(buffer);
 
@@ -50,7 +49,7 @@ export class PngExtractor {
                   break;
                 }
               }
-            } catch (error) {
+            } catch {
               // Ignore JSON parsing errors
             }
           }
@@ -82,6 +81,13 @@ export class PngExtractor {
             // Not valid JSON, continue
             console.log('⚠️ Failed to parse textChunks[prompt] as JSON:', (error as Error).message);
           }
+        }
+      }
+
+      if (filePath) {
+        const standardMetadata = await StandardMetadataExtractor.extract(filePath);
+        if (Object.keys(standardMetadata).length > 0) {
+          return standardMetadata;
         }
       }
 

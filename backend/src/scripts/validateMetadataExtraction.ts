@@ -4,6 +4,7 @@ import path from 'path';
 import zlib from 'zlib';
 import sharp from 'sharp';
 import { MetadataExtractor } from '../services/metadata';
+import { ImageMetadataWriteService } from '../services/imageMetadataWriteService';
 import { WebPConversionService } from '../services/webpConversionService';
 
 /**
@@ -293,6 +294,8 @@ async function main(): Promise<void> {
   const stealthPngPath = path.join(fixtureDir, 'novelai-stealth.png');
   const jpegPath = path.join(fixtureDir, 'webui-exif.jpg');
   const stealthWebPPath = path.join(fixtureDir, 'novelai-stealth.webp');
+  const standardPngPath = path.join(fixtureDir, 'standardized.png');
+  const standardJpegPath = path.join(fixtureDir, 'standardized.jpg');
   const convertedWebPPath = path.join(fixtureDir, 'converted-xmp.webp');
 
   await createWebUiPngFixture(pngPath);
@@ -300,6 +303,23 @@ async function main(): Promise<void> {
   await createStealthPngFixture(stealthPngPath);
   await createExifJpegFixture(jpegPath);
   await createStealthWebPFixture(stealthWebPPath);
+
+  const standardizedPng = await ImageMetadataWriteService.writeFileAsFormatBuffer(pngPath, {
+    format: 'png',
+    sourcePathForMetadata: pngPath,
+    originalFileName: path.basename(pngPath),
+    mimeType: 'image/png'
+  });
+  fs.writeFileSync(standardPngPath, standardizedPng.buffer);
+
+  const standardizedJpeg = await ImageMetadataWriteService.writeFileAsFormatBuffer(pngPath, {
+    format: 'jpeg',
+    quality: 92,
+    sourcePathForMetadata: pngPath,
+    originalFileName: path.basename(pngPath),
+    mimeType: 'image/png'
+  });
+  fs.writeFileSync(standardJpegPath, standardizedJpeg.buffer);
 
   const converted = await WebPConversionService.convertFileToWebPBuffer(pngPath, {
     quality: 90,
@@ -313,6 +333,8 @@ async function main(): Promise<void> {
   const comfyUiPngResult = await MetadataExtractor.extractMetadata(comfyUiPngPath);
   const stealthPngResult = await MetadataExtractor.extractMetadata(stealthPngPath);
   const jpegResult = await MetadataExtractor.extractMetadata(jpegPath);
+  const standardPngResult = await MetadataExtractor.extractMetadata(standardPngPath);
+  const standardJpegResult = await MetadataExtractor.extractMetadata(standardJpegPath);
   const stealthWebPResult = await MetadataExtractor.extractMetadata(stealthWebPPath);
   const convertedWebPResult = await MetadataExtractor.extractMetadata(convertedWebPPath);
 
@@ -357,6 +379,22 @@ async function main(): Promise<void> {
     sampler: 'Euler a'
   });
 
+  assertMatch('PNG standard metadata', standardPngResult.ai_info, {
+    prompt: 'masterpiece, 1girl',
+    negative_prompt: 'lowres, blurry',
+    steps: 28,
+    sampler: 'Euler a',
+    model: 'animeModel'
+  });
+
+  assertMatch('JPEG standard metadata', standardJpegResult.ai_info, {
+    prompt: 'masterpiece, 1girl',
+    negative_prompt: 'lowres, blurry',
+    steps: 28,
+    sampler: 'Euler a',
+    model: 'animeModel'
+  });
+
   assertMatch('WebP XMP', convertedWebPResult.ai_info, {
     prompt: 'masterpiece, 1girl',
     negative_prompt: 'lowres, blurry',
@@ -382,6 +420,8 @@ async function main(): Promise<void> {
   console.log(`   PNG ComfyUI fixture: ${comfyUiPngPath}`);
   console.log(`   PNG stealth fixture: ${stealthPngPath}`);
   console.log(`   JPEG EXIF fixture: ${jpegPath}`);
+  console.log(`   PNG standard-metadata fixture: ${standardPngPath}`);
+  console.log(`   JPEG standard-metadata fixture: ${standardJpegPath}`);
   console.log(`   WebP XMP fixture: ${convertedWebPPath}`);
   console.log(`   WebP stealth fixture: ${stealthWebPPath}`);
 }

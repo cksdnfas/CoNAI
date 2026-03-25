@@ -46,7 +46,7 @@ async function readPngRawMetadata(context: RawMetadataReaderContext): Promise<Re
     return null;
   }
 
-  const rawData = PngExtractor.extract(context.buffer);
+  const rawData = await PngExtractor.extract(context.buffer, context.filePath);
   return Object.keys(rawData).length > 0 ? rawData : null;
 }
 

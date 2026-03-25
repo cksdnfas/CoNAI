@@ -7,6 +7,7 @@ import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../models/Image/ImageFileModel';
 import { ImageUploadService } from './imageUploadService';
 import { WebPConversionService } from './webpConversionService';
+import { ImageMetadataWriteService } from './imageMetadataWriteService';
 import { db } from '../database/init';
 
 export interface EditResult {
@@ -78,8 +79,15 @@ export class ImageEditorService {
       imageProcessor = imageProcessor.clone();
     }
 
-    // Save edited image
-    await imageProcessor.png().toFile(tempImagePath);
+    // Save edited image while preserving source metadata in standard carriers
+    const editedBuffer = await imageProcessor.png().toBuffer();
+    const savedImage = await ImageMetadataWriteService.writeBufferAsFormatBuffer(editedBuffer, {
+      format: 'png',
+      sourcePathForMetadata: originalPath,
+      originalFileName: path.basename(originalPath),
+      mimeType: imageFile.mime_type || 'image/png',
+    });
+    await fs.promises.writeFile(tempImagePath, savedImage.buffer);
 
     // Get final dimensions
     const metadata = await sharp(tempImagePath).metadata();
@@ -130,12 +138,26 @@ export class ImageEditorService {
     maskData?: Buffer,
     expirationMinutes: number = 30
   ): Promise<EditResult> {
+    const imageFile = ImageFileModel.findById(imageId);
+    if (!imageFile) {
+      throw new Error(`Image file not found: ${imageId}`);
+    }
+
+    const originalPath = imageFile.original_file_path;
+
     // Create temp ID and paths
     const tempId = TempImageService.createTempId();
     const tempImagePath = TempImageService.getTempFilePath(tempId, 'image');
 
-    // Save edited image directly
-    await sharp(imageData).png().toFile(tempImagePath);
+    // Save edited image directly while preserving source metadata in standard carriers
+    const pngBuffer = await sharp(imageData).png().toBuffer();
+    const savedImage = await ImageMetadataWriteService.writeBufferAsFormatBuffer(pngBuffer, {
+      format: 'png',
+      sourcePathForMetadata: originalPath,
+      originalFileName: path.basename(originalPath),
+      mimeType: imageFile.mime_type || 'image/png',
+    });
+    await fs.promises.writeFile(tempImagePath, savedImage.buffer);
 
     // Get final dimensions
     const metadata = await sharp(tempImagePath).metadata();

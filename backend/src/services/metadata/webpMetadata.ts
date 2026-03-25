@@ -2,9 +2,10 @@ import path from 'path';
 import { AIMetadata } from './types';
 
 export type WebPMetadataParserHint = 'webui' | 'novelai' | 'comfyui' | 'unknown';
+export type ConaiImageMetadataSchema = 'conai.image-metadata/v1' | 'conai.webp-metadata/v1';
 
 export interface ConaiWebPXmpPayload {
-  schema: 'conai.webp-metadata/v1';
+  schema: ConaiImageMetadataSchema;
   version: 1;
   createdAt: string;
   source: {
@@ -19,8 +20,14 @@ export interface ConaiWebPXmpPayload {
   aiInfo?: AIMetadata;
 }
 
-const CONAI_XMP_NAMESPACE = 'https://conai.local/ns/webp-metadata/1.0/';
+const CONAI_XMP_NAMESPACE = 'https://conai.local/ns/image-metadata/1.0/';
 const PAYLOAD_TAG = 'conai:payload';
+const PRIMARY_TEXT_TAG = 'conai:primaryText';
+const CREATOR_TOOL = 'CoNAI';
+const SUPPORTED_SCHEMAS = new Set<ConaiImageMetadataSchema>([
+  'conai.image-metadata/v1',
+  'conai.webp-metadata/v1',
+]);
 
 function xmlEscape(value: string): string {
   return value
@@ -115,6 +122,56 @@ export function detectWebPMetadataParserHint(rawData: unknown, aiInfo: AIMetadat
   return 'unknown';
 }
 
+/** Build a primary metadata text string that travels across EXIF/XMP carriers. */
+export function buildPrimaryMetadataText(
+  rawData: unknown,
+  aiInfo: AIMetadata | undefined,
+  parserHint: WebPMetadataParserHint = detectWebPMetadataParserHint(rawData, aiInfo)
+): string | null {
+  const objectRawData = typeof rawData === 'object' && rawData !== null
+    ? rawData as Record<string, any>
+    : null;
+
+  if (typeof objectRawData?.parameters === 'string' && objectRawData.parameters.trim()) {
+    return objectRawData.parameters.trim();
+  }
+
+  if (parserHint === 'novelai' && typeof objectRawData?.Comment === 'string' && objectRawData.Comment.trim()) {
+    return objectRawData.Comment.trim();
+  }
+
+  if (parserHint === 'comfyui' && typeof objectRawData?.comfyui_workflow === 'string' && objectRawData.comfyui_workflow.trim()) {
+    return objectRawData.comfyui_workflow.trim();
+  }
+
+  if (typeof aiInfo?.parameters === 'string' && aiInfo.parameters.trim()) {
+    return aiInfo.parameters.trim();
+  }
+
+  if (parserHint === 'novelai' && typeof aiInfo?.raw_nai_parameters === 'string' && aiInfo.raw_nai_parameters.trim()) {
+    return aiInfo.raw_nai_parameters.trim();
+  }
+
+  if (parserHint === 'comfyui' && typeof aiInfo?.comfyui_workflow === 'string' && aiInfo.comfyui_workflow.trim()) {
+    return aiInfo.comfyui_workflow.trim();
+  }
+
+  const parameters = buildWebUIParametersFromAiInfo(aiInfo);
+  if (parameters) {
+    return parameters;
+  }
+
+  if (typeof objectRawData?.Comment === 'string' && objectRawData.Comment.trim()) {
+    return objectRawData.Comment.trim();
+  }
+
+  if (typeof objectRawData?.comfyui_workflow === 'string' && objectRawData.comfyui_workflow.trim()) {
+    return objectRawData.comfyui_workflow.trim();
+  }
+
+  return null;
+}
+
 export function createConaiWebPXmpPayload(input: {
   sourcePath?: string;
   originalFileName?: string;
@@ -131,7 +188,7 @@ export function createConaiWebPXmpPayload(input: {
   const safeAiInfo = isNonEmptyObject(input.aiInfo) ? stripUndefined(input.aiInfo) : undefined;
 
   return {
-    schema: 'conai.webp-metadata/v1',
+    schema: 'conai.image-metadata/v1',
     version: 1,
     createdAt: input.createdAt || new Date().toISOString(),
     source: {
@@ -148,18 +205,37 @@ export function createConaiWebPXmpPayload(input: {
 }
 
 export function buildConaiWebPXmp(payload: ConaiWebPXmpPayload): string {
-  const encodedPayload = xmlEscape(JSON.stringify(stripUndefined(payload)));
+  const safePayload = stripUndefined(payload);
+  const encodedPayload = xmlEscape(JSON.stringify(safePayload));
+  const primaryText = buildPrimaryMetadataText(safePayload.rawData, safePayload.aiInfo, safePayload.parserHint);
+
+  const descriptionBlock = primaryText
+    ? [
+        '      <dc:description>',
+        '        <rdf:Alt>',
+        `          <rdf:li xml:lang="x-default">${xmlEscape(primaryText)}</rdf:li>`,
+        '        </rdf:Alt>',
+        '      </dc:description>',
+      ].join('')
+    : '';
+
+  const primaryTextBlock = primaryText
+    ? `      <${PRIMARY_TEXT_TAG}>${xmlEscape(primaryText)}</${PRIMARY_TEXT_TAG}>`
+    : '';
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    `<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="CoNAI WebP Metadata">`,
+    `<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="${CREATOR_TOOL} Image Metadata">`,
     '  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">',
-    `    <rdf:Description rdf:about="" xmlns:conai="${CONAI_XMP_NAMESPACE}">`,
+    `    <rdf:Description rdf:about="" xmlns:conai="${CONAI_XMP_NAMESPACE}" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xmp="http://ns.adobe.com/xap/1.0/">`,
+    `      <xmp:CreatorTool>${CREATOR_TOOL}</xmp:CreatorTool>`,
+    descriptionBlock,
+    primaryTextBlock,
     `      <${PAYLOAD_TAG}>${encodedPayload}</${PAYLOAD_TAG}>`,
     '    </rdf:Description>',
     '  </rdf:RDF>',
     '</x:xmpmeta>',
-  ].join('');
+  ].filter(Boolean).join('');
 }
 
 export function parseConaiWebPXmp(xmp: string): ConaiWebPXmpPayload | null {
@@ -170,7 +246,7 @@ export function parseConaiWebPXmp(xmp: string): ConaiWebPXmpPayload | null {
 
   try {
     const parsed = JSON.parse(xmlUnescape(match[1])) as ConaiWebPXmpPayload;
-    if (parsed?.schema !== 'conai.webp-metadata/v1') {
+    if (!SUPPORTED_SCHEMAS.has(parsed?.schema)) {
       return null;
     }
 
@@ -226,6 +302,31 @@ function rebuildRawDataFromAiInfo(aiInfo: AIMetadata | undefined, parserHint: We
   }
 
   return {};
+}
+
+/** Extract human-readable AI metadata text from XMP when no payload-specific parser is available. */
+export function extractLikelyAiMetadataTextFromXmp(xmp: string): string | null {
+  const payload = parseConaiWebPXmp(xmp);
+  if (payload) {
+    const fromPayload = buildPrimaryMetadataText(payload.rawData, payload.aiInfo, payload.parserHint);
+    if (fromPayload) {
+      return fromPayload;
+    }
+  }
+
+  const primaryMatch = xmp.match(/<conai:primaryText>([\s\S]*?)<\/conai:primaryText>/i);
+  if (primaryMatch?.[1]) {
+    return xmlUnescape(primaryMatch[1]).trim();
+  }
+
+  const descriptionMatch = xmp.match(/<rdf:li[^>]*xml:lang="x-default"[^>]*>([\s\S]*?)<\/rdf:li>/i)
+    || xmp.match(/<dc:description[^>]*>([\s\S]*?)<\/dc:description>/i);
+
+  if (descriptionMatch?.[1]) {
+    return xmlUnescape(descriptionMatch[1].replace(/<[^>]+>/g, '')).trim();
+  }
+
+  return null;
 }
 
 export function restoreRawDataFromConaiWebPXmp(payload: ConaiWebPXmpPayload): Record<string, any> {
