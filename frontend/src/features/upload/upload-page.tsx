@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
-import { Image as ImageIcon } from 'lucide-react'
+import { Download, Image as ImageIcon } from 'lucide-react'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
 import { PageHeader } from '@/components/common/page-header'
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
+  downloadConvertedWebP,
   extractImageKaloscopePreview,
   extractImageMetadataPreview,
   extractImageTaggerPreview,
@@ -101,6 +102,7 @@ export function UploadPage() {
   const [kaloscopeResult, setKaloscopeResult] = useState<AutoTestKaloscopeResult | null>(null)
   const [extractError, setExtractError] = useState<string | null>(null)
   const [activeExtractAction, setActiveExtractAction] = useState<ExtractAction | null>(null)
+  const [isConvertingWebP, setIsConvertingWebP] = useState(false)
   const [isExtractDragActive, setIsExtractDragActive] = useState(false)
 
   useEffect(() => {
@@ -127,7 +129,7 @@ export function UploadPage() {
 
   const uploadTotalSize = useMemo(() => uploadFiles.reduce((sum, file) => sum + file.size, 0), [uploadFiles])
   const uploadPercent = uploadProgress?.percent ?? (uploadResult ? 100 : 0)
-  const extractBusy = activeExtractAction !== null
+  const extractBusy = activeExtractAction !== null || isConvertingWebP
 
   const resetUploadState = () => {
     setUploadResult(null)
@@ -192,6 +194,29 @@ export function UploadPage() {
       showSnackbar({ message, tone: 'error' })
     } finally {
       setIsUploading(false)
+    }
+  }
+
+  const handleConvertWebP = async () => {
+    if (!extractFile || extractBusy) {
+      return
+    }
+
+    setIsConvertingWebP(true)
+    setExtractError(null)
+
+    try {
+      const result = await downloadConvertedWebP(extractFile)
+      const message = result.metadataState === 'preserved'
+        ? `WebP 변환 완료. 메타 보존된 파일(${result.fileName}) 다운로드를 시작했어.`
+        : `WebP 변환 완료. 파일(${result.fileName}) 다운로드를 시작했어.`
+      showSnackbar({ message, tone: 'info' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'WebP 변환에 실패했어.'
+      setExtractError(message)
+      showSnackbar({ message, tone: 'error' })
+    } finally {
+      setIsConvertingWebP(false)
     }
   }
 
@@ -464,6 +489,10 @@ export function UploadPage() {
                 <Button type="button" onClick={() => handleExtractAction('all')} disabled={!extractFile || extractBusy}>
                   {activeExtractAction === 'all' ? '추출 중…' : '한번에 추출'}
                 </Button>
+                <Button type="button" variant="outline" onClick={handleConvertWebP} disabled={!extractFile || extractBusy}>
+                  <Download className="h-4 w-4" />
+                  {isConvertingWebP ? 'WebP 변환 중…' : 'WebP 변환'}
+                </Button>
                 <Button type="button" variant="outline" onClick={() => handleExtractAction('prompt')} disabled={!extractFile || extractBusy}>
                   {activeExtractAction === 'prompt' ? '추출 중…' : '프롬프트'}
                 </Button>
@@ -502,7 +531,11 @@ export function UploadPage() {
                   <SummaryTile label="file" value={extractFile.name} />
                   <SummaryTile label="size" value={formatBytes(extractFile.size)} />
                   <SummaryTile label="type" value={extractFile.type || '—'} />
-                  <SummaryTile label="status" value={extractBusy ? '추출 중…' : '대기'} />
+                  <SummaryTile label="status" value={isConvertingWebP ? 'WebP 변환 중…' : extractBusy ? '추출 중…' : '대기'} />
+                </div>
+
+                <div className="rounded-sm bg-surface-high px-4 py-3 text-sm text-muted-foreground">
+                  WebP 변환은 현재 선택한 이미지 한 장을 기준으로 바로 다운로드해. CoNAI가 읽은 메타는 가능한 범위에서 XMP로 옮겨 담고, WebP stealth / EXIF / PNG text 계열 추출도 같이 유지하도록 맞춰둔 상태야.
                 </div>
               </div>
             ) : null}

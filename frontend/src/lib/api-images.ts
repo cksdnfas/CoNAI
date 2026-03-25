@@ -276,3 +276,59 @@ export async function extractImageKaloscopePreview(file: File) {
 
   return readApiPayload<AutoTestKaloscopeResult>(response)
 }
+
+export interface ConvertWebPDownloadResult {
+  fileName: string
+  metadataState: 'preserved' | 'empty' | 'unknown'
+}
+
+/** Extract a suggested filename from Content-Disposition when available. */
+function getDownloadFileName(contentDisposition: string | null, fallbackFileName: string) {
+  if (!contentDisposition) {
+    return fallbackFileName
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1])
+  }
+
+  const basicMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
+  if (basicMatch?.[1]) {
+    return basicMatch[1]
+  }
+
+  return fallbackFileName
+}
+
+/** Convert a single image file to WebP and trigger an immediate download. */
+export async function downloadConvertedWebP(file: File, options?: { quality?: number }) {
+  const formData = new FormData()
+  formData.append('image', file)
+  formData.append('quality', String(options?.quality ?? 90))
+
+  const response = await fetch(buildApiUrl('/api/images/convert-webp'), {
+    method: 'POST',
+    headers: {
+      Accept: 'image/webp',
+    },
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(text || `Request failed: ${response.status}`)
+  }
+
+  const blob = await response.blob()
+  const fallbackFileName = `${file.name.replace(/\.[^.]+$/, '') || 'converted-image'}.webp`
+  const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
+  const metadataState = (response.headers.get('X-CoNAI-WebP-Metadata') as ConvertWebPDownloadResult['metadataState'] | null) ?? 'unknown'
+
+  triggerBlobDownload(blob, fileName)
+
+  return {
+    fileName,
+    metadataState,
+  } satisfies ConvertWebPDownloadResult
+}

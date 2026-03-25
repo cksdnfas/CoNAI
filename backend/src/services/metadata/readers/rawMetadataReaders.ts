@@ -1,8 +1,10 @@
+import sharp from 'sharp';
 import { AIMetadata } from '../types';
 import { PngExtractor } from '../extractors/pngExtractor';
 import { JpegExtractor } from '../extractors/jpegExtractor';
 import { WebPExtractor } from '../extractors/webpExtractor';
 import { WebPStealthExtractor } from '../extractors/webpStealthExtractor';
+import { settingsService } from '../../settingsService';
 
 interface RawMetadataReaderContext {
   buffer: Buffer;
@@ -11,6 +13,30 @@ interface RawMetadataReaderContext {
 }
 
 type RawMetadataReader = (context: RawMetadataReaderContext) => Promise<Record<string, any> | null>;
+
+/**
+ * Decide whether stealth readers should run for the current file.
+ */
+async function canRunStealthReader(context: RawMetadataReaderContext): Promise<boolean> {
+  const metadataSettings = settingsService.loadSettings().metadataExtraction;
+
+  if (metadataSettings.stealthScanMode === 'skip') {
+    return false;
+  }
+
+  const fileSizeMB = context.buffer.length / (1024 * 1024);
+  if (fileSizeMB > metadataSettings.stealthMaxFileSizeMB) {
+    return false;
+  }
+
+  const imageMetadata = await sharp(context.buffer).metadata();
+  if (!imageMetadata.width || !imageMetadata.height) {
+    return true;
+  }
+
+  const megaPixels = (imageMetadata.width * imageMetadata.height) / 1_000_000;
+  return megaPixels <= metadataSettings.stealthMaxResolutionMP;
+}
 
 /**
  * Read PNG text-chunk based raw metadata.
@@ -53,6 +79,10 @@ async function readWebPContainerRawMetadata(context: RawMetadataReaderContext): 
  */
 async function readWebPStealthRawMetadata(context: RawMetadataReaderContext): Promise<Record<string, any> | null> {
   if (context.fileExt !== '.webp') {
+    return null;
+  }
+
+  if (!(await canRunStealthReader(context))) {
     return null;
   }
 
