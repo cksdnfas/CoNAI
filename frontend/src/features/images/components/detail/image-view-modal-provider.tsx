@@ -1,14 +1,49 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren, type UIEventHandler } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Download, ExternalLink, RefreshCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { getImagesBatch } from '@/lib/api'
 import { ImageDetailView, type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
+import { ImageViewThumbnailStrip } from './image-view-thumbnail-strip'
 import { ImageViewModalContext, type ImageViewModalOpenInput } from './image-view-modal-context'
 
 interface ImageViewModalState {
   compositeHash: string | null
   compositeHashes: string[]
+}
+
+/** Keep the horizontal thumbnail scrollbar visible only while it is being used. */
+function useTransientScrollState() {
+  const [isScrollActive, setIsScrollActive] = useState(false)
+  const timeoutRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
+
+  const handleScroll: UIEventHandler<HTMLDivElement> = () => {
+    setIsScrollActive(true)
+
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current)
+    }
+
+    timeoutRef.current = window.setTimeout(() => {
+      setIsScrollActive(false)
+      timeoutRef.current = null
+    }, 520)
+  }
+
+  return {
+    isScrollActive,
+    handleScroll,
+  }
 }
 
 /** Provide a global image view modal for app-shell image browsing flows. */
@@ -28,6 +63,13 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
 
   const canViewPrevious = activeIndex > 0
   const canViewNext = activeIndex >= 0 && activeIndex < modalState.compositeHashes.length - 1
+
+  const thumbnailStripQuery = useQuery({
+    queryKey: ['image-view-thumbnail-strip', modalState.compositeHashes],
+    queryFn: () => getImagesBatch(modalState.compositeHashes),
+    enabled: modalState.compositeHashes.length > 0,
+    staleTime: 60_000,
+  })
 
   /** Open the image view modal with an optional ordered navigation context. */
   const openImageView = useCallback((input: ImageViewModalOpenInput) => {
@@ -120,6 +162,13 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     }
   }, [closeImageView, modalState.compositeHash, viewNextImage, viewPreviousImage])
 
+  const thumbnailStripScrollState = useTransientScrollState()
+  const thumbnailStripItems = thumbnailStripQuery.data ?? []
+  const thumbnailStripCompositeHashes = useMemo(
+    () => thumbnailStripItems.map((item) => item.composite_hash).filter((value): value is string => typeof value === 'string' && value.length > 0),
+    [thumbnailStripItems],
+  )
+
   const contextValue = useMemo(
     () => ({
       activeCompositeHash: modalState.compositeHash,
@@ -143,11 +192,16 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
           compositeHash={modalState.compositeHash}
           activeIndex={activeIndex}
           totalCount={modalState.compositeHashes.length}
+          thumbnailStripItems={thumbnailStripItems}
+          thumbnailStripCompositeHashes={thumbnailStripCompositeHashes}
+          thumbnailStripIsScrollActive={thumbnailStripScrollState.isScrollActive}
+          onThumbnailStripScroll={thumbnailStripScrollState.handleScroll}
           canViewPrevious={canViewPrevious}
           canViewNext={canViewNext}
           onClose={closeImageView}
           onViewPrevious={viewPreviousImage}
           onViewNext={viewNextImage}
+          onSelectImage={openImageView}
         />
       ) : null}
     </ImageViewModalContext.Provider>
@@ -158,11 +212,16 @@ interface ImageViewModalProps {
   compositeHash: string
   activeIndex: number
   totalCount: number
+  thumbnailStripItems: Awaited<ReturnType<typeof getImagesBatch>>
+  thumbnailStripCompositeHashes: string[]
+  thumbnailStripIsScrollActive: boolean
+  onThumbnailStripScroll: UIEventHandler<HTMLDivElement>
   canViewPrevious: boolean
   canViewNext: boolean
   onClose: () => void
   onViewPrevious: () => void
   onViewNext: () => void
+  onSelectImage: (input: ImageViewModalOpenInput) => void
 }
 
 /** Render the shared image detail view inside a global modal shell. */
@@ -170,11 +229,16 @@ function ImageViewModal({
   compositeHash,
   activeIndex,
   totalCount,
+  thumbnailStripItems,
+  thumbnailStripCompositeHashes,
+  thumbnailStripIsScrollActive,
+  onThumbnailStripScroll,
   canViewPrevious,
   canViewNext,
   onClose,
   onViewPrevious,
   onViewNext,
+  onSelectImage,
 }: ImageViewModalProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
 
@@ -189,26 +253,45 @@ function ImageViewModal({
         role="dialog"
         aria-modal="true"
         aria-label="이미지 보기"
-        className="mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-6 xl:h-[calc(100vh-3rem)] xl:overflow-hidden"
+        className="mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-6 xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <ImageDetailView
-          compositeHash={compositeHash}
-          presentation="modal"
-          renderHeader={(controls) => (
-            <ImageViewModalActions
-              compositeHash={compositeHash}
-              activeIndex={activeIndex}
-              totalCount={totalCount}
-              canViewPrevious={canViewPrevious}
-              canViewNext={canViewNext}
-              controls={controls}
-              onClose={onClose}
-              onViewPrevious={onViewPrevious}
-              onViewNext={onViewNext}
+        <div className="xl:min-h-0 xl:flex-1">
+          <ImageDetailView
+            compositeHash={compositeHash}
+            presentation="modal"
+            renderHeader={(controls) => (
+              <ImageViewModalActions
+                compositeHash={compositeHash}
+                activeIndex={activeIndex}
+                totalCount={totalCount}
+                canViewPrevious={canViewPrevious}
+                canViewNext={canViewNext}
+                controls={controls}
+                onClose={onClose}
+                onViewPrevious={onViewPrevious}
+                onViewNext={onViewNext}
+              />
+            )}
+          />
+        </div>
+
+        {thumbnailStripItems.length > 1 ? (
+          <div className="mt-4 border-t border-border/70 pt-3 xl:mt-3 xl:shrink-0 xl:pt-3">
+            <ImageViewThumbnailStrip
+              items={thumbnailStripItems}
+              activeCompositeHash={compositeHash}
+              isScrollActive={thumbnailStripIsScrollActive}
+              onScroll={onThumbnailStripScroll}
+              onSelect={(nextCompositeHash) =>
+                onSelectImage({
+                  compositeHash: nextCompositeHash,
+                  compositeHashes: thumbnailStripCompositeHashes,
+                })
+              }
             />
-          )}
-        />
+          </div>
+        ) : null}
       </div>
     </div>,
     document.body,

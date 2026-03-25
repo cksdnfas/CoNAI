@@ -57,6 +57,25 @@ export async function getImage(compositeHash: string) {
   return response.data
 }
 
+/** Load a specific ordered set of images by composite hash for viewer navigation UI. */
+export async function getImagesBatch(compositeHashes: string[]) {
+  const response = await fetchJson<ApiResponse<Omit<ImageListPayload, 'hasMore'>>>(`/api/images/batch`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      composite_hashes: compositeHashes,
+    }),
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '이미지 스트립을 불러오지 못했어.')
+  }
+
+  return response.data.images
+}
+
 export async function getImageDuplicates(compositeHash: string, threshold = 5) {
   const response = await fetchJson<ApiResponse<SimilarityQueryResult>>(`/api/images/${compositeHash}/duplicates?threshold=${threshold}`)
   if (!response.success) {

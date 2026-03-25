@@ -308,6 +308,41 @@
     background: transparent;
   }
 
+  .image-view-thumbnail-strip {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  @supports (overflow: overlay) {
+    .image-view-thumbnail-strip {
+      overflow-x: overlay;
+    }
+  }
+
+  .image-view-thumbnail-strip::-webkit-scrollbar {
+    height: 0;
+  }
+
+  .image-view-thumbnail-strip.is-scroll-active {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--secondary) 42%, transparent) transparent;
+  }
+
+  .image-view-thumbnail-strip.is-scroll-active::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .image-view-thumbnail-strip.is-scroll-active::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .image-view-thumbnail-strip.is-scroll-active::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--secondary) 40%, transparent);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
   .image-list-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(var(--image-list-min-column-width, 300px), 1fr));
