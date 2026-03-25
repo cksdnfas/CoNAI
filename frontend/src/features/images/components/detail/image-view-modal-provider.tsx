@@ -189,7 +189,7 @@ function ImageViewModal({
         role="dialog"
         aria-modal="true"
         aria-label="이미지 보기"
-        className="mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-6"
+        className="mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-6 xl:h-[calc(100vh-3rem)] xl:overflow-hidden"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <ImageDetailView

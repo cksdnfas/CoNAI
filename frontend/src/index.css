@@ -266,6 +266,48 @@
     padding-block: var(--theme-selection-bar-padding-y);
   }
 
+  .image-detail-scroll-pane {
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  @supports (overflow: overlay) {
+    .image-detail-scroll-pane {
+      overflow-y: overlay;
+    }
+  }
+
+  .image-detail-scroll-pane::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  .image-detail-scroll-pane.is-scroll-active {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--secondary) 46%, transparent) transparent;
+  }
+
+  .image-detail-scroll-pane.is-scroll-active::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .image-detail-scroll-pane.is-scroll-active::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .image-detail-scroll-pane.is-scroll-active::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--secondary) 42%, transparent);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .image-detail-scroll-pane.is-scroll-active::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
   .image-list-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(var(--image-list-min-column-width, 300px), 1fr));

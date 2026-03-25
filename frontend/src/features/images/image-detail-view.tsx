@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode, type UIEventHandler } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -46,6 +46,38 @@ const SIMILAR_IMAGE_TAB_BUTTON_LABELS: Record<SimilarImageTab, string> = {
   text: '텍스트',
 }
 
+/** Keep the overlay scrollbar visible only while the pane is actively scrolling. */
+function useTransientScrollState() {
+  const [isScrollActive, setIsScrollActive] = useState(false)
+  const timeoutRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
+
+  const handleScroll: UIEventHandler<HTMLDivElement> = () => {
+    setIsScrollActive(true)
+
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current)
+    }
+
+    timeoutRef.current = window.setTimeout(() => {
+      setIsScrollActive(false)
+      timeoutRef.current = null
+    }, 520)
+  }
+
+  return {
+    isScrollActive,
+    handleScroll,
+  }
+}
+
 /** Render the shared image detail body so page and modal presentations stay aligned. */
 export function ImageDetailView({ compositeHash, presentation = 'page', renderHeader }: ImageDetailViewProps) {
   const queryClient = useQueryClient()
@@ -54,6 +86,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
   const [isPromptSimilaritySettingsOpen, setIsPromptSimilaritySettingsOpen] = useState(false)
   const [similarityDraft, setSimilarityDraft] = useState<SimilaritySettingsDraft | null>(null)
   const [promptSimilarityDraft, setPromptSimilarityDraft] = useState<PromptSimilaritySettingsDraft | null>(null)
+  const leftPaneScrollState = useTransientScrollState()
+  const rightPaneScrollState = useTransientScrollState()
 
   useEffect(() => {
     if (presentation === 'page') {
@@ -351,12 +385,21 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
     </div>
   )
 
+  const detailShellClassName = presentation === 'modal'
+    ? 'xl:h-full'
+    : 'xl:h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))]'
+
+  const detailGridClassName = cn(
+    'grid gap-8 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]',
+    presentation === 'page' ? 'xl:items-stretch' : 'xl:h-full xl:items-stretch',
+  )
+
   return (
-    <div className="space-y-8">
-      {renderHeader?.(headerControls)}
+    <div className={cn('space-y-8 xl:flex xl:min-h-0 xl:flex-col xl:space-y-0', detailShellClassName)}>
+      {renderHeader ? <div className="xl:pb-6">{renderHeader(headerControls)}</div> : null}
 
       {imageQuery.isLoading ? (
-        <div className="grid gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] xl:items-start">
+        <div className={detailGridClassName}>
           <div className="space-y-8">
             <Skeleton className="min-h-[540px] w-full rounded-sm" />
             <div className="grid gap-4 md:grid-cols-2">
@@ -380,8 +423,14 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
       ) : null}
 
       {!imageQuery.isLoading && !imageQuery.isError && image ? (
-        <div className="grid gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] xl:items-start">
-          <div className="space-y-8">
+        <div className={detailGridClassName}>
+          <div
+            className={cn(
+              'space-y-8 xl:min-h-0 xl:overflow-y-auto xl:pr-2 image-detail-scroll-pane',
+              leftPaneScrollState.isScrollActive && 'is-scroll-active',
+            )}
+            onScroll={leftPaneScrollState.handleScroll}
+          >
             <div className="overflow-hidden rounded-sm bg-surface-low shadow-[0_0_40px_rgba(14,14,14,0.22)]">
               <div className="flex min-h-[540px] items-center justify-center bg-surface-lowest">
                 <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} />
@@ -412,7 +461,13 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
             />
           </div>
 
-          <div className="xl:self-start">
+          <div
+            className={cn(
+              'xl:min-h-0 xl:overflow-y-auto xl:pr-2 image-detail-scroll-pane',
+              rightPaneScrollState.isScrollActive && 'is-scroll-active',
+            )}
+            onScroll={rightPaneScrollState.handleScroll}
+          >
             <ImageDetailMetaCard image={image as ImageRecord} />
           </div>
         </div>
