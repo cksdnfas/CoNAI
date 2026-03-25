@@ -45,15 +45,34 @@ const APPEARANCE_PRESET_SLOT_IDS = ['slot-1', 'slot-2', 'slot-3'] as const;
 
 function getDefaultAppearanceTheme(): AppearanceThemeSettings {
   return {
-    themeMode: 'dark',
+    themeMode: 'system',
     accentPreset: 'conai',
     customPrimaryColor: '#f95e14',
     customSecondaryColor: '#ffb59a',
     surfacePreset: 'studio',
+    customSurfaceBackgroundColor: '#131313',
+    customSurfaceContainerColor: '#201f1f',
+    customSurfaceHighColor: '#2a2a2a',
     radiusPreset: 'balanced',
     glassPreset: 'balanced',
     shadowPreset: 'balanced',
     density: 'comfortable',
+    fontPreset: 'manrope',
+    customFontFamily: 'Pretendard Variable, Pretendard, Manrope, ui-sans-serif, system-ui, sans-serif',
+    customMonoFontFamily: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+    customFontUrl: '',
+    customMonoFontUrl: '',
+    customFontFileName: '',
+    customMonoFontFileName: '',
+    fontScalePercent: 100,
+    searchBoxWidth: 380,
+    searchDrawerWidth: 420,
+    desktopSearchMinWidth: 768,
+    desktopNavMinWidth: 1024,
+    positiveBadgeColor: '#34d399',
+    negativeBadgeColor: '#fb7185',
+    autoBadgeColor: '#38bdf8',
+    ratingBadgeColor: '#a78bfa',
   };
 }
 

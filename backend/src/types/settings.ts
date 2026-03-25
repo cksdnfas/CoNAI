@@ -81,13 +81,14 @@ export interface SimilaritySettings {
   promptSimilarity: PromptSimilaritySettings;
 }
 
-export type ThemeMode = 'dark' | 'light';
+export type ThemeMode = 'system' | 'dark' | 'light';
 export type AppearancePreset = 'conai' | 'ocean' | 'forest' | 'custom';
-export type SurfacePreset = 'studio' | 'midnight' | 'paper';
+export type SurfacePreset = 'studio' | 'midnight' | 'paper' | 'custom';
 export type RadiusPreset = 'sharp' | 'balanced' | 'soft';
 export type GlassPreset = 'subtle' | 'balanced' | 'immersive';
 export type ShadowPreset = 'soft' | 'balanced' | 'dramatic';
 export type DensityPreset = 'compact' | 'comfortable' | 'spacious';
+export type FontPreset = 'manrope' | 'system' | 'custom';
 export type AppearancePresetSlotId = 'slot-1' | 'slot-2' | 'slot-3';
 
 export interface AppearanceThemeSettings {
@@ -96,10 +97,29 @@ export interface AppearanceThemeSettings {
   customPrimaryColor: string;
   customSecondaryColor: string;
   surfacePreset: SurfacePreset;
+  customSurfaceBackgroundColor: string;
+  customSurfaceContainerColor: string;
+  customSurfaceHighColor: string;
   radiusPreset: RadiusPreset;
   glassPreset: GlassPreset;
   shadowPreset: ShadowPreset;
   density: DensityPreset;
+  fontPreset: FontPreset;
+  customFontFamily: string;
+  customMonoFontFamily: string;
+  customFontUrl: string;
+  customMonoFontUrl: string;
+  customFontFileName: string;
+  customMonoFontFileName: string;
+  fontScalePercent: number;
+  searchBoxWidth: number;
+  searchDrawerWidth: number;
+  desktopSearchMinWidth: number;
+  desktopNavMinWidth: number;
+  positiveBadgeColor: string;
+  negativeBadgeColor: string;
+  autoBadgeColor: string;
+  ratingBadgeColor: string;
 }
 
 export interface AppearancePresetSlot {

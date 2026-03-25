@@ -1,5 +1,6 @@
 import { Copy } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { getThemeToneStyle } from '@/lib/theme-tones'
 import type { PromptCollectionItem } from '@/types/prompt'
 
 interface PromptListItemProps {
@@ -15,7 +16,9 @@ export function PromptListItem({ item, onCopy }: PromptListItemProps) {
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold text-foreground">{item.prompt}</div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-          <Badge variant="ghost">{item.type}</Badge>
+          <Badge variant="ghost" style={getThemeToneStyle(item.type === 'positive' ? 'positive' : item.type === 'negative' ? 'negative' : 'auto')}>
+            {item.type}
+          </Badge>
           {synonyms.length > 0 ? <span>synonyms {synonyms.length}</span> : null}
         </div>
       </div>

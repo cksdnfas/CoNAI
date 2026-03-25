@@ -2,24 +2,29 @@ import { useState } from 'react'
 import { ChevronDown, Copy } from 'lucide-react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Badge } from '@/components/ui/badge'
+import { getThemeToneStyle, getThemeToneTextStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 import type { ExtractedPromptCardItem } from '@/lib/image-extracted-prompts'
 
-function getPromptToneClassName(tone: ExtractedPromptCardItem['tone']) {
+function getPromptToneStyle(tone: ExtractedPromptCardItem['tone']) {
   switch (tone) {
     case 'positive':
-      return 'text-secondary'
+      return getThemeToneTextStyle('positive')
     case 'negative':
-      return 'text-destructive'
+      return getThemeToneTextStyle('negative')
     case 'character':
-      return 'text-primary'
+      return { color: 'var(--primary)' }
     default:
-      return 'text-foreground'
+      return undefined
   }
 }
 
-function getPromptBadgeVariant(label: string) {
-  return label === '그룹' ? 'default' : 'secondary'
+function getPromptBadgeStyle(label: string) {
+  if (label === '그룹') {
+    return getThemeToneStyle('rating')
+  }
+
+  return undefined
 }
 
 interface ExtractedPromptCardProps {
@@ -51,11 +56,11 @@ function ExtractedPromptCard({ item }: ExtractedPromptCardProps) {
           <ChevronDown className={cn('h-4 w-4 transition-transform', expanded ? 'rotate-0' : '-rotate-90')} />
         </button>
 
-        <div className={cn('min-w-0 text-sm font-semibold', getPromptToneClassName(item.tone))}>{item.title}</div>
+        <div className={cn('min-w-0 text-sm font-semibold')} style={getPromptToneStyle(item.tone)}>{item.title}</div>
 
         <div className="ml-auto flex items-center gap-2">
           {(item.badges ?? []).map((badge) => (
-            <Badge key={`${item.id}:${badge}`} variant={getPromptBadgeVariant(badge)} className="tracking-normal normal-case">
+            <Badge key={`${item.id}:${badge}`} variant={badge === '그룹' ? 'default' : 'secondary'} className="tracking-normal normal-case" style={getPromptBadgeStyle(badge)}>
               {badge}
             </Badge>
           ))}

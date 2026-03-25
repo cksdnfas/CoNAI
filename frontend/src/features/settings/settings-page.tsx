@@ -24,6 +24,7 @@ import {
   startFolderWatcher,
   stopFolderWatcher,
   updateAppearanceSettings,
+  uploadAppearanceFont,
   updateKaloscopeSettings,
   updateMetadataSettings,
   updateTaggerSettings,
@@ -217,6 +218,13 @@ export function SettingsPage() {
     },
   })
 
+  const appearanceFontUploadMutation = useMutation({
+    mutationFn: ({ file, target }: { file: File; target: 'sans' | 'mono' }) => uploadAppearanceFont(file, target),
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '커스텀 폰트 업로드에 실패했어.')
+    },
+  })
+
   const taggerMutation = useMutation({
     mutationFn: updateTaggerSettings,
     onSuccess: async (settings) => {
@@ -404,6 +412,46 @@ export function SettingsPage() {
     void appearancePresetSlotsMutation.mutateAsync(normalizedPresetSlots)
   }
 
+  const handleAppearanceFontUpload = async (target: 'sans' | 'mono', file: File) => {
+    const uploaded = await appearanceFontUploadMutation.mutateAsync({ file, target })
+
+    setAppearanceDraft((current) => {
+      const base = current ?? savedAppearance
+      const next = { ...base, fontPreset: 'custom' as const }
+
+      if (target === 'sans') {
+        next.customFontUrl = uploaded.url
+        next.customFontFileName = uploaded.originalName
+      } else {
+        next.customMonoFontUrl = uploaded.url
+        next.customMonoFontFileName = uploaded.originalName
+      }
+
+      return next
+    })
+
+    notifyInfo(`${target === 'sans' ? '본문' : '모노'} 커스텀 폰트를 업로드했어. 저장하면 기본 테마에 반영돼.`)
+  }
+
+  const handleAppearanceFontClear = (target: 'sans' | 'mono') => {
+    setAppearanceDraft((current) => {
+      const base = current ?? savedAppearance
+      const next = { ...base }
+
+      if (target === 'sans') {
+        next.customFontUrl = ''
+        next.customFontFileName = ''
+      } else {
+        next.customMonoFontUrl = ''
+        next.customMonoFontFileName = ''
+      }
+
+      return next
+    })
+
+    notifyInfo(`${target === 'sans' ? '본문' : '모노'} 업로드 폰트를 draft에서 해제했어. 저장하면 반영돼.`)
+  }
+
   const patchTaggerDraft = (patch: Partial<TaggerSettings>) => {
     if (!effectiveTaggerDraft) return
     setTaggerDraft({ ...effectiveTaggerDraft, ...patch })
@@ -544,7 +592,10 @@ export function SettingsPage() {
               onExport={handleAppearanceExport}
               onImport={handleAppearanceImport}
               onSavePresetSlots={handleAppearancePresetSlotsSave}
+              onUploadCustomFont={handleAppearanceFontUpload}
+              onClearCustomFont={handleAppearanceFontClear}
               isSaving={appearanceMutation.isPending || appearancePresetSlotsMutation.isPending}
+              isUploadingFont={appearanceFontUploadMutation.isPending}
             />
           ) : null}
 

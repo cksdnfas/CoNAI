@@ -21,6 +21,7 @@ export function AppearanceTab({
   onImport,
   onSavePresetSlots,
   onUploadCustomFont,
+  onClearCustomFont,
   isSaving,
   isUploadingFont,
 }: AppearanceTabProps) {
@@ -133,6 +134,7 @@ export function AppearanceTab({
                 onPatchAppearance={onPatchAppearance}
                 onRequestSansFontUpload={() => sansFontInputRef.current?.click()}
                 onRequestMonoFontUpload={() => monoFontInputRef.current?.click()}
+                onClearCustomFont={onClearCustomFont}
                 isUploadingFont={isUploadingFont}
               />
             </>

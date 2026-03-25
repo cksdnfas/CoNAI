@@ -428,6 +428,8 @@ export const DEFAULT_APPEARANCE_THEME: AppearanceThemeSettings = {
   customMonoFontFamily: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
   customFontUrl: '',
   customMonoFontUrl: '',
+  customFontFileName: '',
+  customMonoFontFileName: '',
   fontScalePercent: 100,
   searchBoxWidth: 380,
   searchDrawerWidth: 420,

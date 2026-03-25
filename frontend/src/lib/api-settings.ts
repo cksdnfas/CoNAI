@@ -1,4 +1,4 @@
-import { fetchJson } from '@/lib/api-client'
+import { buildApiUrl, fetchJson } from '@/lib/api-client'
 import type { ApiResponse } from '@/types/image'
 import type {
   AppearanceSettings,
@@ -48,6 +48,15 @@ export interface AutoTestKaloscopeResult {
   tagged_at?: string
 }
 
+export interface AppearanceFontUploadResult {
+  target: 'sans' | 'mono'
+  fileName: string
+  originalName: string
+  url: string
+  mimeType: string
+  size: number
+}
+
 export async function getAppSettings() {
   const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings')
   if (!response.success) {
@@ -86,6 +95,27 @@ export async function updateAppearanceSettings(settings: Partial<AppearanceSetti
   }
 
   return response.data
+}
+
+export async function uploadAppearanceFont(file: File, target: 'sans' | 'mono') {
+  const formData = new FormData()
+  formData.append('font', file)
+  formData.append('target', target)
+
+  const response = await fetch(buildApiUrl('/api/settings/appearance/font-upload'), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+    },
+    body: formData,
+  })
+
+  const payload = (await response.json()) as ApiResponse<AppearanceFontUploadResult>
+  if (!response.ok || !payload.success) {
+    throw new Error(payload.error || '커스텀 폰트 업로드에 실패했어.')
+  }
+
+  return payload.data
 }
 
 export async function updateTaggerSettings(settings: Partial<TaggerSettings>) {

@@ -1,6 +1,7 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { getThemeToneStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 import type { PromptGroupRecord, PromptTypeFilter } from '@/types/prompt'
 import { PromptTree } from './prompt-tree'
@@ -45,8 +46,9 @@ export function PromptSidebar({
             onClick={() => onChangeType(value)}
             className={cn(
               'rounded-sm px-2 py-1 transition-colors',
-              promptType === value ? 'bg-surface-container text-primary' : 'text-muted-foreground hover:text-foreground',
+              promptType === value ? '' : 'text-muted-foreground hover:text-foreground',
             )}
+            style={promptType === value ? getThemeToneStyle(value) : undefined}
           >
             {label}
           </button>

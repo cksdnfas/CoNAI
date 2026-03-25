@@ -29,6 +29,8 @@ export function extractAppearanceTheme(appearance: AppearanceSettings | Appearan
     customMonoFontFamily: appearance.customMonoFontFamily,
     customFontUrl: appearance.customFontUrl,
     customMonoFontUrl: appearance.customMonoFontUrl,
+    customFontFileName: appearance.customFontFileName,
+    customMonoFontFileName: appearance.customMonoFontFileName,
     fontScalePercent: appearance.fontScalePercent,
     searchBoxWidth: appearance.searchBoxWidth,
     searchDrawerWidth: appearance.searchDrawerWidth,
@@ -143,6 +145,16 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
   if (source.customMonoFontUrl !== undefined) {
     if (typeof source.customMonoFontUrl !== 'string') return null
     next.customMonoFontUrl = source.customMonoFontUrl
+  }
+
+  if (source.customFontFileName !== undefined) {
+    if (typeof source.customFontFileName !== 'string') return null
+    next.customFontFileName = source.customFontFileName
+  }
+
+  if (source.customMonoFontFileName !== undefined) {
+    if (typeof source.customMonoFontFileName !== 'string') return null
+    next.customMonoFontFileName = source.customMonoFontFileName
   }
 
   const boundedIntegerFields: Array<{ key: keyof Pick<AppearanceThemeSettings,

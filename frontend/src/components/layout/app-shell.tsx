@@ -1,7 +1,11 @@
 import { Image } from 'lucide-react'
 import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
 import { HomeSearchDrawer, HomeSearchHeaderBox } from '@/features/home/components/home-search-ui'
+import { getAppSettings } from '@/lib/api'
+import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
+import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -23,6 +27,13 @@ export function AppShell() {
 function AppShellLayout() {
   const location = useLocation()
   const shouldUseGlobalScrollRestoration = location.pathname !== '/'
+  const settingsQuery = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: getAppSettings,
+  })
+  const appearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
+  const showDesktopSearch = useMinWidth(appearance.desktopSearchMinWidth)
+  const showDesktopNav = useMinWidth(appearance.desktopNavMinWidth)
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -36,7 +47,7 @@ function AppShellLayout() {
               <span className="text-lg font-bold tracking-[-0.04em] text-foreground">CoNAI</span>
             </div>
 
-            <nav className="hidden items-center gap-8 text-sm font-medium tracking-tight lg:flex">
+            <nav className={cn('items-center gap-8 text-sm font-medium tracking-tight', showDesktopNav ? 'flex' : 'hidden')}>
               {navItems.map(({ to, label }) => (
                 <NavLink
                   key={to}
@@ -56,7 +67,7 @@ function AppShellLayout() {
           </div>
 
           <div className="flex items-center gap-4">
-            <HomeSearchHeaderBox active={true} />
+            <HomeSearchHeaderBox active={true} desktopMode={showDesktopSearch} />
           </div>
         </div>
       </header>

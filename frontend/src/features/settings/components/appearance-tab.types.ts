@@ -12,6 +12,7 @@ export interface AppearanceTabProps {
   onImport: (file: File) => void | Promise<void>
   onSavePresetSlots: (presetSlots: AppearancePresetSlot[]) => void
   onUploadCustomFont: (target: 'sans' | 'mono', file: File) => void | Promise<void>
+  onClearCustomFont: (target: 'sans' | 'mono') => void
   isSaving: boolean
   isUploadingFont: boolean
 }

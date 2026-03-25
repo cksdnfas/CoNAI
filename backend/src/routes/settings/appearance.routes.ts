@@ -150,6 +150,14 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
     return 'customMonoFontUrl must be a string'
   }
 
+  if (appearanceSettings.customFontFileName !== undefined && typeof appearanceSettings.customFontFileName !== 'string') {
+    return 'customFontFileName must be a string'
+  }
+
+  if (appearanceSettings.customMonoFontFileName !== undefined && typeof appearanceSettings.customMonoFontFileName !== 'string') {
+    return 'customMonoFontFileName must be a string'
+  }
+
   const boundedIntegers: Array<{ key: keyof Pick<AppearanceThemeSettings,
     'fontScalePercent' |
     'searchBoxWidth' |

@@ -1,5 +1,6 @@
 import { Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { getThemeToneStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 import { useHomeSearch } from '@/features/home/home-search-context'
 import type { SearchScope } from '@/features/home/search-types'
@@ -11,15 +12,15 @@ const SEARCH_SCOPE_TABS: Array<{ value: SearchScope; label: string }> = [
   { value: 'rating', label: '평가' },
 ]
 
-const SEARCH_SCOPE_BADGE: Record<SearchScope, { label: string; className: string }> = {
-  positive: { label: '긍정', className: 'bg-emerald-500/12 text-emerald-300' },
-  negative: { label: '부정', className: 'bg-rose-500/12 text-rose-300' },
-  auto: { label: '오토', className: 'bg-sky-500/12 text-sky-300' },
-  rating: { label: '평가', className: 'bg-violet-500/12 text-violet-300' },
+const SEARCH_SCOPE_LABELS: Record<SearchScope, string> = {
+  positive: '긍정',
+  negative: '부정',
+  auto: '오토',
+  rating: '평가',
 }
 
 /** Render the shared header search input with autocomplete-style suggestion results. */
-export function HomeSearchHeaderBox({ active }: { active: boolean }) {
+export function HomeSearchHeaderBox({ active, desktopMode }: { active: boolean; desktopMode: boolean }) {
   const {
     isDrawerOpen,
     searchScope,
@@ -38,39 +39,60 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
   } = useHomeSearch()
 
   if (!active) {
-    return (
+    return desktopMode ? (
       <div className="hidden items-center rounded-sm bg-surface-lowest px-3 py-1.5 text-sm text-muted-foreground md:flex">
         <Search className="mr-2 h-4 w-4" />
         <span className="w-44 truncate">Search gallery…</span>
       </div>
-    )
+    ) : null
   }
 
-  const showSuggestionMenu = isDrawerOpen && (searchScope === 'rating' || searchInput.trim().length > 0)
+  const showSuggestionMenu = desktopMode && isDrawerOpen && (searchScope === 'rating' || searchInput.trim().length > 0)
   const activeCountLabel = appliedChips.length > 0 ? `${appliedChips.length} filters` : 'Search gallery…'
 
   return (
-    <div className="relative hidden md:block">
-      <div className="theme-settings-control flex w-[380px] items-center rounded-sm border border-white/10 bg-surface-lowest text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]">
-        <Search className="mr-2 h-4 w-4 text-muted-foreground" />
-        <input
-          value={searchInput}
-          onFocus={openDrawer}
-          onChange={(event) => setSearchInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              submitSearchFromInput()
-            }
-          }}
-          placeholder={activeCountLabel}
-          className="h-full w-full bg-transparent outline-none placeholder:text-muted-foreground"
-          aria-label="갤러리 검색"
-        />
-      </div>
+    <div className="relative">
+      {desktopMode ? (
+        <div
+          className="theme-settings-control flex items-center rounded-sm border border-white/10 bg-surface-lowest text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]"
+          style={{ width: 'var(--theme-search-box-width)' }}
+        >
+          <Search className="mr-2 h-4 w-4 text-muted-foreground" />
+          <input
+            value={searchInput}
+            onFocus={openDrawer}
+            onChange={(event) => setSearchInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                submitSearchFromInput()
+              }
+            }}
+            placeholder={activeCountLabel}
+            className="h-full w-full bg-transparent outline-none placeholder:text-muted-foreground"
+            aria-label="갤러리 검색"
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={openDrawer}
+          className="theme-floating-panel inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-foreground transition hover:bg-surface-high"
+          aria-label="검색 열기"
+        >
+          <Search className="h-4 w-4" />
+          <span className="hidden sm:inline">검색</span>
+          {appliedChips.length > 0 ? (
+            <span className="rounded-full bg-primary/14 px-2 py-0.5 text-[11px] font-semibold text-primary">{appliedChips.length}</span>
+          ) : null}
+        </button>
+      )}
 
       {showSuggestionMenu ? (
-        <div className="theme-floating-panel absolute right-0 top-[calc(var(--theme-shell-header-height)+0.5rem)] z-[70] w-[380px] overflow-hidden rounded-sm">
+        <div
+          className="theme-floating-panel absolute right-0 top-[calc(var(--theme-shell-header-height)+0.5rem)] z-[70] overflow-hidden rounded-sm"
+          style={{ width: 'min(calc(100vw - 1rem), var(--theme-search-box-width))' }}
+        >
           <div className="flex items-center gap-1 border-b border-white/5 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
             {SEARCH_SCOPE_TABS.map((tab) => (
               <button
@@ -79,8 +101,9 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
                 onClick={() => setSearchScope(tab.value)}
                 className={cn(
                   'rounded-sm px-3 py-1.5 text-xs font-semibold transition-colors',
-                  searchScope === tab.value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-surface-high hover:text-foreground',
+                  searchScope === tab.value ? '' : 'text-muted-foreground hover:bg-surface-high hover:text-foreground',
                 )}
+                style={searchScope === tab.value ? getThemeToneStyle(tab.value) : undefined}
               >
                 {tab.label}
               </button>
@@ -96,7 +119,7 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
                     onClick={submitSearchFromInput}
                     className="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-surface-high"
                   >
-                    <span className="text-sm text-foreground">"{searchInput.trim()}" 검색</span>
+                    <span className="text-sm text-foreground">&quot;{searchInput.trim()}&quot; 검색</span>
                     <span className="text-xs text-muted-foreground">Enter</span>
                   </button>
                 ) : null}
@@ -184,9 +207,10 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
 
       <aside
         className={cn(
-          'theme-floating-panel fixed bottom-0 right-0 top-[var(--theme-shell-header-height)] z-40 flex h-[calc(100vh-var(--theme-shell-header-height))] w-[420px] max-w-full flex-col transition-transform duration-300',
+          'theme-floating-panel fixed bottom-0 right-0 top-[var(--theme-shell-header-height)] z-40 flex h-[calc(100vh-var(--theme-shell-header-height))] max-w-full flex-col transition-transform duration-300',
           isDrawerOpen ? 'translate-x-0' : 'translate-x-full',
         )}
+        style={{ width: 'min(calc(100vw - 0.75rem), var(--theme-search-drawer-width))' }}
       >
         <div className="theme-drawer-header flex items-center justify-between border-b border-white/5">
           <div className="text-2xl font-semibold tracking-tight text-foreground">search</div>
@@ -201,32 +225,28 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
             {draftChips.length === 0 ? <div className="rounded-sm border border-white/5 bg-surface-lowest px-4 py-4 text-sm text-muted-foreground">No filters</div> : null}
             {draftChips.length > 0 ? (
               <div className="space-y-2">
-                {draftChips.map((chip) => {
-                  const scopeBadge = SEARCH_SCOPE_BADGE[chip.scope]
-
-                  return (
-                    <div key={chip.id} className="flex items-center gap-2 rounded-sm border border-white/10 bg-surface-lowest px-3 py-3">
-                      <span className={cn('rounded-sm px-2 py-1 text-[11px] font-semibold tracking-[0.08em]', scopeBadge.className)}>
-                        {scopeBadge.label}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => cycleChipOperator(chip.id)}
-                        className="rounded-sm border border-primary/35 bg-primary/10 px-2.5 py-1 text-[11px] font-bold tracking-[0.16em] text-primary shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_8%,transparent)] transition hover:bg-primary/18 hover:border-primary/55 active:scale-[0.98]"
-                        aria-label={`${chip.label} 연산자 변경`}
-                        title="클릭해서 OR / AND / NOT 전환"
-                      >
-                        {chip.operator}
-                      </button>
-                      <span className="min-w-0 flex-1 truncate text-sm text-foreground" style={chip.color ? { color: chip.color } : undefined}>
-                        {chip.label}
-                      </span>
-                      <button type="button" onClick={() => removeChip(chip.id)} className="text-muted-foreground transition hover:text-foreground" aria-label={`${chip.label} 삭제`}>
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )
-                })}
+                {draftChips.map((chip) => (
+                  <div key={chip.id} className="flex items-center gap-2 rounded-sm border border-white/10 bg-surface-lowest px-3 py-3">
+                    <span className="rounded-sm px-2 py-1 text-[11px] font-semibold tracking-[0.08em]" style={getThemeToneStyle(chip.scope)}>
+                      {SEARCH_SCOPE_LABELS[chip.scope]}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => cycleChipOperator(chip.id)}
+                      className="rounded-sm border border-primary/35 bg-primary/10 px-2.5 py-1 text-[11px] font-bold tracking-[0.16em] text-primary shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_8%,transparent)] transition hover:bg-primary/18 hover:border-primary/55 active:scale-[0.98]"
+                      aria-label={`${chip.label} 연산자 변경`}
+                      title="클릭해서 OR / AND / NOT 전환"
+                    >
+                      {chip.operator}
+                    </button>
+                    <span className="min-w-0 flex-1 truncate text-sm text-foreground" style={chip.color ? { color: chip.color } : undefined}>
+                      {chip.label}
+                    </span>
+                    <button type="button" onClick={() => removeChip(chip.id)} className="text-muted-foreground transition hover:text-foreground" aria-label={`${chip.label} 삭제`}>
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
               </div>
             ) : null}
 
@@ -258,23 +278,19 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
                   <div key={entry.id} className="flex items-start gap-3 rounded-sm border border-white/10 bg-surface-lowest px-4 py-3">
                     <button type="button" onClick={() => selectHistoryEntry(entry)} className="min-w-0 flex-1 text-left">
                       <div className="flex flex-wrap gap-2">
-                        {entry.chips.map((chip) => {
-                          const scopeBadge = SEARCH_SCOPE_BADGE[chip.scope]
-
-                          return (
-                            <span key={chip.id} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-background px-2.5 py-1.5 text-xs text-foreground">
-                              <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em]', scopeBadge.className)}>
-                                {scopeBadge.label}
-                              </span>
-                              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.14em] text-primary">
-                                {chip.operator}
-                              </span>
-                              <span className="truncate" style={chip.color ? { color: chip.color } : undefined}>
-                                {chip.label}
-                              </span>
+                        {entry.chips.map((chip) => (
+                          <span key={chip.id} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-background px-2.5 py-1.5 text-xs text-foreground">
+                            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em]" style={getThemeToneStyle(chip.scope)}>
+                              {SEARCH_SCOPE_LABELS[chip.scope]}
                             </span>
-                          )
-                        })}
+                            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.14em] text-primary">
+                              {chip.operator}
+                            </span>
+                            <span className="truncate" style={chip.color ? { color: chip.color } : undefined}>
+                              {chip.label}
+                            </span>
+                          </span>
+                        ))}
                       </div>
                     </button>
                     <button type="button" onClick={() => void deleteHistoryEntry(entry.id)} className="mt-1 text-muted-foreground transition hover:text-foreground" aria-label="검색 히스토리 삭제">

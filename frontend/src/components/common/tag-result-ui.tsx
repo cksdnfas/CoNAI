@@ -1,19 +1,20 @@
 import { useState } from 'react'
+import { getThemeToneFillStyle, getThemeToneStyle } from '@/lib/theme-tones'
 import { formatScore } from './tag-result-utils'
 
-function getRatingAccentClassName(label: string) {
+function getRatingAccentStyle(label: string) {
   switch (label.toLowerCase()) {
     case 'general':
     case 'safe':
-      return 'bg-emerald-500'
+      return getThemeToneFillStyle('positive')
     case 'sensitive':
-      return 'bg-amber-500'
+      return { backgroundColor: 'color-mix(in srgb, var(--theme-badge-rating) 72%, #f59e0b)' }
     case 'questionable':
-      return 'bg-orange-500'
+      return getThemeToneFillStyle('rating')
     case 'explicit':
-      return 'bg-red-500'
+      return getThemeToneFillStyle('negative')
     default:
-      return 'bg-primary'
+      return { backgroundColor: 'var(--primary)' }
   }
 }
 
@@ -60,7 +61,7 @@ export function ScoreMeterList({
                 <span className="shrink-0 font-mono text-muted-foreground">{formatScore(score)}</span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-surface-low">
-                <div className={`h-full rounded-full ${accentClassName}`} style={{ width: `${width}%` }} />
+                <div className={accentClassName ? `h-full rounded-full ${accentClassName}` : 'h-full rounded-full'} style={{ width: `${width}%`, ...(accentClassName ? undefined : getThemeToneFillStyle('auto')) }} />
               </div>
             </div>
           )
@@ -115,17 +116,17 @@ export function StackedRatingBar({ title, entries }: { title: string; entries: A
         {normalizedEntries.map(([label, score]) => (
           <div
             key={label}
-            className={getRatingAccentClassName(label)}
-            style={{ width: `${Math.max(0, Math.min(score * 100, 100))}%` }}
+            className="h-full"
+            style={{ width: `${Math.max(0, Math.min(score * 100, 100))}%`, ...getRatingAccentStyle(label) }}
             title={`${label} ${formatScore(score)}`}
           />
         ))}
       </div>
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {normalizedEntries.map(([label, score]) => (
-          <div key={`${label}-legend`} className="flex items-center justify-between gap-3 rounded-sm bg-surface-low px-3 py-2 text-xs">
+          <div key={`${label}-legend`} className="flex items-center justify-between gap-3 rounded-sm bg-surface-low px-3 py-2 text-xs" style={getThemeToneStyle('rating')}>
             <div className="flex min-w-0 items-center gap-2">
-              <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${getRatingAccentClassName(label)}`} />
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={getRatingAccentStyle(label)} />
               <span className="truncate text-foreground">{label}</span>
             </div>
             <span className="shrink-0 font-mono text-muted-foreground">{formatScore(score)}</span>
