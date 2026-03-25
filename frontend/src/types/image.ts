@@ -25,10 +25,23 @@ export interface ImageAiRawNaiParameters {
   v4_negative_prompt?: ImageAiRawNaiPromptPayload | null
 }
 
+export interface ImageAiGenerationParams {
+  steps?: number | null
+  cfg_scale?: number | null
+  sampler?: string | null
+  seed?: number | null
+  scheduler?: string | null
+  denoise_strength?: number | null
+  generation_time?: number | null
+  batch_size?: number | null
+  batch_index?: number | null
+}
+
 export interface ImageAiMetadata {
   ai_tool?: string | null
   model_name?: string | null
   lora_models?: string[] | null
+  generation_params?: ImageAiGenerationParams | null
   prompts?: ImageAiPromptMetadata | null
   raw_nai_parameters?: ImageAiRawNaiParameters | null
 }

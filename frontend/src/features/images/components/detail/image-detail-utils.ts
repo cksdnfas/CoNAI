@@ -76,8 +76,37 @@ export interface PromptSimilaritySettingsDraft {
   }
 }
 
+export interface ImageGenerationParamItem {
+  id: string
+  label: string
+  value: string
+}
+
 function getSortedTagEntries(scores?: Record<string, number> | null) {
   return Object.entries(scores ?? {}).sort(([, left], [, right]) => right - left)
+}
+
+function formatMetadataScalar(value?: string | number | null) {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  return String(value)
+}
+
+/** Build generation-parameter display items from one image record. */
+export function getImageGenerationParamItems(image: ImageRecord): ImageGenerationParamItem[] {
+  const generationParams = image.ai_metadata?.generation_params
+
+  return [
+    { id: 'steps', label: 'Steps', value: formatMetadataScalar(generationParams?.steps) },
+    { id: 'cfg-scale', label: 'CFG scale', value: formatMetadataScalar(generationParams?.cfg_scale) },
+    { id: 'sampler', label: 'Sampler', value: formatMetadataScalar(generationParams?.sampler) },
+    { id: 'seed', label: 'Seed', value: formatMetadataScalar(generationParams?.seed) },
+    { id: 'scheduler', label: 'Scheduler', value: formatMetadataScalar(generationParams?.scheduler) },
+  ]
+    .filter((item): item is ImageGenerationParamItem => Boolean(item.value))
+    .map((item) => ({ ...item, value: item.value as string }))
 }
 
 /** Build extracted auto prompt content for the detail metadata card. */

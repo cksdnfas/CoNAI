@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type UIEventHandler } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import {
@@ -10,8 +10,6 @@ import {
 interface ImageViewThumbnailStripProps {
   items: ImageRecord[]
   activeCompositeHash: string
-  isScrollActive: boolean
-  onScroll: UIEventHandler<HTMLDivElement>
   onSelect: (compositeHash: string) => void
 }
 
@@ -19,40 +17,95 @@ interface ImageViewThumbnailStripProps {
 export function ImageViewThumbnailStrip({
   items,
   activeCompositeHash,
-  isScrollActive,
-  onScroll,
   onSelect,
 }: ImageViewThumbnailStripProps) {
+  const stripRef = useRef<HTMLDivElement | null>(null)
   const buttonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const dragPointerIdRef = useRef<number | null>(null)
+  const dragStartXRef = useRef(0)
+  const dragStartScrollLeftRef = useRef(0)
+  const suppressClickRef = useRef(false)
+  const [isDragging, setIsDragging] = useState(false)
 
   const activeIndex = useMemo(
     () => items.findIndex((item) => item.composite_hash === activeCompositeHash),
     [activeCompositeHash, items],
   )
 
-  useEffect(() => {
-    if (!activeCompositeHash) {
-      return
-    }
-
-    buttonRefs.current[activeCompositeHash]?.scrollIntoView({
-      block: 'nearest',
-      inline: 'center',
-      behavior: 'smooth',
-    })
-  }, [activeCompositeHash])
-
   if (items.length <= 1) {
     return null
   }
 
+  const finishDrag = () => {
+    dragPointerIdRef.current = null
+    dragStartXRef.current = 0
+    dragStartScrollLeftRef.current = 0
+    setIsDragging(false)
+
+    window.setTimeout(() => {
+      suppressClickRef.current = false
+    }, 0)
+  }
+
   return (
     <div
+      ref={stripRef}
       className={cn(
         'image-view-thumbnail-strip snap-x snap-mandatory overflow-x-auto overflow-y-hidden py-2',
-        isScrollActive && 'is-scroll-active',
+        isDragging && 'cursor-grabbing select-none',
       )}
-      onScroll={onScroll}
+      onPointerDown={(event) => {
+        if (event.button !== 0) {
+          return
+        }
+
+        dragPointerIdRef.current = event.pointerId
+        dragStartXRef.current = event.clientX
+        dragStartScrollLeftRef.current = stripRef.current?.scrollLeft ?? 0
+        suppressClickRef.current = false
+        setIsDragging(false)
+      }}
+      onPointerMove={(event) => {
+        if (dragPointerIdRef.current !== event.pointerId || !stripRef.current) {
+          return
+        }
+
+        const deltaX = event.clientX - dragStartXRef.current
+        if (!isDragging && Math.abs(deltaX) > 6) {
+          suppressClickRef.current = true
+          setIsDragging(true)
+        }
+
+        if (Math.abs(deltaX) <= 1) {
+          return
+        }
+
+        stripRef.current.scrollLeft = dragStartScrollLeftRef.current - deltaX
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+      onPointerUp={(event) => {
+        if (dragPointerIdRef.current !== event.pointerId) {
+          return
+        }
+
+        finishDrag()
+      }}
+      onPointerCancel={(event) => {
+        if (dragPointerIdRef.current !== event.pointerId) {
+          return
+        }
+
+        finishDrag()
+      }}
+      onPointerLeave={(event) => {
+        if (dragPointerIdRef.current !== event.pointerId || !isDragging) {
+          return
+        }
+
+        finishDrag()
+      }}
+      style={{ touchAction: 'pan-y pinch-zoom' }}
     >
       <div className="flex min-w-max items-center gap-3 pr-1">
         {items.map((item, index) => {
@@ -74,12 +127,22 @@ export function ImageViewThumbnailStrip({
               }}
               type="button"
               className={cn(
-                'group relative h-18 w-18 shrink-0 snap-center overflow-hidden rounded-sm border bg-surface-low text-left transition-all duration-200',
+                'group relative h-18 w-18 shrink-0 snap-center overflow-hidden rounded-sm border bg-surface-low text-left transition-all duration-200 select-none',
+                isDragging && 'pointer-events-none',
                 isActive
                   ? 'border-primary scale-[1.03] shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_58%,transparent)]'
                   : 'border-border hover:border-secondary/60 hover:scale-[1.02]',
               )}
-              onClick={() => onSelect(compositeHash)}
+              onClick={(event) => {
+                if (suppressClickRef.current) {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  return
+                }
+
+                onSelect(compositeHash)
+              }}
+              onDragStart={(event) => event.preventDefault()}
               title={`${index + 1}. ${displayName}`}
               aria-label={`${index + 1}. ${displayName}`}
               aria-current={isActive ? 'true' : undefined}
@@ -88,15 +151,16 @@ export function ImageViewThumbnailStrip({
                 mediaKind === 'video' ? (
                   <video
                     src={previewUrl}
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-cover select-none"
                     muted
                     loop
                     autoPlay
                     playsInline
                     preload="metadata"
+                    draggable={false}
                   />
                 ) : (
-                  <img src={previewUrl} alt={displayName} className="h-full w-full object-cover" loading="lazy" />
+                  <img src={previewUrl} alt={displayName} className="h-full w-full object-cover select-none" loading="lazy" draggable={false} />
                 )
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">없음</div>
@@ -110,7 +174,7 @@ export function ImageViewThumbnailStrip({
         })}
       </div>
 
-      <div className="mt-1 px-1 text-[11px] text-muted-foreground">
+      <div className="mt-1 px-1 text-[11px] text-muted-foreground select-none">
         {activeIndex >= 0 ? `${activeIndex + 1} / ${items.length}` : `${items.length} items`}
       </div>
     </div>

@@ -126,6 +126,13 @@ function buildExtractedImagePreview(
       ai_tool: aiInfo.ai_tool || null,
       model_name: aiInfo.model || null,
       lora_models: Array.isArray(aiInfo.lora_models) ? aiInfo.lora_models : null,
+      generation_params: {
+        steps: aiInfo.steps ?? null,
+        cfg_scale: aiInfo.cfg_scale ?? aiInfo.scale ?? null,
+        sampler: aiInfo.sampler ?? null,
+        seed: aiInfo.seed ?? null,
+        scheduler: aiInfo.scheduler ?? null,
+      },
       prompts: {
         prompt: aiInfo.prompt || aiInfo.positive_prompt || null,
         negative_prompt: aiInfo.negative_prompt || null,

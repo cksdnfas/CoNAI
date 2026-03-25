@@ -8,7 +8,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
 import type { ImageRecord } from '@/types/image'
-import { formatBytes, getImageArtistPromptSection, getImageAutoPromptContent } from './image-detail-utils'
+import { formatBytes, getImageArtistPromptSection, getImageAutoPromptContent, getImageGenerationParamItems } from './image-detail-utils'
 
 interface ImageDetailMetaCardProps {
   image: ImageRecord
@@ -18,6 +18,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const extractedPromptCards = getImageExtractedPromptCards(image)
   const autoPromptContent = getImageAutoPromptContent(image)
   const artistPromptSection = getImageArtistPromptSection(image)
+  const generationParamItems = getImageGenerationParamItems(image)
 
   return (
     <div className="space-y-3 text-sm text-muted-foreground">
@@ -44,9 +45,15 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         {image.ai_metadata?.model_name ? (
           <div className="rounded-sm bg-surface-high p-4 sm:col-span-2">
             <p className="text-[11px] uppercase tracking-[0.18em]">Model</p>
-            <p className="mt-2 text-foreground">{image.ai_metadata.model_name}</p>
+            <p className="mt-2 break-words text-foreground">{image.ai_metadata.model_name}</p>
           </div>
         ) : null}
+        {generationParamItems.map((item) => (
+          <div key={item.id} className="rounded-sm bg-surface-high p-4">
+            <p className="text-[11px] uppercase tracking-[0.18em]">{item.label}</p>
+            <p className="mt-2 break-words text-foreground">{item.value}</p>
+          </div>
+        ))}
         {image.original_file_path ? (
           <div className="rounded-sm bg-surface-high p-4 sm:col-span-2">
             <p className="text-[11px] uppercase tracking-[0.18em]">Path</p>

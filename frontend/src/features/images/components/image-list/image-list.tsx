@@ -66,11 +66,17 @@ export function ImageList({
         return
       }
 
-      if (activationMode === 'modal' && imageViewModal) {
-        imageViewModal.openImageView({
-          compositeHash: imageId,
-          compositeHashes: itemCompositeHashes,
-        })
+      if ((activationMode === 'modal' || activationMode === 'modal-single') && imageViewModal) {
+        imageViewModal.openImageView(
+          activationMode === 'modal'
+            ? {
+                compositeHash: imageId,
+                compositeHashes: itemCompositeHashes,
+              }
+            : {
+                compositeHash: imageId,
+              },
+        )
         return
       }
 

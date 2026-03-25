@@ -24,66 +24,27 @@ import {
 import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
 import { getThemeToneTextStyle } from '@/lib/theme-tones'
 import type { ImageRecord } from '@/types/image'
-import { formatBytes } from '../images/components/detail/image-detail-utils'
+import { MetadataRewriteForm } from '../metadata/components/metadata-rewrite-form'
+import { buildMetadataRewritePatch, useMetadataRewriteDraft } from '../metadata/use-metadata-rewrite-draft'
+import { formatBytes, getImageGenerationParamItems } from '../images/components/detail/image-detail-utils'
+import { useDropZoneState } from './use-drop-zone-state'
 
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/tiff,image/bmp,image/gif'
 const UPLOAD_ACCEPT = `${IMAGE_ACCEPT},video/mp4,video/webm,video/quicktime,video/x-msvideo,video/x-matroska`
 const MAX_VISIBLE_FILES = 6
 
 type ExtractAction = 'prompt' | 'tagger' | 'kaloscope' | 'all'
-type RewriteFormat = 'png' | 'jpeg' | 'webp'
-
-interface RewriteMetadataDraft {
-  format: RewriteFormat
-  prompt: string
-  negativePrompt: string
-  steps: string
-  sampler: string
-  model: string
-}
 
 function formatDimensions(width?: number | null, height?: number | null) {
   if (!width || !height) return '—'
   return `${width} × ${height}`
 }
 
-function inferRewriteFormat(file: File | null): RewriteFormat {
-  if (!file) {
-    return 'webp'
-  }
-
-  const lowerName = file.name.toLowerCase()
-  if (lowerName.endsWith('.png')) {
-    return 'png'
-  }
-
-  if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) {
-    return 'jpeg'
-  }
-
-  if (lowerName.endsWith('.webp')) {
-    return 'webp'
-  }
-
-  return 'webp'
-}
-
-function createEmptyRewriteDraft(file: File | null): RewriteMetadataDraft {
-  return {
-    format: inferRewriteFormat(file),
-    prompt: '',
-    negativePrompt: '',
-    steps: '',
-    sampler: '',
-    model: '',
-  }
-}
-
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-sm bg-surface-high p-4">
+    <div className="min-w-0 rounded-sm bg-surface-high p-4">
       <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
-      <div className="mt-2 break-words text-sm text-foreground">{value}</div>
+      <div className="mt-2 min-w-0 whitespace-pre-wrap break-all text-sm text-foreground">{value}</div>
     </div>
   )
 }
@@ -136,7 +97,6 @@ export function UploadPage() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState<UploadTransferProgress | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const [isUploadDragActive, setIsUploadDragActive] = useState(false)
 
   const [extractFile, setExtractFile] = useState<File | null>(null)
   const [extractPreviewUrl, setExtractPreviewUrl] = useState<string | null>(null)
@@ -147,8 +107,7 @@ export function UploadPage() {
   const [activeExtractAction, setActiveExtractAction] = useState<ExtractAction | null>(null)
   const [isConvertingWebP, setIsConvertingWebP] = useState(false)
   const [isRewritingMetadata, setIsRewritingMetadata] = useState(false)
-  const [rewriteDraft, setRewriteDraft] = useState<RewriteMetadataDraft>(createEmptyRewriteDraft(null))
-  const [isExtractDragActive, setIsExtractDragActive] = useState(false)
+  const { draft: rewriteDraft, patchDraft: patchRewriteDraft } = useMetadataRewriteDraft(extractFile, extractResult)
 
   useEffect(() => {
     if (!extractFile) {
@@ -164,32 +123,20 @@ export function UploadPage() {
     }
   }, [extractFile])
 
-  useEffect(() => {
-    setRewriteDraft((current) => ({
-      ...current,
-      format: inferRewriteFormat(extractFile),
-    }))
-  }, [extractFile])
-
-  useEffect(() => {
-    if (!extractResult) {
-      return
-    }
-
-    setRewriteDraft((current) => ({
-      ...current,
-      prompt: extractResult.ai_metadata?.prompts?.prompt ?? current.prompt,
-      negativePrompt: extractResult.ai_metadata?.prompts?.negative_prompt ?? current.negativePrompt,
-      model: extractResult.ai_metadata?.model_name ?? current.model,
-    }))
-  }, [extractResult])
-
   const extractedPromptCards = useMemo(() => {
     if (!extractResult) {
       return []
     }
 
     return getImageExtractedPromptCards(extractResult)
+  }, [extractResult])
+
+  const extractedGenerationParamItems = useMemo(() => {
+    if (!extractResult) {
+      return []
+    }
+
+    return getImageGenerationParamItems(extractResult)
   }, [extractResult])
 
   const uploadTotalSize = useMemo(() => uploadFiles.reduce((sum, file) => sum + file.size, 0), [uploadFiles])
@@ -216,7 +163,6 @@ export function UploadPage() {
 
   const applyExtractFile = (file: File | null) => {
     setExtractFile(file)
-    setRewriteDraft(createEmptyRewriteDraft(file))
     resetExtractResults()
   }
 
@@ -295,35 +241,9 @@ export function UploadPage() {
     setExtractError(null)
 
     try {
-      const metadataPatch: Record<string, string | number> = {}
-
-      if (rewriteDraft.prompt.trim()) {
-        metadataPatch.prompt = rewriteDraft.prompt.trim()
-      }
-
-      if (rewriteDraft.negativePrompt.trim()) {
-        metadataPatch.negative_prompt = rewriteDraft.negativePrompt.trim()
-      }
-
-      if (rewriteDraft.steps.trim()) {
-        const numericSteps = Number(rewriteDraft.steps)
-        if (!Number.isFinite(numericSteps) || numericSteps <= 0) {
-          throw new Error('steps는 1 이상의 숫자여야 해.')
-        }
-        metadataPatch.steps = Math.round(numericSteps)
-      }
-
-      if (rewriteDraft.sampler.trim()) {
-        metadataPatch.sampler = rewriteDraft.sampler.trim()
-      }
-
-      if (rewriteDraft.model.trim()) {
-        metadataPatch.model = rewriteDraft.model.trim()
-      }
-
       const result = await downloadRewrittenImage(extractFile, {
         format: rewriteDraft.format,
-        metadataPatch,
+        metadataPatch: buildMetadataRewritePatch(rewriteDraft),
       })
 
       const message = result.rewriteState === 'patched'
@@ -418,70 +338,32 @@ export function UploadPage() {
     }
   }
 
-  const handleUploadDragEnter = (event: DragEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    setIsUploadDragActive(true)
-  }
+  const uploadDropZone = useDropZoneState<HTMLButtonElement>({
+    onDropFiles: (files) => {
+      if (files.length === 0) {
+        return
+      }
 
-  const handleUploadDragOver = (event: DragEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    setIsUploadDragActive(true)
-  }
+      applyUploadFiles(files)
+    },
+  })
 
-  const handleUploadDragLeave = (event: DragEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
-      return
-    }
-    setIsUploadDragActive(false)
-  }
+  const extractDropZone = useDropZoneState<HTMLButtonElement>({
+    onDropFiles: (files) => {
+      const imageFile = files.find((file) => file.type.startsWith('image/')) ?? files[0] ?? null
 
-  const handleUploadDrop = (event: DragEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    setIsUploadDragActive(false)
-    const files = Array.from(event.dataTransfer.files ?? [])
-    if (files.length === 0) {
-      return
-    }
-    applyUploadFiles(files)
-  }
+      if (!imageFile) {
+        return
+      }
 
-  const handleExtractDragEnter = (event: DragEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    setIsExtractDragActive(true)
-  }
+      if (!imageFile.type.startsWith('image/')) {
+        showSnackbar({ message: '이미지 파일만 미리보기할 수 있어.', tone: 'error' })
+        return
+      }
 
-  const handleExtractDragOver = (event: DragEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    setIsExtractDragActive(true)
-  }
-
-  const handleExtractDragLeave = (event: DragEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
-      return
-    }
-    setIsExtractDragActive(false)
-  }
-
-  const handleExtractDrop = (event: DragEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    setIsExtractDragActive(false)
-
-    const files = Array.from(event.dataTransfer.files ?? [])
-    const imageFile = files.find((file) => file.type.startsWith('image/')) ?? files[0] ?? null
-
-    if (!imageFile) {
-      return
-    }
-
-    if (!imageFile.type.startsWith('image/')) {
-      showSnackbar({ message: '이미지 파일만 미리보기할 수 있어.', tone: 'error' })
-      return
-    }
-
-    applyExtractFile(imageFile)
-  }
+      applyExtractFile(imageFile)
+    },
+  })
 
   return (
     <div className="space-y-8">
@@ -516,12 +398,12 @@ export function UploadPage() {
 
             <DropSurface
               ariaLabel="업로드할 파일 선택"
-              active={isUploadDragActive}
+              active={uploadDropZone.isDragActive}
               onClick={() => uploadInputRef.current?.click()}
-              onDrop={handleUploadDrop}
-              onDragEnter={handleUploadDragEnter}
-              onDragOver={handleUploadDragOver}
-              onDragLeave={handleUploadDragLeave}
+              onDrop={uploadDropZone.handleDrop}
+              onDragEnter={uploadDropZone.handleDragEnter}
+              onDragOver={uploadDropZone.handleDragOver}
+              onDragLeave={uploadDropZone.handleDragLeave}
             />
 
             {uploadFiles.length > 0 ? (
@@ -634,12 +516,12 @@ export function UploadPage() {
 
             <DropSurface
               ariaLabel="미리보기할 이미지 선택"
-              active={isExtractDragActive}
+              active={extractDropZone.isDragActive}
               onClick={() => extractInputRef.current?.click()}
-              onDrop={handleExtractDrop}
-              onDragEnter={handleExtractDragEnter}
-              onDragOver={handleExtractDragOver}
-              onDragLeave={handleExtractDragLeave}
+              onDrop={extractDropZone.handleDrop}
+              onDragEnter={extractDropZone.handleDragEnter}
+              onDragOver={extractDropZone.handleDragOver}
+              onDragLeave={extractDropZone.handleDragLeave}
             />
 
             {extractFile ? (
@@ -657,90 +539,7 @@ export function UploadPage() {
                   <SummaryTile label="status" value={isRewritingMetadata ? '메타 수정 중…' : isConvertingWebP ? 'WebP 변환 중…' : extractBusy ? '추출 중…' : '대기'} />
                 </div>
 
-                <div className="rounded-sm bg-surface-high px-4 py-3 text-sm text-muted-foreground">
-                  WebP 변환은 현재 선택한 이미지 한 장을 기준으로 바로 다운로드해. CoNAI가 읽은 메타는 가능한 범위에서 XMP로 옮겨 담고, WebP stealth / EXIF / PNG text 계열 추출도 같이 유지하도록 맞춰둔 상태야.
-                </div>
-
-                <div className="space-y-4 rounded-sm bg-surface-high p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium text-foreground">메타 수정</div>
-                      <div className="mt-1 text-xs text-muted-foreground">현재 파일을 다시 저장하면서 prompt / negative / steps / sampler / model을 표준 EXIF/XMP 기준으로 덮어써.</div>
-                    </div>
-                    <Badge variant="outline">rewrite</Badge>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    <label className="space-y-2 text-sm">
-                      <span className="text-muted-foreground">출력 포맷</span>
-                      <select
-                        value={rewriteDraft.format}
-                        onChange={(event) => setRewriteDraft((current) => ({ ...current, format: event.target.value as RewriteFormat }))}
-                        className="h-9 w-full rounded-sm border border-border bg-surface-low px-3 text-sm text-foreground outline-none transition focus:border-primary"
-                        disabled={extractBusy}
-                      >
-                        <option value="png">PNG</option>
-                        <option value="jpeg">JPEG</option>
-                        <option value="webp">WebP</option>
-                      </select>
-                    </label>
-
-                    <label className="space-y-2 text-sm">
-                      <span className="text-muted-foreground">steps</span>
-                      <input
-                        value={rewriteDraft.steps}
-                        onChange={(event) => setRewriteDraft((current) => ({ ...current, steps: event.target.value }))}
-                        placeholder="예: 28"
-                        className="h-9 w-full rounded-sm border border-border bg-surface-low px-3 text-sm text-foreground outline-none transition focus:border-primary"
-                        disabled={extractBusy}
-                      />
-                    </label>
-
-                    <label className="space-y-2 text-sm">
-                      <span className="text-muted-foreground">sampler</span>
-                      <input
-                        value={rewriteDraft.sampler}
-                        onChange={(event) => setRewriteDraft((current) => ({ ...current, sampler: event.target.value }))}
-                        placeholder="예: Euler a"
-                        className="h-9 w-full rounded-sm border border-border bg-surface-low px-3 text-sm text-foreground outline-none transition focus:border-primary"
-                        disabled={extractBusy}
-                      />
-                    </label>
-
-                    <label className="space-y-2 text-sm md:col-span-2 xl:col-span-3">
-                      <span className="text-muted-foreground">prompt</span>
-                      <textarea
-                        value={rewriteDraft.prompt}
-                        onChange={(event) => setRewriteDraft((current) => ({ ...current, prompt: event.target.value }))}
-                        placeholder="positive prompt"
-                        className="min-h-28 w-full rounded-sm border border-border bg-surface-low px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary"
-                        disabled={extractBusy}
-                      />
-                    </label>
-
-                    <label className="space-y-2 text-sm md:col-span-2 xl:col-span-3">
-                      <span className="text-muted-foreground">negative prompt</span>
-                      <textarea
-                        value={rewriteDraft.negativePrompt}
-                        onChange={(event) => setRewriteDraft((current) => ({ ...current, negativePrompt: event.target.value }))}
-                        placeholder="negative prompt"
-                        className="min-h-24 w-full rounded-sm border border-border bg-surface-low px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary"
-                        disabled={extractBusy}
-                      />
-                    </label>
-
-                    <label className="space-y-2 text-sm md:col-span-2 xl:col-span-3">
-                      <span className="text-muted-foreground">model</span>
-                      <input
-                        value={rewriteDraft.model}
-                        onChange={(event) => setRewriteDraft((current) => ({ ...current, model: event.target.value }))}
-                        placeholder="예: animeModel"
-                        className="h-9 w-full rounded-sm border border-border bg-surface-low px-3 text-sm text-foreground outline-none transition focus:border-primary"
-                        disabled={extractBusy}
-                      />
-                    </label>
-                  </div>
-                </div>
+                <MetadataRewriteForm draft={rewriteDraft} disabled={extractBusy} onDraftChange={patchRewriteDraft} />
               </div>
             ) : null}
 
@@ -758,6 +557,9 @@ export function UploadPage() {
                   <SummaryTile label="size" value={formatBytes(extractResult.file_size)} />
                   <SummaryTile label="tool" value={extractResult.ai_metadata?.ai_tool || '—'} />
                   <SummaryTile label="model" value={extractResult.ai_metadata?.model_name || '—'} />
+                  {extractedGenerationParamItems.map((item) => (
+                    <SummaryTile key={item.id} label={item.label} value={item.value} />
+                  ))}
                 </div>
 
                 {extractResult.ai_metadata?.lora_models?.length ? (

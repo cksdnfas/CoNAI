@@ -15,7 +15,7 @@ interface RelatedImageGallerySectionProps {
   errorMessage: string | null
   emptyMessage: string
   actions?: ReactNode
-  activationMode?: 'navigate' | 'modal'
+  activationMode?: 'navigate' | 'modal' | 'modal-single'
   useStaticGrid?: boolean
 }
 
@@ -38,11 +38,17 @@ export function RelatedImageGallerySection({
 
   /** Activate a related image in either modal or route-navigation mode. */
   const handleActivate = (imageId: string, href?: string) => {
-    if (activationMode === 'modal' && imageViewModal) {
-      imageViewModal.openImageView({
-        compositeHash: imageId,
-        compositeHashes: itemCompositeHashes,
-      })
+    if ((activationMode === 'modal' || activationMode === 'modal-single') && imageViewModal) {
+      imageViewModal.openImageView(
+        activationMode === 'modal'
+          ? {
+              compositeHash: imageId,
+              compositeHashes: itemCompositeHashes,
+            }
+          : {
+              compositeHash: imageId,
+            },
+      )
       return
     }
 
