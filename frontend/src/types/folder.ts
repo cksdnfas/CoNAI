@@ -43,6 +43,47 @@ export interface WatchedFolderUpdateInput {
   is_active?: boolean
 }
 
+export interface BackupSource {
+  id: number
+  source_path: string
+  display_name: string | null
+  target_folder_name: string
+  recursive: number
+  watcher_enabled: number
+  watcher_polling_interval: number | null
+  import_mode: 'copy_original' | 'convert_webp'
+  webp_quality: number
+  is_active: number
+  watcher_status: string | null
+  watcher_error: string | null
+  watcher_last_event: string | null
+  created_date: string
+  updated_date: string
+}
+
+export interface BackupSourceInput {
+  source_path: string
+  display_name?: string
+  target_folder_name: string
+  recursive?: boolean
+  watcher_enabled?: boolean
+  watcher_polling_interval?: number | null
+  import_mode?: 'copy_original' | 'convert_webp'
+  webp_quality?: number
+}
+
+export interface BackupSourceUpdateInput {
+  source_path?: string
+  display_name?: string
+  target_folder_name?: string
+  recursive?: boolean
+  watcher_enabled?: boolean
+  watcher_polling_interval?: number | null
+  import_mode?: 'copy_original' | 'convert_webp'
+  webp_quality?: number
+  is_active?: boolean
+}
+
 export interface FolderScanLog {
   id: number
   folder_id: number

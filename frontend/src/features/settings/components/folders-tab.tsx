@@ -4,11 +4,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { FolderScanLog, WatchedFolder, WatchedFolderUpdateInput, WatchersHealthSummary } from '@/types/folder'
-import { formatDateTime, type NewWatchedFolderDraft } from '../settings-utils'
+import type { BackupSource, BackupSourceUpdateInput, FolderScanLog, WatchedFolder, WatchedFolderUpdateInput, WatchersHealthSummary } from '@/types/folder'
+import { formatDateTime, type NewBackupSourceDraft, type NewWatchedFolderDraft } from '../settings-utils'
 import { settingsControlClassName } from './settings-control-classes'
 import { SettingsField, SettingsToggleRow, SettingsValueTile } from './settings-primitives'
 import { WatchedFolderCard } from './watched-folder-card'
+import { BackupSourceCard } from './backup-source-card'
 
 interface FoldersTabProps {
   newFolder: NewWatchedFolderDraft
@@ -18,6 +19,13 @@ interface FoldersTabProps {
   isAddingFolder: boolean
   onValidatePath: () => void
   onAddFolder: () => void
+  newBackupSource: NewBackupSourceDraft
+  onNewBackupSourceChange: (patch: Partial<NewBackupSourceDraft>) => void
+  backupPathValidationMessage: string | null
+  isValidatingBackupPath: boolean
+  isAddingBackupSource: boolean
+  onValidateBackupPath: () => void
+  onAddBackupSource: () => void
   onRefresh: () => void
   onScanAll: () => void
   folders: WatchedFolder[]
@@ -30,6 +38,14 @@ interface FoldersTabProps {
   onFolderStopWatcher: (folderId: number) => Promise<void>
   onFolderRestartWatcher: (folderId: number) => Promise<void>
   onFolderDelete: (folderId: number) => Promise<void>
+  backupSources: BackupSource[]
+  backupSourcesLoading: boolean
+  backupSourcesError: string | null
+  onBackupSourceSave: (sourceId: number, input: BackupSourceUpdateInput) => Promise<void>
+  onBackupSourceStartWatcher: (sourceId: number) => Promise<void>
+  onBackupSourceStopWatcher: (sourceId: number) => Promise<void>
+  onBackupSourceRestartWatcher: (sourceId: number) => Promise<void>
+  onBackupSourceDelete: (sourceId: number) => Promise<void>
   scanLogs: FolderScanLog[]
   scanLogsLoading: boolean
   watchersHealth: WatchersHealthSummary | undefined
@@ -43,6 +59,13 @@ export function FoldersTab({
   isAddingFolder,
   onValidatePath,
   onAddFolder,
+  newBackupSource,
+  onNewBackupSourceChange,
+  backupPathValidationMessage,
+  isValidatingBackupPath,
+  isAddingBackupSource,
+  onValidateBackupPath,
+  onAddBackupSource,
   onRefresh,
   onScanAll,
   folders,
@@ -55,6 +78,14 @@ export function FoldersTab({
   onFolderStopWatcher,
   onFolderRestartWatcher,
   onFolderDelete,
+  backupSources,
+  backupSourcesLoading,
+  backupSourcesError,
+  onBackupSourceSave,
+  onBackupSourceStartWatcher,
+  onBackupSourceStopWatcher,
+  onBackupSourceRestartWatcher,
+  onBackupSourceDelete,
   scanLogs,
   scanLogsLoading,
   watchersHealth,
@@ -77,8 +108,9 @@ export function FoldersTab({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-3 text-sm md:grid-cols-5">
+        <CardContent className="grid gap-3 text-sm md:grid-cols-6">
           <SettingsValueTile label="folders" value={folders.length} valueClassName="text-xl" />
+          <SettingsValueTile label="backup sources" value={backupSources.length} valueClassName="text-xl" />
           <SettingsValueTile label="watching" value={watchersHealth?.watching ?? 0} valueClassName="text-xl" />
           <SettingsValueTile label="errors" value={watchersHealth?.error ?? 0} valueClassName="text-xl" />
           <SettingsValueTile label="events 24h" value={watchersHealth?.totalEvents24h ?? 0} valueClassName="text-xl" />
@@ -217,6 +249,136 @@ export function FoldersTab({
                 onStopWatcher={onFolderStopWatcher}
                 onRestartWatcher={onFolderRestartWatcher}
                 onDelete={onFolderDelete}
+              />
+            ))
+          : null}
+      </section>
+
+      <Card className="bg-surface-container">
+        <CardHeader>
+          <CardTitle>새 백업 소스 추가</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <SettingsField label="source 폴더 경로">
+              <input
+                value={newBackupSource.source_path}
+                onChange={(event) => onNewBackupSourceChange({ source_path: event.target.value })}
+                placeholder="D:\\Images\\Incoming"
+                className={settingsControlClassName}
+              />
+            </SettingsField>
+
+            <SettingsField label="표시 이름">
+              <input
+                value={newBackupSource.display_name}
+                onChange={(event) => onNewBackupSourceChange({ display_name: event.target.value })}
+                placeholder="Backup source A"
+                className={settingsControlClassName}
+              />
+            </SettingsField>
+
+            <SettingsField label="uploads 대상 폴더명">
+              <input
+                value={newBackupSource.target_folder_name}
+                onChange={(event) => onNewBackupSourceChange({ target_folder_name: event.target.value })}
+                placeholder="backup-a"
+                className={settingsControlClassName}
+              />
+            </SettingsField>
+
+            <SettingsField label="가져오기 모드">
+              <select
+                value={newBackupSource.import_mode}
+                onChange={(event) => onNewBackupSourceChange({ import_mode: event.target.value as NewBackupSourceDraft['import_mode'] })}
+                className={settingsControlClassName}
+              >
+                <option value="copy_original">원본 복사</option>
+                <option value="convert_webp">WebP 변환 (메타 보존)</option>
+              </select>
+            </SettingsField>
+
+            <SettingsField label="watcher polling(ms)">
+              <input
+                type="number"
+                min={100}
+                value={newBackupSource.watcher_polling_interval}
+                onChange={(event) => onNewBackupSourceChange({ watcher_polling_interval: Number(event.target.value) || 100 })}
+                className={settingsControlClassName}
+              />
+            </SettingsField>
+
+            <SettingsField label="WebP 품질">
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={newBackupSource.webp_quality}
+                onChange={(event) => onNewBackupSourceChange({ webp_quality: Number(event.target.value) || 90 })}
+                className={settingsControlClassName}
+                disabled={newBackupSource.import_mode !== 'convert_webp'}
+              />
+            </SettingsField>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <SettingsToggleRow>
+              <input type="checkbox" checked={newBackupSource.recursive} onChange={(event) => onNewBackupSourceChange({ recursive: event.target.checked })} />
+              하위 폴더 포함
+            </SettingsToggleRow>
+            <SettingsToggleRow>
+              <input type="checkbox" checked={newBackupSource.watcher_enabled} onChange={(event) => onNewBackupSourceChange({ watcher_enabled: event.target.checked })} />
+              watcher 시작
+            </SettingsToggleRow>
+          </div>
+
+          {backupPathValidationMessage ? <p className="text-sm text-primary">{backupPathValidationMessage}</p> : null}
+
+          <div className="flex flex-wrap justify-between gap-2">
+            <Button size="sm" variant="outline" disabled={isValidatingBackupPath || !newBackupSource.source_path.trim()} onClick={onValidateBackupPath}>
+              {isValidatingBackupPath ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+              source 경로 검증
+            </Button>
+
+            <Button size="sm" disabled={isAddingBackupSource || !newBackupSource.source_path.trim() || !newBackupSource.target_folder_name.trim()} onClick={onAddBackupSource}>
+              <FolderPlus className="h-4 w-4" />
+              백업 소스 추가
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <section className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold tracking-tight text-foreground">등록된 백업 소스</h2>
+          <Badge variant="outline">{backupSources.length}</Badge>
+        </div>
+
+        {backupSourcesLoading ? (
+          <div className="space-y-4">
+            {Array.from({ length: 2 }).map((_, index) => (
+              <Skeleton key={index} className="h-48 w-full rounded-sm" />
+            ))}
+          </div>
+        ) : null}
+
+        {backupSourcesError ? (
+          <Alert variant="destructive">
+            <AlertTitle>백업 소스를 불러오지 못했어</AlertTitle>
+            <AlertDescription>{backupSourcesError}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {!backupSourcesLoading && !backupSourcesError
+          ? backupSources.map((source) => (
+              <BackupSourceCard
+                key={source.id}
+                source={source}
+                onSave={onBackupSourceSave}
+                onStartWatcher={onBackupSourceStartWatcher}
+                onStopWatcher={onBackupSourceStopWatcher}
+                onRestartWatcher={onBackupSourceRestartWatcher}
+                onDelete={onBackupSourceDelete}
               />
             ))
           : null}

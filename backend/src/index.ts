@@ -68,6 +68,7 @@ import naiRoutes from './routes/nai';
 import generationHistoryRoutes from './routes/generation-history.routes';
 import wildcardRoutes from './routes/wildcards';
 import { watchedFoldersRoutes } from './routes/watchedFolders';
+import { backupSourcesRoutes } from './routes/backupSources';
 import { backgroundQueueRoutes } from './routes/backgroundQueue';
 import { systemRoutes } from './routes/system.routes';
 import imageEditorRoutes from './routes/image-editor.routes';
@@ -307,6 +308,7 @@ async function registerRoutes() {
   app.use('/api/generation-history', readOnlyLimiter, optionalAuth, generationHistoryRoutes);
   app.use('/api/wildcards', optionalAuth, wildcardRoutes);
   app.use('/api/folders', optionalAuth, watchedFoldersRoutes);
+  app.use('/api/backup-sources', optionalAuth, backupSourcesRoutes);
   app.use('/api/search-history', optionalAuth, searchHistoryRoutes);
   app.use('/api/background-queue', optionalAuth, backgroundQueueRoutes);
   app.use('/api/system', optionalAuth, systemRoutes);
@@ -470,6 +472,11 @@ async function startServer() {
           const { FileWatcherService } = await import('./services/fileWatcherService');
           await FileWatcherService.initialize();
           console.log('✅ File watcher service started successfully');
+
+          console.log('📥 Starting backup source watcher service...');
+          const { BackupSourceWatcherService } = await import('./services/backupSourceWatcherService');
+          await BackupSourceWatcherService.initialize();
+          console.log('✅ Backup source watcher service started successfully');
         } catch (error) {
           console.warn('⚠️  Failed to start file watcher service:', error instanceof Error ? error.message : error);
           console.warn('   Falling back to scheduled scans only');

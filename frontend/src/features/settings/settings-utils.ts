@@ -47,6 +47,17 @@ export interface NewWatchedFolderDraft {
   exclude_patterns: string
 }
 
+export interface NewBackupSourceDraft {
+  source_path: string
+  display_name: string
+  target_folder_name: string
+  recursive: boolean
+  watcher_enabled: boolean
+  watcher_polling_interval: number
+  import_mode: 'copy_original' | 'convert_webp'
+  webp_quality: number
+}
+
 export function createNewWatchedFolderDraft(): NewWatchedFolderDraft {
   return {
     folder_path: '',
@@ -58,5 +69,18 @@ export function createNewWatchedFolderDraft(): NewWatchedFolderDraft {
     watcher_polling_interval: 2000,
     exclude_extensions: '',
     exclude_patterns: '',
+  }
+}
+
+export function createNewBackupSourceDraft(): NewBackupSourceDraft {
+  return {
+    source_path: '',
+    display_name: '',
+    target_folder_name: '',
+    recursive: true,
+    watcher_enabled: true,
+    watcher_polling_interval: 2000,
+    import_mode: 'copy_original',
+    webp_quality: 90,
   }
 }
