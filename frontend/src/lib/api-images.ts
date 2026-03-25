@@ -282,6 +282,13 @@ export interface ConvertWebPDownloadResult {
   metadataState: 'preserved' | 'empty' | 'unknown'
 }
 
+export interface RewriteMetadataDownloadResult {
+  fileName: string
+  rewriteState: 'patched' | 'preserved' | 'unknown'
+  xmpState: 'applied' | 'empty' | 'unknown'
+  exifState: 'applied' | 'empty' | 'unknown'
+}
+
 /** Extract a suggested filename from Content-Disposition when available. */
 function getDownloadFileName(contentDisposition: string | null, fallbackFileName: string) {
   if (!contentDisposition) {
@@ -331,4 +338,50 @@ export async function downloadConvertedWebP(file: File, options?: { quality?: nu
     fileName,
     metadataState,
   } satisfies ConvertWebPDownloadResult
+}
+
+/** Rewrite image metadata and download the rewritten file immediately. */
+export async function downloadRewrittenImage(
+  file: File,
+  options: {
+    format: 'png' | 'jpeg' | 'webp'
+    quality?: number
+    metadataPatch?: Record<string, string | number>
+  },
+) {
+  const formData = new FormData()
+  formData.append('image', file)
+  formData.append('format', options.format)
+  formData.append('quality', String(options.quality ?? 90))
+
+  if (options.metadataPatch && Object.keys(options.metadataPatch).length > 0) {
+    formData.append('metadataPatch', JSON.stringify(options.metadataPatch))
+  }
+
+  const response = await fetch(buildApiUrl('/api/images/rewrite-metadata'), {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(text || `Request failed: ${response.status}`)
+  }
+
+  const blob = await response.blob()
+  const extension = options.format === 'jpeg' ? 'jpg' : options.format
+  const fallbackFileName = `${file.name.replace(/\.[^.]+$/, '') || 'rewritten-image'}.${extension}`
+  const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
+  const rewriteState = (response.headers.get('X-CoNAI-Metadata-Rewrite') as RewriteMetadataDownloadResult['rewriteState'] | null) ?? 'unknown'
+  const xmpState = (response.headers.get('X-CoNAI-Metadata-XMP') as RewriteMetadataDownloadResult['xmpState'] | null) ?? 'unknown'
+  const exifState = (response.headers.get('X-CoNAI-Metadata-EXIF') as RewriteMetadataDownloadResult['exifState'] | null) ?? 'unknown'
+
+  triggerBlobDownload(blob, fileName)
+
+  return {
+    fileName,
+    rewriteState,
+    xmpState,
+    exifState,
+  } satisfies RewriteMetadataDownloadResult
 }

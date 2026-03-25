@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   downloadConvertedWebP,
+  downloadRewrittenImage,
   extractImageKaloscopePreview,
   extractImageMetadataPreview,
   extractImageTaggerPreview,
@@ -30,10 +31,52 @@ const UPLOAD_ACCEPT = `${IMAGE_ACCEPT},video/mp4,video/webm,video/quicktime,vide
 const MAX_VISIBLE_FILES = 6
 
 type ExtractAction = 'prompt' | 'tagger' | 'kaloscope' | 'all'
+type RewriteFormat = 'png' | 'jpeg' | 'webp'
+
+interface RewriteMetadataDraft {
+  format: RewriteFormat
+  prompt: string
+  negativePrompt: string
+  steps: string
+  sampler: string
+  model: string
+}
 
 function formatDimensions(width?: number | null, height?: number | null) {
   if (!width || !height) return '—'
   return `${width} × ${height}`
+}
+
+function inferRewriteFormat(file: File | null): RewriteFormat {
+  if (!file) {
+    return 'webp'
+  }
+
+  const lowerName = file.name.toLowerCase()
+  if (lowerName.endsWith('.png')) {
+    return 'png'
+  }
+
+  if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) {
+    return 'jpeg'
+  }
+
+  if (lowerName.endsWith('.webp')) {
+    return 'webp'
+  }
+
+  return 'webp'
+}
+
+function createEmptyRewriteDraft(file: File | null): RewriteMetadataDraft {
+  return {
+    format: inferRewriteFormat(file),
+    prompt: '',
+    negativePrompt: '',
+    steps: '',
+    sampler: '',
+    model: '',
+  }
 }
 
 function SummaryTile({ label, value }: { label: string; value: string }) {
@@ -103,6 +146,8 @@ export function UploadPage() {
   const [extractError, setExtractError] = useState<string | null>(null)
   const [activeExtractAction, setActiveExtractAction] = useState<ExtractAction | null>(null)
   const [isConvertingWebP, setIsConvertingWebP] = useState(false)
+  const [isRewritingMetadata, setIsRewritingMetadata] = useState(false)
+  const [rewriteDraft, setRewriteDraft] = useState<RewriteMetadataDraft>(createEmptyRewriteDraft(null))
   const [isExtractDragActive, setIsExtractDragActive] = useState(false)
 
   useEffect(() => {
@@ -119,6 +164,26 @@ export function UploadPage() {
     }
   }, [extractFile])
 
+  useEffect(() => {
+    setRewriteDraft((current) => ({
+      ...current,
+      format: inferRewriteFormat(extractFile),
+    }))
+  }, [extractFile])
+
+  useEffect(() => {
+    if (!extractResult) {
+      return
+    }
+
+    setRewriteDraft((current) => ({
+      ...current,
+      prompt: extractResult.ai_metadata?.prompts?.prompt ?? current.prompt,
+      negativePrompt: extractResult.ai_metadata?.prompts?.negative_prompt ?? current.negativePrompt,
+      model: extractResult.ai_metadata?.model_name ?? current.model,
+    }))
+  }, [extractResult])
+
   const extractedPromptCards = useMemo(() => {
     if (!extractResult) {
       return []
@@ -129,7 +194,7 @@ export function UploadPage() {
 
   const uploadTotalSize = useMemo(() => uploadFiles.reduce((sum, file) => sum + file.size, 0), [uploadFiles])
   const uploadPercent = uploadProgress?.percent ?? (uploadResult ? 100 : 0)
-  const extractBusy = activeExtractAction !== null || isConvertingWebP
+  const extractBusy = activeExtractAction !== null || isConvertingWebP || isRewritingMetadata
 
   const resetUploadState = () => {
     setUploadResult(null)
@@ -151,6 +216,7 @@ export function UploadPage() {
 
   const applyExtractFile = (file: File | null) => {
     setExtractFile(file)
+    setRewriteDraft(createEmptyRewriteDraft(file))
     resetExtractResults()
   }
 
@@ -217,6 +283,59 @@ export function UploadPage() {
       showSnackbar({ message, tone: 'error' })
     } finally {
       setIsConvertingWebP(false)
+    }
+  }
+
+  const handleRewriteMetadata = async () => {
+    if (!extractFile || extractBusy) {
+      return
+    }
+
+    setIsRewritingMetadata(true)
+    setExtractError(null)
+
+    try {
+      const metadataPatch: Record<string, string | number> = {}
+
+      if (rewriteDraft.prompt.trim()) {
+        metadataPatch.prompt = rewriteDraft.prompt.trim()
+      }
+
+      if (rewriteDraft.negativePrompt.trim()) {
+        metadataPatch.negative_prompt = rewriteDraft.negativePrompt.trim()
+      }
+
+      if (rewriteDraft.steps.trim()) {
+        const numericSteps = Number(rewriteDraft.steps)
+        if (!Number.isFinite(numericSteps) || numericSteps <= 0) {
+          throw new Error('steps는 1 이상의 숫자여야 해.')
+        }
+        metadataPatch.steps = Math.round(numericSteps)
+      }
+
+      if (rewriteDraft.sampler.trim()) {
+        metadataPatch.sampler = rewriteDraft.sampler.trim()
+      }
+
+      if (rewriteDraft.model.trim()) {
+        metadataPatch.model = rewriteDraft.model.trim()
+      }
+
+      const result = await downloadRewrittenImage(extractFile, {
+        format: rewriteDraft.format,
+        metadataPatch,
+      })
+
+      const message = result.rewriteState === 'patched'
+        ? `메타 수정 파일(${result.fileName}) 다운로드를 시작했어. XMP ${result.xmpState}, EXIF ${result.exifState}.`
+        : `메타 보존 파일(${result.fileName}) 다운로드를 시작했어. XMP ${result.xmpState}, EXIF ${result.exifState}.`
+      showSnackbar({ message, tone: 'info' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '메타 수정에 실패했어.'
+      setExtractError(message)
+      showSnackbar({ message, tone: 'error' })
+    } finally {
+      setIsRewritingMetadata(false)
     }
   }
 
@@ -493,6 +612,10 @@ export function UploadPage() {
                   <Download className="h-4 w-4" />
                   {isConvertingWebP ? 'WebP 변환 중…' : 'WebP 변환'}
                 </Button>
+                <Button type="button" variant="outline" onClick={handleRewriteMetadata} disabled={!extractFile || extractBusy}>
+                  <Download className="h-4 w-4" />
+                  {isRewritingMetadata ? '메타 수정 중…' : '메타 수정 다운로드'}
+                </Button>
                 <Button type="button" variant="outline" onClick={() => handleExtractAction('prompt')} disabled={!extractFile || extractBusy}>
                   {activeExtractAction === 'prompt' ? '추출 중…' : '프롬프트'}
                 </Button>
@@ -531,11 +654,92 @@ export function UploadPage() {
                   <SummaryTile label="file" value={extractFile.name} />
                   <SummaryTile label="size" value={formatBytes(extractFile.size)} />
                   <SummaryTile label="type" value={extractFile.type || '—'} />
-                  <SummaryTile label="status" value={isConvertingWebP ? 'WebP 변환 중…' : extractBusy ? '추출 중…' : '대기'} />
+                  <SummaryTile label="status" value={isRewritingMetadata ? '메타 수정 중…' : isConvertingWebP ? 'WebP 변환 중…' : extractBusy ? '추출 중…' : '대기'} />
                 </div>
 
                 <div className="rounded-sm bg-surface-high px-4 py-3 text-sm text-muted-foreground">
                   WebP 변환은 현재 선택한 이미지 한 장을 기준으로 바로 다운로드해. CoNAI가 읽은 메타는 가능한 범위에서 XMP로 옮겨 담고, WebP stealth / EXIF / PNG text 계열 추출도 같이 유지하도록 맞춰둔 상태야.
+                </div>
+
+                <div className="space-y-4 rounded-sm bg-surface-high p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-foreground">메타 수정</div>
+                      <div className="mt-1 text-xs text-muted-foreground">현재 파일을 다시 저장하면서 prompt / negative / steps / sampler / model을 표준 EXIF/XMP 기준으로 덮어써.</div>
+                    </div>
+                    <Badge variant="outline">rewrite</Badge>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <label className="space-y-2 text-sm">
+                      <span className="text-muted-foreground">출력 포맷</span>
+                      <select
+                        value={rewriteDraft.format}
+                        onChange={(event) => setRewriteDraft((current) => ({ ...current, format: event.target.value as RewriteFormat }))}
+                        className="h-9 w-full rounded-sm border border-border bg-surface-low px-3 text-sm text-foreground outline-none transition focus:border-primary"
+                        disabled={extractBusy}
+                      >
+                        <option value="png">PNG</option>
+                        <option value="jpeg">JPEG</option>
+                        <option value="webp">WebP</option>
+                      </select>
+                    </label>
+
+                    <label className="space-y-2 text-sm">
+                      <span className="text-muted-foreground">steps</span>
+                      <input
+                        value={rewriteDraft.steps}
+                        onChange={(event) => setRewriteDraft((current) => ({ ...current, steps: event.target.value }))}
+                        placeholder="예: 28"
+                        className="h-9 w-full rounded-sm border border-border bg-surface-low px-3 text-sm text-foreground outline-none transition focus:border-primary"
+                        disabled={extractBusy}
+                      />
+                    </label>
+
+                    <label className="space-y-2 text-sm">
+                      <span className="text-muted-foreground">sampler</span>
+                      <input
+                        value={rewriteDraft.sampler}
+                        onChange={(event) => setRewriteDraft((current) => ({ ...current, sampler: event.target.value }))}
+                        placeholder="예: Euler a"
+                        className="h-9 w-full rounded-sm border border-border bg-surface-low px-3 text-sm text-foreground outline-none transition focus:border-primary"
+                        disabled={extractBusy}
+                      />
+                    </label>
+
+                    <label className="space-y-2 text-sm md:col-span-2 xl:col-span-3">
+                      <span className="text-muted-foreground">prompt</span>
+                      <textarea
+                        value={rewriteDraft.prompt}
+                        onChange={(event) => setRewriteDraft((current) => ({ ...current, prompt: event.target.value }))}
+                        placeholder="positive prompt"
+                        className="min-h-28 w-full rounded-sm border border-border bg-surface-low px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary"
+                        disabled={extractBusy}
+                      />
+                    </label>
+
+                    <label className="space-y-2 text-sm md:col-span-2 xl:col-span-3">
+                      <span className="text-muted-foreground">negative prompt</span>
+                      <textarea
+                        value={rewriteDraft.negativePrompt}
+                        onChange={(event) => setRewriteDraft((current) => ({ ...current, negativePrompt: event.target.value }))}
+                        placeholder="negative prompt"
+                        className="min-h-24 w-full rounded-sm border border-border bg-surface-low px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary"
+                        disabled={extractBusy}
+                      />
+                    </label>
+
+                    <label className="space-y-2 text-sm md:col-span-2 xl:col-span-3">
+                      <span className="text-muted-foreground">model</span>
+                      <input
+                        value={rewriteDraft.model}
+                        onChange={(event) => setRewriteDraft((current) => ({ ...current, model: event.target.value }))}
+                        placeholder="예: animeModel"
+                        className="h-9 w-full rounded-sm border border-border bg-surface-low px-3 text-sm text-foreground outline-none transition focus:border-primary"
+                        disabled={extractBusy}
+                      />
+                    </label>
+                  </div>
                 </div>
               </div>
             ) : null}
