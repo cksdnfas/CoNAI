@@ -21,3 +21,11 @@ export function getThemeToneFillStyle(tone: ThemeTone): CSSProperties {
     backgroundColor: `var(--theme-badge-${tone})`,
   }
 }
+
+export function getThemeTonePanelStyle(tone: ThemeTone): CSSProperties {
+  return {
+    backgroundColor: `var(--theme-badge-${tone}-soft)`,
+    color: `var(--theme-badge-${tone})`,
+    borderColor: `color-mix(in srgb, var(--theme-badge-${tone}) 28%, transparent)`,
+  }
+}

@@ -6,6 +6,7 @@ import {
   SHADOW_PRESETS,
   type AppearanceContrastIssue,
 } from '@/lib/appearance'
+import { getThemeTonePanelStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 import type { AppearanceSettings } from '@/types/settings'
 import { SettingsValueTile } from './settings-primitives'
@@ -51,14 +52,14 @@ export function AppearanceTabPreviewSection({
       </div>
 
       {contrastIssues.length > 0 ? (
-        <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100">
+        <Alert className="border" style={getThemeTonePanelStyle('rating')}>
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Contrast guardrail</AlertTitle>
           <AlertDescription>
             <p>현재 조합은 일부 텍스트/상태 색 대비가 약해 보여. 저장 전 확인하는 편이 좋아.</p>
             <div className="flex flex-wrap gap-2 pt-1">
               {contrastIssues.map((issue) => (
-                <span key={issue.id} className="rounded-full border border-amber-500/30 bg-background/70 px-2 py-1 text-xs text-foreground">
+                <span key={issue.id} className="rounded-full border bg-background/70 px-2 py-1 text-xs text-foreground" style={getThemeTonePanelStyle('rating')}>
                   {issue.label}: {issue.ratio}:1
                 </span>
               ))}

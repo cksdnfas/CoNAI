@@ -11,6 +11,7 @@ import {
   resolveAppearanceColors,
   resolveSurfacePalette,
 } from '@/lib/appearance'
+import { getThemeToneStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 import type { AppearancePresetSlot, AppearanceSettings } from '@/types/settings'
 import { settingsControlClassName } from './settings-control-classes'
@@ -89,9 +90,10 @@ export function AppearanceTabSlotSection({
                             : isActiveSlot
                               ? 'bg-primary/14 text-primary'
                               : matchesSavedTheme
-                                ? 'bg-emerald-500/14 text-emerald-700 dark:text-emerald-300'
+                                ? ''
                                 : 'bg-surface-highest text-foreground',
                         )}
+                        style={matchesSavedTheme && !isEmptySlot && !isActiveSlot ? getThemeToneStyle('positive') : undefined}
                       >
                         {isEmptySlot ? 'Empty' : isActiveSlot ? 'Active preview' : matchesSavedTheme ? 'Saved baseline' : 'Saved slot'}
                       </span>

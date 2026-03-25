@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { getThemeTonePanelStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 
 interface SnackbarProps {
@@ -29,10 +30,9 @@ export function Snackbar({ open, message, tone = 'info', onClose, durationMs = 2
         className={cn(
           'pointer-events-auto max-w-md min-w-[240px] rounded-sm border px-4 py-3 text-sm shadow-2xl transition-all duration-200',
           open && message ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0',
-          tone === 'error'
-            ? 'border-destructive/30 bg-destructive/12 text-destructive'
-            : 'border-primary/20 bg-surface-high text-foreground',
+          tone === 'error' ? '' : 'border-primary/20 bg-surface-high text-foreground',
         )}
+        style={tone === 'error' ? getThemeTonePanelStyle('negative') : undefined}
         role="status"
         aria-live={tone === 'error' ? 'assertive' : 'polite'}
         aria-hidden={!open || !message}

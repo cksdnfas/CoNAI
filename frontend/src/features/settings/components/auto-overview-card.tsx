@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { getThemeToneTextStyle } from '@/lib/theme-tones'
 import type { KaloscopeServerStatus, TaggerDependencyCheckResult, TaggerServerStatus } from '@/types/settings'
 import { SettingsValueTile } from './settings-primitives'
 
@@ -26,7 +27,7 @@ function renderDependencyStatus({
     return <span className="text-muted-foreground">{fallback}</span>
   }
 
-  return <span className={ready ? 'text-primary' : 'text-destructive'}>{ready ? '준비 OK' : '확인 필요'}</span>
+  return <span style={ready ? getThemeToneTextStyle('positive') : getThemeToneTextStyle('negative')}>{ready ? '준비 OK' : '확인 필요'}</span>
 }
 
 export function AutoOverviewCard({

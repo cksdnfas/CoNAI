@@ -54,7 +54,7 @@ export function HomeSearchHeaderBox({ active, desktopMode }: { active: boolean; 
     <div className="relative">
       {desktopMode ? (
         <div
-          className="theme-settings-control flex items-center rounded-sm border border-white/10 bg-surface-lowest text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]"
+          className="theme-settings-control flex items-center rounded-sm border border-border bg-surface-lowest text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]"
           style={{ width: 'var(--theme-search-box-width)' }}
         >
           <Search className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -226,7 +226,7 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
             {draftChips.length > 0 ? (
               <div className="space-y-2">
                 {draftChips.map((chip) => (
-                  <div key={chip.id} className="flex items-center gap-2 rounded-sm border border-white/10 bg-surface-lowest px-3 py-3">
+                  <div key={chip.id} className="flex items-center gap-2 rounded-sm border border-border bg-surface-lowest px-3 py-3">
                     <span className="rounded-sm px-2 py-1 text-[11px] font-semibold tracking-[0.08em]" style={getThemeToneStyle(chip.scope)}>
                       {SEARCH_SCOPE_LABELS[chip.scope]}
                     </span>
@@ -275,11 +275,11 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
             {!historyLoading && historyEntries.length > 0 ? (
               <div className="space-y-3">
                 {historyEntries.map((entry) => (
-                  <div key={entry.id} className="flex items-start gap-3 rounded-sm border border-white/10 bg-surface-lowest px-4 py-3">
+                  <div key={entry.id} className="flex items-start gap-3 rounded-sm border border-border bg-surface-lowest px-4 py-3">
                     <button type="button" onClick={() => selectHistoryEntry(entry)} className="min-w-0 flex-1 text-left">
                       <div className="flex flex-wrap gap-2">
                         {entry.chips.map((chip) => (
-                          <span key={chip.id} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-background px-2.5 py-1.5 text-xs text-foreground">
+                          <span key={chip.id} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1.5 text-xs text-foreground">
                             <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em]" style={getThemeToneStyle(chip.scope)}>
                               {SEARCH_SCOPE_LABELS[chip.scope]}
                             </span>

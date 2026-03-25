@@ -20,6 +20,7 @@ import {
   type UploadTransferProgress,
 } from '@/lib/api'
 import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
+import { getThemeToneTextStyle } from '@/lib/theme-tones'
 import type { ImageRecord } from '@/types/image'
 import { formatBytes } from '../images/components/detail/image-detail-utils'
 
@@ -73,7 +74,7 @@ function DropSurface({ active, ariaLabel, onClick, onDrop, onDragEnter, onDragOv
       onDragLeave={onDragLeave}
       className={[
         'flex h-44 w-full items-center justify-center rounded-sm border-2 border-dashed transition-colors',
-        active ? 'border-primary bg-primary/6' : 'border-white/14 bg-surface-low hover:border-white/24 hover:bg-surface-high/60',
+        active ? 'border-primary bg-primary/6' : 'border-border bg-surface-low hover:border-primary/30 hover:bg-surface-high/60',
       ].join(' ')}
     >
       <ImageIcon className={active ? 'h-12 w-12 text-primary' : 'h-12 w-12 text-muted-foreground'} />
@@ -442,7 +443,7 @@ export function UploadPage() {
                     {uploadResult.failed.map((file) => (
                       <div key={`${file.filename}:${file.error}`} className="rounded-sm bg-surface-high px-3 py-3">
                         <div className="break-all text-foreground">{file.filename}</div>
-                        <div className="mt-1 text-xs text-destructive">{file.error}</div>
+                        <div className="mt-1 text-xs" style={getThemeToneTextStyle('negative')}>{file.error}</div>
                       </div>
                     ))}
                   </div>
