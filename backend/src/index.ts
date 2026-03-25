@@ -88,11 +88,11 @@ import { optionalAuth } from './middleware/authMiddleware';
 import { imageTaggerService } from './services/imageTaggerService';
 import { APIImageProcessor } from './services/APIImageProcessor';
 import { PORTS, IMAGE_PROCESSING } from '@conai/shared';
-import { settingsService } from './services/settingsService';
 import { AutoScanScheduler } from './services/autoScanScheduler';
 import { autoTagScheduler } from './services/autoTagScheduler';
 import { QueryCacheService } from './services/QueryCacheService';
 import { WatchedFolderService } from './services/watchedFolderService';
+import { startRuntimeSideEffectServices } from './startup/startRuntimeSideEffectServices';
 
 const app = express();
 const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;
@@ -449,60 +449,7 @@ async function startServer() {
     await APIImageProcessor.ensureDirectories();
 
     // 7-11. Runtime side-effect services
-    const settings = settingsService.loadSettings();
-    if (isSafeSmokeMode) {
-      console.log('🧪 SAFE_SMOKE_MODE enabled - skipping daemon, watcher, and scheduler startup');
-    } else {
-      if (settings.tagger.enabled) {
-        console.log('🤖 Starting tagger daemon...');
-        try {
-          await imageTaggerService.startDaemon();
-          console.log('✅ Tagger daemon started successfully');
-        } catch (error) {
-          console.warn('⚠️  Failed to start tagger daemon:', error instanceof Error ? error.message : error);
-          console.warn('   Tagger will be started on first use');
-        }
-      } else {
-        console.log('⏭️  Tagger is disabled - skipping daemon startup');
-      }
-
-      if (process.env.ENABLE_FILE_WATCHING !== 'false') {
-        try {
-          console.log('👀 Starting file watcher service...');
-          const { FileWatcherService } = await import('./services/fileWatcherService');
-          await FileWatcherService.initialize();
-          console.log('✅ File watcher service started successfully');
-
-          console.log('📥 Starting backup source watcher service...');
-          const { BackupSourceWatcherService } = await import('./services/backupSourceWatcherService');
-          await BackupSourceWatcherService.initialize();
-          console.log('✅ Backup source watcher service started successfully');
-        } catch (error) {
-          console.warn('⚠️  Failed to start file watcher service:', error instanceof Error ? error.message : error);
-          console.warn('   Falling back to scheduled scans only');
-        }
-      } else {
-        console.log('⏭️  File watching is disabled - using scheduled scans only');
-      }
-
-      console.log('🤖 Starting auto-scan scheduler...');
-      AutoScanScheduler.start();
-      console.log('✅ Auto-scan scheduler started successfully');
-
-      console.log('🤖 Starting auto-tag scheduler...');
-      autoTagScheduler.start();
-      console.log('✅ Auto-tag scheduler started successfully');
-
-      try {
-        console.log('🧹 Starting temp image cleanup scheduler...');
-        const { TempImageCleanupScheduler } = await import('./cron/tempImageCleanup');
-        TempImageCleanupScheduler.start();
-        console.log('✅ Temp image cleanup scheduler started successfully');
-      } catch (error) {
-        console.warn('⚠️  Failed to start temp image cleanup scheduler:', error instanceof Error ? error.message : error);
-        console.warn('   Temp files will not be automatically cleaned up');
-      }
-    }
+    await startRuntimeSideEffectServices(isSafeSmokeMode);
 
     const extractHost = (value?: string | null): string | undefined => {
       if (!value || value.trim().length === 0) {
