@@ -6,6 +6,7 @@ import { runtimePaths } from '../config/runtimePaths';
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../models/Image/ImageFileModel';
 import { ImageUploadService } from './imageUploadService';
+import { WebPConversionService } from './webpConversionService';
 import { db } from '../database/init';
 
 export interface EditResult {
@@ -258,16 +259,15 @@ export class ImageEditorService {
 
     const newFilePath = path.join(canvasDir, newFileName);
 
-    // Convert to WebP and get metadata in one pass (avoid file handle issues)
-    const webpBuffer = await sharp(imageBuffer)
-      .webp({ quality: Math.min(100, Math.max(1, quality)) })
-      .toBuffer();
-
-    // Get metadata from buffer (not file) to avoid file handle issues
-    const metadata = await sharp(webpBuffer).metadata();
+    const conversion = await WebPConversionService.convertBufferToWebPBuffer(imageBuffer, {
+      quality,
+      sourcePathForMetadata: originalPath,
+      originalFileName: path.basename(originalPath),
+      mimeType: imageFile.mime_type || 'image/webp',
+    });
 
     // Write to file
-    await fs.promises.writeFile(newFilePath, webpBuffer);
+    await fs.promises.writeFile(newFilePath, conversion.buffer);
 
     // Register with TempImageService for cleanup tracking
     TempImageService.registerTempFile(
@@ -282,9 +282,9 @@ export class ImageEditorService {
       success: true,
       filePath: newFilePath,
       tempId,
-      width: metadata.width || 0,
-      height: metadata.height || 0,
-      fileSize: webpBuffer.length
+      width: conversion.info.width || 0,
+      height: conversion.info.height || 0,
+      fileSize: conversion.buffer.length
     };
   }
 }

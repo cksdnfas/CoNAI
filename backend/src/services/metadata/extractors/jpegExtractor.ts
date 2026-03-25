@@ -5,6 +5,7 @@
 
 import sharp from 'sharp';
 import { AIMetadata } from '../types';
+import { ExifTextExtractor } from './exifTextExtractor';
 
 export class JpegExtractor {
   /**
@@ -19,12 +20,24 @@ export class JpegExtractor {
 
       // Extract AI metadata from EXIF Comment or UserComment
       if (metadata.exif) {
-        // Sharp's exif data is in Buffer format - explicitly use utf8 for proper Unicode handling
-        const exifString = metadata.exif.toString('utf8');
+        const exifText = ExifTextExtractor.findLikelyAiMetadataText(metadata.exif);
 
-        if (exifString.includes('parameters') && exifString.includes('Steps:')) {
-          // Will be parsed by WebUIParser
-          return { parameters: exifString };
+        if (exifText) {
+          if (exifText.includes('parameters') && exifText.includes('Steps:')) {
+            return { parameters: exifText };
+          }
+
+          if (exifText.includes('Steps:') && exifText.includes('Sampler:')) {
+            return { parameters: exifText };
+          }
+
+          if (exifText.includes('Negative prompt:')) {
+            return { parameters: exifText };
+          }
+
+          if (exifText.trim().startsWith('{')) {
+            return { Comment: exifText };
+          }
         }
       }
     } catch (error) {

@@ -8,6 +8,7 @@ import { runtimePaths } from '../config/runtimePaths';
 import path from 'path';
 import fs from 'fs';
 import sharp from 'sharp';
+import { WebPConversionService } from '../services/webpConversionService';
 
 const router = Router();
 
@@ -43,14 +44,17 @@ router.get('/:id/webp', asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
-    // Convert to WebP with 100% quality (lossless-like)
-    const webpBuffer = await sharp(originalPath)
-      .webp({ quality: 100, lossless: false })
-      .toBuffer();
+    const conversion = await WebPConversionService.convertFileToWebPBuffer(originalPath, {
+      quality: 100,
+      lossless: false,
+      sourcePathForMetadata: originalPath,
+      originalFileName: path.basename(originalPath),
+      mimeType: imageFile.mime_type || 'image/webp',
+    });
 
     res.set('Content-Type', 'image/webp');
     res.set('Cache-Control', 'private, max-age=300'); // 5분 캐시
-    return res.send(webpBuffer);
+    return res.send(conversion.buffer);
   } catch (error) {
     console.error('Error converting image to WebP:', error);
     return res.status(500).json({
@@ -379,14 +383,17 @@ router.get('/canvas/:filename/webp', asyncHandler(async (req: Request, res: Resp
       });
     }
 
-    // Convert to WebP with 100% quality
-    const webpBuffer = await sharp(filePath)
-      .webp({ quality: 100, lossless: false })
-      .toBuffer();
+    const conversion = await WebPConversionService.convertFileToWebPBuffer(filePath, {
+      quality: 100,
+      lossless: false,
+      sourcePathForMetadata: filePath,
+      originalFileName: path.basename(filePath),
+      mimeType: 'image/webp',
+    });
 
     res.set('Content-Type', 'image/webp');
     res.set('Cache-Control', 'private, max-age=300');
-    return res.send(webpBuffer);
+    return res.send(conversion.buffer);
   } catch (error) {
     console.error('Error converting canvas image to WebP:', error);
     return res.status(500).json({
@@ -447,14 +454,16 @@ router.post('/canvas/:filename/save-webp', asyncHandler(async (req: Request, res
       });
     }
 
-    // Convert to WebP and save
-    const webpBuffer = await sharp(imageBuffer)
-      .webp({ quality: Math.min(100, Math.max(1, quality)) })
-      .toBuffer();
+    const metadataSourcePath = fs.existsSync(filePath) ? filePath : undefined;
 
-    const metadata = await sharp(webpBuffer).metadata();
+    const conversion = await WebPConversionService.convertBufferToWebPBuffer(imageBuffer, {
+      quality,
+      sourcePathForMetadata: metadataSourcePath,
+      originalFileName: newFileName,
+      mimeType: 'image/webp',
+    });
 
-    await fs.promises.writeFile(filePath, webpBuffer);
+    await fs.promises.writeFile(filePath, conversion.buffer);
 
     return res.json({
       success: true,
@@ -462,9 +471,9 @@ router.post('/canvas/:filename/save-webp', asyncHandler(async (req: Request, res
         filename: newFileName,
         filePath,
         url: `/temp/canvas/${newFileName}`,
-        width: metadata.width || 0,
-        height: metadata.height || 0,
-        fileSize: webpBuffer.length
+        width: conversion.info.width || 0,
+        height: conversion.info.height || 0,
+        fileSize: conversion.buffer.length
       }
     });
   } catch (error) {

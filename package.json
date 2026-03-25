@@ -18,6 +18,7 @@
     "build:shared": "cd shared && npm run build",
     "build:frontend": "cd frontend && npm run build",
     "build:backend": "cd backend && npm run build",
+    "validate:metadata": "cd backend && npm run validate:metadata",
     "build:integrated": "node scripts/build-integrated.js",
     "build:bundle": "node scripts/build-bundle.js",
     "build:portable": "node scripts/build-portable.js",

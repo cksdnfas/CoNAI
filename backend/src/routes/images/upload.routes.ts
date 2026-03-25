@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 import { Router, Request, Response } from 'express';
 import { successResponse, errorResponse } from '@conai/shared';
 import { uploadSingle, uploadMultiple } from '../../middleware/upload';
@@ -9,6 +10,7 @@ import { imageTaggerService } from '../../services/imageTaggerService';
 import { kaloscopeTaggerService } from '../../services/kaloscopeTaggerService';
 import { UploadResponse } from '../../types/image';
 import { runtimePaths } from '../../config/runtimePaths';
+import { WebPConversionService } from '../../services/webpConversionService';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
@@ -37,6 +39,12 @@ function parseMaybeJson(value: unknown) {
   } catch {
     return null;
   }
+}
+
+function buildDownloadFileName(originalName: string): string {
+  const baseName = path.basename(originalName, path.extname(originalName)) || 'converted-image';
+  const safeBaseName = baseName.replace(/[\\/:*?"<>|]/g, '_');
+  return `${safeBaseName}.webp`;
 }
 
 function buildExtractedImagePreview(
@@ -266,6 +274,50 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
       success: false,
       error: error instanceof Error ? error.message : 'Multiple upload failed'
     });
+  }
+}));
+
+/**
+ * 이미지 저장 없이 WebP로 변환하고 메타데이터를 XMP로 보존
+ */
+router.post('/convert-webp', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
+  const file = getSingleUploadedFile(req);
+
+  if (!file) {
+    return res.status(400).json(errorResponse('No file uploaded'));
+  }
+
+  if (!isImageFile(file.mimetype)) {
+    return res.status(400).json(errorResponse('Only image files can be converted to WebP'));
+  }
+
+  if (!file.path) {
+    return res.status(500).json(errorResponse('Temporary upload path is missing'));
+  }
+
+  const rawQuality = typeof req.body?.quality === 'string' ? Number(req.body.quality) : Number(req.body?.quality ?? 90);
+
+  try {
+    const conversion = await WebPConversionService.convertFileToWebPBuffer(file.path, {
+      quality: Number.isFinite(rawQuality) ? rawQuality : 90,
+      sourcePathForMetadata: file.path,
+      originalFileName: file.originalname,
+      mimeType: file.mimetype,
+    });
+
+    const downloadName = buildDownloadFileName(file.originalname);
+    const encodedName = encodeURIComponent(downloadName);
+
+    res.setHeader('Content-Type', 'image/webp');
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"; filename*=UTF-8''${encodedName}`);
+    res.setHeader('X-CoNAI-WebP-Metadata', conversion.embeddedPayload ? 'preserved' : 'empty');
+
+    return res.send(conversion.buffer);
+  } catch (error) {
+    console.error('❌ Convert WebP error:', error);
+    return res.status(500).json(errorResponse(error instanceof Error ? error.message : 'WebP conversion failed'));
+  } finally {
+    await cleanupTemporaryUpload(file);
   }
 }));
 

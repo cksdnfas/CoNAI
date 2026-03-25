@@ -5,19 +5,36 @@
 
 import fs from 'fs';
 import path from 'path';
-import { ImageMetadata, AIMetadata, LoRAModel } from './types';
-import { PngExtractor } from './extractors/pngExtractor';
-import { JpegExtractor } from './extractors/jpegExtractor';
+import { ImageMetadata, AIMetadata } from './types';
 import { StealthPngExtractor } from './extractors/stealthPngExtractor';
-import { NovelAIParser } from './parsers/novelaiParser';
-import { WebUIParser } from './parsers/webuiParser';
-import { ComfyUIParser } from './parsers/comfyuiParser';
-import { WorkflowDetector } from './parsers/workflowDetector';
+import { readRawMetadata } from './readers/rawMetadataReaders';
+import { parseRawMetadata } from './parsers/rawMetadataParsers';
+import { normalizeExtractedMetadata } from './normalizeMetadata';
 import { MetadataExtractionError } from '../../types/errors';
 import { assertFileReadable } from '../../utils/fileAccess';
 import { logger } from '../../utils/logger';
 
 export class MetadataExtractor {
+  /**
+   * Extract raw parser input plus parsed metadata for metadata-preserving conversions.
+   */
+  static async extractPreservableData(filePath: string): Promise<{
+    metadata: ImageMetadata;
+    rawData: Record<string, any>;
+  }> {
+    await assertFileReadable(filePath);
+
+    const fileExt = path.extname(filePath).toLowerCase();
+    const buffer = await fs.promises.readFile(filePath);
+    const rawData = await this.extractRawData(buffer, filePath, fileExt);
+    const metadata = await this.extractMetadata(filePath);
+
+    return {
+      metadata,
+      rawData,
+    };
+  }
+
   /**
    * Extract metadata from image file (primary + secondary extraction)
    * @param filePath - Image file path
@@ -145,35 +162,10 @@ export class MetadataExtractor {
         }
       }
 
-      // 워크플로 JSON 검증 및 필터링
-      if (aiInfo.prompt) {
-        if (WorkflowDetector.isWorkflowJSON(aiInfo.prompt)) {
-          const workflowInfo = WorkflowDetector.extractWorkflowInfo(aiInfo.prompt);
-          console.warn(`⚠️ [MetadataExtractor] Workflow JSON detected - invalidating prompt`, workflowInfo);
-
-          // 워크플로 JSON을 프롬프트로 저장하지 않음
-          aiInfo.prompt = undefined;
-          aiInfo.positive_prompt = undefined;
-        }
-      }
-
-      // Negative prompt도 검증
-      if (aiInfo.negative_prompt) {
-        if (WorkflowDetector.isWorkflowJSON(aiInfo.negative_prompt)) {
-          logger.warn(`⚠️ [MetadataExtractor] Workflow JSON in negative prompt - invalidating`);
-          aiInfo.negative_prompt = undefined;
-        }
-      }
-
-      // AI 도구 자동 감지
-      const detectStart = Date.now();
-      this.detectAITool(aiInfo);
-      logger.debug(`⏱️ [MetadataExtractor] AI tool detection: ${Date.now() - detectStart}ms`);
-
-      // LoRA 모델 정보 처리
-      const loraStart = Date.now();
-      this.processLoRAModels(aiInfo);
-      logger.debug(`⏱️ [MetadataExtractor] LoRA processing: ${Date.now() - loraStart}ms`);
+      // Normalize parsed metadata (workflow guard, AI tool detection, LoRA extraction)
+      const normalizeStart = Date.now();
+      normalizeExtractedMetadata(aiInfo);
+      logger.debug(`⏱️ [MetadataExtractor] Metadata normalization: ${Date.now() - normalizeStart}ms`);
 
       // AI 정보가 없어도 기본값 설정하지 않음
       // 프롬프트가 없으면 prompt 필드를 undefined로 유지
@@ -225,17 +217,25 @@ export class MetadataExtractor {
     filePath: string,
     fileExt: string
   ): Promise<AIMetadata> {
-    let rawData: any = {};
-
-    // Extract raw data based on file type
-    if (fileExt === '.png') {
-      rawData = PngExtractor.extract(buffer);
-    } else if (['.jpg', '.jpeg'].includes(fileExt)) {
-      rawData = await JpegExtractor.extract(filePath);
-    }
+    const rawData = await this.extractRawData(buffer, filePath, fileExt);
 
     // Parse raw data
-    return this.parseRawData(rawData);
+    return parseRawMetadata(rawData);
+  }
+
+  /**
+   * Extract raw parser input based on file type.
+   */
+  private static async extractRawData(
+    buffer: Buffer,
+    filePath: string,
+    fileExt: string
+  ): Promise<Record<string, any>> {
+    return readRawMetadata({
+      buffer,
+      filePath,
+      fileExt,
+    });
   }
 
   /**
@@ -280,7 +280,7 @@ export class MetadataExtractor {
 
       // Parse Stealth data
       logger.debug('🔄 [secondaryExtraction] Calling parseRawData...');
-      const parsedData = this.parseRawData({ stealthData });
+      const parsedData = parseRawMetadata({ stealthData });
 
       logger.debug('📦 [secondaryExtraction] Parse result:', {
         hasPrompt: !!parsedData.prompt,
@@ -315,155 +315,6 @@ export class MetadataExtractor {
       return existingAiInfo;
     }
   }
-
-  /**
-   * Parse raw data using appropriate parser
-   */
-  private static parseRawData(rawData: any): AIMetadata {
-    logger.debug('🔍 [parseRawData] Input type:', typeof rawData, {
-      hasStealthData: !!rawData.stealthData,
-      stealthDataLength: rawData.stealthData?.length || 0,
-      stealthDataPreview: rawData.stealthData ? String(rawData.stealthData).substring(0, 100) : undefined,
-      hasComfyUIWorkflow: !!rawData.comfyui_workflow,
-      hasParameters: !!rawData.parameters
-    });
-
-    // PRIORITY 1: Try NovelAI parser (most specific format)
-    if (NovelAIParser.isNovelAIFormat(rawData)) {
-      logger.debug('📦 [MetadataExtractor] Parsing as NovelAI format');
-      return NovelAIParser.parse(rawData);
-    }
-
-    // PRIORITY 2: Try WebUI parser (reliable prompt extraction)
-    if (WebUIParser.isWebUIFormat(rawData)) {
-      logger.debug('📦 [MetadataExtractor] Parsing as WebUI format');
-      const result = WebUIParser.parse(rawData);
-
-      // If ComfyUI workflow exists, use it for AI tool detection
-      if (rawData.comfyui_workflow && !result.ai_tool) {
-        logger.debug('ℹ️ [MetadataExtractor] ComfyUI workflow detected - marking as ComfyUI');
-        result.ai_tool = 'ComfyUI';
-      }
-
-      return result;
-    }
-
-    // PRIORITY 3: Try ComfyUI workflow parser (fallback, less reliable for prompts)
-    if (rawData.comfyui_workflow) {
-      logger.debug('📦 [MetadataExtractor] Parsing as ComfyUI workflow format (fallback)');
-      return ComfyUIParser.parse(rawData);
-    }
-
-    // Try parsing stealth data if present
-    if (rawData.stealthData) {
-      logger.debug('🔍 [parseRawData] Attempting to parse stealth data...');
-
-      // Try NovelAI
-      const isNovelAI = NovelAIParser.isNovelAIFormat(rawData.stealthData);
-      logger.debug('🔍 [parseRawData] Is NovelAI format?', isNovelAI);
-
-      if (isNovelAI) {
-        logger.debug('📦 [MetadataExtractor] Parsing stealth data as NovelAI format');
-        const result = NovelAIParser.parse(rawData.stealthData);
-        logger.debug('✅ [parseRawData] NovelAI parse result:', {
-          hasPrompt: !!result.prompt,
-          hasPositivePrompt: !!result.positive_prompt,
-          hasNegativePrompt: !!result.negative_prompt
-        });
-        return result;
-      }
-
-      // Try WebUI
-      const isWebUI = WebUIParser.isWebUIFormat(rawData.stealthData);
-      logger.debug('🔍 [parseRawData] Is WebUI format?', isWebUI);
-
-      if (isWebUI) {
-        logger.debug('📦 [MetadataExtractor] Parsing stealth data as WebUI format');
-        const result = WebUIParser.parse(rawData.stealthData);
-        logger.debug('✅ [parseRawData] WebUI parse result:', {
-          hasPrompt: !!result.prompt,
-          hasPositivePrompt: !!result.positive_prompt,
-          hasNegativePrompt: !!result.negative_prompt
-        });
-        return result;
-      }
-
-      logger.debug('❌ [parseRawData] Stealth data found but format not recognized');
-      logger.debug('📄 [parseRawData] Raw stealth data sample:', typeof rawData.stealthData === 'string' ? rawData.stealthData.substring(0, 200) : rawData.stealthData);
-    }
-
-    // No recognized format - return empty
-    logger.debug('⚠️ [MetadataExtractor] No recognized format found');
-    return {};
-  }
-
-  /**
-   * Detect AI tool from metadata
-   */
-  private static detectAITool(aiInfo: AIMetadata): void {
-    if (!aiInfo) return;
-
-    // Already detected
-    if (aiInfo.ai_tool && aiInfo.ai_tool !== 'Unknown') return;
-
-    // Detect from content
-    const text = JSON.stringify(aiInfo).toLowerCase();
-
-    if (text.includes('comfyui') || text.includes('comfy ui')) {
-      aiInfo.ai_tool = 'ComfyUI';
-    } else if (text.includes('novelai') || text.includes('novel ai')) {
-      aiInfo.ai_tool = 'NovelAI';
-    } else if (text.includes('automatic1111') || text.includes('webui')) {
-      aiInfo.ai_tool = 'Automatic1111';
-    } else if (text.includes('invokeai') || text.includes('invoke ai')) {
-      aiInfo.ai_tool = 'InvokeAI';
-    } else if (text.includes('midjourney')) {
-      aiInfo.ai_tool = 'Midjourney';
-    } else if (text.includes('dall-e') || text.includes('dalle')) {
-      aiInfo.ai_tool = 'DALL-E';
-    } else if (text.includes('stable diffusion') || text.includes('sd ')) {
-      aiInfo.ai_tool = 'Stable Diffusion';
-    } else {
-      aiInfo.ai_tool = 'Unknown';
-    }
-  }
-
-  /**
-   * Process LoRA models information
-   */
-  private static processLoRAModels(aiInfo: AIMetadata): void {
-    if (!aiInfo) return;
-
-    // Already processed
-    if (aiInfo.lora_models && Array.isArray(aiInfo.lora_models)) {
-      return;
-    }
-
-    // Extract from prompt
-    const promptText = aiInfo.positive_prompt || aiInfo.prompt;
-    if (promptText) {
-      const loras = this.extractLoRAInfo(promptText);
-      if (loras.length > 0) {
-        aiInfo.lora_models = loras;
-      }
-    }
-  }
-
-  /**
-   * Extract LoRA information from prompt
-   * Returns array of LoRA names (for compatibility with existing type)
-   */
-  private static extractLoRAInfo(prompt: string): string[] {
-    const loraRegex = /<lora:([^:]+):([\d.]+)>/g;
-    const loras: string[] = [];
-    let match;
-
-    while ((match = loraRegex.exec(prompt)) !== null) {
-      loras.push(match[1]);  // Only store name for compatibility
-    }
-
-    return loras;
-  }
 }
 
 // Re-export types for convenience
@@ -474,4 +325,6 @@ export { ComfyUIParser } from './parsers/comfyuiParser';
 export { WorkflowDetector } from './parsers/workflowDetector';
 export { PngExtractor } from './extractors/pngExtractor';
 export { JpegExtractor } from './extractors/jpegExtractor';
+export { WebPExtractor } from './extractors/webpExtractor';
+export { WebPStealthExtractor } from './extractors/webpStealthExtractor';
 export { StealthPngExtractor } from './extractors/stealthPngExtractor';
