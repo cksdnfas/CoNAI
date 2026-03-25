@@ -17,6 +17,7 @@ import {
   TaggerDevice,
   SupportedLanguage,
 } from '../types/settings';
+import { cleanupUnusedAppearanceFontFiles } from './appearanceFontAssetService';
 
 const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
 
@@ -479,6 +480,7 @@ export class SettingsService {
       },
     };
     this.saveSettings(updatedSettings);
+    cleanupUnusedAppearanceFontFiles(updatedSettings.appearance);
     return updatedSettings;
   }
 
