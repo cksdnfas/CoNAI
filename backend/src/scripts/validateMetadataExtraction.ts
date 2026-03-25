@@ -120,11 +120,8 @@ async function createExifJpegFixture(filePath: string): Promise<void> {
     .toFile(filePath);
 }
 
-/**
- * Create a WebP fixture with NovelAI stealth metadata in alpha-channel LSBs.
- */
-async function createStealthWebPFixture(filePath: string): Promise<void> {
-  const payload = {
+function createNovelAiPayload() {
+  return {
     Description: '1girl, breakfast scene',
     Software: 'NovelAI',
     Source: 'NovelAI Diffusion V4.5 4BDE2A90',
@@ -160,7 +157,12 @@ async function createStealthWebPFixture(filePath: string): Promise<void> {
       version: 1
     })
   };
+}
 
+/**
+ * Build raw RGBA pixels containing alpha-channel stealth metadata.
+ */
+function createAlphaStealthRawImage(payload: Record<string, unknown>): { raw: Buffer; width: number; height: number } {
   const signature = 'stealth_pngcomp';
   const compressedPayload = zlib.gzipSync(Buffer.from(JSON.stringify(payload), 'utf8'));
   const bits = [
@@ -193,10 +195,78 @@ async function createStealthWebPFixture(filePath: string): Promise<void> {
     }
   }
 
-  await sharp(raw, {
+  return { raw, width, height };
+}
+
+/**
+ * Create a PNG fixture with ComfyUI workflow metadata.
+ */
+async function createComfyUiPngFixture(filePath: string): Promise<void> {
+  const workflow = {
+    '1': {
+      class_type: 'CLIPTextEncode',
+      inputs: { text: 'cinematic portrait, 1girl' }
+    },
+    '2': {
+      class_type: 'CLIPTextEncode',
+      inputs: { text: 'lowres, blurry' }
+    },
+    '3': {
+      class_type: 'KSampler',
+      inputs: {
+        seed: 4242,
+        steps: 30,
+        cfg: 6.5,
+        sampler_name: 'dpmpp_2m',
+        scheduler: 'karras',
+        denoise: 1
+      }
+    },
+    '4': {
+      class_type: 'CheckpointLoaderSimple',
+      inputs: { ckpt_name: 'dreamshaper.safetensors' }
+    },
+    '5': {
+      class_type: 'EmptyLatentImage',
+      inputs: { width: 1024, height: 1536 }
+    }
+  };
+
+  const basePng = await sharp({
+    create: {
+      width: 1024,
+      height: 1536,
+      channels: 3,
+      background: { r: 80, g: 40, b: 180 }
+    }
+  }).png().toBuffer();
+
+  fs.writeFileSync(filePath, insertTextChunk(basePng, 'prompt', JSON.stringify(workflow)));
+}
+
+/**
+ * Create a PNG fixture with NovelAI stealth metadata in alpha-channel LSBs.
+ */
+async function createStealthPngFixture(filePath: string): Promise<void> {
+  const stealthImage = createAlphaStealthRawImage(createNovelAiPayload());
+  await sharp(stealthImage.raw, {
     raw: {
-      width,
-      height,
+      width: stealthImage.width,
+      height: stealthImage.height,
+      channels: 4
+    }
+  }).png().toFile(filePath);
+}
+
+/**
+ * Create a WebP fixture with NovelAI stealth metadata in alpha-channel LSBs.
+ */
+async function createStealthWebPFixture(filePath: string): Promise<void> {
+  const stealthImage = createAlphaStealthRawImage(createNovelAiPayload());
+  await sharp(stealthImage.raw, {
+    raw: {
+      width: stealthImage.width,
+      height: stealthImage.height,
       channels: 4
     }
   }).webp({ lossless: true }).toFile(filePath);
@@ -219,11 +289,15 @@ async function main(): Promise<void> {
   fs.mkdirSync(fixtureDir, { recursive: true });
 
   const pngPath = path.join(fixtureDir, 'webui.png');
+  const comfyUiPngPath = path.join(fixtureDir, 'comfyui.png');
+  const stealthPngPath = path.join(fixtureDir, 'novelai-stealth.png');
   const jpegPath = path.join(fixtureDir, 'webui-exif.jpg');
   const stealthWebPPath = path.join(fixtureDir, 'novelai-stealth.webp');
   const convertedWebPPath = path.join(fixtureDir, 'converted-xmp.webp');
 
   await createWebUiPngFixture(pngPath);
+  await createComfyUiPngFixture(comfyUiPngPath);
+  await createStealthPngFixture(stealthPngPath);
   await createExifJpegFixture(jpegPath);
   await createStealthWebPFixture(stealthWebPPath);
 
@@ -236,6 +310,8 @@ async function main(): Promise<void> {
   fs.writeFileSync(convertedWebPPath, converted.buffer);
 
   const pngResult = await MetadataExtractor.extractMetadata(pngPath);
+  const comfyUiPngResult = await MetadataExtractor.extractMetadata(comfyUiPngPath);
+  const stealthPngResult = await MetadataExtractor.extractMetadata(stealthPngPath);
   const jpegResult = await MetadataExtractor.extractMetadata(jpegPath);
   const stealthWebPResult = await MetadataExtractor.extractMetadata(stealthWebPPath);
   const convertedWebPResult = await MetadataExtractor.extractMetadata(convertedWebPPath);
@@ -246,6 +322,32 @@ async function main(): Promise<void> {
     steps: 28,
     sampler: 'Euler a',
     model: 'animeModel'
+  });
+
+  assertMatch('ComfyUI PNG', comfyUiPngResult.ai_info, {
+    ai_tool: 'ComfyUI',
+    prompt: 'cinematic portrait, 1girl',
+    negative_prompt: 'lowres, blurry',
+    steps: 30,
+    sampler: 'dpmpp_2m',
+    scheduler: 'karras',
+    cfg_scale: 6.5,
+    seed: 4242,
+    width: 1024,
+    height: 1536,
+    model: 'dreamshaper.safetensors'
+  });
+
+  assertMatch('NovelAI stealth PNG', stealthPngResult.ai_info, {
+    ai_tool: 'NovelAI',
+    prompt: '1girl, breakfast scene',
+    negative_prompt: 'lowres, bad anatomy',
+    steps: 26,
+    sampler: 'k_euler_ancestral',
+    seed: 1496421763,
+    width: 1024,
+    height: 1024,
+    model: 'NovelAI Diffusion V4.5'
   });
 
   assertMatch('JPEG EXIF', jpegResult.ai_info, {
@@ -277,6 +379,8 @@ async function main(): Promise<void> {
 
   console.log('✅ Metadata validation passed');
   console.log(`   PNG WebUI fixture: ${pngPath}`);
+  console.log(`   PNG ComfyUI fixture: ${comfyUiPngPath}`);
+  console.log(`   PNG stealth fixture: ${stealthPngPath}`);
   console.log(`   JPEG EXIF fixture: ${jpegPath}`);
   console.log(`   WebP XMP fixture: ${convertedWebPPath}`);
   console.log(`   WebP stealth fixture: ${stealthWebPPath}`);
