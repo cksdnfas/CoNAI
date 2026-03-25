@@ -10,6 +10,8 @@ import { imageTaggerService } from '../../services/imageTaggerService';
 import { kaloscopeTaggerService } from '../../services/kaloscopeTaggerService';
 import { UploadResponse } from '../../types/image';
 import { runtimePaths } from '../../config/runtimePaths';
+import { AIMetadata } from '../../services/metadata';
+import { ImageMetadataWriteService, ImageOutputFormat } from '../../services/imageMetadataWriteService';
 import { WebPConversionService } from '../../services/webpConversionService';
 
 const router = Router();
@@ -41,10 +43,70 @@ function parseMaybeJson(value: unknown) {
   }
 }
 
-function buildDownloadFileName(originalName: string): string {
+function buildDownloadFileName(originalName: string, format: ImageOutputFormat = 'webp'): string {
   const baseName = path.basename(originalName, path.extname(originalName)) || 'converted-image';
   const safeBaseName = baseName.replace(/[\\/:*?"<>|]/g, '_');
-  return `${safeBaseName}.webp`;
+  const extension = format === 'jpeg' ? 'jpg' : format;
+  return `${safeBaseName}.${extension}`;
+}
+
+/** Parse a requested output format into a supported image format. */
+function resolveOutputFormat(requestedFormat: unknown, file: Express.Multer.File): ImageOutputFormat {
+  if (typeof requestedFormat === 'string') {
+    const normalized = requestedFormat.trim().toLowerCase();
+    if (normalized === 'png' || normalized === 'webp') {
+      return normalized;
+    }
+
+    if (normalized === 'jpg' || normalized === 'jpeg') {
+      return 'jpeg';
+    }
+  }
+
+  const extension = path.extname(file.originalname).toLowerCase();
+  if (extension === '.png') {
+    return 'png';
+  }
+
+  if (extension === '.jpg' || extension === '.jpeg') {
+    return 'jpeg';
+  }
+
+  if (extension === '.webp') {
+    return 'webp';
+  }
+
+  return 'webp';
+}
+
+/** Build a response content-type for a requested output format. */
+function buildOutputMimeType(format: ImageOutputFormat): string {
+  if (format === 'png') {
+    return 'image/png';
+  }
+
+  if (format === 'jpeg') {
+    return 'image/jpeg';
+  }
+
+  return 'image/webp';
+}
+
+/** Parse a JSON metadata patch payload from multipart form data. */
+function parseMetadataPatch(value: unknown): Partial<AIMetadata> | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const parsed = typeof value === 'string'
+    ? parseMaybeJson(value)
+    : value;
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('metadataPatch must be a JSON object');
+  }
+
+  return parsed as Partial<AIMetadata>;
 }
 
 function buildExtractedImagePreview(
@@ -305,7 +367,7 @@ router.post('/convert-webp', uploadSingle, asyncHandler(async (req: Request, res
       mimeType: file.mimetype,
     });
 
-    const downloadName = buildDownloadFileName(file.originalname);
+    const downloadName = buildDownloadFileName(file.originalname, 'webp');
     const encodedName = encodeURIComponent(downloadName);
 
     res.setHeader('Content-Type', 'image/webp');
@@ -316,6 +378,59 @@ router.post('/convert-webp', uploadSingle, asyncHandler(async (req: Request, res
   } catch (error) {
     console.error('❌ Convert WebP error:', error);
     return res.status(500).json(errorResponse(error instanceof Error ? error.message : 'WebP conversion failed'));
+  } finally {
+    await cleanupTemporaryUpload(file);
+  }
+}));
+
+/**
+ * Rewrite image metadata without saving the upload to the library.
+ */
+router.post('/rewrite-metadata', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
+  const file = getSingleUploadedFile(req);
+
+  if (!file) {
+    return res.status(400).json(errorResponse('No file uploaded'));
+  }
+
+  if (!isImageFile(file.mimetype)) {
+    return res.status(400).json(errorResponse('Only image files can be rewritten without upload'));
+  }
+
+  if (!file.path) {
+    return res.status(500).json(errorResponse('Temporary upload path is missing'));
+  }
+
+  const outputFormat = resolveOutputFormat(req.body?.format, file);
+  const rawQuality = typeof req.body?.quality === 'string' ? Number(req.body.quality) : Number(req.body?.quality ?? 90);
+
+  try {
+    const metadataPatch = parseMetadataPatch(req.body?.metadataPatch);
+    const rewritten = await ImageMetadataWriteService.writeFileAsFormatBuffer(file.path, {
+      format: outputFormat,
+      quality: Number.isFinite(rawQuality) ? rawQuality : 90,
+      sourcePathForMetadata: file.path,
+      originalFileName: file.originalname,
+      mimeType: file.mimetype,
+      metadataPatch,
+    });
+
+    const downloadName = buildDownloadFileName(file.originalname, outputFormat);
+    const encodedName = encodeURIComponent(downloadName);
+
+    res.setHeader('Content-Type', buildOutputMimeType(outputFormat));
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"; filename*=UTF-8''${encodedName}`);
+    res.setHeader('X-CoNAI-Metadata-Rewrite', metadataPatch ? 'patched' : 'preserved');
+    res.setHeader('X-CoNAI-Metadata-XMP', rewritten.xmpApplied ? 'applied' : 'empty');
+    res.setHeader('X-CoNAI-Metadata-EXIF', rewritten.exifApplied ? 'applied' : 'empty');
+
+    return res.send(rewritten.buffer);
+  } catch (error) {
+    console.error('❌ Rewrite metadata error:', error);
+    if (error instanceof Error && error.message === 'metadataPatch must be a JSON object') {
+      return res.status(400).json(errorResponse(error.message));
+    }
+    return res.status(500).json(errorResponse(error instanceof Error ? error.message : 'Metadata rewrite failed'));
   } finally {
     await cleanupTemporaryUpload(file);
   }

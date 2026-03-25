@@ -1,17 +1,19 @@
 import sharp from 'sharp';
 import { MetadataExtractor } from './metadata';
+import { AIMetadata } from './metadata/types';
 import { buildConaiWebPXmp, buildPrimaryMetadataText, createConaiWebPXmpPayload, ConaiWebPXmpPayload } from './metadata/webpMetadata';
 import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
 
 export type ImageOutputFormat = 'png' | 'jpeg' | 'webp';
 
-interface ImageMetadataWriteOptions {
+export interface ImageMetadataWriteOptions {
   format: ImageOutputFormat;
   quality?: number;
   lossless?: boolean;
   sourcePathForMetadata?: string;
   originalFileName?: string;
   mimeType?: string;
+  metadataPatch?: Partial<AIMetadata>;
 }
 
 interface ImageMetadataArtifacts {
@@ -36,8 +38,48 @@ function clampQuality(quality: number | undefined): number {
   return Math.min(100, Math.max(1, Math.round(quality)));
 }
 
+/** Apply a metadata patch on top of extracted AI metadata. */
+function applyMetadataPatch(baseAiInfo: AIMetadata | undefined, metadataPatch: Partial<AIMetadata> | undefined): AIMetadata | undefined {
+  if (!metadataPatch || Object.keys(metadataPatch).length === 0) {
+    return baseAiInfo;
+  }
+
+  const nextAiInfo: AIMetadata = {
+    ...(baseAiInfo || {}),
+  };
+
+  for (const [key, value] of Object.entries(metadataPatch)) {
+    if (value === null) {
+      delete nextAiInfo[key];
+      continue;
+    }
+
+    if (value !== undefined) {
+      nextAiInfo[key] = value;
+    }
+  }
+
+  if (metadataPatch.prompt !== undefined) {
+    if (metadataPatch.prompt === null) {
+      delete nextAiInfo.positive_prompt;
+    } else {
+      nextAiInfo.positive_prompt = metadataPatch.prompt;
+    }
+  }
+
+  if (metadataPatch.positive_prompt !== undefined) {
+    if (metadataPatch.positive_prompt === null) {
+      delete nextAiInfo.prompt;
+    } else {
+      nextAiInfo.prompt = metadataPatch.positive_prompt;
+    }
+  }
+
+  return Object.keys(nextAiInfo).length > 0 ? nextAiInfo : undefined;
+}
+
 /** Build standard EXIF/XMP carriers from extracted source metadata. */
-async function buildMetadataArtifacts(options: Pick<ImageMetadataWriteOptions, 'sourcePathForMetadata' | 'originalFileName' | 'mimeType'>): Promise<ImageMetadataArtifacts> {
+async function buildMetadataArtifacts(options: Pick<ImageMetadataWriteOptions, 'sourcePathForMetadata' | 'originalFileName' | 'mimeType' | 'metadataPatch'>): Promise<ImageMetadataArtifacts> {
   if (!options.sourcePathForMetadata) {
     return {
       payload: null,
@@ -47,12 +89,16 @@ async function buildMetadataArtifacts(options: Pick<ImageMetadataWriteOptions, '
   }
 
   const extracted = await MetadataExtractor.extractPreservableData(options.sourcePathForMetadata);
-  const rawData = extracted.rawData && Object.keys(extracted.rawData).length > 0
+  const extractedRawData = extracted.rawData && Object.keys(extracted.rawData).length > 0
     ? extracted.rawData
     : undefined;
-  const aiInfo = extracted.metadata.ai_info && Object.keys(extracted.metadata.ai_info).length > 0
+  const extractedAiInfo = extracted.metadata.ai_info && Object.keys(extracted.metadata.ai_info).length > 0
     ? extracted.metadata.ai_info
     : undefined;
+  const aiInfo = applyMetadataPatch(extractedAiInfo, options.metadataPatch);
+  const rawData = options.metadataPatch && Object.keys(options.metadataPatch).length > 0
+    ? undefined
+    : extractedRawData;
 
   if (!rawData && !aiInfo) {
     return {
@@ -134,9 +180,13 @@ export class ImageMetadataWriteService {
       sourcePathForMetadata: options.sourcePathForMetadata || inputPath,
       originalFileName: options.originalFileName,
       mimeType: options.mimeType,
+      metadataPatch: options.metadataPatch,
     });
 
-    const pipeline = applyMetadataArtifacts(buildFormatPipeline(inputPath, options), artifacts);
+    const pipelineInput = options.metadataPatch && Object.keys(options.metadataPatch).length > 0
+      ? await sharp(toWindowsLongPathIfNeeded(inputPath)).toBuffer()
+      : inputPath;
+    const pipeline = applyMetadataArtifacts(buildFormatPipeline(pipelineInput, options), artifacts);
     const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
 
     return {
@@ -153,9 +203,13 @@ export class ImageMetadataWriteService {
       sourcePathForMetadata: options.sourcePathForMetadata,
       originalFileName: options.originalFileName,
       mimeType: options.mimeType,
+      metadataPatch: options.metadataPatch,
     });
 
-    const pipeline = applyMetadataArtifacts(buildFormatPipeline(inputBuffer, options), artifacts);
+    const pipelineInput = options.metadataPatch && Object.keys(options.metadataPatch).length > 0
+      ? await sharp(inputBuffer).toBuffer()
+      : inputBuffer;
+    const pipeline = applyMetadataArtifacts(buildFormatPipeline(pipelineInput, options), artifacts);
     const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
 
     return {

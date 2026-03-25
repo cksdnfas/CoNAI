@@ -296,6 +296,9 @@ async function main(): Promise<void> {
   const stealthWebPPath = path.join(fixtureDir, 'novelai-stealth.webp');
   const standardPngPath = path.join(fixtureDir, 'standardized.png');
   const standardJpegPath = path.join(fixtureDir, 'standardized.jpg');
+  const rewrittenPngPath = path.join(fixtureDir, 'rewritten.png');
+  const rewrittenJpegPath = path.join(fixtureDir, 'rewritten.jpg');
+  const rewrittenWebPPath = path.join(fixtureDir, 'rewritten.webp');
   const convertedWebPPath = path.join(fixtureDir, 'converted-xmp.webp');
 
   await createWebUiPngFixture(pngPath);
@@ -321,6 +324,43 @@ async function main(): Promise<void> {
   });
   fs.writeFileSync(standardJpegPath, standardizedJpeg.buffer);
 
+  const metadataPatch = {
+    prompt: 'rewritten prompt, dramatic lighting',
+    negative_prompt: 'rewritten negative, lowres',
+    steps: 33,
+    sampler: 'Euler a',
+    model: 'rewrittenModel',
+  };
+
+  const rewrittenPng = await ImageMetadataWriteService.writeFileAsFormatBuffer(pngPath, {
+    format: 'png',
+    sourcePathForMetadata: pngPath,
+    originalFileName: path.basename(pngPath),
+    mimeType: 'image/png',
+    metadataPatch,
+  });
+  fs.writeFileSync(rewrittenPngPath, rewrittenPng.buffer);
+
+  const rewrittenJpeg = await ImageMetadataWriteService.writeFileAsFormatBuffer(pngPath, {
+    format: 'jpeg',
+    quality: 92,
+    sourcePathForMetadata: pngPath,
+    originalFileName: path.basename(pngPath),
+    mimeType: 'image/png',
+    metadataPatch,
+  });
+  fs.writeFileSync(rewrittenJpegPath, rewrittenJpeg.buffer);
+
+  const rewrittenWebP = await ImageMetadataWriteService.writeFileAsFormatBuffer(pngPath, {
+    format: 'webp',
+    quality: 90,
+    sourcePathForMetadata: pngPath,
+    originalFileName: path.basename(pngPath),
+    mimeType: 'image/png',
+    metadataPatch,
+  });
+  fs.writeFileSync(rewrittenWebPPath, rewrittenWebP.buffer);
+
   const converted = await WebPConversionService.convertFileToWebPBuffer(pngPath, {
     quality: 90,
     sourcePathForMetadata: pngPath,
@@ -335,6 +375,9 @@ async function main(): Promise<void> {
   const jpegResult = await MetadataExtractor.extractMetadata(jpegPath);
   const standardPngResult = await MetadataExtractor.extractMetadata(standardPngPath);
   const standardJpegResult = await MetadataExtractor.extractMetadata(standardJpegPath);
+  const rewrittenPngResult = await MetadataExtractor.extractMetadata(rewrittenPngPath);
+  const rewrittenJpegResult = await MetadataExtractor.extractMetadata(rewrittenJpegPath);
+  const rewrittenWebPResult = await MetadataExtractor.extractMetadata(rewrittenWebPPath);
   const stealthWebPResult = await MetadataExtractor.extractMetadata(stealthWebPPath);
   const convertedWebPResult = await MetadataExtractor.extractMetadata(convertedWebPPath);
 
@@ -395,6 +438,30 @@ async function main(): Promise<void> {
     model: 'animeModel'
   });
 
+  assertMatch('PNG rewritten metadata', rewrittenPngResult.ai_info, {
+    prompt: 'rewritten prompt, dramatic lighting',
+    negative_prompt: 'rewritten negative, lowres',
+    steps: 33,
+    sampler: 'Euler a',
+    model: 'rewrittenModel'
+  });
+
+  assertMatch('JPEG rewritten metadata', rewrittenJpegResult.ai_info, {
+    prompt: 'rewritten prompt, dramatic lighting',
+    negative_prompt: 'rewritten negative, lowres',
+    steps: 33,
+    sampler: 'Euler a',
+    model: 'rewrittenModel'
+  });
+
+  assertMatch('WebP rewritten metadata', rewrittenWebPResult.ai_info, {
+    prompt: 'rewritten prompt, dramatic lighting',
+    negative_prompt: 'rewritten negative, lowres',
+    steps: 33,
+    sampler: 'Euler a',
+    model: 'rewrittenModel'
+  });
+
   assertMatch('WebP XMP', convertedWebPResult.ai_info, {
     prompt: 'masterpiece, 1girl',
     negative_prompt: 'lowres, blurry',
@@ -422,6 +489,9 @@ async function main(): Promise<void> {
   console.log(`   JPEG EXIF fixture: ${jpegPath}`);
   console.log(`   PNG standard-metadata fixture: ${standardPngPath}`);
   console.log(`   JPEG standard-metadata fixture: ${standardJpegPath}`);
+  console.log(`   PNG rewritten-metadata fixture: ${rewrittenPngPath}`);
+  console.log(`   JPEG rewritten-metadata fixture: ${rewrittenJpegPath}`);
+  console.log(`   WebP rewritten-metadata fixture: ${rewrittenWebPPath}`);
   console.log(`   WebP XMP fixture: ${convertedWebPPath}`);
   console.log(`   WebP stealth fixture: ${stealthWebPPath}`);
 }
