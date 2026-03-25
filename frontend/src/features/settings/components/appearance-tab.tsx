@@ -1,13 +1,11 @@
 import { useRef } from 'react'
-import { Download, RotateCcw, Sparkles, Upload, X } from 'lucide-react'
+import { Download, RotateCcw, Save, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { getAppearanceContrastIssues, resolveAppearanceColors, resolveSurfacePalette } from '@/lib/appearance'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AppearanceTabEditorSection } from './appearance-tab-editor-section'
-import { AppearanceTabPreviewSection } from './appearance-tab-preview-section'
 import { AppearanceTabSlotSection } from './appearance-tab-slot-section'
 import type { AppearanceTabProps } from './appearance-tab.types'
-import { areThemesEqual, getAppearanceTabColorValues } from './appearance-tab.utils'
+import { getAppearanceTabColorValues } from './appearance-tab.utils'
 
 export function AppearanceTab({
   appearanceDraft,
@@ -28,46 +26,34 @@ export function AppearanceTab({
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const sansFontInputRef = useRef<HTMLInputElement | null>(null)
   const monoFontInputRef = useRef<HTMLInputElement | null>(null)
-  const resolvedColors = appearanceDraft ? resolveAppearanceColors(appearanceDraft) : null
-  const resolvedSurface = appearanceDraft ? resolveSurfacePalette(appearanceDraft) : null
-  const contrastIssues = appearanceDraft ? getAppearanceContrastIssues(appearanceDraft) : []
   const colorValues = getAppearanceTabColorValues(appearanceDraft)
-  const savedThemeMatchesDraft = areThemesEqual(appearanceDraft, savedAppearance)
 
   return (
     <div className="space-y-8">
       <Card className="bg-surface-container">
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-1">
-              <CardTitle>Appearance</CardTitle>
-              <CardDescription>앱 전체 테마의 색감, 표면 무드, 밀도, 마감값을 조정하고 JSON으로 가져오거나 내보낼 수 있어.</CardDescription>
-            </div>
+            <CardTitle>Appearance</CardTitle>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={onExport} disabled={isSaving}>
+              <Button type="button" size="icon-sm" variant="outline" onClick={onExport} disabled={isSaving} aria-label="외형 내보내기" title="외형 내보내기">
                 <Download className="h-4 w-4" />
-                내보내기
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSaving}>
+              <Button type="button" size="icon-sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSaving} aria-label="외형 가져오기" title="외형 가져오기">
                 <Upload className="h-4 w-4" />
-                가져오기
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={onReset} disabled={!appearanceDraft || isSaving}>
+              <Button type="button" size="icon-sm" variant="outline" onClick={onReset} disabled={!appearanceDraft || isSaving} aria-label="기본값으로 되돌리기" title="기본값으로 되돌리기">
                 <RotateCcw className="h-4 w-4" />
-                기본값
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={onCancel} disabled={!isDirty || isSaving}>
+              <Button type="button" size="icon-sm" variant="outline" onClick={onCancel} disabled={!isDirty || isSaving} aria-label="변경 취소" title="변경 취소">
                 <X className="h-4 w-4" />
-                취소
               </Button>
-              <Button type="button" size="sm" onClick={onSave} disabled={!appearanceDraft || !isDirty || isSaving}>
-                <Sparkles className="h-4 w-4" />
-                저장
+              <Button type="button" size="icon-sm" onClick={onSave} disabled={!appearanceDraft || !isDirty || isSaving} aria-label="외형 저장" title="외형 저장">
+                <Save className="h-4 w-4" />
               </Button>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-8">
           <input
             ref={fileInputRef}
             type="file"
@@ -108,21 +94,11 @@ export function AppearanceTab({
             }}
           />
 
-          {appearanceDraft && resolvedColors && resolvedSurface ? (
+          {appearanceDraft ? (
             <>
-              <AppearanceTabPreviewSection
-                appearanceDraft={appearanceDraft}
-                savedAppearance={savedAppearance}
-                isDirty={isDirty}
-                contrastIssues={contrastIssues}
-                resolvedColors={resolvedColors}
-                resolvedSurface={resolvedSurface}
-              />
-
               <AppearanceTabSlotSection
                 appearanceDraft={appearanceDraft}
                 savedAppearance={savedAppearance}
-                savedThemeMatchesDraft={savedThemeMatchesDraft}
                 isSaving={isSaving}
                 onPatchAppearance={onPatchAppearance}
                 onSavePresetSlots={onSavePresetSlots}
