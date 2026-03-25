@@ -49,7 +49,8 @@ import { MetadataTab } from './components/metadata-tab'
 import { SettingsTabNav } from './components/settings-tab-nav'
 import type { SettingsTab } from './settings-tabs'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
-import { applyAppearanceTheme, extractAppearanceTheme, normalizeAppearanceImport } from '@/lib/appearance'
+import { applyAppearanceTheme } from '@/lib/appearance'
+import { buildAppearancePackage, restoreAppearancePackage } from '@/lib/appearance-package'
 import { createNewWatchedFolderDraft, parseCommaSeparatedInput } from './settings-utils'
 
 export function SettingsPage() {
@@ -376,31 +377,39 @@ export function SettingsPage() {
     })
   }
 
-  const handleAppearanceExport = () => {
-    const appearanceToExport = extractAppearanceTheme(effectiveAppearanceDraft ?? savedAppearance)
-    const blob = new Blob([JSON.stringify(appearanceToExport, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `conai-appearance-${appearanceToExport.accentPreset}-${appearanceToExport.themeMode}.json`
-    document.body.append(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
-    notifyInfo('현재 화면 설정을 JSON으로 내보냈어.')
+  const handleAppearanceExport = async () => {
+    try {
+      const appearanceToExport = {
+        ...(effectiveAppearanceDraft ?? savedAppearance),
+        presetSlots: normalizePresetSlotsForSave((effectiveAppearanceDraft ?? savedAppearance).presetSlots),
+      }
+      const packageDocument = await buildAppearancePackage(appearanceToExport)
+      const blob = new Blob([JSON.stringify(packageDocument, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `conai-appearance-package-${appearanceToExport.accentPreset}-${appearanceToExport.themeMode}.json`
+      document.body.append(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+      notifyInfo('현재 테마와 연결된 폰트 자산까지 패키지로 내보냈어.')
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : '화면 설정 패키지를 내보내지 못했어.')
+    }
   }
 
   const handleAppearanceImport = async (file: File) => {
     try {
       const raw = JSON.parse(await file.text()) as unknown
-      const importedAppearance = normalizeAppearanceImport(raw, savedAppearance)
+      const importedAppearance = await restoreAppearancePackage(raw, savedAppearance, uploadAppearanceFont)
 
       if (!importedAppearance) {
         throw new Error('Appearance JSON 구조를 확인하지 못했어.')
       }
 
       await appearanceMutation.mutateAsync(importedAppearance)
-      notifyInfo('화면 설정 파일을 불러와 저장했어.')
+      notifyInfo('화면 설정 패키지를 불러와 저장했어.')
     } catch (error) {
       notifyError(error instanceof Error ? error.message : '화면 설정 파일을 불러오지 못했어.')
     }
