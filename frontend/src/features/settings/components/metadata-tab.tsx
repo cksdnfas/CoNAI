@@ -1,4 +1,4 @@
-import { Sparkles } from 'lucide-react'
+import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -21,7 +21,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving }
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>Metadata</CardTitle>
             <Button size="sm" onClick={onSave} disabled={!metadataDraft || isSaving}>
-              <Sparkles className="h-4 w-4" />
+              <Save className="h-4 w-4" />
               저장
             </Button>
           </div>

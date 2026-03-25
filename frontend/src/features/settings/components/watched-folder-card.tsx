@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Play, RotateCcw, ScanSearch, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -79,17 +80,45 @@ export function WatchedFolderCard({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" disabled={isBusy} onClick={() => handleAction(() => onScan(folder.id))}>
-              스캔
+            <Button
+              size="icon-sm"
+              variant="outline"
+              disabled={isBusy}
+              onClick={() => handleAction(() => onScan(folder.id))}
+              aria-label="폴더 스캔"
+              title="폴더 스캔"
+            >
+              <ScanSearch className="h-4 w-4" />
             </Button>
-            <Button size="sm" variant="outline" disabled={isBusy} onClick={() => handleAction(() => onStartWatcher(folder.id))}>
-              watcher 시작
+            <Button
+              size="icon-sm"
+              variant="outline"
+              disabled={isBusy}
+              onClick={() => handleAction(() => onStartWatcher(folder.id))}
+              aria-label="watcher 시작"
+              title="watcher 시작"
+            >
+              <Play className="h-4 w-4" />
             </Button>
-            <Button size="sm" variant="outline" disabled={isBusy} onClick={() => handleAction(() => onStopWatcher(folder.id))}>
-              watcher 중지
+            <Button
+              size="icon-sm"
+              variant="outline"
+              disabled={isBusy}
+              onClick={() => handleAction(() => onStopWatcher(folder.id))}
+              aria-label="watcher 중지"
+              title="watcher 중지"
+            >
+              <Square className="h-4 w-4" />
             </Button>
-            <Button size="sm" variant="outline" disabled={isBusy} onClick={() => handleAction(() => onRestartWatcher(folder.id))}>
-              watcher 재시작
+            <Button
+              size="icon-sm"
+              variant="outline"
+              disabled={isBusy}
+              onClick={() => handleAction(() => onRestartWatcher(folder.id))}
+              aria-label="watcher 재시작"
+              title="watcher 재시작"
+            >
+              <RotateCcw className="h-4 w-4" />
             </Button>
           </div>
         </div>

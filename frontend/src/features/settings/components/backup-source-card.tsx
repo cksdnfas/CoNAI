@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Play, RotateCcw, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -75,14 +76,35 @@ export function BackupSourceCard({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" disabled={isBusy} onClick={() => handleAction(() => onStartWatcher(source.id))}>
-              watcher 시작
+            <Button
+              size="icon-sm"
+              variant="outline"
+              disabled={isBusy}
+              onClick={() => handleAction(() => onStartWatcher(source.id))}
+              aria-label="watcher 시작"
+              title="watcher 시작"
+            >
+              <Play className="h-4 w-4" />
             </Button>
-            <Button size="sm" variant="outline" disabled={isBusy} onClick={() => handleAction(() => onStopWatcher(source.id))}>
-              watcher 중지
+            <Button
+              size="icon-sm"
+              variant="outline"
+              disabled={isBusy}
+              onClick={() => handleAction(() => onStopWatcher(source.id))}
+              aria-label="watcher 중지"
+              title="watcher 중지"
+            >
+              <Square className="h-4 w-4" />
             </Button>
-            <Button size="sm" variant="outline" disabled={isBusy} onClick={() => handleAction(() => onRestartWatcher(source.id))}>
-              watcher 재시작
+            <Button
+              size="icon-sm"
+              variant="outline"
+              disabled={isBusy}
+              onClick={() => handleAction(() => onRestartWatcher(source.id))}
+              aria-label="watcher 재시작"
+              title="watcher 재시작"
+            >
+              <RotateCcw className="h-4 w-4" />
             </Button>
           </div>
         </div>

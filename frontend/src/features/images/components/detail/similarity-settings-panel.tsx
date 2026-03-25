@@ -26,9 +26,14 @@ export function SimilaritySettingsPanel({
   return (
     <div className="space-y-4">
       <div className="relative">
-        <Button size="sm" variant="outline" onClick={onToggle}>
+        <Button
+          size="icon-sm"
+          variant="outline"
+          onClick={onToggle}
+          aria-label={isOpen ? '이미지 유사도 설정 닫기' : '이미지 유사도 설정 열기'}
+          title="이미지 유사도 설정"
+        >
           <Settings2 className="h-4 w-4" />
-          이미지 유사도 설정
         </Button>
 
         {isOpen && draft ? (

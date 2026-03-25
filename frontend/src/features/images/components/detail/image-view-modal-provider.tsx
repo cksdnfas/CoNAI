@@ -315,40 +315,37 @@ function ImageViewModalActions({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" onClick={onClose}>
+        <Button size="icon-sm" variant="secondary" onClick={onClose} aria-label="닫기" title="닫기">
           <X className="h-4 w-4" />
-          닫기
         </Button>
-        <Button variant="outline" onClick={onViewPrevious} disabled={!canViewPrevious}>
+        <Button size="icon-sm" variant="outline" onClick={onViewPrevious} disabled={!canViewPrevious} aria-label="이전 이미지" title="이전 이미지">
           <ChevronLeft className="h-4 w-4" />
-          이전
         </Button>
-        <Button variant="outline" onClick={onViewNext} disabled={!canViewNext}>
-          다음
+        <Button size="icon-sm" variant="outline" onClick={onViewNext} disabled={!canViewNext} aria-label="다음 이미지" title="다음 이미지">
           <ChevronRight className="h-4 w-4" />
         </Button>
         {showCounter ? <div className="px-2 text-xs text-muted-foreground">{activeIndex + 1} / {totalCount}</div> : null}
         <Button
+          size="icon-sm"
           variant="outline"
           onClick={() => {
             navigate(`/images/${compositeHash}`)
             onClose()
           }}
+          aria-label="상세 페이지 열기"
+          title="상세 페이지"
         >
           <ExternalLink className="h-4 w-4" />
-          상세 페이지
         </Button>
-        <Button variant="outline" onClick={controls.refresh} disabled={controls.isRefreshing}>
-          <RefreshCcw className="h-4 w-4" />
-          새로고침
+        <Button size="icon-sm" variant="outline" onClick={controls.refresh} disabled={controls.isRefreshing} aria-label="새로고침" title="새로고침">
+          <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
         </Button>
       </div>
 
       {controls.downloadUrl ? (
-        <Button asChild>
-          <a href={controls.downloadUrl} download={controls.downloadName}>
+        <Button size="icon-sm" asChild aria-label="다운로드" title="다운로드">
+          <a href={controls.downloadUrl} download={controls.downloadName} aria-label="다운로드" title="다운로드">
             <Download className="h-4 w-4" />
-            다운로드
           </a>
         </Button>
       ) : null}

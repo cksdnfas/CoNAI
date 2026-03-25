@@ -1,4 +1,4 @@
-import { Image } from 'lucide-react'
+import { FolderTree, House, Image, MessageSquareText, Settings2, Upload, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
@@ -9,12 +9,12 @@ import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
 
-const navItems = [
-  { to: '/', label: 'Home' },
-  { to: '/groups', label: 'Group' },
-  { to: '/prompts', label: 'Prompt' },
-  { to: '/upload', label: 'Upload' },
-  { to: '/settings', label: 'Settings' },
+const navItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
+  { to: '/', label: 'Home', icon: House },
+  { to: '/groups', label: 'Group', icon: FolderTree },
+  { to: '/prompts', label: 'Prompt', icon: MessageSquareText },
+  { to: '/upload', label: 'Upload', icon: Upload },
+  { to: '/settings', label: 'Settings', icon: Settings2 },
 ]
 
 export function AppShell() {
@@ -36,40 +36,44 @@ function AppShellLayout() {
   })
   const appearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
   const showDesktopSearch = useMinWidth(appearance.desktopSearchMinWidth)
-  const showDesktopNav = useMinWidth(appearance.desktopNavMinWidth)
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="theme-shell-header fixed inset-x-0 top-0 z-50">
-        <div className="theme-shell-inner mx-auto flex w-full max-w-[1680px] items-center justify-between">
-          <div className="flex items-center gap-10">
-            <div className="flex items-center gap-3">
+        <div className="theme-shell-inner mx-auto flex w-full max-w-[1680px] items-center gap-3 sm:gap-4">
+          <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-6">
+            <div className="flex shrink-0 items-center gap-3">
               <div className="rounded-sm bg-surface-high p-2 text-secondary">
                 <Image className="h-4 w-4" />
               </div>
               <span className="text-lg font-bold tracking-[-0.04em] text-foreground">CoNAI</span>
             </div>
 
-            <nav className={cn('items-center gap-8 text-sm font-medium tracking-tight', showDesktopNav ? 'flex' : 'hidden')}>
-              {navItems.map(({ to, label }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={to === '/'}
-                  className={({ isActive }) =>
-                    cn(
-                      'border-b-2 border-transparent pb-1 text-foreground/60 transition-colors duration-300 hover:text-foreground',
-                      isActive && 'border-primary text-primary',
-                    )
-                  }
-                >
-                  {label}
-                </NavLink>
-              ))}
-            </nav>
+            <div className="min-w-0 flex-1 overflow-x-auto">
+              <nav className="flex min-w-max items-center gap-2 pr-2" aria-label="주요 페이지 이동">
+                {navItems.map(({ to, label, icon: Icon }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={to === '/'}
+                    aria-label={label}
+                    title={label}
+                    className={({ isActive }) =>
+                      cn(
+                        'inline-flex size-9 shrink-0 items-center justify-center rounded-sm border border-transparent text-foreground/70 transition-all duration-300 hover:border-border hover:bg-surface-high hover:text-foreground',
+                        isActive && 'border-primary/35 bg-primary/12 text-primary shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_10%,transparent)]',
+                      )
+                    }
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="sr-only">{label}</span>
+                  </NavLink>
+                ))}
+              </nav>
+            </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
             <HomeSearchHeaderBox active={true} desktopMode={showDesktopSearch} />
           </div>
         </div>

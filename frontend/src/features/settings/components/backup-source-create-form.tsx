@@ -1,0 +1,121 @@
+import { FolderPlus, LoaderCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { settingsControlClassName } from './settings-control-classes'
+import { SettingsField, SettingsToggleRow } from './settings-primitives'
+import type { NewBackupSourceDraft } from '../settings-utils'
+
+interface BackupSourceCreateFormProps {
+  newBackupSource: NewBackupSourceDraft
+  onNewBackupSourceChange: (patch: Partial<NewBackupSourceDraft>) => void
+  backupPathValidationMessage: string | null
+  isValidatingBackupPath: boolean
+  isAddingBackupSource: boolean
+  onValidateBackupPath: () => void
+  onAddBackupSource: () => Promise<boolean>
+}
+
+export function BackupSourceCreateForm({
+  newBackupSource,
+  onNewBackupSourceChange,
+  backupPathValidationMessage,
+  isValidatingBackupPath,
+  isAddingBackupSource,
+  onValidateBackupPath,
+  onAddBackupSource,
+}: BackupSourceCreateFormProps) {
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SettingsField label="source 폴더 경로">
+          <input
+            value={newBackupSource.source_path}
+            onChange={(event) => onNewBackupSourceChange({ source_path: event.target.value })}
+            placeholder="D:\\Images\\Incoming"
+            className={settingsControlClassName}
+          />
+        </SettingsField>
+
+        <SettingsField label="표시 이름">
+          <input
+            value={newBackupSource.display_name}
+            onChange={(event) => onNewBackupSourceChange({ display_name: event.target.value })}
+            placeholder="Backup source A"
+            className={settingsControlClassName}
+          />
+        </SettingsField>
+
+        <SettingsField label="uploads 대상 폴더명">
+          <input
+            value={newBackupSource.target_folder_name}
+            onChange={(event) => onNewBackupSourceChange({ target_folder_name: event.target.value })}
+            placeholder="backup-a"
+            className={settingsControlClassName}
+          />
+        </SettingsField>
+
+        <SettingsField label="가져오기 모드">
+          <select
+            value={newBackupSource.import_mode}
+            onChange={(event) => onNewBackupSourceChange({ import_mode: event.target.value as NewBackupSourceDraft['import_mode'] })}
+            className={settingsControlClassName}
+          >
+            <option value="copy_original">원본 복사</option>
+            <option value="convert_webp">WebP 변환 (메타 보존)</option>
+          </select>
+        </SettingsField>
+
+        <SettingsField label="watcher polling(ms)">
+          <input
+            type="number"
+            min={100}
+            value={newBackupSource.watcher_polling_interval}
+            onChange={(event) => onNewBackupSourceChange({ watcher_polling_interval: Number(event.target.value) || 100 })}
+            className={settingsControlClassName}
+          />
+        </SettingsField>
+
+        <SettingsField label="WebP 품질">
+          <input
+            type="number"
+            min={1}
+            max={100}
+            value={newBackupSource.webp_quality}
+            onChange={(event) => onNewBackupSourceChange({ webp_quality: Number(event.target.value) || 90 })}
+            className={settingsControlClassName}
+            disabled={newBackupSource.import_mode !== 'convert_webp'}
+          />
+        </SettingsField>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <SettingsToggleRow>
+          <input type="checkbox" checked={newBackupSource.recursive} onChange={(event) => onNewBackupSourceChange({ recursive: event.target.checked })} />
+          하위 폴더 포함
+        </SettingsToggleRow>
+        <SettingsToggleRow>
+          <input type="checkbox" checked={newBackupSource.watcher_enabled} onChange={(event) => onNewBackupSourceChange({ watcher_enabled: event.target.checked })} />
+          watcher 시작
+        </SettingsToggleRow>
+      </div>
+
+      {backupPathValidationMessage ? <p className="text-sm text-primary">{backupPathValidationMessage}</p> : null}
+
+      <div className="flex flex-wrap justify-between gap-2">
+        <Button type="button" size="sm" variant="outline" disabled={isValidatingBackupPath || !newBackupSource.source_path.trim()} onClick={onValidateBackupPath}>
+          {isValidatingBackupPath ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+          source 경로 검증
+        </Button>
+
+        <Button
+          type="button"
+          size="sm"
+          disabled={isAddingBackupSource || !newBackupSource.source_path.trim() || !newBackupSource.target_folder_name.trim()}
+          onClick={() => void onAddBackupSource()}
+        >
+          {isAddingBackupSource ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FolderPlus className="h-4 w-4" />}
+          백업 소스 추가
+        </Button>
+      </div>
+    </div>
+  )
+}

@@ -12,19 +12,16 @@ interface ImageDetailActionsProps {
 export function ImageDetailActions({ downloadUrl, downloadName, isRefreshing, onBack, onRefresh }: ImageDetailActionsProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button variant="secondary" onClick={onBack}>
+      <Button size="icon-sm" variant="secondary" onClick={onBack} aria-label="피드로 돌아가기" title="피드로 돌아가기">
         <ArrowLeft className="h-4 w-4" />
-        피드로 돌아가기
       </Button>
-      <Button variant="outline" onClick={onRefresh} disabled={isRefreshing}>
-        <RefreshCcw className="h-4 w-4" />
-        새로고침
+      <Button size="icon-sm" variant="outline" onClick={onRefresh} disabled={isRefreshing} aria-label="새로고침" title="새로고침">
+        <RefreshCcw className={isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
       </Button>
       {downloadUrl ? (
-        <Button asChild>
-          <a href={downloadUrl} download={downloadName}>
+        <Button size="icon-sm" asChild aria-label="다운로드" title="다운로드">
+          <a href={downloadUrl} download={downloadName} aria-label="다운로드" title="다운로드">
             <Download className="h-4 w-4" />
-            다운로드
           </a>
         </Button>
       ) : null}

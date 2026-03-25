@@ -169,18 +169,23 @@ export function useFolderSettingsTab({ notifyInfo, notifyError }: UseFolderSetti
     }
   }
 
-  const handleAddFolder = () => {
-    void addFolderMutation.mutateAsync({
-      folder_path: newFolder.folder_path,
-      folder_name: newFolder.folder_name || undefined,
-      auto_scan: newFolder.auto_scan,
-      scan_interval: newFolder.scan_interval,
-      recursive: newFolder.recursive,
-      watcher_enabled: newFolder.watcher_enabled,
-      watcher_polling_interval: newFolder.watcher_polling_interval,
-      exclude_extensions: parseCommaSeparatedInput(newFolder.exclude_extensions),
-      exclude_patterns: parseCommaSeparatedInput(newFolder.exclude_patterns),
-    })
+  const handleAddFolder = async () => {
+    try {
+      await addFolderMutation.mutateAsync({
+        folder_path: newFolder.folder_path,
+        folder_name: newFolder.folder_name || undefined,
+        auto_scan: newFolder.auto_scan,
+        scan_interval: newFolder.scan_interval,
+        recursive: newFolder.recursive,
+        watcher_enabled: newFolder.watcher_enabled,
+        watcher_polling_interval: newFolder.watcher_polling_interval,
+        exclude_extensions: parseCommaSeparatedInput(newFolder.exclude_extensions),
+        exclude_patterns: parseCommaSeparatedInput(newFolder.exclude_patterns),
+      })
+      return true
+    } catch {
+      return false
+    }
   }
 
   const handleBackupSourceSave = async (sourceId: number, input: BackupSourceUpdateInput) => {
@@ -212,17 +217,22 @@ export function useFolderSettingsTab({ notifyInfo, notifyError }: UseFolderSetti
     }
   }
 
-  const handleAddBackupSource = () => {
-    void addBackupSourceMutation.mutateAsync({
-      source_path: newBackupSource.source_path,
-      display_name: newBackupSource.display_name || undefined,
-      target_folder_name: newBackupSource.target_folder_name,
-      recursive: newBackupSource.recursive,
-      watcher_enabled: newBackupSource.watcher_enabled,
-      watcher_polling_interval: newBackupSource.watcher_polling_interval,
-      import_mode: newBackupSource.import_mode,
-      webp_quality: newBackupSource.webp_quality,
-    })
+  const handleAddBackupSource = async () => {
+    try {
+      await addBackupSourceMutation.mutateAsync({
+        source_path: newBackupSource.source_path,
+        display_name: newBackupSource.display_name || undefined,
+        target_folder_name: newBackupSource.target_folder_name,
+        recursive: newBackupSource.recursive,
+        watcher_enabled: newBackupSource.watcher_enabled,
+        watcher_polling_interval: newBackupSource.watcher_polling_interval,
+        import_mode: newBackupSource.import_mode,
+        webp_quality: newBackupSource.webp_quality,
+      })
+      return true
+    } catch {
+      return false
+    }
   }
 
   return {

@@ -77,11 +77,11 @@ export function HomeSearchHeaderBox({ active, desktopMode }: { active: boolean; 
         <button
           type="button"
           onClick={openDrawer}
-          className="theme-floating-panel inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-foreground transition hover:bg-surface-high"
+          className="theme-floating-panel inline-flex items-center gap-2 rounded-full p-2 text-sm text-foreground transition hover:bg-surface-high"
           aria-label="검색 열기"
+          title="검색"
         >
           <Search className="h-4 w-4" />
-          <span className="hidden sm:inline">검색</span>
           {appliedChips.length > 0 ? (
             <span className="rounded-full bg-primary/14 px-2 py-0.5 text-[11px] font-semibold text-primary">{appliedChips.length}</span>
           ) : null}
