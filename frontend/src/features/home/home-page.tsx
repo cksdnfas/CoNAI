@@ -132,6 +132,7 @@ export function HomePage() {
           <ImageList
             items={images}
             layout="masonry"
+            activationMode="modal"
             getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
             selectable={true}
             selectedIds={selectedIds}

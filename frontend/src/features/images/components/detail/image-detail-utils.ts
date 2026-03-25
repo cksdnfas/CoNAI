@@ -23,6 +23,32 @@ export function getDownloadName(path?: string | null, compositeHash?: string | n
   return compositeHash ? `${compositeHash}.png` : 'image'
 }
 
+/** Build the in-app render URL for the main detail media view. */
+export function getImageDetailRenderUrl(image?: ImageRecord | null) {
+  if (!image) {
+    return null
+  }
+
+  if (image.composite_hash) {
+    return `/api/images/${image.composite_hash}/file`
+  }
+
+  return image.image_url || image.thumbnail_url || null
+}
+
+/** Build the original-file download URL for the detail header actions. */
+export function getImageDetailDownloadUrl(image?: ImageRecord | null) {
+  if (!image) {
+    return null
+  }
+
+  if (image.composite_hash) {
+    return `/api/images/${image.composite_hash}/download/original`
+  }
+
+  return image.image_url || image.thumbnail_url || null
+}
+
 export function getValidImageRecords(images: ImageRecord[]) {
   return images.filter((image) => typeof image.composite_hash === 'string' && image.composite_hash.length > 0)
 }

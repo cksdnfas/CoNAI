@@ -1,7 +1,8 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { markHomeScrollRestorePending } from '@/features/home/use-home-scroll-restoration'
+import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { ImageListGrid } from './image-list-grid'
 import { ImageListMasonry } from './image-list-masonry'
 import type { ImageListProps } from './image-list-types'
@@ -12,6 +13,7 @@ import { useImageListSelection } from './use-image-list-selection'
 export function ImageList({
   items,
   layout = 'masonry',
+  activationMode = 'navigate',
   getItemHref,
   selectable = false,
   selectedIds = [],
@@ -27,9 +29,14 @@ export function ImageList({
 }: ImageListProps) {
   const navigate = useNavigate()
   const location = useLocation()
+  const imageViewModal = useImageViewModal()
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null)
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
   const selectionMode = selectable && selectedIds.length > 0
+  const itemCompositeHashes = useMemo(
+    () => items.map((item) => item.composite_hash).filter((value): value is string => typeof value === 'string' && value.length > 0),
+    [items],
+  )
   const loadMoreSentinelRef = useImageListLoadMore({
     hasMore,
     isLoadingMore,
@@ -59,6 +66,14 @@ export function ImageList({
         return
       }
 
+      if (activationMode === 'modal' && imageViewModal) {
+        imageViewModal.openImageView({
+          compositeHash: imageId,
+          compositeHashes: itemCompositeHashes,
+        })
+        return
+      }
+
       if (href) {
         if (location.pathname === '/') {
           markHomeScrollRestorePending()
@@ -72,7 +87,7 @@ export function ImageList({
         })
       }
     },
-    [location.pathname, navigate, onSelectedIdsChange, selectedIds, selectionMode, shouldSuppressClick],
+    [activationMode, imageViewModal, itemCompositeHashes, location.pathname, navigate, onSelectedIdsChange, selectedIds, selectionMode, shouldSuppressClick],
   )
 
   return (

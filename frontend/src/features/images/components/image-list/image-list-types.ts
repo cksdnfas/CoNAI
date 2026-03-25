@@ -5,6 +5,7 @@ export type ImageListLayoutMode = 'grid' | 'masonry'
 export interface ImageListProps {
   items: ImageRecord[]
   layout?: ImageListLayoutMode
+  activationMode?: 'navigate' | 'modal'
   getItemHref?: (image: ImageRecord) => string | undefined
   selectable?: boolean
   selectedIds?: string[]

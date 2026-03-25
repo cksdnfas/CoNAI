@@ -59,6 +59,7 @@ export function GroupImageSection({
         <ImageList
           items={groupImages}
           layout="masonry"
+          activationMode="modal"
           getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
           hasMore={hasMore}
           isLoadingMore={isLoadingMore}

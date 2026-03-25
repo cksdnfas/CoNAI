@@ -3,6 +3,7 @@ import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-do
 import { useQuery } from '@tanstack/react-query'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
 import { HomeSearchDrawer, HomeSearchHeaderBox } from '@/features/home/components/home-search-ui'
+import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
 import { getAppSettings } from '@/lib/api'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useMinWidth } from '@/lib/use-min-width'
@@ -19,7 +20,9 @@ const navItems = [
 export function AppShell() {
   return (
     <HomeSearchProvider>
-      <AppShellLayout />
+      <ImageViewModalProvider>
+        <AppShellLayout />
+      </ImageViewModalProvider>
     </HomeSearchProvider>
   )
 }
