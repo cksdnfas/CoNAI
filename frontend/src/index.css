@@ -310,7 +310,7 @@
 
   .related-image-gallery-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(var(--related-image-grid-columns-base, 1), minmax(0, 1fr));
     gap: 1rem;
     align-items: start;
   }

@@ -163,6 +163,39 @@ function getRelatedImageAspectRatioLabel(ratio: AppearanceSettings['detailRelate
   }
 }
 
+function RelatedImageColumnSlider({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <SettingsField label={label}>
+      <div className="space-y-2">
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={1}
+            max={6}
+            step={1}
+            value={value}
+            onChange={(event) => onChange(Number(event.target.value))}
+            className="w-full"
+          />
+          <span className="w-8 text-right text-sm font-semibold text-foreground">{value}</span>
+        </div>
+        <div className="flex justify-between text-[11px] text-muted-foreground">
+          <span>1</span>
+          <span>6</span>
+        </div>
+      </div>
+    </SettingsField>
+  )
+}
+
 function getUploadedFontDisplayName(fileName: string, url: string) {
   if (fileName.trim()) {
     return fileName.trim()
@@ -511,18 +544,18 @@ function AppearanceListEditorContent({
     <div className="space-y-8">
       <section className="space-y-4">
         <EditorSectionLead title="유사 / 중복 이미지" />
-        <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label="데스크톱 한 줄 카드 수">
-            <Input
-              type="number"
-              min={2}
-              max={6}
-              step={1}
-              variant="settings"
-              value={appearanceDraft.detailRelatedImageColumns}
-              onChange={(event) => onPatchAppearance({ detailRelatedImageColumns: Number.parseInt(event.target.value || '3', 10) })}
-            />
-          </SettingsField>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RelatedImageColumnSlider
+            label="모바일 한 줄 카드 수"
+            value={appearanceDraft.detailRelatedImageMobileColumns}
+            onChange={(value) => onPatchAppearance({ detailRelatedImageMobileColumns: value })}
+          />
+
+          <RelatedImageColumnSlider
+            label="데스크톱 한 줄 카드 수"
+            value={appearanceDraft.detailRelatedImageColumns}
+            onChange={(value) => onPatchAppearance({ detailRelatedImageColumns: value })}
+          />
 
           <SettingsField label="카드 비율">
             <Select

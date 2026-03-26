@@ -107,6 +107,7 @@ export interface AppearanceThemeSettings {
   searchDrawerWidth: number
   desktopSearchMinWidth: number
   desktopNavMinWidth: number
+  detailRelatedImageMobileColumns: number
   detailRelatedImageColumns: number
   detailRelatedImageAspectRatio: RelatedImageCardAspectRatio
   positiveBadgeColor: string

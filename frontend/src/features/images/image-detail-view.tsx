@@ -271,7 +271,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
 
   const getErrorMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback)
 
-  const relatedImageColumns = effectiveAppearanceSettings?.detailRelatedImageColumns ?? 3
+  const relatedImageMobileColumns = effectiveAppearanceSettings?.detailRelatedImageMobileColumns ?? 1
+  const relatedImageDesktopColumns = effectiveAppearanceSettings?.detailRelatedImageColumns ?? 3
   const relatedImageAspectRatio = effectiveAppearanceSettings?.detailRelatedImageAspectRatio ?? 'square'
 
   const similarSectionTitle = SIMILAR_IMAGE_SECTION_TITLE_LABELS[activeSimilarImageTab]
@@ -416,7 +417,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
                 errorMessage={null}
                 emptyMessage="현재 중복 이미지가 없어."
                 activationMode={presentation === 'modal' ? 'modal' : 'navigate'}
-                cardColumns={relatedImageColumns}
+                mobileCardColumns={relatedImageMobileColumns}
+                desktopCardColumns={relatedImageDesktopColumns}
                 cardAspectRatio={relatedImageAspectRatio}
               />
             ) : null}
@@ -429,7 +431,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
               emptyMessage={similarSectionEmptyMessage}
               actions={similarSectionActions}
               activationMode={presentation === 'modal' ? 'modal' : 'modal-single'}
-              cardColumns={relatedImageColumns}
+              mobileCardColumns={relatedImageMobileColumns}
+              desktopCardColumns={relatedImageDesktopColumns}
               cardAspectRatio={relatedImageAspectRatio}
             />
           </div>

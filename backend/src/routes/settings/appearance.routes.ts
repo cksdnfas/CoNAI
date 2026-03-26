@@ -184,6 +184,7 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
     'searchDrawerWidth' |
     'desktopSearchMinWidth' |
     'desktopNavMinWidth' |
+    'detailRelatedImageMobileColumns' |
     'detailRelatedImageColumns'
   >; min: number; max: number }> = [
     { key: 'fontScalePercent', min: 85, max: 125 },
@@ -192,7 +193,8 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
     { key: 'searchDrawerWidth', min: 320, max: 720 },
     { key: 'desktopSearchMinWidth', min: 640, max: 1600 },
     { key: 'desktopNavMinWidth', min: 768, max: 1800 },
-    { key: 'detailRelatedImageColumns', min: 2, max: 6 },
+    { key: 'detailRelatedImageMobileColumns', min: 1, max: 6 },
+    { key: 'detailRelatedImageColumns', min: 1, max: 6 },
   ]
 
   for (const { key, min, max } of boundedIntegers) {

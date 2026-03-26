@@ -436,6 +436,7 @@ export const DEFAULT_APPEARANCE_THEME: AppearanceThemeSettings = {
   searchDrawerWidth: 420,
   desktopSearchMinWidth: 768,
   desktopNavMinWidth: 1024,
+  detailRelatedImageMobileColumns: 1,
   detailRelatedImageColumns: 3,
   detailRelatedImageAspectRatio: 'square',
   positiveBadgeColor: '#34d399',

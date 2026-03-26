@@ -16,7 +16,8 @@ interface RelatedImageGallerySectionProps {
   emptyMessage: string
   actions?: ReactNode
   activationMode?: 'navigate' | 'modal' | 'modal-single'
-  cardColumns?: number
+  mobileCardColumns?: number
+  desktopCardColumns?: number
   cardAspectRatio?: RelatedImageCardAspectRatio
 }
 
@@ -42,7 +43,8 @@ export function RelatedImageGallerySection({
   emptyMessage,
   actions,
   activationMode = 'navigate',
-  cardColumns = 3,
+  mobileCardColumns = 1,
+  desktopCardColumns = 3,
   cardAspectRatio = 'square',
 }: RelatedImageGallerySectionProps) {
   const navigate = useNavigate()
@@ -74,10 +76,14 @@ export function RelatedImageGallerySection({
     }
   }
 
+  const resolvedMobileCardColumns = Math.min(Math.max(mobileCardColumns, 1), 6)
+  const resolvedDesktopCardColumns = Math.min(Math.max(desktopCardColumns, 1), 6)
   const gridStyle = {
-    ['--related-image-grid-columns-md' as string]: String(Math.min(Math.max(cardColumns, 2), 2)),
-    ['--related-image-grid-columns-xl' as string]: String(Math.min(Math.max(cardColumns, 2), 6)),
+    ['--related-image-grid-columns-base' as string]: String(resolvedMobileCardColumns),
+    ['--related-image-grid-columns-md' as string]: String(resolvedDesktopCardColumns),
+    ['--related-image-grid-columns-xl' as string]: String(resolvedDesktopCardColumns),
   }
+  const skeletonCount = Math.max(resolvedMobileCardColumns, resolvedDesktopCardColumns)
 
   return (
     <section className="space-y-4">
@@ -88,7 +94,7 @@ export function RelatedImageGallerySection({
 
       {isLoading ? (
         <div className="related-image-gallery-grid" style={gridStyle}>
-          {Array.from({ length: Math.min(Math.max(cardColumns, 2), 6) }).map((_, index) => (
+          {Array.from({ length: skeletonCount }).map((_, index) => (
             <Skeleton
               key={index}
               className="w-full rounded-sm"
