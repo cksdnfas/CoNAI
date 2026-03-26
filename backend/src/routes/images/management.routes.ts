@@ -8,11 +8,14 @@ import { ImageMetadataWriteService, ImageOutputFormat } from '../../services/ima
 import { AIMetadata } from '../../services/metadata/types';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
+import { ImageMetadataEditRevisionModel } from '../../models/Image/ImageMetadataEditRevisionModel';
+import { db } from '../../database/init';
 import { resolveUploadsPath } from '../../config/runtimePaths';
 import { successResponse, errorResponse } from '@conai/shared';
 import { QueryCacheService } from '../../services/QueryCacheService';
 import { enrichImageWithFileView } from './utils';
 import { ImageFileRecord, ImageMetadataRecord } from '../../types/image';
+import { copyToRecycleBin } from '../../utils/recycleBin';
 
 const router = Router();
 
@@ -21,6 +24,15 @@ function buildDownloadFileName(originalName: string, format: ImageOutputFormat):
   const safeBaseName = baseName.replace(/[\\/:*?"<>|]/g, '_');
   const extension = format === 'jpeg' ? 'jpg' : format;
   return `${safeBaseName}.${extension}`;
+}
+
+function buildEditedFileName(originalName: string, format: ImageOutputFormat): string {
+  const parsed = path.parse(originalName);
+  const extension = format === 'jpeg' ? '.jpg' : `.${format}`;
+  const stamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+  const baseName = (parsed.name || 'image').replace(/(?:__metaedit_\d{14})+$/g, '');
+  const safeName = baseName.replace(/[\\/:*?"<>|]/g, '_');
+  return `${safeName}__metaedit_${stamp}${extension}`;
 }
 
 function buildOutputMimeType(format: ImageOutputFormat): string {
@@ -136,6 +148,84 @@ function buildMetadataRecordUpdates(currentMetadata: ImageMetadataRecord, metada
   };
 }
 
+function buildEditableMetadataSnapshot(metadata: ImageMetadataRecord) {
+  return {
+    prompt: metadata.prompt ?? null,
+    negative_prompt: metadata.negative_prompt ?? null,
+    model_name: metadata.model_name ?? null,
+    steps: metadata.steps ?? null,
+    sampler: metadata.sampler ?? null,
+    raw_nai_parameters: metadata.raw_nai_parameters ?? null,
+    metadata_updated_date: metadata.metadata_updated_date,
+  };
+}
+
+function buildUniqueSiblingPath(targetPath: string): string {
+  if (!fs.existsSync(targetPath)) {
+    return targetPath;
+  }
+
+  const parsed = path.parse(targetPath);
+  let index = 1;
+  while (true) {
+    const candidate = path.join(parsed.dir, `${parsed.name} (${index})${parsed.ext}`);
+    if (!fs.existsSync(candidate)) {
+      return candidate;
+    }
+    index += 1;
+  }
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function deleteFileWithRetry(filePath: string): Promise<void> {
+  const retryDelaysMs = [120, 240, 480, 960, 1600, 2400];
+  let lastError: unknown = null;
+
+  for (let attemptIndex = 0; attemptIndex <= retryDelaysMs.length; attemptIndex += 1) {
+    try {
+      if (!fs.existsSync(filePath)) {
+        return;
+      }
+      await fs.promises.unlink(filePath);
+      return;
+    } catch (error) {
+      lastError = error;
+      const code = error && typeof error === 'object' && 'code' in error ? (error as NodeJS.ErrnoException).code : null;
+      const shouldRetry = code === 'EBUSY' || code === 'EPERM' || code === 'EACCES' || code === 'UNKNOWN';
+      if (!shouldRetry || attemptIndex >= retryDelaysMs.length) {
+        break;
+      }
+      await sleep(retryDelaysMs[attemptIndex]);
+    }
+  }
+
+  throw lastError;
+}
+
+function deleteFileInBackground(filePath: string) {
+  const scheduleDelaysMs = [0, 5000, 15000, 30000, 60000, 180000, 300000];
+
+  const runAttempt = (attemptIndex: number) => {
+    setTimeout(async () => {
+      try {
+        await deleteFileWithRetry(filePath);
+        console.log(`🧹 Cleaned up replaced source file: ${filePath}`);
+      } catch (error) {
+        if (attemptIndex + 1 < scheduleDelaysMs.length) {
+          runAttempt(attemptIndex + 1);
+          return;
+        }
+        console.warn(`⚠️ Background cleanup still could not delete old file: ${filePath}`, error);
+      }
+    }, scheduleDelaysMs[attemptIndex]);
+  };
+
+  runAttempt(0);
+}
+
 async function getEditableImageTarget(compositeHash: string) {
   const files = await ImageFileModel.findActiveByHash(compositeHash);
   if (!files || files.length === 0) {
@@ -232,32 +322,113 @@ router.patch('/:compositeHash/metadata', asyncHandler(async (req: Request, res: 
     return res.status(target.status ?? 500).json(target.error);
   }
 
+  let stagedFilePath: string | null = null;
+  let nextFilePath: string | null = null;
+  let recycleBinPath: string | null = null;
+  let saveCommitted = false;
+
   try {
     const metadataPatch = parseMetadataPatch(req.body?.metadataPatch);
     if (!metadataPatch || Object.keys(metadataPatch).length === 0) {
       return res.status(400).json(errorResponse('metadataPatch is required'));
     }
 
-    const metadataUpdates = buildMetadataRecordUpdates(target.metadata, metadataPatch);
-    MediaMetadataModel.update(compositeHash, metadataUpdates);
+    const outputFormat = resolveStoredOutputFormat(target.activeFile);
+    const inputBuffer = await fs.promises.readFile(target.originalPath);
+    const rewritten = await ImageMetadataWriteService.writeBufferAsFormatBuffer(inputBuffer, {
+      format: outputFormat,
+      quality: 100,
+      lossless: outputFormat === 'webp',
+      sourcePathForMetadata: target.originalPath,
+      originalFileName: path.basename(target.activeFile.original_file_path),
+      mimeType: target.activeFile.mime_type || buildOutputMimeType(outputFormat),
+      metadataPatch,
+    });
 
+    const targetDirectory = path.dirname(target.originalPath);
+    const nextRelativeName = buildEditedFileName(path.basename(target.activeFile.original_file_path), outputFormat);
+    nextFilePath = buildUniqueSiblingPath(path.join(targetDirectory, nextRelativeName));
+    stagedFilePath = `${nextFilePath}.stage`;
+
+    await fs.promises.writeFile(stagedFilePath, rewritten.buffer);
+    await fs.promises.rename(stagedFilePath, nextFilePath);
+    stagedFilePath = null;
+
+    recycleBinPath = await copyToRecycleBin(target.originalPath);
+
+    if (!nextFilePath || !recycleBinPath) {
+      throw new Error('Replacement paths were not prepared');
+    }
+
+    const committedNextFilePath = nextFilePath;
+    const committedRecycleBinPath = recycleBinPath;
+    const nextFileStat = await fs.promises.stat(committedNextFilePath);
+    const metadataUpdates = buildMetadataRecordUpdates(target.metadata, metadataPatch);
+    const nextMetadataSnapshot = {
+      ...buildEditableMetadataSnapshot(target.metadata),
+      ...metadataUpdates,
+    };
+
+    let nextImageFileId = 0;
+
+    db.transaction(() => {
+      ImageFileModel.updateStatus(target.activeFile.id, 'deleted');
+      nextImageFileId = ImageFileModel.create({
+        composite_hash: compositeHash,
+        file_type: target.activeFile.file_type,
+        original_file_path: committedNextFilePath,
+        folder_id: target.activeFile.folder_id,
+        file_status: 'active',
+        file_size: nextFileStat.size,
+        mime_type: target.activeFile.mime_type,
+        file_modified_date: nextFileStat.mtime.toISOString(),
+      });
+      MediaMetadataModel.update(compositeHash, metadataUpdates);
+      ImageMetadataEditRevisionModel.create({
+        composite_hash: compositeHash,
+        image_file_id: target.activeFile.id,
+        previous_file_path: target.originalPath,
+        replacement_file_path: committedNextFilePath,
+        recycle_bin_path: committedRecycleBinPath,
+        previous_metadata_json: JSON.stringify(buildEditableMetadataSnapshot(target.metadata)),
+        next_metadata_json: JSON.stringify(nextMetadataSnapshot),
+      });
+    })();
+    saveCommitted = true;
+
+    void deleteFileInBackground(target.originalPath);
     QueryCacheService.invalidateImageCache(compositeHash, false);
 
     const updatedMetadata = await MediaMetadataModel.findByHash(compositeHash);
     if (!updatedMetadata) {
-      return res.status(500).json(errorResponse('Updated metadata could not be loaded'));
+      throw new Error('Updated metadata could not be loaded');
     }
 
     return res.json(successResponse(enrichImageWithFileView({
       ...updatedMetadata,
-      file_id: target.activeFile.id,
-      original_file_path: target.activeFile.original_file_path,
-      file_size: target.activeFile.file_size,
+      file_id: nextImageFileId,
+      original_file_path: committedNextFilePath,
+      file_size: nextFileStat.size,
       mime_type: target.activeFile.mime_type,
       file_type: target.activeFile.file_type,
     })));
   } catch (error) {
     console.error('❌ Save image metadata error:', error);
+
+    if (!saveCommitted) {
+      if (stagedFilePath && fs.existsSync(stagedFilePath)) {
+        await fs.promises.unlink(stagedFilePath).catch(() => undefined);
+      }
+
+      if (nextFilePath && fs.existsSync(nextFilePath)) {
+        await fs.promises.unlink(nextFilePath).catch(() => undefined);
+      }
+
+      if (recycleBinPath && fs.existsSync(recycleBinPath)) {
+        await fs.promises.unlink(recycleBinPath).catch(() => undefined);
+      }
+    }
+
     if (error instanceof Error && error.message === 'metadataPatch must be a JSON object') {
       return res.status(400).json(errorResponse(error.message));
     }

@@ -34,11 +34,12 @@
 
 ### Supported actions
 - 다운로드: 수정 메타를 포함한 파일 다운로드
-- 저장: 라이브러리 `media_metadata` 갱신
+- 저장: 새 운영 파일 생성 + 기존 운영 파일 RecycleBin 보관 + 라이브러리 `media_metadata` 갱신
 
 ### Explicit limits
 - 대상은 정적 이미지 파일만 (`file_type === image`)
-- 저장은 DB 메타 반영만 수행
+- 저장은 실제 운영 파일 교체 + DB 메타 반영을 함께 수행
+- 기존 운영 파일은 시스템 RecycleBin으로 보관하고, 새 파일을 active로 승격
 - 다운로드는 현재 draft의 format 선택 허용
 - `cfg_scale`, `seed`, `scheduler`, `auto_tags`, `raw_nai_parameters` 직접 편집 UI는 v1 제외
 
@@ -68,9 +69,13 @@
 - 처리 순서:
   1. active file / metadata 조회
   2. 입력 patch 검증
-  3. `media_metadata` 갱신
-  4. 캐시 무효화
-  5. 갱신된 이미지 레코드 반환
+  3. 수정 메타가 반영된 새 운영 파일 생성
+  4. 기존 운영 파일을 시스템 RecycleBin에 보관
+  5. 기존 file row는 `deleted`, 새 file row는 `active`로 전환
+  6. `media_metadata` 갱신
+  7. 편집 revision 기록 생성
+  8. 캐시 무효화
+  9. 갱신된 이미지 레코드 반환
 
 ### 5. Data consistency rules
 - DB 반영 필드:

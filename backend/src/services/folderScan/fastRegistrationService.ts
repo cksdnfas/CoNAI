@@ -55,23 +55,38 @@ export class FastRegistrationService {
 
           // 1. 기존 파일 확인
           const existingFile = db.prepare(
-            'SELECT id, composite_hash FROM image_files WHERE original_file_path = ?'
-          ).get(filePath) as { id: number; composite_hash: string | null } | undefined;
+            'SELECT id, composite_hash, file_status FROM image_files WHERE original_file_path = ?'
+          ).get(filePath) as { id: number; composite_hash: string | null; file_status: string } | undefined;
 
           if (existingFile) {
-            db.prepare(`
-              UPDATE image_files
-              SET file_status = 'active',
-                  last_verified_date = ?,
-                  file_modified_date = ?,
-                  file_size = ?
-              WHERE id = ?
-            `).run(
-              new Date().toISOString(),
-              stats.mtime.toISOString(),
-              stats.size,
-              existingFile.id
-            );
+            if (existingFile.file_status === 'deleted') {
+              db.prepare(`
+                UPDATE image_files
+                SET last_verified_date = ?,
+                    file_modified_date = ?,
+                    file_size = ?
+                WHERE id = ?
+              `).run(
+                new Date().toISOString(),
+                stats.mtime.toISOString(),
+                stats.size,
+                existingFile.id
+              );
+            } else {
+              db.prepare(`
+                UPDATE image_files
+                SET file_status = 'active',
+                    last_verified_date = ?,
+                    file_modified_date = ?,
+                    file_size = ?
+                WHERE id = ?
+              `).run(
+                new Date().toISOString(),
+                stats.mtime.toISOString(),
+                stats.size,
+                existingFile.id
+              );
+            }
 
             result.existingImages++;
             result.totalScanned++;

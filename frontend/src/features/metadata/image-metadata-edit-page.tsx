@@ -108,7 +108,7 @@ export function ImageMetadataEditPage() {
       return
     }
 
-    if (!window.confirm('현재 메타 정보를 라이브러리 DB에 저장할까?')) {
+    if (!window.confirm('현재 메타 정보를 실제 파일과 라이브러리 DB에 저장할까? 이전 운영 파일은 시스템 RecycleBin에 보관돼.')) {
       return
     }
 

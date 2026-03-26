@@ -42,34 +42,32 @@ export function generateRecycleBinFileName(originalPath: string): string {
  *
  * @throws 파일이 존재하지 않거나 이동 실패 시 에러
  */
-export async function moveToRecycleBin(filePath: string): Promise<string> {
-  // 파일 존재 확인
+export async function copyToRecycleBin(filePath: string): Promise<string> {
   if (!fs.existsSync(filePath)) {
     throw new Error(`File not found: ${filePath}`);
   }
 
-  // 파일인지 확인 (디렉토리는 제외)
   const stats = await fs.promises.stat(filePath);
   if (!stats.isFile()) {
     throw new Error(`Not a file: ${filePath}`);
   }
 
-  // RecycleBin 파일명 생성
   const recycleBinFileName = generateRecycleBinFileName(filePath);
   const recycleBinFilePath = path.join(RECYCLE_BIN_PATH, recycleBinFileName);
+  await fs.promises.copyFile(filePath, recycleBinFilePath);
+  return recycleBinFilePath;
+}
+
+export async function moveToRecycleBin(filePath: string): Promise<string> {
+  const recycleBinFilePath = await copyToRecycleBin(filePath);
 
   try {
-    // 파일 이동 (fs.rename은 같은 파티션에서만 작동하므로 copyFile + unlink 사용)
-    await fs.promises.copyFile(filePath, recycleBinFilePath);
     await fs.promises.unlink(filePath);
-
-    console.log(`♻️ Moved to RecycleBin: ${path.basename(filePath)} → ${recycleBinFileName}`);
-
+    console.log(`♻️ Moved to RecycleBin: ${path.basename(filePath)} → ${path.basename(recycleBinFilePath)}`);
     return recycleBinFilePath;
   } catch (error) {
     console.error(`❌ Failed to move file to RecycleBin:`, error);
 
-    // copyFile은 성공했지만 unlink 실패 시 RecycleBin 파일 삭제
     if (fs.existsSync(recycleBinFilePath)) {
       try {
         await fs.promises.unlink(recycleBinFilePath);
