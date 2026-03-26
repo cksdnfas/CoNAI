@@ -3,11 +3,11 @@ import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block
 import { WDTaggerResultBlock } from '@/components/common/wd-tagger-result-block'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
 import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult } from '@/lib/api'
 import type { ImageRecord } from '@/types/image'
 import { formatFileSize } from '../settings-utils'
-import { settingsMonoControlClassName } from './settings-control-classes'
 import { SettingsField, SettingsValueTile } from './settings-primitives'
 
 interface AutoTestCardProps {
@@ -64,7 +64,9 @@ export function AutoTestCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <SettingsField label="Composite hash">
-          <input
+          <Input
+            variant="settings"
+            className="font-mono"
             value={autoTestHashInput}
             onChange={(event) => onAutoTestHashInputChange(event.target.value)}
             onKeyDown={(event) => {
@@ -74,7 +76,6 @@ export function AutoTestCard({
               onResolveAutoTestMedia()
             }}
             placeholder="image hash"
-            className={settingsMonoControlClassName}
           />
         </SettingsField>
 
