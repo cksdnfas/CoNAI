@@ -23,7 +23,7 @@ function normalizeSourcePath(sourcePath: string): string {
   return isNetworkPath ? sourcePath.replace(/\//g, '\\') : path.resolve(sourcePath);
 }
 
-/** Validate and normalize a direct child folder name under uploads. */
+/** Validate and normalize a relative target path under uploads. */
 function normalizeTargetFolderName(targetFolderName: string): string {
   const trimmed = targetFolderName.trim();
 
@@ -31,23 +31,35 @@ function normalizeTargetFolderName(targetFolderName: string): string {
     throw createServiceError('target_folder_name이 필요합니다', 400);
   }
 
-  if (path.isAbsolute(trimmed)) {
-    throw createServiceError('대상 폴더명은 절대 경로일 수 없습니다', 400);
+  if (/^[a-zA-Z]:[\\/]/.test(trimmed) || /^[\\/]{2,}/.test(trimmed)) {
+    throw createServiceError('대상 경로는 Upload 내부 상대 경로만 사용할 수 있습니다', 400);
   }
 
-  if (trimmed.includes('/') || trimmed.includes('\\')) {
-    throw createServiceError('대상 폴더명은 uploads 바로 아래 단일 폴더명만 허용합니다', 400);
+  const normalized = trimmed
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/^uploads?(?:\/+|$)/i, '');
+
+  const segments = normalized
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (segments.length === 0) {
+    throw createServiceError('target_folder_name이 필요합니다', 400);
   }
 
-  if (trimmed.includes('..')) {
-    throw createServiceError('대상 폴더명에 상위 경로 이동은 사용할 수 없습니다', 400);
+  for (const segment of segments) {
+    if (segment === '.' || segment === '..' || segment.includes('..')) {
+      throw createServiceError('대상 경로에 상위 경로 이동은 사용할 수 없습니다', 400);
+    }
+
+    if (!/^[a-zA-Z0-9 _.-]+$/.test(segment)) {
+      throw createServiceError('대상 경로의 각 폴더명은 영문, 숫자, 공백, _, -, . 만 사용할 수 있습니다', 400);
+    }
   }
 
-  if (!/^[a-zA-Z0-9 _.-]+$/.test(trimmed)) {
-    throw createServiceError('대상 폴더명은 영문, 숫자, 공백, _, -, . 만 사용할 수 있습니다', 400);
-  }
-
-  return trimmed;
+  return segments.join('/');
 }
 
 /** Check whether two paths overlap and could create a watcher loop. */

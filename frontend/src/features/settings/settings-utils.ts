@@ -20,6 +20,25 @@ export function parseCommaSeparatedInput(raw: string) {
     .filter(Boolean)
 }
 
+/** Normalize a backup target path so it stays relative to the Upload root. */
+export function normalizeBackupTargetPath(raw: string) {
+  return raw
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/^uploads?(?:\/+|$)/i, '')
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .join('/')
+}
+
+/** Build a human-readable Upload-root preview for one backup target path input. */
+export function buildBackupTargetPreviewPath(raw: string) {
+  const normalized = normalizeBackupTargetPath(raw)
+  return normalized ? `Upload/${normalized}` : 'Upload'
+}
+
 export function formatDateTime(value?: string | null) {
   if (!value) return '—'
   const date = new Date(value)

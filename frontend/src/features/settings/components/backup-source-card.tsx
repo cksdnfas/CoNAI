@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Play, RotateCcw, Square } from 'lucide-react'
+import { CircleHelp, Play, RotateCcw, Square } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { BackupSource, BackupSourceUpdateInput } from '@/types/folder'
-import { formatDateTime } from '../settings-utils'
+import { buildBackupTargetPreviewPath, formatDateTime, normalizeBackupTargetPath } from '../settings-utils'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
 import {
   SettingsResourceCardHeader,
@@ -76,7 +76,7 @@ export function BackupSourceCard({
             { label: `mode ${source.import_mode}`, variant: 'outline' },
             { label: `watcher ${source.watcher_status || 'stopped'}`, variant: getWatcherBadgeVariant(source.watcher_status) },
           ]}
-          details={[`source ${source.source_path}`, `target uploads/${source.target_folder_name}`]}
+          details={[`source ${source.source_path}`, `target ${buildBackupTargetPreviewPath(source.target_folder_name)}`]}
           actions={[
             {
               label: 'watcher 시작',
@@ -113,8 +113,33 @@ export function BackupSourceCard({
             <Input variant="settings" value={draft.source_path} onChange={(event) => setDraft((current) => ({ ...current, source_path: event.target.value }))} />
           </SettingsField>
 
-          <SettingsField label="uploads 대상 폴더명">
-            <Input variant="settings" value={draft.target_folder_name} onChange={(event) => setDraft((current) => ({ ...current, target_folder_name: event.target.value }))} placeholder="backup-a" />
+          <SettingsField
+            label={(
+              <span className="inline-flex items-center gap-1">
+                Upload 내부 대상 경로
+                <span
+                  className="inline-flex cursor-help text-muted-foreground"
+                  title={[
+                    '업로드 폴더 안의 상대 경로로 지정해.',
+                    '예: Backup → Upload/Backup',
+                    '예: Backup/001 → Upload/Backup/001',
+                    '앞에 / 를 붙여도 자동으로 Upload 기준으로 정리돼.',
+                  ].join('\n')}
+                  aria-label="업로드 폴더 안의 상대 경로로 지정해. 예: Backup이면 Upload/Backup, Backup/001이면 Upload/Backup/001에 저장돼."
+                >
+                  <CircleHelp className="h-3.5 w-3.5" />
+                </span>
+              </span>
+            )}
+          >
+            <Input
+              variant="settings"
+              value={draft.target_folder_name}
+              onChange={(event) => setDraft((current) => ({ ...current, target_folder_name: event.target.value }))}
+              placeholder="Backup 또는 Backup/001"
+            />
+            <p className="mt-2 text-xs text-muted-foreground">업로드 폴더 안 상대 경로로 저장돼. `Backup` 입력 시 `Upload/Backup`으로 처리해.</p>
+            <p className="mt-1 break-all font-mono text-xs text-primary">최종 경로: {buildBackupTargetPreviewPath(draft.target_folder_name)}</p>
           </SettingsField>
 
           <SettingsField label="가져오기 모드">
@@ -175,7 +200,7 @@ export function BackupSourceCard({
               onSave(source.id, {
                 display_name: draft.display_name,
                 source_path: draft.source_path,
-                target_folder_name: draft.target_folder_name,
+                target_folder_name: normalizeBackupTargetPath(draft.target_folder_name),
                 recursive: draft.recursive,
                 watcher_enabled: draft.watcher_enabled,
                 watcher_polling_interval: draft.watcher_enabled ? draft.watcher_polling_interval : null,

@@ -1,8 +1,9 @@
+import { CircleHelp } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
 import { SettingsResourceCreateActionRow } from './settings-resource-shared'
-import type { NewBackupSourceDraft } from '../settings-utils'
+import { buildBackupTargetPreviewPath, type NewBackupSourceDraft } from '../settings-utils'
 
 interface BackupSourceCreateFormProps {
   newBackupSource: NewBackupSourceDraft
@@ -34,8 +35,33 @@ export function BackupSourceCreateForm({
           <Input variant="settings" value={newBackupSource.display_name} onChange={(event) => onNewBackupSourceChange({ display_name: event.target.value })} placeholder="Backup source A" />
         </SettingsField>
 
-        <SettingsField label="uploads 대상 폴더명">
-          <Input variant="settings" value={newBackupSource.target_folder_name} onChange={(event) => onNewBackupSourceChange({ target_folder_name: event.target.value })} placeholder="backup-a" />
+        <SettingsField
+          label={(
+            <span className="inline-flex items-center gap-1">
+              Upload 내부 대상 경로
+              <span
+                className="inline-flex cursor-help text-muted-foreground"
+                title={[
+                  '업로드 폴더 안의 상대 경로로 지정해.',
+                  '예: Backup → Upload/Backup',
+                  '예: Backup/001 → Upload/Backup/001',
+                  '앞에 / 를 붙여도 자동으로 Upload 기준으로 정리돼.',
+                ].join('\n')}
+                aria-label="업로드 폴더 안의 상대 경로로 지정해. 예: Backup이면 Upload/Backup, Backup/001이면 Upload/Backup/001에 저장돼."
+              >
+                <CircleHelp className="h-3.5 w-3.5" />
+              </span>
+            </span>
+          )}
+        >
+          <Input
+            variant="settings"
+            value={newBackupSource.target_folder_name}
+            onChange={(event) => onNewBackupSourceChange({ target_folder_name: event.target.value })}
+            placeholder="Backup 또는 Backup/001"
+          />
+          <p className="mt-2 text-xs text-muted-foreground">업로드 폴더 안 상대 경로로 저장돼. `Backup` 입력 시 `Upload/Backup`으로 처리해.</p>
+          <p className="mt-1 break-all font-mono text-xs text-primary">최종 경로: {buildBackupTargetPreviewPath(newBackupSource.target_folder_name)}</p>
         </SettingsField>
 
         <SettingsField label="가져오기 모드">

@@ -23,7 +23,7 @@ import {
   validateWatchedFolderPath,
 } from '@/lib/api'
 import type { BackupSourceUpdateInput, WatchedFolderUpdateInput } from '@/types/folder'
-import { createNewBackupSourceDraft, createNewWatchedFolderDraft, parseCommaSeparatedInput } from './settings-utils'
+import { createNewBackupSourceDraft, createNewWatchedFolderDraft, normalizeBackupTargetPath, parseCommaSeparatedInput } from './settings-utils'
 
 interface UseFolderSettingsTabOptions {
   /** Show a success/info snackbar for folder tab actions. */
@@ -222,7 +222,7 @@ export function useFolderSettingsTab({ notifyInfo, notifyError }: UseFolderSetti
       await addBackupSourceMutation.mutateAsync({
         source_path: newBackupSource.source_path,
         display_name: newBackupSource.display_name || undefined,
-        target_folder_name: newBackupSource.target_folder_name,
+        target_folder_name: normalizeBackupTargetPath(newBackupSource.target_folder_name),
         recursive: newBackupSource.recursive,
         watcher_enabled: newBackupSource.watcher_enabled,
         watcher_polling_interval: newBackupSource.watcher_polling_interval,
