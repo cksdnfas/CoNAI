@@ -165,32 +165,6 @@ async function getEditableImageTarget(compositeHash: string) {
   };
 }
 
-async function replaceFileAtomically(targetPath: string, nextBuffer: Buffer) {
-  const directoryPath = path.dirname(targetPath);
-  const targetName = path.basename(targetPath);
-  const token = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const tempPath = path.join(directoryPath, `.${targetName}.conai-write-${token}.tmp`);
-  const backupPath = path.join(directoryPath, `.${targetName}.conai-backup-${token}.bak`);
-
-  await fs.promises.writeFile(tempPath, nextBuffer);
-
-  try {
-    await fs.promises.rename(targetPath, backupPath);
-    await fs.promises.rename(tempPath, targetPath);
-    await fs.promises.unlink(backupPath).catch(() => undefined);
-  } catch (error) {
-    if (fs.existsSync(tempPath)) {
-      await fs.promises.unlink(tempPath).catch(() => undefined);
-    }
-
-    if (fs.existsSync(backupPath) && !fs.existsSync(targetPath)) {
-      await fs.promises.rename(backupPath, targetPath).catch(() => undefined);
-    }
-
-    throw error;
-  }
-}
-
 /**
  * 기존 이미지 메타를 수정한 파일을 즉시 다운로드
  */
@@ -264,30 +238,6 @@ router.patch('/:compositeHash/metadata', asyncHandler(async (req: Request, res: 
       return res.status(400).json(errorResponse('metadataPatch is required'));
     }
 
-    const outputFormat = resolveStoredOutputFormat(target.activeFile);
-    if (outputFormat === 'jpeg') {
-      return res.status(400).json(errorResponse('JPEG 저장 편집은 아직 안전하게 지원하지 않아. 우선 다운로드로만 사용해줘.'));
-    }
-
-    const rewritten = await ImageMetadataWriteService.writeFileAsFormatBuffer(target.originalPath, {
-      format: outputFormat,
-      quality: 100,
-      lossless: outputFormat === 'webp',
-      sourcePathForMetadata: target.originalPath,
-      originalFileName: path.basename(target.activeFile.original_file_path),
-      mimeType: target.activeFile.mime_type || buildOutputMimeType(outputFormat),
-      metadataPatch,
-    });
-
-    await replaceFileAtomically(target.originalPath, rewritten.buffer);
-
-    const stat = await fs.promises.stat(target.originalPath);
-    ImageFileModel.updateFileStats(target.activeFile.id, {
-      fileSize: stat.size,
-      fileModifiedDate: stat.mtime.toISOString(),
-      mimeType: target.activeFile.mime_type,
-    });
-
     const metadataUpdates = buildMetadataRecordUpdates(target.metadata, metadataPatch);
     MediaMetadataModel.update(compositeHash, metadataUpdates);
 
@@ -302,13 +252,13 @@ router.patch('/:compositeHash/metadata', asyncHandler(async (req: Request, res: 
       ...updatedMetadata,
       file_id: target.activeFile.id,
       original_file_path: target.activeFile.original_file_path,
-      file_size: stat.size,
+      file_size: target.activeFile.file_size,
       mime_type: target.activeFile.mime_type,
       file_type: target.activeFile.file_type,
     })));
   } catch (error) {
     console.error('❌ Save image metadata error:', error);
-    if (error instanceof Error && (error.message === 'metadataPatch must be a JSON object' || error.message === 'Unsupported source image format')) {
+    if (error instanceof Error && error.message === 'metadataPatch must be a JSON object') {
       return res.status(400).json(errorResponse(error.message));
     }
     return res.status(500).json(errorResponse(error instanceof Error ? error.message : 'Failed to save image metadata'));

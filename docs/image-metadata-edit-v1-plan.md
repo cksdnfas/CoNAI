@@ -34,12 +34,11 @@
 
 ### Supported actions
 - 다운로드: 수정 메타를 포함한 파일 다운로드
-- 저장: 원본 파일 메타 + `media_metadata` 동시 갱신
+- 저장: 라이브러리 `media_metadata` 갱신
 
 ### Explicit limits
 - 대상은 정적 이미지 파일만 (`file_type === image`)
-- 저장 시 포맷 변경 금지
-- 저장은 우선 안전한 경로만 허용 (현재 구현 기준 PNG / WebP, JPEG는 다운로드 전용)
+- 저장은 DB 메타 반영만 수행
 - 다운로드는 현재 draft의 format 선택 허용
 - `cfg_scale`, `seed`, `scheduler`, `auto_tags`, `raw_nai_parameters` 직접 편집 UI는 v1 제외
 
@@ -67,14 +66,11 @@
 ### 4. Backend save endpoint
 - 신규 엔드포인트: `PATCH /api/images/:compositeHash/metadata`
 - 처리 순서:
-  1. active file 조회
-  2. 이미지 파일 지원 여부 확인
-  3. 원본 포맷 기준 rewrite buffer 생성
-  4. temp 파일 작성
-  5. 원본 파일 교체
-  6. `media_metadata` 갱신
-  7. 캐시 무효화
-  8. 갱신된 이미지 레코드 반환
+  1. active file / metadata 조회
+  2. 입력 patch 검증
+  3. `media_metadata` 갱신
+  4. 캐시 무효화
+  5. 갱신된 이미지 레코드 반환
 
 ### 5. Data consistency rules
 - DB 반영 필드:

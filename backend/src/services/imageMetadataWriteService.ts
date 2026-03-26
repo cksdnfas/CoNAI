@@ -1,3 +1,4 @@
+import fs from 'fs';
 import sharp from 'sharp';
 import { MetadataExtractor } from './metadata';
 import { AIMetadata } from './metadata/types';
@@ -175,27 +176,14 @@ function applyMetadataArtifacts(pipeline: sharp.Sharp, artifacts: ImageMetadataA
 }
 
 export class ImageMetadataWriteService {
+  /** Load one source image into memory first to avoid holding a path-based file handle during save. */
   static async writeFileAsFormatBuffer(inputPath: string, options: ImageMetadataWriteOptions): Promise<ImageMetadataWriteResult> {
-    const artifacts = await buildMetadataArtifacts({
+    const inputBuffer = await fs.promises.readFile(toWindowsLongPathIfNeeded(inputPath));
+
+    return this.writeBufferAsFormatBuffer(inputBuffer, {
+      ...options,
       sourcePathForMetadata: options.sourcePathForMetadata || inputPath,
-      originalFileName: options.originalFileName,
-      mimeType: options.mimeType,
-      metadataPatch: options.metadataPatch,
     });
-
-    const pipelineInput = options.metadataPatch && Object.keys(options.metadataPatch).length > 0
-      ? await sharp(toWindowsLongPathIfNeeded(inputPath)).toBuffer()
-      : inputPath;
-    const pipeline = applyMetadataArtifacts(buildFormatPipeline(pipelineInput, options), artifacts);
-    const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
-
-    return {
-      buffer: data,
-      info,
-      embeddedPayload: artifacts.payload,
-      xmpApplied: Boolean(artifacts.xmp),
-      exifApplied: Boolean(artifacts.exif),
-    };
   }
 
   static async writeBufferAsFormatBuffer(inputBuffer: Buffer, options: ImageMetadataWriteOptions): Promise<ImageMetadataWriteResult> {

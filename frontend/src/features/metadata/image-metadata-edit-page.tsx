@@ -10,7 +10,7 @@ import { ImageDetailMedia } from '@/features/images/components/detail/image-deta
 import { getDownloadName, getImageDetailRenderUrl } from '@/features/images/components/detail/image-detail-utils'
 import { downloadExistingImageWithRewrittenMetadata, getImage, saveImageMetadata } from '@/lib/api'
 import { MetadataRewriteForm } from './components/metadata-rewrite-form'
-import { buildMetadataRewritePatch, createRewriteDraftFromImage, inferRewriteFormatFromPath, type RewriteMetadataDraft } from './use-metadata-rewrite-draft'
+import { buildMetadataRewritePatch, createRewriteDraftFromImage, type RewriteMetadataDraft } from './use-metadata-rewrite-draft'
 
 export function ImageMetadataEditPage() {
   const { compositeHash } = useParams<{ compositeHash: string }>()
@@ -89,7 +89,6 @@ export function ImageMetadataEditPage() {
   const renderUrl = getImageDetailRenderUrl(image)
   const downloadName = getDownloadName(image?.original_file_path, image?.composite_hash)
   const isEditableImage = image?.file_type === 'image'
-  const supportsPersistentSave = inferRewriteFormatFromPath(image?.original_file_path) !== 'jpeg'
   const busy = downloadMutation.isPending || saveMutation.isPending
 
   const handleBack = () => {
@@ -109,7 +108,7 @@ export function ImageMetadataEditPage() {
       return
     }
 
-    if (!window.confirm('현재 메타 정보를 원본 파일과 DB에 저장할까?')) {
+    if (!window.confirm('현재 메타 정보를 라이브러리 DB에 저장할까?')) {
       return
     }
 
@@ -133,7 +132,7 @@ export function ImageMetadataEditPage() {
             <Download className="h-4 w-4" />
             다운로드
           </Button>
-          <Button onClick={handleSave} disabled={!draft || busy || !isEditableImage || !supportsPersistentSave}>
+          <Button onClick={handleSave} disabled={!draft || busy || !isEditableImage}>
             <Save className="h-4 w-4" />
             저장
           </Button>
@@ -180,13 +179,6 @@ export function ImageMetadataEditPage() {
               <Alert variant="destructive">
                 <AlertTitle>이 파일은 아직 저장 편집 대상이 아니야</AlertTitle>
                 <AlertDescription>정적 이미지 파일만 메타 저장을 지원해.</AlertDescription>
-              </Alert>
-            ) : null}
-
-            {isEditableImage && !supportsPersistentSave ? (
-              <Alert>
-                <AlertTitle>JPEG는 아직 저장 편집을 잠가뒀어</AlertTitle>
-                <AlertDescription>현재는 다운로드로만 확인할 수 있어.</AlertDescription>
               </Alert>
             ) : null}
 
