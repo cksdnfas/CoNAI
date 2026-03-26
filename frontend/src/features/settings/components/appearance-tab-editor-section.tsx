@@ -1,5 +1,7 @@
 import { Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import {
   APPEARANCE_PRESETS,
   DEFAULT_APPEARANCE_SETTINGS,
@@ -13,7 +15,6 @@ import {
 import { cn } from '@/lib/utils'
 import type { AppearanceSettings } from '@/types/settings'
 import type { AppearanceTabColorValues } from './appearance-tab.types'
-import { settingsControlClassName } from './settings-control-classes'
 import { SettingsField } from './settings-primitives'
 
 interface AppearanceTabEditorSectionProps {
@@ -215,6 +216,32 @@ function UploadedFontCard({
   )
 }
 
+function AppearanceColorControl({
+  colorValue,
+  textValue,
+  placeholder,
+  onChangeColor,
+  onChangeText,
+}: {
+  colorValue: string
+  textValue: string
+  placeholder: string
+  onChangeColor: (value: string) => void
+  onChangeText: (value: string) => void
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <input
+        type="color"
+        value={colorValue}
+        onChange={(event) => onChangeColor(event.target.value)}
+        className="h-10 w-16 rounded-sm border border-border bg-surface-lowest p-1"
+      />
+      <Input variant="settings" type="text" value={textValue} onChange={(event) => onChangeText(event.target.value)} placeholder={placeholder} />
+    </div>
+  )
+}
+
 export function AppearanceTabEditorSection({
   appearanceDraft,
   colorValues,
@@ -230,28 +257,28 @@ export function AppearanceTabEditorSection({
         <EditorSectionLead title="폰트" />
         <div className="grid gap-4 md:grid-cols-2">
           <SettingsField label="폰트 프리셋">
-            <select
+            <Select
+              variant="settings"
               value={appearanceDraft.fontPreset}
               onChange={(event) => onPatchAppearance({ fontPreset: event.target.value as AppearanceSettings['fontPreset'] })}
-              className={settingsControlClassName}
             >
               {Object.keys(FONT_PRESETS).map((presetKey) => (
                 <option key={presetKey} value={presetKey}>
                   {getFontPresetLabel(presetKey as AppearanceSettings['fontPreset'])}
                 </option>
               ))}
-            </select>
+            </Select>
           </SettingsField>
 
           <SettingsField label="글자 크기 (%)">
-            <input
+            <Input
               type="number"
               min={85}
               max={125}
               step={1}
+              variant="settings"
               value={appearanceDraft.fontScalePercent}
               onChange={(event) => onPatchAppearance({ fontScalePercent: Number.parseInt(event.target.value || '100', 10) })}
-              className={settingsControlClassName}
             />
           </SettingsField>
         </div>
@@ -259,11 +286,11 @@ export function AppearanceTabEditorSection({
         {appearanceDraft.fontPreset === 'custom' ? (
           <div className="grid gap-4 md:grid-cols-2">
             <SettingsField label="본문 폰트 패밀리">
-              <input
+              <Input
                 type="text"
+                variant="settings"
                 value={appearanceDraft.customFontFamily}
                 onChange={(event) => onPatchAppearance({ customFontFamily: event.target.value })}
-                className={settingsControlClassName}
                 placeholder={DEFAULT_APPEARANCE_SETTINGS.customFontFamily}
               />
               <div className="mt-3">
@@ -279,11 +306,11 @@ export function AppearanceTabEditorSection({
             </SettingsField>
 
             <SettingsField label="모노 폰트 패밀리">
-              <input
+              <Input
                 type="text"
+                variant="settings"
                 value={appearanceDraft.customMonoFontFamily}
                 onChange={(event) => onPatchAppearance({ customMonoFontFamily: event.target.value })}
-                className={settingsControlClassName}
                 placeholder={DEFAULT_APPEARANCE_SETTINGS.customMonoFontFamily}
               />
               <div className="mt-3">
@@ -305,50 +332,50 @@ export function AppearanceTabEditorSection({
         <EditorSectionLead title="검색 / 반응형" />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SettingsField label="검색창 너비 (px)">
-            <input
+            <Input
               type="number"
               min={240}
               max={640}
               step={10}
+              variant="settings"
               value={appearanceDraft.searchBoxWidth}
               onChange={(event) => onPatchAppearance({ searchBoxWidth: Number.parseInt(event.target.value || '380', 10) })}
-              className={settingsControlClassName}
             />
           </SettingsField>
 
           <SettingsField label="검색 패널 너비 (px)">
-            <input
+            <Input
               type="number"
               min={320}
               max={720}
               step={10}
+              variant="settings"
               value={appearanceDraft.searchDrawerWidth}
               onChange={(event) => onPatchAppearance({ searchDrawerWidth: Number.parseInt(event.target.value || '420', 10) })}
-              className={settingsControlClassName}
             />
           </SettingsField>
 
           <SettingsField label="데스크톱 검색 전환폭 (px)">
-            <input
+            <Input
               type="number"
               min={640}
               max={1600}
               step={10}
+              variant="settings"
               value={appearanceDraft.desktopSearchMinWidth}
               onChange={(event) => onPatchAppearance({ desktopSearchMinWidth: Number.parseInt(event.target.value || '768', 10) })}
-              className={settingsControlClassName}
             />
           </SettingsField>
 
           <SettingsField label="데스크톱 메뉴 전환폭 (px)">
-            <input
+            <Input
               type="number"
               min={768}
               max={1800}
               step={10}
+              variant="settings"
               value={appearanceDraft.desktopNavMinWidth}
               onChange={(event) => onPatchAppearance({ desktopNavMinWidth: Number.parseInt(event.target.value || '1024', 10) })}
-              className={settingsControlClassName}
             />
           </SettingsField>
         </div>
@@ -358,29 +385,29 @@ export function AppearanceTabEditorSection({
         <EditorSectionLead title="기본" />
         <div className="grid gap-4 md:grid-cols-2">
           <SettingsField label="테마 모드">
-            <select
+            <Select
+              variant="settings"
               value={appearanceDraft.themeMode}
               onChange={(event) => onPatchAppearance({ themeMode: event.target.value as AppearanceSettings['themeMode'] })}
-              className={settingsControlClassName}
             >
               <option value="system">{getThemeModeLabel('system')}</option>
               <option value="dark">{getThemeModeLabel('dark')}</option>
               <option value="light">{getThemeModeLabel('light')}</option>
-            </select>
+            </Select>
           </SettingsField>
 
           <SettingsField label="밀도">
-            <select
+            <Select
+              variant="settings"
               value={appearanceDraft.density}
               onChange={(event) => onPatchAppearance({ density: event.target.value as AppearanceSettings['density'] })}
-              className={settingsControlClassName}
             >
               {Object.keys(DENSITY_PRESETS).map((presetKey) => (
                 <option key={presetKey} value={presetKey}>
                   {getDensityLabel(presetKey as AppearanceSettings['density'])}
                 </option>
               ))}
-            </select>
+            </Select>
           </SettingsField>
         </div>
       </section>
@@ -437,39 +464,23 @@ export function AppearanceTabEditorSection({
         {appearanceDraft.accentPreset === 'custom' ? (
           <div className="grid gap-4 md:grid-cols-2">
             <SettingsField label="기본 강조색">
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={colorValues.customPrimaryColorValue}
-                  onChange={(event) => onPatchAppearance({ customPrimaryColor: event.target.value })}
-                  className="h-10 w-16 rounded-sm border border-border bg-surface-lowest p-1"
-                />
-                <input
-                  type="text"
-                  value={appearanceDraft.customPrimaryColor}
-                  onChange={(event) => onPatchAppearance({ customPrimaryColor: event.target.value })}
-                  className={settingsControlClassName}
-                  placeholder={DEFAULT_APPEARANCE_SETTINGS.customPrimaryColor}
-                />
-              </div>
+              <AppearanceColorControl
+                colorValue={colorValues.customPrimaryColorValue}
+                textValue={appearanceDraft.customPrimaryColor}
+                onChangeColor={(value) => onPatchAppearance({ customPrimaryColor: value })}
+                onChangeText={(value) => onPatchAppearance({ customPrimaryColor: value })}
+                placeholder={DEFAULT_APPEARANCE_SETTINGS.customPrimaryColor}
+              />
             </SettingsField>
 
             <SettingsField label="보조 강조색">
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={colorValues.customSecondaryColorValue}
-                  onChange={(event) => onPatchAppearance({ customSecondaryColor: event.target.value })}
-                  className="h-10 w-16 rounded-sm border border-border bg-surface-lowest p-1"
-                />
-                <input
-                  type="text"
-                  value={appearanceDraft.customSecondaryColor}
-                  onChange={(event) => onPatchAppearance({ customSecondaryColor: event.target.value })}
-                  className={settingsControlClassName}
-                  placeholder={DEFAULT_APPEARANCE_SETTINGS.customSecondaryColor}
-                />
-              </div>
+              <AppearanceColorControl
+                colorValue={colorValues.customSecondaryColorValue}
+                textValue={appearanceDraft.customSecondaryColor}
+                onChangeColor={(value) => onPatchAppearance({ customSecondaryColor: value })}
+                onChangeText={(value) => onPatchAppearance({ customSecondaryColor: value })}
+                placeholder={DEFAULT_APPEARANCE_SETTINGS.customSecondaryColor}
+              />
             </SettingsField>
           </div>
         ) : null}
@@ -530,102 +541,78 @@ export function AppearanceTabEditorSection({
         {appearanceDraft.surfacePreset === 'custom' ? (
           <div className="grid gap-4 md:grid-cols-3">
             <SettingsField label="배경">
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={colorValues.customSurfaceBackgroundColorValue}
-                  onChange={(event) => onPatchAppearance({ customSurfaceBackgroundColor: event.target.value })}
-                  className="h-10 w-16 rounded-sm border border-border bg-surface-lowest p-1"
-                />
-                <input
-                  type="text"
-                  value={appearanceDraft.customSurfaceBackgroundColor}
-                  onChange={(event) => onPatchAppearance({ customSurfaceBackgroundColor: event.target.value })}
-                  className={settingsControlClassName}
-                  placeholder={DEFAULT_APPEARANCE_SETTINGS.customSurfaceBackgroundColor}
-                />
-              </div>
+              <AppearanceColorControl
+                colorValue={colorValues.customSurfaceBackgroundColorValue}
+                textValue={appearanceDraft.customSurfaceBackgroundColor}
+                onChangeColor={(value) => onPatchAppearance({ customSurfaceBackgroundColor: value })}
+                onChangeText={(value) => onPatchAppearance({ customSurfaceBackgroundColor: value })}
+                placeholder={DEFAULT_APPEARANCE_SETTINGS.customSurfaceBackgroundColor}
+              />
             </SettingsField>
 
             <SettingsField label="컨테이너">
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={colorValues.customSurfaceContainerColorValue}
-                  onChange={(event) => onPatchAppearance({ customSurfaceContainerColor: event.target.value })}
-                  className="h-10 w-16 rounded-sm border border-border bg-surface-lowest p-1"
-                />
-                <input
-                  type="text"
-                  value={appearanceDraft.customSurfaceContainerColor}
-                  onChange={(event) => onPatchAppearance({ customSurfaceContainerColor: event.target.value })}
-                  className={settingsControlClassName}
-                  placeholder={DEFAULT_APPEARANCE_SETTINGS.customSurfaceContainerColor}
-                />
-              </div>
+              <AppearanceColorControl
+                colorValue={colorValues.customSurfaceContainerColorValue}
+                textValue={appearanceDraft.customSurfaceContainerColor}
+                onChangeColor={(value) => onPatchAppearance({ customSurfaceContainerColor: value })}
+                onChangeText={(value) => onPatchAppearance({ customSurfaceContainerColor: value })}
+                placeholder={DEFAULT_APPEARANCE_SETTINGS.customSurfaceContainerColor}
+              />
             </SettingsField>
 
             <SettingsField label="강조 표면">
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={colorValues.customSurfaceHighColorValue}
-                  onChange={(event) => onPatchAppearance({ customSurfaceHighColor: event.target.value })}
-                  className="h-10 w-16 rounded-sm border border-border bg-surface-lowest p-1"
-                />
-                <input
-                  type="text"
-                  value={appearanceDraft.customSurfaceHighColor}
-                  onChange={(event) => onPatchAppearance({ customSurfaceHighColor: event.target.value })}
-                  className={settingsControlClassName}
-                  placeholder={DEFAULT_APPEARANCE_SETTINGS.customSurfaceHighColor}
-                />
-              </div>
+              <AppearanceColorControl
+                colorValue={colorValues.customSurfaceHighColorValue}
+                textValue={appearanceDraft.customSurfaceHighColor}
+                onChangeColor={(value) => onPatchAppearance({ customSurfaceHighColor: value })}
+                onChangeText={(value) => onPatchAppearance({ customSurfaceHighColor: value })}
+                placeholder={DEFAULT_APPEARANCE_SETTINGS.customSurfaceHighColor}
+              />
             </SettingsField>
           </div>
         ) : null}
 
         <div className="grid gap-4 md:grid-cols-3">
           <SettingsField label="모서리">
-            <select
+            <Select
+              variant="settings"
               value={appearanceDraft.radiusPreset}
               onChange={(event) => onPatchAppearance({ radiusPreset: event.target.value as AppearanceSettings['radiusPreset'] })}
-              className={settingsControlClassName}
             >
               {Object.keys(RADIUS_PRESETS).map((presetKey) => (
                 <option key={presetKey} value={presetKey}>
                   {getRadiusLabel(presetKey as AppearanceSettings['radiusPreset'])}
                 </option>
               ))}
-            </select>
+            </Select>
           </SettingsField>
 
           <SettingsField label="유리감">
-            <select
+            <Select
+              variant="settings"
               value={appearanceDraft.glassPreset}
               onChange={(event) => onPatchAppearance({ glassPreset: event.target.value as AppearanceSettings['glassPreset'] })}
-              className={settingsControlClassName}
             >
               {Object.keys(GLASS_PRESETS).map((presetKey) => (
                 <option key={presetKey} value={presetKey}>
                   {getGlassLabel(presetKey as AppearanceSettings['glassPreset'])}
                 </option>
               ))}
-            </select>
+            </Select>
           </SettingsField>
 
           <SettingsField label="그림자">
-            <select
+            <Select
+              variant="settings"
               value={appearanceDraft.shadowPreset}
               onChange={(event) => onPatchAppearance({ shadowPreset: event.target.value as AppearanceSettings['shadowPreset'] })}
-              className={settingsControlClassName}
             >
               {Object.keys(SHADOW_PRESETS).map((presetKey) => (
                 <option key={presetKey} value={presetKey}>
                   {getShadowLabel(presetKey as AppearanceSettings['shadowPreset'])}
                 </option>
               ))}
-            </select>
+            </Select>
           </SettingsField>
         </div>
       </section>
@@ -634,75 +621,43 @@ export function AppearanceTabEditorSection({
         <EditorSectionLead title="배지 색상" />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SettingsField label="긍정 배지">
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={colorValues.positiveBadgeColorValue}
-                onChange={(event) => onPatchAppearance({ positiveBadgeColor: event.target.value })}
-                className="h-10 w-16 rounded-sm border border-border bg-surface-lowest p-1"
-              />
-              <input
-                type="text"
-                value={appearanceDraft.positiveBadgeColor}
-                onChange={(event) => onPatchAppearance({ positiveBadgeColor: event.target.value })}
-                className={settingsControlClassName}
-                placeholder={DEFAULT_APPEARANCE_SETTINGS.positiveBadgeColor}
-              />
-            </div>
+            <AppearanceColorControl
+              colorValue={colorValues.positiveBadgeColorValue}
+              textValue={appearanceDraft.positiveBadgeColor}
+              onChangeColor={(value) => onPatchAppearance({ positiveBadgeColor: value })}
+              onChangeText={(value) => onPatchAppearance({ positiveBadgeColor: value })}
+              placeholder={DEFAULT_APPEARANCE_SETTINGS.positiveBadgeColor}
+            />
           </SettingsField>
 
           <SettingsField label="부정 배지">
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={colorValues.negativeBadgeColorValue}
-                onChange={(event) => onPatchAppearance({ negativeBadgeColor: event.target.value })}
-                className="h-10 w-16 rounded-sm border border-border bg-surface-lowest p-1"
-              />
-              <input
-                type="text"
-                value={appearanceDraft.negativeBadgeColor}
-                onChange={(event) => onPatchAppearance({ negativeBadgeColor: event.target.value })}
-                className={settingsControlClassName}
-                placeholder={DEFAULT_APPEARANCE_SETTINGS.negativeBadgeColor}
-              />
-            </div>
+            <AppearanceColorControl
+              colorValue={colorValues.negativeBadgeColorValue}
+              textValue={appearanceDraft.negativeBadgeColor}
+              onChangeColor={(value) => onPatchAppearance({ negativeBadgeColor: value })}
+              onChangeText={(value) => onPatchAppearance({ negativeBadgeColor: value })}
+              placeholder={DEFAULT_APPEARANCE_SETTINGS.negativeBadgeColor}
+            />
           </SettingsField>
 
           <SettingsField label="오토 배지">
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={colorValues.autoBadgeColorValue}
-                onChange={(event) => onPatchAppearance({ autoBadgeColor: event.target.value })}
-                className="h-10 w-16 rounded-sm border border-border bg-surface-lowest p-1"
-              />
-              <input
-                type="text"
-                value={appearanceDraft.autoBadgeColor}
-                onChange={(event) => onPatchAppearance({ autoBadgeColor: event.target.value })}
-                className={settingsControlClassName}
-                placeholder={DEFAULT_APPEARANCE_SETTINGS.autoBadgeColor}
-              />
-            </div>
+            <AppearanceColorControl
+              colorValue={colorValues.autoBadgeColorValue}
+              textValue={appearanceDraft.autoBadgeColor}
+              onChangeColor={(value) => onPatchAppearance({ autoBadgeColor: value })}
+              onChangeText={(value) => onPatchAppearance({ autoBadgeColor: value })}
+              placeholder={DEFAULT_APPEARANCE_SETTINGS.autoBadgeColor}
+            />
           </SettingsField>
 
           <SettingsField label="평가 배지">
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={colorValues.ratingBadgeColorValue}
-                onChange={(event) => onPatchAppearance({ ratingBadgeColor: event.target.value })}
-                className="h-10 w-16 rounded-sm border border-border bg-surface-lowest p-1"
-              />
-              <input
-                type="text"
-                value={appearanceDraft.ratingBadgeColor}
-                onChange={(event) => onPatchAppearance({ ratingBadgeColor: event.target.value })}
-                className={settingsControlClassName}
-                placeholder={DEFAULT_APPEARANCE_SETTINGS.ratingBadgeColor}
-              />
-            </div>
+            <AppearanceColorControl
+              colorValue={colorValues.ratingBadgeColorValue}
+              textValue={appearanceDraft.ratingBadgeColor}
+              onChangeColor={(value) => onPatchAppearance({ ratingBadgeColor: value })}
+              onChangeText={(value) => onPatchAppearance({ ratingBadgeColor: value })}
+              placeholder={DEFAULT_APPEARANCE_SETTINGS.ratingBadgeColor}
+            />
           </SettingsField>
         </div>
       </section>

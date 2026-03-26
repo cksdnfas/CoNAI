@@ -2,8 +2,6 @@ import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 
 export const detailSettingsLabelClassName = 'text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase'
-export const detailSettingsControlClassName = 'h-10 w-full rounded-sm border border-border bg-surface-high px-3 text-sm text-foreground outline-none focus:border-primary'
-export const detailSettingsNestedControlClassName = 'h-10 w-full rounded-sm border border-border bg-surface-container px-3 text-sm text-foreground outline-none focus:border-primary'
 
 interface DetailSettingsFlyoutProps {
   isOpen: boolean

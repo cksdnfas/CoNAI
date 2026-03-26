@@ -1,9 +1,9 @@
 import { Check, Paintbrush, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { extractAppearanceTheme, resolveAppearanceColors, resolveSurfacePalette } from '@/lib/appearance'
 import { cn } from '@/lib/utils'
 import type { AppearancePresetSlot, AppearanceSettings } from '@/types/settings'
-import { settingsControlClassName } from './settings-control-classes'
 import { areThemeSettingsEqual, formatSlotTimestamp } from './appearance-tab.utils'
 
 interface AppearanceTabSlotSectionProps {
@@ -100,8 +100,9 @@ export function AppearanceTabSlotSection({
                   <div className="text-right text-[11px] text-muted-foreground">{formatSlotTimestamp(slot.updatedAt)}</div>
                 </div>
 
-                <input
+                <Input
                   type="text"
+                  variant="settings"
                   value={slot.label}
                   onChange={(event) =>
                     onPatchAppearance({
@@ -110,7 +111,6 @@ export function AppearanceTabSlotSection({
                       ),
                     })
                   }
-                  className={settingsControlClassName}
                   maxLength={32}
                   placeholder="슬롯 이름"
                 />
