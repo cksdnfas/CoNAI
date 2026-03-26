@@ -29,7 +29,7 @@ export function AppShell() {
 
 function AppShellLayout() {
   const location = useLocation()
-  const shouldUseGlobalScrollRestoration = location.pathname !== '/'
+  const shouldUseGlobalScrollRestoration = location.pathname !== '/' && !location.pathname.startsWith('/groups')
   const settingsQuery = useQuery({
     queryKey: ['app-settings'],
     queryFn: getAppSettings,

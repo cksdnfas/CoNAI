@@ -1,5 +1,6 @@
 import { VirtuosoGrid } from 'react-virtuoso'
 import type { ImageRecord } from '@/types/image'
+import type { ImageListScrollMode } from './image-list-types'
 import { ImageListItem } from './image-list-item'
 
 interface ImageListGridProps {
@@ -12,6 +13,9 @@ interface ImageListGridProps {
   gridItemHeight: number
   getItemHref?: (image: ImageRecord) => string | undefined
   onActivate: (imageId: string, href?: string) => void
+  scrollMode: ImageListScrollMode
+  viewportHeight?: number | string
+  onEndReached?: () => void
 }
 
 /** Render a reusable virtualized grid layout with equally sized cards. */
@@ -25,19 +29,27 @@ export function ImageListGrid({
   gridItemHeight,
   getItemHref,
   onActivate,
+  scrollMode,
+  viewportHeight,
+  onEndReached,
 }: ImageListGridProps) {
+  const usesWindowScroll = scrollMode === 'window'
+
   return (
     <div
       style={{
         ['--image-list-min-column-width' as string]: `${minColumnWidth}px`,
         ['--image-list-column-gap' as string]: `${columnGap}px`,
         ['--image-list-row-gap' as string]: `${rowGap}px`,
+        height: usesWindowScroll ? undefined : (viewportHeight ?? '100%'),
       }}
     >
       <VirtuosoGrid<ImageRecord>
         data={items}
-        useWindowScroll
+        useWindowScroll={usesWindowScroll}
+        style={usesWindowScroll ? undefined : { height: '100%' }}
         overscan={{ main: 1200, reverse: 600 }}
+        endReached={onEndReached}
         listClassName="image-list-grid"
         itemClassName="image-list-grid-item"
         computeItemKey={(_, item) => String(item.composite_hash ?? item.id)}

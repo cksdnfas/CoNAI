@@ -1,9 +1,11 @@
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getThemeToneStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 import { useHomeSearch } from '@/features/home/home-search-context'
-import type { SearchScope } from '@/features/home/search-types'
+import type { RatingTierRecord, SearchScope } from '@/features/home/search-types'
+import type { PromptCollectionItem } from '@/types/prompt'
 
 const SEARCH_SCOPE_TABS: Array<{ value: SearchScope; label: string }> = [
   { value: 'positive', label: '긍정' },
@@ -19,158 +21,244 @@ const SEARCH_SCOPE_LABELS: Record<SearchScope, string> = {
   rating: '평가',
 }
 
-/** Render the shared header search input with autocomplete-style suggestion results. */
-export function HomeSearchHeaderBox({ active, desktopMode }: { active: boolean; desktopMode: boolean }) {
-  const {
-    isDrawerOpen,
-    searchScope,
-    searchInput,
-    promptSuggestions,
-    filteredRatingTiers,
-    suggestionsLoading,
-    ratingTiersLoading,
-    appliedChips,
-    openDrawer,
-    setSearchInput,
-    setSearchScope,
-    submitSearchFromInput,
-    addSuggestionChip,
-    addRatingChip,
-  } = useHomeSearch()
+interface HomeSearchScopeTabsProps {
+  searchScope: SearchScope
+  setSearchScope: (scope: SearchScope) => void
+  onClose?: () => void
+}
 
-  if (!active) {
-    return desktopMode ? (
-      <div className="hidden items-center rounded-sm bg-surface-lowest px-3 py-1.5 text-sm text-muted-foreground md:flex">
-        <Search className="mr-2 h-4 w-4" />
-        <span className="w-44 truncate">Search gallery…</span>
-      </div>
-    ) : null
-  }
+interface HomeSearchSuggestionListProps {
+  searchScope: SearchScope
+  searchInput: string
+  promptSuggestions: PromptCollectionItem[]
+  filteredRatingTiers: RatingTierRecord[]
+  suggestionsLoading: boolean
+  ratingTiersLoading: boolean
+  submitSearchFromInput: () => void
+  addSuggestionChip: (item: PromptCollectionItem) => void
+  addRatingChip: (tier: RatingTierRecord) => void
+}
 
-  const showSuggestionMenu = desktopMode && isDrawerOpen && (searchScope === 'rating' || searchInput.trim().length > 0)
-  const activeCountLabel = appliedChips.length > 0 ? `${appliedChips.length} filters` : 'Search gallery…'
+interface HomeSearchInputBoxProps {
+  searchInput: string
+  setSearchInput: (value: string) => void
+  submitSearchFromInput: () => void
+  placeholder: string
+  ariaLabel: string
+  onFocus?: () => void
+  style?: CSSProperties
+}
 
+interface HomeSearchSuggestionPanelProps {
+  searchScope: SearchScope
+  setSearchScope: (scope: SearchScope) => void
+  searchInput: string
+  promptSuggestions: PromptCollectionItem[]
+  filteredRatingTiers: RatingTierRecord[]
+  suggestionsLoading: boolean
+  ratingTiersLoading: boolean
+  submitSearchFromInput: () => void
+  addSuggestionChip: (item: PromptCollectionItem) => void
+  addRatingChip: (tier: RatingTierRecord) => void
+  onClose?: () => void
+  className?: string
+  style?: CSSProperties
+}
+
+/** Render the shared search scope tabs used by the search suggestion panel. */
+function HomeSearchScopeTabs({ searchScope, setSearchScope, onClose }: HomeSearchScopeTabsProps) {
   return (
-    <div className="relative">
-      {desktopMode ? (
-        <div
-          className="theme-settings-control flex items-center rounded-sm border border-border bg-surface-lowest text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]"
-          style={{ width: 'var(--theme-search-box-width)' }}
-        >
-          <Search className="mr-2 h-4 w-4 text-muted-foreground" />
-          <input
-            value={searchInput}
-            onFocus={openDrawer}
-            onChange={(event) => setSearchInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                submitSearchFromInput()
-              }
-            }}
-            placeholder={activeCountLabel}
-            className="h-full w-full bg-transparent outline-none placeholder:text-muted-foreground"
-            aria-label="갤러리 검색"
-          />
-        </div>
-      ) : (
+    <div className="flex items-center gap-2 border-b border-white/5 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+        {SEARCH_SCOPE_TABS.map((tab) => (
+          <button
+            key={tab.value}
+            type="button"
+            onClick={() => setSearchScope(tab.value)}
+            className={cn(
+              'rounded-sm px-3 py-1.5 text-xs font-semibold transition-colors',
+              searchScope === tab.value ? '' : 'text-muted-foreground hover:bg-surface-high hover:text-foreground',
+            )}
+            style={searchScope === tab.value ? getThemeToneStyle(tab.value) : undefined}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {onClose ? (
         <button
           type="button"
-          onClick={openDrawer}
-          className="theme-floating-panel inline-flex items-center gap-2 rounded-full p-2 text-sm text-foreground transition hover:bg-surface-high"
-          aria-label="검색 열기"
-          title="검색"
+          onClick={onClose}
+          className="rounded-sm p-2 text-muted-foreground transition hover:bg-surface-high hover:text-foreground"
+          aria-label="입력 필터 닫기"
+          title="입력 필터 닫기"
         >
-          <Search className="h-4 w-4" />
-          {appliedChips.length > 0 ? (
-            <span className="rounded-full bg-primary/14 px-2 py-0.5 text-[11px] font-semibold text-primary">{appliedChips.length}</span>
-          ) : null}
+          <X className="h-4 w-4" />
         </button>
-      )}
-
-      {showSuggestionMenu ? (
-        <div
-          className="theme-floating-panel absolute right-0 top-[calc(var(--theme-shell-header-height)+0.5rem)] z-[70] overflow-hidden rounded-sm"
-          style={{ width: 'min(calc(100vw - 1rem), var(--theme-search-box-width))' }}
-        >
-          <div className="flex items-center gap-1 border-b border-white/5 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
-            {SEARCH_SCOPE_TABS.map((tab) => (
-              <button
-                key={tab.value}
-                type="button"
-                onClick={() => setSearchScope(tab.value)}
-                className={cn(
-                  'rounded-sm px-3 py-1.5 text-xs font-semibold transition-colors',
-                  searchScope === tab.value ? '' : 'text-muted-foreground hover:bg-surface-high hover:text-foreground',
-                )}
-                style={searchScope === tab.value ? getThemeToneStyle(tab.value) : undefined}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="max-h-[420px] overflow-y-auto py-2">
-            {searchScope !== 'rating' ? (
-              <>
-                {searchInput.trim().length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={submitSearchFromInput}
-                    className="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-surface-high"
-                  >
-                    <span className="text-sm text-foreground">&quot;{searchInput.trim()}&quot; 검색</span>
-                    <span className="text-xs text-muted-foreground">Enter</span>
-                  </button>
-                ) : null}
-
-                {suggestionsLoading ? <div className="px-4 py-6 text-sm text-muted-foreground">추천 항목을 불러오는 중…</div> : null}
-                {!suggestionsLoading && promptSuggestions.length === 0 ? (
-                  <div className="px-4 py-6 text-sm text-muted-foreground">일치하는 추천 프롬프트가 아직 없어.</div>
-                ) : null}
-                {!suggestionsLoading && promptSuggestions.length > 0
-                  ? promptSuggestions.map((item) => (
-                      <button
-                        key={`${item.type}-${item.id}`}
-                        type="button"
-                        onClick={() => addSuggestionChip(item)}
-                        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-surface-high"
-                      >
-                        <span className="truncate text-sm text-secondary">{item.prompt}</span>
-                        <span className="shrink-0 text-sm text-muted-foreground">{item.usage_count.toLocaleString('ko-KR')}</span>
-                      </button>
-                    ))
-                  : null}
-              </>
-            ) : (
-              <>
-                {ratingTiersLoading ? <div className="px-4 py-6 text-sm text-muted-foreground">평가 티어를 불러오는 중…</div> : null}
-                {!ratingTiersLoading && filteredRatingTiers.length === 0 ? (
-                  <div className="px-4 py-6 text-sm text-muted-foreground">일치하는 평가 티어가 없어.</div>
-                ) : null}
-                {!ratingTiersLoading && filteredRatingTiers.length > 0
-                  ? filteredRatingTiers.map((tier) => (
-                      <button
-                        key={tier.id}
-                        type="button"
-                        onClick={() => addRatingChip(tier)}
-                        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-surface-high"
-                      >
-                        <span className="text-sm font-semibold" style={tier.color ? { color: tier.color } : undefined}>
-                          {tier.tier_name}
-                        </span>
-                        <span className="shrink-0 text-sm text-muted-foreground">
-                          {tier.min_score}~{tier.max_score === null ? '∞' : tier.max_score}
-                        </span>
-                      </button>
-                    ))
-                  : null}
-              </>
-            )}
-          </div>
-        </div>
       ) : null}
     </div>
+  )
+}
+
+/** Render the shared search input box used by the drawer search entry. */
+function HomeSearchInputBox({ searchInput, setSearchInput, submitSearchFromInput, placeholder, ariaLabel, onFocus, style }: HomeSearchInputBoxProps) {
+  return (
+    <div
+      className="theme-settings-control flex items-center rounded-sm border border-border bg-surface-lowest text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]"
+      style={style}
+    >
+      <Search className="mr-2 h-4 w-4 text-muted-foreground" />
+      <input
+        value={searchInput}
+        onFocus={onFocus}
+        onChange={(event) => setSearchInput(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            submitSearchFromInput()
+          }
+        }}
+        placeholder={placeholder}
+        className="h-full w-full bg-transparent outline-none placeholder:text-muted-foreground"
+        aria-label={ariaLabel}
+      />
+    </div>
+  )
+}
+
+/** Render the shared search suggestion list for text and rating scopes. */
+function HomeSearchSuggestionList({
+  searchScope,
+  searchInput,
+  promptSuggestions,
+  filteredRatingTiers,
+  suggestionsLoading,
+  ratingTiersLoading,
+  submitSearchFromInput,
+  addSuggestionChip,
+  addRatingChip,
+}: HomeSearchSuggestionListProps) {
+  if (searchScope !== 'rating') {
+    return (
+      <>
+        {searchInput.trim().length > 0 ? (
+          <button
+            type="button"
+            onClick={submitSearchFromInput}
+            className="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-surface-high"
+          >
+            <span className="text-sm text-foreground">&quot;{searchInput.trim()}&quot; 검색</span>
+            <span className="text-xs text-muted-foreground">Enter</span>
+          </button>
+        ) : null}
+
+        {suggestionsLoading ? <div className="px-4 py-6 text-sm text-muted-foreground">추천 항목을 불러오는 중…</div> : null}
+        {!suggestionsLoading && promptSuggestions.length === 0 ? (
+          <div className="px-4 py-6 text-sm text-muted-foreground">일치하는 추천 프롬프트가 아직 없어.</div>
+        ) : null}
+        {!suggestionsLoading && promptSuggestions.length > 0
+          ? promptSuggestions.map((item) => (
+              <button
+                key={`${item.type}-${item.id}`}
+                type="button"
+                onClick={() => addSuggestionChip(item)}
+                className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-surface-high"
+              >
+                <span className="truncate text-sm text-secondary">{item.prompt}</span>
+                <span className="shrink-0 text-sm text-muted-foreground">{item.usage_count.toLocaleString('ko-KR')}</span>
+              </button>
+            ))
+          : null}
+      </>
+    )
+  }
+
+  return (
+    <>
+      {ratingTiersLoading ? <div className="px-4 py-6 text-sm text-muted-foreground">평가 티어를 불러오는 중…</div> : null}
+      {!ratingTiersLoading && filteredRatingTiers.length === 0 ? (
+        <div className="px-4 py-6 text-sm text-muted-foreground">일치하는 평가 티어가 없어.</div>
+      ) : null}
+      {!ratingTiersLoading && filteredRatingTiers.length > 0
+        ? filteredRatingTiers.map((tier) => (
+            <button
+              key={tier.id}
+              type="button"
+              onClick={() => addRatingChip(tier)}
+              className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-surface-high"
+            >
+              <span className="text-sm font-semibold" style={tier.color ? { color: tier.color } : undefined}>
+                {tier.tier_name}
+              </span>
+              <span className="shrink-0 text-sm text-muted-foreground">
+                {tier.min_score}~{tier.max_score === null ? '∞' : tier.max_score}
+              </span>
+            </button>
+          ))
+        : null}
+    </>
+  )
+}
+
+/** Render the shared suggestion panel below the drawer search input. */
+function HomeSearchSuggestionPanel({
+  searchScope,
+  setSearchScope,
+  searchInput,
+  promptSuggestions,
+  filteredRatingTiers,
+  suggestionsLoading,
+  ratingTiersLoading,
+  submitSearchFromInput,
+  addSuggestionChip,
+  addRatingChip,
+  onClose,
+  className,
+  style,
+}: HomeSearchSuggestionPanelProps) {
+  return (
+    <div className={cn('theme-floating-panel overflow-hidden rounded-sm', className)} style={style}>
+      <HomeSearchScopeTabs searchScope={searchScope} setSearchScope={setSearchScope} onClose={onClose} />
+
+      <div className="max-h-[420px] overflow-y-auto py-2">
+        <HomeSearchSuggestionList
+          searchScope={searchScope}
+          searchInput={searchInput}
+          promptSuggestions={promptSuggestions}
+          filteredRatingTiers={filteredRatingTiers}
+          suggestionsLoading={suggestionsLoading}
+          ratingTiersLoading={ratingTiersLoading}
+          submitSearchFromInput={submitSearchFromInput}
+          addSuggestionChip={addSuggestionChip}
+          addRatingChip={addRatingChip}
+        />
+      </div>
+    </div>
+  )
+}
+
+/** Render the header search control as a drawer-open button only. */
+export function HomeSearchHeaderBox({ active, desktopMode: _desktopMode }: { active: boolean; desktopMode: boolean }) {
+  const { appliedChips, openDrawer } = useHomeSearch()
+
+  if (!active) {
+    return null
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={openDrawer}
+      className="theme-floating-panel inline-flex items-center gap-2 rounded-full p-2 text-sm text-foreground transition hover:bg-surface-high"
+      aria-label="검색 열기"
+      title="검색"
+    >
+      <Search className="h-4 w-4" />
+      {appliedChips.length > 0 ? (
+        <span className="rounded-full bg-primary/14 px-2 py-0.5 text-[11px] font-semibold text-primary">{appliedChips.length}</span>
+      ) : null}
+    </button>
   )
 }
 
@@ -178,10 +266,22 @@ export function HomeSearchHeaderBox({ active, desktopMode }: { active: boolean; 
 export function HomeSearchDrawer({ active }: { active: boolean }) {
   const {
     isDrawerOpen,
+    searchScope,
+    searchInput,
     draftChips,
+    appliedChips,
+    promptSuggestions,
+    filteredRatingTiers,
     historyEntries,
+    suggestionsLoading,
     historyLoading,
+    ratingTiersLoading,
     closeDrawer,
+    setSearchInput,
+    setSearchScope,
+    submitSearchFromInput,
+    addSuggestionChip,
+    addRatingChip,
     cycleChipOperator,
     removeChip,
     applySearch,
@@ -190,9 +290,62 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
     deleteHistoryEntry,
     clearHistoryEntries,
   } = useHomeSearch()
+  const [isSuggestionPanelOpen, setIsSuggestionPanelOpen] = useState(false)
+  const searchSectionRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (!isDrawerOpen) {
+      setIsSuggestionPanelOpen(false)
+      return
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!searchSectionRef.current?.contains(event.target as Node)) {
+        setIsSuggestionPanelOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [isDrawerOpen])
 
   if (!active) {
     return null
+  }
+
+  const activeCountLabel = appliedChips.length > 0 ? `${appliedChips.length} filters` : 'Search gallery…'
+
+  const handleOpenSuggestionPanel = () => {
+    setIsSuggestionPanelOpen(true)
+  }
+
+  const handleCloseSuggestionPanel = () => {
+    setIsSuggestionPanelOpen(false)
+  }
+
+  const handleSubmitSearchFromInput = () => {
+    submitSearchFromInput()
+    setIsSuggestionPanelOpen(false)
+  }
+
+  const handleAddSuggestionChip = (item: PromptCollectionItem) => {
+    addSuggestionChip(item)
+    setIsSuggestionPanelOpen(false)
+  }
+
+  const handleAddRatingChip = (tier: RatingTierRecord) => {
+    addRatingChip(tier)
+    setIsSuggestionPanelOpen(false)
+  }
+
+  const handleApplySearch = () => {
+    applySearch()
+    setIsSuggestionPanelOpen(false)
+  }
+
+  const handleClearSearch = () => {
+    clearSearch()
+    setIsSuggestionPanelOpen(false)
   }
 
   return (
@@ -220,6 +373,33 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
         </div>
 
         <div className="theme-drawer-body flex-1 space-y-6 overflow-y-auto">
+          <section ref={searchSectionRef} className="space-y-3">
+            <HomeSearchInputBox
+              searchInput={searchInput}
+              setSearchInput={setSearchInput}
+              submitSearchFromInput={handleSubmitSearchFromInput}
+              placeholder={activeCountLabel}
+              ariaLabel="드로어 검색 입력"
+              onFocus={handleOpenSuggestionPanel}
+            />
+
+            {isSuggestionPanelOpen ? (
+              <HomeSearchSuggestionPanel
+                searchScope={searchScope}
+                setSearchScope={setSearchScope}
+                searchInput={searchInput}
+                promptSuggestions={promptSuggestions}
+                filteredRatingTiers={filteredRatingTiers}
+                suggestionsLoading={suggestionsLoading}
+                ratingTiersLoading={ratingTiersLoading}
+                submitSearchFromInput={handleSubmitSearchFromInput}
+                addSuggestionChip={handleAddSuggestionChip}
+                addRatingChip={handleAddRatingChip}
+                onClose={handleCloseSuggestionPanel}
+              />
+            ) : null}
+          </section>
+
           <section className="space-y-3">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Current filters</div>
             {draftChips.length === 0 ? <div className="rounded-sm border border-white/5 bg-surface-lowest px-4 py-4 text-sm text-muted-foreground">No filters</div> : null}
@@ -251,10 +431,10 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
             ) : null}
 
             <div className="flex gap-2">
-              <Button type="button" className="flex-1" onClick={applySearch}>
+              <Button type="button" className="flex-1" onClick={handleApplySearch}>
                 검색
               </Button>
-              <Button type="button" variant="outline" className="flex-1" onClick={clearSearch}>
+              <Button type="button" variant="outline" className="flex-1" onClick={handleClearSearch}>
                 초기화
               </Button>
             </div>

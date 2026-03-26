@@ -1,5 +1,6 @@
 export * from './api-images'
 export * from './api-groups'
+export * from './api-auto-folder-groups'
 export * from './api-prompts'
 export * from './api-folders'
 export * from './api-backup-sources'

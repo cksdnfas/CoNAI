@@ -138,8 +138,7 @@ export function BackupSourceCard({
               onChange={(event) => setDraft((current) => ({ ...current, target_folder_name: event.target.value }))}
               placeholder="Backup 또는 Backup/001"
             />
-            <p className="mt-2 text-xs text-muted-foreground">업로드 폴더 안 상대 경로로 저장돼. `Backup` 입력 시 `Upload/Backup`으로 처리해.</p>
-            <p className="mt-1 break-all font-mono text-xs text-primary">최종 경로: {buildBackupTargetPreviewPath(draft.target_folder_name)}</p>
+            <p className="mt-2 break-all font-mono text-xs text-primary">최종 경로: {buildBackupTargetPreviewPath(draft.target_folder_name)}</p>
           </SettingsField>
 
           <SettingsField label="가져오기 모드">

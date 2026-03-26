@@ -1,6 +1,7 @@
 import type { ImageRecord } from '@/types/image'
 
 export type ImageListLayoutMode = 'grid' | 'masonry'
+export type ImageListScrollMode = 'window' | 'container'
 
 export interface ImageListProps {
   items: ImageRecord[]
@@ -18,4 +19,6 @@ export interface ImageListProps {
   rowGap?: number
   gridItemHeight?: number
   className?: string
+  scrollMode?: ImageListScrollMode
+  viewportHeight?: number | string
 }

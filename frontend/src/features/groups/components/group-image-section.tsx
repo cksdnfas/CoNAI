@@ -15,6 +15,8 @@ interface GroupImageSectionProps {
   hasMore: boolean
   isLoadingMore: boolean
   onLoadMore: () => void
+  hideHeader?: boolean
+  presentation?: 'page' | 'drawer'
 }
 
 export function GroupImageSection({
@@ -26,19 +28,27 @@ export function GroupImageSection({
   hasMore,
   isLoadingMore,
   onLoadMore,
+  hideHeader = false,
+  presentation = 'page',
 }: GroupImageSectionProps) {
+  const shouldShowCollectionCounts = group.manual_added_count !== undefined || group.auto_collected_count !== undefined
+
   return (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">이미지</h2>
-          <p className="text-sm text-muted-foreground">{group.image_count.toLocaleString('ko-KR')}개 항목</p>
+    <section className={presentation === 'drawer' ? 'flex h-full min-h-0 flex-col gap-4' : 'space-y-4'}>
+      {!hideHeader ? (
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight text-foreground">이미지</h2>
+            <p className="text-sm text-muted-foreground">{group.image_count.toLocaleString('ko-KR')}개 항목</p>
+          </div>
+          {shouldShowCollectionCounts ? (
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">manual {group.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
+              <Badge variant="outline">auto {group.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
+            </div>
+          ) : null}
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">manual {group.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
-          <Badge variant="outline">auto {group.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
-        </div>
-      </div>
+      ) : null}
 
       {isLoading ? (
         <div className="grid gap-4 md:grid-cols-3">
@@ -64,10 +74,13 @@ export function GroupImageSection({
           hasMore={hasMore}
           isLoadingMore={isLoadingMore}
           onLoadMore={onLoadMore}
-          minColumnWidth={280}
-          columnGap={20}
-          rowGap={20}
-          gridItemHeight={260}
+          minColumnWidth={presentation === 'drawer' ? 180 : 280}
+          columnGap={presentation === 'drawer' ? 12 : 20}
+          rowGap={presentation === 'drawer' ? 12 : 20}
+          gridItemHeight={presentation === 'drawer' ? 220 : 260}
+          scrollMode={presentation === 'drawer' ? 'container' : 'window'}
+          viewportHeight={presentation === 'drawer' ? '100%' : undefined}
+          className={presentation === 'drawer' ? 'min-h-0 flex-1' : undefined}
         />
       ) : null}
 

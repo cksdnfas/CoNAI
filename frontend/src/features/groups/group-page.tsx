@@ -1,43 +1,93 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { PageHeader } from '@/components/common/page-header'
-import { getGroup, getGroupBreadcrumb, getGroupImages, getGroupsHierarchyAll } from '@/lib/api'
+import {
+  getAutoFolderGroup,
+  getAutoFolderGroupBreadcrumb,
+  getAutoFolderGroupImages,
+  getAutoFolderGroupsHierarchyAll,
+  getAutoFolderGroupThumbnailUrl,
+  getGroup,
+  getGroupBreadcrumb,
+  getGroupImages,
+  getGroupsHierarchyAll,
+  getGroupThumbnailUrl,
+} from '@/lib/api'
+import { useMinWidth } from '@/lib/use-min-width'
 import { GroupBreadcrumbs } from './components/group-breadcrumbs'
 import { GroupChildCard } from './components/group-child-card'
+import { GroupImageDrawer } from './components/group-image-drawer'
 import { GroupImageSection } from './components/group-image-section'
 import { GroupTree } from './components/group-tree'
+
+const groupSources = {
+  custom: {
+    key: 'custom',
+    tabLabel: '사용자 커스텀 그룹',
+    rootTitle: '사용자 커스텀 그룹',
+    rootSectionTitle: '루트 그룹',
+    getAllGroups: getGroupsHierarchyAll,
+    getGroup,
+    getBreadcrumb: getGroupBreadcrumb,
+    getImages: getGroupImages,
+    getThumbnailUrl: getGroupThumbnailUrl,
+  },
+  folders: {
+    key: 'folders',
+    tabLabel: '감시폴더 그룹',
+    rootTitle: '감시폴더 그룹',
+    rootSectionTitle: '감시폴더 루트',
+    getAllGroups: getAutoFolderGroupsHierarchyAll,
+    getGroup: getAutoFolderGroup,
+    getBreadcrumb: getAutoFolderGroupBreadcrumb,
+    getImages: getAutoFolderGroupImages,
+    getThumbnailUrl: getAutoFolderGroupThumbnailUrl,
+  },
+} as const
+
+type GroupSourceKey = keyof typeof groupSources
+
+function normalizeGroupSourceKey(value: string | null): GroupSourceKey {
+  return value === 'folders' ? 'folders' : 'custom'
+}
 
 export function GroupPage() {
   const navigate = useNavigate()
   const { groupId } = useParams<{ groupId?: string }>()
+  const [searchParams] = useSearchParams()
+  const [isImageDrawerOpen, setIsImageDrawerOpen] = useState(false)
+  const isWideLayout = useMinWidth(1280)
+  const selectedSourceKey = normalizeGroupSourceKey(searchParams.get('tab'))
+  const selectedSource = groupSources[selectedSourceKey]
   const selectedGroupId = groupId ? Number(groupId) : undefined
 
   const groupsQuery = useQuery({
-    queryKey: ['groups-hierarchy-all'],
-    queryFn: getGroupsHierarchyAll,
+    queryKey: ['groups-hierarchy-all', selectedSource.key],
+    queryFn: selectedSource.getAllGroups,
   })
 
   const selectedGroupQuery = useQuery({
-    queryKey: ['group-detail', selectedGroupId],
-    queryFn: () => getGroup(selectedGroupId!),
+    queryKey: ['group-detail', selectedSource.key, selectedGroupId],
+    queryFn: () => selectedSource.getGroup(selectedGroupId!),
     enabled: Number.isFinite(selectedGroupId),
   })
 
   const breadcrumbQuery = useQuery({
-    queryKey: ['group-breadcrumb', selectedGroupId],
-    queryFn: () => getGroupBreadcrumb(selectedGroupId!),
-    enabled: Number.isFinite(selectedGroupId),
+    queryKey: ['group-breadcrumb', selectedSource.key, selectedGroupId],
+    queryFn: () => selectedSource.getBreadcrumb(selectedGroupId!),
+    enabled: Number.isFinite(selectedGroupId) && isWideLayout,
   })
 
   const groupImagesQuery = useInfiniteQuery({
-    queryKey: ['group-images', selectedGroupId],
-    queryFn: ({ pageParam }) => getGroupImages(selectedGroupId!, { page: pageParam, limit: 40 }),
+    queryKey: ['group-images', selectedSource.key, selectedGroupId],
+    queryFn: ({ pageParam }) => selectedSource.getImages(selectedGroupId!, { page: pageParam, limit: 40 }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const { page, totalPages } = lastPage.pagination
@@ -46,28 +96,63 @@ export function GroupPage() {
     enabled: Number.isFinite(selectedGroupId),
   })
 
+  useEffect(() => {
+    if (isWideLayout) {
+      setIsImageDrawerOpen(false)
+    }
+  }, [isWideLayout])
+
   const allGroups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data])
   const rootGroups = useMemo(() => allGroups.filter((group) => group.parent_id == null), [allGroups])
   const childGroups = useMemo(() => allGroups.filter((group) => group.parent_id === selectedGroupId), [allGroups, selectedGroupId])
   const groupImages = useMemo(() => (groupImagesQuery.data?.pages ?? []).flatMap((page) => page.images), [groupImagesQuery.data?.pages])
 
   const handleOpenGroup = (nextGroupId: number) => {
-    navigate(`/groups/${nextGroupId}`)
+    if (!isWideLayout) {
+      setIsImageDrawerOpen(true)
+    }
+    navigate(`/groups/${nextGroupId}?tab=${selectedSource.key}`)
+  }
+
+  const handleOpenRoot = () => {
+    setIsImageDrawerOpen(false)
+    navigate(`/groups?tab=${selectedSource.key}`)
+  }
+
+  const handleSelectSource = (nextSource: GroupSourceKey) => {
+    setIsImageDrawerOpen(false)
+    navigate(`/groups?tab=${nextSource}`)
   }
 
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow="Groups"
-        title={selectedGroupQuery.data?.name ?? '그룹 탐색'}
-        description={
-          selectedGroupQuery.data?.description ||
-          '백엔드 계층 그룹을 기준으로 이미지 묶음을 탐색하고, 현재 그룹의 이미지들을 바로 확인한다.'
+        eyebrow={isWideLayout ? 'Groups' : undefined}
+        title={selectedGroupQuery.data?.name ?? selectedSource.rootTitle}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {Object.values(groupSources).map((source) => (
+              <Button
+                key={source.key}
+                type="button"
+                variant={selectedSource.key === source.key ? 'default' : 'secondary'}
+                size="sm"
+                onClick={() => handleSelectSource(source.key)}
+              >
+                {source.tabLabel}
+              </Button>
+            ))}
+          </div>
         }
       />
 
       <div className="grid gap-8 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <ExplorerSidebar title="Explorer" badge={<Badge variant="outline">{allGroups.length}</Badge>} className="xl:sticky xl:top-24 xl:self-start">
+        <ExplorerSidebar
+          title="Explorer"
+          badge={<Badge variant="outline">{allGroups.length}</Badge>}
+          className="xl:sticky xl:top-24 xl:self-start xl:flex xl:max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] xl:flex-col"
+          bodyClassName="xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:pr-1"
+        >
           {groupsQuery.isLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 6 }).map((_, index) => (
@@ -91,24 +176,28 @@ export function GroupPage() {
         </ExplorerSidebar>
 
         <section className="space-y-8">
-          {selectedGroupId ? (
+          {isWideLayout && selectedGroupId ? (
             <GroupBreadcrumbs
               items={breadcrumbQuery.data ?? []}
               selectedGroupId={selectedGroupId}
               onOpenGroup={handleOpenGroup}
-              onOpenRoot={() => navigate('/groups')}
+              onOpenRoot={handleOpenRoot}
             />
           ) : null}
 
           {!selectedGroupId ? (
             <Card className="bg-surface-container">
               <CardHeader>
-                <CardTitle>루트 그룹</CardTitle>
-                <CardDescription>먼저 탐색할 그룹을 하나 골라. 그룹 안으로 들어가면 하위 그룹과 이미지 목록을 같이 보여줄게.</CardDescription>
+                <CardTitle>{selectedSource.rootSectionTitle}</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {rootGroups.map((group) => (
-                  <GroupChildCard key={group.id} group={group} onOpen={handleOpenGroup} />
+                  <GroupChildCard
+                    key={group.id}
+                    group={group}
+                    thumbnailUrl={selectedSource.getThumbnailUrl(group.id)}
+                    onOpen={handleOpenGroup}
+                  />
                 ))}
               </CardContent>
             </Card>
@@ -135,26 +224,56 @@ export function GroupPage() {
                   </div>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {childGroups.map((group) => (
-                      <GroupChildCard key={group.id} group={group} onOpen={handleOpenGroup} />
+                      <GroupChildCard
+                        key={group.id}
+                        group={group}
+                        thumbnailUrl={selectedSource.getThumbnailUrl(group.id)}
+                        onOpen={handleOpenGroup}
+                      />
                     ))}
                   </div>
                 </section>
               ) : null}
 
-              <GroupImageSection
-                group={selectedGroupQuery.data}
-                groupImages={groupImages}
-                isLoading={groupImagesQuery.isLoading}
-                isError={groupImagesQuery.isError}
-                errorMessage={groupImagesQuery.error instanceof Error ? groupImagesQuery.error.message : null}
-                hasMore={Boolean(groupImagesQuery.hasNextPage)}
-                isLoadingMore={groupImagesQuery.isFetchingNextPage}
-                onLoadMore={() => void groupImagesQuery.fetchNextPage()}
-              />
+              {isWideLayout ? (
+                <GroupImageSection
+                  group={selectedGroupQuery.data}
+                  groupImages={groupImages}
+                  isLoading={groupImagesQuery.isLoading}
+                  isError={groupImagesQuery.isError}
+                  errorMessage={groupImagesQuery.error instanceof Error ? groupImagesQuery.error.message : null}
+                  hasMore={Boolean(groupImagesQuery.hasNextPage)}
+                  isLoadingMore={groupImagesQuery.isFetchingNextPage}
+                  onLoadMore={() => void groupImagesQuery.fetchNextPage()}
+                />
+              ) : null}
             </div>
           ) : null}
         </section>
       </div>
+
+      {!isWideLayout && selectedGroupId && selectedGroupQuery.data && selectedGroupQuery.data.image_count > 0 ? (
+        <>
+          <div className="fixed inset-x-0 bottom-4 z-[70] flex justify-center px-4">
+            <Button type="button" size="sm" className="theme-floating-panel w-[30vw] min-w-[112px] max-w-[180px] shadow-[0_18px_48px_rgba(0,0,0,0.35)]" onClick={() => setIsImageDrawerOpen(true)}>
+              이미지 보기
+            </Button>
+          </div>
+
+          <GroupImageDrawer
+            open={isImageDrawerOpen}
+            group={selectedGroupQuery.data}
+            groupImages={groupImages}
+            isLoading={groupImagesQuery.isLoading}
+            isError={groupImagesQuery.isError}
+            errorMessage={groupImagesQuery.error instanceof Error ? groupImagesQuery.error.message : null}
+            hasMore={Boolean(groupImagesQuery.hasNextPage)}
+            isLoadingMore={groupImagesQuery.isFetchingNextPage}
+            onLoadMore={() => void groupImagesQuery.fetchNextPage()}
+            onClose={() => setIsImageDrawerOpen(false)}
+          />
+        </>
+      ) : null}
     </div>
   )
 }

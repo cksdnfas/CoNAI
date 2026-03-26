@@ -1,5 +1,6 @@
 import { VirtuosoMasonry } from '@virtuoso.dev/masonry'
 import type { ImageRecord } from '@/types/image'
+import type { ImageListScrollMode } from './image-list-types'
 import { ImageListItem } from './image-list-item'
 import { useImageListColumnCount } from './use-image-list-column-count'
 
@@ -13,6 +14,8 @@ interface ImageListMasonryProps {
   rowGap: number
   getItemHref?: (image: ImageRecord) => string | undefined
   onActivate: (imageId: string, href?: string) => void
+  scrollMode: ImageListScrollMode
+  viewportHeight?: number | string
 }
 
 /** Render a reusable virtualized masonry layout with responsive column count. */
@@ -26,16 +29,22 @@ export function ImageListMasonry({
   rowGap,
   getItemHref,
   onActivate,
+  scrollMode,
+  viewportHeight,
 }: ImageListMasonryProps) {
   const columnCount = useImageListColumnCount(containerElement, minColumnWidth, columnGap)
+  const usesWindowScroll = scrollMode === 'window'
 
   return (
     <VirtuosoMasonry<ImageRecord, undefined>
       data={items}
-      useWindowScroll
+      useWindowScroll={usesWindowScroll}
       columnCount={columnCount}
       initialItemCount={Math.min(items.length, Math.max(columnCount * 2, 8))}
-      style={{ columnGap: `${columnGap}px` }}
+      style={{
+        columnGap: `${columnGap}px`,
+        height: usesWindowScroll ? undefined : (viewportHeight ?? '100%'),
+      }}
       ItemContent={({ data: image }) => (
         <div style={{ paddingBottom: `${rowGap}px` }}>
           <ImageListItem

@@ -26,6 +26,8 @@ export function ImageList({
   rowGap = 24,
   gridItemHeight = 280,
   className,
+  scrollMode = 'window',
+  viewportHeight,
 }: ImageListProps) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -38,10 +40,18 @@ export function ImageList({
     [items],
   )
   const loadMoreSentinelRef = useImageListLoadMore({
-    hasMore,
+    hasMore: scrollMode === 'window' && hasMore,
     isLoadingMore,
     onLoadMore,
   })
+
+  const handleEndReached = useCallback(() => {
+    if (scrollMode !== 'container' || !hasMore || isLoadingMore || !onLoadMore) {
+      return
+    }
+
+    void onLoadMore()
+  }, [hasMore, isLoadingMore, onLoadMore, scrollMode])
 
   const { shouldSuppressClick } = useImageListSelection({
     containerElement,
@@ -117,6 +127,9 @@ export function ImageList({
           gridItemHeight={gridItemHeight}
           getItemHref={getItemHref}
           onActivate={handleActivate}
+          scrollMode={scrollMode}
+          viewportHeight={viewportHeight}
+          onEndReached={handleEndReached}
         />
       ) : (
         <ImageListMasonry
@@ -129,10 +142,12 @@ export function ImageList({
           rowGap={rowGap}
           getItemHref={getItemHref}
           onActivate={handleActivate}
+          scrollMode={scrollMode}
+          viewportHeight={viewportHeight}
         />
       )}
 
-      <div ref={loadMoreSentinelRef} className="h-px w-full" aria-hidden="true" />
+      {scrollMode === 'window' ? <div ref={loadMoreSentinelRef} className="h-px w-full" aria-hidden="true" /> : null}
     </div>
   )
 }
