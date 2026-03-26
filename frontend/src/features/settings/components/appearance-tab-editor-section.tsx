@@ -363,44 +363,26 @@ function AppearanceGeneralEditorContent({
 
         {appearanceDraft.fontPreset === 'custom' ? (
           <div className="grid gap-4 md:grid-cols-2">
-            <SettingsField label="본문 폰트 패밀리">
-              <Input
-                type="text"
-                variant="settings"
-                value={appearanceDraft.customFontFamily}
-                onChange={(event) => onPatchAppearance({ customFontFamily: event.target.value })}
-                placeholder={DEFAULT_APPEARANCE_SETTINGS.customFontFamily}
+            <SettingsField label="본문 폰트">
+              <UploadedFontCard
+                label="본문 폰트 파일"
+                fileName={appearanceDraft.customFontFileName}
+                url={appearanceDraft.customFontUrl}
+                onUpload={onRequestSansFontUpload}
+                onClear={() => onClearCustomFont('sans')}
+                isUploadingFont={isUploadingFont}
               />
-              <div className="mt-3">
-                <UploadedFontCard
-                  label="본문 폰트 파일"
-                  fileName={appearanceDraft.customFontFileName}
-                  url={appearanceDraft.customFontUrl}
-                  onUpload={onRequestSansFontUpload}
-                  onClear={() => onClearCustomFont('sans')}
-                  isUploadingFont={isUploadingFont}
-                />
-              </div>
             </SettingsField>
 
-            <SettingsField label="모노 폰트 패밀리">
-              <Input
-                type="text"
-                variant="settings"
-                value={appearanceDraft.customMonoFontFamily}
-                onChange={(event) => onPatchAppearance({ customMonoFontFamily: event.target.value })}
-                placeholder={DEFAULT_APPEARANCE_SETTINGS.customMonoFontFamily}
+            <SettingsField label="모노 폰트">
+              <UploadedFontCard
+                label="모노 폰트 파일"
+                fileName={appearanceDraft.customMonoFontFileName}
+                url={appearanceDraft.customMonoFontUrl}
+                onUpload={onRequestMonoFontUpload}
+                onClear={() => onClearCustomFont('mono')}
+                isUploadingFont={isUploadingFont}
               />
-              <div className="mt-3">
-                <UploadedFontCard
-                  label="모노 폰트 파일"
-                  fileName={appearanceDraft.customMonoFontFileName}
-                  url={appearanceDraft.customMonoFontUrl}
-                  onUpload={onRequestMonoFontUpload}
-                  onClear={() => onClearCustomFont('mono')}
-                  isUploadingFont={isUploadingFont}
-                />
-              </div>
             </SettingsField>
           </div>
         ) : null}
