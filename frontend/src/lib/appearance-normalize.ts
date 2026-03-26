@@ -188,8 +188,8 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
     'detailRelatedImageMobileColumns' |
     'detailRelatedImageColumns'
   >; min: number; max: number }> = [
-    { key: 'fontScalePercent', min: 85, max: 125 },
-    { key: 'textScalePercent', min: 85, max: 125 },
+    { key: 'fontScalePercent', min: 85, max: 200 },
+    { key: 'textScalePercent', min: 85, max: 200 },
     { key: 'searchBoxWidth', min: 240, max: 640 },
     { key: 'searchDrawerWidth', min: 320, max: 720 },
     { key: 'desktopSearchMinWidth', min: 640, max: 1600 },

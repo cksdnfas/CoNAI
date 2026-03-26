@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { db } from '../database/init';
 import { runtimePaths } from '../config/runtimePaths';
+import { normalizeUnicode } from '../utils/pathResolver';
 
 type BackupImportMode = 'copy_original' | 'convert_webp';
 
@@ -14,18 +15,48 @@ function createServiceError(message: string, statusCode: number): ServiceError {
 }
 
 function normalizeComparePath(inputPath: string): string {
-  return path.resolve(inputPath).replace(/[\\/]+$/, '').toLowerCase();
+  return path.resolve(normalizeUnicode(inputPath)).replace(/[\\/]+$/, '').toLowerCase();
 }
 
 /** Validate and normalize a source path for backup ingestion. */
 function normalizeSourcePath(sourcePath: string): string {
-  const isNetworkPath = sourcePath.startsWith('\\\\') || sourcePath.startsWith('//');
-  return isNetworkPath ? sourcePath.replace(/\//g, '\\') : path.resolve(sourcePath);
+  const normalizedSourcePath = normalizeUnicode(sourcePath);
+  const isNetworkPath = normalizedSourcePath.startsWith('\\\\') || normalizedSourcePath.startsWith('//');
+  return isNetworkPath ? normalizedSourcePath.replace(/\//g, '\\') : path.resolve(normalizedSourcePath);
+}
+
+const windowsInvalidFolderNameChars = /[<>:"/\\|?*\u0000-\u001F]/;
+const windowsReservedFolderNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
+
+function normalizeTargetFolderSegment(segment: string): string {
+  const normalizedSegment = normalizeUnicode(segment).trim();
+
+  if (!normalizedSegment) {
+    throw createServiceError('대상 경로의 폴더명이 비어 있습니다', 400);
+  }
+
+  if (normalizedSegment === '.' || normalizedSegment === '..') {
+    throw createServiceError('대상 경로에 상위 경로 이동은 사용할 수 없습니다', 400);
+  }
+
+  if (windowsInvalidFolderNameChars.test(normalizedSegment)) {
+    throw createServiceError('대상 경로의 폴더명에는 Windows에서 금지된 문자를 사용할 수 없습니다', 400);
+  }
+
+  if (/[. ]$/.test(normalizedSegment)) {
+    throw createServiceError('대상 경로의 폴더명은 공백이나 . 으로 끝날 수 없습니다', 400);
+  }
+
+  if (windowsReservedFolderNames.test(normalizedSegment)) {
+    throw createServiceError('대상 경로의 폴더명으로 Windows 예약어는 사용할 수 없습니다', 400);
+  }
+
+  return normalizedSegment;
 }
 
 /** Validate and normalize a relative target path under uploads. */
 function normalizeTargetFolderName(targetFolderName: string): string {
-  const trimmed = targetFolderName.trim();
+  const trimmed = normalizeUnicode(targetFolderName).trim();
 
   if (!trimmed) {
     throw createServiceError('target_folder_name이 필요합니다', 400);
@@ -43,20 +74,11 @@ function normalizeTargetFolderName(targetFolderName: string): string {
   const segments = normalized
     .split('/')
     .map((segment) => segment.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((segment) => normalizeTargetFolderSegment(segment));
 
   if (segments.length === 0) {
     throw createServiceError('target_folder_name이 필요합니다', 400);
-  }
-
-  for (const segment of segments) {
-    if (segment === '.' || segment === '..' || segment.includes('..')) {
-      throw createServiceError('대상 경로에 상위 경로 이동은 사용할 수 없습니다', 400);
-    }
-
-    if (!/^[a-zA-Z0-9 _.-]+$/.test(segment)) {
-      throw createServiceError('대상 경로의 각 폴더명은 영문, 숫자, 공백, _, -, . 만 사용할 수 있습니다', 400);
-    }
   }
 
   return segments.join('/');

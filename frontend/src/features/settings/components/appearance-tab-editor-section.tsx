@@ -407,7 +407,7 @@ function AppearanceGeneralEditorContent({
             <Input
               type="number"
               min={85}
-              max={125}
+              max={200}
               step={1}
               variant="settings"
               value={appearanceDraft.fontScalePercent}
@@ -419,7 +419,7 @@ function AppearanceGeneralEditorContent({
             <Input
               type="number"
               min={85}
-              max={125}
+              max={200}
               step={1}
               variant="settings"
               value={appearanceDraft.textScalePercent}
