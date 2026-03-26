@@ -242,7 +242,7 @@ function ImageViewModal({
         role="dialog"
         aria-modal="true"
         aria-label="이미지 보기"
-        className="scrollbar-stable-pane mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 pb-28 shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-6 md:pb-32 xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden xl:pb-6"
+        className="scrollbar-stable-pane mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 pb-[calc(env(safe-area-inset-bottom)+8rem)] shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-6 md:pb-[calc(env(safe-area-inset-bottom)+8rem)] xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden xl:pb-6"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="xl:min-h-0 xl:flex-1">
@@ -354,12 +354,12 @@ function ImageViewModalActions({
       </div>
 
       <div
-        className="fixed inset-x-4 bottom-4 z-[92] md:inset-x-6 xl:hidden"
+        className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-[92] md:inset-x-6 xl:hidden"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="rounded-sm border border-border bg-background/96 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.35)] backdrop-blur-md">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">{navigationButtons}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            {navigationButtons}
             {downloadButton}
           </div>
         </div>
