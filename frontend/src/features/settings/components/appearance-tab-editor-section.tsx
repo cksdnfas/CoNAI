@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,6 +27,14 @@ interface AppearanceTabEditorSectionProps {
   onClearCustomFont: (target: 'sans' | 'mono') => void
   isUploadingFont: boolean
 }
+
+type AppearanceEditorTab = 'general' | 'list' | 'color'
+
+const APPEARANCE_EDITOR_TABS: Array<{ value: AppearanceEditorTab; label: string }> = [
+  { value: 'general', label: '일반' },
+  { value: 'list', label: '목록' },
+  { value: 'color', label: '색상' },
+]
 
 function EditorSectionLead({ title }: { title: string }) {
   return <div className="text-sm font-semibold text-foreground">{title}</div>
@@ -257,9 +266,32 @@ function AppearanceColorControl({
   )
 }
 
-export function AppearanceTabEditorSection({
+function AppearanceEditorTabButton({
+  label,
+  isActive,
+  onClick,
+}: {
+  label: string
+  isActive: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded-sm px-3 py-1.5 text-xs font-semibold transition-colors',
+        isActive ? 'bg-surface-high text-foreground' : 'text-muted-foreground hover:bg-surface-high hover:text-foreground',
+      )}
+      aria-pressed={isActive}
+    >
+      {label}
+    </button>
+  )
+}
+
+function AppearanceGeneralEditorContent({
   appearanceDraft,
-  colorValues,
   onPatchAppearance,
   onRequestSansFontUpload,
   onRequestMonoFontUpload,
@@ -268,6 +300,37 @@ export function AppearanceTabEditorSection({
 }: AppearanceTabEditorSectionProps) {
   return (
     <div className="space-y-8">
+      <section className="space-y-4">
+        <EditorSectionLead title="기본" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <SettingsField label="테마 모드">
+            <Select
+              variant="settings"
+              value={appearanceDraft.themeMode}
+              onChange={(event) => onPatchAppearance({ themeMode: event.target.value as AppearanceSettings['themeMode'] })}
+            >
+              <option value="system">{getThemeModeLabel('system')}</option>
+              <option value="dark">{getThemeModeLabel('dark')}</option>
+              <option value="light">{getThemeModeLabel('light')}</option>
+            </Select>
+          </SettingsField>
+
+          <SettingsField label="밀도">
+            <Select
+              variant="settings"
+              value={appearanceDraft.density}
+              onChange={(event) => onPatchAppearance({ density: event.target.value as AppearanceSettings['density'] })}
+            >
+              {Object.keys(DENSITY_PRESETS).map((presetKey) => (
+                <option key={presetKey} value={presetKey}>
+                  {getDensityLabel(presetKey as AppearanceSettings['density'])}
+                </option>
+              ))}
+            </Select>
+          </SettingsField>
+        </div>
+      </section>
+
       <section className="space-y-4">
         <EditorSectionLead title="폰트" />
         <div className="grid gap-4 md:grid-cols-2">
@@ -397,36 +460,102 @@ export function AppearanceTabEditorSection({
       </section>
 
       <section className="space-y-4">
-        <EditorSectionLead title="기본" />
-        <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label="테마 모드">
+        <EditorSectionLead title="카드 / 마감" />
+        <div className="grid gap-4 md:grid-cols-3">
+          <SettingsField label="모서리">
             <Select
               variant="settings"
-              value={appearanceDraft.themeMode}
-              onChange={(event) => onPatchAppearance({ themeMode: event.target.value as AppearanceSettings['themeMode'] })}
+              value={appearanceDraft.radiusPreset}
+              onChange={(event) => onPatchAppearance({ radiusPreset: event.target.value as AppearanceSettings['radiusPreset'] })}
             >
-              <option value="system">{getThemeModeLabel('system')}</option>
-              <option value="dark">{getThemeModeLabel('dark')}</option>
-              <option value="light">{getThemeModeLabel('light')}</option>
+              {Object.keys(RADIUS_PRESETS).map((presetKey) => (
+                <option key={presetKey} value={presetKey}>
+                  {getRadiusLabel(presetKey as AppearanceSettings['radiusPreset'])}
+                </option>
+              ))}
             </Select>
           </SettingsField>
 
-          <SettingsField label="밀도">
+          <SettingsField label="유리감">
             <Select
               variant="settings"
-              value={appearanceDraft.density}
-              onChange={(event) => onPatchAppearance({ density: event.target.value as AppearanceSettings['density'] })}
+              value={appearanceDraft.glassPreset}
+              onChange={(event) => onPatchAppearance({ glassPreset: event.target.value as AppearanceSettings['glassPreset'] })}
             >
-              {Object.keys(DENSITY_PRESETS).map((presetKey) => (
+              {Object.keys(GLASS_PRESETS).map((presetKey) => (
                 <option key={presetKey} value={presetKey}>
-                  {getDensityLabel(presetKey as AppearanceSettings['density'])}
+                  {getGlassLabel(presetKey as AppearanceSettings['glassPreset'])}
+                </option>
+              ))}
+            </Select>
+          </SettingsField>
+
+          <SettingsField label="그림자">
+            <Select
+              variant="settings"
+              value={appearanceDraft.shadowPreset}
+              onChange={(event) => onPatchAppearance({ shadowPreset: event.target.value as AppearanceSettings['shadowPreset'] })}
+            >
+              {Object.keys(SHADOW_PRESETS).map((presetKey) => (
+                <option key={presetKey} value={presetKey}>
+                  {getShadowLabel(presetKey as AppearanceSettings['shadowPreset'])}
                 </option>
               ))}
             </Select>
           </SettingsField>
         </div>
       </section>
+    </div>
+  )
+}
 
+function AppearanceListEditorContent({
+  appearanceDraft,
+  onPatchAppearance,
+}: AppearanceTabEditorSectionProps) {
+  return (
+    <div className="space-y-8">
+      <section className="space-y-4">
+        <EditorSectionLead title="유사 / 중복 이미지" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <SettingsField label="데스크톱 한 줄 카드 수">
+            <Input
+              type="number"
+              min={2}
+              max={6}
+              step={1}
+              variant="settings"
+              value={appearanceDraft.detailRelatedImageColumns}
+              onChange={(event) => onPatchAppearance({ detailRelatedImageColumns: Number.parseInt(event.target.value || '3', 10) })}
+            />
+          </SettingsField>
+
+          <SettingsField label="카드 비율">
+            <Select
+              variant="settings"
+              value={appearanceDraft.detailRelatedImageAspectRatio}
+              onChange={(event) => onPatchAppearance({ detailRelatedImageAspectRatio: event.target.value as AppearanceSettings['detailRelatedImageAspectRatio'] })}
+            >
+              {(['original', 'square', 'portrait', 'landscape'] as AppearanceSettings['detailRelatedImageAspectRatio'][]).map((ratio) => (
+                <option key={ratio} value={ratio}>
+                  {getRelatedImageAspectRatioLabel(ratio)}
+                </option>
+              ))}
+            </Select>
+          </SettingsField>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function AppearanceColorEditorContent({
+  appearanceDraft,
+  colorValues,
+  onPatchAppearance,
+}: AppearanceTabEditorSectionProps) {
+  return (
+    <div className="space-y-8">
       <section className="space-y-4">
         <EditorSectionLead title="강조색" />
         <div className="grid gap-3 md:grid-cols-2">
@@ -589,84 +718,6 @@ export function AppearanceTabEditorSection({
       </section>
 
       <section className="space-y-4">
-        <EditorSectionLead title="카드 / 마감" />
-        <div className="grid gap-4 md:grid-cols-3">
-          <SettingsField label="모서리">
-            <Select
-              variant="settings"
-              value={appearanceDraft.radiusPreset}
-              onChange={(event) => onPatchAppearance({ radiusPreset: event.target.value as AppearanceSettings['radiusPreset'] })}
-            >
-              {Object.keys(RADIUS_PRESETS).map((presetKey) => (
-                <option key={presetKey} value={presetKey}>
-                  {getRadiusLabel(presetKey as AppearanceSettings['radiusPreset'])}
-                </option>
-              ))}
-            </Select>
-          </SettingsField>
-
-          <SettingsField label="유리감">
-            <Select
-              variant="settings"
-              value={appearanceDraft.glassPreset}
-              onChange={(event) => onPatchAppearance({ glassPreset: event.target.value as AppearanceSettings['glassPreset'] })}
-            >
-              {Object.keys(GLASS_PRESETS).map((presetKey) => (
-                <option key={presetKey} value={presetKey}>
-                  {getGlassLabel(presetKey as AppearanceSettings['glassPreset'])}
-                </option>
-              ))}
-            </Select>
-          </SettingsField>
-
-          <SettingsField label="그림자">
-            <Select
-              variant="settings"
-              value={appearanceDraft.shadowPreset}
-              onChange={(event) => onPatchAppearance({ shadowPreset: event.target.value as AppearanceSettings['shadowPreset'] })}
-            >
-              {Object.keys(SHADOW_PRESETS).map((presetKey) => (
-                <option key={presetKey} value={presetKey}>
-                  {getShadowLabel(presetKey as AppearanceSettings['shadowPreset'])}
-                </option>
-              ))}
-            </Select>
-          </SettingsField>
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <EditorSectionLead title="유사 / 중복 이미지" />
-        <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label="데스크톱 한 줄 카드 수">
-            <Input
-              type="number"
-              min={2}
-              max={6}
-              step={1}
-              variant="settings"
-              value={appearanceDraft.detailRelatedImageColumns}
-              onChange={(event) => onPatchAppearance({ detailRelatedImageColumns: Number.parseInt(event.target.value || '3', 10) })}
-            />
-          </SettingsField>
-
-          <SettingsField label="카드 비율">
-            <Select
-              variant="settings"
-              value={appearanceDraft.detailRelatedImageAspectRatio}
-              onChange={(event) => onPatchAppearance({ detailRelatedImageAspectRatio: event.target.value as AppearanceSettings['detailRelatedImageAspectRatio'] })}
-            >
-              {(['original', 'square', 'portrait', 'landscape'] as AppearanceSettings['detailRelatedImageAspectRatio'][]).map((ratio) => (
-                <option key={ratio} value={ratio}>
-                  {getRelatedImageAspectRatioLabel(ratio)}
-                </option>
-              ))}
-            </Select>
-          </SettingsField>
-        </div>
-      </section>
-
-      <section className="space-y-4">
         <EditorSectionLead title="배지 색상" />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SettingsField label="긍정 배지">
@@ -710,6 +761,29 @@ export function AppearanceTabEditorSection({
           </SettingsField>
         </div>
       </section>
+    </div>
+  )
+}
+
+export function AppearanceTabEditorSection(props: AppearanceTabEditorSectionProps) {
+  const [activeTab, setActiveTab] = useState<AppearanceEditorTab>('general')
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-2 border-b border-white/5 pb-2">
+        {APPEARANCE_EDITOR_TABS.map((tab) => (
+          <AppearanceEditorTabButton
+            key={tab.value}
+            label={tab.label}
+            isActive={activeTab === tab.value}
+            onClick={() => setActiveTab(tab.value)}
+          />
+        ))}
+      </div>
+
+      {activeTab === 'general' ? <AppearanceGeneralEditorContent {...props} /> : null}
+      {activeTab === 'list' ? <AppearanceListEditorContent {...props} /> : null}
+      {activeTab === 'color' ? <AppearanceColorEditorContent {...props} /> : null}
     </div>
   )
 }
