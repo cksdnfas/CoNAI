@@ -179,6 +179,7 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
 
   const boundedIntegers: Array<{ key: keyof Pick<AppearanceThemeSettings,
     'fontScalePercent' |
+    'textScalePercent' |
     'searchBoxWidth' |
     'searchDrawerWidth' |
     'desktopSearchMinWidth' |
@@ -186,6 +187,7 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
     'detailRelatedImageColumns'
   >; min: number; max: number }> = [
     { key: 'fontScalePercent', min: 85, max: 125 },
+    { key: 'textScalePercent', min: 85, max: 125 },
     { key: 'searchBoxWidth', min: 240, max: 640 },
     { key: 'searchDrawerWidth', min: 320, max: 720 },
     { key: 'desktopSearchMinWidth', min: 640, max: 1600 },

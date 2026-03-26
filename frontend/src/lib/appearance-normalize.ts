@@ -32,6 +32,7 @@ export function extractAppearanceTheme(appearance: AppearanceSettings | Appearan
     customFontFileName: appearance.customFontFileName,
     customMonoFontFileName: appearance.customMonoFontFileName,
     fontScalePercent: appearance.fontScalePercent,
+    textScalePercent: appearance.textScalePercent,
     searchBoxWidth: appearance.searchBoxWidth,
     searchDrawerWidth: appearance.searchDrawerWidth,
     desktopSearchMinWidth: appearance.desktopSearchMinWidth,
@@ -166,6 +167,7 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
 
   const boundedIntegerFields: Array<{ key: keyof Pick<AppearanceThemeSettings,
     'fontScalePercent' |
+    'textScalePercent' |
     'searchBoxWidth' |
     'searchDrawerWidth' |
     'desktopSearchMinWidth' |
@@ -173,6 +175,7 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
     'detailRelatedImageColumns'
   >; min: number; max: number }> = [
     { key: 'fontScalePercent', min: 85, max: 125 },
+    { key: 'textScalePercent', min: 85, max: 125 },
     { key: 'searchBoxWidth', min: 240, max: 640 },
     { key: 'searchDrawerWidth', min: 320, max: 720 },
     { key: 'desktopSearchMinWidth', min: 640, max: 1600 },

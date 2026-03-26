@@ -102,6 +102,7 @@ export interface AppearanceThemeSettings {
   customFontFileName: string
   customMonoFontFileName: string
   fontScalePercent: number
+  textScalePercent: number
   searchBoxWidth: number
   searchDrawerWidth: number
   desktopSearchMinWidth: number

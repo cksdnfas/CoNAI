@@ -333,7 +333,7 @@ function AppearanceGeneralEditorContent({
 
       <section className="space-y-4">
         <EditorSectionLead title="폰트" />
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-3">
           <SettingsField label="폰트 프리셋">
             <Select
               variant="settings"
@@ -348,7 +348,7 @@ function AppearanceGeneralEditorContent({
             </Select>
           </SettingsField>
 
-          <SettingsField label="글자 크기 (%)">
+          <SettingsField label="UI 배율 (%)">
             <Input
               type="number"
               min={85}
@@ -357,6 +357,18 @@ function AppearanceGeneralEditorContent({
               variant="settings"
               value={appearanceDraft.fontScalePercent}
               onChange={(event) => onPatchAppearance({ fontScalePercent: Number.parseInt(event.target.value || '100', 10) })}
+            />
+          </SettingsField>
+
+          <SettingsField label="글자 크기 (%)">
+            <Input
+              type="number"
+              min={85}
+              max={125}
+              step={1}
+              variant="settings"
+              value={appearanceDraft.textScalePercent}
+              onChange={(event) => onPatchAppearance({ textScalePercent: Number.parseInt(event.target.value || '100', 10) })}
             />
           </SettingsField>
         </div>

@@ -431,6 +431,7 @@ export const DEFAULT_APPEARANCE_THEME: AppearanceThemeSettings = {
   customFontFileName: '',
   customMonoFontFileName: '',
   fontScalePercent: 100,
+  textScalePercent: 100,
   searchBoxWidth: 380,
   searchDrawerWidth: 420,
   desktopSearchMinWidth: 768,
