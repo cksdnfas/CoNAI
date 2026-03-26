@@ -1,7 +1,7 @@
 import chokidar, { FSWatcher } from 'chokidar';
 import fs from 'fs';
 import path from 'path';
-import { isImageExtension } from '../constants/supportedExtensions';
+import { isImageExtension, isSupportedExtension } from '../constants/supportedExtensions';
 import { runtimePaths } from '../config/runtimePaths';
 import { WebPConversionService } from './webpConversionService';
 import { BackupSource, BackupSourceService, ensureBackupTargetDirectory } from './backupSourceService';
@@ -70,6 +70,10 @@ async function waitForFileWrite(filePath: string): Promise<void> {
   throw new Error(`파일 쓰기 완료를 확인하지 못했습니다: ${filePath}`);
 }
 
+function shouldConvertBackupFileToWebP(source: BackupSource, sourceFilePath: string): boolean {
+  return source.import_mode === 'convert_webp' && isImageExtension(path.extname(sourceFilePath));
+}
+
 /** Compute the preferred destination path under uploads for one imported file. */
 function buildPreferredTargetPath(source: BackupSource, sourceFilePath: string): string {
   const targetRoot = ensureBackupTargetDirectory(source.target_folder_name);
@@ -79,7 +83,7 @@ function buildPreferredTargetPath(source: BackupSource, sourceFilePath: string):
 
   fs.mkdirSync(targetDirectory, { recursive: true });
 
-  if (source.import_mode === 'convert_webp') {
+  if (shouldConvertBackupFileToWebP(source, sourceFilePath)) {
     const baseName = path.parse(sourceFilePath).name;
     return path.join(targetDirectory, `${baseName}.webp`);
   }
@@ -92,7 +96,7 @@ function buildTargetPath(source: BackupSource, sourceFilePath: string): string {
   return buildUniqueTargetPath(buildPreferredTargetPath(source, sourceFilePath));
 }
 
-async function collectExistingImageFiles(rootPath: string, recursive: boolean): Promise<string[]> {
+async function collectExistingSupportedFiles(rootPath: string, recursive: boolean): Promise<string[]> {
   const collected: string[] = [];
 
   const walk = async (directoryPath: string): Promise<void> => {
@@ -108,7 +112,7 @@ async function collectExistingImageFiles(rootPath: string, recursive: boolean): 
         continue;
       }
 
-      if (entry.isFile() && isImageExtension(path.extname(entry.name))) {
+      if (entry.isFile() && isSupportedExtension(path.extname(entry.name))) {
         collected.push(entryPath);
       }
     }
@@ -260,7 +264,7 @@ export class BackupSourceWatcherService {
     }
 
     try {
-      const files = await collectExistingImageFiles(source.source_path, source.recursive === 1);
+      const files = await collectExistingSupportedFiles(source.source_path, source.recursive === 1);
       if (files.length === 0) {
         return;
       }
@@ -293,7 +297,7 @@ export class BackupSourceWatcherService {
     }
   }
 
-  /** Import a newly added image into uploads. */
+  /** Import a newly added supported media file into uploads. */
   private static async handleAddEvent(
     sourceId: number,
     filePath: string,
@@ -307,7 +311,7 @@ export class BackupSourceWatcherService {
     this.pendingImports.add(pendingKey);
 
     try {
-      if (!isImageExtension(path.extname(filePath))) {
+      if (!isSupportedExtension(path.extname(filePath))) {
         return 'skipped';
       }
 
@@ -335,7 +339,7 @@ export class BackupSourceWatcherService {
         ? preferredTargetPath
         : buildTargetPath(source, filePath);
 
-      if (source.import_mode === 'convert_webp') {
+      if (shouldConvertBackupFileToWebP(source, filePath)) {
         const converted = await WebPConversionService.convertFileToWebPBuffer(filePath, {
           quality: source.webp_quality,
           sourcePathForMetadata: filePath,
