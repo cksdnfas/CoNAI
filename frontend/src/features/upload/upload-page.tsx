@@ -159,6 +159,7 @@ export function UploadPage() {
     setTaggerResult(null)
     setKaloscopeResult(null)
     setExtractError(null)
+    setActiveExtractAction(null)
   }
 
   const applyExtractFile = (file: File | null) => {
@@ -208,6 +209,47 @@ export function UploadPage() {
       setIsUploading(false)
     }
   }
+
+  useEffect(() => {
+    if (!extractFile) {
+      return
+    }
+
+    let cancelled = false
+
+    setActiveExtractAction('prompt')
+    setExtractError(null)
+    setExtractResult(null)
+
+    void extractImageMetadataPreview(extractFile)
+      .then((result) => {
+        if (cancelled) {
+          return
+        }
+
+        setExtractResult(result)
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return
+        }
+
+        const message = error instanceof Error ? error.message : '프롬프트 추출에 실패했어.'
+        setExtractError(message)
+        showSnackbar({ message, tone: 'error' })
+      })
+      .finally(() => {
+        if (cancelled) {
+          return
+        }
+
+        setActiveExtractAction((current) => (current === 'prompt' ? null : current))
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [extractFile, showSnackbar])
 
   const handleConvertWebP = async () => {
     if (!extractFile || extractBusy) {
@@ -297,7 +339,7 @@ export function UploadPage() {
       setKaloscopeResult(null)
 
       const [promptState, taggerState, kaloscopeState] = await Promise.allSettled([
-        extractImageMetadataPreview(extractFile),
+        extractResult ? Promise.resolve(extractResult) : extractImageMetadataPreview(extractFile),
         extractImageTaggerPreview(extractFile),
         extractImageKaloscopePreview(extractFile),
       ])
@@ -482,7 +524,7 @@ export function UploadPage() {
         <Card className="bg-surface-container">
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle>정보 미리보기</CardTitle>
+              <CardTitle>Preview</CardTitle>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="ghost" onClick={() => applyExtractFile(null)} disabled={!extractFile && !extractResult && !taggerResult && !kaloscopeResult && !extractError}>
                   초기화
@@ -497,9 +539,6 @@ export function UploadPage() {
                 <Button type="button" variant="outline" onClick={handleRewriteMetadata} disabled={!extractFile || extractBusy}>
                   <Download className="h-4 w-4" />
                   {isRewritingMetadata ? '메타 수정 중…' : '메타 수정 다운로드'}
-                </Button>
-                <Button type="button" variant="outline" onClick={() => handleExtractAction('prompt')} disabled={!extractFile || extractBusy}>
-                  {activeExtractAction === 'prompt' ? '추출 중…' : '프롬프트'}
                 </Button>
                 <Button type="button" variant="outline" onClick={() => handleExtractAction('tagger')} disabled={!extractFile || extractBusy}>
                   {activeExtractAction === 'tagger' ? '추출 중…' : '자동'}
