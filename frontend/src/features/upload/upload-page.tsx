@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   downloadConvertedWebP,
@@ -34,6 +35,7 @@ const UPLOAD_ACCEPT = `${IMAGE_ACCEPT},video/mp4,video/webm,video/quicktime,vide
 const MAX_VISIBLE_FILES = 6
 
 type ExtractAction = 'prompt' | 'tagger' | 'kaloscope' | 'all'
+type ManualExtractAction = 'all' | 'tagger' | 'kaloscope'
 
 function formatDimensions(width?: number | null, height?: number | null) {
   if (!width || !height) return '—'
@@ -105,6 +107,7 @@ export function UploadPage() {
   const [kaloscopeResult, setKaloscopeResult] = useState<AutoTestKaloscopeResult | null>(null)
   const [extractError, setExtractError] = useState<string | null>(null)
   const [activeExtractAction, setActiveExtractAction] = useState<ExtractAction | null>(null)
+  const [selectedExtractAction, setSelectedExtractAction] = useState<ManualExtractAction>('all')
   const [isConvertingWebP, setIsConvertingWebP] = useState(false)
   const [isRewritingMetadata, setIsRewritingMetadata] = useState(false)
   const [isRewritePanelOpen, setIsRewritePanelOpen] = useState(false)
@@ -252,6 +255,10 @@ export function UploadPage() {
       cancelled = true
     }
   }, [extractFile, showSnackbar])
+
+  const handleRunSelectedExtract = async () => {
+    await handleExtractAction(selectedExtractAction)
+  }
 
   const handleConvertWebP = async () => {
     if (!extractFile || extractBusy) {
@@ -527,12 +534,9 @@ export function UploadPage() {
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle>Preview</CardTitle>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" variant="ghost" onClick={() => applyExtractFile(null)} disabled={!extractFile && !extractResult && !taggerResult && !kaloscopeResult && !extractError}>
                   초기화
-                </Button>
-                <Button type="button" onClick={() => handleExtractAction('all')} disabled={!extractFile || extractBusy}>
-                  {activeExtractAction === 'all' ? '추출 중…' : '한번에 추출'}
                 </Button>
                 <Button type="button" variant="outline" onClick={handleConvertWebP} disabled={!extractFile || extractBusy}>
                   <Download className="h-4 w-4" />
@@ -542,12 +546,21 @@ export function UploadPage() {
                   <Download className="h-4 w-4" />
                   {isRewritingMetadata ? '메타 수정 중…' : '메타 수정 다운로드'}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => handleExtractAction('tagger')} disabled={!extractFile || extractBusy}>
-                  {activeExtractAction === 'tagger' ? '추출 중…' : '자동'}
-                </Button>
-                <Button type="button" variant="outline" onClick={() => handleExtractAction('kaloscope')} disabled={!extractFile || extractBusy}>
-                  {activeExtractAction === 'kaloscope' ? '추출 중…' : '작가'}
-                </Button>
+                <div className="flex min-w-[220px] flex-1 flex-wrap items-center gap-2 sm:flex-none">
+                  <Select
+                    className="min-w-[140px] flex-1 sm:w-40 sm:flex-none"
+                    value={selectedExtractAction}
+                    onChange={(event) => setSelectedExtractAction(event.target.value as ManualExtractAction)}
+                    disabled={!extractFile || extractBusy}
+                  >
+                    <option value="all">한번에 추출</option>
+                    <option value="tagger">자동 추출</option>
+                    <option value="kaloscope">작가 추출</option>
+                  </Select>
+                  <Button type="button" onClick={handleRunSelectedExtract} disabled={!extractFile || extractBusy}>
+                    {activeExtractAction === selectedExtractAction ? '추출 중…' : '추출 실행'}
+                  </Button>
+                </div>
               </div>
             </div>
           </CardHeader>
@@ -568,32 +581,77 @@ export function UploadPage() {
             </div>
 
             {extractFile ? (
-              <div className="space-y-4 rounded-sm bg-surface-low p-4">
-                {extractPreviewUrl ? (
-                  <div className="overflow-hidden rounded-sm bg-surface-high p-4">
-                    <img src={extractPreviewUrl} alt={extractFile.name} className="max-h-[420px] w-full object-contain" />
-                  </div>
-                ) : null}
+              <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
+                <div className="space-y-4">
+                  <div className="space-y-4 rounded-sm bg-surface-low p-4">
+                    {extractPreviewUrl ? (
+                      <div className="overflow-hidden rounded-sm bg-surface-high p-4">
+                        <img src={extractPreviewUrl} alt={extractFile.name} className="max-h-[420px] w-full object-contain" />
+                      </div>
+                    ) : null}
 
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  <SummaryTile label="file" value={extractFile.name} />
-                  <SummaryTile label="size" value={formatBytes(extractFile.size)} />
-                  <SummaryTile label="type" value={extractFile.type || '—'} />
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-3">
+                      <SummaryTile label="file" value={extractFile.name} />
+                      <SummaryTile label="size" value={formatBytes(extractFile.size)} />
+                      <SummaryTile label="type" value={extractFile.type || '—'} />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="rounded-sm bg-surface-high p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm font-medium text-foreground">메타 수정</div>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setIsRewritePanelOpen((current) => !current)}>
-                      {isRewritePanelOpen ? '접기' : '펼치기'}
-                    </Button>
+                <div className="space-y-4">
+                  <div className="rounded-sm bg-surface-low p-4">
+                    <div className="rounded-sm bg-surface-high p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="text-sm font-medium text-foreground">메타 수정</div>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setIsRewritePanelOpen((current) => !current)}>
+                          {isRewritePanelOpen ? '접기' : '펼치기'}
+                        </Button>
+                      </div>
+
+                      {isRewritePanelOpen ? (
+                        <div className="mt-4 border-t border-border pt-4">
+                          <MetadataRewriteForm draft={rewriteDraft} disabled={extractBusy} showHeader={false} onDraftChange={patchRewriteDraft} />
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
 
-                  {isRewritePanelOpen ? (
-                    <div className="mt-4 border-t border-border pt-4">
-                      <MetadataRewriteForm draft={rewriteDraft} disabled={extractBusy} showHeader={false} onDraftChange={patchRewriteDraft} />
+                  {extractResult ? (
+                    <div className="space-y-4 rounded-sm bg-surface-low p-4">
+                      <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+                        <SummaryTile label="dimensions" value={formatDimensions(extractResult.width, extractResult.height)} />
+                        <SummaryTile label="size" value={formatBytes(extractResult.file_size)} />
+                        <SummaryTile label="tool" value={extractResult.ai_metadata?.ai_tool || '—'} />
+                        <SummaryTile label="model" value={extractResult.ai_metadata?.model_name || '—'} />
+                        {extractedGenerationParamItems.map((item) => (
+                          <SummaryTile key={item.id} label={item.label} value={item.value} />
+                        ))}
+                      </div>
+
+                      {extractResult.ai_metadata?.lora_models?.length ? (
+                        <div className="rounded-sm bg-surface-high p-4">
+                          <div className="flex flex-wrap gap-2">
+                            {extractResult.ai_metadata.lora_models.map((item) => (
+                              <Badge key={item} variant="outline">
+                                {item}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {extractedPromptCards.length > 0 ? (
+                        <div className="rounded-sm bg-surface-high p-4">
+                          <ExtractedPromptSections items={extractedPromptCards} />
+                        </div>
+                      ) : (
+                        <div className="rounded-sm bg-surface-high px-4 py-3 text-sm text-muted-foreground">표시할 프롬프트가 없어.</div>
+                      )}
                     </div>
                   ) : null}
+
+                  {taggerResult ? <WDTaggerResultBlock result={taggerResult} title="자동" /> : null}
+                  {kaloscopeResult ? <KaloscopeResultBlock result={kaloscopeResult} title="작가" /> : null}
                 </div>
               </div>
             ) : null}
@@ -604,43 +662,6 @@ export function UploadPage() {
                 <AlertDescription>{extractError}</AlertDescription>
               </Alert>
             ) : null}
-
-            {extractResult ? (
-              <div className="space-y-4 rounded-sm bg-surface-low p-4">
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <SummaryTile label="dimensions" value={formatDimensions(extractResult.width, extractResult.height)} />
-                  <SummaryTile label="size" value={formatBytes(extractResult.file_size)} />
-                  <SummaryTile label="tool" value={extractResult.ai_metadata?.ai_tool || '—'} />
-                  <SummaryTile label="model" value={extractResult.ai_metadata?.model_name || '—'} />
-                  {extractedGenerationParamItems.map((item) => (
-                    <SummaryTile key={item.id} label={item.label} value={item.value} />
-                  ))}
-                </div>
-
-                {extractResult.ai_metadata?.lora_models?.length ? (
-                  <div className="rounded-sm bg-surface-high p-4">
-                    <div className="flex flex-wrap gap-2">
-                      {extractResult.ai_metadata.lora_models.map((item) => (
-                        <Badge key={item} variant="outline">
-                          {item}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {extractedPromptCards.length > 0 ? (
-                  <div className="rounded-sm bg-surface-high p-4">
-                    <ExtractedPromptSections items={extractedPromptCards} />
-                  </div>
-                ) : (
-                  <div className="rounded-sm bg-surface-high px-4 py-3 text-sm text-muted-foreground">표시할 프롬프트가 없어.</div>
-                )}
-              </div>
-            ) : null}
-
-            {taggerResult ? <WDTaggerResultBlock result={taggerResult} title="자동" /> : null}
-            {kaloscopeResult ? <KaloscopeResultBlock result={kaloscopeResult} title="작가" /> : null}
           </CardContent>
         </Card>
       </div>
