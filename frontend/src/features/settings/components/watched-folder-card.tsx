@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Play, RotateCcw, ScanSearch, Square } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import type { WatchedFolder, WatchedFolderUpdateInput } from '@/types/folder'
 import { formatDateTime, parseCommaSeparatedInput, parseJsonArray, toCommaSeparatedInput } from '../settings-utils'
-import { settingsControlClassName } from './settings-control-classes'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
 import {
   SettingsResourceCardHeader,
@@ -116,39 +116,19 @@ export function WatchedFolderCard({
       <CardContent className="space-y-5">
         <div className="grid gap-4 lg:grid-cols-2">
           <SettingsField label="표시 이름">
-            <input
-              value={draft.folder_name}
-              onChange={(event) => setDraft((current) => ({ ...current, folder_name: event.target.value }))}
-              className={settingsControlClassName}
-            />
+            <Input variant="settings" value={draft.folder_name} onChange={(event) => setDraft((current) => ({ ...current, folder_name: event.target.value }))} />
           </SettingsField>
 
           <SettingsField label="스캔 주기(분)">
-            <input
-              type="number"
-              min={1}
-              value={draft.scan_interval}
-              onChange={(event) => setDraft((current) => ({ ...current, scan_interval: Number(event.target.value) || 1 }))}
-              className={settingsControlClassName}
-            />
+            <Input type="number" min={1} variant="settings" value={draft.scan_interval} onChange={(event) => setDraft((current) => ({ ...current, scan_interval: Number(event.target.value) || 1 }))} />
           </SettingsField>
 
           <SettingsField label="제외 확장자">
-            <input
-              value={draft.exclude_extensions}
-              onChange={(event) => setDraft((current) => ({ ...current, exclude_extensions: event.target.value }))}
-              placeholder="tmp, db, txt"
-              className={settingsControlClassName}
-            />
+            <Input variant="settings" value={draft.exclude_extensions} onChange={(event) => setDraft((current) => ({ ...current, exclude_extensions: event.target.value }))} placeholder="tmp, db, txt" />
           </SettingsField>
 
           <SettingsField label="제외 패턴">
-            <input
-              value={draft.exclude_patterns}
-              onChange={(event) => setDraft((current) => ({ ...current, exclude_patterns: event.target.value }))}
-              placeholder="@eaDir, thumbs, cache"
-              className={settingsControlClassName}
-            />
+            <Input variant="settings" value={draft.exclude_patterns} onChange={(event) => setDraft((current) => ({ ...current, exclude_patterns: event.target.value }))} placeholder="@eaDir, thumbs, cache" />
           </SettingsField>
 
           <SettingsToggleRow>

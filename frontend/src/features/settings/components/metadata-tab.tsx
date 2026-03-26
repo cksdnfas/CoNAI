@@ -1,9 +1,10 @@
 import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { MetadataExtractionSettings } from '@/types/settings'
-import { settingsControlClassName } from './settings-control-classes'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
 
 interface MetadataTabProps {
@@ -43,36 +44,20 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving }
               </SettingsToggleRow>
 
               <SettingsField label="Stealth scan mode">
-                <select
-                  value={metadataDraft.stealthScanMode}
-                  onChange={(event) => onPatchMetadata({ stealthScanMode: event.target.value as MetadataExtractionSettings['stealthScanMode'] })}
-                  className={settingsControlClassName}
-                >
+                <Select variant="settings" value={metadataDraft.stealthScanMode} onChange={(event) => onPatchMetadata({ stealthScanMode: event.target.value as MetadataExtractionSettings['stealthScanMode'] })}>
                   <option value="fast">fast</option>
                   <option value="full">full</option>
                   <option value="skip">skip</option>
-                </select>
+                </Select>
                 <span className="mt-2 text-xs text-muted-foreground">fast/full은 PNG stealth fallback 쪽에서 의미가 크고, WebP stealth는 skip 여부와 크기/해상도 제한을 같이 따라.</span>
               </SettingsField>
 
               <SettingsField label="최대 파일 크기(MB)">
-                <input
-                  type="number"
-                  min={1}
-                  value={metadataDraft.stealthMaxFileSizeMB}
-                  onChange={(event) => onPatchMetadata({ stealthMaxFileSizeMB: Number(event.target.value) || 1 })}
-                  className={settingsControlClassName}
-                />
+                <Input type="number" min={1} variant="settings" value={metadataDraft.stealthMaxFileSizeMB} onChange={(event) => onPatchMetadata({ stealthMaxFileSizeMB: Number(event.target.value) || 1 })} />
               </SettingsField>
 
               <SettingsField label="최대 해상도(MP)">
-                <input
-                  type="number"
-                  min={1}
-                  value={metadataDraft.stealthMaxResolutionMP}
-                  onChange={(event) => onPatchMetadata({ stealthMaxResolutionMP: Number(event.target.value) || 1 })}
-                  className={settingsControlClassName}
-                />
+                <Input type="number" min={1} variant="settings" value={metadataDraft.stealthMaxResolutionMP} onChange={(event) => onPatchMetadata({ stealthMaxResolutionMP: Number(event.target.value) || 1 })} />
               </SettingsField>
 
               <SettingsToggleRow>

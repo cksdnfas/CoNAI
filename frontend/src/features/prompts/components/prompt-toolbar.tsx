@@ -1,5 +1,6 @@
 import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
 import type { PromptSortBy, PromptSortOrder } from '@/types/prompt'
 
 interface PromptToolbarProps {
@@ -45,23 +46,15 @@ export function PromptToolbar({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <select
-          value={sortBy}
-          onChange={(event) => onChangeSortBy(event.target.value as PromptSortBy)}
-          className="h-9 rounded-sm bg-surface-lowest px-3 text-sm text-foreground outline-none"
-        >
+        <Select value={sortBy} onChange={(event) => onChangeSortBy(event.target.value as PromptSortBy)} className="border-0 bg-surface-lowest">
           <option value="usage_count">usage</option>
           <option value="created_at">created</option>
           <option value="prompt">prompt</option>
-        </select>
-        <select
-          value={sortOrder}
-          onChange={(event) => onChangeSortOrder(event.target.value as PromptSortOrder)}
-          className="h-9 rounded-sm bg-surface-lowest px-3 text-sm text-foreground outline-none"
-        >
+        </Select>
+        <Select value={sortOrder} onChange={(event) => onChangeSortOrder(event.target.value as PromptSortOrder)} className="border-0 bg-surface-lowest">
           <option value="DESC">DESC</option>
           <option value="ASC">ASC</option>
-        </select>
+        </Select>
       </div>
     </div>
   )

@@ -1,8 +1,9 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { TaggerModelInfo, TaggerSettings } from '@/types/settings'
-import { settingsControlClassName } from './settings-control-classes'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
 
 interface TaggerSettingsCardProps {
@@ -52,57 +53,33 @@ export function TaggerSettingsCard({
             </SettingsToggleRow>
 
             <SettingsField label="모델">
-              <select
-                value={taggerDraft.model}
-                onChange={(event) => onPatchTagger({ model: event.target.value as TaggerSettings['model'] })}
-                className={settingsControlClassName}
-              >
+              <Select variant="settings" value={taggerDraft.model} onChange={(event) => onPatchTagger({ model: event.target.value as TaggerSettings['model'] })}>
                 {taggerModels.map((model) => (
                   <option key={model.name} value={model.name}>
                     {model.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </SettingsField>
 
             <SettingsField label="디바이스">
-              <select
-                value={taggerDraft.device}
-                onChange={(event) => onPatchTagger({ device: event.target.value as TaggerSettings['device'] })}
-                className={settingsControlClassName}
-              >
+              <Select variant="settings" value={taggerDraft.device} onChange={(event) => onPatchTagger({ device: event.target.value as TaggerSettings['device'] })}>
                 <option value="auto">auto</option>
                 <option value="cpu">cpu</option>
                 <option value="cuda">cuda</option>
-              </select>
+              </Select>
             </SettingsField>
 
             <SettingsField label="General threshold">
-              <input
-                type="number"
-                min={0}
-                max={1}
-                step={0.01}
-                value={taggerDraft.generalThreshold}
-                onChange={(event) => onPatchTagger({ generalThreshold: Number(event.target.value) || 0 })}
-                className={settingsControlClassName}
-              />
+              <Input type="number" min={0} max={1} step={0.01} variant="settings" value={taggerDraft.generalThreshold} onChange={(event) => onPatchTagger({ generalThreshold: Number(event.target.value) || 0 })} />
             </SettingsField>
 
             <SettingsField label="Character threshold">
-              <input
-                type="number"
-                min={0}
-                max={1}
-                step={0.01}
-                value={taggerDraft.characterThreshold}
-                onChange={(event) => onPatchTagger({ characterThreshold: Number(event.target.value) || 0 })}
-                className={settingsControlClassName}
-              />
+              <Input type="number" min={0} max={1} step={0.01} variant="settings" value={taggerDraft.characterThreshold} onChange={(event) => onPatchTagger({ characterThreshold: Number(event.target.value) || 0 })} />
             </SettingsField>
 
             <SettingsField label="Python path" className="md:col-span-2">
-              <input value={taggerDraft.pythonPath} onChange={(event) => onPatchTagger({ pythonPath: event.target.value })} className={settingsControlClassName} />
+              <Input variant="settings" value={taggerDraft.pythonPath} onChange={(event) => onPatchTagger({ pythonPath: event.target.value })} />
             </SettingsField>
 
             <SettingsToggleRow>
@@ -115,13 +92,7 @@ export function TaggerSettingsCard({
             </SettingsToggleRow>
 
             <SettingsField label="자동 언로드(분)">
-              <input
-                type="number"
-                min={1}
-                value={taggerDraft.autoUnloadMinutes}
-                onChange={(event) => onPatchTagger({ autoUnloadMinutes: Number(event.target.value) || 1 })}
-                className={settingsControlClassName}
-              />
+              <Input type="number" min={1} variant="settings" value={taggerDraft.autoUnloadMinutes} onChange={(event) => onPatchTagger({ autoUnloadMinutes: Number(event.target.value) || 1 })} />
             </SettingsField>
           </>
         ) : (

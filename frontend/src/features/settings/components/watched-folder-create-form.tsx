@@ -1,4 +1,4 @@
-import { settingsControlClassName } from './settings-control-classes'
+import { Input } from '@/components/ui/input'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
 import { SettingsResourceCreateActionRow } from './settings-resource-shared'
 import type { NewWatchedFolderDraft } from '../settings-utils'
@@ -26,59 +26,27 @@ export function WatchedFolderCreateForm({
     <div className="space-y-5">
       <div className="grid gap-4 lg:grid-cols-2">
         <SettingsField label="폴더 경로">
-          <input
-            value={newFolder.folder_path}
-            onChange={(event) => onNewFolderChange({ folder_path: event.target.value })}
-            placeholder="D:\\Images\\Incoming"
-            className={settingsControlClassName}
-          />
+          <Input variant="settings" value={newFolder.folder_path} onChange={(event) => onNewFolderChange({ folder_path: event.target.value })} placeholder="D:\\Images\\Incoming" />
         </SettingsField>
 
         <SettingsField label="표시 이름">
-          <input
-            value={newFolder.folder_name}
-            onChange={(event) => onNewFolderChange({ folder_name: event.target.value })}
-            placeholder="Incoming"
-            className={settingsControlClassName}
-          />
+          <Input variant="settings" value={newFolder.folder_name} onChange={(event) => onNewFolderChange({ folder_name: event.target.value })} placeholder="Incoming" />
         </SettingsField>
 
         <SettingsField label="스캔 주기(분)">
-          <input
-            type="number"
-            min={1}
-            value={newFolder.scan_interval}
-            onChange={(event) => onNewFolderChange({ scan_interval: Number(event.target.value) || 1 })}
-            className={settingsControlClassName}
-          />
+          <Input type="number" min={1} variant="settings" value={newFolder.scan_interval} onChange={(event) => onNewFolderChange({ scan_interval: Number(event.target.value) || 1 })} />
         </SettingsField>
 
         <SettingsField label="watcher polling(ms)">
-          <input
-            type="number"
-            min={100}
-            value={newFolder.watcher_polling_interval}
-            onChange={(event) => onNewFolderChange({ watcher_polling_interval: Number(event.target.value) || 100 })}
-            className={settingsControlClassName}
-          />
+          <Input type="number" min={100} variant="settings" value={newFolder.watcher_polling_interval} onChange={(event) => onNewFolderChange({ watcher_polling_interval: Number(event.target.value) || 100 })} />
         </SettingsField>
 
         <SettingsField label="제외 확장자">
-          <input
-            value={newFolder.exclude_extensions}
-            onChange={(event) => onNewFolderChange({ exclude_extensions: event.target.value })}
-            placeholder="tmp, db"
-            className={settingsControlClassName}
-          />
+          <Input variant="settings" value={newFolder.exclude_extensions} onChange={(event) => onNewFolderChange({ exclude_extensions: event.target.value })} placeholder="tmp, db" />
         </SettingsField>
 
         <SettingsField label="제외 패턴">
-          <input
-            value={newFolder.exclude_patterns}
-            onChange={(event) => onNewFolderChange({ exclude_patterns: event.target.value })}
-            placeholder="@eaDir, cache"
-            className={settingsControlClassName}
-          />
+          <Input variant="settings" value={newFolder.exclude_patterns} onChange={(event) => onNewFolderChange({ exclude_patterns: event.target.value })} placeholder="@eaDir, cache" />
         </SettingsField>
       </div>
 

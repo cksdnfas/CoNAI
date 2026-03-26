@@ -1,8 +1,9 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { KaloscopeServerStatus, KaloscopeSettings } from '@/types/settings'
-import { settingsControlClassName } from './settings-control-classes'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
 
 interface KaloscopeSettingsCardProps {
@@ -53,26 +54,15 @@ export function KaloscopeSettingsCard({
             </SettingsToggleRow>
 
             <SettingsField label="디바이스">
-              <select
-                value={kaloscopeDraft.device}
-                onChange={(event) => onPatchKaloscope({ device: event.target.value as KaloscopeSettings['device'] })}
-                className={settingsControlClassName}
-              >
+              <Select variant="settings" value={kaloscopeDraft.device} onChange={(event) => onPatchKaloscope({ device: event.target.value as KaloscopeSettings['device'] })}>
                 <option value="auto">auto</option>
                 <option value="cpu">cpu</option>
                 <option value="cuda">cuda</option>
-              </select>
+              </Select>
             </SettingsField>
 
             <SettingsField label="Top K">
-              <input
-                type="number"
-                min={1}
-                max={200}
-                value={kaloscopeDraft.topK}
-                onChange={(event) => onPatchKaloscope({ topK: Number(event.target.value) || 1 })}
-                className={settingsControlClassName}
-              />
+              <Input type="number" min={1} max={200} variant="settings" value={kaloscopeDraft.topK} onChange={(event) => onPatchKaloscope({ topK: Number(event.target.value) || 1 })} />
             </SettingsField>
           </>
         ) : (

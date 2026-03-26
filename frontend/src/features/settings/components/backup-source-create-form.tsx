@@ -1,4 +1,5 @@
-import { settingsControlClassName } from './settings-control-classes'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
 import { SettingsResourceCreateActionRow } from './settings-resource-shared'
 import type { NewBackupSourceDraft } from '../settings-utils'
@@ -26,63 +27,30 @@ export function BackupSourceCreateForm({
     <div className="space-y-5">
       <div className="grid gap-4 lg:grid-cols-2">
         <SettingsField label="source 폴더 경로">
-          <input
-            value={newBackupSource.source_path}
-            onChange={(event) => onNewBackupSourceChange({ source_path: event.target.value })}
-            placeholder="D:\\Images\\Incoming"
-            className={settingsControlClassName}
-          />
+          <Input variant="settings" value={newBackupSource.source_path} onChange={(event) => onNewBackupSourceChange({ source_path: event.target.value })} placeholder="D:\\Images\\Incoming" />
         </SettingsField>
 
         <SettingsField label="표시 이름">
-          <input
-            value={newBackupSource.display_name}
-            onChange={(event) => onNewBackupSourceChange({ display_name: event.target.value })}
-            placeholder="Backup source A"
-            className={settingsControlClassName}
-          />
+          <Input variant="settings" value={newBackupSource.display_name} onChange={(event) => onNewBackupSourceChange({ display_name: event.target.value })} placeholder="Backup source A" />
         </SettingsField>
 
         <SettingsField label="uploads 대상 폴더명">
-          <input
-            value={newBackupSource.target_folder_name}
-            onChange={(event) => onNewBackupSourceChange({ target_folder_name: event.target.value })}
-            placeholder="backup-a"
-            className={settingsControlClassName}
-          />
+          <Input variant="settings" value={newBackupSource.target_folder_name} onChange={(event) => onNewBackupSourceChange({ target_folder_name: event.target.value })} placeholder="backup-a" />
         </SettingsField>
 
         <SettingsField label="가져오기 모드">
-          <select
-            value={newBackupSource.import_mode}
-            onChange={(event) => onNewBackupSourceChange({ import_mode: event.target.value as NewBackupSourceDraft['import_mode'] })}
-            className={settingsControlClassName}
-          >
+          <Select variant="settings" value={newBackupSource.import_mode} onChange={(event) => onNewBackupSourceChange({ import_mode: event.target.value as NewBackupSourceDraft['import_mode'] })}>
             <option value="copy_original">원본 복사</option>
             <option value="convert_webp">WebP 변환 (메타 보존)</option>
-          </select>
+          </Select>
         </SettingsField>
 
         <SettingsField label="watcher polling(ms)">
-          <input
-            type="number"
-            min={100}
-            value={newBackupSource.watcher_polling_interval}
-            onChange={(event) => onNewBackupSourceChange({ watcher_polling_interval: Number(event.target.value) || 100 })}
-            className={settingsControlClassName}
-          />
+          <Input type="number" min={100} variant="settings" value={newBackupSource.watcher_polling_interval} onChange={(event) => onNewBackupSourceChange({ watcher_polling_interval: Number(event.target.value) || 100 })} />
         </SettingsField>
 
         <SettingsField label="WebP 품질">
-          <input
-            type="number"
-            min={1}
-            max={100}
-            value={newBackupSource.webp_quality}
-            onChange={(event) => onNewBackupSourceChange({ webp_quality: Number(event.target.value) || 90 })}
-            className={settingsControlClassName}
-            disabled={newBackupSource.import_mode !== 'convert_webp'}
-          />
+          <Input type="number" min={1} max={100} variant="settings" value={newBackupSource.webp_quality} onChange={(event) => onNewBackupSourceChange({ webp_quality: Number(event.target.value) || 90 })} disabled={newBackupSource.import_mode !== 'convert_webp'} />
         </SettingsField>
       </div>
 

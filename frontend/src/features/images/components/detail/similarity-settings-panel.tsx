@@ -1,13 +1,12 @@
 import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
+import { ToggleRow } from '@/components/ui/toggle-row'
 import type { SimilaritySettings } from '@/types/settings'
 import type { SimilaritySettingsDraft } from './image-detail-utils'
-import {
-  DetailSettingsFlyout,
-  detailSettingsControlClassName,
-  detailSettingsLabelClassName,
-} from './detail-settings-flyout'
+import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
 
 interface SimilaritySettingsPanelProps {
   isOpen: boolean
@@ -59,41 +58,26 @@ export function SimilaritySettingsPanel({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <label className={detailSettingsLabelClassName}>Limit</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={draft.detailSimilarLimit}
-                  onChange={(event) => onPatchDraft({ detailSimilarLimit: Number(event.target.value) })}
-                  className={detailSettingsControlClassName}
-                />
+                <Input type="number" min={1} max={100} variant="detail" value={draft.detailSimilarLimit} onChange={(event) => onPatchDraft({ detailSimilarLimit: Number(event.target.value) })} />
               </div>
 
               <div className="space-y-2">
                 <label className={detailSettingsLabelClassName}>Sort By</label>
-                <select
-                  value={draft.detailSimilarSortBy}
-                  onChange={(event) => onPatchDraft({ detailSimilarSortBy: event.target.value as SimilaritySettings['detailSimilarSortBy'] })}
-                  className={detailSettingsControlClassName}
-                >
+                <Select variant="detail" value={draft.detailSimilarSortBy} onChange={(event) => onPatchDraft({ detailSimilarSortBy: event.target.value as SimilaritySettings['detailSimilarSortBy'] })}>
                   <option value="similarity">Similarity</option>
                   <option value="upload_date">Upload date</option>
-                </select>
+                </Select>
               </div>
 
               <div className="space-y-2">
                 <label className={detailSettingsLabelClassName}>Sort Order</label>
-                <select
-                  value={draft.detailSimilarSortOrder}
-                  onChange={(event) => onPatchDraft({ detailSimilarSortOrder: event.target.value as SimilaritySettings['detailSimilarSortOrder'] })}
-                  className={detailSettingsControlClassName}
-                >
+                <Select variant="detail" value={draft.detailSimilarSortOrder} onChange={(event) => onPatchDraft({ detailSimilarSortOrder: event.target.value as SimilaritySettings['detailSimilarSortOrder'] })}>
                   <option value="DESC">DESC</option>
                   <option value="ASC">ASC</option>
-                </select>
+                </Select>
               </div>
 
-              <label className="flex items-center gap-3 rounded-sm border border-border bg-surface-high px-3 py-2.5 text-sm text-foreground">
+              <ToggleRow variant="detail">
                 <input
                   type="checkbox"
                   checked={draft.detailSimilarIncludeColorSimilarity}
@@ -101,7 +85,7 @@ export function SimilaritySettingsPanel({
                   className="h-4 w-4"
                 />
                 색상 유사도 포함
-              </label>
+              </ToggleRow>
             </div>
 
             <div className="flex justify-end gap-2">

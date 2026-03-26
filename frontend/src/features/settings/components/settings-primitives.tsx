@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react'
+import { ToggleRow } from '@/components/ui/toggle-row'
 import { cn } from '@/lib/utils'
 
 interface SettingsFieldProps extends ComponentProps<'label'> {
@@ -23,9 +24,9 @@ interface SettingsToggleRowProps extends ComponentProps<'label'> {
 // Shared toggle row used by checkbox-style settings.
 export function SettingsToggleRow({ children, className, ...props }: SettingsToggleRowProps) {
   return (
-    <label className={cn('theme-settings-panel flex items-center gap-3 rounded-sm bg-surface-low text-sm text-foreground', className)} {...props}>
+    <ToggleRow variant="settings" className={className} {...props}>
       {children}
-    </label>
+    </ToggleRow>
   )
 }
 

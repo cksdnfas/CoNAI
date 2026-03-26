@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Play, RotateCcw, Square } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import type { BackupSource, BackupSourceUpdateInput } from '@/types/folder'
 import { formatDateTime } from '../settings-utils'
-import { settingsControlClassName } from './settings-control-classes'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
 import {
   SettingsResourceCardHeader,
@@ -105,61 +106,30 @@ export function BackupSourceCard({
       <CardContent className="space-y-5">
         <div className="grid gap-4 lg:grid-cols-2">
           <SettingsField label="표시 이름">
-            <input
-              value={draft.display_name}
-              onChange={(event) => setDraft((current) => ({ ...current, display_name: event.target.value }))}
-              className={settingsControlClassName}
-            />
+            <Input variant="settings" value={draft.display_name} onChange={(event) => setDraft((current) => ({ ...current, display_name: event.target.value }))} />
           </SettingsField>
 
           <SettingsField label="source 경로">
-            <input
-              value={draft.source_path}
-              onChange={(event) => setDraft((current) => ({ ...current, source_path: event.target.value }))}
-              className={settingsControlClassName}
-            />
+            <Input variant="settings" value={draft.source_path} onChange={(event) => setDraft((current) => ({ ...current, source_path: event.target.value }))} />
           </SettingsField>
 
           <SettingsField label="uploads 대상 폴더명">
-            <input
-              value={draft.target_folder_name}
-              onChange={(event) => setDraft((current) => ({ ...current, target_folder_name: event.target.value }))}
-              placeholder="backup-a"
-              className={settingsControlClassName}
-            />
+            <Input variant="settings" value={draft.target_folder_name} onChange={(event) => setDraft((current) => ({ ...current, target_folder_name: event.target.value }))} placeholder="backup-a" />
           </SettingsField>
 
           <SettingsField label="가져오기 모드">
-            <select
-              value={draft.import_mode}
-              onChange={(event) => setDraft((current) => ({ ...current, import_mode: event.target.value as BackupSource['import_mode'] }))}
-              className={settingsControlClassName}
-            >
+            <Select variant="settings" value={draft.import_mode} onChange={(event) => setDraft((current) => ({ ...current, import_mode: event.target.value as BackupSource['import_mode'] }))}>
               <option value="copy_original">원본 복사</option>
               <option value="convert_webp">WebP 변환 (메타 보존)</option>
-            </select>
+            </Select>
           </SettingsField>
 
           <SettingsField label="watcher polling(ms)">
-            <input
-              type="number"
-              min={100}
-              value={draft.watcher_polling_interval}
-              onChange={(event) => setDraft((current) => ({ ...current, watcher_polling_interval: Number(event.target.value) || 100 }))}
-              className={settingsControlClassName}
-            />
+            <Input type="number" min={100} variant="settings" value={draft.watcher_polling_interval} onChange={(event) => setDraft((current) => ({ ...current, watcher_polling_interval: Number(event.target.value) || 100 }))} />
           </SettingsField>
 
           <SettingsField label="WebP 품질">
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={draft.webp_quality}
-              onChange={(event) => setDraft((current) => ({ ...current, webp_quality: Number(event.target.value) || 90 }))}
-              className={settingsControlClassName}
-              disabled={draft.import_mode !== 'convert_webp'}
-            />
+            <Input type="number" min={1} max={100} variant="settings" value={draft.webp_quality} onChange={(event) => setDraft((current) => ({ ...current, webp_quality: Number(event.target.value) || 90 }))} disabled={draft.import_mode !== 'convert_webp'} />
           </SettingsField>
 
           <SettingsToggleRow>

@@ -1,13 +1,9 @@
 import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import type { PromptSimilaritySettingsDraft } from './image-detail-utils'
-import {
-  DetailSettingsFlyout,
-  detailSettingsControlClassName,
-  detailSettingsLabelClassName,
-  detailSettingsNestedControlClassName,
-} from './detail-settings-flyout'
+import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
 
 interface PromptSimilaritySettingsPanelProps {
   isOpen: boolean
@@ -43,14 +39,7 @@ export function PromptSimilaritySettingsPanel({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <label className={detailSettingsLabelClassName}>Result Limit</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={draft.resultLimit}
-                  onChange={(event) => onPatchDraft({ resultLimit: Number(event.target.value) })}
-                  className={detailSettingsControlClassName}
-                />
+                <Input type="number" min={1} max={100} variant="detail" value={draft.resultLimit} onChange={(event) => onPatchDraft({ resultLimit: Number(event.target.value) })} />
               </div>
 
               <div className="space-y-2">
@@ -76,41 +65,17 @@ export function PromptSimilaritySettingsPanel({
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>Positive</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.1}
-                    value={draft.weights.positive}
-                    onChange={(event) => onPatchDraft({ weights: { ...draft.weights, positive: Number(event.target.value) } })}
-                    className={detailSettingsNestedControlClassName}
-                  />
+                  <Input type="number" min={0} max={100} step={0.1} variant="detailNested" value={draft.weights.positive} onChange={(event) => onPatchDraft({ weights: { ...draft.weights, positive: Number(event.target.value) } })} />
                 </div>
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>Negative</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.1}
-                    value={draft.weights.negative}
-                    onChange={(event) => onPatchDraft({ weights: { ...draft.weights, negative: Number(event.target.value) } })}
-                    className={detailSettingsNestedControlClassName}
-                  />
+                  <Input type="number" min={0} max={100} step={0.1} variant="detailNested" value={draft.weights.negative} onChange={(event) => onPatchDraft({ weights: { ...draft.weights, negative: Number(event.target.value) } })} />
                 </div>
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>Auto</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.1}
-                    value={draft.weights.auto}
-                    onChange={(event) => onPatchDraft({ weights: { ...draft.weights, auto: Number(event.target.value) } })}
-                    className={detailSettingsNestedControlClassName}
-                  />
+                  <Input type="number" min={0} max={100} step={0.1} variant="detailNested" value={draft.weights.auto} onChange={(event) => onPatchDraft({ weights: { ...draft.weights, auto: Number(event.target.value) } })} />
                 </div>
               </div>
 
@@ -119,38 +84,17 @@ export function PromptSimilaritySettingsPanel({
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>Positive</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={draft.fieldThresholds.positive}
-                    onChange={(event) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, positive: Number(event.target.value) } })}
-                    className={detailSettingsNestedControlClassName}
-                  />
+                  <Input type="number" min={0} max={100} variant="detailNested" value={draft.fieldThresholds.positive} onChange={(event) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, positive: Number(event.target.value) } })} />
                 </div>
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>Negative</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={draft.fieldThresholds.negative}
-                    onChange={(event) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, negative: Number(event.target.value) } })}
-                    className={detailSettingsNestedControlClassName}
-                  />
+                  <Input type="number" min={0} max={100} variant="detailNested" value={draft.fieldThresholds.negative} onChange={(event) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, negative: Number(event.target.value) } })} />
                 </div>
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>Auto</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={draft.fieldThresholds.auto}
-                    onChange={(event) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, auto: Number(event.target.value) } })}
-                    className={detailSettingsNestedControlClassName}
-                  />
+                  <Input type="number" min={0} max={100} variant="detailNested" value={draft.fieldThresholds.auto} onChange={(event) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, auto: Number(event.target.value) } })} />
                 </div>
               </div>
             </div>
