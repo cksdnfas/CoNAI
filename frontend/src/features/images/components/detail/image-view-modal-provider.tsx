@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren, type RefObject } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Download, ExternalLink, RefreshCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getImagesBatch } from '@/lib/api'
+import { useMinWidth } from '@/lib/use-min-width'
 import { ImageDetailView, type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
 import { ImageViewThumbnailStrip } from './image-view-thumbnail-strip'
 import { ImageViewModalContext, type ImageViewModalOpenInput } from './image-view-modal-context'
@@ -202,10 +203,43 @@ function ImageViewModal({
   onSelectImage,
 }: ImageViewModalProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const mobileActionsRef = useRef<HTMLDivElement | null>(null)
+  const isDesktopModalLayout = useMinWidth(1280)
+  const [mobileActionsHeight, setMobileActionsHeight] = useState(0)
 
   useEffect(() => {
     containerRef.current?.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })
   }, [compositeHash])
+
+  useEffect(() => {
+    if (isDesktopModalLayout) {
+      setMobileActionsHeight(0)
+      return
+    }
+
+    const mobileActionsElement = mobileActionsRef.current
+    if (!mobileActionsElement) {
+      setMobileActionsHeight(0)
+      return
+    }
+
+    const updateMobileActionsHeight = () => {
+      setMobileActionsHeight(mobileActionsElement.getBoundingClientRect().height)
+    }
+
+    updateMobileActionsHeight()
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateMobileActionsHeight()
+    })
+    resizeObserver.observe(mobileActionsElement)
+    window.addEventListener('resize', updateMobileActionsHeight)
+
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', updateMobileActionsHeight)
+    }
+  }, [isDesktopModalLayout, compositeHash])
 
   return createPortal(
     <div className="fixed inset-0 z-[90] bg-black/72 p-4 md:p-6" onMouseDown={onClose}>
@@ -242,7 +276,12 @@ function ImageViewModal({
         role="dialog"
         aria-modal="true"
         aria-label="이미지 보기"
-        className="scrollbar-stable-pane mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 pb-[calc(env(safe-area-inset-bottom)+8rem)] shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-6 md:pb-[calc(env(safe-area-inset-bottom)+8rem)] xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden xl:pb-6"
+        className="scrollbar-stable-pane mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-6 xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden xl:pb-6"
+        style={
+          isDesktopModalLayout
+            ? undefined
+            : { paddingBottom: `calc(env(safe-area-inset-bottom) + ${Math.ceil(mobileActionsHeight) + 16}px)` }
+        }
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="xl:min-h-0 xl:flex-1">
@@ -257,6 +296,7 @@ function ImageViewModal({
                 canViewPrevious={canViewPrevious}
                 canViewNext={canViewNext}
                 controls={controls}
+                mobileActionsRef={mobileActionsRef}
                 onClose={onClose}
                 onViewPrevious={onViewPrevious}
                 onViewNext={onViewNext}
@@ -292,6 +332,7 @@ interface ImageViewModalActionsProps {
   canViewPrevious: boolean
   canViewNext: boolean
   controls: ImageDetailViewHeaderControls
+  mobileActionsRef: RefObject<HTMLDivElement | null>
   onClose: () => void
   onViewPrevious: () => void
   onViewNext: () => void
@@ -305,6 +346,7 @@ function ImageViewModalActions({
   canViewPrevious,
   canViewNext,
   controls,
+  mobileActionsRef,
   onClose,
   onViewPrevious,
   onViewNext,
@@ -354,6 +396,7 @@ function ImageViewModalActions({
       </div>
 
       <div
+        ref={mobileActionsRef}
         className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-[92] md:inset-x-6 xl:hidden"
         onMouseDown={(event) => event.stopPropagation()}
       >
