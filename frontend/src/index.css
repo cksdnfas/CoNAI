@@ -142,12 +142,13 @@
   html {
     scroll-behavior: smooth;
     scrollbar-gutter: stable;
+    font-size: calc(16px * var(--theme-font-scale));
   }
 
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
-    font-size: calc(1rem * var(--theme-font-scale));
+    font-size: 1rem;
     font-feature-settings: 'rlig' 1, 'calt' 1;
     background-image:
       radial-gradient(circle at top, color-mix(in srgb, var(--primary) 8%, transparent), transparent 26%),

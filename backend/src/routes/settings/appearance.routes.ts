@@ -31,6 +31,18 @@ const allowedFontMimeTypes = new Set([
   'application/octet-stream',
 ])
 
+function normalizeUploadedOriginalName(originalName: string) {
+  const decodedName = Buffer.from(originalName, 'latin1').toString('utf8')
+  const looksMojibake = /[À-ÿ]/.test(originalName) && !/[가-힣]/.test(originalName)
+  const decodedHasReadableUnicode = /[가-힣ㄱ-ㅎㅏ-ㅣぁ-ゖァ-ヺ一-龯]/.test(decodedName)
+
+  if (looksMojibake && decodedHasReadableUnicode) {
+    return decodedName
+  }
+
+  return originalName
+}
+
 const appearanceFontUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => {
@@ -266,13 +278,14 @@ router.post('/appearance/font-upload', (req: Request, res: Response, next) => {
   }
 
   const publicUrl = `${publicUrls.uploadsBaseUrl}/theme-fonts/${file.filename}`
+  const originalName = normalizeUploadedOriginalName(file.originalname)
 
   res.status(201).json({
     success: true,
     data: {
       target,
       fileName: file.filename,
-      originalName: file.originalname,
+      originalName,
       url: publicUrl,
       mimeType: file.mimetype,
       size: file.size,
