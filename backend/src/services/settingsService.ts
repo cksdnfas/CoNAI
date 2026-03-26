@@ -70,6 +70,8 @@ function getDefaultAppearanceTheme(): AppearanceThemeSettings {
     searchDrawerWidth: 420,
     desktopSearchMinWidth: 768,
     desktopNavMinWidth: 1024,
+    detailRelatedImageColumns: 3,
+    detailRelatedImageAspectRatio: 'square',
     positiveBadgeColor: '#34d399',
     negativeBadgeColor: '#fb7185',
     autoBadgeColor: '#38bdf8',

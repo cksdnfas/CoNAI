@@ -36,6 +36,8 @@ export function extractAppearanceTheme(appearance: AppearanceSettings | Appearan
     searchDrawerWidth: appearance.searchDrawerWidth,
     desktopSearchMinWidth: appearance.desktopSearchMinWidth,
     desktopNavMinWidth: appearance.desktopNavMinWidth,
+    detailRelatedImageColumns: appearance.detailRelatedImageColumns,
+    detailRelatedImageAspectRatio: appearance.detailRelatedImageAspectRatio,
     positiveBadgeColor: appearance.positiveBadgeColor,
     negativeBadgeColor: appearance.negativeBadgeColor,
     autoBadgeColor: appearance.autoBadgeColor,
@@ -127,6 +129,11 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
     next.fontPreset = source.fontPreset
   }
 
+  if (source.detailRelatedImageAspectRatio !== undefined) {
+    if (!isEnumValue(source.detailRelatedImageAspectRatio, ['original', 'square', 'portrait', 'landscape'])) return null
+    next.detailRelatedImageAspectRatio = source.detailRelatedImageAspectRatio
+  }
+
   if (source.customFontFamily !== undefined) {
     if (typeof source.customFontFamily !== 'string') return null
     next.customFontFamily = source.customFontFamily
@@ -162,13 +169,15 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
     'searchBoxWidth' |
     'searchDrawerWidth' |
     'desktopSearchMinWidth' |
-    'desktopNavMinWidth'
+    'desktopNavMinWidth' |
+    'detailRelatedImageColumns'
   >; min: number; max: number }> = [
     { key: 'fontScalePercent', min: 85, max: 125 },
     { key: 'searchBoxWidth', min: 240, max: 640 },
     { key: 'searchDrawerWidth', min: 320, max: 720 },
     { key: 'desktopSearchMinWidth', min: 640, max: 1600 },
     { key: 'desktopNavMinWidth', min: 768, max: 1800 },
+    { key: 'detailRelatedImageColumns', min: 2, max: 6 },
   ]
 
   for (const { key, min, max } of boundedIntegerFields) {

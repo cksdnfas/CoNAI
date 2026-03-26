@@ -14,6 +14,7 @@ interface ImageListItemProps {
   selected?: boolean
   selectionMode?: boolean
   gridItemHeight?: number
+  gridItemAspectRatio?: string
   onActivate?: (imageId: string, href?: string) => void
 }
 
@@ -29,6 +30,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   selected = false,
   selectionMode = false,
   gridItemHeight,
+  gridItemAspectRatio,
   onActivate,
 }: ImageListItemProps) {
   const previewUrl = getImageListPreviewUrl(image)
@@ -38,9 +40,11 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   const aspectRatio = image.width && image.height ? `${image.width} / ${image.height}` : undefined
   const mediaFrameStyle = gridItemHeight
     ? { height: gridItemHeight }
-    : aspectRatio
-      ? { aspectRatio }
-      : { aspectRatio: '4 / 5', minHeight: 240 }
+    : gridItemAspectRatio
+      ? { aspectRatio: gridItemAspectRatio }
+      : aspectRatio
+        ? { aspectRatio }
+        : { aspectRatio: '4 / 5', minHeight: 240 }
 
   const content = previewUrl ? (
     mediaKind === 'video' ? (

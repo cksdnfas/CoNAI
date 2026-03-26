@@ -89,6 +89,7 @@ export type GlassPreset = 'subtle' | 'balanced' | 'immersive';
 export type ShadowPreset = 'soft' | 'balanced' | 'dramatic';
 export type DensityPreset = 'compact' | 'comfortable' | 'spacious';
 export type FontPreset = 'manrope' | 'system' | 'custom';
+export type RelatedImageCardAspectRatio = 'original' | 'square' | 'portrait' | 'landscape';
 export type AppearancePresetSlotId = 'slot-1' | 'slot-2' | 'slot-3';
 
 export interface AppearanceThemeSettings {
@@ -116,6 +117,8 @@ export interface AppearanceThemeSettings {
   searchDrawerWidth: number;
   desktopSearchMinWidth: number;
   desktopNavMinWidth: number;
+  detailRelatedImageColumns: number;
+  detailRelatedImageAspectRatio: RelatedImageCardAspectRatio;
   positiveBadgeColor: string;
   negativeBadgeColor: string;
   autoBadgeColor: string;

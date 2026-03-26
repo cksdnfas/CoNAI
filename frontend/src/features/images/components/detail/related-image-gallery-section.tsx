@@ -5,8 +5,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { ImageListItem } from '@/features/images/components/image-list/image-list-item'
-import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { ImageRecord } from '@/types/image'
+import type { RelatedImageCardAspectRatio } from '@/types/settings'
 
 interface RelatedImageGallerySectionProps {
   title: string
@@ -16,7 +16,22 @@ interface RelatedImageGallerySectionProps {
   emptyMessage: string
   actions?: ReactNode
   activationMode?: 'navigate' | 'modal' | 'modal-single'
-  useStaticGrid?: boolean
+  cardColumns?: number
+  cardAspectRatio?: RelatedImageCardAspectRatio
+}
+
+function getRelatedImageCardAspectRatioValue(ratio: RelatedImageCardAspectRatio): string | undefined {
+  switch (ratio) {
+    case 'square':
+      return '1 / 1'
+    case 'portrait':
+      return '4 / 5'
+    case 'landscape':
+      return '3 / 2'
+    case 'original':
+    default:
+      return undefined
+  }
 }
 
 export function RelatedImageGallerySection({
@@ -27,7 +42,8 @@ export function RelatedImageGallerySection({
   emptyMessage,
   actions,
   activationMode = 'navigate',
-  useStaticGrid = false,
+  cardColumns = 3,
+  cardAspectRatio = 'square',
 }: RelatedImageGallerySectionProps) {
   const navigate = useNavigate()
   const imageViewModal = useImageViewModal()
@@ -35,6 +51,7 @@ export function RelatedImageGallerySection({
     () => items.map((item) => item.composite_hash).filter((value): value is string => typeof value === 'string' && value.length > 0),
     [items],
   )
+  const cardAspectRatioValue = getRelatedImageCardAspectRatioValue(cardAspectRatio)
 
   /** Activate a related image in either modal or route-navigation mode. */
   const handleActivate = (imageId: string, href?: string) => {
@@ -57,6 +74,11 @@ export function RelatedImageGallerySection({
     }
   }
 
+  const gridStyle = {
+    ['--related-image-grid-columns-md' as string]: String(Math.min(Math.max(cardColumns, 2), 2)),
+    ['--related-image-grid-columns-xl' as string]: String(Math.min(Math.max(cardColumns, 2), 6)),
+  }
+
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -65,9 +87,13 @@ export function RelatedImageGallerySection({
       </div>
 
       {isLoading ? (
-        <div className="grid gap-4 md:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <Skeleton key={index} className="h-[220px] w-full rounded-sm" />
+        <div className="related-image-gallery-grid" style={gridStyle}>
+          {Array.from({ length: Math.min(Math.max(cardColumns, 2), 6) }).map((_, index) => (
+            <Skeleton
+              key={index}
+              className="w-full rounded-sm"
+              style={cardAspectRatioValue ? { aspectRatio: cardAspectRatioValue } : { aspectRatio: '1 / 1', minHeight: 220 }}
+            />
           ))}
         </div>
       ) : null}
@@ -80,30 +106,17 @@ export function RelatedImageGallerySection({
       ) : null}
 
       {!isLoading && !errorMessage && items.length > 0 ? (
-        useStaticGrid ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {items.map((relatedImage) => (
-              <ImageListItem
-                key={String(relatedImage.composite_hash ?? relatedImage.id)}
-                image={relatedImage}
-                href={relatedImage.composite_hash ? `/images/${relatedImage.composite_hash}` : undefined}
-                gridItemHeight={220}
-                onActivate={handleActivate}
-              />
-            ))}
-          </div>
-        ) : (
-          <ImageList
-            items={items}
-            layout="grid"
-            activationMode={activationMode}
-            getItemHref={(relatedImage) => (relatedImage.composite_hash ? `/images/${relatedImage.composite_hash}` : undefined)}
-            minColumnWidth={220}
-            columnGap={16}
-            rowGap={16}
-            gridItemHeight={220}
-          />
-        )
+        <div className="related-image-gallery-grid" style={gridStyle}>
+          {items.map((relatedImage) => (
+            <ImageListItem
+              key={String(relatedImage.composite_hash ?? relatedImage.id)}
+              image={relatedImage}
+              href={relatedImage.composite_hash ? `/images/${relatedImage.composite_hash}` : undefined}
+              gridItemAspectRatio={cardAspectRatioValue}
+              onActivate={handleActivate}
+            />
+          ))}
+        </div>
       ) : null}
 
       {!isLoading && !errorMessage && items.length === 0 ? (

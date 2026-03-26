@@ -139,6 +139,21 @@ function getFontPresetLabel(preset: AppearanceSettings['fontPreset']) {
   }
 }
 
+function getRelatedImageAspectRatioLabel(ratio: AppearanceSettings['detailRelatedImageAspectRatio']) {
+  switch (ratio) {
+    case 'original':
+      return '원본 비율'
+    case 'square':
+      return '정사각형'
+    case 'portrait':
+      return '세로형 (4:5)'
+    case 'landscape':
+      return '가로형 (3:2)'
+    default:
+      return String(ratio)
+  }
+}
+
 function getUploadedFontDisplayName(fileName: string, url: string) {
   if (fileName.trim()) {
     return fileName.trim()
@@ -571,7 +586,10 @@ export function AppearanceTabEditorSection({
             </SettingsField>
           </div>
         ) : null}
+      </section>
 
+      <section className="space-y-4">
+        <EditorSectionLead title="카드 / 마감" />
         <div className="grid gap-4 md:grid-cols-3">
           <SettingsField label="모서리">
             <Select
@@ -610,6 +628,37 @@ export function AppearanceTabEditorSection({
               {Object.keys(SHADOW_PRESETS).map((presetKey) => (
                 <option key={presetKey} value={presetKey}>
                   {getShadowLabel(presetKey as AppearanceSettings['shadowPreset'])}
+                </option>
+              ))}
+            </Select>
+          </SettingsField>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <EditorSectionLead title="유사 / 중복 이미지" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <SettingsField label="데스크톱 한 줄 카드 수">
+            <Input
+              type="number"
+              min={2}
+              max={6}
+              step={1}
+              variant="settings"
+              value={appearanceDraft.detailRelatedImageColumns}
+              onChange={(event) => onPatchAppearance({ detailRelatedImageColumns: Number.parseInt(event.target.value || '3', 10) })}
+            />
+          </SettingsField>
+
+          <SettingsField label="카드 비율">
+            <Select
+              variant="settings"
+              value={appearanceDraft.detailRelatedImageAspectRatio}
+              onChange={(event) => onPatchAppearance({ detailRelatedImageAspectRatio: event.target.value as AppearanceSettings['detailRelatedImageAspectRatio'] })}
+            >
+              {(['original', 'square', 'portrait', 'landscape'] as AppearanceSettings['detailRelatedImageAspectRatio'][]).map((ratio) => (
+                <option key={ratio} value={ratio}>
+                  {getRelatedImageAspectRatioLabel(ratio)}
                 </option>
               ))}
             </Select>

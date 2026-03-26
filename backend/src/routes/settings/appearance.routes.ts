@@ -109,6 +109,13 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
     return `Invalid font preset. Must be one of: ${validFontPresets.join(', ')}`
   }
 
+  if (
+    appearanceSettings.detailRelatedImageAspectRatio !== undefined &&
+    !['original', 'square', 'portrait', 'landscape'].includes(appearanceSettings.detailRelatedImageAspectRatio)
+  ) {
+    return 'detailRelatedImageAspectRatio must be one of: original, square, portrait, landscape'
+  }
+
   const hexColorFields: Array<keyof Pick<AppearanceThemeSettings,
     'customSurfaceBackgroundColor' |
     'customSurfaceContainerColor' |
@@ -163,13 +170,15 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
     'searchBoxWidth' |
     'searchDrawerWidth' |
     'desktopSearchMinWidth' |
-    'desktopNavMinWidth'
+    'desktopNavMinWidth' |
+    'detailRelatedImageColumns'
   >; min: number; max: number }> = [
     { key: 'fontScalePercent', min: 85, max: 125 },
     { key: 'searchBoxWidth', min: 240, max: 640 },
     { key: 'searchDrawerWidth', min: 320, max: 720 },
     { key: 'desktopSearchMinWidth', min: 640, max: 1600 },
     { key: 'desktopNavMinWidth', min: 768, max: 1800 },
+    { key: 'detailRelatedImageColumns', min: 2, max: 6 },
   ]
 
   for (const { key, min, max } of boundedIntegers) {

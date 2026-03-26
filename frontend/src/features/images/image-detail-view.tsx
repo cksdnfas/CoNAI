@@ -69,6 +69,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
   })
 
   const effectiveSimilaritySettings = settingsQuery.data?.similarity
+  const effectiveAppearanceSettings = settingsQuery.data?.appearance
 
   const imageQuery = useQuery({
     queryKey: ['image-detail', compositeHash],
@@ -270,6 +271,9 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
 
   const getErrorMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback)
 
+  const relatedImageColumns = effectiveAppearanceSettings?.detailRelatedImageColumns ?? 3
+  const relatedImageAspectRatio = effectiveAppearanceSettings?.detailRelatedImageAspectRatio ?? 'square'
+
   const similarSectionTitle = SIMILAR_IMAGE_SECTION_TITLE_LABELS[activeSimilarImageTab]
   const similarSectionItems = activeSimilarImageTab === 'image' ? similarImages : promptSimilarImages
   const similarSectionIsLoading = activeSimilarImageTab === 'image'
@@ -412,7 +416,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
                 errorMessage={null}
                 emptyMessage="현재 중복 이미지가 없어."
                 activationMode={presentation === 'modal' ? 'modal' : 'navigate'}
-                useStaticGrid={presentation === 'modal'}
+                cardColumns={relatedImageColumns}
+                cardAspectRatio={relatedImageAspectRatio}
               />
             ) : null}
 
@@ -424,7 +429,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
               emptyMessage={similarSectionEmptyMessage}
               actions={similarSectionActions}
               activationMode={presentation === 'modal' ? 'modal' : 'modal-single'}
-              useStaticGrid={presentation === 'modal'}
+              cardColumns={relatedImageColumns}
+              cardAspectRatio={relatedImageAspectRatio}
             />
           </div>
 
