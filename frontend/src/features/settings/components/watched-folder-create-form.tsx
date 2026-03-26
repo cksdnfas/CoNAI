@@ -1,7 +1,6 @@
-import { FolderPlus, LoaderCircle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { settingsControlClassName } from './settings-control-classes'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
+import { SettingsResourceCreateActionRow } from './settings-resource-shared'
 import type { NewWatchedFolderDraft } from '../settings-utils'
 
 interface WatchedFolderCreateFormProps {
@@ -98,19 +97,17 @@ export function WatchedFolderCreateForm({
         </SettingsToggleRow>
       </div>
 
-      {pathValidationMessage ? <p className="text-sm text-primary">{pathValidationMessage}</p> : null}
-
-      <div className="flex flex-wrap justify-between gap-2">
-        <Button type="button" size="sm" variant="outline" disabled={isValidatingPath || !newFolder.folder_path.trim()} onClick={onValidatePath}>
-          {isValidatingPath ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-          경로 검증
-        </Button>
-
-        <Button type="button" size="sm" disabled={isAddingFolder || !newFolder.folder_path.trim()} onClick={() => void onAddFolder()}>
-          {isAddingFolder ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FolderPlus className="h-4 w-4" />}
-          감시 폴더 추가
-        </Button>
-      </div>
+      <SettingsResourceCreateActionRow
+        validationMessage={pathValidationMessage}
+        canValidate={Boolean(newFolder.folder_path.trim())}
+        isValidating={isValidatingPath}
+        validateLabel="경로 검증"
+        onValidate={onValidatePath}
+        canSubmit={Boolean(newFolder.folder_path.trim())}
+        isSubmitting={isAddingFolder}
+        submitLabel="감시 폴더 추가"
+        onSubmit={() => void onAddFolder()}
+      />
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { cn } from '@/lib/utils'
 import { SETTINGS_TAB_ITEMS, type SettingsTab } from '../settings-tabs'
 
@@ -8,11 +9,7 @@ interface SettingsTabNavProps {
 
 export function SettingsTabNav({ activeTab, onChange }: SettingsTabNavProps) {
   return (
-    <aside className="rounded-sm bg-surface-lowest p-4 min-[800px]:sticky min-[800px]:top-24 min-[800px]:self-start">
-      <div className="mb-4">
-        <h2 className="text-[11px] font-semibold tracking-[0.22em] text-muted-foreground uppercase">Sections</h2>
-      </div>
-
+    <ExplorerSidebar title="Sections" className="min-[800px]:sticky min-[800px]:top-24 min-[800px]:self-start">
       <div className="space-y-2">
         {SETTINGS_TAB_ITEMS.map((item) => (
           <button
@@ -30,6 +27,6 @@ export function SettingsTabNav({ activeTab, onChange }: SettingsTabNavProps) {
           </button>
         ))}
       </div>
-    </aside>
+    </ExplorerSidebar>
   )
 }

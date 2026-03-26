@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Play, RotateCcw, ScanSearch, Square } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import type { WatchedFolder, WatchedFolderUpdateInput } from '@/types/folder'
-import { parseCommaSeparatedInput, parseJsonArray, toCommaSeparatedInput } from '../settings-utils'
+import { formatDateTime, parseCommaSeparatedInput, parseJsonArray, toCommaSeparatedInput } from '../settings-utils'
 import { settingsControlClassName } from './settings-control-classes'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
+import {
+  SettingsResourceCardHeader,
+  SettingsResourceFooterActions,
+  SettingsResourceMetaList,
+  getWatcherBadgeVariant,
+} from './settings-resource-shared'
 
 interface WatchedFolderCardProps {
   folder: WatchedFolder
@@ -68,60 +72,45 @@ export function WatchedFolderCard({
   return (
     <Card className="bg-surface-container">
       <CardHeader>
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <CardTitle>{folder.folder_name || '이름 없는 폴더'}</CardTitle>
-              {folder.is_default === 1 ? <Badge variant="secondary">default</Badge> : null}
-              <Badge variant={draft.is_active ? 'outline' : 'secondary'}>{draft.is_active ? 'active' : 'inactive'}</Badge>
-              <Badge variant="outline">watcher {watcherState || 'stopped'}</Badge>
-            </div>
-            <div className="break-all font-mono text-xs text-muted-foreground">{folder.folder_path}</div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="icon-sm"
-              variant="outline"
-              disabled={isBusy}
-              onClick={() => handleAction(() => onScan(folder.id))}
-              aria-label="폴더 스캔"
-              title="폴더 스캔"
-            >
-              <ScanSearch className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon-sm"
-              variant="outline"
-              disabled={isBusy}
-              onClick={() => handleAction(() => onStartWatcher(folder.id))}
-              aria-label="watcher 시작"
-              title="watcher 시작"
-            >
-              <Play className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon-sm"
-              variant="outline"
-              disabled={isBusy}
-              onClick={() => handleAction(() => onStopWatcher(folder.id))}
-              aria-label="watcher 중지"
-              title="watcher 중지"
-            >
-              <Square className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon-sm"
-              variant="outline"
-              disabled={isBusy}
-              onClick={() => handleAction(() => onRestartWatcher(folder.id))}
-              aria-label="watcher 재시작"
-              title="watcher 재시작"
-            >
-              <RotateCcw className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+        <SettingsResourceCardHeader
+          title={folder.folder_name || '이름 없는 폴더'}
+          badges={[
+            ...(folder.is_default === 1 ? [{ label: 'default', variant: 'secondary' as const }] : []),
+            { label: draft.is_active ? 'active' : 'inactive', variant: draft.is_active ? 'outline' : 'secondary' },
+            { label: `watcher ${watcherState || 'stopped'}`, variant: getWatcherBadgeVariant(watcherState) },
+          ]}
+          details={[folder.folder_path]}
+          actions={[
+            {
+              label: '폴더 스캔',
+              title: '폴더 스캔',
+              icon: <ScanSearch className="h-4 w-4" />,
+              disabled: isBusy,
+              onClick: () => void handleAction(() => onScan(folder.id)),
+            },
+            {
+              label: 'watcher 시작',
+              title: 'watcher 시작',
+              icon: <Play className="h-4 w-4" />,
+              disabled: isBusy,
+              onClick: () => void handleAction(() => onStartWatcher(folder.id)),
+            },
+            {
+              label: 'watcher 중지',
+              title: 'watcher 중지',
+              icon: <Square className="h-4 w-4" />,
+              disabled: isBusy,
+              onClick: () => void handleAction(() => onStopWatcher(folder.id)),
+            },
+            {
+              label: 'watcher 재시작',
+              title: 'watcher 재시작',
+              icon: <RotateCcw className="h-4 w-4" />,
+              disabled: isBusy,
+              onClick: () => void handleAction(() => onRestartWatcher(folder.id)),
+            },
+          ]}
+        />
       </CardHeader>
 
       <CardContent className="space-y-5">
@@ -187,49 +176,41 @@ export function WatchedFolderCard({
           </SettingsToggleRow>
         </div>
 
-        <div className="flex flex-col gap-2 text-xs text-muted-foreground">
-          <span>최근 스캔: {folder.last_scan_date ? new Date(folder.last_scan_date).toLocaleString('ko-KR') : '—'}</span>
-          <span>최근 상태: {folder.last_scan_status || '—'}</span>
-          <span>최근 신규 이미지: {folder.last_scan_found.toLocaleString('ko-KR')}</span>
-        </div>
+        <SettingsResourceMetaList
+          items={[
+            { label: '최근 스캔', value: formatDateTime(folder.last_scan_date) },
+            { label: '최근 상태', value: folder.last_scan_status || '—' },
+            { label: '최근 신규 이미지', value: folder.last_scan_found.toLocaleString('ko-KR') },
+          ]}
+        />
 
-        <div className="flex flex-wrap justify-between gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={isBusy || folder.is_default === 1}
-            onClick={() => {
-              if (!window.confirm(`정말 ${folder.folder_name || folder.folder_path} 폴더를 삭제할까?`)) {
-                return
-              }
-              void handleAction(() => onDelete(folder.id))
-            }}
-          >
-            폴더 제거
-          </Button>
-
-          <Button
-            size="sm"
-            disabled={isBusy}
-            onClick={() =>
-              void handleAction(() =>
-                onSave(folder.id, {
-                  folder_name: draft.folder_name,
-                  auto_scan: draft.auto_scan,
-                  scan_interval: draft.scan_interval,
-                  recursive: draft.recursive,
-                  watcher_enabled: draft.watcher_enabled,
-                  watcher_polling_interval: draft.watcher_enabled ? draft.watcher_polling_interval : null,
-                  exclude_extensions: parseCommaSeparatedInput(draft.exclude_extensions),
-                  exclude_patterns: parseCommaSeparatedInput(draft.exclude_patterns),
-                  is_active: draft.is_active,
-                }),
-              )
+        <SettingsResourceFooterActions
+          dangerLabel="폴더 제거"
+          dangerDisabled={isBusy || folder.is_default === 1}
+          onDanger={() => {
+            if (!window.confirm(`정말 ${folder.folder_name || folder.folder_path} 폴더를 삭제할까?`)) {
+              return
             }
-          >
-            {isBusy ? '처리 중…' : '폴더 설정 저장'}
-          </Button>
-        </div>
+            void handleAction(() => onDelete(folder.id))
+          }}
+          primaryLabel={isBusy ? '처리 중…' : '폴더 설정 저장'}
+          primaryDisabled={isBusy}
+          onPrimary={() =>
+            void handleAction(() =>
+              onSave(folder.id, {
+                folder_name: draft.folder_name,
+                auto_scan: draft.auto_scan,
+                scan_interval: draft.scan_interval,
+                recursive: draft.recursive,
+                watcher_enabled: draft.watcher_enabled,
+                watcher_polling_interval: draft.watcher_enabled ? draft.watcher_polling_interval : null,
+                exclude_extensions: parseCommaSeparatedInput(draft.exclude_extensions),
+                exclude_patterns: parseCommaSeparatedInput(draft.exclude_patterns),
+                is_active: draft.is_active,
+              }),
+            )
+          }
+        />
       </CardContent>
     </Card>
   )

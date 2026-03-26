@@ -1,7 +1,6 @@
-import { FolderPlus, LoaderCircle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { settingsControlClassName } from './settings-control-classes'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
+import { SettingsResourceCreateActionRow } from './settings-resource-shared'
 import type { NewBackupSourceDraft } from '../settings-utils'
 
 interface BackupSourceCreateFormProps {
@@ -98,24 +97,17 @@ export function BackupSourceCreateForm({
         </SettingsToggleRow>
       </div>
 
-      {backupPathValidationMessage ? <p className="text-sm text-primary">{backupPathValidationMessage}</p> : null}
-
-      <div className="flex flex-wrap justify-between gap-2">
-        <Button type="button" size="sm" variant="outline" disabled={isValidatingBackupPath || !newBackupSource.source_path.trim()} onClick={onValidateBackupPath}>
-          {isValidatingBackupPath ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-          source 경로 검증
-        </Button>
-
-        <Button
-          type="button"
-          size="sm"
-          disabled={isAddingBackupSource || !newBackupSource.source_path.trim() || !newBackupSource.target_folder_name.trim()}
-          onClick={() => void onAddBackupSource()}
-        >
-          {isAddingBackupSource ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FolderPlus className="h-4 w-4" />}
-          백업 소스 추가
-        </Button>
-      </div>
+      <SettingsResourceCreateActionRow
+        validationMessage={backupPathValidationMessage}
+        canValidate={Boolean(newBackupSource.source_path.trim())}
+        isValidating={isValidatingBackupPath}
+        validateLabel="source 경로 검증"
+        onValidate={onValidateBackupPath}
+        canSubmit={Boolean(newBackupSource.source_path.trim() && newBackupSource.target_folder_name.trim())}
+        isSubmitting={isAddingBackupSource}
+        submitLabel="백업 소스 추가"
+        onSubmit={() => void onAddBackupSource()}
+      />
     </div>
   )
 }

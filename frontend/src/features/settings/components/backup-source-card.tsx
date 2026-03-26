@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Play, RotateCcw, Square } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import type { BackupSource, BackupSourceUpdateInput } from '@/types/folder'
+import { formatDateTime } from '../settings-utils'
 import { settingsControlClassName } from './settings-control-classes'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
+import {
+  SettingsResourceCardHeader,
+  SettingsResourceFooterActions,
+  SettingsResourceMetaList,
+  getWatcherBadgeVariant,
+} from './settings-resource-shared'
 
 interface BackupSourceCardProps {
   source: BackupSource
@@ -63,51 +68,38 @@ export function BackupSourceCard({
   return (
     <Card className="bg-surface-container">
       <CardHeader>
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <CardTitle>{source.display_name || '이름 없는 백업 소스'}</CardTitle>
-              <Badge variant={draft.is_active ? 'outline' : 'secondary'}>{draft.is_active ? 'active' : 'inactive'}</Badge>
-              <Badge variant="outline">mode {source.import_mode}</Badge>
-              <Badge variant="outline">watcher {source.watcher_status || 'stopped'}</Badge>
-            </div>
-            <div className="break-all font-mono text-xs text-muted-foreground">source {source.source_path}</div>
-            <div className="break-all font-mono text-xs text-muted-foreground">target uploads/{source.target_folder_name}</div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="icon-sm"
-              variant="outline"
-              disabled={isBusy}
-              onClick={() => handleAction(() => onStartWatcher(source.id))}
-              aria-label="watcher 시작"
-              title="watcher 시작"
-            >
-              <Play className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon-sm"
-              variant="outline"
-              disabled={isBusy}
-              onClick={() => handleAction(() => onStopWatcher(source.id))}
-              aria-label="watcher 중지"
-              title="watcher 중지"
-            >
-              <Square className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon-sm"
-              variant="outline"
-              disabled={isBusy}
-              onClick={() => handleAction(() => onRestartWatcher(source.id))}
-              aria-label="watcher 재시작"
-              title="watcher 재시작"
-            >
-              <RotateCcw className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+        <SettingsResourceCardHeader
+          title={source.display_name || '이름 없는 백업 소스'}
+          badges={[
+            { label: draft.is_active ? 'active' : 'inactive', variant: draft.is_active ? 'outline' : 'secondary' },
+            { label: `mode ${source.import_mode}`, variant: 'outline' },
+            { label: `watcher ${source.watcher_status || 'stopped'}`, variant: getWatcherBadgeVariant(source.watcher_status) },
+          ]}
+          details={[`source ${source.source_path}`, `target uploads/${source.target_folder_name}`]}
+          actions={[
+            {
+              label: 'watcher 시작',
+              title: 'watcher 시작',
+              icon: <Play className="h-4 w-4" />,
+              disabled: isBusy,
+              onClick: () => void handleAction(() => onStartWatcher(source.id)),
+            },
+            {
+              label: 'watcher 중지',
+              title: 'watcher 중지',
+              icon: <Square className="h-4 w-4" />,
+              disabled: isBusy,
+              onClick: () => void handleAction(() => onStopWatcher(source.id)),
+            },
+            {
+              label: 'watcher 재시작',
+              title: 'watcher 재시작',
+              icon: <RotateCcw className="h-4 w-4" />,
+              disabled: isBusy,
+              onClick: () => void handleAction(() => onRestartWatcher(source.id)),
+            },
+          ]}
+        />
       </CardHeader>
 
       <CardContent className="space-y-5">
@@ -190,48 +182,40 @@ export function BackupSourceCard({
           </SettingsToggleRow>
         </div>
 
-        <div className="flex flex-col gap-2 text-xs text-muted-foreground">
-          <span>최근 이벤트: {source.watcher_last_event ? new Date(source.watcher_last_event).toLocaleString('ko-KR') : '—'}</span>
-          <span>최근 오류: {source.watcher_error || '—'}</span>
-        </div>
+        <SettingsResourceMetaList
+          items={[
+            { label: '최근 이벤트', value: formatDateTime(source.watcher_last_event) },
+            { label: '최근 오류', value: source.watcher_error || '—' },
+          ]}
+        />
 
-        <div className="flex flex-wrap justify-between gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={isBusy}
-            onClick={() => {
-              if (!window.confirm(`정말 ${source.display_name || source.source_path} 백업 소스를 삭제할까?`)) {
-                return
-              }
-              void handleAction(() => onDelete(source.id))
-            }}
-          >
-            백업 소스 제거
-          </Button>
-
-          <Button
-            size="sm"
-            disabled={isBusy}
-            onClick={() =>
-              void handleAction(() =>
-                onSave(source.id, {
-                  display_name: draft.display_name,
-                  source_path: draft.source_path,
-                  target_folder_name: draft.target_folder_name,
-                  recursive: draft.recursive,
-                  watcher_enabled: draft.watcher_enabled,
-                  watcher_polling_interval: draft.watcher_enabled ? draft.watcher_polling_interval : null,
-                  import_mode: draft.import_mode,
-                  webp_quality: draft.webp_quality,
-                  is_active: draft.is_active,
-                }),
-              )
+        <SettingsResourceFooterActions
+          dangerLabel="백업 소스 제거"
+          dangerDisabled={isBusy}
+          onDanger={() => {
+            if (!window.confirm(`정말 ${source.display_name || source.source_path} 백업 소스를 삭제할까?`)) {
+              return
             }
-          >
-            {isBusy ? '처리 중…' : '백업 소스 저장'}
-          </Button>
-        </div>
+            void handleAction(() => onDelete(source.id))
+          }}
+          primaryLabel={isBusy ? '처리 중…' : '백업 소스 저장'}
+          primaryDisabled={isBusy}
+          onPrimary={() =>
+            void handleAction(() =>
+              onSave(source.id, {
+                display_name: draft.display_name,
+                source_path: draft.source_path,
+                target_folder_name: draft.target_folder_name,
+                recursive: draft.recursive,
+                watcher_enabled: draft.watcher_enabled,
+                watcher_polling_interval: draft.watcher_enabled ? draft.watcher_polling_interval : null,
+                import_mode: draft.import_mode,
+                webp_quality: draft.webp_quality,
+                is_active: draft.is_active,
+              }),
+            )
+          }
+        />
       </CardContent>
     </Card>
   )

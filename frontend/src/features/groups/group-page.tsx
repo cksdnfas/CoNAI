@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { PageHeader } from '@/components/common/page-header'
 import { getGroup, getGroupBreadcrumb, getGroupImages, getGroupsHierarchyAll } from '@/lib/api'
 import { GroupBreadcrumbs } from './components/group-breadcrumbs'
@@ -66,12 +67,7 @@ export function GroupPage() {
       />
 
       <div className="grid gap-8 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="rounded-sm bg-surface-lowest p-4 xl:sticky xl:top-24 xl:self-start">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-[11px] font-semibold tracking-[0.22em] text-muted-foreground uppercase">Explorer</h2>
-            <Badge variant="outline">{allGroups.length}</Badge>
-          </div>
-
+        <ExplorerSidebar title="Explorer" badge={<Badge variant="outline">{allGroups.length}</Badge>} className="xl:sticky xl:top-24 xl:self-start">
           {groupsQuery.isLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 6 }).map((_, index) => (
@@ -92,7 +88,7 @@ export function GroupPage() {
           {!groupsQuery.isLoading && !groupsQuery.isError ? (
             <GroupTree groups={allGroups} selectedGroupId={selectedGroupId} onSelectGroup={handleOpenGroup} />
           ) : null}
-        </aside>
+        </ExplorerSidebar>
 
         <section className="space-y-8">
           {selectedGroupId ? (
