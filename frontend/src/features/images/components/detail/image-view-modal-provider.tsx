@@ -242,7 +242,7 @@ function ImageViewModal({
         role="dialog"
         aria-modal="true"
         aria-label="이미지 보기"
-        className="scrollbar-stable-pane mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-6 xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden"
+        className="scrollbar-stable-pane mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 pb-28 shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-6 md:pb-32 xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden xl:pb-6"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="xl:min-h-0 xl:flex-1">
@@ -312,43 +312,58 @@ function ImageViewModalActions({
   const navigate = useNavigate()
   const showCounter = totalCount > 1 && activeIndex >= 0
 
+  const openDetailPage = () => {
+    navigate(`/images/${compositeHash}`)
+    onClose()
+  }
+
+  const navigationButtons = (
+    <>
+      <Button size="icon-sm" variant="secondary" onClick={onClose} aria-label="닫기" title="닫기">
+        <X className="h-4 w-4" />
+      </Button>
+      <Button size="icon-sm" variant="outline" onClick={onViewPrevious} disabled={!canViewPrevious} aria-label="이전 이미지" title="이전 이미지">
+        <ChevronLeft className="h-4 w-4" />
+      </Button>
+      <Button size="icon-sm" variant="outline" onClick={onViewNext} disabled={!canViewNext} aria-label="다음 이미지" title="다음 이미지">
+        <ChevronRight className="h-4 w-4" />
+      </Button>
+      {showCounter ? <div className="px-2 text-xs text-muted-foreground">{activeIndex + 1} / {totalCount}</div> : null}
+      <Button size="icon-sm" variant="outline" onClick={openDetailPage} aria-label="상세 페이지 열기" title="상세 페이지">
+        <ExternalLink className="h-4 w-4" />
+      </Button>
+      <Button size="icon-sm" variant="outline" onClick={controls.refresh} disabled={controls.isRefreshing} aria-label="새로고침" title="새로고침">
+        <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+      </Button>
+    </>
+  )
+
+  const downloadButton = controls.downloadUrl ? (
+    <Button size="icon-sm" asChild aria-label="다운로드" title="다운로드">
+      <a href={controls.downloadUrl} download={controls.downloadName} aria-label="다운로드" title="다운로드">
+        <Download className="h-4 w-4" />
+      </a>
+    </Button>
+  ) : null
+
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="icon-sm" variant="secondary" onClick={onClose} aria-label="닫기" title="닫기">
-          <X className="h-4 w-4" />
-        </Button>
-        <Button size="icon-sm" variant="outline" onClick={onViewPrevious} disabled={!canViewPrevious} aria-label="이전 이미지" title="이전 이미지">
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <Button size="icon-sm" variant="outline" onClick={onViewNext} disabled={!canViewNext} aria-label="다음 이미지" title="다음 이미지">
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-        {showCounter ? <div className="px-2 text-xs text-muted-foreground">{activeIndex + 1} / {totalCount}</div> : null}
-        <Button
-          size="icon-sm"
-          variant="outline"
-          onClick={() => {
-            navigate(`/images/${compositeHash}`)
-            onClose()
-          }}
-          aria-label="상세 페이지 열기"
-          title="상세 페이지"
-        >
-          <ExternalLink className="h-4 w-4" />
-        </Button>
-        <Button size="icon-sm" variant="outline" onClick={controls.refresh} disabled={controls.isRefreshing} aria-label="새로고침" title="새로고침">
-          <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-        </Button>
+    <>
+      <div className="hidden xl:flex xl:flex-wrap xl:items-center xl:justify-between xl:gap-3">
+        <div className="flex flex-wrap items-center gap-2">{navigationButtons}</div>
+        {downloadButton}
       </div>
 
-      {controls.downloadUrl ? (
-        <Button size="icon-sm" asChild aria-label="다운로드" title="다운로드">
-          <a href={controls.downloadUrl} download={controls.downloadName} aria-label="다운로드" title="다운로드">
-            <Download className="h-4 w-4" />
-          </a>
-        </Button>
-      ) : null}
-    </div>
+      <div
+        className="fixed inset-x-4 bottom-4 z-[92] md:inset-x-6 xl:hidden"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="rounded-sm border border-border bg-background/96 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.35)] backdrop-blur-md">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">{navigationButtons}</div>
+            {downloadButton}
+          </div>
+        </div>
+      </div>
+    </>
   )
 }
