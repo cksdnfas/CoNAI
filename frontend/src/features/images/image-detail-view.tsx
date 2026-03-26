@@ -364,7 +364,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
 
   const detailGridClassName = cn(
     'grid gap-8 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]',
-    presentation === 'page' ? 'xl:items-stretch' : 'xl:h-full xl:items-stretch',
+    presentation === 'page' ? 'bg-background xl:items-start' : 'xl:h-full xl:items-stretch',
   )
 
   return (

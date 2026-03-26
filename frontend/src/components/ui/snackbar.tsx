@@ -28,8 +28,8 @@ export function Snackbar({ open, message, tone = 'info', onClose, durationMs = 2
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[80] flex justify-end p-4 sm:p-6">
       <div
         className={cn(
-          'pointer-events-auto max-w-md min-w-[240px] rounded-sm border px-4 py-3 text-sm shadow-2xl transition-all duration-200',
-          open && message ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0',
+          'max-w-md min-w-[240px] rounded-sm border px-4 py-3 text-sm shadow-2xl transition-all duration-200',
+          open && message ? 'pointer-events-auto translate-y-0 opacity-100' : 'pointer-events-none translate-y-2 opacity-0',
           tone === 'error' ? '' : 'border-primary/20 bg-surface-high text-foreground',
         )}
         style={tone === 'error' ? getThemeTonePanelStyle('negative') : undefined}
