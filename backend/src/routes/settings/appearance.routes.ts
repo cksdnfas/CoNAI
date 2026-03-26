@@ -16,6 +16,8 @@ const validGlassPresets = ['subtle', 'balanced', 'immersive']
 const validShadowPresets = ['soft', 'balanced', 'dramatic']
 const validDensityPresets = ['compact', 'comfortable', 'spacious']
 const validFontPresets = ['manrope', 'system', 'custom']
+const validBodyFontWeightPresets = ['regular', 'medium']
+const validEmphasisFontWeightPresets = ['standard', 'bold']
 const validAppearancePresetSlotIds = ['slot-1', 'slot-2', 'slot-3']
 const appearanceFontDir = path.join(runtimePaths.uploadsDir, 'theme-fonts')
 const allowedFontExtensions = new Set(['.ttf', '.otf', '.woff', '.woff2'])
@@ -119,6 +121,17 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
 
   if (appearanceSettings.fontPreset !== undefined && !validFontPresets.includes(appearanceSettings.fontPreset)) {
     return `Invalid font preset. Must be one of: ${validFontPresets.join(', ')}`
+  }
+
+  if (appearanceSettings.bodyFontWeightPreset !== undefined && !validBodyFontWeightPresets.includes(appearanceSettings.bodyFontWeightPreset)) {
+    return `Invalid body font weight preset. Must be one of: ${validBodyFontWeightPresets.join(', ')}`
+  }
+
+  if (
+    appearanceSettings.emphasisFontWeightPreset !== undefined &&
+    !validEmphasisFontWeightPresets.includes(appearanceSettings.emphasisFontWeightPreset)
+  ) {
+    return `Invalid emphasis font weight preset. Must be one of: ${validEmphasisFontWeightPresets.join(', ')}`
   }
 
   if (

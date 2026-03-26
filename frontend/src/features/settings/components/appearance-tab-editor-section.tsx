@@ -148,6 +148,28 @@ function getFontPresetLabel(preset: AppearanceSettings['fontPreset']) {
   }
 }
 
+function getBodyFontWeightLabel(preset: AppearanceSettings['bodyFontWeightPreset']) {
+  switch (preset) {
+    case 'regular':
+      return '기본'
+    case 'medium':
+      return '약간 굵게'
+    default:
+      return String(preset)
+  }
+}
+
+function getEmphasisFontWeightLabel(preset: AppearanceSettings['emphasisFontWeightPreset']) {
+  switch (preset) {
+    case 'standard':
+      return '기본'
+    case 'bold':
+      return '볼드'
+    default:
+      return String(preset)
+  }
+}
+
 function getRelatedImageAspectRatioLabel(ratio: AppearanceSettings['detailRelatedImageAspectRatio']) {
   switch (ratio) {
     case 'original':
@@ -366,7 +388,7 @@ function AppearanceGeneralEditorContent({
 
       <section className="space-y-4">
         <EditorSectionLead title="폰트" />
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <SettingsField label="폰트 프리셋">
             <Select
               variant="settings"
@@ -403,6 +425,34 @@ function AppearanceGeneralEditorContent({
               value={appearanceDraft.textScalePercent}
               onChange={(event) => onPatchAppearance({ textScalePercent: Number.parseInt(event.target.value || '100', 10) })}
             />
+          </SettingsField>
+
+          <SettingsField label="본문 굵기">
+            <Select
+              variant="settings"
+              value={appearanceDraft.bodyFontWeightPreset}
+              onChange={(event) => onPatchAppearance({ bodyFontWeightPreset: event.target.value as AppearanceSettings['bodyFontWeightPreset'] })}
+            >
+              {(['regular', 'medium'] as AppearanceSettings['bodyFontWeightPreset'][]).map((preset) => (
+                <option key={preset} value={preset}>
+                  {getBodyFontWeightLabel(preset)}
+                </option>
+              ))}
+            </Select>
+          </SettingsField>
+
+          <SettingsField label="강조 굵기">
+            <Select
+              variant="settings"
+              value={appearanceDraft.emphasisFontWeightPreset}
+              onChange={(event) => onPatchAppearance({ emphasisFontWeightPreset: event.target.value as AppearanceSettings['emphasisFontWeightPreset'] })}
+            >
+              {(['standard', 'bold'] as AppearanceSettings['emphasisFontWeightPreset'][]).map((preset) => (
+                <option key={preset} value={preset}>
+                  {getEmphasisFontWeightLabel(preset)}
+                </option>
+              ))}
+            </Select>
           </SettingsField>
         </div>
 

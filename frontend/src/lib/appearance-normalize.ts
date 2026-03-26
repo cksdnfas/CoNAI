@@ -33,6 +33,8 @@ export function extractAppearanceTheme(appearance: AppearanceSettings | Appearan
     customMonoFontFileName: appearance.customMonoFontFileName,
     fontScalePercent: appearance.fontScalePercent,
     textScalePercent: appearance.textScalePercent,
+    bodyFontWeightPreset: appearance.bodyFontWeightPreset,
+    emphasisFontWeightPreset: appearance.emphasisFontWeightPreset,
     searchBoxWidth: appearance.searchBoxWidth,
     searchDrawerWidth: appearance.searchDrawerWidth,
     desktopSearchMinWidth: appearance.desktopSearchMinWidth,
@@ -129,6 +131,16 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
   if (source.fontPreset !== undefined) {
     if (!isEnumValue(source.fontPreset, ['manrope', 'system', 'custom'])) return null
     next.fontPreset = source.fontPreset
+  }
+
+  if (source.bodyFontWeightPreset !== undefined) {
+    if (!isEnumValue(source.bodyFontWeightPreset, ['regular', 'medium'])) return null
+    next.bodyFontWeightPreset = source.bodyFontWeightPreset
+  }
+
+  if (source.emphasisFontWeightPreset !== undefined) {
+    if (!isEnumValue(source.emphasisFontWeightPreset, ['standard', 'bold'])) return null
+    next.emphasisFontWeightPreset = source.emphasisFontWeightPreset
   }
 
   if (source.detailRelatedImageAspectRatio !== undefined) {

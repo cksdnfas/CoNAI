@@ -97,6 +97,11 @@
   --theme-selection-bar-padding-y: 0.75rem;
   --theme-ui-scale: 1;
   --theme-text-scale: 1;
+  --theme-body-font-weight: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
   --theme-search-box-width: 380px;
   --theme-search-drawer-width: 420px;
   --theme-badge-positive: #34d399;
@@ -158,6 +163,7 @@
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
     font-size: calc(1rem * var(--theme-text-scale));
+    font-weight: var(--theme-body-font-weight);
     font-feature-settings: 'rlig' 1, 'calt' 1;
     background-image:
       radial-gradient(circle at top, color-mix(in srgb, var(--primary) 8%, transparent), transparent 26%),

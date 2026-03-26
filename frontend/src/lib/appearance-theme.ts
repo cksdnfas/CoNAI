@@ -21,6 +21,26 @@ import {
 const CUSTOM_SANS_FONT_ALIAS = 'CoNAI Uploaded Sans'
 const CUSTOM_MONO_FONT_ALIAS = 'CoNAI Uploaded Mono'
 
+const BODY_FONT_WEIGHT_VALUES = {
+  regular: '400',
+  medium: '500',
+} as const
+
+const EMPHASIS_FONT_WEIGHT_VALUES = {
+  standard: {
+    medium: '500',
+    semibold: '600',
+    bold: '700',
+    extrabold: '800',
+  },
+  bold: {
+    medium: '600',
+    semibold: '700',
+    bold: '800',
+    extrabold: '900',
+  },
+} as const
+
 export interface AppearanceContrastIssue {
   id: 'primary-text' | 'secondary-text' | 'primary-surface' | 'secondary-surface'
   label: string
@@ -95,6 +115,8 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
   const shadowPreset = SHADOW_PRESETS[appearance.shadowPreset]
   const densityPreset = DENSITY_PRESETS[appearance.density]
   const fontPreset = FONT_PRESETS[appearance.fontPreset]
+  const bodyFontWeight = BODY_FONT_WEIGHT_VALUES[appearance.bodyFontWeightPreset]
+  const emphasisFontWeight = EMPHASIS_FONT_WEIGHT_VALUES[appearance.emphasisFontWeightPreset]
   const baseFontFamily = appearance.fontPreset === 'custom' ? appearance.customFontFamily.trim() || fontPreset.fontFamily : fontPreset.fontFamily
   const baseMonoFamily = appearance.fontPreset === 'custom' ? appearance.customMonoFontFamily.trim() || fontPreset.monoFamily : fontPreset.monoFamily
   const fontFamily = appearance.fontPreset === 'custom' && appearance.customFontUrl
@@ -158,6 +180,11 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
     '--theme-selection-bar-padding-y': densityPreset.selectionBarPaddingY,
     '--font-sans': fontFamily,
     '--font-mono': monoFamily,
+    '--theme-body-font-weight': bodyFontWeight,
+    '--font-weight-medium': emphasisFontWeight.medium,
+    '--font-weight-semibold': emphasisFontWeight.semibold,
+    '--font-weight-bold': emphasisFontWeight.bold,
+    '--font-weight-extrabold': emphasisFontWeight.extrabold,
     '--theme-ui-scale': `${appearance.fontScalePercent / 100}`,
     '--theme-text-scale': `${appearance.textScalePercent / 100}`,
     '--theme-search-box-width': `${appearance.searchBoxWidth}px`,

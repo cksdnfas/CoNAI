@@ -78,6 +78,8 @@ export type GlassPreset = 'subtle' | 'balanced' | 'immersive'
 export type ShadowPreset = 'soft' | 'balanced' | 'dramatic'
 export type DensityPreset = 'compact' | 'comfortable' | 'spacious'
 export type FontPreset = 'manrope' | 'system' | 'custom'
+export type BodyFontWeightPreset = 'regular' | 'medium'
+export type EmphasisFontWeightPreset = 'standard' | 'bold'
 export type RelatedImageCardAspectRatio = 'original' | 'square' | 'portrait' | 'landscape'
 export type AppearancePresetSlotId = 'slot-1' | 'slot-2' | 'slot-3'
 
@@ -103,6 +105,8 @@ export interface AppearanceThemeSettings {
   customMonoFontFileName: string
   fontScalePercent: number
   textScalePercent: number
+  bodyFontWeightPreset: BodyFontWeightPreset
+  emphasisFontWeightPreset: EmphasisFontWeightPreset
   searchBoxWidth: number
   searchDrawerWidth: number
   desktopSearchMinWidth: number
