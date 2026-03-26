@@ -131,6 +131,19 @@ export class ImageFileModel {
   }
 
   /**
+   * 파일 크기/수정시각 동기화
+   */
+  static updateFileStats(id: number, updates: { fileSize: number; fileModifiedDate: string | null; mimeType?: string | null }): boolean {
+    const info = db.prepare(`
+      UPDATE image_files
+      SET file_size = ?, file_modified_date = ?, mime_type = COALESCE(?, mime_type), last_verified_date = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(updates.fileSize, updates.fileModifiedDate, updates.mimeType ?? null, id);
+
+    return info.changes > 0;
+  }
+
+  /**
    * 파일 검증 시간 업데이트
    */
   static updateVerified(id: number): boolean {

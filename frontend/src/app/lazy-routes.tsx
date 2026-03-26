@@ -20,6 +20,11 @@ const ImageDetailPageLazy = lazy(async () => {
   return { default: module.ImageDetailPage }
 })
 
+const ImageMetadataEditPageLazy = lazy(async () => {
+  const module = await import('@/features/metadata/image-metadata-edit-page')
+  return { default: module.ImageMetadataEditPage }
+})
+
 const PromptPageLazy = lazy(async () => {
   const module = await import('@/features/prompts/prompt-page')
   return { default: module.PromptPage }
@@ -62,6 +67,10 @@ export function HomeRoute() {
 
 export function ImageDetailRoute() {
   return withSuspense(<ImageDetailPageLazy />)
+}
+
+export function ImageMetadataEditRoute() {
+  return withSuspense(<ImageMetadataEditPageLazy />)
 }
 
 export function PromptRoute() {

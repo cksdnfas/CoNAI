@@ -289,6 +289,8 @@ export interface RewriteMetadataDownloadResult {
   exifState: 'applied' | 'empty' | 'unknown'
 }
 
+export type MetadataPatchPayload = Record<string, string | number | null>
+
 /** Extract a suggested filename from Content-Disposition when available. */
 function getDownloadFileName(contentDisposition: string | null, fallbackFileName: string) {
   if (!contentDisposition) {
@@ -346,7 +348,7 @@ export async function downloadRewrittenImage(
   options: {
     format: 'png' | 'jpeg' | 'webp'
     quality?: number
-    metadataPatch?: Record<string, string | number>
+    metadataPatch?: MetadataPatchPayload
   },
 ) {
   const formData = new FormData()
@@ -384,4 +386,62 @@ export async function downloadRewrittenImage(
     xmpState,
     exifState,
   } satisfies RewriteMetadataDownloadResult
+}
+
+/** Rewrite metadata for one existing library image and download the rewritten file immediately. */
+export async function downloadExistingImageWithRewrittenMetadata(
+  compositeHash: string,
+  options: {
+    format: 'png' | 'jpeg' | 'webp'
+    quality?: number
+    metadataPatch?: MetadataPatchPayload
+  },
+) {
+  const response = await fetch(buildApiUrl(`/api/images/${compositeHash}/rewrite-metadata/download`), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/octet-stream',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      format: options.format,
+      quality: options.quality ?? 90,
+      metadataPatch: options.metadataPatch,
+    }),
+  })
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(text || `Request failed: ${response.status}`)
+  }
+
+  const blob = await response.blob()
+  const fallbackFileName = `${compositeHash}.${options.format === 'jpeg' ? 'jpg' : options.format}`
+  const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
+  const rewriteState = (response.headers.get('X-CoNAI-Metadata-Rewrite') as RewriteMetadataDownloadResult['rewriteState'] | null) ?? 'unknown'
+  const xmpState = (response.headers.get('X-CoNAI-Metadata-XMP') as RewriteMetadataDownloadResult['xmpState'] | null) ?? 'unknown'
+  const exifState = (response.headers.get('X-CoNAI-Metadata-EXIF') as RewriteMetadataDownloadResult['exifState'] | null) ?? 'unknown'
+
+  triggerBlobDownload(blob, fileName)
+
+  return {
+    fileName,
+    rewriteState,
+    xmpState,
+    exifState,
+  } satisfies RewriteMetadataDownloadResult
+}
+
+/** Persist one metadata patch onto an existing library image and return the updated image record. */
+export async function saveImageMetadata(compositeHash: string, metadataPatch: MetadataPatchPayload) {
+  const response = await fetch(buildApiUrl(`/api/images/${compositeHash}/metadata`), {
+    method: 'PATCH',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ metadataPatch }),
+  })
+
+  return readApiPayload<ImageRecord>(response)
 }

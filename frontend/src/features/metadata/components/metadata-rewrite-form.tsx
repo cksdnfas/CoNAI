@@ -7,12 +7,13 @@ import type { RewriteFormat, RewriteMetadataDraft } from '../use-metadata-rewrit
 interface MetadataRewriteFormProps {
   draft: RewriteMetadataDraft
   disabled?: boolean
+  formatLabel?: string
   /** Apply a partial draft update from one form field. */
   onDraftChange: (patch: Partial<RewriteMetadataDraft>) => void
 }
 
 /** Render reusable metadata rewrite controls for prompt and generation fields. */
-export function MetadataRewriteForm({ draft, disabled = false, onDraftChange }: MetadataRewriteFormProps) {
+export function MetadataRewriteForm({ draft, disabled = false, formatLabel = '출력 포맷', onDraftChange }: MetadataRewriteFormProps) {
   return (
     <div className="space-y-4 rounded-sm bg-surface-high p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -22,7 +23,7 @@ export function MetadataRewriteForm({ draft, disabled = false, onDraftChange }: 
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <label className="space-y-2 text-sm">
-          <span className="text-muted-foreground">출력 포맷</span>
+          <span className="text-muted-foreground">{formatLabel}</span>
           <Select value={draft.format} onChange={(event) => onDraftChange({ format: event.target.value as RewriteFormat })} disabled={disabled}>
             <option value="png">PNG</option>
             <option value="jpeg">JPEG</option>

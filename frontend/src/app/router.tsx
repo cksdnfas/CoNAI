@@ -4,6 +4,7 @@ import {
   GroupRoute,
   HomeRoute,
   ImageDetailRoute,
+  ImageMetadataEditRoute,
   LoginRoute,
   NotFoundRoute,
   PromptRoute,
@@ -39,6 +40,10 @@ export const appRouter = createHashRouter([
       {
         path: 'images/:compositeHash',
         element: <ImageDetailRoute />,
+      },
+      {
+        path: 'images/:compositeHash/metadata',
+        element: <ImageMetadataEditRoute />,
       },
       {
         path: 'upload',

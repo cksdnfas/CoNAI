@@ -1,3 +1,5 @@
+import { FilePenLine } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import {
   ArtistPromptSection,
@@ -6,6 +8,8 @@ import {
   RatingPromptSection,
 } from '@/components/common/prompt-result-sections'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
 import type { ImageRecord } from '@/types/image'
 import { formatBytes, getImageArtistPromptSection, getImageAutoPromptContent, getImageGenerationParamItems } from './image-detail-utils'
@@ -15,18 +19,35 @@ interface ImageDetailMetaCardProps {
 }
 
 export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
+  const navigate = useNavigate()
+  const imageViewModal = useImageViewModal()
   const extractedPromptCards = getImageExtractedPromptCards(image)
   const autoPromptContent = getImageAutoPromptContent(image)
   const artistPromptSection = getImageArtistPromptSection(image)
   const generationParamItems = getImageGenerationParamItems(image)
+  const canEditMetadata = Boolean(image.composite_hash) && image.file_type === 'image'
 
   return (
     <div className="space-y-3 text-sm text-muted-foreground">
-      {image.is_processing ? (
-        <div className="flex items-center justify-end">
-          <Badge variant="secondary">Processing</Badge>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-base font-semibold tracking-tight text-foreground">메타 정보</div>
+        <div className="flex items-center gap-2">
+          {image.is_processing ? <Badge variant="secondary">Processing</Badge> : null}
+          {canEditMetadata ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                imageViewModal?.closeImageView()
+                navigate(`/images/${image.composite_hash}/metadata`)
+              }}
+            >
+              <FilePenLine className="h-4 w-4" />
+              메타 수정
+            </Button>
+          ) : null}
         </div>
-      ) : null}
+      </div>
 
       <div className="rounded-sm bg-surface-high p-4">
         <p className="text-[11px] uppercase tracking-[0.18em]">Composite hash</p>
