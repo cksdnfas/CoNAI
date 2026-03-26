@@ -107,6 +107,7 @@ export function UploadPage() {
   const [activeExtractAction, setActiveExtractAction] = useState<ExtractAction | null>(null)
   const [isConvertingWebP, setIsConvertingWebP] = useState(false)
   const [isRewritingMetadata, setIsRewritingMetadata] = useState(false)
+  const [isRewritePanelOpen, setIsRewritePanelOpen] = useState(false)
   const { draft: rewriteDraft, patchDraft: patchRewriteDraft } = useMetadataRewriteDraft(extractFile, extractResult)
 
   useEffect(() => {
@@ -164,6 +165,7 @@ export function UploadPage() {
 
   const applyExtractFile = (file: File | null) => {
     setExtractFile(file)
+    setIsRewritePanelOpen(false)
     resetExtractResults()
   }
 
@@ -553,32 +555,46 @@ export function UploadPage() {
           <CardContent className="space-y-4">
             <input ref={extractInputRef} type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={handleExtractFileChange} />
 
-            <DropSurface
-              ariaLabel="미리보기할 이미지 선택"
-              active={extractDropZone.isDragActive}
-              onClick={() => extractInputRef.current?.click()}
-              onDrop={extractDropZone.handleDrop}
-              onDragEnter={extractDropZone.handleDragEnter}
-              onDragOver={extractDropZone.handleDragOver}
-              onDragLeave={extractDropZone.handleDragLeave}
-            />
+            <div className="rounded-sm bg-surface-low p-4">
+              <DropSurface
+                ariaLabel="미리보기할 이미지 선택"
+                active={extractDropZone.isDragActive}
+                onClick={() => extractInputRef.current?.click()}
+                onDrop={extractDropZone.handleDrop}
+                onDragEnter={extractDropZone.handleDragEnter}
+                onDragOver={extractDropZone.handleDragOver}
+                onDragLeave={extractDropZone.handleDragLeave}
+              />
+            </div>
 
             {extractFile ? (
               <div className="space-y-4 rounded-sm bg-surface-low p-4">
                 {extractPreviewUrl ? (
-                  <div className="overflow-hidden rounded-sm bg-surface-high">
+                  <div className="overflow-hidden rounded-sm bg-surface-high p-4">
                     <img src={extractPreviewUrl} alt={extractFile.name} className="max-h-[420px] w-full object-contain" />
                   </div>
                 ) : null}
 
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   <SummaryTile label="file" value={extractFile.name} />
                   <SummaryTile label="size" value={formatBytes(extractFile.size)} />
                   <SummaryTile label="type" value={extractFile.type || '—'} />
-                  <SummaryTile label="status" value={isRewritingMetadata ? '메타 수정 중…' : isConvertingWebP ? 'WebP 변환 중…' : extractBusy ? '추출 중…' : '대기'} />
                 </div>
 
-                <MetadataRewriteForm draft={rewriteDraft} disabled={extractBusy} onDraftChange={patchRewriteDraft} />
+                <div className="rounded-sm bg-surface-high p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-sm font-medium text-foreground">메타 수정</div>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setIsRewritePanelOpen((current) => !current)}>
+                      {isRewritePanelOpen ? '접기' : '펼치기'}
+                    </Button>
+                  </div>
+
+                  {isRewritePanelOpen ? (
+                    <div className="mt-4 border-t border-border pt-4">
+                      <MetadataRewriteForm draft={rewriteDraft} disabled={extractBusy} showHeader={false} onDraftChange={patchRewriteDraft} />
+                    </div>
+                  ) : null}
+                </div>
               </div>
             ) : null}
 
@@ -590,7 +606,7 @@ export function UploadPage() {
             ) : null}
 
             {extractResult ? (
-              <div className="space-y-4">
+              <div className="space-y-4 rounded-sm bg-surface-low p-4">
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <SummaryTile label="dimensions" value={formatDimensions(extractResult.width, extractResult.height)} />
                   <SummaryTile label="size" value={formatBytes(extractResult.file_size)} />
@@ -618,7 +634,7 @@ export function UploadPage() {
                     <ExtractedPromptSections items={extractedPromptCards} />
                   </div>
                 ) : (
-                  <div className="rounded-sm bg-surface-low px-4 py-3 text-sm text-muted-foreground">표시할 프롬프트가 없어.</div>
+                  <div className="rounded-sm bg-surface-high px-4 py-3 text-sm text-muted-foreground">표시할 프롬프트가 없어.</div>
                 )}
               </div>
             ) : null}
