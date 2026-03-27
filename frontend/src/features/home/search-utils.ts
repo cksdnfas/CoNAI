@@ -24,8 +24,8 @@ export function cycleSearchOperator(operator: SearchOperator): SearchOperator {
 }
 
 /** Create a dedupe key for chips that represent the same search condition. */
-export function buildSearchChipKey(chip: Pick<SearchChip, 'scope' | 'value' | 'minScore' | 'maxScore'>) {
-  return [chip.scope, chip.value.trim().toLowerCase(), chip.minScore ?? '', chip.maxScore ?? ''].join('::')
+export function buildSearchChipKey(chip: Pick<SearchChip, 'scope' | 'value' | 'minScore' | 'maxScore' | 'conditionType'>) {
+  return [chip.scope, chip.conditionType ?? '', chip.value.trim().toLowerCase(), chip.minScore ?? '', chip.maxScore ?? ''].join('::')
 }
 
 /** Build a compact label for persisted search history entries. */
@@ -33,7 +33,7 @@ export function buildSearchHistoryLabel(chips: SearchChip[]) {
   return chips
     .map((chip) => {
       const prefix = chip.operator === 'NOT' ? 'NOT' : chip.operator
-      const scopeLabel = chip.scope === 'positive' ? '긍정' : chip.scope === 'negative' ? '부정' : chip.scope === 'auto' ? '오토' : '평가'
+      const scopeLabel = chip.scopeLabel ?? (chip.scope === 'positive' ? '긍정' : chip.scope === 'negative' ? '부정' : chip.scope === 'auto' ? '오토' : '평가')
       return `${prefix} ${scopeLabel} ${chip.label}`
     })
     .join(' · ')
@@ -50,6 +50,17 @@ export function buildComplexFilterPayload(chips: SearchChip[]) {
 
   for (const chip of chips) {
     const targetGroup = chip.operator === 'NOT' ? filter.exclude_group : chip.operator === 'AND' ? filter.and_group : filter.or_group
+
+    if (chip.conditionCategory && chip.conditionType) {
+      targetGroup.push({
+        category: chip.conditionCategory,
+        type: chip.conditionType,
+        value: chip.value,
+        ...(chip.minScore !== undefined ? { min_score: chip.minScore } : {}),
+        ...(chip.maxScore !== undefined ? { max_score: chip.maxScore } : {}),
+      })
+      continue
+    }
 
     if (chip.scope === 'positive') {
       targetGroup.push({

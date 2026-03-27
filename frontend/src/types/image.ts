@@ -72,6 +72,13 @@ export interface ImageAutoTags {
   character?: Record<string, number> | null
 }
 
+export interface ImageGroupMembership {
+  id: number
+  name: string
+  color?: string | null
+  collection_type?: 'manual' | 'auto'
+}
+
 export interface ImageRecord {
   id: number | string
   composite_hash?: string | null
@@ -87,6 +94,7 @@ export interface ImageRecord {
   is_processing?: boolean
   ai_metadata?: ImageAiMetadata | null
   auto_tags?: ImageAutoTags | null
+  groups?: ImageGroupMembership[] | null
 }
 
 export interface ImageListPayload {

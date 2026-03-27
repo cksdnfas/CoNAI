@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -20,6 +21,7 @@ interface GroupImageSectionProps {
   selectable?: boolean
   selectedIds?: string[]
   onSelectedIdsChange?: (selectedIds: string[]) => void
+  renderItemOverlay?: (image: ImageRecord) => ReactNode
 }
 
 export function GroupImageSection({
@@ -36,6 +38,7 @@ export function GroupImageSection({
   selectable = false,
   selectedIds = [],
   onSelectedIdsChange,
+  renderItemOverlay,
 }: GroupImageSectionProps) {
   const shouldShowCollectionCounts = group.manual_added_count !== undefined || group.auto_collected_count !== undefined
 
@@ -90,6 +93,7 @@ export function GroupImageSection({
           scrollMode={presentation === 'drawer' ? 'container' : 'window'}
           viewportHeight={presentation === 'drawer' ? '100%' : undefined}
           className={presentation === 'drawer' ? 'min-h-0 flex-1' : undefined}
+          renderItemOverlay={renderItemOverlay}
         />
       ) : null}
 

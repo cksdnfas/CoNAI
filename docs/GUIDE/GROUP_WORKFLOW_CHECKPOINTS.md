@@ -22,6 +22,8 @@ This note tracks the recently connected group-management workflows so they can b
 
 - Enable or disable auto-collect per custom group.
 - Edit auto-collect rules with chip-first UI.
+- Add prompt / auto-tag / negative / rating conditions as chips.
+- Add basic `ai_tool` / `model_name` conditions as chips.
 - Fall back to raw JSON editing when stored rules cannot be represented safely as chips.
 - Run auto-collect manually from the group detail card.
 - Display last auto-collect execution time on the group detail card.
@@ -37,8 +39,10 @@ This note tracks the recently connected group-management workflows so they can b
   - add current image to a custom group
 - Groups page:
   - multi-select images inside a group
+  - filter group images by `all / manual / auto`
   - add selected images to another custom group
   - remove selected images from the current custom group
+  - remove a single image from the current custom group
 
 ## Review checkpoints
 
@@ -57,6 +61,8 @@ This note tracks the recently connected group-management workflows so they can b
 - [ ] Negative prompt chip adds expected `negative_prompt_contains` condition.
 - [ ] Auto chip adds expected `auto_tag_any` condition.
 - [ ] Rating chip adds expected `auto_tag_rating_score` condition.
+- [ ] Basic AI Tool chip adds expected `basic.ai_tool` condition.
+- [ ] Basic Model chip adds expected `basic.model_name` condition.
 - [ ] OR / AND / NOT operator cycling produces expected group placement.
 - [ ] Existing supported rules load back into chip mode.
 - [ ] Unsupported stored rules open in JSON fallback mode without losing data.
@@ -75,8 +81,10 @@ This note tracks the recently connected group-management workflows so they can b
 
 - [ ] Group page multi-select works on desktop.
 - [ ] Group drawer multi-select works on mobile layout.
+- [ ] Group image filter switches `all / manual / auto` correctly.
 - [ ] Selected group images can be added to another custom group.
 - [ ] Selected images can be removed from the current custom group.
+- [ ] Single-image remove action works inside the group list.
 - [ ] Bulk remove reports removed / skipped counts correctly.
 - [ ] Group image count badges refresh after add/remove actions.
 

@@ -28,6 +28,7 @@ export function ImageList({
   className,
   scrollMode = 'window',
   viewportHeight,
+  renderItemOverlay,
 }: ImageListProps) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -130,6 +131,7 @@ export function ImageList({
           scrollMode={scrollMode}
           viewportHeight={viewportHeight}
           onEndReached={handleEndReached}
+          renderItemOverlay={renderItemOverlay}
         />
       ) : (
         <ImageListMasonry
@@ -144,6 +146,7 @@ export function ImageList({
           onActivate={handleActivate}
           scrollMode={scrollMode}
           viewportHeight={viewportHeight}
+          renderItemOverlay={renderItemOverlay}
         />
       )}
 

@@ -61,6 +61,7 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
   const [mode, setMode] = useState<'chip' | 'json'>('chip')
   const [searchScope, setSearchScope] = useState<SearchScope>('positive')
   const [searchInput, setSearchInput] = useState('')
+  const [basicInput, setBasicInput] = useState('')
   const [chips, setChips] = useState<SearchChip[]>([])
   const [jsonText, setJsonText] = useState('')
   const [warningMessage, setWarningMessage] = useState<string | null>(null)
@@ -91,6 +92,7 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
     setJsonText(parsedState.jsonText)
     setWarningMessage(parsedState.warningMessage)
     setSearchInput('')
+    setBasicInput('')
     setSearchScope('positive')
   }, [initialJsonText])
 
@@ -158,6 +160,25 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
 
   const addRatingChip = (tier: RatingTierRecord) => {
     appendChip(createAutoCollectChip('rating', 'OR', tier.tier_name, tier))
+  }
+
+  const addBasicChip = (conditionType: 'ai_tool' | 'model_name') => {
+    const trimmedValue = basicInput.trim()
+    if (!trimmedValue) {
+      return
+    }
+
+    appendChip({
+      id: createSearchChipId('positive'),
+      scope: 'positive',
+      scopeLabel: '기본',
+      operator: 'OR',
+      label: conditionType === 'ai_tool' ? `AI Tool: ${trimmedValue}` : `Model: ${trimmedValue}`,
+      value: trimmedValue,
+      conditionCategory: 'basic',
+      conditionType,
+    })
+    setBasicInput('')
   }
 
   return (
@@ -232,6 +253,35 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
             </div>
           ) : null}
 
+          <div className="space-y-2 rounded-sm border border-border/70 bg-background/60 p-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Basic conditions</p>
+              <p className="mt-1 text-xs text-muted-foreground">AI Tool / Model 기준 자동수집도 여기서 바로 추가할 수 있어.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <div className="theme-settings-control flex min-w-[220px] flex-1 items-center rounded-sm border border-border bg-surface-lowest text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]">
+                <input
+                  value={basicInput}
+                  onChange={(event) => setBasicInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      addBasicChip('ai_tool')
+                    }
+                  }}
+                  placeholder="예: NovelAI / SDXL / pony"
+                  className="h-10 w-full bg-transparent px-3 outline-none placeholder:text-muted-foreground"
+                />
+              </div>
+              <Button type="button" variant="secondary" onClick={() => addBasicChip('ai_tool')}>
+                AI Tool 추가
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => addBasicChip('model_name')}>
+                Model 추가
+              </Button>
+            </div>
+          </div>
+
           <div className="rounded-sm border border-border/70 bg-background/60">
             <div className="border-b border-border/70 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               {searchScope === 'rating' ? 'Rating tiers' : 'Prompt suggestions'}
@@ -290,7 +340,7 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
                 {chips.map((chip) => (
                   <div key={chip.id} className="flex items-center gap-2 rounded-sm border border-border bg-background px-3 py-3">
                     <span className="rounded-sm px-2 py-1 text-[11px] font-semibold tracking-[0.08em]" style={getThemeToneStyle(chip.scope)}>
-                      {SEARCH_SCOPE_LABELS[chip.scope]}
+                      {chip.scopeLabel ?? SEARCH_SCOPE_LABELS[chip.scope]}
                     </span>
                     <button
                       type="button"

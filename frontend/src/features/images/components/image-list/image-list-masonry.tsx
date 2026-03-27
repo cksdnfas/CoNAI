@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { VirtuosoMasonry } from '@virtuoso.dev/masonry'
 import type { ImageRecord } from '@/types/image'
 import type { ImageListScrollMode } from './image-list-types'
@@ -16,6 +17,7 @@ interface ImageListMasonryProps {
   onActivate: (imageId: string, href?: string) => void
   scrollMode: ImageListScrollMode
   viewportHeight?: number | string
+  renderItemOverlay?: (image: ImageRecord) => ReactNode
 }
 
 /** Render a reusable virtualized masonry layout with responsive column count. */
@@ -31,6 +33,7 @@ export function ImageListMasonry({
   onActivate,
   scrollMode,
   viewportHeight,
+  renderItemOverlay,
 }: ImageListMasonryProps) {
   const columnCount = useImageListColumnCount(containerElement, minColumnWidth, columnGap)
   const usesWindowScroll = scrollMode === 'window'
@@ -53,6 +56,7 @@ export function ImageListMasonry({
             selected={selectedIds.includes(String(image.composite_hash ?? image.id))}
             selectionMode={selectionMode}
             onActivate={onActivate}
+            renderOverlay={renderItemOverlay?.(image)}
           />
         </div>
       )}

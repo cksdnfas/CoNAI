@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,7 @@ interface GroupImageDrawerProps {
   selectable?: boolean
   selectedIds?: string[]
   onSelectedIdsChange?: (selectedIds: string[]) => void
+  renderItemOverlay?: (image: ImageRecord) => ReactNode
   onClose: () => void
 }
 
@@ -35,6 +36,7 @@ export function GroupImageDrawer({
   selectable = false,
   selectedIds = [],
   onSelectedIdsChange,
+  renderItemOverlay,
   onClose,
 }: GroupImageDrawerProps) {
   useEffect(() => {
@@ -100,6 +102,7 @@ export function GroupImageDrawer({
             selectable={selectable}
             selectedIds={selectedIds}
             onSelectedIdsChange={onSelectedIdsChange}
+            renderItemOverlay={renderItemOverlay}
           />
         </div>
 

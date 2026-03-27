@@ -57,10 +57,13 @@ export async function getGroupBreadcrumb(groupId: number) {
   return response.data
 }
 
-export async function getGroupImages(groupId: number, params?: { page?: number; limit?: number }) {
+export async function getGroupImages(groupId: number, params?: { page?: number; limit?: number; collectionType?: 'manual' | 'auto' | 'all' }) {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
   searchParams.set('limit', String(params?.limit ?? 40))
+  if (params?.collectionType && params.collectionType !== 'all') {
+    searchParams.set('collection_type', params.collectionType)
+  }
 
   const response = await fetchJson<ApiResponse<GroupImagesPayload>>(`/api/groups/${groupId}/images?${searchParams.toString()}`)
   if (!response.success) {

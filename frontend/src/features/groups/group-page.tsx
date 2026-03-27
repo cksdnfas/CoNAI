@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FolderMinus, FolderPlus, Pencil, Play, Trash2 } from 'lucide-react'
+import { FolderMinus, FolderPlus, Pencil, Play, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -30,6 +30,7 @@ import {
 } from '@/lib/api'
 import { useMinWidth } from '@/lib/use-min-width'
 import type { GroupMutationInput, GroupRecord } from '@/types/group'
+import type { ImageRecord } from '@/types/image'
 import { GroupBreadcrumbs } from './components/group-breadcrumbs'
 import { GroupChildCard } from './components/group-child-card'
 import { GroupEditorModal } from './components/group-editor-modal'
@@ -80,6 +81,11 @@ function normalizeGroupSourceKey(value: string | null): GroupSourceKey {
   return value === 'folders' ? 'folders' : 'custom'
 }
 
+/** Read the current group's collection type from the enriched image payload. */
+function getImageCollectionType(image: ImageRecord) {
+  return image.groups?.[0]?.collection_type ?? 'manual'
+}
+
 /** Format a backend timestamp into a compact Korean label for group metadata. */
 function formatGroupTimestamp(value?: string | null) {
   if (!value) {
@@ -104,6 +110,7 @@ export function GroupPage() {
   const [editorState, setEditorState] = useState<GroupEditorState | null>(null)
   const [selectedGroupImageIds, setSelectedGroupImageIds] = useState<string[]>([])
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
+  const [groupImageCollectionFilter, setGroupImageCollectionFilter] = useState<'all' | 'manual' | 'auto'>('all')
   const isWideLayout = useMinWidth(1280)
   const selectedSourceKey = normalizeGroupSourceKey(searchParams.get('tab'))
   const selectedSource = groupSources[selectedSourceKey]
@@ -133,8 +140,11 @@ export function GroupPage() {
   })
 
   const groupImagesQuery = useInfiniteQuery({
-    queryKey: ['group-images', selectedSource.key, selectedGroupId],
-    queryFn: ({ pageParam }) => selectedSource.getImages(selectedGroupId!, { page: pageParam, limit: 40 }),
+    queryKey: ['group-images', selectedSource.key, selectedGroupId, isCustomSource ? groupImageCollectionFilter : 'all'],
+    queryFn: ({ pageParam }) =>
+      isCustomSource
+        ? getGroupImages(selectedGroupId!, { page: pageParam, limit: 40, collectionType: groupImageCollectionFilter })
+        : selectedSource.getImages(selectedGroupId!, { page: pageParam, limit: 40 }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const { page, totalPages } = lastPage.pagination
@@ -237,6 +247,7 @@ export function GroupPage() {
   useEffect(() => {
     setSelectedGroupImageIds([])
     setIsAssignModalOpen(false)
+    setGroupImageCollectionFilter('all')
   }, [selectedGroupId, selectedSource.key])
 
   const allGroups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data])
@@ -385,6 +396,52 @@ export function GroupPage() {
       groupId: selectedGroupId,
       compositeHashes: selectedGroupCompositeHashes,
     })
+  }
+
+  const handleRemoveSingleImage = async (image: ImageRecord) => {
+    if (!selectedGroupId || !isCustomSource || !image.composite_hash) {
+      return
+    }
+
+    const confirmed = window.confirm('이 이미지를 현재 그룹에서 제거할까?')
+    if (!confirmed) {
+      return
+    }
+
+    await removeGroupImagesMutation.mutateAsync({
+      groupId: selectedGroupId,
+      compositeHashes: [image.composite_hash],
+    })
+  }
+
+  const renderGroupImageOverlay = (image: ImageRecord) => {
+    if (!isCustomSource || !selectedGroupId) {
+      return null
+    }
+
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/82 backdrop-blur-sm transition hover:bg-black/72 hover:text-white"
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          void handleRemoveSingleImage(image)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            event.stopPropagation()
+            void handleRemoveSingleImage(image)
+          }
+        }}
+        title="현재 그룹에서 제거"
+        aria-label="현재 그룹에서 제거"
+      >
+        <X className="h-4 w-4" />
+      </span>
+    )
   }
 
   const groupSummaryDescription = selectedGroupQuery.data?.description?.trim()
@@ -543,12 +600,29 @@ export function GroupPage() {
                   </div>
 
                   {isCustomSource ? (
-                    <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
-                      <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-2">
-                        마지막 자동수집: {formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run)}
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Image filter</span>
+                        {(['all', 'manual', 'auto'] as const).map((filterValue) => (
+                          <Button
+                            key={filterValue}
+                            type="button"
+                            size="sm"
+                            variant={groupImageCollectionFilter === filterValue ? 'default' : 'secondary'}
+                            onClick={() => setGroupImageCollectionFilter(filterValue)}
+                          >
+                            {filterValue === 'all' ? '전체' : filterValue === 'manual' ? 'manual만' : 'auto만'}
+                          </Button>
+                        ))}
                       </div>
-                      <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-2">
-                        부모 그룹: {selectedGroupHierarchy?.parent_id == null ? '루트 그룹' : '하위 그룹으로 연결됨'}
+
+                      <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
+                        <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-2">
+                          마지막 자동수집: {formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run)}
+                        </div>
+                        <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-2">
+                          부모 그룹: {selectedGroupHierarchy?.parent_id == null ? '루트 그룹' : '하위 그룹으로 연결됨'}
+                        </div>
                       </div>
                     </div>
                   ) : null}
@@ -587,6 +661,7 @@ export function GroupPage() {
                   selectable={true}
                   selectedIds={selectedGroupImageIds}
                   onSelectedIdsChange={setSelectedGroupImageIds}
+                  renderItemOverlay={renderGroupImageOverlay}
                 />
               ) : null}
             </div>
@@ -615,6 +690,7 @@ export function GroupPage() {
             selectable={true}
             selectedIds={selectedGroupImageIds}
             onSelectedIdsChange={setSelectedGroupImageIds}
+            renderItemOverlay={renderGroupImageOverlay}
             onClose={() => setIsImageDrawerOpen(false)}
           />
         </>

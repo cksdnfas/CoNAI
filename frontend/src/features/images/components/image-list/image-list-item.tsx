@@ -1,4 +1,4 @@
-import { memo, type DragEvent } from 'react'
+import { memo, type DragEvent, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import {
@@ -16,6 +16,7 @@ interface ImageListItemProps {
   gridItemHeight?: number
   gridItemAspectRatio?: string
   onActivate?: (imageId: string, href?: string) => void
+  renderOverlay?: ReactNode
 }
 
 /** Prevent native media dragging so drag gestures can be used for selection. */
@@ -32,6 +33,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   gridItemHeight,
   gridItemAspectRatio,
   onActivate,
+  renderOverlay,
 }: ImageListItemProps) {
   const previewUrl = getImageListPreviewUrl(image)
   const mediaKind = getImageListMediaKind(image)
@@ -101,6 +103,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
     >
       <div className="relative bg-surface-lowest select-none">
         {content}
+        {renderOverlay ? <div className="absolute right-2 top-2 z-30">{renderOverlay}</div> : null}
         <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-sm" />
       </div>
     </button>

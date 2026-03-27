@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { VirtuosoGrid } from 'react-virtuoso'
 import type { ImageRecord } from '@/types/image'
 import type { ImageListScrollMode } from './image-list-types'
@@ -16,6 +17,7 @@ interface ImageListGridProps {
   scrollMode: ImageListScrollMode
   viewportHeight?: number | string
   onEndReached?: () => void
+  renderItemOverlay?: (image: ImageRecord) => ReactNode
 }
 
 /** Render a reusable virtualized grid layout with equally sized cards. */
@@ -32,6 +34,7 @@ export function ImageListGrid({
   scrollMode,
   viewportHeight,
   onEndReached,
+  renderItemOverlay,
 }: ImageListGridProps) {
   const usesWindowScroll = scrollMode === 'window'
 
@@ -61,6 +64,7 @@ export function ImageListGrid({
             selectionMode={selectionMode}
             gridItemHeight={gridItemHeight}
             onActivate={onActivate}
+            renderOverlay={renderItemOverlay?.(image)}
           />
         )}
       />

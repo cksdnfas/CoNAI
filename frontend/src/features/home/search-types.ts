@@ -10,6 +10,9 @@ export interface SearchChip {
   minScore?: number
   maxScore?: number | null
   color?: string | null
+  scopeLabel?: string
+  conditionCategory?: string
+  conditionType?: string
 }
 
 export interface SearchHistoryEntry {

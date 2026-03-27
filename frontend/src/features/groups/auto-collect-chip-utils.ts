@@ -34,6 +34,8 @@ function buildSearchChipFromCondition(condition: FilterConditionLike, operator: 
     scope = 'auto'
   } else if (condition.type === 'auto_tag_rating_score') {
     scope = 'rating'
+  } else if (condition.type === 'ai_tool' || condition.type === 'model_name') {
+    scope = 'positive'
   }
 
   if (!scope) {
@@ -52,10 +54,13 @@ function buildSearchChipFromCondition(condition: FilterConditionLike, operator: 
     id: createSearchChipId(scope),
     scope,
     operator,
-    label: value,
+    label: condition.type === 'ai_tool' ? `AI Tool: ${value}` : condition.type === 'model_name' ? `Model: ${value}` : value,
     value,
     minScore: condition.min_score,
     maxScore: condition.max_score,
+    scopeLabel: condition.type === 'ai_tool' || condition.type === 'model_name' ? '기본' : undefined,
+    conditionCategory: condition.category,
+    conditionType: condition.type,
   }
 }
 

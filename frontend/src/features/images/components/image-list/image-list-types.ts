@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { ImageRecord } from '@/types/image'
 
 export type ImageListLayoutMode = 'grid' | 'masonry'
@@ -21,4 +22,5 @@ export interface ImageListProps {
   className?: string
   scrollMode?: ImageListScrollMode
   viewportHeight?: number | string
+  renderItemOverlay?: (image: ImageRecord) => ReactNode
 }
