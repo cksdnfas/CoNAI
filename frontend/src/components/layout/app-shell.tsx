@@ -1,4 +1,5 @@
-import { FolderTree, House, Image, MessageSquareText, Settings2, Upload, type LucideIcon } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight, FolderTree, House, Image, MessageSquareText, Settings2, Upload, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
@@ -36,6 +37,45 @@ function AppShellLayout() {
   })
   const appearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
   const showDesktopSearch = useMinWidth(appearance.desktopSearchMinWidth)
+  const navScrollRef = useRef<HTMLDivElement | null>(null)
+  const [canScrollNavLeft, setCanScrollNavLeft] = useState(false)
+  const [canScrollNavRight, setCanScrollNavRight] = useState(false)
+
+  useEffect(() => {
+    const navScrollElement = navScrollRef.current
+    if (!navScrollElement) {
+      setCanScrollNavLeft(false)
+      setCanScrollNavRight(false)
+      return
+    }
+
+    const updateNavScrollHints = () => {
+      const maxScrollLeft = Math.max(0, navScrollElement.scrollWidth - navScrollElement.clientWidth)
+      setCanScrollNavLeft(navScrollElement.scrollLeft > 4)
+      setCanScrollNavRight(navScrollElement.scrollLeft < maxScrollLeft - 4)
+    }
+
+    updateNavScrollHints()
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateNavScrollHints()
+    })
+    resizeObserver.observe(navScrollElement)
+
+    const contentElement = navScrollElement.firstElementChild
+    if (contentElement instanceof HTMLElement) {
+      resizeObserver.observe(contentElement)
+    }
+
+    navScrollElement.addEventListener('scroll', updateNavScrollHints, { passive: true })
+    window.addEventListener('resize', updateNavScrollHints)
+
+    return () => {
+      resizeObserver.disconnect()
+      navScrollElement.removeEventListener('scroll', updateNavScrollHints)
+      window.removeEventListener('resize', updateNavScrollHints)
+    }
+  }, [location.pathname, showDesktopSearch])
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -46,30 +86,44 @@ function AppShellLayout() {
               <div className="rounded-sm bg-surface-high p-2 text-secondary">
                 <Image className="h-4 w-4" />
               </div>
-              <span className="text-lg font-bold tracking-[-0.04em] text-foreground">CoNAI</span>
+              <span className="hidden text-lg font-bold tracking-[-0.04em] text-foreground sm:inline">CoNAI</span>
             </div>
 
-            <div className="min-w-0 flex-1 overflow-x-auto">
-              <nav className="flex min-w-max items-center gap-2 pr-2" aria-label="주요 페이지 이동">
-                {navItems.map(({ to, label, icon: Icon }) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    end={to === '/'}
-                    aria-label={label}
-                    title={label}
-                    className={({ isActive }) =>
-                      cn(
-                        'inline-flex size-9 shrink-0 items-center justify-center rounded-sm border border-transparent text-foreground/70 transition-all duration-300 hover:border-border hover:bg-surface-high hover:text-foreground',
-                        isActive && 'border-primary/35 bg-primary/12 text-primary shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_10%,transparent)]',
-                      )
-                    }
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span className="sr-only">{label}</span>
-                  </NavLink>
-                ))}
-              </nav>
+            <div className="relative min-w-0 flex-1">
+              <div ref={navScrollRef} className="theme-nav-scroll min-w-0 overflow-x-auto">
+                <nav className="flex min-w-max items-center gap-2 pr-10 sm:pr-2" aria-label="주요 페이지 이동">
+                  {navItems.map(({ to, label, icon: Icon }) => (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      end={to === '/'}
+                      aria-label={label}
+                      title={label}
+                      className={({ isActive }) =>
+                        cn(
+                          'inline-flex size-9 shrink-0 items-center justify-center rounded-sm border border-transparent text-foreground/70 transition-all duration-300 hover:border-border hover:bg-surface-high hover:text-foreground',
+                          isActive && 'border-primary/35 bg-primary/12 text-primary shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_10%,transparent)]',
+                        )
+                      }
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span className="sr-only">{label}</span>
+                    </NavLink>
+                  ))}
+                </nav>
+              </div>
+
+              {canScrollNavLeft ? (
+                <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center bg-gradient-to-r from-background via-background/90 to-transparent pl-1 text-foreground/45">
+                  <ChevronLeft className="h-4 w-4" />
+                </div>
+              ) : null}
+
+              {canScrollNavRight ? (
+                <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center bg-gradient-to-l from-background via-background/90 to-transparent pr-1 text-foreground/55">
+                  <ChevronRight className="h-4 w-4" />
+                </div>
+              ) : null}
             </div>
           </div>
 

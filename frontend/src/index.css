@@ -292,11 +292,17 @@
     scrollbar-gutter: stable both-edges;
   }
 
+  .theme-nav-scroll {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
   .image-view-thumbnail-strip {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
 
+  .theme-nav-scroll::-webkit-scrollbar,
   .image-view-thumbnail-strip::-webkit-scrollbar {
     display: none;
     width: 0;
