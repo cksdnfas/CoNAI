@@ -15,6 +15,11 @@ const HomePageLazy = lazy(async () => {
   return { default: module.HomePage }
 })
 
+const ImageGenerationPageLazy = lazy(async () => {
+  const module = await import('@/features/image-generation/image-generation-page')
+  return { default: module.ImageGenerationPage }
+})
+
 const ImageDetailPageLazy = lazy(async () => {
   const module = await import('@/features/images/image-detail-page')
   return { default: module.ImageDetailPage }
@@ -63,6 +68,10 @@ export function GroupRoute() {
 
 export function HomeRoute() {
   return withSuspense(<HomePageLazy />)
+}
+
+export function ImageGenerationRoute() {
+  return withSuspense(<ImageGenerationPageLazy />)
 }
 
 export function ImageDetailRoute() {

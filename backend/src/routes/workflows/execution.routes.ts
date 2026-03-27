@@ -13,6 +13,57 @@ import { GenerationHistoryModel } from '../../models/GenerationHistory';
 
 const router = Router();
 
+interface WorkflowImageFieldPayload {
+  fileName?: string;
+  dataUrl?: string;
+}
+
+/** Convert a data URL payload into a Buffer that can be uploaded to ComfyUI. */
+function parseImageFieldDataUrl(dataUrl: string): Buffer {
+  const sanitized = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+  return Buffer.from(sanitized, 'base64');
+}
+
+/** Create a safe upload filename for ComfyUI input images. */
+function buildWorkflowImageUploadName(fileName?: string): string {
+  const sourceName = (fileName || 'workflow-image.png').trim();
+  const ext = path.extname(sourceName) || '.png';
+  const baseName = path.basename(sourceName, ext).replace(/[^a-zA-Z0-9_-]/g, '_') || 'workflow-image';
+  return `${baseName}_${Date.now()}${ext}`;
+}
+
+/** Upload image marked-field payloads to ComfyUI and replace them with stored filenames. */
+async function prepareWorkflowPromptData(
+  comfyService: ReturnType<typeof createComfyUIService>,
+  markedFields: Array<{ id: string; type: string }>,
+  promptData: Record<string, any>,
+): Promise<Record<string, any>> {
+  const preparedPromptData = { ...promptData };
+
+  for (const field of markedFields) {
+    if (field.type !== 'image') {
+      continue;
+    }
+
+    const value = preparedPromptData[field.id];
+    if (!value || typeof value !== 'object') {
+      continue;
+    }
+
+    const payload = value as WorkflowImageFieldPayload;
+    if (typeof payload.dataUrl !== 'string' || payload.dataUrl.trim().length === 0) {
+      continue;
+    }
+
+    const fileName = buildWorkflowImageUploadName(payload.fileName);
+    const imageBuffer = parseImageFieldDataUrl(payload.dataUrl);
+    const uploadedName = await comfyService.uploadInputImage(fileName, imageBuffer);
+    preparedPromptData[field.id] = uploadedName;
+  }
+
+  return preparedPromptData;
+}
+
 /**
  * 이미지 생성 요청
  * POST /api/workflows/:id/generate
@@ -59,19 +110,28 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
       }
     }
 
+    const comfyService = createComfyUIService(apiEndpoint);
+    const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : [];
+    const preparedPromptData = await prepareWorkflowPromptData(comfyService, markedFields, prompt_data);
+    const substitutedWorkflow = comfyService.substitutePromptData(
+      workflow.workflow_json,
+      markedFields,
+      preparedPromptData,
+    );
+
     // 전송 데이터 로깅
     console.log('📨 Image generation request:', {
       workflow_id: id,
       workflow_name: workflow.name,
       server: serverName,
       endpoint: apiEndpoint,
-      prompt_data_keys: Object.keys(prompt_data),
-      prompt_data_size: JSON.stringify(prompt_data).length
+      prompt_data_keys: Object.keys(preparedPromptData),
+      prompt_data_size: JSON.stringify(preparedPromptData).length
     });
 
     // Parse workflow to extract generation parameters
     const workflowJson = JSON.parse(workflow.workflow_json);
-    const extractedParams = ComfyUIWorkflowParser.extractWithSubstitution(workflowJson, prompt_data);
+    const extractedParams = ComfyUIWorkflowParser.extractWithSubstitution(workflowJson, preparedPromptData);
 
     console.log('📊 Extracted workflow parameters:', {
       positive: extractedParams.positivePrompt.substring(0, 50) + '...',
@@ -85,7 +145,7 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
     let historyId: number | undefined;
     try {
       historyId = await GenerationHistoryService.createComfyUIHistory({
-        workflow: workflowJson,
+        workflow: substitutedWorkflow,
         workflowId: id,
         workflowName: workflow.name,
         promptId: '', // Will be updated after ComfyUI submission
@@ -111,24 +171,12 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
     // 백그라운드에서 이미지 생성 프로세스 실행
     (async () => {
       const startTime = Date.now();
-      let tempImageId: string | undefined;
 
       try {
-        // Handle source_image if provided (from image editor)
-        if (source_image?.tempId) {
-          tempImageId = source_image.tempId;
-          console.log(`🖼️  Using edited image from temp: ${tempImageId}`);
-
-          // TODO: Inject temp image into workflow JSON
-          // This will be done when ComfyUI service supports img2img
-        }
-
-        // ComfyUI 서비스 생성 (선택된 endpoint 사용)
-        const comfyService = createComfyUIService(apiEndpoint);
         console.log(`📤 Sending to ComfyUI: ${apiEndpoint}`);
 
         // 이미지 생성 (temp 폴더에 다운로드)
-        const { promptId, imagePaths: tempFilePaths } = await comfyService.generateImages(workflow, prompt_data);
+        const { promptId, imagePaths: tempFilePaths } = await comfyService.generateImages(workflow, substitutedWorkflow);
 
         // promptId 업데이트
         if (historyId) {
@@ -224,16 +272,7 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
           }
         }
       } finally {
-        // Cleanup temp image if used
-        if (tempImageId) {
-          try {
-            const { TempImageService } = await import('../../services/tempImageService');
-            await TempImageService.deleteTempFile(tempImageId);
-            console.log(`🧹 Cleaned up temp image: ${tempImageId}`);
-          } catch (cleanupError) {
-            console.error(`⚠️ Failed to cleanup temp image ${tempImageId}:`, cleanupError);
-          }
-        }
+        // No extra cleanup needed here because uploaded ComfyUI input files live on the target server.
       }
     })();
 

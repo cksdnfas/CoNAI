@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { getToken } from '../../utils/nai/auth';
 
 const router = Router();
 
@@ -10,7 +11,7 @@ router.get('/data', async (req: Request, res: Response) => {
   try {
     // Authorization 헤더에서 토큰 추출 (프론트엔드에서 전송)
     const authHeader = req.headers.authorization;
-    const token = authHeader?.replace('Bearer ', '');
+    const token = authHeader?.replace('Bearer ', '') || getToken();
 
     if (!token) {
       res.status(401).json({ error: 'NovelAI 인증이 필요합니다. 먼저 로그인하세요.' });

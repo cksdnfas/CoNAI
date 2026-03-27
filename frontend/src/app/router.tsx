@@ -4,6 +4,7 @@ import {
   GroupRoute,
   HomeRoute,
   ImageDetailRoute,
+  ImageGenerationRoute,
   ImageMetadataEditRoute,
   LoginRoute,
   NotFoundRoute,
@@ -36,6 +37,10 @@ export const appRouter = createHashRouter([
       {
         path: 'prompts',
         element: <PromptRoute />,
+      },
+      {
+        path: 'generation',
+        element: <ImageGenerationRoute />,
       },
       {
         path: 'images/:compositeHash',

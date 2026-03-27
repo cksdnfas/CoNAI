@@ -3,9 +3,19 @@ import axios from 'axios';
 // @ts-ignore - no types available
 import AdmZip from 'adm-zip';
 import { preprocessMetadata, NAIMetadataParams } from '../../utils/nai/metadata';
+import { getToken } from '../../utils/nai/auth';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
 
 const router = Router();
+
+/** Accept either raw base64 or a data URL and always return raw base64. */
+function normalizeBase64ImageData(value?: string): string | undefined {
+  if (!value || typeof value !== 'string') {
+    return undefined;
+  }
+
+  return value.replace(/^data:image\/\w+;base64,/, '');
+}
 
 /**
  * POST /api/nai/generate/image
@@ -15,10 +25,10 @@ const router = Router();
  */
 router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Response): Promise<void> => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    const token = req.headers.authorization?.replace('Bearer ', '') || getToken();
 
     if (!token) {
-      res.status(401).json({ error: 'No token provided' });
+      res.status(401).json({ error: 'NovelAI 인증이 필요합니다. 먼저 토큰으로 로그인하세요.' });
       return;
     }
 
@@ -113,7 +123,7 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
     };
 
     if (metadata.image) {
-      requestBody.parameters.image = metadata.image;
+      requestBody.parameters.image = normalizeBase64ImageData(metadata.image);
       requestBody.parameters.strength = metadata.strength;
       requestBody.parameters.noise = metadata.noise;
       requestBody.parameters.extra_noise_seed = metadata.extra_noise_seed;
@@ -121,7 +131,7 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
 
     if (metadata.mask) {
       requestBody.parameters.add_original_image = metadata.add_original_image ?? true;
-      requestBody.parameters.mask = metadata.mask;
+      requestBody.parameters.mask = normalizeBase64ImageData(metadata.mask);
     }
 
     if (metadata.reference_image_multiple) {

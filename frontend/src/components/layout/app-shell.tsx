@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, FolderTree, House, Image, MessageSquareText, Settings2, Upload, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FolderTree, House, Image, MessageSquareText, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
@@ -14,6 +14,7 @@ const navItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
   { to: '/', label: 'Home', icon: House },
   { to: '/groups', label: 'Group', icon: FolderTree },
   { to: '/prompts', label: 'Prompt', icon: MessageSquareText },
+  { to: '/generation', label: 'Generate', icon: Sparkles },
   { to: '/upload', label: 'Upload', icon: Upload },
   { to: '/settings', label: 'Settings', icon: Settings2 },
 ]

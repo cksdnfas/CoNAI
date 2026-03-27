@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import * as path from 'path';
 import * as fs from 'fs';
+import FormData from 'form-data';
 import { WorkflowRecord, MarkedField, ComfyUIPromptResponse, ComfyUIHistoryResponse } from '../types/workflow';
 import { runtimePaths } from '../config/runtimePaths';
 
@@ -290,6 +291,33 @@ export class ComfyUIService {
     }
 
     return { promptId, imagePaths: tempFilePaths };
+  }
+
+  /**
+   * Upload an input image to the target ComfyUI server and return the stored filename.
+   */
+  async uploadInputImage(fileName: string, imageBuffer: Buffer): Promise<string> {
+    try {
+      const formData = new FormData();
+      formData.append('image', imageBuffer, {
+        filename: fileName,
+        contentType: 'image/png'
+      });
+      formData.append('type', 'input');
+      formData.append('overwrite', 'false');
+
+      const response = await this.axiosInstance.post('/upload/image', formData, {
+        headers: formData.getHeaders(),
+        maxBodyLength: Infinity,
+      });
+
+      return response.data?.name || fileName;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(`ComfyUI image upload error: ${error.message}`);
+      }
+      throw error;
+    }
   }
 
   /**
