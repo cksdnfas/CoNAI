@@ -1,14 +1,18 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { FolderPlus, Pencil, Play, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { PageHeader } from '@/components/common/page-header'
 import {
+  createGroup,
+  deleteGroup,
   getAutoFolderGroup,
   getAutoFolderGroupBreadcrumb,
   getAutoFolderGroupImages,
@@ -19,10 +23,14 @@ import {
   getGroupImages,
   getGroupsHierarchyAll,
   getGroupThumbnailUrl,
+  runGroupAutoCollect,
+  updateGroup,
 } from '@/lib/api'
 import { useMinWidth } from '@/lib/use-min-width'
+import type { GroupMutationInput, GroupRecord } from '@/types/group'
 import { GroupBreadcrumbs } from './components/group-breadcrumbs'
 import { GroupChildCard } from './components/group-child-card'
+import { GroupEditorModal } from './components/group-editor-modal'
 import { GroupImageDrawer } from './components/group-image-drawer'
 import { GroupImageSection } from './components/group-image-section'
 import { GroupTree } from './components/group-tree'
@@ -54,19 +62,47 @@ const groupSources = {
 
 type GroupSourceKey = keyof typeof groupSources
 
+type GroupEditorState =
+  | {
+      mode: 'create'
+      defaultParentId: number | null
+    }
+  | {
+      mode: 'edit'
+      group: GroupRecord
+    }
+
 function normalizeGroupSourceKey(value: string | null): GroupSourceKey {
   return value === 'folders' ? 'folders' : 'custom'
 }
 
+/** Format a backend timestamp into a compact Korean label for group metadata. */
+function formatGroupTimestamp(value?: string | null) {
+  if (!value) {
+    return '아직 없음'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleString('ko-KR')
+}
+
 export function GroupPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { showSnackbar } = useSnackbar()
   const { groupId } = useParams<{ groupId?: string }>()
   const [searchParams] = useSearchParams()
   const [isImageDrawerOpen, setIsImageDrawerOpen] = useState(false)
+  const [editorState, setEditorState] = useState<GroupEditorState | null>(null)
   const isWideLayout = useMinWidth(1280)
   const selectedSourceKey = normalizeGroupSourceKey(searchParams.get('tab'))
   const selectedSource = groupSources[selectedSourceKey]
   const selectedGroupId = groupId ? Number(groupId) : undefined
+  const isCustomSource = selectedSource.key === 'custom'
 
   const groupsQuery = useQuery({
     queryKey: ['groups-hierarchy-all', selectedSource.key],
@@ -96,6 +132,66 @@ export function GroupPage() {
     enabled: Number.isFinite(selectedGroupId),
   })
 
+  const refreshCustomGroupQueries = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all', 'custom'] }),
+      queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'] }),
+      queryClient.invalidateQueries({ queryKey: ['group-breadcrumb', 'custom'] }),
+      queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'] }),
+    ])
+  }
+
+  const createGroupMutation = useMutation({
+    mutationFn: createGroup,
+    onSuccess: async (result) => {
+      setEditorState(null)
+      showSnackbar({ message: '커스텀 그룹을 만들었어.', tone: 'info' })
+      await refreshCustomGroupQueries()
+      navigate(`/groups/${result.id}?tab=custom`)
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : '커스텀 그룹 생성에 실패했어.', tone: 'error' })
+    },
+  })
+
+  const updateGroupMutation = useMutation({
+    mutationFn: ({ groupId: targetGroupId, input }: { groupId: number; input: GroupMutationInput }) => updateGroup(targetGroupId, input),
+    onSuccess: async () => {
+      setEditorState(null)
+      showSnackbar({ message: '커스텀 그룹 설정을 저장했어.', tone: 'info' })
+      await refreshCustomGroupQueries()
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : '커스텀 그룹 저장에 실패했어.', tone: 'error' })
+    },
+  })
+
+  const deleteGroupMutation = useMutation({
+    mutationFn: ({ groupId: targetGroupId, cascade }: { groupId: number; cascade: boolean }) => deleteGroup(targetGroupId, { cascade }),
+    onSuccess: async () => {
+      showSnackbar({ message: '커스텀 그룹을 삭제했어.', tone: 'info' })
+      await refreshCustomGroupQueries()
+      navigate('/groups?tab=custom')
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : '커스텀 그룹 삭제에 실패했어.', tone: 'error' })
+    },
+  })
+
+  const autoCollectMutation = useMutation({
+    mutationFn: runGroupAutoCollect,
+    onSuccess: async (result) => {
+      showSnackbar({
+        message: `자동수집 실행 완료: ${result.images_added.toLocaleString('ko-KR')}개 추가, ${result.images_removed.toLocaleString('ko-KR')}개 정리`,
+        tone: 'info',
+      })
+      await refreshCustomGroupQueries()
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : '자동수집 실행에 실패했어.', tone: 'error' })
+    },
+  })
+
   useEffect(() => {
     if (isWideLayout) {
       setIsImageDrawerOpen(false)
@@ -103,6 +199,10 @@ export function GroupPage() {
   }, [isWideLayout])
 
   const allGroups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data])
+  const selectedGroupHierarchy = useMemo(
+    () => allGroups.find((group) => group.id === selectedGroupId) ?? null,
+    [allGroups, selectedGroupId],
+  )
   const rootGroups = useMemo(() => allGroups.filter((group) => group.parent_id == null), [allGroups])
   const childGroups = useMemo(() => allGroups.filter((group) => group.parent_id === selectedGroupId), [allGroups, selectedGroupId])
   const groupImages = useMemo(() => (groupImagesQuery.data?.pages ?? []).flatMap((page) => page.images), [groupImagesQuery.data?.pages])
@@ -121,16 +221,91 @@ export function GroupPage() {
 
   const handleSelectSource = (nextSource: GroupSourceKey) => {
     setIsImageDrawerOpen(false)
+    setEditorState(null)
     navigate(`/groups?tab=${nextSource}`)
   }
+
+  const handleOpenCreateModal = () => {
+    setEditorState({
+      mode: 'create',
+      defaultParentId: isCustomSource ? (selectedGroupId ?? null) : null,
+    })
+  }
+
+  const handleOpenEditModal = () => {
+    if (!selectedGroupQuery.data || !isCustomSource) {
+      return
+    }
+
+    setEditorState({
+      mode: 'edit',
+      group: selectedGroupQuery.data,
+    })
+  }
+
+  const handleSubmitGroup = async (input: GroupMutationInput) => {
+    if (!editorState) {
+      return
+    }
+
+    if (editorState.mode === 'create') {
+      await createGroupMutation.mutateAsync(input)
+      return
+    }
+
+    await updateGroupMutation.mutateAsync({
+      groupId: editorState.group.id,
+      input,
+    })
+  }
+
+  const handleDeleteSelectedGroup = async () => {
+    if (!selectedGroupQuery.data || !selectedGroupId || !isCustomSource) {
+      return
+    }
+
+    const hasChildren = Boolean(selectedGroupHierarchy?.has_children)
+    const confirmed = window.confirm(
+      hasChildren
+        ? `정말 ${selectedGroupQuery.data.name} 그룹을 삭제할까? 하위 그룹은 기본적으로 루트로 올라가.`
+        : `정말 ${selectedGroupQuery.data.name} 그룹을 삭제할까?`,
+    )
+    if (!confirmed) {
+      return
+    }
+
+    const cascade = hasChildren
+      ? window.confirm('하위 그룹까지 전부 같이 삭제할까?\n확인 = 하위 그룹도 함께 삭제\n취소 = 현재 그룹만 삭제하고 하위 그룹은 유지')
+      : false
+
+    await deleteGroupMutation.mutateAsync({
+      groupId: selectedGroupId,
+      cascade,
+    })
+  }
+
+  const handleRunAutoCollect = async () => {
+    if (!selectedGroupId || !isCustomSource) {
+      return
+    }
+
+    await autoCollectMutation.mutateAsync(selectedGroupId)
+  }
+
+  const groupSummaryDescription = selectedGroupQuery.data?.description?.trim()
+    ? selectedGroupQuery.data.description
+    : isCustomSource
+      ? '수동 할당과 자동수집을 함께 쓸 수 있는 사용자 정의 그룹이야.'
+      : '감시폴더 기준으로 구성된 읽기 전용 그룹 뷰야.'
 
   return (
     <div className="space-y-8">
       <PageHeader
         eyebrow={isWideLayout ? 'Groups' : undefined}
         title={selectedGroupQuery.data?.name ?? selectedSource.rootTitle}
+        description={selectedGroupId ? groupSummaryDescription : `${selectedSource.rootTitle}를 탐색하고 연결된 이미지를 빠르게 훑을 수 있어.`}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <>
             {Object.values(groupSources).map((source) => (
               <Button
                 key={source.key}
@@ -142,7 +317,13 @@ export function GroupPage() {
                 {source.tabLabel}
               </Button>
             ))}
-          </div>
+            {isCustomSource ? (
+              <Button type="button" size="sm" onClick={handleOpenCreateModal}>
+                <FolderPlus className="h-4 w-4" />
+                {selectedGroupId ? '하위 그룹 추가' : '새 그룹'}
+              </Button>
+            ) : null}
+          </>
         }
       />
 
@@ -189,6 +370,11 @@ export function GroupPage() {
             <Card className="bg-surface-container">
               <CardHeader>
                 <CardTitle>{selectedSource.rootSectionTitle}</CardTitle>
+                <CardDescription>
+                  {isCustomSource
+                    ? '새 그룹을 만들고, 필요하면 하위 그룹으로 세분화해봐.'
+                    : '감시폴더 구조를 따라 만들어진 그룹들을 여기서 탐색할 수 있어.'}
+                </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {rootGroups.map((group) => (
@@ -216,6 +402,64 @@ export function GroupPage() {
 
           {selectedGroupId && selectedGroupQuery.data ? (
             <div className="space-y-8">
+              <Card className="bg-surface-container">
+                <CardHeader className="gap-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-3">
+                      <CardTitle className="text-2xl tracking-tight">{selectedGroupQuery.data.name}</CardTitle>
+                      <CardDescription>{groupSummaryDescription}</CardDescription>
+                    </div>
+
+                    {isCustomSource ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button type="button" size="sm" variant="secondary" onClick={handleOpenCreateModal}>
+                          <FolderPlus className="h-4 w-4" />
+                          하위 그룹 추가
+                        </Button>
+                        <Button type="button" size="sm" variant="secondary" onClick={handleOpenEditModal}>
+                          <Pencil className="h-4 w-4" />
+                          편집
+                        </Button>
+                        <Button type="button" size="sm" variant="secondary" onClick={() => void handleRunAutoCollect()} disabled={autoCollectMutation.isPending}>
+                          <Play className="h-4 w-4" />
+                          {autoCollectMutation.isPending ? '실행 중…' : '자동수집 실행'}
+                        </Button>
+                        <Button type="button" size="sm" variant="destructive" onClick={() => void handleDeleteSelectedGroup()} disabled={deleteGroupMutation.isPending}>
+                          <Trash2 className="h-4 w-4" />
+                          삭제
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary">이미지 {selectedGroupQuery.data.image_count.toLocaleString('ko-KR')}개</Badge>
+                    <Badge variant="outline">manual {selectedGroupQuery.data.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
+                    <Badge variant="outline">auto {selectedGroupQuery.data.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
+                    {isCustomSource ? (
+                      <Badge variant={selectedGroupQuery.data.auto_collect_enabled ? 'default' : 'outline'}>
+                        {selectedGroupQuery.data.auto_collect_enabled ? '자동수집 켜짐' : '자동수집 꺼짐'}
+                      </Badge>
+                    ) : null}
+                    {selectedGroupHierarchy?.has_children ? (
+                      <Badge variant="outline">하위 그룹 {selectedGroupHierarchy.child_count.toLocaleString('ko-KR')}개</Badge>
+                    ) : null}
+                  </div>
+
+                  {isCustomSource ? (
+                    <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
+                      <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-2">
+                        마지막 자동수집: {formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run)}
+                      </div>
+                      <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-2">
+                        부모 그룹: {selectedGroupHierarchy?.parent_id == null ? '루트 그룹' : '하위 그룹으로 연결됨'}
+                      </div>
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+
               {childGroups.length > 0 ? (
                 <section className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
@@ -273,6 +517,19 @@ export function GroupPage() {
             onClose={() => setIsImageDrawerOpen(false)}
           />
         </>
+      ) : null}
+
+      {isCustomSource ? (
+        <GroupEditorModal
+          open={editorState !== null}
+          mode={editorState?.mode ?? 'create'}
+          groups={allGroups}
+          group={editorState?.mode === 'edit' ? editorState.group : null}
+          defaultParentId={editorState?.mode === 'create' ? editorState.defaultParentId : null}
+          isSubmitting={createGroupMutation.isPending || updateGroupMutation.isPending}
+          onClose={() => setEditorState(null)}
+          onSubmit={handleSubmitGroup}
+        />
       ) : null}
     </div>
   )

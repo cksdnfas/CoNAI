@@ -10,7 +10,7 @@ export interface GroupRecord {
   name: string;
   description?: string;
   color?: string;
-  parent_id?: number;
+  parent_id?: number | null;
   created_date: string;
   updated_date: string;
 
@@ -63,7 +63,7 @@ export interface GroupCreateData {
   name: string;
   description?: string;
   color?: string;
-  parent_id?: number;
+  parent_id?: number | null;
   auto_collect_enabled?: boolean;
   auto_collect_conditions?: AutoCollectCondition[] | ComplexFilter;  // Support both formats
 }
@@ -72,7 +72,7 @@ export interface GroupUpdateData {
   name?: string;
   description?: string;
   color?: string;
-  parent_id?: number;
+  parent_id?: number | null;
   auto_collect_enabled?: boolean;
   auto_collect_conditions?: AutoCollectCondition[] | ComplexFilter;  // Support both formats
 }

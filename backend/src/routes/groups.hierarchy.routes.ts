@@ -55,7 +55,7 @@ router.post('/:id/move', asyncHandler(async (req: Request, res: Response) => {
       return res.status(400).json(errorResponse(validation.error || 'Invalid hierarchy'));
     }
 
-    const updated = await GroupModel.update(id, { parent_id: parent_id === null ? undefined : parent_id });
+    const updated = await GroupModel.update(id, { parent_id });
 
     if (!updated) {
       return res.status(404).json(errorResponse('Group not found'));

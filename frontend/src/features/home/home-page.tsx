@@ -1,21 +1,27 @@
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { FolderPlus } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
 import { useHomeSearch } from '@/features/home/home-search-context'
 import { buildComplexFilterPayload } from '@/features/home/search-utils'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'
-import { downloadImageSelection, getImages, searchImagesComplex } from '@/lib/api'
+import { addImagesToGroup, downloadImageSelection, getGroupsHierarchyAll, getImages, searchImagesComplex } from '@/lib/api'
 
 /** Render the Home page with the reusable image list and header-driven search results. */
 export function HomePage() {
+  const queryClient = useQueryClient()
+  const { showSnackbar } = useSnackbar()
   const { appliedChips } = useHomeSearch()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isDownloading, setIsDownloading] = useState(false)
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
 
   const isSearchMode = appliedChips.length > 0
 
@@ -35,6 +41,28 @@ export function HomePage() {
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
   })
 
+  const groupsQuery = useQuery({
+    queryKey: ['groups-hierarchy-all', 'custom'],
+    queryFn: getGroupsHierarchyAll,
+  })
+
+  const assignToGroupMutation = useMutation({
+    mutationFn: ({ groupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => addImagesToGroup(groupId, compositeHashes),
+    onSuccess: async (result) => {
+      setIsAssignModalOpen(false)
+      setSelectedIds([])
+      showSnackbar({ message: result.message, tone: 'info' })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all', 'custom'] }),
+        queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'] }),
+        queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'] }),
+      ])
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : '그룹 할당에 실패했어.', tone: 'error' })
+    },
+  })
+
   const images = useMemo(
     () => (imagesQuery.data?.pages ?? []).flatMap((page) => page.images),
     [imagesQuery.data?.pages],
@@ -52,7 +80,7 @@ export function HomePage() {
     onLoadMore: imagesQuery.fetchNextPage,
   })
 
-  const downloadableCompositeHashes = useMemo(
+  const selectedCompositeHashes = useMemo(
     () =>
       images
         .filter((image) => selectedIds.includes(String(image.composite_hash ?? image.id)))
@@ -75,16 +103,46 @@ export function HomePage() {
   }
 
   const handleDownloadSelected = async () => {
-    if (downloadableCompositeHashes.length === 0 || isDownloading) {
+    if (selectedCompositeHashes.length === 0 || isDownloading) {
       return
     }
 
     try {
       setIsDownloading(true)
-      await downloadImageSelection(downloadableCompositeHashes)
+      await downloadImageSelection(selectedCompositeHashes)
     } finally {
       setIsDownloading(false)
     }
+  }
+
+  const handleOpenAssignModal = () => {
+    if (selectedCompositeHashes.length === 0) {
+      return
+    }
+
+    if (groupsQuery.isPending) {
+      showSnackbar({ message: '커스텀 그룹 목록을 불러오는 중이야.', tone: 'info' })
+      return
+    }
+
+    if (groupsQuery.isError) {
+      showSnackbar({ message: groupsQuery.error instanceof Error ? groupsQuery.error.message : '그룹 목록을 불러오지 못했어.', tone: 'error' })
+      return
+    }
+
+    if ((groupsQuery.data?.length ?? 0) === 0) {
+      showSnackbar({ message: '먼저 커스텀 그룹을 하나 만들어줘.', tone: 'error' })
+      return
+    }
+
+    setIsAssignModalOpen(true)
+  }
+
+  const handleAssignToGroup = async (groupId: number) => {
+    await assignToGroupMutation.mutateAsync({
+      groupId,
+      compositeHashes: selectedCompositeHashes,
+    })
   }
 
   const emptyStateTitle = isSearchMode ? '검색 결과가 없어' : '표시할 이미지가 아직 없어'
@@ -168,10 +226,31 @@ export function HomePage() {
 
       <ImageSelectionBar
         selectedCount={selectedIds.length}
-        downloadableCount={downloadableCompositeHashes.length}
+        downloadableCount={selectedCompositeHashes.length}
         isDownloading={isDownloading}
+        extraActions={
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={handleOpenAssignModal}
+            disabled={assignToGroupMutation.isPending || groupsQuery.isPending}
+            data-no-select-drag="true"
+          >
+            <FolderPlus className="h-4 w-4" />
+            {assignToGroupMutation.isPending ? '그룹 추가 중…' : '그룹에 추가'}
+          </Button>
+        }
         onDownload={handleDownloadSelected}
         onClear={() => setSelectedIds([])}
+      />
+
+      <GroupAssignModal
+        open={isAssignModalOpen}
+        groups={groupsQuery.data ?? []}
+        selectedCount={selectedCompositeHashes.length}
+        isSubmitting={assignToGroupMutation.isPending}
+        onClose={() => setIsAssignModalOpen(false)}
+        onSubmit={handleAssignToGroup}
       />
     </div>
   )

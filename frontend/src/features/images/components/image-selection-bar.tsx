@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Download, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -6,6 +7,7 @@ interface ImageSelectionBarProps {
   selectedCount: number
   downloadableCount: number
   isDownloading?: boolean
+  extraActions?: ReactNode
   onDownload: () => void
   onClear?: () => void
 }
@@ -15,6 +17,7 @@ export function ImageSelectionBar({
   selectedCount,
   downloadableCount,
   isDownloading = false,
+  extraActions,
   onDownload,
   onClear,
 }: ImageSelectionBarProps) {
@@ -44,6 +47,8 @@ export function ImageSelectionBar({
             선택 해제
           </Button>
         ) : null}
+
+        {extraActions}
 
         <Button
           size="sm"
