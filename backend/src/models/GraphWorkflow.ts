@@ -1,0 +1,118 @@
+import { getUserSettingsDb } from '../database/userSettingsDb'
+import {
+  GraphWorkflowRecord,
+  GraphWorkflowCreateData,
+  GraphWorkflowUpdateData,
+} from '../types/moduleGraph'
+import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
+
+function stringifyGraph(value: unknown) {
+  return JSON.stringify(value ?? { nodes: [], edges: [] })
+}
+
+export class GraphWorkflowModel {
+  static create(workflowData: GraphWorkflowCreateData): number {
+    const db = getUserSettingsDb()
+    const info = db.prepare(`
+      INSERT INTO graph_workflows (
+        name, description, graph_json, version, is_active
+      ) VALUES (?, ?, ?, ?, ?)
+    `).run(
+      workflowData.name,
+      workflowData.description || null,
+      stringifyGraph(workflowData.graph),
+      workflowData.version ?? 1,
+      workflowData.is_active !== undefined ? (workflowData.is_active ? 1 : 0) : 1,
+    )
+
+    const workflowId = info.lastInsertRowid as number
+    this.createVersionSnapshot(workflowId, workflowData.version ?? 1, workflowData.graph, 'Initial version')
+    return workflowId
+  }
+
+  static findById(id: number): GraphWorkflowRecord | null {
+    const db = getUserSettingsDb()
+    const row = db.prepare('SELECT * FROM graph_workflows WHERE id = ?').get(id) as GraphWorkflowRecord | undefined
+    return row || null
+  }
+
+  static findAll(activeOnly = false): GraphWorkflowRecord[] {
+    const db = getUserSettingsDb()
+    let query = 'SELECT * FROM graph_workflows'
+    if (activeOnly) {
+      query += ' WHERE is_active = 1'
+    }
+    query += ' ORDER BY created_date DESC'
+
+    return db.prepare(query).all() as GraphWorkflowRecord[]
+  }
+
+  static update(id: number, workflowData: GraphWorkflowUpdateData): boolean {
+    const db = getUserSettingsDb()
+    const current = this.findById(id)
+    if (!current) {
+      return false
+    }
+
+    const cleanData: Record<string, unknown> = {
+      ...workflowData,
+      graph_json: workflowData.graph !== undefined ? stringifyGraph(workflowData.graph) : undefined,
+      is_active: workflowData.is_active !== undefined ? (workflowData.is_active ? 1 : 0) : undefined,
+    }
+
+    const updates = filterDefined(cleanData)
+    if (Object.keys(updates).length === 0) {
+      return false
+    }
+
+    const nextVersion = workflowData.graph ? (workflowData.version ?? current.version + 1) : (workflowData.version ?? current.version)
+    const finalUpdates = {
+      ...updates,
+      version: nextVersion,
+      updated_date: sqlLiteral('CURRENT_TIMESTAMP'),
+    }
+
+    const { sql, values } = buildUpdateQuery('graph_workflows', finalUpdates, { id })
+    const info = db.prepare(sql).run(...values)
+
+    if (info.changes > 0 && workflowData.graph) {
+      this.createVersionSnapshot(id, nextVersion, workflowData.graph, 'Workflow updated')
+    }
+
+    return info.changes > 0
+  }
+
+  static delete(id: number): boolean {
+    const db = getUserSettingsDb()
+    const info = db.prepare('DELETE FROM graph_workflows WHERE id = ?').run(id)
+    return info.changes > 0
+  }
+
+  static existsByName(name: string, excludeId?: number): boolean {
+    const db = getUserSettingsDb()
+    let query = 'SELECT 1 FROM graph_workflows WHERE name = ?'
+    const params: Array<string | number> = [name]
+
+    if (excludeId !== undefined) {
+      query += ' AND id != ?'
+      params.push(excludeId)
+    }
+
+    const row = db.prepare(query).get(...params)
+    return !!row
+  }
+
+  static createVersionSnapshot(workflowId: number, version: number, graph: unknown, changelog?: string) {
+    const db = getUserSettingsDb()
+    db.prepare(`
+      INSERT OR REPLACE INTO graph_workflow_versions (
+        workflow_id, version, graph_json, changelog
+      ) VALUES (?, ?, ?, ?)
+    `).run(
+      workflowId,
+      version,
+      stringifyGraph(graph),
+      changelog || null,
+    )
+  }
+}
