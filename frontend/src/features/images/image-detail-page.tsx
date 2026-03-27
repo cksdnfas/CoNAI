@@ -30,10 +30,11 @@ export function ImageDetailPage() {
     <ImageDetailView
       compositeHash={compositeHash}
       presentation="page"
-      renderHeader={({ downloadName, downloadUrl, isRefreshing, refresh }) => (
+      renderHeader={({ downloadName, downloadUrl, image, isRefreshing, refresh }) => (
         <ImageDetailActions
           downloadUrl={downloadUrl}
           downloadName={downloadName}
+          image={image}
           isRefreshing={isRefreshing}
           onBack={handleBackToFeed}
           onRefresh={refresh}
