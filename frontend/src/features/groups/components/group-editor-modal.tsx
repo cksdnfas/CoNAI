@@ -8,6 +8,7 @@ import { ToggleRow } from '@/components/ui/toggle-row'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { buildGroupOptionItems, collectDescendantGroupIds } from '@/features/groups/group-option-utils'
 import type { GroupMutationInput, GroupRecord, GroupWithHierarchy } from '@/types/group'
+import { AutoCollectChipEditor } from './auto-collect-chip-editor'
 
 interface GroupEditorModalProps {
   open: boolean
@@ -18,6 +19,12 @@ interface GroupEditorModalProps {
   isSubmitting?: boolean
   onClose: () => void
   onSubmit: (input: GroupMutationInput) => Promise<void>
+}
+
+interface AutoCollectEditorState {
+  mode: 'chip' | 'json'
+  parsedValue: unknown
+  errorMessage: string | null
 }
 
 /** Build the editable auto-collect JSON text shown in the group form. */
@@ -40,7 +47,12 @@ export function GroupEditorModal({
   const [color, setColor] = useState('')
   const [parentValue, setParentValue] = useState('root')
   const [autoCollectEnabled, setAutoCollectEnabled] = useState(false)
-  const [autoCollectText, setAutoCollectText] = useState('')
+  const [autoCollectEditorState, setAutoCollectEditorState] = useState<AutoCollectEditorState>({
+    mode: 'chip',
+    parsedValue: undefined,
+    errorMessage: null,
+  })
+  const [autoCollectInitialText, setAutoCollectInitialText] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -53,7 +65,12 @@ export function GroupEditorModal({
     setColor(group?.color ?? '')
     setParentValue(String(group?.parent_id ?? defaultParentId ?? 'root'))
     setAutoCollectEnabled(Boolean(group?.auto_collect_enabled))
-    setAutoCollectText(getInitialAutoCollectText(group))
+    setAutoCollectInitialText(getInitialAutoCollectText(group))
+    setAutoCollectEditorState({
+      mode: 'chip',
+      parsedValue: undefined,
+      errorMessage: null,
+    })
     setFormError(null)
   }, [defaultParentId, group, open])
 
@@ -77,26 +94,24 @@ export function GroupEditorModal({
     const trimmedName = name.trim()
     const trimmedDescription = description.trim()
     const trimmedColor = color.trim()
-    const trimmedAutoCollectText = autoCollectText.trim()
 
     if (!trimmedName) {
       setFormError('그룹 이름은 꼭 필요해.')
       return
     }
 
-    if (autoCollectEnabled && !trimmedAutoCollectText) {
-      setFormError('자동수집을 켰다면 조건 JSON도 같이 넣어줘야 해.')
+    if (autoCollectEnabled && autoCollectEditorState.errorMessage) {
+      setFormError(autoCollectEditorState.errorMessage)
       return
     }
 
-    let parsedAutoCollectConditions: unknown = undefined
-    if (trimmedAutoCollectText) {
-      try {
-        parsedAutoCollectConditions = JSON.parse(trimmedAutoCollectText)
-      } catch {
-        setFormError('자동수집 조건 JSON 형식이 올바르지 않아.')
-        return
-      }
+    if (autoCollectEnabled && autoCollectEditorState.parsedValue === undefined) {
+      setFormError(
+        autoCollectEditorState.mode === 'chip'
+          ? '자동수집을 켰다면 조건 칩을 하나 이상 넣어줘야 해.'
+          : '자동수집을 켰다면 조건 JSON도 같이 넣어줘야 해.',
+      )
+      return
     }
 
     const input: GroupMutationInput = {
@@ -105,7 +120,7 @@ export function GroupEditorModal({
       color: trimmedColor || null,
       parent_id: parentValue === 'root' ? null : Number(parentValue),
       auto_collect_enabled: autoCollectEnabled,
-      auto_collect_conditions: parsedAutoCollectConditions,
+      auto_collect_conditions: autoCollectEditorState.parsedValue,
     }
 
     setFormError(null)
@@ -118,7 +133,7 @@ export function GroupEditorModal({
       onClose={onClose}
       title={mode === 'create' ? '커스텀 그룹 만들기' : '커스텀 그룹 편집'}
       description="중첩 그룹, 수동 이미지 할당, 자동수집 조건까지 한 번에 관리할 수 있어."
-      widthClassName="max-w-3xl"
+      widthClassName="max-w-4xl"
     >
       <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
@@ -172,26 +187,7 @@ export function GroupEditorModal({
           <input type="checkbox" checked={autoCollectEnabled} onChange={(event) => setAutoCollectEnabled(event.target.checked)} />
         </ToggleRow>
 
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground">자동수집 조건 JSON</p>
-          <Textarea
-            rows={12}
-            value={autoCollectText}
-            onChange={(event) => setAutoCollectText(event.target.value)}
-            placeholder={[
-              '{',
-              '  "or_group": [',
-              '    { "category": "auto_tag", "type": "auto_tag_any", "value": "1girl" }',
-              '  ],',
-              '  "and_group": [],',
-              '  "exclude_group": []',
-              '}',
-            ].join('\n')}
-          />
-          <p className="text-xs leading-5 text-muted-foreground">
-            백엔드가 이미 지원하는 ComplexFilter / legacy 조건 JSON을 그대로 넣는 방식이야.
-          </p>
-        </div>
+        <AutoCollectChipEditor initialJsonText={autoCollectInitialText} onChange={setAutoCollectEditorState} />
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4">
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
