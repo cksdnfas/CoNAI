@@ -64,6 +64,13 @@ export interface GroupBulkAddResult {
   errors?: string[]
 }
 
+export interface GroupBulkRemoveResult {
+  message: string
+  removed_count: number
+  skipped_count: number
+  errors?: string[]
+}
+
 export interface GroupAutoCollectResult {
   group_id: number
   group_name: string

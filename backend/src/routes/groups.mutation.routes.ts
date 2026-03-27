@@ -253,6 +253,48 @@ router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response)
   }
 }));
 
+router.post('/:id/images/bulk-remove', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const groupId = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const { composite_hashes } = req.body;
+
+    if (!composite_hashes || !Array.isArray(composite_hashes) || composite_hashes.length === 0) {
+      return res.status(400).json(errorResponse('Composite hashes array is required'));
+    }
+
+    let removedCount = 0;
+    let skippedCount = 0;
+    const errors: string[] = [];
+
+    for (const compositeHash of composite_hashes) {
+      try {
+        const removed = await ImageGroupModel.removeImageFromGroup(groupId, compositeHash);
+        if (removed) {
+          removedCount++;
+        } else {
+          skippedCount++;
+        }
+      } catch (error) {
+        errors.push(`Image ${compositeHash}: ${(error as Error).message}`);
+      }
+    }
+
+    return res.json(
+      successResponse({
+        message: `Bulk remove completed: ${removedCount} removed, ${skippedCount} skipped`,
+        removed_count: removedCount,
+        skipped_count: skippedCount,
+        errors: errors.length > 0 ? errors : undefined
+      })
+    );
+  } catch (error) {
+    console.error('Error bulk removing images from group:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to bulk remove images from group';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
+  }
+}));
+
 router.delete('/:id/images/:imageId', asyncHandler(async (req: Request, res: Response) => {
   try {
     const groupId = validateId(routeParam(routeParam(req.params.id)), 'Group ID');

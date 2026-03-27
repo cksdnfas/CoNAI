@@ -4,6 +4,7 @@ import type {
   GroupAutoCollectResult,
   GroupBreadcrumbItem,
   GroupBulkAddResult,
+  GroupBulkRemoveResult,
   GroupImagesPayload,
   GroupMutationInput,
   GroupMutationMessage,
@@ -161,6 +162,22 @@ export async function addImagesToGroup(groupId: number, compositeHashes: string[
 
   if (!response.success) {
     throw new Error(response.error || '이미지를 그룹에 추가하지 못했어.')
+  }
+
+  return response.data
+}
+
+export async function removeImagesFromGroup(groupId: number, compositeHashes: string[]) {
+  const response = await fetchJson<ApiResponse<GroupBulkRemoveResult>>(`/api/groups/${groupId}/images/bulk-remove`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ composite_hashes: compositeHashes }),
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '이미지를 그룹에서 제거하지 못했어.')
   }
 
   return response.data

@@ -7,6 +7,8 @@ interface ImageSelectionBarProps {
   selectedCount: number
   downloadableCount: number
   isDownloading?: boolean
+  showDownloadAction?: boolean
+  statusText?: ReactNode
   extraActions?: ReactNode
   onDownload: () => void
   onClear?: () => void
@@ -17,6 +19,8 @@ export function ImageSelectionBar({
   selectedCount,
   downloadableCount,
   isDownloading = false,
+  showDownloadAction = true,
+  statusText,
   extraActions,
   onDownload,
   onClear,
@@ -35,9 +39,9 @@ export function ImageSelectionBar({
         <div className="flex flex-col leading-tight">
           <span className="font-semibold">{selectedCount.toLocaleString('ko-KR')}개 선택됨</span>
           <span className="text-xs text-muted-foreground">
-            {downloadableCount > 0
+            {statusText ?? (downloadableCount > 0
               ? `${downloadableCount.toLocaleString('ko-KR')}개 다운로드 가능`
-              : '다운로드 가능한 항목이 없어'}
+              : '다운로드 가능한 항목이 없어')}
           </span>
         </div>
 
@@ -50,15 +54,17 @@ export function ImageSelectionBar({
 
         {extraActions}
 
-        <Button
-          size="sm"
-          onClick={onDownload}
-          disabled={downloadableCount <= 0 || isDownloading}
-          data-no-select-drag="true"
-        >
-          <Download className="h-4 w-4" />
-          {isDownloading ? '준비 중…' : downloadableCount > 1 ? 'ZIP 다운로드' : '다운로드'}
-        </Button>
+        {showDownloadAction ? (
+          <Button
+            size="sm"
+            onClick={onDownload}
+            disabled={downloadableCount <= 0 || isDownloading}
+            data-no-select-drag="true"
+          >
+            <Download className="h-4 w-4" />
+            {isDownloading ? '준비 중…' : downloadableCount > 1 ? 'ZIP 다운로드' : '다운로드'}
+          </Button>
+        ) : null}
       </div>
     </div>
   )

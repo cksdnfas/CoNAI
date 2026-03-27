@@ -17,6 +17,9 @@ interface GroupImageSectionProps {
   onLoadMore: () => void
   hideHeader?: boolean
   presentation?: 'page' | 'drawer'
+  selectable?: boolean
+  selectedIds?: string[]
+  onSelectedIdsChange?: (selectedIds: string[]) => void
 }
 
 export function GroupImageSection({
@@ -30,6 +33,9 @@ export function GroupImageSection({
   onLoadMore,
   hideHeader = false,
   presentation = 'page',
+  selectable = false,
+  selectedIds = [],
+  onSelectedIdsChange,
 }: GroupImageSectionProps) {
   const shouldShowCollectionCounts = group.manual_added_count !== undefined || group.auto_collected_count !== undefined
 
@@ -71,6 +77,9 @@ export function GroupImageSection({
           layout="masonry"
           activationMode="modal"
           getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
+          selectable={selectable}
+          selectedIds={selectedIds}
+          onSelectedIdsChange={onSelectedIdsChange}
           hasMore={hasMore}
           isLoadingMore={isLoadingMore}
           onLoadMore={onLoadMore}

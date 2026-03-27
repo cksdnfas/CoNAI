@@ -16,6 +16,9 @@ interface GroupImageDrawerProps {
   hasMore: boolean
   isLoadingMore: boolean
   onLoadMore: () => void
+  selectable?: boolean
+  selectedIds?: string[]
+  onSelectedIdsChange?: (selectedIds: string[]) => void
   onClose: () => void
 }
 
@@ -29,6 +32,9 @@ export function GroupImageDrawer({
   hasMore,
   isLoadingMore,
   onLoadMore,
+  selectable = false,
+  selectedIds = [],
+  onSelectedIdsChange,
   onClose,
 }: GroupImageDrawerProps) {
   useEffect(() => {
@@ -91,6 +97,9 @@ export function GroupImageDrawer({
             onLoadMore={onLoadMore}
             hideHeader
             presentation="drawer"
+            selectable={selectable}
+            selectedIds={selectedIds}
+            onSelectedIdsChange={onSelectedIdsChange}
           />
         </div>
 

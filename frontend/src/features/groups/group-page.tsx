@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FolderPlus, Pencil, Play, Trash2 } from 'lucide-react'
+import { FolderMinus, FolderPlus, Pencil, Play, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { PageHeader } from '@/components/common/page-header'
 import {
+  addImagesToGroup,
   createGroup,
   deleteGroup,
   getAutoFolderGroup,
@@ -23,6 +24,7 @@ import {
   getGroupImages,
   getGroupsHierarchyAll,
   getGroupThumbnailUrl,
+  removeImagesFromGroup,
   runGroupAutoCollect,
   updateGroup,
 } from '@/lib/api'
@@ -31,9 +33,11 @@ import type { GroupMutationInput, GroupRecord } from '@/types/group'
 import { GroupBreadcrumbs } from './components/group-breadcrumbs'
 import { GroupChildCard } from './components/group-child-card'
 import { GroupEditorModal } from './components/group-editor-modal'
+import { GroupAssignModal } from './components/group-assign-modal'
 import { GroupImageDrawer } from './components/group-image-drawer'
 import { GroupImageSection } from './components/group-image-section'
 import { GroupTree } from './components/group-tree'
+import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 
 const groupSources = {
   custom: {
@@ -98,6 +102,8 @@ export function GroupPage() {
   const [searchParams] = useSearchParams()
   const [isImageDrawerOpen, setIsImageDrawerOpen] = useState(false)
   const [editorState, setEditorState] = useState<GroupEditorState | null>(null)
+  const [selectedGroupImageIds, setSelectedGroupImageIds] = useState<string[]>([])
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
   const isWideLayout = useMinWidth(1280)
   const selectedSourceKey = normalizeGroupSourceKey(searchParams.get('tab'))
   const selectedSource = groupSources[selectedSourceKey]
@@ -107,6 +113,11 @@ export function GroupPage() {
   const groupsQuery = useQuery({
     queryKey: ['groups-hierarchy-all', selectedSource.key],
     queryFn: selectedSource.getAllGroups,
+  })
+
+  const assignableCustomGroupsQuery = useQuery({
+    queryKey: ['groups-hierarchy-all', 'assignable-custom'],
+    queryFn: getGroupsHierarchyAll,
   })
 
   const selectedGroupQuery = useQuery({
@@ -192,11 +203,41 @@ export function GroupPage() {
     },
   })
 
+  const assignToGroupMutation = useMutation({
+    mutationFn: ({ groupId: targetGroupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => addImagesToGroup(targetGroupId, compositeHashes),
+    onSuccess: async (result) => {
+      setIsAssignModalOpen(false)
+      setSelectedGroupImageIds([])
+      showSnackbar({ message: result.message, tone: 'info' })
+      await refreshCustomGroupQueries()
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : '그룹 추가에 실패했어.', tone: 'error' })
+    },
+  })
+
+  const removeGroupImagesMutation = useMutation({
+    mutationFn: ({ groupId: targetGroupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => removeImagesFromGroup(targetGroupId, compositeHashes),
+    onSuccess: async (result) => {
+      setSelectedGroupImageIds([])
+      showSnackbar({ message: result.message, tone: 'info' })
+      await refreshCustomGroupQueries()
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : '그룹 이미지 제거에 실패했어.', tone: 'error' })
+    },
+  })
+
   useEffect(() => {
     if (isWideLayout) {
       setIsImageDrawerOpen(false)
     }
   }, [isWideLayout])
+
+  useEffect(() => {
+    setSelectedGroupImageIds([])
+    setIsAssignModalOpen(false)
+  }, [selectedGroupId, selectedSource.key])
 
   const allGroups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data])
   const selectedGroupHierarchy = useMemo(
@@ -206,6 +247,14 @@ export function GroupPage() {
   const rootGroups = useMemo(() => allGroups.filter((group) => group.parent_id == null), [allGroups])
   const childGroups = useMemo(() => allGroups.filter((group) => group.parent_id === selectedGroupId), [allGroups, selectedGroupId])
   const groupImages = useMemo(() => (groupImagesQuery.data?.pages ?? []).flatMap((page) => page.images), [groupImagesQuery.data?.pages])
+  const selectedGroupCompositeHashes = useMemo(
+    () =>
+      groupImages
+        .filter((image) => selectedGroupImageIds.includes(String(image.composite_hash ?? image.id)))
+        .map((image) => image.composite_hash)
+        .filter((value): value is string => typeof value === 'string' && value.length > 0),
+    [groupImages, selectedGroupImageIds],
+  )
 
   const handleOpenGroup = (nextGroupId: number) => {
     if (!isWideLayout) {
@@ -290,6 +339,52 @@ export function GroupPage() {
     }
 
     await autoCollectMutation.mutateAsync(selectedGroupId)
+  }
+
+  const handleOpenAssignModal = () => {
+    if (selectedGroupCompositeHashes.length === 0) {
+      return
+    }
+
+    if (assignableCustomGroupsQuery.isPending) {
+      showSnackbar({ message: '커스텀 그룹 목록을 불러오는 중이야.', tone: 'info' })
+      return
+    }
+
+    if (assignableCustomGroupsQuery.isError) {
+      showSnackbar({ message: assignableCustomGroupsQuery.error instanceof Error ? assignableCustomGroupsQuery.error.message : '그룹 목록을 불러오지 못했어.', tone: 'error' })
+      return
+    }
+
+    if ((assignableCustomGroupsQuery.data?.length ?? 0) === 0) {
+      showSnackbar({ message: '먼저 커스텀 그룹을 하나 만들어줘.', tone: 'error' })
+      return
+    }
+
+    setIsAssignModalOpen(true)
+  }
+
+  const handleAssignSelectedImages = async (targetGroupId: number) => {
+    await assignToGroupMutation.mutateAsync({
+      groupId: targetGroupId,
+      compositeHashes: selectedGroupCompositeHashes,
+    })
+  }
+
+  const handleRemoveSelectedImages = async () => {
+    if (!selectedGroupId || !isCustomSource || selectedGroupCompositeHashes.length === 0) {
+      return
+    }
+
+    const confirmed = window.confirm(`선택한 ${selectedGroupCompositeHashes.length.toLocaleString('ko-KR')}개 이미지를 현재 그룹에서 제거할까?`)
+    if (!confirmed) {
+      return
+    }
+
+    await removeGroupImagesMutation.mutateAsync({
+      groupId: selectedGroupId,
+      compositeHashes: selectedGroupCompositeHashes,
+    })
   }
 
   const groupSummaryDescription = selectedGroupQuery.data?.description?.trim()
@@ -489,6 +584,9 @@ export function GroupPage() {
                   hasMore={Boolean(groupImagesQuery.hasNextPage)}
                   isLoadingMore={groupImagesQuery.isFetchingNextPage}
                   onLoadMore={() => void groupImagesQuery.fetchNextPage()}
+                  selectable={true}
+                  selectedIds={selectedGroupImageIds}
+                  onSelectedIdsChange={setSelectedGroupImageIds}
                 />
               ) : null}
             </div>
@@ -514,10 +612,57 @@ export function GroupPage() {
             hasMore={Boolean(groupImagesQuery.hasNextPage)}
             isLoadingMore={groupImagesQuery.isFetchingNextPage}
             onLoadMore={() => void groupImagesQuery.fetchNextPage()}
+            selectable={true}
+            selectedIds={selectedGroupImageIds}
+            onSelectedIdsChange={setSelectedGroupImageIds}
             onClose={() => setIsImageDrawerOpen(false)}
           />
         </>
       ) : null}
+
+      <ImageSelectionBar
+        selectedCount={selectedGroupImageIds.length}
+        downloadableCount={0}
+        showDownloadAction={false}
+        statusText="선택한 이미지를 다른 커스텀 그룹에 넣거나 현재 그룹에서 정리할 수 있어"
+        extraActions={
+          <>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleOpenAssignModal}
+              disabled={assignToGroupMutation.isPending || assignableCustomGroupsQuery.isPending}
+              data-no-select-drag="true"
+            >
+              <FolderPlus className="h-4 w-4" />
+              {assignToGroupMutation.isPending ? '그룹 추가 중…' : '커스텀 그룹에 추가'}
+            </Button>
+            {isCustomSource ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void handleRemoveSelectedImages()}
+                disabled={removeGroupImagesMutation.isPending}
+                data-no-select-drag="true"
+              >
+                <FolderMinus className="h-4 w-4" />
+                {removeGroupImagesMutation.isPending ? '제거 중…' : '현재 그룹에서 제거'}
+              </Button>
+            ) : null}
+          </>
+        }
+        onDownload={() => {}}
+        onClear={() => setSelectedGroupImageIds([])}
+      />
+
+      <GroupAssignModal
+        open={isAssignModalOpen}
+        groups={assignableCustomGroupsQuery.data ?? []}
+        selectedCount={selectedGroupCompositeHashes.length}
+        isSubmitting={assignToGroupMutation.isPending}
+        onClose={() => setIsAssignModalOpen(false)}
+        onSubmit={handleAssignSelectedImages}
+      />
 
       {isCustomSource ? (
         <GroupEditorModal
