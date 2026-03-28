@@ -28,6 +28,7 @@ export function ImageList({
   className,
   scrollMode = 'window',
   viewportHeight,
+  selectionAreaClass = 'image-list-selection-area',
   renderItemOverlay,
 }: ImageListProps) {
   const navigate = useNavigate()
@@ -60,6 +61,7 @@ export function ImageList({
     selectedIds,
     onSelectedIdsChange,
     onDragStateChange: setIsDraggingSelection,
+    selectionAreaClass,
   })
 
   /** Handle item activation without forcing drag-preview rerender loops. */

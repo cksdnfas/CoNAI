@@ -93,6 +93,7 @@ export function GroupImageSection({
           scrollMode={presentation === 'drawer' ? 'container' : 'window'}
           viewportHeight={presentation === 'drawer' ? '100%' : undefined}
           className={presentation === 'drawer' ? 'min-h-0 flex-1' : undefined}
+          selectionAreaClass={presentation === 'drawer' ? 'image-list-selection-area-hidden' : 'image-list-selection-area'}
           renderItemOverlay={renderItemOverlay}
         />
       ) : null}

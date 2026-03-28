@@ -354,6 +354,13 @@
     backdrop-filter: blur(2px);
   }
 
+  .image-list-selection-area-hidden {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    backdrop-filter: none;
+  }
+
   .image-list-selection-frame {
     opacity: 0;
     transition: opacity 140ms ease, box-shadow 140ms ease;

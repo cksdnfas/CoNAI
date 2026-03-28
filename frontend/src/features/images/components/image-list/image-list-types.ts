@@ -22,5 +22,6 @@ export interface ImageListProps {
   className?: string
   scrollMode?: ImageListScrollMode
   viewportHeight?: number | string
+  selectionAreaClass?: string
   renderItemOverlay?: (image: ImageRecord) => ReactNode
 }

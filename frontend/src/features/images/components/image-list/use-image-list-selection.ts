@@ -7,6 +7,7 @@ interface UseImageListSelectionParams {
   selectedIds: string[]
   onSelectedIdsChange?: (selectedIds: string[]) => void
   onDragStateChange?: (isDragging: boolean) => void
+  selectionAreaClass?: string
 }
 
 /** Keep DOM selection preview outside React and commit only the final result. */
@@ -16,6 +17,7 @@ export function useImageListSelection({
   selectedIds,
   onSelectedIdsChange,
   onDragStateChange,
+  selectionAreaClass = 'image-list-selection-area',
 }: UseImageListSelectionParams) {
   const selectionRef = useRef<SelectionArea | null>(null)
   const previewElementsRef = useRef<Set<HTMLElement>>(new Set())
@@ -46,7 +48,7 @@ export function useImageListSelection({
     }
 
     const selection = new SelectionArea({
-      selectionAreaClass: 'image-list-selection-area',
+      selectionAreaClass,
       container,
       startAreas: [container],
       boundaries: [container],

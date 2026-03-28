@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Download, FolderMinus, FolderPlus, Pencil, Play, RotateCcw, Trash2, X } from 'lucide-react'
+import { Download, FolderMinus, FolderPlus, Pencil, Play, RotateCcw, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -569,52 +569,6 @@ export function GroupPage() {
     })
   }
 
-  const handleRemoveSingleImage = async (image: ImageRecord) => {
-    if (!selectedGroupId || !isCustomSource || !image.composite_hash) {
-      return
-    }
-
-    const confirmed = window.confirm('이 이미지를 현재 그룹에서 제거할까?')
-    if (!confirmed) {
-      return
-    }
-
-    await removeGroupImagesMutation.mutateAsync({
-      groupId: selectedGroupId,
-      compositeHashes: [image.composite_hash],
-    })
-  }
-
-  const renderGroupImageOverlay = (image: ImageRecord) => {
-    if (!isCustomSource || !selectedGroupId) {
-      return null
-    }
-
-    return (
-      <span
-        role="button"
-        tabIndex={0}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/82 backdrop-blur-sm transition hover:bg-black/72 hover:text-white"
-        onClick={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          void handleRemoveSingleImage(image)
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault()
-            event.stopPropagation()
-            void handleRemoveSingleImage(image)
-          }
-        }}
-        title="현재 그룹에서 제거"
-        aria-label="현재 그룹에서 제거"
-      >
-        <X className="h-4 w-4" />
-      </span>
-    )
-  }
-
   const groupSummaryDescription = selectedGroupQuery.data?.description?.trim()
     ? selectedGroupQuery.data.description
     : isCustomSource
@@ -849,7 +803,6 @@ export function GroupPage() {
                   selectable={true}
                   selectedIds={selectedGroupImageIds}
                   onSelectedIdsChange={setSelectedGroupImageIds}
-                  renderItemOverlay={renderGroupImageOverlay}
                 />
               ) : null}
             </div>
@@ -878,7 +831,6 @@ export function GroupPage() {
             selectable={true}
             selectedIds={selectedGroupImageIds}
             onSelectedIdsChange={setSelectedGroupImageIds}
-            renderItemOverlay={renderGroupImageOverlay}
             onClose={() => setIsImageDrawerOpen(false)}
           />
         </>
