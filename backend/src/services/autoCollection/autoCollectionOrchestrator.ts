@@ -335,7 +335,7 @@ export class AutoCollectionOrchestrator {
       const validTypes = [
         'prompt_contains', 'prompt_regex',
         'negative_prompt_contains', 'negative_prompt_regex',
-        'ai_tool', 'model_name',
+        'ai_tool', 'ai_tool_group', 'model_name', 'lora_model',
         'auto_tag_rating', 'auto_tag_general',
         'auto_tag_character', 'auto_tag_model',
         'auto_tag_has_character', 'auto_tag_exists',

@@ -5,12 +5,11 @@ import { SearchChipList } from '@/features/search/components/search-chip-list'
 import { SearchScopeTabs } from '@/features/search/components/search-scope-tabs'
 import { SearchSuggestionList } from '@/features/search/components/search-suggestion-list'
 import { SEARCH_SCOPE_LABELS } from '@/features/search/search-constants'
-import { createRatingSearchChip } from '@/features/search/search-utils'
+import { createRatingSearchChip, getSearchScopeStyle } from '@/features/search/search-utils'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import { useSearchSuggestionData } from '@/features/search/use-search-suggestion-data'
 import { useHomeSearch } from '@/features/home/home-search-context'
 import type { PromptCollectionItem } from '@/types/prompt'
-import { getThemeToneStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 
 interface HomeSearchInputBoxProps {
@@ -29,6 +28,7 @@ interface HomeSearchSuggestionPanelProps {
   searchInput: string
   submitSearchFromInput: () => void
   addSuggestionChip: (value: string) => void
+  addAIToolChip: ReturnType<typeof useHomeSearch>['addAIToolChip']
   addRatingChip: (chip: ReturnType<typeof createRatingSearchChip>) => void
   onClose?: () => void
   className?: string
@@ -68,18 +68,28 @@ function HomeSearchSuggestionPanel({
   searchInput,
   submitSearchFromInput,
   addSuggestionChip,
+  addAIToolChip,
   addRatingChip,
   onClose,
   className,
   style,
 }: HomeSearchSuggestionPanelProps) {
-  const { promptSuggestions, filteredRatingTiers, suggestionsLoading, ratingTiersLoading } = useSearchSuggestionData(searchScope, searchInput)
+  const {
+    promptSuggestions,
+    filteredRatingTiers,
+    modelSuggestions,
+    loraSuggestions,
+    suggestionsLoading,
+    ratingTiersLoading,
+    modelSuggestionsLoading,
+    loraSuggestionsLoading,
+  } = useSearchSuggestionData(searchScope, searchInput)
 
   return (
     <div className={cn('theme-floating-panel overflow-hidden rounded-sm', className)} style={style}>
       <div className="flex items-center gap-2 border-b border-white/5 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-          <SearchScopeTabs searchScope={searchScope} onChange={setSearchScope} className="gap-1" />
+        <div className="min-w-0 flex-1">
+          <SearchScopeTabs searchScope={searchScope} onChange={setSearchScope} />
         </div>
 
         {onClose ? (
@@ -101,11 +111,17 @@ function HomeSearchSuggestionPanel({
           searchInput={searchInput}
           promptSuggestions={promptSuggestions}
           filteredRatingTiers={filteredRatingTiers}
+          modelSuggestions={modelSuggestions}
+          loraSuggestions={loraSuggestions}
           suggestionsLoading={suggestionsLoading}
           ratingTiersLoading={ratingTiersLoading}
+          modelSuggestionsLoading={modelSuggestionsLoading}
+          loraSuggestionsLoading={loraSuggestionsLoading}
           onSubmitInput={submitSearchFromInput}
           onSelectSuggestion={(item: PromptCollectionItem) => addSuggestionChip(item.prompt)}
+          onSelectMetadataSuggestion={(value: string) => addSuggestionChip(value)}
           onSelectRatingTier={(tier: RatingTierRecord) => addRatingChip(createRatingSearchChip(tier))}
+          onSelectAIToolSuggestion={addAIToolChip}
           emptyRatingText="일치하는 평가 티어가 없어."
           idlePromptText="먼저 검색어를 입력하면 추천 프롬프트가 보여."
         />
@@ -131,9 +147,7 @@ export function HomeSearchHeaderBox({ active, desktopMode: _desktopMode }: { act
       title="검색"
     >
       <Search className="h-4 w-4" />
-      {appliedChips.length > 0 ? (
-        <span className="rounded-full bg-primary/14 px-2 py-0.5 text-[11px] font-semibold text-primary">{appliedChips.length}</span>
-      ) : null}
+      {appliedChips.length > 0 ? <span className="rounded-full bg-primary/14 px-2 py-0.5 text-[11px] font-semibold text-primary">{appliedChips.length}</span> : null}
     </button>
   )
 }
@@ -153,6 +167,7 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
     setSearchScope,
     submitSearchFromInput,
     addSuggestionChip,
+    addAIToolChip,
     addRatingChip,
     cycleChipOperator,
     removeChip,
@@ -202,6 +217,11 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
 
   const handleAddSuggestionChip = (value: string) => {
     addSuggestionChip(value)
+    setIsSuggestionPanelOpen(false)
+  }
+
+  const handleAddAIToolChip = (tool: 'nai' | 'comfyui' | 'other') => {
+    addAIToolChip(tool)
     setIsSuggestionPanelOpen(false)
   }
 
@@ -262,6 +282,7 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
                 searchInput={searchInput}
                 submitSearchFromInput={handleSubmitSearchFromInput}
                 addSuggestionChip={handleAddSuggestionChip}
+                addAIToolChip={handleAddAIToolChip}
                 addRatingChip={handleAddRatingChip}
                 onClose={handleCloseSuggestionPanel}
               />
@@ -269,13 +290,7 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
           </section>
 
           <section className="space-y-3">
-            <SearchChipList
-              chips={draftChips}
-              title="Current filters"
-              emptyMessage="No filters"
-              onCycleOperator={cycleChipOperator}
-              onRemove={removeChip}
-            />
+            <SearchChipList chips={draftChips} title="Current filters" emptyMessage="No filters" onCycleOperator={cycleChipOperator} onRemove={removeChip} />
 
             <div className="flex gap-2">
               <Button type="button" className="flex-1" onClick={handleApplySearch}>
@@ -307,7 +322,7 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
                       <div className="flex flex-wrap gap-2">
                         {entry.chips.map((chip) => (
                           <span key={chip.id} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1.5 text-xs text-foreground">
-                            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em]" style={getThemeToneStyle(chip.scope)}>
+                            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em]" style={getSearchScopeStyle(chip.scope)}>
                               {chip.scopeLabel ?? SEARCH_SCOPE_LABELS[chip.scope]}
                             </span>
                             <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.14em] text-primary">

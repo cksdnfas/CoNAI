@@ -1,5 +1,6 @@
-export type SearchScope = 'positive' | 'negative' | 'auto' | 'rating'
+export type SearchScope = 'positive' | 'negative' | 'auto' | 'rating' | 'model' | 'lora' | 'tool'
 export type SearchOperator = 'OR' | 'AND' | 'NOT'
+export type SearchAiToolGroup = 'nai' | 'comfyui' | 'other'
 
 export interface SearchChip {
   id: string
@@ -32,4 +33,15 @@ export interface RatingTierRecord {
   color?: string | null
   created_at: string
   updated_at: string
+}
+
+export interface SearchMetadataSuggestion {
+  value: string
+  count: number
+}
+
+export interface SearchAiToolOption {
+  value: SearchAiToolGroup
+  label: string
+  aliases: string[]
 }

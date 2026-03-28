@@ -197,7 +197,7 @@ export class ComplexFilterService {
   }
 
   /**
-   * Build SQL for basic conditions (ai_tool, model_name)
+   * Build SQL for basic conditions (ai_tool, model_name, lora_model)
    * 새 구조: media_metadata 테이블 사용 (im 별칭)
    */
   private static buildBasicConditionSQL(condition: FilterCondition, params: any[]): string | null {
@@ -205,9 +205,27 @@ export class ComplexFilterService {
       params.push(condition.value);
       return 'im.ai_tool = ?';
     }
+    if (condition.type === 'ai_tool_group') {
+      const normalizedValue = String(condition.value).trim().toLowerCase();
+
+      if (normalizedValue === 'nai') {
+        return `LOWER(COALESCE(im.ai_tool, '')) = 'novelai'`;
+      }
+      if (normalizedValue === 'comfyui') {
+        return `LOWER(COALESCE(im.ai_tool, '')) = 'comfyui'`;
+      }
+      if (normalizedValue === 'other') {
+        return `COALESCE(TRIM(im.ai_tool), '') != '' AND LOWER(im.ai_tool) NOT IN ('novelai', 'comfyui')`;
+      }
+      return null;
+    }
     if (condition.type === 'model_name') {
       params.push(`%${condition.value}%`);
       return 'im.model_name LIKE ?';
+    }
+    if (condition.type === 'lora_model') {
+      params.push(`%${String(condition.value).toLowerCase()}%`);
+      return `LOWER(COALESCE(im.lora_models, '')) LIKE ?`;
     }
     return null;
   }
@@ -636,7 +654,7 @@ export class ComplexFilterService {
       } else if (condition.type === 'auto_tag_general' || condition.type === 'auto_tag_character' ||
         condition.type === 'prompt_contains' || condition.type === 'prompt_regex' ||
         condition.type === 'negative_prompt_contains' || condition.type === 'negative_prompt_regex' ||
-        condition.type === 'ai_tool' || condition.type === 'model_name' ||
+        condition.type === 'ai_tool' || condition.type === 'ai_tool_group' || condition.type === 'model_name' || condition.type === 'lora_model' ||
         condition.type === 'auto_tag_model' || condition.type === 'auto_tag_any') {
         // String types: value must be non-empty string
         if (typeof condition.value !== 'string' || condition.value.trim() === '') {

@@ -354,6 +354,45 @@ export class MediaMetadataModel {
   }
 
   /**
+   * 검색 UI용 모델 자동완성 후보 조회
+   */
+  static searchModelSuggestions(query = '', limit = 16): Array<{ value: string; count: number }> {
+    const normalizedQuery = query.trim().toLowerCase();
+    const likePattern = `%${normalizedQuery}%`;
+
+    return db.prepare(`
+      SELECT model_name as value, COUNT(*) as count
+      FROM media_metadata
+      WHERE model_name IS NOT NULL
+        AND TRIM(model_name) != ''
+        AND (? = '' OR LOWER(model_name) LIKE ?)
+      GROUP BY model_name
+      ORDER BY count DESC, model_name ASC
+      LIMIT ?
+    `).all(normalizedQuery, likePattern, limit) as Array<{ value: string; count: number }>;
+  }
+
+  /**
+   * 검색 UI용 LoRA 자동완성 후보 조회
+   */
+  static searchLoraSuggestions(query = '', limit = 16): Array<{ value: string; count: number }> {
+    const normalizedQuery = query.trim().toLowerCase();
+    const likePattern = `%${normalizedQuery}%`;
+
+    return db.prepare(`
+      SELECT TRIM(CAST(lora_item.value AS TEXT)) as value, COUNT(*) as count
+      FROM media_metadata AS metadata
+      JOIN json_each(CASE WHEN json_valid(metadata.lora_models) = 1 THEN metadata.lora_models ELSE '[]' END) AS lora_item
+      WHERE metadata.lora_models IS NOT NULL
+        AND TRIM(CAST(lora_item.value AS TEXT)) != ''
+        AND (? = '' OR LOWER(CAST(lora_item.value AS TEXT)) LIKE ?)
+      GROUP BY TRIM(CAST(lora_item.value AS TEXT))
+      ORDER BY count DESC, value ASC
+      LIMIT ?
+    `).all(normalizedQuery, likePattern, limit) as Array<{ value: string; count: number }>;
+  }
+
+  /**
    * 총 개수
    */
   static count(): number {

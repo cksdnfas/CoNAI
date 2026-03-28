@@ -4,8 +4,8 @@ import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { clearSearchHistory, deleteSearchHistory, getSearchHistory, saveSearchHistory } from '@/lib/api'
-import type { SearchChip, SearchHistoryEntry, SearchScope } from '@/features/search/search-types'
-import { buildSearchChipKey, buildSearchHistoryLabel, createTextSearchChip, cycleSearchOperator } from '@/features/search/search-utils'
+import type { SearchAiToolGroup, SearchChip, SearchHistoryEntry, SearchScope } from '@/features/search/search-types'
+import { buildSearchChipKey, buildSearchHistoryLabel, createAIToolSearchChip, createTextSearchChip, cycleSearchOperator } from '@/features/search/search-utils'
 
 interface HomeSearchContextValue {
   isDrawerOpen: boolean
@@ -22,6 +22,7 @@ interface HomeSearchContextValue {
   addTextChip: () => boolean
   submitSearchFromInput: () => void
   addSuggestionChip: (value: string) => void
+  addAIToolChip: (tool: SearchAiToolGroup) => void
   addRatingChip: (chip: SearchChip) => void
   cycleChipOperator: (chipId: string) => void
   removeChip: (chipId: string) => void
@@ -110,7 +111,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
   }
 
   const addTextChip = () => {
-    if (searchScope === 'rating') {
+    if (searchScope === 'rating' || searchScope === 'tool') {
       return false
     }
 
@@ -125,11 +126,21 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
   }
 
   const addSuggestionChip = (value: string) => {
-    if (searchScope === 'rating') {
+    if (searchScope === 'rating' || searchScope === 'tool') {
       return
     }
 
     const chip = createTextSearchChip(searchScope, value)
+    if (!chip) {
+      return
+    }
+
+    appendDraftChip(chip)
+    setSearchInputState('')
+  }
+
+  const addAIToolChip = (tool: SearchAiToolGroup) => {
+    const chip = createAIToolSearchChip(tool)
     if (!chip) {
       return
     }
@@ -144,7 +155,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
   }
 
   const withPendingInputChip = (chips: SearchChip[]) => {
-    if (searchScope === 'rating') {
+    if (searchScope === 'rating' || searchScope === 'tool') {
       return chips
     }
 
@@ -199,46 +210,42 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     showSnackbar({ message: '저장된 검색을 다시 적용했어.', tone: 'info' })
   }
 
-  const value = useMemo<HomeSearchContextValue>(() => ({
-    isDrawerOpen,
-    searchScope,
-    searchInput,
-    draftChips,
-    appliedChips,
-    historyEntries,
-    historyLoading: historyQuery.isLoading,
-    openDrawer,
-    closeDrawer,
-    setSearchScope,
-    setSearchInput,
-    addTextChip,
-    submitSearchFromInput,
-    addSuggestionChip,
-    addRatingChip,
-    cycleChipOperator: (chipId: string) => {
-      setDraftChips((current) => current.map((chip) => (chip.id === chipId ? { ...chip, operator: cycleSearchOperator(chip.operator) } : chip)))
-    },
-    removeChip: (chipId: string) => {
-      setDraftChips((current) => current.filter((chip) => chip.id !== chipId))
-    },
-    applySearch,
-    clearSearch,
-    selectHistoryEntry,
-    deleteHistoryEntry: async (entryId: string) => {
-      await deleteHistoryMutation.mutateAsync(entryId)
-    },
-    clearHistoryEntries: async () => {
-      await clearHistoryMutation.mutateAsync()
-    },
-  }), [
-    appliedChips,
-    draftChips,
-    historyEntries,
-    historyQuery.isLoading,
-    isDrawerOpen,
-    searchInput,
-    searchScope,
-  ])
+  const value = useMemo<HomeSearchContextValue>(
+    () => ({
+      isDrawerOpen,
+      searchScope,
+      searchInput,
+      draftChips,
+      appliedChips,
+      historyEntries,
+      historyLoading: historyQuery.isLoading,
+      openDrawer,
+      closeDrawer,
+      setSearchScope,
+      setSearchInput,
+      addTextChip,
+      submitSearchFromInput,
+      addSuggestionChip,
+      addAIToolChip,
+      addRatingChip,
+      cycleChipOperator: (chipId: string) => {
+        setDraftChips((current) => current.map((chip) => (chip.id === chipId ? { ...chip, operator: cycleSearchOperator(chip.operator) } : chip)))
+      },
+      removeChip: (chipId: string) => {
+        setDraftChips((current) => current.filter((chip) => chip.id !== chipId))
+      },
+      applySearch,
+      clearSearch,
+      selectHistoryEntry,
+      deleteHistoryEntry: async (entryId: string) => {
+        await deleteHistoryMutation.mutateAsync(entryId)
+      },
+      clearHistoryEntries: async () => {
+        await clearHistoryMutation.mutateAsync()
+      },
+    }),
+    [appliedChips, draftChips, historyEntries, historyQuery.isLoading, isDrawerOpen, searchInput, searchScope],
+  )
 
   return <HomeSearchContext.Provider value={value}>{children}</HomeSearchContext.Provider>
 }

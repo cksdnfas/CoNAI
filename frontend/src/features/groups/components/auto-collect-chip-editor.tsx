@@ -1,14 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
 import { SearchScopeTabs } from '@/features/search/components/search-scope-tabs'
 import { SearchSuggestionList } from '@/features/search/components/search-suggestion-list'
+import { SEARCH_SCOPE_LABELS, isTextInputSearchScope } from '@/features/search/search-constants'
 import { useSearchSuggestionData } from '@/features/search/use-search-suggestion-data'
 import type { SearchChip, SearchOperator, SearchScope } from '@/features/search/search-types'
-import { buildComplexFilterPayload, buildSearchChipKey, createRatingSearchChip, createTextSearchChip, cycleSearchOperator } from '@/features/search/search-utils'
+import {
+  buildComplexFilterPayload,
+  buildSearchChipKey,
+  createAIToolSearchChip,
+  createRatingSearchChip,
+  createTextSearchChip,
+  cycleSearchOperator,
+} from '@/features/search/search-utils'
 import { parseAutoCollectChipState } from '@/features/groups/auto-collect-chip-utils'
 
 interface AutoCollectEditorState {
@@ -24,7 +31,7 @@ interface AutoCollectChipEditorProps {
 
 /** Create a search chip for the auto-collect editor using the shared search-chip model. */
 function createAutoCollectChip(scope: SearchScope, operator: SearchOperator, value: string): SearchChip | null {
-  if (scope === 'rating') {
+  if (scope === 'rating' || scope === 'tool') {
     return null
   }
 
@@ -32,17 +39,33 @@ function createAutoCollectChip(scope: SearchScope, operator: SearchOperator, val
   return chip ? { ...chip } : null
 }
 
+const SEARCH_SCOPE_PLACEHOLDERS: Partial<Record<SearchScope, string>> = {
+  positive: '긍정 프롬프트를 입력하고 Enter',
+  negative: '부정 프롬프트를 입력하고 Enter',
+  auto: '오토 태그를 입력하고 Enter',
+  model: '모델명을 입력하고 Enter',
+  lora: 'LoRA 이름을 입력하고 Enter',
+}
+
 /** Render the group auto-collect editor with chip-first and JSON fallback modes. */
 export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollectChipEditorProps) {
   const [mode, setMode] = useState<'chip' | 'json'>('chip')
   const [searchScope, setSearchScope] = useState<SearchScope>('positive')
   const [searchInput, setSearchInput] = useState('')
-  const [basicInput, setBasicInput] = useState('')
   const [chips, setChips] = useState<SearchChip[]>([])
   const [jsonText, setJsonText] = useState('')
   const [warningMessage, setWarningMessage] = useState<string | null>(null)
 
-  const { promptSuggestions, filteredRatingTiers, suggestionsLoading, ratingTiersLoading } = useSearchSuggestionData(searchScope, searchInput)
+  const {
+    promptSuggestions,
+    filteredRatingTiers,
+    modelSuggestions,
+    loraSuggestions,
+    suggestionsLoading,
+    ratingTiersLoading,
+    modelSuggestionsLoading,
+    loraSuggestionsLoading,
+  } = useSearchSuggestionData(searchScope, searchInput)
 
   useEffect(() => {
     const parsedState = parseAutoCollectChipState(initialJsonText)
@@ -51,7 +74,6 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
     setJsonText(parsedState.jsonText)
     setWarningMessage(parsedState.warningMessage)
     setSearchInput('')
-    setBasicInput('')
     setSearchScope('positive')
   }, [initialJsonText])
 
@@ -101,48 +123,28 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
     setSearchInput('')
   }
 
-  const addTextChip = () => {
+  const submitSearchInput = () => {
     appendChip(createAutoCollectChip(searchScope, 'OR', searchInput))
   }
 
-  const addSuggestionChip = (value: string) => {
-    appendChip(createAutoCollectChip(searchScope, 'OR', value))
-  }
-
-  const addRatingChip = (tierId: number) => {
-    const tier = filteredRatingTiers.find((item) => item.id === tierId)
-    if (!tier) {
-      return
+  const searchSectionTitle = useMemo(() => {
+    if (searchScope === 'rating') {
+      return '평가 티어'
     }
-
-    appendChip(createRatingSearchChip(tier, { operator: 'OR' }))
-  }
-
-  const addBasicChip = (conditionType: 'ai_tool' | 'model_name') => {
-    const trimmedValue = basicInput.trim()
-    if (!trimmedValue) {
-      return
+    if (searchScope === 'tool') {
+      return 'AI Tool'
     }
+    return `${SEARCH_SCOPE_LABELS[searchScope]} 추천`
+  }, [searchScope])
 
-    appendChip({
-      id: `basic-${conditionType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      scope: 'positive',
-      scopeLabel: '기본',
-      operator: 'OR',
-      label: conditionType === 'ai_tool' ? `AI Tool: ${trimmedValue}` : `Model: ${trimmedValue}`,
-      value: trimmedValue,
-      conditionCategory: 'basic',
-      conditionType,
-    })
-    setBasicInput('')
-  }
+  const isTextInputScope = isTextInputSearchScope(searchScope)
 
   return (
-    <div className="space-y-4 rounded-sm border border-border/70 bg-surface-low/50 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-foreground">자동수집 조건</p>
-          <p className="text-xs text-muted-foreground">검색과 같은 칩/연산자 체계를 공유하고, 복잡한 규칙만 JSON 직접 편집으로 내려가면 돼.</p>
+          <p className="text-xs text-muted-foreground">검색과 같은 필터 모듈을 그대로 써서 조건을 구성해. 복잡한 예외만 JSON으로 내려가면 돼.</p>
         </div>
 
         <div className="inline-flex rounded-sm border border-border bg-background p-1">
@@ -174,73 +176,47 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
         <div className="space-y-4">
           <SearchScopeTabs searchScope={searchScope} onChange={setSearchScope} />
 
-          {searchScope !== 'rating' ? (
-            <div className="flex gap-2">
-              <div className="theme-settings-control flex flex-1 items-center rounded-sm border border-border bg-surface-lowest text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]">
-                <Search className="mr-2 h-4 w-4 text-muted-foreground" />
-                <input
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      addTextChip()
-                    }
-                  }}
-                  placeholder="자동수집에 쓸 키워드를 넣어줘"
-                  className="h-10 w-full bg-transparent outline-none placeholder:text-muted-foreground"
-                />
-              </div>
-              <Button type="button" variant="secondary" onClick={addTextChip}>
-                칩 추가
-              </Button>
+          {isTextInputScope ? (
+            <div className="theme-settings-control flex items-center rounded-sm border border-border bg-surface-lowest text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]">
+              <Search className="mr-2 h-4 w-4 text-muted-foreground" />
+              <input
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    submitSearchInput()
+                  }
+                }}
+                placeholder={SEARCH_SCOPE_PLACEHOLDERS[searchScope]}
+                className="h-10 w-full bg-transparent outline-none placeholder:text-muted-foreground"
+              />
             </div>
           ) : null}
 
-          <div className="space-y-2 rounded-sm border border-border/70 bg-background/60 p-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Basic conditions</p>
-              <p className="mt-1 text-xs text-muted-foreground">AI Tool / Model 기준 자동수집도 여기서 바로 추가할 수 있어.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <div className="theme-settings-control flex min-w-[220px] flex-1 items-center rounded-sm border border-border bg-surface-lowest text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]">
-                <input
-                  value={basicInput}
-                  onChange={(event) => setBasicInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      addBasicChip('ai_tool')
-                    }
-                  }}
-                  placeholder="예: NovelAI / SDXL / pony"
-                  className="h-10 w-full bg-transparent px-3 outline-none placeholder:text-muted-foreground"
-                />
-              </div>
-              <Button type="button" variant="secondary" onClick={() => addBasicChip('ai_tool')}>
-                AI Tool 추가
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => addBasicChip('model_name')}>
-                Model 추가
-              </Button>
-            </div>
-          </div>
-
-          <div className="rounded-sm border border-border/70 bg-background/60">
+          <div className="overflow-hidden rounded-sm border border-border/70 bg-background/60">
             <div className="border-b border-border/70 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              {searchScope === 'rating' ? 'Rating tiers' : 'Prompt suggestions'}
+              {searchSectionTitle}
             </div>
-            <div className="max-h-56 overflow-y-auto py-2">
+            <div className="max-h-64 overflow-y-auto py-2">
               <SearchSuggestionList
                 searchScope={searchScope}
                 searchInput={searchInput}
                 promptSuggestions={promptSuggestions}
                 filteredRatingTiers={filteredRatingTiers}
+                modelSuggestions={modelSuggestions}
+                loraSuggestions={loraSuggestions}
                 suggestionsLoading={suggestionsLoading}
                 ratingTiersLoading={ratingTiersLoading}
-                onSubmitInput={addTextChip}
-                onSelectSuggestion={(item) => addSuggestionChip(item.prompt)}
-                onSelectRatingTier={(tier) => addRatingChip(tier.id)}
+                modelSuggestionsLoading={modelSuggestionsLoading}
+                loraSuggestionsLoading={loraSuggestionsLoading}
+                onSubmitInput={submitSearchInput}
+                onSelectSuggestion={(item) => appendChip(createAutoCollectChip(searchScope, 'OR', item.prompt))}
+                onSelectMetadataSuggestion={(value) => appendChip(createAutoCollectChip(searchScope, 'OR', value))}
+                onSelectRatingTier={(tier) => appendChip(createRatingSearchChip(tier, { operator: 'OR' }))}
+                onSelectAIToolSuggestion={(tool) => appendChip(createAIToolSearchChip(tool, { operator: 'OR' }))}
+                emptyRatingText="사용 가능한 평가 티어가 없어."
+                idlePromptText="먼저 검색어를 입력하면 추천 프롬프트가 보여."
               />
             </div>
           </div>

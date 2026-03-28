@@ -1,5 +1,7 @@
-import type { RatingTierRecord, SearchChip, SearchOperator, SearchScope } from './search-types'
-import { SEARCH_SCOPE_LABELS } from './search-constants'
+import type { CSSProperties } from 'react'
+import { getThemeToneStyle } from '@/lib/theme-tones'
+import { SEARCH_AI_TOOL_OPTIONS, SEARCH_SCOPE_LABELS } from './search-constants'
+import type { RatingTierRecord, SearchAiToolGroup, SearchChip, SearchOperator, SearchScope } from './search-types'
 
 const SEARCH_OPERATOR_SEQUENCE: SearchOperator[] = ['OR', 'AND', 'NOT']
 
@@ -18,11 +20,37 @@ export function createSearchChipId(scope: SearchScope) {
   return `${scope}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-/** Create a basic text search chip using the shared search semantics. */
-export function createTextSearchChip(scope: Exclude<SearchScope, 'rating'>, value: string, options?: { operator?: SearchOperator }) {
+/** Create a text-driven search chip using the shared search semantics. */
+export function createTextSearchChip(scope: Exclude<SearchScope, 'rating' | 'tool'>, value: string, options?: { operator?: SearchOperator }) {
   const trimmedValue = value.trim()
   if (!trimmedValue) {
     return null
+  }
+
+  if (scope === 'model') {
+    return {
+      id: createSearchChipId(scope),
+      scope,
+      operator: options?.operator ?? 'OR',
+      label: trimmedValue,
+      value: trimmedValue,
+      scopeLabel: SEARCH_SCOPE_LABELS[scope],
+      conditionCategory: 'basic',
+      conditionType: 'model_name',
+    } satisfies SearchChip
+  }
+
+  if (scope === 'lora') {
+    return {
+      id: createSearchChipId(scope),
+      scope,
+      operator: options?.operator ?? 'OR',
+      label: trimmedValue,
+      value: trimmedValue,
+      scopeLabel: SEARCH_SCOPE_LABELS[scope],
+      conditionCategory: 'basic',
+      conditionType: 'lora_model',
+    } satisfies SearchChip
   }
 
   return {
@@ -32,6 +60,43 @@ export function createTextSearchChip(scope: Exclude<SearchScope, 'rating'>, valu
     label: buildSearchChipLabel(scope, trimmedValue),
     value: trimmedValue,
   } satisfies SearchChip
+}
+
+/** Create a fixed AI-tool group chip (NAI / ComfyUI / Other). */
+export function createAIToolSearchChip(tool: SearchAiToolGroup, options?: { operator?: SearchOperator }) {
+  const option = SEARCH_AI_TOOL_OPTIONS.find((item) => item.value === tool)
+  if (!option) {
+    return null
+  }
+
+  return {
+    id: createSearchChipId('tool'),
+    scope: 'tool',
+    operator: options?.operator ?? 'OR',
+    label: option.label,
+    value: option.value,
+    scopeLabel: SEARCH_SCOPE_LABELS.tool,
+    conditionCategory: 'basic',
+    conditionType: 'ai_tool_group',
+  } satisfies SearchChip
+}
+
+/** Normalize legacy/raw AI tool values into the grouped Tool tab values when possible. */
+export function normalizeAIToolGroupValue(value: string): SearchAiToolGroup | null {
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) {
+    return null
+  }
+
+  if (normalized === 'nai' || normalized === 'novelai') {
+    return 'nai'
+  }
+
+  if (normalized === 'comfyui') {
+    return 'comfyui'
+  }
+
+  return null
 }
 
 /** Create a rating-tier search chip using the shared rating semantics. */
@@ -69,6 +134,35 @@ export function buildSearchHistoryLabel(chips: SearchChip[]) {
     })
     .join(' · ')
     .slice(0, 180)
+}
+
+/** Resolve the shared pill/toggle style for each search scope. */
+export function getSearchScopeStyle(scope: SearchScope): CSSProperties {
+  if (scope === 'positive' || scope === 'negative' || scope === 'auto' || scope === 'rating') {
+    return getThemeToneStyle(scope)
+  }
+
+  if (scope === 'model') {
+    return {
+      backgroundColor: 'color-mix(in srgb, var(--primary) 12%, transparent)',
+      color: 'color-mix(in srgb, var(--primary) 88%, white 4%)',
+      boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--primary) 24%, transparent)',
+    }
+  }
+
+  if (scope === 'lora') {
+    return {
+      backgroundColor: 'color-mix(in srgb, var(--secondary) 14%, transparent)',
+      color: 'color-mix(in srgb, var(--secondary) 88%, white 2%)',
+      boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--secondary) 24%, transparent)',
+    }
+  }
+
+  return {
+    backgroundColor: 'color-mix(in srgb, #f59e0b 14%, transparent)',
+    color: 'color-mix(in srgb, #f59e0b 90%, white 2%)',
+    boxShadow: 'inset 0 0 0 1px color-mix(in srgb, #f59e0b 28%, transparent)',
+  }
 }
 
 /** Convert UI chips into the backend complex filter payload. */

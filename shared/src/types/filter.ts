@@ -22,7 +22,7 @@ export interface FilterCondition {
 
   // Condition type (세부 조건 타입)
   // Basic category
-  type: 'ai_tool' | 'model_name' |
+  type: 'ai_tool' | 'ai_tool_group' | 'model_name' | 'lora_model' |
   // Prompt category
   'prompt_contains' | 'prompt_regex' |
   'negative_prompt_contains' | 'negative_prompt_regex' |

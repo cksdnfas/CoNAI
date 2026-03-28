@@ -1,5 +1,5 @@
 import { fetchJson } from '@/lib/api-client'
-import type { SearchChip, SearchHistoryEntry, RatingTierRecord } from '@/features/search/search-types'
+import type { RatingTierRecord, SearchChip, SearchHistoryEntry, SearchMetadataSuggestion } from '@/features/search/search-types'
 
 interface ApiResponse<T> {
   success: boolean
@@ -60,6 +60,32 @@ export async function getRatingTiers() {
   const response = await fetchJson<ApiResponse<RatingTierRecord[]>>('/api/settings/rating/tiers')
   if (!response.success || !response.data) {
     throw new Error(response.error || '평가 티어를 불러오지 못했어.')
+  }
+  return response.data
+}
+
+/** Load distinct model suggestions from indexed image metadata. */
+export async function getSearchModelSuggestions(params?: { query?: string; limit?: number }) {
+  const searchParams = new URLSearchParams()
+  searchParams.set('q', params?.query ?? '')
+  searchParams.set('limit', String(params?.limit ?? 16))
+
+  const response = await fetchJson<ApiResponse<SearchMetadataSuggestion[]>>(`/api/search-options/models?${searchParams.toString()}`)
+  if (!response.success || !response.data) {
+    throw new Error(response.error || '모델 추천 목록을 불러오지 못했어.')
+  }
+  return response.data
+}
+
+/** Load distinct LoRA suggestions from indexed image metadata. */
+export async function getSearchLoraSuggestions(params?: { query?: string; limit?: number }) {
+  const searchParams = new URLSearchParams()
+  searchParams.set('q', params?.query ?? '')
+  searchParams.set('limit', String(params?.limit ?? 16))
+
+  const response = await fetchJson<ApiResponse<SearchMetadataSuggestion[]>>(`/api/search-options/loras?${searchParams.toString()}`)
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'LoRA 추천 목록을 불러오지 못했어.')
   }
   return response.data
 }

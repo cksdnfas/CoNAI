@@ -4,7 +4,7 @@
  * Handles all regex and string matching conditions:
  * - prompt_contains, prompt_regex
  * - negative_prompt_contains, negative_prompt_regex
- * - model_name, filename, ai_tool
+ * - model_name, lora_model, filename, ai_tool
  */
 
 import { AutoCollectCondition } from '@conai/shared';
@@ -46,7 +46,7 @@ export class RegexEvaluator implements ConditionEvaluator {
     const { type, value, case_sensitive = false } = condition;
 
     // All regex conditions require string value
-    if (typeof value !== 'string' && !['ai_tool'].includes(type)) {
+    if (typeof value !== 'string') {
       return false;
     }
 
@@ -95,6 +95,25 @@ export class RegexEvaluator implements ConditionEvaluator {
           value as string,
           case_sensitive
         );
+
+      case 'ai_tool_group':
+        return this.evaluateAIToolGroup(image.ai_tool || '', value as string);
+
+      case 'lora_model': {
+        const loraValue = (image as { lora_models?: string | string[] | null }).lora_models;
+        const loraText = typeof loraValue === 'string'
+          ? loraValue
+          : Array.isArray(loraValue)
+            ? loraValue.join(', ')
+            : '';
+
+        return this.evaluateContains(
+          loraText,
+          value as string,
+          case_sensitive,
+          condition.exact_match
+        );
+      }
 
       default:
         return false;
@@ -154,6 +173,26 @@ export class RegexEvaluator implements ConditionEvaluator {
   }
 
   /**
+   * Evaluate grouped AI tool options used by the shared search UI.
+   */
+  private evaluateAIToolGroup(targetText: string, searchValue: string): boolean {
+    const normalizedTarget = targetText.trim().toLowerCase();
+    const normalizedSearch = searchValue.trim().toLowerCase();
+
+    if (normalizedSearch === 'nai') {
+      return normalizedTarget === 'novelai';
+    }
+    if (normalizedSearch === 'comfyui') {
+      return normalizedTarget === 'comfyui';
+    }
+    if (normalizedSearch === 'other') {
+      return normalizedTarget.length > 0 && normalizedTarget !== 'novelai' && normalizedTarget !== 'comfyui';
+    }
+
+    return false;
+  }
+
+  /**
    * Get condition types handled by this evaluator
    */
   getHandledTypes(): AutoCollectCondition['type'][] {
@@ -163,7 +202,9 @@ export class RegexEvaluator implements ConditionEvaluator {
       'negative_prompt_contains',
       'negative_prompt_regex',
       'model_name',
-      'ai_tool'
+      'lora_model',
+      'ai_tool',
+      'ai_tool_group'
     ];
   }
 }

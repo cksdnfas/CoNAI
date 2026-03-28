@@ -1,5 +1,5 @@
 import type { SearchChip, SearchOperator, SearchScope } from '@/features/search/search-types'
-import { createSearchChipId } from '@/features/search/search-utils'
+import { createAIToolSearchChip, createSearchChipId, normalizeAIToolGroupValue } from '@/features/search/search-utils'
 
 interface FilterConditionLike {
   category?: string
@@ -34,31 +34,47 @@ function buildSearchChipFromCondition(condition: FilterConditionLike, operator: 
     scope = 'auto'
   } else if (condition.type === 'auto_tag_rating_score') {
     scope = 'rating'
-  } else if (condition.type === 'ai_tool' || condition.type === 'model_name') {
-    scope = 'positive'
+  } else if (condition.type === 'model_name') {
+    scope = 'model'
+  } else if (condition.type === 'lora_model') {
+    scope = 'lora'
+  } else if (condition.type === 'ai_tool_group') {
+    scope = 'tool'
+  } else if (condition.type === 'ai_tool') {
+    const rawValue = typeof condition.value === 'string' || typeof condition.value === 'number' ? String(condition.value) : ''
+    const toolGroup = normalizeAIToolGroupValue(rawValue)
+    if (!toolGroup) {
+      return null
+    }
+
+    const chip = createAIToolSearchChip(toolGroup, { operator })
+    return chip ? { ...chip, id: createSearchChipId('tool') } : null
   }
 
   if (!scope) {
     return null
   }
 
-  const rawValue = typeof condition.value === 'string' || typeof condition.value === 'number'
-    ? String(condition.value)
-    : ''
+  const rawValue = typeof condition.value === 'string' || typeof condition.value === 'number' ? String(condition.value) : ''
   const value = rawValue.trim()
   if (!value) {
     return null
+  }
+
+  if (scope === 'tool') {
+    const chip = createAIToolSearchChip(value as 'nai' | 'comfyui' | 'other', { operator })
+    return chip ? { ...chip, id: createSearchChipId('tool') } : null
   }
 
   return {
     id: createSearchChipId(scope),
     scope,
     operator,
-    label: condition.type === 'ai_tool' ? `AI Tool: ${value}` : condition.type === 'model_name' ? `Model: ${value}` : value,
+    label: value,
     value,
     minScore: condition.min_score,
     maxScore: condition.max_score,
-    scopeLabel: condition.type === 'ai_tool' || condition.type === 'model_name' ? '기본' : undefined,
+    scopeLabel: scope === 'model' ? '모델' : scope === 'lora' ? 'LoRA' : undefined,
     conditionCategory: condition.category,
     conditionType: condition.type,
   }

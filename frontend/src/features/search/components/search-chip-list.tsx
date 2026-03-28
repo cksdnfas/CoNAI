@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
-import { getThemeToneStyle } from '@/lib/theme-tones'
 import { SEARCH_SCOPE_LABELS } from '@/features/search/search-constants'
+import { getSearchScopeStyle } from '@/features/search/search-utils'
 import type { SearchChip } from '@/features/search/search-types'
 
 interface SearchChipListProps {
@@ -27,7 +27,7 @@ export function SearchChipList({
         <div className="space-y-2">
           {chips.map((chip) => (
             <div key={chip.id} className="flex items-center gap-2 rounded-sm border border-border bg-background px-3 py-3">
-              <span className="rounded-sm px-2 py-1 text-[11px] font-semibold tracking-[0.08em]" style={getThemeToneStyle(chip.scope)}>
+              <span className="rounded-sm px-2 py-1 text-[11px] font-semibold tracking-[0.08em]" style={getSearchScopeStyle(chip.scope)}>
                 {chip.scopeLabel ?? SEARCH_SCOPE_LABELS[chip.scope]}
               </span>
               <button

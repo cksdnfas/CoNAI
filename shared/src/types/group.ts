@@ -35,7 +35,7 @@ export interface ImageGroupRecord {
 export interface AutoCollectCondition {
   type: 'prompt_contains' | 'prompt_regex' |
         'negative_prompt_contains' | 'negative_prompt_regex' |
-        'ai_tool' | 'model_name' |
+        'ai_tool' | 'ai_tool_group' | 'model_name' | 'lora_model' |
         // Auto-tag related conditions
         'auto_tag_rating' | 'auto_tag_general' |
         'auto_tag_character' | 'auto_tag_model' |
