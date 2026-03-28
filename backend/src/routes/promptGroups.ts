@@ -40,7 +40,7 @@ router.get('/export', async (req: Request, res: Response) => {
   try {
     const { type = 'positive' } = req.query;
 
-    const exportData = await PromptGroupService.exportToJSON(type as 'positive' | 'negative');
+    const exportData = await PromptGroupService.exportToJSON(type as 'positive' | 'negative' | 'auto');
 
     // 파일 다운로드 헤더 설정
     const filename = `prompt_groups_${type}_${new Date().toISOString().split('T')[0]}.json`;
@@ -428,7 +428,7 @@ router.post('/import', async (req: Request, res: Response) => {
       return res.status(400).json(response);
     }
 
-    const result = await PromptGroupService.importFromJSON(importData, type as 'positive' | 'negative');
+    const result = await PromptGroupService.importFromJSON(importData, type as 'positive' | 'negative' | 'auto');
 
     const response: PromptGroupResponse = {
       success: result.success,

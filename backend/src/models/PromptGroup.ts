@@ -189,31 +189,36 @@ export class PromptGroupModel {
    */
   static reassignGroupIds(
     groupData: GroupImportData[],
-    type: 'positive' | 'negative' | 'auto' = 'positive'
+    type: 'positive' | 'negative' | 'auto' = 'positive',
+    preserveExisting: boolean = true
   ): { old_id: number; new_id: number; group_name: string }[] {
     const tableName = getTableName(type);
     const reassignments: { old_id: number; new_id: number; group_name: string }[] = [];
+    const pendingParentUpdates: Array<{ id: number; old_parent_id: number | null }> = [];
 
     // 1. 기존 그룹들 조회
     const existingGroups = this.findAll(true, type);
 
-    // 2. 임시 테이블 생성 및 기존 데이터 백업
-    db.prepare(`CREATE TEMPORARY TABLE temp_${tableName} AS SELECT * FROM ${tableName}`).run();
+    // 2. 백업에 없는 기존 그룹만 뒤에 유지
+    const jsonGroupNames = new Set(groupData.map(g => g.group_name));
+    const existingNonDuplicate = preserveExisting
+      ? existingGroups.filter(g => !jsonGroupNames.has(g.group_name))
+      : [];
 
     // 3. 기존 테이블 클리어
     db.prepare(`DELETE FROM ${tableName}`).run();
 
-    // 4. JSON 그룹들을 우선 삽입
+    // 4. JSON 그룹들을 먼저 삽입하고 parent_id는 2차 remap
     for (const group of groupData) {
       const info = db.prepare(`INSERT INTO ${tableName} (group_name, display_order, is_visible, parent_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`).run(
+           VALUES (?, ?, ?, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`).run(
         group.group_name,
         group.display_order,
-        group.is_visible ? 1 : 0,
-        group.parent_id || null
+        group.is_visible ? 1 : 0
       );
 
       const newId = info.lastInsertRowid as number;
+      pendingParentUpdates.push({ id: newId, old_parent_id: group.parent_id ?? null });
 
       if (group.id) {
         reassignments.push({
@@ -225,22 +230,18 @@ export class PromptGroupModel {
     }
 
     // 5. 기존 그룹들 중 중복되지 않는 것들을 뒤쪽 ID로 삽입
-    const jsonGroupNames = new Set(groupData.map(g => g.group_name));
-    const existingNonDuplicate = existingGroups.filter(g => !jsonGroupNames.has(g.group_name));
-
     for (const existingGroup of existingNonDuplicate) {
       const info = db.prepare(`INSERT INTO ${tableName} (group_name, display_order, is_visible, parent_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)`).run(
+           VALUES (?, ?, ?, NULL, ?, ?)`).run(
         existingGroup.group_name,
         existingGroup.display_order,
         existingGroup.is_visible ? 1 : 0,
-        existingGroup.parent_id || null,
         existingGroup.created_at,
         existingGroup.updated_at
       );
 
       const newId = info.lastInsertRowid as number;
-
+      pendingParentUpdates.push({ id: newId, old_parent_id: existingGroup.parent_id ?? null });
       reassignments.push({
         old_id: existingGroup.id,
         new_id: newId,
@@ -248,8 +249,12 @@ export class PromptGroupModel {
       });
     }
 
-    // 6. 임시 테이블 삭제
-    db.prepare(`DROP TABLE temp_${tableName}`).run();
+    // 6. parent_id를 새 ID 기준으로 remap
+    const idMap = new Map(reassignments.map(item => [item.old_id, item.new_id]));
+    for (const item of pendingParentUpdates) {
+      const nextParentId = item.old_parent_id == null ? null : (idMap.get(item.old_parent_id) ?? null);
+      db.prepare(`UPDATE ${tableName} SET parent_id = ? WHERE id = ?`).run(nextParentId, item.id);
+    }
 
     return reassignments;
   }

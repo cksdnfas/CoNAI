@@ -412,14 +412,26 @@ export class PromptCollectionModel {
 
     for (const setting of settings) {
       const row = db.prepare(`SELECT id FROM ${tableName} WHERE prompt = ?`).get(setting.prompt) as any;
+      const synonymsJson = setting.synonyms ? JSON.stringify(setting.synonyms) : null;
+      const usageCount = typeof setting.usage_count === 'number' && Number.isFinite(setting.usage_count)
+        ? Math.max(0, Math.trunc(setting.usage_count))
+        : 0;
 
       if (row) {
-        const synonymsJson = setting.synonyms ? JSON.stringify(setting.synonyms) : null;
-        const info = db.prepare(`UPDATE ${tableName} SET group_id = ?, synonyms = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(setting.group_id || null, synonymsJson, row.id);
+        const info = db.prepare(`UPDATE ${tableName} SET usage_count = ?, group_id = ?, synonyms = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(
+          usageCount,
+          setting.group_id ?? null,
+          synonymsJson,
+          row.id
+        );
         if (info.changes > 0) updatedCount++;
       } else {
-        const synonymsJson = setting.synonyms ? JSON.stringify(setting.synonyms) : null;
-        db.prepare(`INSERT INTO ${tableName} (prompt, usage_count, group_id, synonyms) VALUES (?, 0, ?, ?)`).run(setting.prompt, setting.group_id || null, synonymsJson);
+        db.prepare(`INSERT INTO ${tableName} (prompt, usage_count, group_id, synonyms) VALUES (?, ?, ?, ?)`).run(
+          setting.prompt,
+          usageCount,
+          setting.group_id ?? null,
+          synonymsJson
+        );
         updatedCount++;
       }
     }

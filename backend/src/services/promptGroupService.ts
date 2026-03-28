@@ -5,11 +5,11 @@ import {
   PromptGroupData,
   PromptGroupWithPrompts,
   GroupReassignmentResult,
-  GroupImportData,
   GroupExportData,
   GroupedPromptsResult,
   GroupedPrompts,
-  PromptItem
+  PromptItem,
+  PromptBackupItem
 } from '../types/promptGroup';
 import { db } from '../database/init';
 
@@ -153,17 +153,21 @@ export class PromptGroupService {
   }
 
   /**
-   * JSON으로 그룹 설정 내보내기
+   * Export a prompt snapshot with groups, hierarchy, and prompt assignments.
    */
   static async exportToJSON(type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<GroupExportData> {
     try {
       const groups = await PromptGroupModel.exportForJSON(type);
+      const prompts = PromptCollectionModel.exportAllPrompts(type) as PromptBackupItem[];
 
       return {
+        version: '2.0',
         groups,
+        prompts,
         metadata: {
           export_date: new Date().toISOString(),
           total_groups: groups.length,
+          total_prompts: prompts.length,
           type
         }
       };
@@ -174,33 +178,58 @@ export class PromptGroupService {
   }
 
   /**
-   * JSON에서 그룹 설정 가져오기 (복잡한 ID 재배치 로직)
+   * Restore a prompt snapshot with group remapping and prompt upserts.
    */
   static async importFromJSON(
     importData: GroupExportData,
     type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<GroupReassignmentResult> {
     try {
-      // 1. 그룹 ID 재배치
-      const reassignments = await PromptGroupModel.reassignGroupIds(importData.groups, type);
+      const result = db.transaction(() => {
+        const hasPromptSnapshot = Array.isArray(importData.prompts)
 
-      // 2. 프롬프트 컬렉션의 group_id 업데이트
-      let updatedPrompts = 0;
-      for (const reassignment of reassignments) {
-        const count = await this.updatePromptGroupIds(
-          reassignment.old_id,
-          reassignment.new_id,
-          type
-        );
-        updatedPrompts += count;
-      }
+        // 1. 그룹 ID 재배치
+        const reassignments = PromptGroupModel.reassignGroupIds(importData.groups, type, !hasPromptSnapshot);
+        const idMap = new Map(reassignments.map(item => [item.old_id, item.new_id]));
 
-      return {
-        success: true,
-        reassigned_groups: reassignments,
-        updated_prompts: updatedPrompts,
-        message: `Successfully imported ${importData.groups.length} groups and updated ${updatedPrompts} prompts`
-      };
+        // 2. 새 포맷이면 프롬프트 스냅샷 자체를 복원
+        if (hasPromptSnapshot) {
+          const snapshotPrompts = importData.prompts ?? []
+          const remappedPrompts = snapshotPrompts.map(prompt => ({
+            ...prompt,
+            group_id: prompt.group_id == null ? null : (idMap.get(prompt.group_id) ?? null)
+          }));
+
+          const restoredPrompts = PromptCollectionModel.importSettings(remappedPrompts, type);
+
+          return {
+            success: true,
+            reassigned_groups: reassignments,
+            updated_prompts: restoredPrompts,
+            message: `Successfully imported ${importData.groups.length} groups and restored ${restoredPrompts} prompts`
+          } as GroupReassignmentResult;
+        }
+
+        // 3. 구버전 포맷은 기존 DB 프롬프트 재할당만 수행
+        let updatedPrompts = 0;
+        for (const reassignment of reassignments) {
+          const count = this.updatePromptGroupIds(
+            reassignment.old_id,
+            reassignment.new_id,
+            type
+          );
+          updatedPrompts += count;
+        }
+
+        return {
+          success: true,
+          reassigned_groups: reassignments,
+          updated_prompts: updatedPrompts,
+          message: `Successfully imported ${importData.groups.length} groups and reassigned ${updatedPrompts} existing prompts`
+        } as GroupReassignmentResult;
+      })();
+
+      return result;
     } catch (error) {
       console.error('Error importing from JSON:', error);
       return {
@@ -248,11 +277,11 @@ export class PromptGroupService {
   /**
    * 프롬프트 컬렉션의 group_id 업데이트 (내부 유틸리티)
    */
-  private static async updatePromptGroupIds(
+  private static updatePromptGroupIds(
     oldGroupId: number | null,
     newGroupId: number | null,
     type: 'positive' | 'negative' | 'auto' = 'positive'
-  ): Promise<number> {
+  ): number {
     const tableName = getPromptTableName(type);
 
     let query: string;

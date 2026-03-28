@@ -55,11 +55,21 @@ export interface GroupImportData {
   parent_id: number | null;
 }
 
+export interface PromptBackupItem {
+  prompt: string;
+  usage_count: number;
+  group_id: number | null;
+  synonyms?: string[] | null;
+}
+
 export interface GroupExportData {
+  version?: '2.0';
   groups: GroupImportData[];
+  prompts?: PromptBackupItem[];
   metadata: {
     export_date: string;
     total_groups: number;
+    total_prompts?: number;
     type: 'positive' | 'negative' | 'auto';
   };
 }
