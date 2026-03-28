@@ -74,10 +74,14 @@ fs.copyFileSync(BUNDLE_FILE, path.join(appDir, 'bundle.js'));
 console.log('   ✅ Copied bundle.js');
 
 // Copy migration files (compiled .js from dist)
-const migrationsSource = path.join(ROOT_DIR, 'backend', 'dist', 'database', 'migrations');
+const migrationsSourceCandidates = [
+  path.join(ROOT_DIR, 'backend', 'dist', 'database', 'migrations'),
+  path.join(ROOT_DIR, 'backend', 'dist', 'backend', 'src', 'database', 'migrations')
+];
+const migrationsSource = migrationsSourceCandidates.find((candidate) => fs.existsSync(candidate));
 const migrationsTarget = path.join(appDir, 'migrations');
 
-if (fs.existsSync(migrationsSource)) {
+if (migrationsSource) {
   fs.copySync(migrationsSource, migrationsTarget, {
     filter: (src) => {
       // .js 파일과 디렉토리만 복사 (컴파일된 JavaScript + 서브폴더)
@@ -121,13 +125,28 @@ console.log('Step 5: Copying native modules...');
 const appNodeModules = path.join(appDir, 'node_modules');
 fs.ensureDirSync(appNodeModules);
 
-// Find source node_modules
-const sourceNodeModules = fs.existsSync(path.join(ROOT_DIR, 'backend', 'node_modules'))
-  ? path.join(ROOT_DIR, 'backend', 'node_modules')
-  : path.join(ROOT_DIR, 'node_modules');
+// Resolve module locations across workspace roots.
+const sourceNodeModulesCandidates = [
+  path.join(ROOT_DIR, 'backend', 'node_modules'),
+  path.join(ROOT_DIR, 'node_modules')
+].filter((candidate, index, list) => list.indexOf(candidate) === index && fs.existsSync(candidate));
+
+const resolveModuleSourcePath = (moduleName) => {
+  for (const nodeModulesPath of sourceNodeModulesCandidates) {
+    const modulePath = path.join(nodeModulesPath, moduleName);
+    if (fs.existsSync(path.join(modulePath, 'package.json')) || fs.existsSync(modulePath)) {
+      return modulePath;
+    }
+  }
+  return null;
+};
 
 console.log(`   📦 Reading sharp package.json to find all dependencies...`);
-const sharpSource = path.join(sourceNodeModules, 'sharp');
+const sharpSource = resolveModuleSourcePath('sharp');
+if (!sharpSource) {
+  console.error('❌ sharp not found in backend/node_modules or root node_modules');
+  process.exit(1);
+}
 const sharpPackageJson = JSON.parse(fs.readFileSync(path.join(sharpSource, 'package.json'), 'utf8'));
 
 // Collect all sharp dependencies
@@ -150,9 +169,10 @@ const collectAllDependencies = (moduleName, collected = new Set()) => {
   if (collected.has(moduleName)) return collected;
   collected.add(moduleName);
 
-  const modulePath = path.join(sourceNodeModules, moduleName);
-  const packageJsonPath = path.join(modulePath, 'package.json');
+  const modulePath = resolveModuleSourcePath(moduleName);
+  if (!modulePath) return collected;
 
+  const packageJsonPath = path.join(modulePath, 'package.json');
   if (!fs.existsSync(packageJsonPath)) return collected;
 
   try {
@@ -186,9 +206,9 @@ console.log(`   ✅ Copied sharp`);
 
 // Copy better-sqlite3 and collect its dependencies
 console.log(`   📦 Copying better-sqlite3...`);
-const betterSqlite3Source = path.join(sourceNodeModules, 'better-sqlite3');
+const betterSqlite3Source = resolveModuleSourcePath('better-sqlite3');
 const betterSqlite3Target = path.join(appNodeModules, 'better-sqlite3');
-if (fs.existsSync(betterSqlite3Source)) {
+if (betterSqlite3Source && fs.existsSync(betterSqlite3Source)) {
   fs.copySync(betterSqlite3Source, betterSqlite3Target, { dereference: true });
   console.log(`   ✅ Copied better-sqlite3`);
 
@@ -204,9 +224,9 @@ if (fs.existsSync(betterSqlite3Source)) {
 
 // Copy argon2 and collect its dependencies
 console.log(`   📦 Copying argon2...`);
-const argon2Source = path.join(sourceNodeModules, 'argon2');
+const argon2Source = resolveModuleSourcePath('argon2');
 const argon2Target = path.join(appNodeModules, 'argon2');
-if (fs.existsSync(argon2Source)) {
+if (argon2Source && fs.existsSync(argon2Source)) {
   fs.copySync(argon2Source, argon2Target, { dereference: true });
   console.log(`   ✅ Copied argon2`);
 
@@ -224,9 +244,9 @@ if (fs.existsSync(argon2Source)) {
 
 // Copy blake2 and collect its dependencies
 console.log(`   📦 Copying blake2...`);
-const blake2Source = path.join(sourceNodeModules, 'blake2');
+const blake2Source = resolveModuleSourcePath('blake2');
 const blake2Target = path.join(appNodeModules, 'blake2');
-if (fs.existsSync(blake2Source)) {
+if (blake2Source && fs.existsSync(blake2Source)) {
   fs.copySync(blake2Source, blake2Target, { dereference: true });
   console.log(`   ✅ Copied blake2`);
 
@@ -246,10 +266,10 @@ if (fs.existsSync(blake2Source)) {
 console.log(`   📦 Copying all dependencies (${allDependencies.size} total)...`);
 let copiedCount = 0;
 for (const dep of allDependencies) {
-  const depSource = path.join(sourceNodeModules, dep);
+  const depSource = resolveModuleSourcePath(dep);
   const depTarget = path.join(appNodeModules, dep);
 
-  if (fs.existsSync(depSource) && !fs.existsSync(depTarget)) {
+  if (depSource && fs.existsSync(depSource) && !fs.existsSync(depTarget)) {
     try {
       fs.copySync(depSource, depTarget, { dereference: true });
       copiedCount++;
@@ -262,10 +282,10 @@ console.log(`   ✅ Copied ${copiedCount} dependencies`);
 
 // Copy @img scoped packages (sharp platform binaries)
 console.log('   📦 Copying @img platform binaries...');
-const imgScopeSource = path.join(sourceNodeModules, '@img');
+const imgScopeSource = resolveModuleSourcePath('@img');
 const imgScopeTarget = path.join(appNodeModules, '@img');
 
-if (fs.existsSync(imgScopeSource)) {
+if (imgScopeSource && fs.existsSync(imgScopeSource)) {
   fs.copySync(imgScopeSource, imgScopeTarget, { dereference: true });
   const packages = fs.readdirSync(imgScopeTarget);
   console.log(`   ✅ Copied ${packages.length} @img packages`);
@@ -279,10 +299,10 @@ const ffmpegModules = ['ffmpeg-static', 'ffprobe-static'];
 let ffmpegCopied = 0;
 
 for (const mod of ffmpegModules) {
-  const modSource = path.join(sourceNodeModules, mod);
+  const modSource = resolveModuleSourcePath(mod);
   const modTarget = path.join(appNodeModules, mod);
 
-  if (fs.existsSync(modSource)) {
+  if (modSource && fs.existsSync(modSource)) {
     fs.copySync(modSource, modTarget, { dereference: true });
 
     // Set executable permissions on Unix-like systems

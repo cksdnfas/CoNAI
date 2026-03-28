@@ -555,9 +555,15 @@ export function ComfyWorkflowAuthoringModal({
                       elementsSelectable
                       panOnDrag
                     >
-                      <MiniMap pannable zoomable nodeColor="#7c4dff" maskColor="rgba(8, 11, 18, 0.6)" className="!bg-[#11131a]" />
+                      <MiniMap
+                        pannable
+                        zoomable
+                        nodeColor="var(--primary)"
+                        maskColor="color-mix(in srgb, var(--background) 72%, transparent)"
+                        className="!bg-background"
+                      />
                       <Controls />
-                      <Background color="rgba(255,255,255,0.08)" />
+                      <Background color="color-mix(in srgb, var(--foreground) 10%, transparent)" />
                     </ReactFlow>
                   </ReactFlowProvider>
                 ) : (

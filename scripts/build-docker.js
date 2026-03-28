@@ -76,10 +76,14 @@ const safeRemove = async (dirPath) => {
     console.log('   ✅ Copied bundle.js');
 
     // Copy migration files (compiled .js from dist)
-    const migrationsSource = path.join(ROOT_DIR, 'backend', 'dist', 'database', 'migrations');
+    const migrationsSourceCandidates = [
+      path.join(ROOT_DIR, 'backend', 'dist', 'database', 'migrations'),
+      path.join(ROOT_DIR, 'backend', 'dist', 'backend', 'src', 'database', 'migrations')
+    ];
+    const migrationsSource = migrationsSourceCandidates.find((candidate) => fs.existsSync(candidate));
     const migrationsTarget = path.join(DOCKER_OUTPUT_DIR, 'migrations');
 
-    if (fs.existsSync(migrationsSource)) {
+    if (migrationsSource) {
       fs.copySync(migrationsSource, migrationsTarget, {
         filter: (src) => {
           return src.endsWith('.js') || fs.statSync(src).isDirectory();
@@ -217,7 +221,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY python/requirements.txt ./python/requirements.txt
 
 # Install Python dependencies (CPU)
-RUN pip3 install --no-cache-dir \\
+RUN pip3 install --break-system-packages --no-cache-dir \\
     --extra-index-url https://download.pytorch.org/whl/cpu \\
     -r python/requirements.txt && \\
     find /usr/local/lib/python3* -name '*.pyc' -delete && \\
@@ -294,7 +298,7 @@ COPY python/requirements.txt ./python/requirements.txt
 
 # Install Python dependencies (GPU)
 # Using --extra-index-url to allow PyPI access for non-torch packages
-RUN pip3 install --no-cache-dir \\
+RUN pip3 install --break-system-packages --no-cache-dir \\
     --extra-index-url https://download.pytorch.org/whl/cu121 \\
     -r python/requirements.txt && \\
     rm -rf /root/.cache/pip
