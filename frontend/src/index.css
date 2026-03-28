@@ -93,8 +93,10 @@
   --theme-drawer-header-padding-y: 1rem;
   --theme-drawer-body-padding-x: 1.25rem;
   --theme-drawer-body-padding-y: 1.25rem;
+  --theme-bottom-drawer-radius: calc(var(--radius) + 0.75rem);
   --theme-selection-bar-padding-x: 1.25rem;
   --theme-selection-bar-padding-y: 0.75rem;
+  --theme-selection-bar-radius: calc(var(--radius) + 0.75rem);
   --theme-ui-scale: 1;
   --theme-text-scale: 1;
   --theme-body-font-weight: 400;
@@ -278,9 +280,15 @@
     padding-block: var(--theme-drawer-body-padding-y);
   }
 
+  .theme-bottom-drawer {
+    border-top-left-radius: var(--theme-bottom-drawer-radius);
+    border-top-right-radius: var(--theme-bottom-drawer-radius);
+  }
+
   .theme-selection-bar {
     padding-inline: var(--theme-selection-bar-padding-x);
     padding-block: var(--theme-selection-bar-padding-y);
+    border-radius: var(--theme-selection-bar-radius);
   }
 
   .image-detail-scroll-pane {

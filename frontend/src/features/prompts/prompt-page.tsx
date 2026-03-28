@@ -1,39 +1,22 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/common/page-header'
-import {
-  assignPromptToGroup,
-  batchAssignPromptsToGroup,
-  collectPrompts,
-  createPromptGroup,
-  deletePrompt,
-  deletePromptGroup,
-  exportPromptGroups,
-  getPromptGroupStatistics,
-  getPromptGroups,
-  getPromptStatistics,
-  getTopPrompts,
-  importPromptGroups,
-  reorderPromptGroups,
-  searchPromptCollection,
-  updatePromptGroup,
-} from '@/lib/api'
+import { exportPromptGroups } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import type { PromptCollectionItem, PromptGroupExportData, PromptGroupRecord, PromptSortBy, PromptSortOrder, PromptStatistics, PromptTypeFilter } from '@/types/prompt'
+import type { PromptCollectionItem, PromptGroupExportData, PromptGroupRecord, PromptSortBy, PromptSortOrder, PromptTypeFilter } from '@/types/prompt'
 import { PromptCollectModal } from './components/prompt-collect-modal'
 import { PromptGroupAssignModal } from './components/prompt-group-assign-modal'
 import { PromptGroupEditorModal } from './components/prompt-group-editor-modal'
-import { PromptListItem } from './components/prompt-list-item'
+import { PromptListPanel } from './components/prompt-list-panel'
 import { PromptSelectionBar } from './components/prompt-selection-bar'
 import { PromptSidebar } from './components/prompt-sidebar'
 import { PromptSummaryModal } from './components/prompt-summary-modal'
 import { PromptToolbar } from './components/prompt-toolbar'
 import { usePromptListSelection } from './components/use-prompt-list-selection'
+import { PROMPT_TYPE_TABS, getPromptTypeTotal, isLockedPromptGroup, isLockedPromptItem } from './prompt-page-utils'
+import { usePromptPageMutations } from './use-prompt-page-mutations'
+import { usePromptPageQueries } from './use-prompt-page-queries'
 
 type AssignModalState =
   | { mode: 'single'; item: PromptCollectionItem }
@@ -45,49 +28,11 @@ type GroupEditorState =
   | { mode: 'edit'; group: PromptGroupRecord }
   | null
 
-const PROMPT_TYPE_TABS: Array<{ value: PromptTypeFilter; label: string }> = [
-  { value: 'positive', label: 'Positive' },
-  { value: 'negative', label: 'Negative' },
-  { value: 'auto', label: 'Auto' },
-]
-
-function getSortedSiblingGroups(groups: PromptGroupRecord[], group: PromptGroupRecord | null) {
-  if (!group) {
-    return []
-  }
-
-  return groups
-    .filter((item) => item.id !== 0 && item.parent_id === group.parent_id)
-    .sort((left, right) => left.display_order - right.display_order || left.group_name.localeCompare(right.group_name))
-}
-
-function isLockedPromptGroup(group?: PromptGroupRecord | null) {
-  return group?.group_name?.trim().toLowerCase() === 'lora'
-}
-
-function isLockedPromptItem(item: PromptCollectionItem) {
-  return item.group_info?.group_name?.trim().toLowerCase() === 'lora'
-}
-
-function getPromptTypeTotal(promptType: PromptTypeFilter, statistics?: PromptStatistics) {
-  if (!statistics) {
-    return 0
-  }
-
-  if (promptType === 'positive') {
-    return statistics.total_prompts
-  }
-  if (promptType === 'negative') {
-    return statistics.total_negative_prompts
-  }
-  return statistics.total_auto_prompts
-}
-
 export function PromptPage() {
-  const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const promptListRef = useRef<HTMLDivElement | null>(null)
+
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
   const [isCollectModalOpen, setIsCollectModalOpen] = useState(false)
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false)
@@ -102,172 +47,31 @@ export function PromptPage() {
   const [assignModalState, setAssignModalState] = useState<AssignModalState>(null)
   const [groupEditorState, setGroupEditorState] = useState<GroupEditorState>(null)
 
-  const groupsQuery = useQuery({
-    queryKey: ['prompt-groups', promptType],
-    queryFn: () => getPromptGroups(promptType),
+  const {
+    groupsQuery,
+    statisticsQuery,
+    topPromptsQuery,
+    groupStatisticsQuery,
+    promptSearchQuery,
+    selectedGroup,
+    siblingGroups,
+    totalCount,
+  } = usePromptPageQueries({
+    promptType,
+    selectedGroupId,
+    searchQuery,
+    page,
+    sortBy,
+    sortOrder,
   })
 
-  const statisticsQuery = useQuery({
-    queryKey: ['prompt-statistics'],
-    queryFn: getPromptStatistics,
-  })
-
-  const topPromptsQuery = useQuery({
-    queryKey: ['prompt-top', promptType],
-    queryFn: () => getTopPrompts({ type: promptType, limit: 9 }),
-  })
-
-  const groupStatisticsQuery = useQuery({
-    queryKey: ['prompt-group-statistics', promptType],
-    queryFn: () => getPromptGroupStatistics(promptType),
-  })
-
-  const promptSearchQuery = useQuery({
-    queryKey: ['prompt-search', promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder],
-    queryFn: () =>
-      searchPromptCollection({
-        query: searchQuery,
-        type: promptType,
-        page,
-        limit: 40,
-        sortBy,
-        sortOrder,
-        groupId: selectedGroupId ?? undefined,
-      }),
-  })
-
-  const selectedGroup = useMemo(
-    () => (groupsQuery.data ?? []).find((group) => group.id === selectedGroupId) ?? null,
-    [groupsQuery.data, selectedGroupId],
-  )
   const isSelectedGroupLocked = isLockedPromptGroup(selectedGroup)
-  const siblingGroups = useMemo(() => getSortedSiblingGroups(groupsQuery.data ?? [], selectedGroup), [groupsQuery.data, selectedGroup])
   const selectedGroupSiblingIndex = siblingGroups.findIndex((group) => group.id === selectedGroup?.id)
   const canMoveGroupUp = !isSelectedGroupLocked && selectedGroupSiblingIndex > 0
   const canMoveGroupDown = !isSelectedGroupLocked && selectedGroupSiblingIndex >= 0 && selectedGroupSiblingIndex < siblingGroups.length - 1
 
-  const refreshPromptQueries = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['prompt-groups', promptType] }),
-      queryClient.invalidateQueries({ queryKey: ['prompt-group-statistics', promptType] }),
-      queryClient.invalidateQueries({ queryKey: ['prompt-top', promptType] }),
-      queryClient.invalidateQueries({ queryKey: ['prompt-search', promptType] }),
-      queryClient.invalidateQueries({ queryKey: ['prompt-statistics'] }),
-    ])
-  }
-
-  const assignSinglePromptMutation = useMutation({
-    mutationFn: ({ promptId, groupId }: { promptId: number; groupId: number | null }) => assignPromptToGroup(promptId, groupId, promptType),
-    onSuccess: async (result) => {
-      setAssignModalState(null)
-      showSnackbar({ message: result.message, tone: 'info' })
-      await refreshPromptQueries()
-    },
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '프롬프트 그룹 지정에 실패했어.', tone: 'error' })
-    },
-  })
-
-  const batchAssignPromptsMutation = useMutation({
-    mutationFn: ({ prompts, groupId }: { prompts: string[]; groupId: number | null }) => batchAssignPromptsToGroup(prompts, groupId, promptType),
-    onSuccess: async (result) => {
-      setAssignModalState(null)
-      setSelectedPromptIds([])
-      showSnackbar({ message: result.message, tone: 'info' })
-      await refreshPromptQueries()
-    },
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '프롬프트 일괄 그룹 지정에 실패했어.', tone: 'error' })
-    },
-  })
-
-  const createPromptGroupMutation = useMutation({
-    mutationFn: (input: { group_name: string; parent_id?: number | null; is_visible?: boolean }) => createPromptGroup(input, promptType),
-    onSuccess: async (result) => {
-      setGroupEditorState(null)
-      showSnackbar({ message: result.message, tone: 'info' })
-      await refreshPromptQueries()
-      setSelectedGroupId(result.id)
-    },
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '프롬프트 그룹 생성에 실패했어.', tone: 'error' })
-    },
-  })
-
-  const updatePromptGroupMutation = useMutation({
-    mutationFn: ({ groupId, input }: { groupId: number; input: { group_name?: string; is_visible?: boolean } }) => updatePromptGroup(groupId, input, promptType),
-    onSuccess: async (result) => {
-      setGroupEditorState(null)
-      showSnackbar({ message: result.message, tone: 'info' })
-      await refreshPromptQueries()
-    },
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '프롬프트 그룹 수정에 실패했어.', tone: 'error' })
-    },
-  })
-
-  const deletePromptGroupMutation = useMutation({
-    mutationFn: (groupId: number) => deletePromptGroup(groupId, promptType),
-    onSuccess: async (result) => {
-      showSnackbar({ message: result.message, tone: 'info' })
-      await refreshPromptQueries()
-      setSelectedGroupId(undefined)
-    },
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '프롬프트 그룹 삭제에 실패했어.', tone: 'error' })
-    },
-  })
-
-  const reorderPromptGroupsMutation = useMutation({
-    mutationFn: (groupOrders: Array<{ id: number; display_order: number }>) => reorderPromptGroups(groupOrders, promptType),
-    onSuccess: async (result) => {
-      showSnackbar({ message: result.message, tone: 'info' })
-      await refreshPromptQueries()
-    },
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '프롬프트 그룹 순서 변경에 실패했어.', tone: 'error' })
-    },
-  })
-
-  const importPromptGroupsMutation = useMutation({
-    mutationFn: (payload: PromptGroupExportData) => importPromptGroups(payload, promptType),
-    onSuccess: async (result) => {
-      showSnackbar({ message: result.message, tone: 'info' })
-      await refreshPromptQueries()
-      setSelectedGroupId(undefined)
-    },
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '프롬프트 그룹 import에 실패했어.', tone: 'error' })
-    },
-  })
-
-  const deletePromptMutation = useMutation({
-    mutationFn: (promptId: number) => deletePrompt(promptId, promptType),
-    onSuccess: async (result, promptId) => {
-      showSnackbar({ message: result.message, tone: 'info' })
-      setSelectedPromptIds((current) => current.filter((id) => id !== promptId))
-      await refreshPromptQueries()
-    },
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '프롬프트 삭제에 실패했어.', tone: 'error' })
-    },
-  })
-
-  const collectPromptsMutation = useMutation({
-    mutationFn: collectPrompts,
-    onSuccess: async (result) => {
-      setIsCollectModalOpen(false)
-      showSnackbar({ message: result.message, tone: 'info' })
-      await refreshPromptQueries()
-    },
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '프롬프트 수동 수집에 실패했어.', tone: 'error' })
-    },
-  })
-
   const items = useMemo(() => promptSearchQuery.data?.items ?? [], [promptSearchQuery.data?.items])
   const pagination = promptSearchQuery.data?.pagination
-  const totalCount = getPromptTypeTotal(promptType, statisticsQuery.data)
   const selectedPromptItems = useMemo(
     () => items.filter((item) => selectedPromptIds.includes(item.id)),
     [items, selectedPromptIds],
@@ -281,6 +85,38 @@ export function PromptPage() {
     () => (groupsQuery.data ?? []).filter((group) => group.id !== 0 && !isLockedPromptGroup(group)),
     [groupsQuery.data],
   )
+
+  const {
+    assignSinglePromptMutation,
+    batchAssignPromptsMutation,
+    createPromptGroupMutation,
+    updatePromptGroupMutation,
+    deletePromptGroupMutation,
+    reorderPromptGroupsMutation,
+    importPromptGroupsMutation,
+    deletePromptMutation,
+    collectPromptsMutation,
+  } = usePromptPageMutations({
+    promptType,
+    onInfo: (message) => showSnackbar({ message, tone: 'info' }),
+    onError: (message) => showSnackbar({ message, tone: 'error' }),
+    onAfterSingleAssign: () => setAssignModalState(null),
+    onAfterBatchAssign: () => {
+      setAssignModalState(null)
+      setSelectedPromptIds([])
+    },
+    onAfterCreateGroup: (groupId) => {
+      setGroupEditorState(null)
+      setSelectedGroupId(groupId)
+    },
+    onAfterUpdateGroup: () => setGroupEditorState(null),
+    onAfterDeleteGroup: () => setSelectedGroupId(undefined),
+    onAfterCollect: () => setIsCollectModalOpen(false),
+    onAfterImport: () => setSelectedGroupId(undefined),
+    onAfterDeletePrompt: (promptId) => {
+      setSelectedPromptIds((current) => current.filter((id) => id !== promptId))
+    },
+  })
 
   const { shouldSuppressClick } = usePromptListSelection({
     containerElement: promptListRef.current,
@@ -316,12 +152,7 @@ export function PromptPage() {
   }
 
   const handleTogglePromptSelection = (promptId: number, checked: boolean) => {
-    setSelectedPromptIds((current) => {
-      if (checked) {
-        return current.includes(promptId) ? current : [...current, promptId]
-      }
-      return current.filter((id) => id !== promptId)
-    })
+    setSelectedPromptIds((current) => (checked ? (current.includes(promptId) ? current : [...current, promptId]) : current.filter((id) => id !== promptId)))
   }
 
   const handleOpenMultiAssignModal = () => {
@@ -341,10 +172,7 @@ export function PromptPage() {
     }
 
     if (assignModalState.mode === 'single') {
-      await assignSinglePromptMutation.mutateAsync({
-        promptId: assignModalState.item.id,
-        groupId,
-      })
+      await assignSinglePromptMutation.mutateAsync({ promptId: assignModalState.item.id, groupId })
       return
     }
 
@@ -364,10 +192,7 @@ export function PromptPage() {
       return
     }
 
-    await updatePromptGroupMutation.mutateAsync({
-      groupId: groupEditorState.group.id,
-      input,
-    })
+    await updatePromptGroupMutation.mutateAsync({ groupId: groupEditorState.group.id, input })
   }
 
   const handleDeleteSelectedGroup = async () => {
@@ -410,10 +235,6 @@ export function PromptPage() {
     }
   }
 
-  const handleImportGroups = () => {
-    importInputRef.current?.click()
-  }
-
   const handleImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.currentTarget.value = ''
@@ -439,6 +260,7 @@ export function PromptPage() {
     if (!confirmed) {
       return
     }
+
     await deletePromptMutation.mutateAsync(item.id)
   }
 
@@ -508,12 +330,12 @@ export function PromptPage() {
           onMoveGroupUp={canMoveGroupUp ? () => void handleMoveSelectedGroup('up') : undefined}
           onMoveGroupDown={canMoveGroupDown ? () => void handleMoveSelectedGroup('down') : undefined}
           onExportGroups={() => void handleExportGroups()}
-          onImportGroups={handleImportGroups}
+          onImportGroups={() => importInputRef.current?.click()}
           canMoveGroupUp={canMoveGroupUp}
           canMoveGroupDown={canMoveGroupDown}
         />
 
-        <section className="space-y-6">
+        <div className="space-y-6">
           <PromptToolbar
             searchInput={searchInput}
             sortBy={sortBy}
@@ -532,81 +354,31 @@ export function PromptPage() {
             onOpenCollect={() => setIsCollectModalOpen(true)}
           />
 
-          {promptSearchQuery.isError ? (
-            <Alert variant="destructive">
-              <AlertTitle>프롬프트 목록을 불러오지 못했어</AlertTitle>
-              <AlertDescription>
-                {promptSearchQuery.error instanceof Error ? promptSearchQuery.error.message : '알 수 없는 오류가 발생했어.'}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          {!promptSearchQuery.isLoading && items.length === 0 ? (
-            <Card className="bg-surface-container">
-              <CardContent className="p-6 text-sm text-muted-foreground">항목 없음</CardContent>
-            </Card>
-          ) : null}
-
-          <div ref={promptListRef} className={isDraggingSelection ? 'select-none' : undefined}>
-            <div className="space-y-1">
-              <div className="grid grid-cols-[32px_minmax(0,1fr)_120px_116px] border-b border-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-                <span />
-                <span>Prompt</span>
-                <span className="text-right">Usage</span>
-                <span />
-              </div>
-
-              {promptSearchQuery.isLoading ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 10 }).map((_, index) => (
-                    <Skeleton key={index} className="h-12 w-full rounded-sm" />
-                  ))}
-                </div>
-              ) : null}
-
-              {!promptSearchQuery.isLoading && items.length > 0
-                ? items.map((item) => {
-                    const isLocked = isLockedPromptItem(item)
-                    return (
-                      <PromptListItem
-                        key={`${item.type}-${item.id}`}
-                        item={item}
-                        selected={selectedPromptIds.includes(item.id)}
-                        canAssign={!isLocked}
-                        canDelete={!isLocked}
-                        onCopy={handleCopyPrompt}
-                        onToggleSelect={(checked) => handleTogglePromptSelection(item.id, checked)}
-                        onAssignGroup={() => setAssignModalState({ mode: 'single', item })}
-                        onDelete={() => void handleDeleteSinglePrompt(item)}
-                        onActivate={() => {
-                          if (shouldSuppressClick()) {
-                            return
-                          }
-                          void handleCopyPrompt(item.prompt)
-                        }}
-                      />
-                    )
-                  })
-                : null}
-            </div>
-          </div>
-
-          {pagination ? (
-            <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
-              <span>
-                page {pagination.page} / {pagination.totalPages} · total {pagination.total.toLocaleString('ko-KR')}
-              </span>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-                  이전
-                </Button>
-                <Button size="sm" variant="outline" disabled={page >= pagination.totalPages} onClick={() => setPage((current) => current + 1)}>
-                  다음
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </section>
+          <PromptListPanel
+            items={items}
+            selectedPromptIds={selectedPromptIds}
+            isLoading={promptSearchQuery.isLoading}
+            isError={promptSearchQuery.isError}
+            errorMessage={promptSearchQuery.error instanceof Error ? promptSearchQuery.error.message : null}
+            isDraggingSelection={isDraggingSelection}
+            totalPages={pagination?.totalPages ?? 0}
+            page={pagination?.page ?? 1}
+            total={pagination?.total ?? 0}
+            promptListRef={promptListRef}
+            onPageChange={setPage}
+            onTogglePromptSelection={handleTogglePromptSelection}
+            onAssignPrompt={(item) => setAssignModalState({ mode: 'single', item })}
+            onDeletePrompt={(item) => void handleDeleteSinglePrompt(item)}
+            onCopyPrompt={handleCopyPrompt}
+            onActivatePrompt={(item) => {
+              if (shouldSuppressClick()) {
+                return
+              }
+              void handleCopyPrompt(item.prompt)
+            }}
+            isLockedPromptItem={isLockedPromptItem}
+          />
+        </div>
       </div>
 
       <PromptSelectionBar
