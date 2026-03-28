@@ -1,6 +1,7 @@
 import { ShieldCheck } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
+import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -16,10 +17,10 @@ export function LoginPage() {
         />
 
         <div className="space-y-3">
-          <div className="space-y-1">
-            <h2 className="text-sm font-semibold text-foreground">현재 상태</h2>
-            <p className="text-sm text-muted-foreground">인증 플로우는 보류 중이고, 이 화면은 진입 지점만 안정적으로 확보해 둔 상태야.</p>
-          </div>
+          <SectionHeading
+            heading={<span className="text-sm font-semibold">현재 상태</span>}
+            description="인증 플로우는 보류 중이고, 이 화면은 진입 지점만 안정적으로 확보해 둔 상태야."
+          />
 
           <Card className="border-primary/15 bg-card">
             <CardContent className="space-y-4">

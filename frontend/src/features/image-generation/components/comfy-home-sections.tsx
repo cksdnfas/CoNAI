@@ -1,4 +1,5 @@
 import { Copy, ListTree, Pencil, Plus, Server, Trash2 } from 'lucide-react'
+import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { ComfyUIServer, CustomDropdownList, GenerationWorkflow } from '@/lib/api'
@@ -25,20 +26,24 @@ export function ComfyWorkflowListSection({
 }: WorkflowListSectionProps) {
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 text-base font-semibold text-foreground">
+      <SectionHeading
+        heading={(
+          <span className="flex items-center gap-2">
             <ListTree className="h-4 w-4 text-primary" />
             워크플로우
-          </div>
-          <Badge variant="outline">{workflows.length}</Badge>
-        </div>
-
-        <Button type="button" size="sm" variant="outline" onClick={onCreateWorkflow}>
-          <Plus className="h-4 w-4" />
-          등록
-        </Button>
-      </div>
+          </span>
+        )}
+        actions={(
+          <>
+            <Badge variant="outline">{workflows.length}</Badge>
+            <Button type="button" size="sm" variant="outline" onClick={onCreateWorkflow}>
+              <Plus className="h-4 w-4" />
+              등록
+            </Button>
+          </>
+        )}
+        className="[&>div>h2]:text-base"
+      />
 
       <div className="rounded-sm border border-border bg-surface-low p-4">
         {workflows.length > 0 ? (
@@ -133,20 +138,24 @@ type ServerListSectionProps = {
 export function ComfyServerListSection({ servers, serverTests, onOpenCreateServer, onEditServer, onDeleteServer, onTestServer }: ServerListSectionProps) {
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 text-base font-semibold text-foreground">
+      <SectionHeading
+        heading={(
+          <span className="flex items-center gap-2">
             <Server className="h-4 w-4 text-primary" />
             서버
-          </div>
-          <Badge variant="outline">{servers.length}</Badge>
-        </div>
-
-        <Button type="button" size="sm" variant="outline" onClick={onOpenCreateServer}>
-          <Plus className="h-4 w-4" />
-          서버 등록
-        </Button>
-      </div>
+          </span>
+        )}
+        actions={(
+          <>
+            <Badge variant="outline">{servers.length}</Badge>
+            <Button type="button" size="sm" variant="outline" onClick={onOpenCreateServer}>
+              <Plus className="h-4 w-4" />
+              서버 등록
+            </Button>
+          </>
+        )}
+        className="[&>div>h2]:text-base"
+      />
 
       <div className="rounded-sm border border-border bg-surface-low p-4">
         {servers.length > 0 ? (
@@ -207,10 +216,11 @@ type DropdownListsSectionProps = {
 export function ComfyDropdownListsSection({ dropdownLists }: DropdownListsSectionProps) {
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-base font-semibold tracking-tight text-foreground">커스텀 드롭다운 목록</h2>
-        <Badge variant="outline">{dropdownLists.length}</Badge>
-      </div>
+      <SectionHeading
+        heading="커스텀 드롭다운 목록"
+        actions={<Badge variant="outline">{dropdownLists.length}</Badge>}
+        className="[&>div>h2]:text-base"
+      />
 
       <div className="rounded-sm border border-border bg-surface-low p-4">
         {dropdownLists.length > 0 ? (

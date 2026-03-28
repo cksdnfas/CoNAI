@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/common/page-header'
+import { SectionHeading } from '@/components/common/section-heading'
 import { exportPromptGroups } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { PromptCollectionItem, PromptGroupExportData, PromptGroupRecord, PromptSortBy, PromptSortOrder, PromptTypeFilter } from '@/types/prompt'
@@ -303,12 +304,7 @@ export function PromptPage() {
       />
 
       <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold tracking-tight text-foreground">Prompt type</h2>
-            <p className="text-sm text-muted-foreground">{currentPromptTotal.toLocaleString('ko-KR')}개 항목</p>
-          </div>
-        </div>
+        <SectionHeading heading="Prompt type" description={`${currentPromptTotal.toLocaleString('ko-KR')}개 항목`} />
         <div className="rounded-sm bg-surface-lowest p-2">
           <div className="flex flex-wrap gap-2">
             {PROMPT_TYPE_TABS.map((tab) => (
@@ -351,14 +347,10 @@ export function PromptPage() {
         />
 
         <section className="space-y-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight text-foreground">{currentSectionTitle}</h2>
-              <p className="text-sm text-muted-foreground">
-                {promptTypeLabel} · {currentSectionCount.toLocaleString('ko-KR')}개 표시됨
-              </p>
-            </div>
-          </div>
+          <SectionHeading
+            heading={currentSectionTitle}
+            description={`${promptTypeLabel} · ${currentSectionCount.toLocaleString('ko-KR')}개 표시됨`}
+          />
 
           <PromptToolbar
             searchInput={searchInput}

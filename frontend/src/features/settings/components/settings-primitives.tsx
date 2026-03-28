@@ -1,5 +1,4 @@
 import type { ComponentProps, ReactNode } from 'react'
-import { SectionHeading } from '@/components/common/section-heading'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { cn } from '@/lib/utils'
 
@@ -28,31 +27,6 @@ export function SettingsToggleRow({ children, className, ...props }: SettingsTog
     <ToggleRow variant="settings" className={className} {...props}>
       {children}
     </ToggleRow>
-  )
-}
-
-interface SettingsSectionHeadingProps extends ComponentProps<'div'> {
-  heading: ReactNode
-  description?: ReactNode
-  actions?: ReactNode
-}
-
-// Shared section heading row used above settings cards.
-export function SettingsSectionHeading({
-  heading,
-  description,
-  actions,
-  className,
-  ...props
-}: SettingsSectionHeadingProps) {
-  return (
-    <SectionHeading
-      heading={heading}
-      description={description}
-      actions={actions}
-      className={className}
-      {...props}
-    />
   )
 }
 

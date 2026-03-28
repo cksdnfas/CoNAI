@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { PageHeader } from '@/components/common/page-header'
+import { SectionHeading } from '@/components/common/section-heading'
 import {
   addImagesToGroup,
   createGroup,
@@ -656,17 +657,15 @@ export function GroupPage() {
 
           {!selectedGroupId ? (
             <section className="space-y-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-2">
-                  <h2 className="text-xl font-semibold tracking-tight text-foreground">{selectedSource.rootSectionTitle}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {isCustomSource
-                      ? '새 그룹을 만들고, 필요하면 하위 그룹으로 세분화해봐.'
-                      : '감시폴더 구조를 따라 만들어진 그룹들을 여기서 탐색할 수 있어.'}
-                  </p>
-                </div>
-                <Badge variant="secondary">{rootGroups.length.toLocaleString('ko-KR')}개</Badge>
-              </div>
+              <SectionHeading
+                heading={selectedSource.rootSectionTitle}
+                description={
+                  isCustomSource
+                    ? '새 그룹을 만들고, 필요하면 하위 그룹으로 세분화해봐.'
+                    : '감시폴더 구조를 따라 만들어진 그룹들을 여기서 탐색할 수 있어.'
+                }
+                actions={<Badge variant="secondary">{rootGroups.length.toLocaleString('ko-KR')}개</Badge>}
+              />
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {rootGroups.map((group) => (
@@ -695,39 +694,38 @@ export function GroupPage() {
           {selectedGroupId && selectedGroupQuery.data ? (
             <div className="space-y-8">
               <section className="space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-2">
-                    <h2 className="text-xl font-semibold tracking-tight text-foreground">그룹 개요</h2>
-                    <p className="text-sm text-muted-foreground">현재 그룹 상태와 수집 정보를 여기서 바로 확인해.</p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button type="button" size="sm" variant="secondary" onClick={handleOpenGroupDownloadModal} disabled={groupFileCountsQuery.isLoading || downloadGroupArchiveMutation.isPending}>
-                      <Download className="h-4 w-4" />
-                      {downloadGroupArchiveMutation.isPending && downloadScope === 'group' ? '준비 중…' : '다운로드'}
-                    </Button>
-                    {isCustomSource ? (
-                      <>
-                        <Button type="button" size="sm" variant="secondary" onClick={handleOpenCreateModal}>
-                          <FolderPlus className="h-4 w-4" />
-                          하위 그룹 추가
-                        </Button>
-                        <Button type="button" size="sm" variant="secondary" onClick={handleOpenEditModal}>
-                          <Pencil className="h-4 w-4" />
-                          편집
-                        </Button>
-                        <Button type="button" size="sm" variant="secondary" onClick={() => void handleRunAutoCollect()} disabled={autoCollectMutation.isPending}>
-                          <Play className="h-4 w-4" />
-                          {autoCollectMutation.isPending ? '실행 중…' : '자동수집 실행'}
-                        </Button>
-                        <Button type="button" size="sm" variant="destructive" onClick={() => void handleDeleteSelectedGroup()} disabled={deleteGroupMutation.isPending}>
-                          <Trash2 className="h-4 w-4" />
-                          삭제
-                        </Button>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
+                <SectionHeading
+                  heading="그룹 개요"
+                  description="현재 그룹 상태와 수집 정보를 여기서 바로 확인해."
+                  actions={
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button type="button" size="sm" variant="secondary" onClick={handleOpenGroupDownloadModal} disabled={groupFileCountsQuery.isLoading || downloadGroupArchiveMutation.isPending}>
+                        <Download className="h-4 w-4" />
+                        {downloadGroupArchiveMutation.isPending && downloadScope === 'group' ? '준비 중…' : '다운로드'}
+                      </Button>
+                      {isCustomSource ? (
+                        <>
+                          <Button type="button" size="sm" variant="secondary" onClick={handleOpenCreateModal}>
+                            <FolderPlus className="h-4 w-4" />
+                            하위 그룹 추가
+                          </Button>
+                          <Button type="button" size="sm" variant="secondary" onClick={handleOpenEditModal}>
+                            <Pencil className="h-4 w-4" />
+                            편집
+                          </Button>
+                          <Button type="button" size="sm" variant="secondary" onClick={() => void handleRunAutoCollect()} disabled={autoCollectMutation.isPending}>
+                            <Play className="h-4 w-4" />
+                            {autoCollectMutation.isPending ? '실행 중…' : '자동수집 실행'}
+                          </Button>
+                          <Button type="button" size="sm" variant="destructive" onClick={() => void handleDeleteSelectedGroup()} disabled={deleteGroupMutation.isPending}>
+                            <Trash2 className="h-4 w-4" />
+                            삭제
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
+                  }
+                />
 
                 <Card className="bg-surface-container">
                   <CardContent className="space-y-4">
@@ -778,10 +776,10 @@ export function GroupPage() {
 
               {childGroups.length > 0 ? (
                 <section className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <h2 className="text-xl font-semibold tracking-tight text-foreground">하위 그룹</h2>
-                    <Badge variant="secondary">{childGroups.length.toLocaleString('ko-KR')}</Badge>
-                  </div>
+                  <SectionHeading
+                    heading="하위 그룹"
+                    actions={<Badge variant="secondary">{childGroups.length.toLocaleString('ko-KR')}</Badge>}
+                  />
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {childGroups.map((group) => (
                       <GroupChildCard

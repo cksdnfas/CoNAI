@@ -1,3 +1,4 @@
+import { SectionHeading } from '@/components/common/section-heading'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import type { PromptCollectionItem, PromptGroupRecord, PromptStatistics, PromptTypeFilter } from '@/types/prompt'
@@ -23,11 +24,9 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
       <section className="space-y-3">
-        <div>
-          <h3 className="text-base font-semibold tracking-tight text-foreground">{getTypeLabel(promptType)} 요약</h3>
-        </div>
+        <SectionHeading heading={`${getTypeLabel(promptType)} 요약`} />
         <Card className="bg-surface-container">
-          <CardContent className="grid gap-3 pt-6 sm:grid-cols-3">
+          <CardContent className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-sm border border-border/70 bg-background/50 px-4 py-3">
               <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Current type total</div>
               <div className="mt-2 text-2xl font-semibold text-foreground">{getPromptTypeTotal(promptType, statistics).toLocaleString('ko-KR')}</div>
@@ -45,11 +44,9 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
       </section>
 
       <section className="space-y-3">
-        <div>
-          <h3 className="text-base font-semibold tracking-tight text-foreground">Top groups</h3>
-        </div>
+        <SectionHeading heading="Top groups" />
         <Card className="bg-surface-container">
-          <CardContent className="space-y-2 pt-6">
+          <CardContent className="space-y-2">
             {topGroups.length > 0 ? topGroups.map((group) => (
               <div key={group.id} className="flex items-center justify-between gap-3 rounded-sm border border-border/70 bg-background/50 px-3 py-2 text-sm">
                 <span className="min-w-0 truncate text-foreground">{group.group_name}</span>
@@ -61,11 +58,9 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
       </section>
 
       <section className="space-y-3 xl:col-span-2">
-        <div>
-          <h3 className="text-base font-semibold tracking-tight text-foreground">Top prompts</h3>
-        </div>
+        <SectionHeading heading="Top prompts" />
         <Card className="bg-surface-container">
-          <CardContent className="grid gap-2 pt-6 md:grid-cols-2 xl:grid-cols-3">
+          <CardContent className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {topPrompts.length > 0 ? topPrompts.slice(0, 9).map((item) => (
               <div key={`${item.type}-${item.id}`} className="rounded-sm border border-border/70 bg-background/50 px-3 py-2">
                 <div className="truncate text-sm font-medium text-foreground">{item.prompt}</div>

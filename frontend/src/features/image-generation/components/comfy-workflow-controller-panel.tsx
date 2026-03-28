@@ -1,4 +1,5 @@
 import { ArrowLeft, ImagePlus, Layers3 } from 'lucide-react'
+import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -68,10 +69,11 @@ export function ComfyWorkflowControllerPanel({
       </div>
 
       <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-medium text-foreground">입력 필드</h2>
-          <Badge variant="outline">{workflowFields.length}</Badge>
-        </div>
+        <SectionHeading
+          heading="입력 필드"
+          actions={<Badge variant="outline">{workflowFields.length}</Badge>}
+          className="[&>div>h2]:text-sm [&>div>h2]:font-medium [&>div>h2]:tracking-normal"
+        />
 
         <div className="rounded-sm border border-border bg-surface-low p-4">
           {workflowFields.length > 0 ? (
@@ -96,10 +98,11 @@ export function ComfyWorkflowControllerPanel({
       </section>
 
       <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-medium text-foreground">대상 서버</h2>
-          {selectedServer ? <Badge variant="secondary">{selectedServer.name}</Badge> : <Badge variant="outline">선택 안 됨</Badge>}
-        </div>
+        <SectionHeading
+          heading="대상 서버"
+          actions={selectedServer ? <Badge variant="secondary">{selectedServer.name}</Badge> : <Badge variant="outline">선택 안 됨</Badge>}
+          className="[&>div>h2]:text-sm [&>div>h2]:font-medium [&>div>h2]:tracking-normal"
+        />
 
         <div className="rounded-sm border border-border bg-surface-low p-4">
           <div className="space-y-4">

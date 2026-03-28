@@ -1,10 +1,10 @@
 import { useRef } from 'react'
 import { Download, RotateCcw, Save, Upload, X } from 'lucide-react'
+import { SectionHeading } from '@/components/common/section-heading'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { AppearanceTabEditorSection } from './appearance-tab-editor-section'
 import { AppearanceTabSlotSection } from './appearance-tab-slot-section'
-import { SettingsSectionHeading } from './settings-primitives'
 import type { AppearanceTabProps } from './appearance-tab.types'
 import { getAppearanceTabColorValues } from './appearance-tab.utils'
 
@@ -72,7 +72,7 @@ export function AppearanceTab({
       />
 
       <section className="space-y-4">
-        <SettingsSectionHeading
+        <SectionHeading
           heading="테마 슬롯"
           actions={
             <>
@@ -110,7 +110,7 @@ export function AppearanceTab({
       </section>
 
       <section className="space-y-4">
-        <SettingsSectionHeading heading="세부 편집" />
+        <SectionHeading heading="세부 편집" />
         <Card className="bg-surface-container">
           <CardContent>
             {appearanceDraft ? (

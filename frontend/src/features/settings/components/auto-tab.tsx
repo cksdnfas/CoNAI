@@ -1,5 +1,5 @@
+import { SectionHeading } from '@/components/common/section-heading'
 import { Button } from '@/components/ui/button'
-import { SettingsSectionHeading } from './settings-primitives'
 import { AutoOverviewCard } from './auto-overview-card'
 import { AutoTestCard } from './auto-test-card'
 import { KaloscopeSettingsCard } from './kaloscope-settings-card'
@@ -39,7 +39,7 @@ export function AutoTab({
   return (
     <div className="space-y-8">
       <section className="space-y-4">
-        <SettingsSectionHeading heading="개요" />
+        <SectionHeading heading="개요" />
         <AutoOverviewCard
           taggerStatus={taggerStatus}
           taggerDependencyResult={taggerDependencyResult}
@@ -49,7 +49,7 @@ export function AutoTab({
       </section>
 
       <section className="space-y-4">
-        <SettingsSectionHeading
+        <SectionHeading
           heading="Kaloscope"
           actions={
             <Button size="sm" onClick={onSaveKaloscope} disabled={!kaloscopeDraft || isSavingKaloscope}>
@@ -65,7 +65,7 @@ export function AutoTab({
       </section>
 
       <section className="space-y-4">
-        <SettingsSectionHeading
+        <SectionHeading
           heading="WD Tagger"
           actions={
             <Button size="sm" onClick={onSaveTagger} disabled={!taggerDraft || isSavingTagger || isCheckingTaggerDependencies}>
@@ -81,7 +81,7 @@ export function AutoTab({
       </section>
 
       <section className="space-y-4">
-        <SettingsSectionHeading
+        <SectionHeading
           heading="테스트"
           actions={
             <>

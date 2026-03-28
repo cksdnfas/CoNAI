@@ -16,6 +16,7 @@ import '@xyflow/react/dist/style.css'
 import { ArrowLeft, Boxes, ChevronDown, Copy, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '@/components/common/page-header'
+import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -894,10 +895,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       {workflowView === 'browse' ? (
         <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
           <div className="space-y-3">
-            <div className="space-y-1">
-              <h2 className="text-sm font-semibold text-foreground">Saved Workflows</h2>
-              <p className="text-sm text-muted-foreground">저장된 워크플로우를 선택하고 실행 흐름으로 이어가.</p>
-            </div>
+            <SectionHeading
+              heading={<span className="text-sm font-semibold">Saved Workflows</span>}
+              description="저장된 워크플로우를 선택하고 실행 흐름으로 이어가."
+            />
             <SavedGraphList
               graphs={graphWorkflowsQuery.data ?? []}
               selectedGraphId={selectedGraphId}
@@ -916,10 +917,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
           <div className="space-y-6">
             <div className="space-y-3">
-              <div className="space-y-1">
-                <h2 className="text-sm font-semibold text-foreground">Workflow Runner</h2>
-                <p className="text-sm text-muted-foreground">선택한 워크플로우를 그래프 편집기 없이 바로 실행해.</p>
-              </div>
+              <SectionHeading
+                heading={<span className="text-sm font-semibold">Workflow Runner</span>}
+                description="선택한 워크플로우를 그래프 편집기 없이 바로 실행해."
+              />
               <WorkflowRunnerPanel
                 selectedGraph={selectedGraphRecord}
                 inputDefinitions={selectedGraphRecord?.graph.metadata?.exposed_inputs ?? []}
@@ -938,10 +939,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             </div>
 
             <div className="space-y-3">
-              <div className="space-y-1">
-                <h2 className="text-sm font-semibold text-foreground">Execution Results</h2>
-                <p className="text-sm text-muted-foreground">최근 실행 상태와 결과 아티팩트, 로그를 여기서 확인해.</p>
-              </div>
+              <SectionHeading
+                heading={<span className="text-sm font-semibold">Execution Results</span>}
+                description="최근 실행 상태와 결과 아티팩트, 로그를 여기서 확인해."
+              />
               <GraphExecutionPanel
                 selectedGraphId={selectedGraphId}
                 selectedExecutionId={selectedExecutionId}
@@ -968,15 +969,15 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
             <div className="space-y-6">
               <div className="space-y-3 xl:sticky xl:top-24">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <h2 className="text-sm font-semibold text-foreground">Workflow Setup</h2>
-                    <p className="text-sm text-muted-foreground">현재 편집 중인 워크플로우의 저장 상태와 메타데이터를 정리해.</p>
-                  </div>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => setIsSetupCollapsed((current) => !current)}>
-                    <ChevronDown className={`h-4 w-4 transition-transform ${isSetupCollapsed ? '-rotate-90' : 'rotate-0'}`} />
-                  </Button>
-                </div>
+                <SectionHeading
+                  heading={<span className="text-sm font-semibold">Workflow Setup</span>}
+                  description="현재 편집 중인 워크플로우의 저장 상태와 메타데이터를 정리해."
+                  actions={
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setIsSetupCollapsed((current) => !current)}>
+                      <ChevronDown className={`h-4 w-4 transition-transform ${isSetupCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+                    </Button>
+                  }
+                />
                 <Card className="bg-surface-container">
                   {!isSetupCollapsed ? (
                     <CardContent className="space-y-4">
@@ -1006,10 +1007,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               </div>
 
               <div className="space-y-3">
-                <div className="space-y-1">
-                  <h2 className="text-sm font-semibold text-foreground">Exposed Run Inputs</h2>
-                  <p className="text-sm text-muted-foreground">러너에 노출할 입력과 기본값 표시를 정리해.</p>
-                </div>
+                <SectionHeading
+                  heading={<span className="text-sm font-semibold">Exposed Run Inputs</span>}
+                  description="러너에 노출할 입력과 기본값 표시를 정리해."
+                />
                 <WorkflowExposedInputEditor
                   candidates={workflowInputCandidates}
                   selectedInputs={workflowExposedInputs}
@@ -1022,10 +1023,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               </div>
 
               <div className="space-y-3">
-                <div className="space-y-1">
-                  <h2 className="text-sm font-semibold text-foreground">Modules</h2>
-                  <p className="text-sm text-muted-foreground">재사용 가능한 모듈을 검색해서 캔버스에 추가해.</p>
-                </div>
+                <SectionHeading
+                  heading={<span className="text-sm font-semibold">Modules</span>}
+                  description="재사용 가능한 모듈을 검색해서 캔버스에 추가해."
+                />
                 <ModuleLibraryPanel
                   modules={modules}
                   isError={modulesQuery.isError}
@@ -1037,19 +1038,21 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             </div>
 
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <SectionHeading
+                heading={
+                  <span className="flex items-center gap-2 text-sm font-semibold">
                     <Boxes className="h-4 w-4 text-primary" />
                     Workflow Graph
-                  </h2>
-                  <p className="text-sm text-muted-foreground">노드 배치와 연결을 여기서 편집해.</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline">노드 {nodes.length}</Badge>
-                  <Badge variant="outline">엣지 {edges.length}</Badge>
-                </div>
-              </div>
+                  </span>
+                }
+                description="노드 배치와 연결을 여기서 편집해."
+                actions={
+                  <>
+                    <Badge variant="outline">노드 {nodes.length}</Badge>
+                    <Badge variant="outline">엣지 {edges.length}</Badge>
+                  </>
+                }
+              />
 
               <Card className="bg-surface-container">
                 <CardContent className="space-y-4">
@@ -1094,10 +1097,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             </div>
 
             <div className="space-y-3 xl:sticky xl:top-24 xl:self-start">
-              <div className="space-y-1">
-                <h2 className="text-sm font-semibold text-foreground">Node Inspector</h2>
-                <p className="text-sm text-muted-foreground">선택한 노드나 엣지의 입력 오버라이드를 다듬어.</p>
-              </div>
+              <SectionHeading
+                heading={<span className="text-sm font-semibold">Node Inspector</span>}
+                description="선택한 노드나 엣지의 입력 오버라이드를 다듬어."
+              />
               <NodeInspectorPanel
                 selectedNode={selectedNode}
                 selectedEdge={selectedEdge}
@@ -1110,10 +1113,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           </div>
 
           <div className="space-y-3">
-            <div className="space-y-1">
-              <h2 className="text-sm font-semibold text-foreground">Execution Results</h2>
-              <p className="text-sm text-muted-foreground">선택한 그래프의 실행 상태와 상세 결과를 아래에서 이어서 확인해.</p>
-            </div>
+            <SectionHeading
+              heading={<span className="text-sm font-semibold">Execution Results</span>}
+              description="선택한 그래프의 실행 상태와 상세 결과를 아래에서 이어서 확인해."
+            />
             <GraphExecutionPanel
               selectedGraphId={selectedGraphId}
               selectedExecutionId={selectedExecutionId}

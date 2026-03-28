@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ExternalLink, ImagePlus, Save } from 'lucide-react'
+import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -378,7 +379,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-sm font-medium text-foreground">Prompt</h2>
+              <SectionHeading heading="Prompt" className="[&>div>h2]:text-sm [&>div>h2]:font-medium [&>div>h2]:tracking-normal" />
               <div className="rounded-sm border border-border bg-surface-low p-4">
                 <div className="grid gap-4 xl:grid-cols-2">
                   <FormField label="Prompt">
@@ -398,7 +399,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-sm font-medium text-foreground">Generation Settings</h2>
+              <SectionHeading heading="Generation Settings" className="[&>div>h2]:text-sm [&>div>h2]:font-medium [&>div>h2]:tracking-normal" />
               <div className="rounded-sm border border-border bg-surface-low p-4">
                 <div className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-3">
@@ -455,7 +456,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
             {naiForm.action !== 'generate' ? (
               <section className="space-y-3">
-                <h2 className="text-sm font-medium text-foreground">Source Images</h2>
+                <SectionHeading heading="Source Images" className="[&>div>h2]:text-sm [&>div>h2]:font-medium [&>div>h2]:tracking-normal" />
                 <div className="rounded-sm border border-border bg-surface-low p-4">
                   <div className="space-y-4">
                     <FormField label="Source Image">
@@ -499,14 +500,15 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             ) : null}
 
             <section className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-sm font-medium text-foreground">Advanced</h2>
-                {naiCostQuery.isSuccess ? (
+              <SectionHeading
+                heading="Advanced"
+                actions={naiCostQuery.isSuccess ? (
                   <Badge variant={naiCostQuery.data.canAfford ? 'secondary' : 'outline'}>
                     {naiCostQuery.data.isOpusFree ? 'Opus 무료 생성' : naiCostQuery.data.canAfford ? '잔액 충분' : '잔액 부족'}
                   </Badge>
-                ) : null}
-              </div>
+                ) : undefined}
+                className="[&>div>h2]:text-sm [&>div>h2]:font-medium [&>div>h2]:tracking-normal"
+              />
 
               <div className="rounded-sm border border-border bg-surface-low p-4">
                 <div className="space-y-4">
@@ -555,7 +557,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-sm font-medium text-foreground">Actions</h2>
+              <SectionHeading heading="Actions" className="[&>div>h2]:text-sm [&>div>h2]:font-medium [&>div>h2]:tracking-normal" />
               <div className="rounded-sm border border-border bg-surface-low p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <Button type="button" variant="outline" onClick={() => setIsModuleSaveModalOpen(true)}>

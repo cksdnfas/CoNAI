@@ -1,11 +1,12 @@
 import { Save } from 'lucide-react'
+import { SectionHeading } from '@/components/common/section-heading'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { MetadataExtractionSettings } from '@/types/settings'
-import { SettingsField, SettingsSectionHeading, SettingsToggleRow } from './settings-primitives'
+import { SettingsField, SettingsToggleRow } from './settings-primitives'
 
 interface MetadataTabProps {
   metadataDraft: MetadataExtractionSettings | null
@@ -18,7 +19,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving }
   return (
     <div className="space-y-8">
       <section className="space-y-4">
-        <SettingsSectionHeading
+        <SectionHeading
           heading="Metadata"
           actions={
             <Button size="sm" onClick={onSave} disabled={!metadataDraft || isSaving}>

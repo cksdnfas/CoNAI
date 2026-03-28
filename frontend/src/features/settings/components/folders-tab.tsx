@@ -3,11 +3,12 @@ import { Plus, RefreshCcw, ScanSearch } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { SectionHeading } from '@/components/common/section-heading'
 import type { BackupSource, BackupSourceUpdateInput, FolderScanLog, WatchedFolder, WatchedFolderUpdateInput, WatchersHealthSummary } from '@/types/folder'
 import { formatDateTime, type NewBackupSourceDraft, type NewWatchedFolderDraft } from '../settings-utils'
-import { SettingsSectionHeading, SettingsValueTile } from './settings-primitives'
+import { SettingsValueTile } from './settings-primitives'
 import { WatchedFolderCard } from './watched-folder-card'
 import { WatchedFolderListItem } from './watched-folder-list-item'
 import { WatchedFolderCreateForm } from './watched-folder-create-form'
@@ -142,19 +143,21 @@ export function FoldersTab({
       <div className="space-y-8">
         <Card className="bg-surface-container">
           <CardHeader>
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <CardTitle>감시 폴더 운영</CardTitle>
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={onRefresh}>
-                  <RefreshCcw className="h-4 w-4" />
-                  새로고침
-                </Button>
-                <Button size="sm" onClick={onScanAll}>
-                  <ScanSearch className="h-4 w-4" />
-                  전체 스캔
-                </Button>
-              </div>
-            </div>
+            <SectionHeading
+              heading="감시 폴더 운영"
+              actions={
+                <>
+                  <Button size="sm" variant="outline" onClick={onRefresh}>
+                    <RefreshCcw className="h-4 w-4" />
+                    새로고침
+                  </Button>
+                  <Button size="sm" onClick={onScanAll}>
+                    <ScanSearch className="h-4 w-4" />
+                    전체 스캔
+                  </Button>
+                </>
+              }
+            />
           </CardHeader>
           <CardContent className="grid gap-3 text-sm md:grid-cols-6">
             <SettingsValueTile label="folders" value={folders.length} valueClassName="text-xl" />
@@ -167,21 +170,25 @@ export function FoldersTab({
         </Card>
 
         <section className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <h2 className="text-xl font-semibold tracking-tight text-foreground">등록된 감시 폴더</h2>
-              <Badge variant="outline">{folders.length}</Badge>
-            </div>
-            <Button
-              type="button"
-              size="icon-sm"
-              onClick={() => setIsAddFolderModalOpen(true)}
-              aria-label="감시 폴더 추가"
-              title="감시 폴더 추가"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
+          <SectionHeading
+            heading={
+              <span className="inline-flex items-center gap-3">
+                <span>등록된 감시 폴더</span>
+                <Badge variant="outline">{folders.length}</Badge>
+              </span>
+            }
+            actions={
+              <Button
+                type="button"
+                size="icon-sm"
+                onClick={() => setIsAddFolderModalOpen(true)}
+                aria-label="감시 폴더 추가"
+                title="감시 폴더 추가"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            }
+          />
 
           {foldersLoading ? (
             <div className="space-y-3">
@@ -231,21 +238,25 @@ export function FoldersTab({
         </section>
 
         <section className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <h2 className="text-xl font-semibold tracking-tight text-foreground">등록된 백업 소스</h2>
-              <Badge variant="outline">{backupSources.length}</Badge>
-            </div>
-            <Button
-              type="button"
-              size="icon-sm"
-              onClick={() => setIsAddBackupSourceModalOpen(true)}
-              aria-label="백업 소스 추가"
-              title="백업 소스 추가"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
+          <SectionHeading
+            heading={
+              <span className="inline-flex items-center gap-3">
+                <span>등록된 백업 소스</span>
+                <Badge variant="outline">{backupSources.length}</Badge>
+              </span>
+            }
+            actions={
+              <Button
+                type="button"
+                size="icon-sm"
+                onClick={() => setIsAddBackupSourceModalOpen(true)}
+                aria-label="백업 소스 추가"
+                title="백업 소스 추가"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            }
+          />
 
           {backupSourcesLoading ? (
             <div className="space-y-3">
@@ -294,7 +305,7 @@ export function FoldersTab({
         </section>
 
         <section className="space-y-4">
-          <SettingsSectionHeading heading="최근 스캔 로그" />
+          <SectionHeading heading="최근 스캔 로그" />
           <Card className="bg-surface-container">
             <CardContent className="space-y-3">
               {scanLogsLoading ? (

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -45,18 +46,16 @@ export function GroupImageSection({
   return (
     <section className={presentation === 'drawer' ? 'flex h-full min-h-0 flex-col gap-4' : 'space-y-4'}>
       {!hideHeader ? (
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-semibold tracking-tight text-foreground">이미지</h2>
-            <p className="text-sm text-muted-foreground">{group.image_count.toLocaleString('ko-KR')}개 항목</p>
-          </div>
-          {shouldShowCollectionCounts ? (
+        <SectionHeading
+          heading="이미지"
+          description={`${group.image_count.toLocaleString('ko-KR')}개 항목`}
+          actions={shouldShowCollectionCounts ? (
             <div className="flex items-center gap-2">
               <Badge variant="outline">manual {group.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
               <Badge variant="outline">auto {group.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
             </div>
-          ) : null}
-        </div>
+          ) : undefined}
+        />
       ) : null}
 
       {isLoading ? (

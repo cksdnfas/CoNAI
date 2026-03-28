@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
+import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -59,17 +60,19 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }
 
   return (
     <section className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-base font-semibold tracking-tight text-foreground">생성 히스토리</h2>
-          <Badge variant="outline">{historyLabel}</Badge>
-          <Badge variant="outline">{historyRecords.length}</Badge>
-        </div>
-
-        <Button type="button" size="icon-sm" variant="outline" onClick={() => void historyQuery.refetch()} title="새로고침" aria-label="히스토리 새로고침">
-          <RefreshCw className="h-4 w-4" />
-        </Button>
-      </div>
+      <SectionHeading
+        heading="생성 히스토리"
+        actions={(
+          <>
+            <Badge variant="outline">{historyLabel}</Badge>
+            <Badge variant="outline">{historyRecords.length}</Badge>
+            <Button type="button" size="icon-sm" variant="outline" onClick={() => void historyQuery.refetch()} title="새로고침" aria-label="히스토리 새로고침">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </>
+        )}
+        className="[&>div>h2]:text-base"
+      />
 
       <div className="rounded-sm border border-border bg-surface-low p-4">
         {historyQuery.isError ? (

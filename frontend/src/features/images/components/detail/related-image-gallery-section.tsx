@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -87,10 +88,7 @@ export function RelatedImageGallerySection({
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-semibold tracking-tight text-foreground">{title}</h2>
-        {actions}
-      </div>
+      <SectionHeading heading={title} actions={actions} />
 
       {isLoading ? (
         <div className="related-image-gallery-grid" style={gridStyle}>
