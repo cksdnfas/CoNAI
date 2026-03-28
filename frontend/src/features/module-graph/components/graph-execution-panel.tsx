@@ -1,0 +1,259 @@
+import { Play, RotateCcw, Square } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import type {
+  GraphExecutionArtifactRecord,
+  GraphExecutionLogRecord,
+  GraphExecutionRecord,
+} from '@/lib/api'
+import { formatDateTime, getArtifactPreviewUrl, parseMetadataValue } from '../module-graph-shared'
+
+type GraphExecutionDetail = {
+  execution: GraphExecutionRecord
+  artifacts: GraphExecutionArtifactRecord[]
+  logs: GraphExecutionLogRecord[]
+}
+
+type GraphExecutionPanelProps = {
+  selectedGraphId: number | null
+  selectedExecutionId: number | null
+  selectedExecutionStatus?: GraphExecutionRecord['status'] | null
+  executionList: GraphExecutionRecord[]
+  executionListError: string
+  executionListIsError: boolean
+  executionDetail: GraphExecutionDetail | undefined
+  executionDetailError: string
+  executionDetailIsError: boolean
+  isExecutingGraph: boolean
+  isCancellingExecution: boolean
+  onSelectExecution: (executionId: number) => void
+  onRerunGraph: () => void
+  onRetryExecution: () => void
+  onCancelExecution: () => void
+}
+
+/** Render graph execution history, selected detail, artifacts, and logs. */
+export function GraphExecutionPanel({
+  selectedGraphId,
+  selectedExecutionId,
+  selectedExecutionStatus,
+  executionList,
+  executionListError,
+  executionListIsError,
+  executionDetail,
+  executionDetailError,
+  executionDetailIsError,
+  isExecutingGraph,
+  isCancellingExecution,
+  onSelectExecution,
+  onRerunGraph,
+  onRetryExecution,
+  onCancelExecution,
+}: GraphExecutionPanelProps) {
+  const queuedExecutions = executionList
+    .filter((execution) => execution.status === 'queued')
+    .sort((left, right) => (left.queue_position ?? Number.MAX_SAFE_INTEGER) - (right.queue_position ?? Number.MAX_SAFE_INTEGER))
+  const runningExecutions = executionList.filter((execution) => execution.status === 'running')
+  const queuedCount = queuedExecutions.length
+  const runningCount = runningExecutions.length
+  const retryable = selectedExecutionStatus === 'failed' || selectedExecutionStatus === 'cancelled'
+  const activeRunningExecution = runningExecutions[0] ?? null
+  const nextQueuedExecution = queuedExecutions[0] ?? null
+
+  return (
+    <Card className="bg-surface-container">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base">Execution Results</CardTitle>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              onClick={onCancelExecution}
+              disabled={isCancellingExecution || (selectedExecutionStatus !== 'queued' && selectedExecutionStatus !== 'running')}
+              title={isCancellingExecution ? '취소 요청 중' : '실행 취소'}
+              aria-label={isCancellingExecution ? '실행 취소 요청 중' : '실행 취소'}
+            >
+              <Square className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              onClick={onRetryExecution}
+              disabled={!retryable || isExecutingGraph}
+              title="다시 시도"
+              aria-label="실행 다시 시도"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              onClick={onRerunGraph}
+              disabled={!selectedGraphId || isExecutingGraph}
+              title={isExecutingGraph ? '실행 중' : '재실행'}
+              aria-label={isExecutingGraph ? '워크플로우 실행 중' : '워크플로우 재실행'}
+            >
+              <Play className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-3 pt-0">
+        {!selectedGraphId ? <div className="text-sm text-muted-foreground">그래프를 먼저 골라줘.</div> : null}
+
+        {selectedGraphId && executionListIsError ? (
+          <Alert variant="destructive">
+            <AlertTitle>실행 목록 오류</AlertTitle>
+            <AlertDescription>{executionListError}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {selectedGraphId && executionList.length === 0 ? (
+          <div className="text-sm text-muted-foreground">아직 실행 기록이 없어.</div>
+        ) : null}
+
+        {selectedGraphId ? (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-1.5">
+              <Badge variant="outline">Q {queuedCount}</Badge>
+              <Badge variant="outline">R {runningCount}</Badge>
+            </div>
+
+            {queuedCount > 0 || runningCount > 0 ? (
+              <div className="rounded-sm bg-surface-low px-2.5 py-2 text-xs text-muted-foreground">
+                {activeRunningExecution ? <div>실행 중 #{activeRunningExecution.id}</div> : null}
+                {nextQueuedExecution ? <div>다음 #{nextQueuedExecution.id} · 순번 {nextQueuedExecution.queue_position ?? '?'}</div> : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="space-y-1.5">
+          {executionList.map((execution) => (
+            <button
+              key={execution.id}
+              type="button"
+              onClick={() => onSelectExecution(execution.id)}
+              className="block w-full rounded-sm bg-surface-low px-2.5 py-2 text-left transition-colors hover:bg-surface-high"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="text-sm font-medium text-foreground">#{execution.id}</span>
+                  <Badge variant={execution.status === 'completed' ? 'secondary' : 'outline'}>{execution.status}</Badge>
+                  {selectedExecutionId === execution.id ? <Badge variant="secondary">선택</Badge> : null}
+                </div>
+                <div className="text-[11px] text-muted-foreground">{formatDateTime(execution.created_date)}</div>
+              </div>
+
+              {(execution.status === 'queued' && execution.queue_position) || execution.cancel_requested || execution.error_message ? (
+                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                  {execution.status === 'queued' && execution.queue_position ? <span>순번 {execution.queue_position}</span> : null}
+                  {execution.cancel_requested ? <span className="text-[#ffd180]">취소 요청됨</span> : null}
+                  {execution.error_message ? <span className="text-[#ffb4ab] line-clamp-1">{execution.error_message}</span> : null}
+                </div>
+              ) : null}
+            </button>
+          ))}
+        </div>
+
+        {selectedExecutionId && executionDetailIsError ? (
+          <Alert variant="destructive">
+            <AlertTitle>실행 상세 오류</AlertTitle>
+            <AlertDescription>{executionDetailError}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {selectedExecutionId && executionDetail ? (
+          <div className="space-y-3 rounded-sm bg-surface-low p-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-foreground">#{executionDetail.execution.id}</span>
+                <Badge variant={executionDetail.execution.status === 'completed' ? 'secondary' : 'outline'}>{executionDetail.execution.status}</Badge>
+                <span className="text-[11px] text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
+              </div>
+            </div>
+
+            {executionDetail.execution.status === 'queued' && executionDetail.execution.queue_position ? (
+              <div className="text-[11px] text-[#ffd180]">큐 순번 {executionDetail.execution.queue_position}</div>
+            ) : null}
+
+            {executionDetail.execution.cancel_requested ? (
+              <div className="text-[11px] text-[#ffd180]">취소 요청 접수됨</div>
+            ) : null}
+
+            {executionDetail.execution.error_message ? (
+              <div className="text-[11px] text-[#ffb4ab]">{executionDetail.execution.error_message}</div>
+            ) : null}
+
+            {executionDetail.execution.failed_node_id ? (
+              <div className="text-[11px] text-[#ffd180]">실패 노드 {executionDetail.execution.failed_node_id}</div>
+            ) : null}
+
+            <div className="space-y-2.5">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Artifacts</div>
+              {executionDetail.artifacts.map((artifact) => {
+                const previewUrl = getArtifactPreviewUrl(artifact)
+                const parsedMetadata = parseMetadataValue(artifact.metadata)
+
+                return (
+                  <div key={artifact.id} className="rounded-sm bg-surface-container p-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-foreground">{artifact.node_id} · {artifact.port_key}</div>
+                        <div className="text-[11px] text-muted-foreground">{artifact.artifact_type} · {formatDateTime(artifact.created_date)}</div>
+                      </div>
+                    </div>
+
+                    {previewUrl && (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') ? (
+                      <img src={previewUrl} alt={`${artifact.node_id}-${artifact.port_key}`} className="mt-2 max-h-44 rounded-sm border border-border object-contain" />
+                    ) : null}
+
+                    {artifact.storage_path ? <div className="mt-2 break-all text-[11px] text-muted-foreground">{artifact.storage_path}</div> : null}
+
+                    {parsedMetadata ? (
+                      <pre className="mt-2 overflow-auto rounded-sm bg-[#0b111c] p-2.5 text-[11px] text-[#d7e3ff]">{typeof parsedMetadata === 'string' ? parsedMetadata : JSON.stringify(parsedMetadata, null, 2)}</pre>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="space-y-2.5">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Logs</div>
+              {executionDetail.logs.length === 0 ? (
+                <div className="text-[11px] text-muted-foreground">저장된 로그가 없어.</div>
+              ) : (
+                executionDetail.logs.map((log) => {
+                  const parsedDetails = parseMetadataValue(log.details)
+                  return (
+                    <div key={log.id} className="rounded-sm bg-surface-container p-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge variant={log.level === 'error' ? 'outline' : 'secondary'}>{log.level}</Badge>
+                          <span className="text-sm font-medium text-foreground">{log.event_type}</span>
+                          {log.node_id ? <Badge variant="outline">{log.node_id}</Badge> : null}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">{formatDateTime(log.created_date)}</div>
+                      </div>
+                      <div className="mt-1.5 text-sm text-foreground">{log.message}</div>
+                      {parsedDetails ? (
+                        <pre className="mt-2 overflow-auto rounded-sm bg-[#0b111c] p-2.5 text-[11px] text-[#d7e3ff]">{typeof parsedDetails === 'string' ? parsedDetails : JSON.stringify(parsedDetails, null, 2)}</pre>
+                      ) : null}
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  )
+}

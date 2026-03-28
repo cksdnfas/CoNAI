@@ -20,6 +20,11 @@ const ImageGenerationPageLazy = lazy(async () => {
   return { default: module.ImageGenerationPage }
 })
 
+const ModuleGraphPageLazy = lazy(async () => {
+  const module = await import('@/features/module-graph/module-graph-page')
+  return { default: module.ModuleGraphPage }
+})
+
 const ImageDetailPageLazy = lazy(async () => {
   const module = await import('@/features/images/image-detail-page')
   return { default: module.ImageDetailPage }
@@ -72,6 +77,10 @@ export function HomeRoute() {
 
 export function ImageGenerationRoute() {
   return withSuspense(<ImageGenerationPageLazy />)
+}
+
+export function ModuleGraphRoute() {
+  return withSuspense(<ModuleGraphPageLazy />)
 }
 
 export function ImageDetailRoute() {

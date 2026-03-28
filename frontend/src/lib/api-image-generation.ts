@@ -17,6 +17,8 @@ export interface GenerationHistoryRecord {
   negative_prompt?: string | null
   width?: number | null
   height?: number | null
+  actual_width?: number | null
+  actual_height?: number | null
   error_message?: string | null
   original_path?: string | null
   composite_hash?: string | null
@@ -276,6 +278,17 @@ export async function getGenerationHistory(serviceType?: GenerationServiceType) 
 
   const response = await requestJson<GenerationHistoryResponse>(`/api/generation-history?${searchParams.toString()}`)
   return response
+}
+
+/** Login to NovelAI with username/password and store the returned token on the backend. */
+export async function loginNai(username: string, password: string) {
+  return requestJson<NAILoginResponse>('/api/nai/auth/login', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ username, password }),
+  })
 }
 
 /** Validate and store a NovelAI access token on the backend. */

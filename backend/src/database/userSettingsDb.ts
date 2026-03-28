@@ -220,6 +220,105 @@ function createTables(): void {
     )
   `);
 
+  // 9. Module definitions table (generic NAI/ComfyUI module metadata)
+  userSettingsDb.exec(`
+    CREATE TABLE IF NOT EXISTS module_definitions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      engine_type TEXT NOT NULL CHECK(engine_type IN ('nai', 'comfyui')),
+      authoring_source TEXT NOT NULL CHECK(authoring_source IN ('nai_form_snapshot', 'comfyui_workflow_wrap', 'manual')),
+      category TEXT,
+      source_workflow_id INTEGER,
+      template_defaults TEXT NOT NULL,
+      exposed_inputs TEXT NOT NULL,
+      output_ports TEXT NOT NULL,
+      internal_fixed_values TEXT,
+      ui_schema TEXT,
+      version INTEGER NOT NULL DEFAULT 1,
+      is_active INTEGER DEFAULT 1,
+      color TEXT DEFAULT '#7c4dff',
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (source_workflow_id) REFERENCES workflows(id) ON DELETE SET NULL
+    )
+  `);
+
+  // 10. Graph workflows table (node/edge documents)
+  userSettingsDb.exec(`
+    CREATE TABLE IF NOT EXISTS graph_workflows (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      graph_json TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      is_active INTEGER DEFAULT 1,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // 11. Graph workflow versions table (history snapshots)
+  userSettingsDb.exec(`
+    CREATE TABLE IF NOT EXISTS graph_workflow_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workflow_id INTEGER NOT NULL,
+      version INTEGER NOT NULL,
+      graph_json TEXT NOT NULL,
+      changelog TEXT,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (workflow_id) REFERENCES graph_workflows(id) ON DELETE CASCADE,
+      UNIQUE(workflow_id, version)
+    )
+  `);
+
+  // 12. Graph executions table (future runtime execution tracking)
+  userSettingsDb.exec(`
+    CREATE TABLE IF NOT EXISTS graph_executions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      graph_workflow_id INTEGER NOT NULL,
+      graph_version INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('draft', 'queued', 'running', 'completed', 'failed', 'cancelled')) DEFAULT 'draft',
+      execution_plan TEXT,
+      started_at DATETIME,
+      completed_at DATETIME,
+      error_message TEXT,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (graph_workflow_id) REFERENCES graph_workflows(id) ON DELETE CASCADE
+    )
+  `);
+
+  // 13. Graph execution artifacts table (future intermediate image/text/blob tracking)
+  userSettingsDb.exec(`
+    CREATE TABLE IF NOT EXISTS graph_execution_artifacts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      execution_id INTEGER NOT NULL,
+      node_id TEXT NOT NULL,
+      port_key TEXT NOT NULL,
+      artifact_type TEXT NOT NULL,
+      storage_path TEXT,
+      metadata TEXT,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (execution_id) REFERENCES graph_executions(id) ON DELETE CASCADE
+    )
+  `);
+
+  // 14. Graph execution logs table (node-level timeline/logging)
+  userSettingsDb.exec(`
+    CREATE TABLE IF NOT EXISTS graph_execution_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      execution_id INTEGER NOT NULL,
+      node_id TEXT,
+      level TEXT NOT NULL CHECK(level IN ('info', 'warn', 'error')) DEFAULT 'info',
+      event_type TEXT NOT NULL,
+      message TEXT NOT NULL,
+      details TEXT,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (execution_id) REFERENCES graph_executions(id) ON DELETE CASCADE
+    )
+  `);
+
   // ===== MIGRATION: Add missing columns BEFORE creating indexes =====
   // Helper function to check if column exists
   const hasColumn = (tableName: string, columnName: string): boolean => {
@@ -277,6 +376,12 @@ function createTables(): void {
     userSettingsDb.exec("ALTER TABLE external_api_providers ADD COLUMN provider_type TEXT NOT NULL DEFAULT 'general'");
   }
 
+  // Migrate graph_executions table
+  if (!hasColumn('graph_executions', 'failed_node_id')) {
+    console.log('  Migrating graph_executions: adding failed_node_id column');
+    userSettingsDb.exec('ALTER TABLE graph_executions ADD COLUMN failed_node_id TEXT');
+  }
+
   // Create indexes (now safe - all columns exist)
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows(name)',
@@ -297,7 +402,22 @@ function createTables(): void {
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_is_auto_collected ON custom_dropdown_lists(is_auto_collected)',
     'CREATE INDEX IF NOT EXISTS idx_external_api_providers_name ON external_api_providers(provider_name)',
     'CREATE INDEX IF NOT EXISTS idx_external_api_providers_is_enabled ON external_api_providers(is_enabled)',
-    'CREATE INDEX IF NOT EXISTS idx_external_api_providers_type ON external_api_providers(provider_type)'
+    'CREATE INDEX IF NOT EXISTS idx_external_api_providers_type ON external_api_providers(provider_type)',
+    'CREATE INDEX IF NOT EXISTS idx_module_definitions_name ON module_definitions(name)',
+    'CREATE INDEX IF NOT EXISTS idx_module_definitions_engine_type ON module_definitions(engine_type)',
+    'CREATE INDEX IF NOT EXISTS idx_module_definitions_source_workflow ON module_definitions(source_workflow_id)',
+    'CREATE INDEX IF NOT EXISTS idx_module_definitions_active ON module_definitions(is_active)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_workflows_name ON graph_workflows(name)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_workflows_active ON graph_workflows(is_active)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_workflow_versions_workflow_id ON graph_workflow_versions(workflow_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_executions_workflow_id ON graph_executions(graph_workflow_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_executions_status ON graph_executions(status)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_executions_failed_node ON graph_executions(failed_node_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_execution_id ON graph_execution_artifacts(execution_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_node_port ON graph_execution_artifacts(node_id, port_key)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_logs_execution_id ON graph_execution_logs(execution_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_logs_node_id ON graph_execution_logs(node_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_logs_level ON graph_execution_logs(level)'
   ];
 
   indexes.forEach(sql => userSettingsDb.exec(sql));
@@ -312,7 +432,7 @@ function createTables(): void {
     VALUES (?, ?, ?)
   `).run('civitai', 'Civitai', 1);
 
-  console.log('  ✅ User settings tables created (8 tables + indexes)');
+  console.log('  ✅ User settings tables created (14 tables + indexes)');
 
   // Run migrations for existing tables
   migrateExistingTables();

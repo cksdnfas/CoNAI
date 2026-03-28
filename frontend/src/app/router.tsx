@@ -1,4 +1,4 @@
-import { createHashRouter } from 'react-router-dom'
+import { Navigate, createHashRouter } from 'react-router-dom'
 import { AppShell } from '@/components/layout/app-shell'
 import {
   GroupRoute,
@@ -41,6 +41,10 @@ export const appRouter = createHashRouter([
       {
         path: 'generation',
         element: <ImageGenerationRoute />,
+      },
+      {
+        path: 'graph',
+        element: <Navigate to="/generation?tab=workflows" replace />,
       },
       {
         path: 'images/:compositeHash',

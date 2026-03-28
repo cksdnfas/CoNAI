@@ -64,6 +64,8 @@ import { settingsRoutes } from './routes/settings';
 import { workflowRoutes } from './routes/workflows';
 import { comfyuiServerRoutes } from './routes/comfyuiServers';
 import { customDropdownListRoutes } from './routes/customDropdownLists';
+import { moduleDefinitionRoutes } from './routes/moduleDefinitions';
+import { graphWorkflowRoutes } from './routes/graphWorkflows';
 import naiRoutes from './routes/nai';
 import generationHistoryRoutes from './routes/generation-history.routes';
 import wildcardRoutes from './routes/wildcards';
@@ -304,6 +306,8 @@ async function registerRoutes() {
   app.use('/api/workflows', readOnlyLimiter, optionalAuth, workflowRoutes);
   app.use('/api/comfyui-servers', optionalAuth, comfyuiServerRoutes);
   app.use('/api/custom-dropdown-lists', optionalAuth, customDropdownListRoutes);
+  app.use('/api/module-definitions', optionalAuth, moduleDefinitionRoutes);
+  app.use('/api/graph-workflows', optionalAuth, graphWorkflowRoutes);
   app.use('/api/nai', uploadLimiter, optionalAuth, naiRoutes); // Upload endpoint
   app.use('/api/generation-history', readOnlyLimiter, optionalAuth, generationHistoryRoutes);
   app.use('/api/wildcards', optionalAuth, wildcardRoutes);
