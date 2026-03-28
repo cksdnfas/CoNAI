@@ -3,7 +3,7 @@ import { Plus, RefreshCcw, ScanSearch } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SectionHeading } from '@/components/common/section-heading'
 import type { BackupSource, BackupSourceUpdateInput, FolderScanLog, WatchedFolder, WatchedFolderUpdateInput, WatchersHealthSummary } from '@/types/folder'
@@ -142,8 +142,9 @@ export function FoldersTab({
     <>
       <div className="space-y-8">
         <Card className="bg-surface-container">
-          <CardHeader>
+          <CardContent className="space-y-4">
             <SectionHeading
+              variant="inside"
               heading="감시 폴더 운영"
               actions={
                 <>
@@ -158,38 +159,18 @@ export function FoldersTab({
                 </>
               }
             />
-          </CardHeader>
-          <CardContent className="grid gap-3 text-sm md:grid-cols-6">
-            <SettingsValueTile label="folders" value={folders.length} valueClassName="text-xl" />
-            <SettingsValueTile label="backup sources" value={backupSources.length} valueClassName="text-xl" />
-            <SettingsValueTile label="watching" value={watchersHealth?.watching ?? 0} valueClassName="text-xl" />
-            <SettingsValueTile label="errors" value={watchersHealth?.error ?? 0} valueClassName="text-xl" />
-            <SettingsValueTile label="events 24h" value={watchersHealth?.totalEvents24h ?? 0} valueClassName="text-xl" />
-            <SettingsValueTile label="latest scan log" value={scanLogs[0]?.folder_name ?? '—'} />
+            <div className="grid gap-3 text-sm md:grid-cols-6">
+              <SettingsValueTile label="folders" value={folders.length} valueClassName="text-xl" />
+              <SettingsValueTile label="backup sources" value={backupSources.length} valueClassName="text-xl" />
+              <SettingsValueTile label="watching" value={watchersHealth?.watching ?? 0} valueClassName="text-xl" />
+              <SettingsValueTile label="errors" value={watchersHealth?.error ?? 0} valueClassName="text-xl" />
+              <SettingsValueTile label="events 24h" value={watchersHealth?.totalEvents24h ?? 0} valueClassName="text-xl" />
+              <SettingsValueTile label="latest scan log" value={scanLogs[0]?.folder_name ?? '—'} />
+            </div>
           </CardContent>
         </Card>
 
         <section className="space-y-4">
-          <SectionHeading
-            heading={
-              <span className="inline-flex items-center gap-3">
-                <span>등록된 감시 폴더</span>
-                <Badge variant="outline">{folders.length}</Badge>
-              </span>
-            }
-            actions={
-              <Button
-                type="button"
-                size="icon-sm"
-                onClick={() => setIsAddFolderModalOpen(true)}
-                aria-label="감시 폴더 추가"
-                title="감시 폴더 추가"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            }
-          />
-
           {foldersLoading ? (
             <div className="space-y-3">
               {Array.from({ length: 3 }).map((_, index) => (
@@ -208,6 +189,23 @@ export function FoldersTab({
           {!foldersLoading && !foldersError ? (
             <Card className="overflow-hidden bg-surface-container">
               <CardContent className="p-0">
+                <SectionHeading
+                  variant="inside"
+                  className="border-b border-border/70 px-4 pb-4"
+                  heading="등록된 감시 폴더"
+                  description={`${folders.length.toLocaleString('ko-KR')}개 항목`}
+                  actions={
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      onClick={() => setIsAddFolderModalOpen(true)}
+                      aria-label="감시 폴더 추가"
+                      title="감시 폴더 추가"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  }
+                />
                 {folders.length > 0 ? (
                   <>
                     <div className="hidden border-b border-border/70 bg-surface-low/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)_minmax(220px,0.9fr)_auto] md:items-center md:gap-3">
@@ -217,7 +215,7 @@ export function FoldersTab({
                       <span className="text-right">옵션</span>
                     </div>
 
-                    <div className="divide-y divide-border/70">
+                    <div className="space-y-4 px-4 pt-4">
                       {folders.map((folder) => (
                         <WatchedFolderListItem
                           key={folder.id}
@@ -238,26 +236,6 @@ export function FoldersTab({
         </section>
 
         <section className="space-y-4">
-          <SectionHeading
-            heading={
-              <span className="inline-flex items-center gap-3">
-                <span>등록된 백업 소스</span>
-                <Badge variant="outline">{backupSources.length}</Badge>
-              </span>
-            }
-            actions={
-              <Button
-                type="button"
-                size="icon-sm"
-                onClick={() => setIsAddBackupSourceModalOpen(true)}
-                aria-label="백업 소스 추가"
-                title="백업 소스 추가"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            }
-          />
-
           {backupSourcesLoading ? (
             <div className="space-y-3">
               {Array.from({ length: 2 }).map((_, index) => (
@@ -276,6 +254,23 @@ export function FoldersTab({
           {!backupSourcesLoading && !backupSourcesError ? (
             <Card className="overflow-hidden bg-surface-container">
               <CardContent className="p-0">
+                <SectionHeading
+                  variant="inside"
+                  className="border-b border-border/70 px-4 pb-4"
+                  heading="등록된 백업 소스"
+                  description={`${backupSources.length.toLocaleString('ko-KR')}개 항목`}
+                  actions={
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      onClick={() => setIsAddBackupSourceModalOpen(true)}
+                      aria-label="백업 소스 추가"
+                      title="백업 소스 추가"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  }
+                />
                 {backupSources.length > 0 ? (
                   <>
                     <div className="hidden border-b border-border/70 bg-surface-low/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)_minmax(220px,0.9fr)_auto] md:items-center md:gap-3">
@@ -285,7 +280,7 @@ export function FoldersTab({
                       <span className="text-right">옵션</span>
                     </div>
 
-                    <div className="divide-y divide-border/70">
+                    <div className="space-y-4 px-4 pt-4">
                       {backupSources.map((source) => (
                         <BackupSourceListItem
                           key={source.id}
@@ -305,9 +300,13 @@ export function FoldersTab({
         </section>
 
         <section className="space-y-4">
-          <SectionHeading heading="최근 스캔 로그" />
           <Card className="bg-surface-container">
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-4">
+              <SectionHeading
+                variant="inside"
+                heading="최근 스캔 로그"
+                description={`${scanLogs.length.toLocaleString('ko-KR')}개 로그`}
+              />
               {scanLogsLoading ? (
                 <div className="space-y-2">
                   {Array.from({ length: 5 }).map((_, index) => (

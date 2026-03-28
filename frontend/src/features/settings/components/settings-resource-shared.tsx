@@ -49,8 +49,10 @@ export function SettingsResourceListItem({ title, path, badges, selected = false
   return (
     <div
       className={cn(
-        'grid gap-3 px-4 py-4 transition-colors md:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)_minmax(220px,0.9fr)_auto] md:items-center',
-        selected ? 'bg-surface-high' : 'bg-transparent hover:bg-surface-low/80',
+        'grid gap-3 rounded-sm border px-4 py-4 transition-colors md:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)_minmax(220px,0.9fr)_auto] md:items-center',
+        selected
+          ? 'border-primary/40 bg-surface-container shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_18%,transparent)]'
+          : 'border-border bg-surface-container hover:bg-surface-high',
       )}
     >
       <div className="min-w-0 space-y-1">
