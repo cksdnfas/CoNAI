@@ -6,10 +6,11 @@ import type { PromptGroupRecord } from '@/types/prompt'
 interface PromptTreeProps {
   groups: PromptGroupRecord[]
   selectedGroupId?: number | null
+  totalCount?: number
   onSelectGroup: (groupId?: number | null) => void
 }
 
-export function PromptTree({ groups, selectedGroupId, onSelectGroup }: PromptTreeProps) {
+export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGroup }: PromptTreeProps) {
   return (
     <div className="space-y-3">
       <button
@@ -22,7 +23,7 @@ export function PromptTree({ groups, selectedGroupId, onSelectGroup }: PromptTre
             : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
         )}
       >
-        <span>All prompts</span>
+        <span>{`All prompts (${totalCount.toLocaleString('ko-KR')})`}</span>
       </button>
 
       <HierarchyNav
@@ -31,7 +32,7 @@ export function PromptTree({ groups, selectedGroupId, onSelectGroup }: PromptTre
         onSelect={(group) => onSelectGroup(group.id)}
         getId={(group) => group.id}
         getParentId={(group) => group.parent_id}
-        getLabel={(group) => group.group_name}
+        getLabel={(group) => `${group.group_name} (${(group.prompt_count ?? 0).toLocaleString('ko-KR')})`}
         sortItems={(left, right) => left.display_order - right.display_order || left.group_name.localeCompare(right.group_name)}
         renderIcon={(_, hasChildren) => (hasChildren ? <FolderOpen className="h-4 w-4" /> : <Folder className="h-4 w-4" />)}
       />

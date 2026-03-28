@@ -364,4 +364,23 @@
     opacity: 1;
     animation: image-list-selection-pulse 1.7s ease-in-out infinite;
   }
+
+  .prompt-list-selection-frame {
+    opacity: 0;
+    transition: opacity 140ms ease, box-shadow 140ms ease;
+  }
+
+  .prompt-list-selectable.is-selection-preview .prompt-list-selection-frame {
+    opacity: 1;
+    box-shadow:
+      inset 0 0 0 4px color-mix(in srgb, var(--primary) 98%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--secondary) 22%, transparent),
+      0 0 24px color-mix(in srgb, var(--primary) 20%, transparent);
+  }
+
+  .prompt-list-selectable.is-selected .prompt-list-selection-frame,
+  .prompt-list-selectable[data-selected='true'] .prompt-list-selection-frame {
+    opacity: 1;
+    animation: image-list-selection-pulse 1.7s ease-in-out infinite;
+  }
 }

@@ -33,6 +33,10 @@ const getPromptTableName = (type: 'positive' | 'negative' | 'auto'): string => {
 };
 
 export class PromptGroupService {
+  private static isProtectedLoRAGroup(group: { group_name?: string | null } | null | undefined): boolean {
+    return group?.group_name?.trim().toLowerCase() === 'lora';
+  }
+
   /**
    * 모든 그룹 조회 (프롬프트 수 포함)
    */
@@ -94,6 +98,9 @@ export class PromptGroupService {
     type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<number> {
     try {
+      if (this.isProtectedLoRAGroup({ group_name: data.group_name })) {
+        throw new Error('LoRA group is protected');
+      }
       return await PromptGroupModel.create(data, type);
     } catch (error) {
       console.error('Error creating group:', error);
@@ -110,6 +117,10 @@ export class PromptGroupService {
     type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<boolean> {
     try {
+      const currentGroup = await PromptGroupModel.findById(id, type);
+      if (this.isProtectedLoRAGroup(currentGroup)) {
+        throw new Error('LoRA group is protected');
+      }
       return await PromptGroupModel.update(id, data, type);
     } catch (error) {
       console.error('Error updating group:', error);
@@ -125,6 +136,11 @@ export class PromptGroupService {
     type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<boolean> {
     try {
+      const currentGroup = await PromptGroupModel.findById(id, type);
+      if (this.isProtectedLoRAGroup(currentGroup)) {
+        throw new Error('LoRA group is protected');
+      }
+
       // 먼저 해당 그룹의 프롬프트들을 NULL로 변경
       await this.updatePromptGroupIds(id, null, type);
 
@@ -204,6 +220,13 @@ export class PromptGroupService {
     type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<number> {
     try {
+      for (const item of groupOrders) {
+        const group = await PromptGroupModel.findById(item.id, type);
+        if (this.isProtectedLoRAGroup(group)) {
+          throw new Error('LoRA group is protected');
+        }
+      }
+
       let updatedCount = 0;
 
       for (const item of groupOrders) {

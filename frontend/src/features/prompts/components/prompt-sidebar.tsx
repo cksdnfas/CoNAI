@@ -1,36 +1,46 @@
+import { FolderPlus, Pencil, Trash2, ChevronUp, ChevronDown, Download, Upload } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
-import { getThemeToneStyle } from '@/lib/theme-tones'
-import { cn } from '@/lib/utils'
-import type { PromptGroupRecord, PromptTypeFilter } from '@/types/prompt'
+import type { PromptGroupRecord } from '@/types/prompt'
 import { PromptTree } from './prompt-tree'
 
 interface PromptSidebarProps {
-  promptType: PromptTypeFilter
   groups: PromptGroupRecord[]
   selectedGroupId?: number | null
+  totalCount?: number
   groupsLoading: boolean
   groupsError: string | null
-  onChangeType: (nextType: PromptTypeFilter) => void
   onSelectGroup: (groupId?: number | null) => void
+  onCreateGroup?: () => void
+  onEditGroup?: () => void
+  onDeleteGroup?: () => void
+  onMoveGroupUp?: () => void
+  onMoveGroupDown?: () => void
+  onExportGroups?: () => void
+  onImportGroups?: () => void
+  canMoveGroupUp?: boolean
+  canMoveGroupDown?: boolean
 }
 
-const PROMPT_TYPE_TABS = [
-  ['positive', 'Positive'],
-  ['negative', 'Negative'],
-  ['auto', 'Auto'],
-] as const satisfies readonly [PromptTypeFilter, string][]
-
 export function PromptSidebar({
-  promptType,
   groups,
   selectedGroupId,
+  totalCount = 0,
   groupsLoading,
   groupsError,
-  onChangeType,
   onSelectGroup,
+  onCreateGroup,
+  onEditGroup,
+  onDeleteGroup,
+  onMoveGroupUp,
+  onMoveGroupDown,
+  onExportGroups,
+  onImportGroups,
+  canMoveGroupUp = false,
+  canMoveGroupDown = false,
 }: PromptSidebarProps) {
   return (
     <ExplorerSidebar
@@ -38,21 +48,37 @@ export function PromptSidebar({
       badge={<Badge variant="outline">{groups.length}</Badge>}
       className="min-[800px]:sticky min-[800px]:top-24 min-[800px]:self-start"
       headerExtra={
-        <div className="flex gap-2 border-b border-white/5 pb-2 text-xs font-semibold">
-          {PROMPT_TYPE_TABS.map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => onChangeType(value)}
-              className={cn(
-                'rounded-sm px-2 py-1 transition-colors',
-                promptType === value ? '' : 'text-muted-foreground hover:text-foreground',
-              )}
-              style={promptType === value ? getThemeToneStyle(value) : undefined}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="space-y-2 border-b border-white/5 pb-2">
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="secondary" onClick={() => onCreateGroup?.()} disabled={!onCreateGroup}>
+              <FolderPlus className="h-4 w-4" />
+              그룹 추가
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => onEditGroup?.()} disabled={!onEditGroup || selectedGroupId == null || selectedGroupId === 0}>
+              <Pencil className="h-4 w-4" />
+              편집
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => onMoveGroupUp?.()} disabled={!onMoveGroupUp || !canMoveGroupUp}>
+              <ChevronUp className="h-4 w-4" />
+              위로
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => onMoveGroupDown?.()} disabled={!onMoveGroupDown || !canMoveGroupDown}>
+              <ChevronDown className="h-4 w-4" />
+              아래로
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => onDeleteGroup?.()} disabled={!onDeleteGroup || selectedGroupId == null || selectedGroupId === 0}>
+              <Trash2 className="h-4 w-4" />
+              삭제
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => onExportGroups?.()} disabled={!onExportGroups}>
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => onImportGroups?.()} disabled={!onImportGroups}>
+              <Upload className="h-4 w-4" />
+              Import
+            </Button>
+          </div>
         </div>
       }
     >
@@ -72,7 +98,7 @@ export function PromptSidebar({
       ) : null}
 
       {!groupsLoading && !groupsError ? (
-        <PromptTree groups={groups} selectedGroupId={selectedGroupId} onSelectGroup={onSelectGroup} />
+        <PromptTree groups={groups} selectedGroupId={selectedGroupId} totalCount={totalCount} onSelectGroup={onSelectGroup} />
       ) : null}
     </ExplorerSidebar>
   )

@@ -12,6 +12,10 @@ parsePromptWithLoRAs,
 removeLoRAWeight } from '@conai/shared';
 
 export class PromptCollectionService {
+  private static isProtectedLoRAGroup(group: { group_name?: string | null } | null | undefined): boolean {
+    return group?.group_name?.trim().toLowerCase() === 'lora';
+  }
+
   /**
    * Invalid prompt values that should not be collected
    */
@@ -542,6 +546,14 @@ export class PromptCollectionService {
     type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<boolean> {
     try {
+      const prompt = await PromptCollectionModel.findById(id, type);
+      if (prompt?.group_id) {
+        const group = await PromptGroupService.getGroupById(prompt.group_id, type);
+        if (this.isProtectedLoRAGroup(group)) {
+          throw new Error('LoRA prompts are protected');
+        }
+      }
+
       return await PromptCollectionModel.delete(id, type);
     } catch (error) {
       console.error('Error deleting prompt:', error);
@@ -685,6 +697,21 @@ export class PromptCollectionService {
     type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<boolean> {
     try {
+      const prompt = await PromptCollectionModel.findById(promptId, type);
+      if (prompt?.group_id) {
+        const currentGroup = await PromptGroupService.getGroupById(prompt.group_id, type);
+        if (this.isProtectedLoRAGroup(currentGroup)) {
+          throw new Error('LoRA prompts are protected');
+        }
+      }
+
+      if (groupId !== null) {
+        const targetGroup = await PromptGroupService.getGroupById(groupId, type);
+        if (this.isProtectedLoRAGroup(targetGroup)) {
+          throw new Error('LoRA group is protected');
+        }
+      }
+
       return await PromptCollectionModel.setGroupId(promptId, groupId, type);
     } catch (error) {
       console.error('Error assigning prompt to group:', error);
@@ -736,6 +763,13 @@ export class PromptCollectionService {
         tableName = 'negative_prompt_collection';
       }
 
+      if (groupId !== null) {
+        const targetGroup = await PromptGroupService.getGroupById(groupId, type);
+        if (this.isProtectedLoRAGroup(targetGroup)) {
+          throw new Error('LoRA group is protected');
+        }
+      }
+
       for (const promptText of prompts) {
         const trimmedPrompt = promptText.trim();
         if (!trimmedPrompt) continue;
@@ -743,9 +777,17 @@ export class PromptCollectionService {
         try {
           // DB에서 해당 프롬프트 검색
           const { db } = require('../database/init');
-          const existing = db.prepare(`SELECT id FROM ${tableName} WHERE prompt = ?`).get(trimmedPrompt) as any;
+          const existing = db.prepare(`SELECT id, group_id FROM ${tableName} WHERE prompt = ?`).get(trimmedPrompt) as any;
 
           if (existing) {
+            if (existing.group_id) {
+              const currentGroup = await PromptGroupService.getGroupById(existing.group_id, type);
+              if (this.isProtectedLoRAGroup(currentGroup)) {
+                failed.push(trimmedPrompt);
+                continue;
+              }
+            }
+
             // 이미 존재하면 그룹 ID만 업데이트
             const success = await PromptCollectionModel.setGroupId(existing.id, groupId, type);
             if (success) {

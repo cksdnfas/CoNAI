@@ -23,6 +23,7 @@ export interface PromptCollectionItem {
   type: 'positive' | 'negative' | 'auto'
   created_at?: string
   updated_at?: string
+  group_info?: PromptGroupRecord | null
 }
 
 export interface PromptSearchPayload {
@@ -42,4 +43,28 @@ export interface PromptStatistics {
   total_auto_prompts: number
   most_used_prompts: PromptCollectionItem[]
   recent_prompts: PromptCollectionItem[]
+}
+
+export interface PromptGroupImportData {
+  id?: number
+  group_name: string
+  display_order: number
+  is_visible: boolean
+  parent_id: number | null
+}
+
+export interface PromptGroupExportData {
+  groups: PromptGroupImportData[]
+  metadata: {
+    export_date: string
+    total_groups: number
+    type: 'positive' | 'negative' | 'auto'
+  }
+}
+
+export interface PromptGroupImportResult {
+  success: boolean
+  reassigned_groups: { old_id: number; new_id: number; group_name: string }[]
+  updated_prompts: number
+  message: string
 }

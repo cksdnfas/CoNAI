@@ -342,6 +342,15 @@ export class PromptCollectionModel {
   }
 
   /**
+   * ID로 프롬프트 조회
+   */
+  static findById(id: number, type: 'positive' | 'negative' | 'auto' = 'positive'): any | null {
+    const tableName = getTableName(type);
+    const row = db.prepare(`SELECT * FROM ${tableName} WHERE id = ?`).get(id) as any;
+    return row || null;
+  }
+
+  /**
    * 프롬프트 삭제 (사용자에 의한 수동 삭제만 허용)
    */
   static delete(id: number, type: 'positive' | 'negative' | 'auto' = 'positive'): boolean {
