@@ -30,7 +30,7 @@ export function ImageSelectionBar({
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[90] flex justify-center px-4">
       <div
         className={cn(
           'theme-floating-panel theme-selection-bar pointer-events-auto flex items-center gap-3 rounded-full text-sm text-foreground',

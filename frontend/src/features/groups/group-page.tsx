@@ -352,6 +352,16 @@ export function GroupPage() {
   }, [isWideLayout])
 
   useEffect(() => {
+    if (isWideLayout || isImageDrawerOpen || selectedGroupImageIds.length === 0) {
+      return
+    }
+
+    setSelectedGroupImageIds([])
+    setIsAssignModalOpen(false)
+    setDownloadScope(null)
+  }, [isWideLayout, isImageDrawerOpen, selectedGroupImageIds.length])
+
+  useEffect(() => {
     setSelectedGroupImageIds([])
     setIsAssignModalOpen(false)
     setDownloadScope(null)
@@ -879,7 +889,6 @@ export function GroupPage() {
         downloadableCount={selectableDownloadCount}
         showDownloadAction={true}
         isDownloading={downloadGroupArchiveMutation.isPending && downloadScope === 'selection'}
-        statusText="선택한 이미지를 다른 커스텀 그룹에 넣거나 현재 그룹에서 정리하거나 바로 내려받을 수 있어"
         extraActions={
           <>
             <Button
