@@ -26,6 +26,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const artistPromptSection = getImageArtistPromptSection(image)
   const generationParamItems = getImageGenerationParamItems(image)
   const canEditMetadata = Boolean(image.composite_hash) && image.file_type === 'image'
+  const metaItemClassName = 'rounded-sm border border-border bg-surface-container p-4'
 
   return (
     <div className="space-y-3 text-sm text-muted-foreground">
@@ -49,40 +50,40 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         </div>
       </div>
 
-      <div className="rounded-sm bg-surface-high p-4">
+      <div className={metaItemClassName}>
         <p className="text-[11px] uppercase tracking-[0.18em]">Composite hash</p>
         <p className="mt-2 break-all font-mono text-foreground">{image.composite_hash || '—'}</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-sm bg-surface-high p-4">
+        <div className={metaItemClassName}>
           <p className="text-[11px] uppercase tracking-[0.18em]">Dimensions</p>
           <p className="mt-2 text-foreground">{image.width && image.height ? `${image.width} × ${image.height}` : '—'}</p>
         </div>
-        <div className="rounded-sm bg-surface-high p-4">
+        <div className={metaItemClassName}>
           <p className="text-[11px] uppercase tracking-[0.18em]">File size</p>
           <p className="mt-2 text-foreground">{formatBytes(image.file_size)}</p>
         </div>
         {image.ai_metadata?.model_name ? (
-          <div className="rounded-sm bg-surface-high p-4 sm:col-span-2">
+          <div className={`${metaItemClassName} sm:col-span-2`}>
             <p className="text-[11px] uppercase tracking-[0.18em]">Model</p>
             <p className="mt-2 break-words text-foreground">{image.ai_metadata.model_name}</p>
           </div>
         ) : null}
         {generationParamItems.map((item) => (
-          <div key={item.id} className="rounded-sm bg-surface-high p-4">
+          <div key={item.id} className={metaItemClassName}>
             <p className="text-[11px] uppercase tracking-[0.18em]">{item.label}</p>
             <p className="mt-2 break-words text-foreground">{item.value}</p>
           </div>
         ))}
         {image.original_file_path ? (
-          <div className="rounded-sm bg-surface-high p-4 sm:col-span-2">
+          <div className={`${metaItemClassName} sm:col-span-2`}>
             <p className="text-[11px] uppercase tracking-[0.18em]">Path</p>
             <p className="mt-2 break-all font-mono text-xs text-foreground/88">{image.original_file_path}</p>
           </div>
         ) : null}
         {extractedPromptCards.length > 0 ? (
-          <div className="rounded-sm bg-surface-high p-4 sm:col-span-2">
+          <div className={`${metaItemClassName} sm:col-span-2`}>
             <p className="text-[11px] uppercase tracking-[0.18em]">Extracted prompt</p>
             <div className="mt-3">
               <ExtractedPromptSections items={extractedPromptCards} />
@@ -90,7 +91,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
           </div>
         ) : null}
         {autoPromptContent ? (
-          <div className="rounded-sm bg-surface-high p-4 sm:col-span-2">
+          <div className={`${metaItemClassName} sm:col-span-2`}>
             <p className="text-[11px] uppercase tracking-[0.18em]">Auto prompt</p>
             <div className="mt-3 space-y-3">
               <RatingPromptSection entries={autoPromptContent.ratingEntries} />
@@ -100,7 +101,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
           </div>
         ) : null}
         {artistPromptSection ? (
-          <div className="rounded-sm bg-surface-high p-4 sm:col-span-2">
+          <div className={`${metaItemClassName} sm:col-span-2`}>
             <p className="text-[11px] uppercase tracking-[0.18em]">Artist prompt</p>
             <div className="mt-3">
               <ArtistPromptSection
