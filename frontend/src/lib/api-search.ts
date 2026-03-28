@@ -1,5 +1,5 @@
 import { fetchJson } from '@/lib/api-client'
-import type { SearchChip, SearchHistoryEntry, RatingTierRecord } from '@/features/home/search-types'
+import type { SearchChip, SearchHistoryEntry, RatingTierRecord } from '@/features/search/search-types'
 
 interface ApiResponse<T> {
   success: boolean

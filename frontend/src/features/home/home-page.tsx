@@ -8,7 +8,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/ca
 import { Skeleton } from '@/components/ui/skeleton'
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
 import { useHomeSearch } from '@/features/home/home-search-context'
-import { buildComplexFilterPayload } from '@/features/home/search-utils'
+import { buildComplexFilterPayload } from '@/features/search/search-utils'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'

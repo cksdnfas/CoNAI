@@ -1,5 +1,5 @@
-import type { SearchChip, SearchOperator, SearchScope } from '@/features/home/search-types'
-import { createSearchChipId } from '@/features/home/search-utils'
+import type { SearchChip, SearchOperator, SearchScope } from '@/features/search/search-types'
+import { createSearchChipId } from '@/features/search/search-utils'
 
 interface FilterConditionLike {
   category?: string

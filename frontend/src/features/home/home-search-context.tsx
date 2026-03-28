@@ -3,10 +3,9 @@ import { createContext, useContext, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { clearSearchHistory, deleteSearchHistory, getRatingTiers, getSearchHistory, saveSearchHistory, searchPromptCollection } from '@/lib/api'
-import type { PromptCollectionItem } from '@/types/prompt'
-import type { RatingTierRecord, SearchChip, SearchHistoryEntry, SearchScope } from './search-types'
-import { buildSearchChipKey, buildSearchChipLabel, buildSearchHistoryLabel, createSearchChipId, cycleSearchOperator } from './search-utils'
+import { clearSearchHistory, deleteSearchHistory, getSearchHistory, saveSearchHistory } from '@/lib/api'
+import type { SearchChip, SearchHistoryEntry, SearchScope } from '@/features/search/search-types'
+import { buildSearchChipKey, buildSearchHistoryLabel, createTextSearchChip, cycleSearchOperator } from '@/features/search/search-utils'
 
 interface HomeSearchContextValue {
   isDrawerOpen: boolean
@@ -14,20 +13,16 @@ interface HomeSearchContextValue {
   searchInput: string
   draftChips: SearchChip[]
   appliedChips: SearchChip[]
-  promptSuggestions: PromptCollectionItem[]
-  filteredRatingTiers: RatingTierRecord[]
   historyEntries: SearchHistoryEntry[]
-  suggestionsLoading: boolean
   historyLoading: boolean
-  ratingTiersLoading: boolean
   openDrawer: () => void
   closeDrawer: () => void
   setSearchScope: (scope: SearchScope) => void
   setSearchInput: (value: string) => void
   addTextChip: () => boolean
   submitSearchFromInput: () => void
-  addSuggestionChip: (item: PromptCollectionItem) => void
-  addRatingChip: (tier: RatingTierRecord) => void
+  addSuggestionChip: (value: string) => void
+  addRatingChip: (chip: SearchChip) => void
   cycleChipOperator: (chipId: string) => void
   removeChip: (chipId: string) => void
   applySearch: () => void
@@ -53,25 +48,6 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
   const historyQuery = useQuery({
     queryKey: ['search-history'],
     queryFn: getSearchHistory,
-  })
-
-  const ratingTiersQuery = useQuery({
-    queryKey: ['rating-tiers'],
-    queryFn: getRatingTiers,
-  })
-
-  const promptSuggestionsQuery = useQuery({
-    queryKey: ['home-search-suggestions', searchScope, searchInput],
-    queryFn: () =>
-      searchPromptCollection({
-        query: searchInput,
-        type: searchScope === 'rating' ? 'positive' : searchScope,
-        page: 1,
-        limit: 16,
-        sortBy: 'usage_count',
-        sortOrder: 'DESC',
-      }),
-    enabled: searchScope !== 'rating' && searchInput.trim().length > 0,
   })
 
   const saveHistoryMutation = useMutation({
@@ -106,11 +82,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     },
   })
 
-  const ratingTiers = ratingTiersQuery.data ?? []
   const historyEntries = historyQuery.data ?? []
-  const promptSuggestions = promptSuggestionsQuery.data?.items ?? []
-
-  const filteredRatingTiers = useMemo(() => ratingTiers, [ratingTiers])
 
   const openDrawer = () => setIsDrawerOpen(true)
   const closeDrawer = () => setIsDrawerOpen(false)
@@ -137,38 +109,12 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  const createTextChip = (scope: Exclude<SearchScope, 'rating'>, value: string): SearchChip | null => {
-    const trimmedValue = value.trim()
-    if (!trimmedValue) {
-      return null
-    }
-
-    return {
-      id: createSearchChipId(scope),
-      scope,
-      operator: 'OR',
-      label: buildSearchChipLabel(scope, trimmedValue),
-      value: trimmedValue,
-    }
-  }
-
-  const createRatingChip = (tier: RatingTierRecord): SearchChip => ({
-    id: createSearchChipId('rating'),
-    scope: 'rating',
-    operator: 'OR',
-    label: tier.tier_name,
-    value: tier.tier_name,
-    minScore: tier.min_score,
-    maxScore: tier.max_score,
-    color: tier.color ?? null,
-  })
-
   const addTextChip = () => {
     if (searchScope === 'rating') {
       return false
     }
 
-    const chip = createTextChip(searchScope, searchInput)
+    const chip = createTextSearchChip(searchScope, searchInput)
     if (!chip) {
       return false
     }
@@ -178,12 +124,12 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     return true
   }
 
-  const addSuggestionChip = (item: PromptCollectionItem) => {
+  const addSuggestionChip = (value: string) => {
     if (searchScope === 'rating') {
       return
     }
 
-    const chip = createTextChip(searchScope, item.prompt)
+    const chip = createTextSearchChip(searchScope, value)
     if (!chip) {
       return
     }
@@ -192,8 +138,8 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     setSearchInputState('')
   }
 
-  const addRatingChip = (tier: RatingTierRecord) => {
-    appendDraftChip(createRatingChip(tier))
+  const addRatingChip = (chip: SearchChip) => {
+    appendDraftChip(chip)
     setSearchInputState('')
   }
 
@@ -202,7 +148,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       return chips
     }
 
-    const nextChip = createTextChip(searchScope, searchInput)
+    const nextChip = createTextSearchChip(searchScope, searchInput)
     if (!nextChip) {
       return chips
     }
@@ -235,14 +181,6 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
   }
 
   const submitSearchFromInput = () => {
-    if (searchScope === 'rating') {
-      if (filteredRatingTiers.length === 1) {
-        addRatingChip(filteredRatingTiers[0])
-        setTimeout(() => applySearch(), 0)
-      }
-      return
-    }
-
     applySearch()
   }
 
@@ -267,12 +205,8 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     searchInput,
     draftChips,
     appliedChips,
-    promptSuggestions,
-    filteredRatingTiers,
     historyEntries,
-    suggestionsLoading: promptSuggestionsQuery.isLoading,
     historyLoading: historyQuery.isLoading,
-    ratingTiersLoading: ratingTiersQuery.isLoading,
     openDrawer,
     closeDrawer,
     setSearchScope,
@@ -299,13 +233,9 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
   }), [
     appliedChips,
     draftChips,
-    filteredRatingTiers,
     historyEntries,
     historyQuery.isLoading,
     isDrawerOpen,
-    promptSuggestions,
-    promptSuggestionsQuery.isLoading,
-    ratingTiersQuery.isLoading,
     searchInput,
     searchScope,
   ])

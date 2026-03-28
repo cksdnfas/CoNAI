@@ -1,43 +1,17 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { SearchChipList } from '@/features/search/components/search-chip-list'
+import { SearchScopeTabs } from '@/features/search/components/search-scope-tabs'
+import { SearchSuggestionList } from '@/features/search/components/search-suggestion-list'
+import { SEARCH_SCOPE_LABELS } from '@/features/search/search-constants'
+import { createRatingSearchChip } from '@/features/search/search-utils'
+import type { RatingTierRecord } from '@/features/search/search-types'
+import { useSearchSuggestionData } from '@/features/search/use-search-suggestion-data'
+import { useHomeSearch } from '@/features/home/home-search-context'
+import type { PromptCollectionItem } from '@/types/prompt'
 import { getThemeToneStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
-import { useHomeSearch } from '@/features/home/home-search-context'
-import type { RatingTierRecord, SearchScope } from '@/features/home/search-types'
-import type { PromptCollectionItem } from '@/types/prompt'
-
-const SEARCH_SCOPE_TABS: Array<{ value: SearchScope; label: string }> = [
-  { value: 'positive', label: '긍정' },
-  { value: 'auto', label: '오토' },
-  { value: 'negative', label: '부정' },
-  { value: 'rating', label: '평가' },
-]
-
-const SEARCH_SCOPE_LABELS: Record<SearchScope, string> = {
-  positive: '긍정',
-  negative: '부정',
-  auto: '오토',
-  rating: '평가',
-}
-
-interface HomeSearchScopeTabsProps {
-  searchScope: SearchScope
-  setSearchScope: (scope: SearchScope) => void
-  onClose?: () => void
-}
-
-interface HomeSearchSuggestionListProps {
-  searchScope: SearchScope
-  searchInput: string
-  promptSuggestions: PromptCollectionItem[]
-  filteredRatingTiers: RatingTierRecord[]
-  suggestionsLoading: boolean
-  ratingTiersLoading: boolean
-  submitSearchFromInput: () => void
-  addSuggestionChip: (item: PromptCollectionItem) => void
-  addRatingChip: (tier: RatingTierRecord) => void
-}
 
 interface HomeSearchInputBoxProps {
   searchInput: string
@@ -50,55 +24,15 @@ interface HomeSearchInputBoxProps {
 }
 
 interface HomeSearchSuggestionPanelProps {
-  searchScope: SearchScope
-  setSearchScope: (scope: SearchScope) => void
+  searchScope: ReturnType<typeof useHomeSearch>['searchScope']
+  setSearchScope: ReturnType<typeof useHomeSearch>['setSearchScope']
   searchInput: string
-  promptSuggestions: PromptCollectionItem[]
-  filteredRatingTiers: RatingTierRecord[]
-  suggestionsLoading: boolean
-  ratingTiersLoading: boolean
   submitSearchFromInput: () => void
-  addSuggestionChip: (item: PromptCollectionItem) => void
-  addRatingChip: (tier: RatingTierRecord) => void
+  addSuggestionChip: (value: string) => void
+  addRatingChip: (chip: ReturnType<typeof createRatingSearchChip>) => void
   onClose?: () => void
   className?: string
   style?: CSSProperties
-}
-
-/** Render the shared search scope tabs used by the search suggestion panel. */
-function HomeSearchScopeTabs({ searchScope, setSearchScope, onClose }: HomeSearchScopeTabsProps) {
-  return (
-    <div className="flex items-center gap-2 border-b border-white/5 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-        {SEARCH_SCOPE_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            onClick={() => setSearchScope(tab.value)}
-            className={cn(
-              'rounded-sm px-3 py-1.5 text-xs font-semibold transition-colors',
-              searchScope === tab.value ? '' : 'text-muted-foreground hover:bg-surface-high hover:text-foreground',
-            )}
-            style={searchScope === tab.value ? getThemeToneStyle(tab.value) : undefined}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {onClose ? (
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-sm p-2 text-muted-foreground transition hover:bg-surface-high hover:text-foreground"
-          aria-label="입력 필터 닫기"
-          title="입력 필터 닫기"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      ) : null}
-    </div>
-  )
 }
 
 /** Render the shared search input box used by the drawer search entry. */
@@ -127,89 +61,11 @@ function HomeSearchInputBox({ searchInput, setSearchInput, submitSearchFromInput
   )
 }
 
-/** Render the shared search suggestion list for text and rating scopes. */
-function HomeSearchSuggestionList({
-  searchScope,
-  searchInput,
-  promptSuggestions,
-  filteredRatingTiers,
-  suggestionsLoading,
-  ratingTiersLoading,
-  submitSearchFromInput,
-  addSuggestionChip,
-  addRatingChip,
-}: HomeSearchSuggestionListProps) {
-  if (searchScope !== 'rating') {
-    return (
-      <>
-        {searchInput.trim().length > 0 ? (
-          <button
-            type="button"
-            onClick={submitSearchFromInput}
-            className="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-surface-high"
-          >
-            <span className="text-sm text-foreground">&quot;{searchInput.trim()}&quot; 검색</span>
-            <span className="text-xs text-muted-foreground">Enter</span>
-          </button>
-        ) : null}
-
-        {suggestionsLoading ? <div className="px-4 py-6 text-sm text-muted-foreground">추천 항목을 불러오는 중…</div> : null}
-        {!suggestionsLoading && promptSuggestions.length === 0 ? (
-          <div className="px-4 py-6 text-sm text-muted-foreground">일치하는 추천 프롬프트가 아직 없어.</div>
-        ) : null}
-        {!suggestionsLoading && promptSuggestions.length > 0
-          ? promptSuggestions.map((item) => (
-              <button
-                key={`${item.type}-${item.id}`}
-                type="button"
-                onClick={() => addSuggestionChip(item)}
-                className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-surface-high"
-              >
-                <span className="truncate text-sm text-secondary">{item.prompt}</span>
-                <span className="shrink-0 text-sm text-muted-foreground">{item.usage_count.toLocaleString('ko-KR')}</span>
-              </button>
-            ))
-          : null}
-      </>
-    )
-  }
-
-  return (
-    <>
-      {ratingTiersLoading ? <div className="px-4 py-6 text-sm text-muted-foreground">평가 티어를 불러오는 중…</div> : null}
-      {!ratingTiersLoading && filteredRatingTiers.length === 0 ? (
-        <div className="px-4 py-6 text-sm text-muted-foreground">일치하는 평가 티어가 없어.</div>
-      ) : null}
-      {!ratingTiersLoading && filteredRatingTiers.length > 0
-        ? filteredRatingTiers.map((tier) => (
-            <button
-              key={tier.id}
-              type="button"
-              onClick={() => addRatingChip(tier)}
-              className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-surface-high"
-            >
-              <span className="text-sm font-semibold" style={tier.color ? { color: tier.color } : undefined}>
-                {tier.tier_name}
-              </span>
-              <span className="shrink-0 text-sm text-muted-foreground">
-                {tier.min_score}~{tier.max_score === null ? '∞' : tier.max_score}
-              </span>
-            </button>
-          ))
-        : null}
-    </>
-  )
-}
-
 /** Render the shared suggestion panel below the drawer search input. */
 function HomeSearchSuggestionPanel({
   searchScope,
   setSearchScope,
   searchInput,
-  promptSuggestions,
-  filteredRatingTiers,
-  suggestionsLoading,
-  ratingTiersLoading,
   submitSearchFromInput,
   addSuggestionChip,
   addRatingChip,
@@ -217,21 +73,41 @@ function HomeSearchSuggestionPanel({
   className,
   style,
 }: HomeSearchSuggestionPanelProps) {
+  const { promptSuggestions, filteredRatingTiers, suggestionsLoading, ratingTiersLoading } = useSearchSuggestionData(searchScope, searchInput)
+
   return (
     <div className={cn('theme-floating-panel overflow-hidden rounded-sm', className)} style={style}>
-      <HomeSearchScopeTabs searchScope={searchScope} setSearchScope={setSearchScope} onClose={onClose} />
+      <div className="flex items-center gap-2 border-b border-white/5 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+          <SearchScopeTabs searchScope={searchScope} onChange={setSearchScope} className="gap-1" />
+        </div>
+
+        {onClose ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-sm p-2 text-muted-foreground transition hover:bg-surface-high hover:text-foreground"
+            aria-label="입력 필터 닫기"
+            title="입력 필터 닫기"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
 
       <div className="max-h-[420px] overflow-y-auto py-2">
-        <HomeSearchSuggestionList
+        <SearchSuggestionList
           searchScope={searchScope}
           searchInput={searchInput}
           promptSuggestions={promptSuggestions}
           filteredRatingTiers={filteredRatingTiers}
           suggestionsLoading={suggestionsLoading}
           ratingTiersLoading={ratingTiersLoading}
-          submitSearchFromInput={submitSearchFromInput}
-          addSuggestionChip={addSuggestionChip}
-          addRatingChip={addRatingChip}
+          onSubmitInput={submitSearchFromInput}
+          onSelectSuggestion={(item: PromptCollectionItem) => addSuggestionChip(item.prompt)}
+          onSelectRatingTier={(tier: RatingTierRecord) => addRatingChip(createRatingSearchChip(tier))}
+          emptyRatingText="일치하는 평가 티어가 없어."
+          idlePromptText="먼저 검색어를 입력하면 추천 프롬프트가 보여."
         />
       </div>
     </div>
@@ -270,12 +146,8 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
     searchInput,
     draftChips,
     appliedChips,
-    promptSuggestions,
-    filteredRatingTiers,
     historyEntries,
-    suggestionsLoading,
     historyLoading,
-    ratingTiersLoading,
     closeDrawer,
     setSearchInput,
     setSearchScope,
@@ -328,13 +200,13 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
     setIsSuggestionPanelOpen(false)
   }
 
-  const handleAddSuggestionChip = (item: PromptCollectionItem) => {
-    addSuggestionChip(item)
+  const handleAddSuggestionChip = (value: string) => {
+    addSuggestionChip(value)
     setIsSuggestionPanelOpen(false)
   }
 
-  const handleAddRatingChip = (tier: RatingTierRecord) => {
-    addRatingChip(tier)
+  const handleAddRatingChip = (chip: ReturnType<typeof createRatingSearchChip>) => {
+    addRatingChip(chip)
     setIsSuggestionPanelOpen(false)
   }
 
@@ -388,10 +260,6 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
                 searchScope={searchScope}
                 setSearchScope={setSearchScope}
                 searchInput={searchInput}
-                promptSuggestions={promptSuggestions}
-                filteredRatingTiers={filteredRatingTiers}
-                suggestionsLoading={suggestionsLoading}
-                ratingTiersLoading={ratingTiersLoading}
                 submitSearchFromInput={handleSubmitSearchFromInput}
                 addSuggestionChip={handleAddSuggestionChip}
                 addRatingChip={handleAddRatingChip}
@@ -401,34 +269,13 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
           </section>
 
           <section className="space-y-3">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Current filters</div>
-            {draftChips.length === 0 ? <div className="rounded-sm border border-white/5 bg-surface-lowest px-4 py-4 text-sm text-muted-foreground">No filters</div> : null}
-            {draftChips.length > 0 ? (
-              <div className="space-y-2">
-                {draftChips.map((chip) => (
-                  <div key={chip.id} className="flex items-center gap-2 rounded-sm border border-border bg-surface-lowest px-3 py-3">
-                    <span className="rounded-sm px-2 py-1 text-[11px] font-semibold tracking-[0.08em]" style={getThemeToneStyle(chip.scope)}>
-                      {SEARCH_SCOPE_LABELS[chip.scope]}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => cycleChipOperator(chip.id)}
-                      className="rounded-sm border border-primary/35 bg-primary/10 px-2.5 py-1 text-[11px] font-bold tracking-[0.16em] text-primary shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_8%,transparent)] transition hover:bg-primary/18 hover:border-primary/55 active:scale-[0.98]"
-                      aria-label={`${chip.label} 연산자 변경`}
-                      title="클릭해서 OR / AND / NOT 전환"
-                    >
-                      {chip.operator}
-                    </button>
-                    <span className="min-w-0 flex-1 truncate text-sm text-foreground" style={chip.color ? { color: chip.color } : undefined}>
-                      {chip.label}
-                    </span>
-                    <button type="button" onClick={() => removeChip(chip.id)} className="text-muted-foreground transition hover:text-foreground" aria-label={`${chip.label} 삭제`}>
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : null}
+            <SearchChipList
+              chips={draftChips}
+              title="Current filters"
+              emptyMessage="No filters"
+              onCycleOperator={cycleChipOperator}
+              onRemove={removeChip}
+            />
 
             <div className="flex gap-2">
               <Button type="button" className="flex-1" onClick={handleApplySearch}>
@@ -461,7 +308,7 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
                         {entry.chips.map((chip) => (
                           <span key={chip.id} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1.5 text-xs text-foreground">
                             <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em]" style={getThemeToneStyle(chip.scope)}>
-                              {SEARCH_SCOPE_LABELS[chip.scope]}
+                              {chip.scopeLabel ?? SEARCH_SCOPE_LABELS[chip.scope]}
                             </span>
                             <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.14em] text-primary">
                               {chip.operator}
