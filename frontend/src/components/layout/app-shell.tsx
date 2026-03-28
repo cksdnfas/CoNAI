@@ -39,8 +39,13 @@ function AppShellLayout() {
   const appearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
   const showDesktopSearch = useMinWidth(appearance.desktopSearchMinWidth)
   const navScrollRef = useRef<HTMLDivElement | null>(null)
+  const navDragPointerIdRef = useRef<number | null>(null)
+  const navDragStartXRef = useRef(0)
+  const navDragStartScrollLeftRef = useRef(0)
+  const suppressNavClickRef = useRef(false)
   const [canScrollNavLeft, setCanScrollNavLeft] = useState(false)
   const [canScrollNavRight, setCanScrollNavRight] = useState(false)
+  const [isDraggingNav, setIsDraggingNav] = useState(false)
 
   useEffect(() => {
     const navScrollElement = navScrollRef.current
@@ -78,6 +83,18 @@ function AppShellLayout() {
     }
   }, [location.pathname, showDesktopSearch])
 
+  /** Reset the temporary nav-drag state after horizontal scroll gestures. */
+  const finishNavDrag = () => {
+    navDragPointerIdRef.current = null
+    navDragStartXRef.current = 0
+    navDragStartScrollLeftRef.current = 0
+    setIsDraggingNav(false)
+
+    window.setTimeout(() => {
+      suppressNavClickRef.current = false
+    }, 0)
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="theme-shell-header fixed inset-x-0 top-0 z-50">
@@ -91,7 +108,62 @@ function AppShellLayout() {
             </div>
 
             <div className="relative min-w-0 flex-1">
-              <div ref={navScrollRef} className="theme-nav-scroll min-w-0 overflow-x-auto">
+              <div
+                ref={navScrollRef}
+                className={cn('theme-nav-scroll min-w-0 overflow-x-auto', isDraggingNav && 'cursor-grabbing select-none')}
+                onPointerDown={(event) => {
+                  if (event.button !== 0) {
+                    return
+                  }
+
+                  navDragPointerIdRef.current = event.pointerId
+                  navDragStartXRef.current = event.clientX
+                  navDragStartScrollLeftRef.current = navScrollRef.current?.scrollLeft ?? 0
+                  suppressNavClickRef.current = false
+                  setIsDraggingNav(false)
+                }}
+                onPointerMove={(event) => {
+                  if (navDragPointerIdRef.current !== event.pointerId || !navScrollRef.current) {
+                    return
+                  }
+
+                  const deltaX = event.clientX - navDragStartXRef.current
+                  if (!isDraggingNav && Math.abs(deltaX) > 6) {
+                    suppressNavClickRef.current = true
+                    setIsDraggingNav(true)
+                  }
+
+                  if (Math.abs(deltaX) <= 1) {
+                    return
+                  }
+
+                  navScrollRef.current.scrollLeft = navDragStartScrollLeftRef.current - deltaX
+                  event.preventDefault()
+                  event.stopPropagation()
+                }}
+                onPointerUp={(event) => {
+                  if (navDragPointerIdRef.current !== event.pointerId) {
+                    return
+                  }
+
+                  finishNavDrag()
+                }}
+                onPointerCancel={(event) => {
+                  if (navDragPointerIdRef.current !== event.pointerId) {
+                    return
+                  }
+
+                  finishNavDrag()
+                }}
+                onPointerLeave={(event) => {
+                  if (navDragPointerIdRef.current !== event.pointerId || !isDraggingNav) {
+                    return
+                  }
+
+                  finishNavDrag()
+                }}
+                style={{ touchAction: 'pan-y pinch-zoom' }}
+              >
                 <nav className="flex min-w-max items-center gap-2 pr-10 sm:pr-2" aria-label="주요 페이지 이동">
                   {navItems.map(({ to, label, icon: Icon }) => (
                     <NavLink
@@ -100,9 +172,20 @@ function AppShellLayout() {
                       end={to === '/'}
                       aria-label={label}
                       title={label}
+                      draggable={false}
+                      onClick={(event) => {
+                        if (!suppressNavClickRef.current) {
+                          return
+                        }
+
+                        event.preventDefault()
+                        event.stopPropagation()
+                      }}
+                      onDragStart={(event) => event.preventDefault()}
                       className={({ isActive }) =>
                         cn(
-                          'inline-flex size-9 shrink-0 items-center justify-center rounded-sm border border-transparent text-foreground/70 transition-all duration-300 hover:border-border hover:bg-surface-high hover:text-foreground',
+                          'inline-flex size-9 shrink-0 items-center justify-center rounded-sm border border-transparent text-foreground/70 transition-all duration-300 hover:border-border hover:bg-surface-high hover:text-foreground select-none',
+                          isDraggingNav && 'pointer-events-none',
                           isActive && 'border-primary/35 bg-primary/12 text-primary shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_10%,transparent)]',
                         )
                       }

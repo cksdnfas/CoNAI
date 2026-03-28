@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { ImageRecord } from '@/types/image'
-import { getGenerationHistory } from '@/lib/api'
+import { getGenerationHistory, getGenerationWorkflowHistory } from '@/lib/api'
 import {
   getErrorMessage,
   getHistoryStatusLabel,
@@ -15,6 +15,7 @@ import {
 type GenerationHistoryPanelProps = {
   refreshNonce: number
   serviceType: 'novelai' | 'comfyui'
+  workflowId?: number | null
 }
 
 function mapHistoryRecordToImageRecord(record: Awaited<ReturnType<typeof getGenerationHistory>>['records'][number]): ImageRecord {
@@ -33,10 +34,10 @@ function mapHistoryRecordToImageRecord(record: Awaited<ReturnType<typeof getGene
 }
 
 /** Render generation history using the shared image-list surface instead of per-record cards. */
-export function GenerationHistoryPanel({ refreshNonce, serviceType }: GenerationHistoryPanelProps) {
+export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }: GenerationHistoryPanelProps) {
   const historyQuery = useQuery({
-    queryKey: ['image-generation-history', serviceType],
-    queryFn: () => getGenerationHistory(serviceType),
+    queryKey: ['image-generation-history', serviceType, workflowId ?? null],
+    queryFn: () => (serviceType === 'comfyui' && workflowId ? getGenerationWorkflowHistory(workflowId) : getGenerationHistory(serviceType)),
     refetchInterval: 5000,
   })
 

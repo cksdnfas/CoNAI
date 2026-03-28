@@ -71,8 +71,8 @@ export function GroupImageDrawer({
         aria-modal="true"
         aria-label="그룹 이미지 시트"
         className={open
-          ? 'theme-floating-panel fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] flex-col rounded-t-[1.25rem] transition-transform duration-300'
-          : 'theme-floating-panel pointer-events-none fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] translate-y-full flex-col rounded-t-[1.25rem] transition-transform duration-300'}
+          ? 'theme-floating-panel theme-bottom-drawer fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] flex-col transition-transform duration-300'
+          : 'theme-floating-panel theme-bottom-drawer pointer-events-none fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] translate-y-full flex-col transition-transform duration-300'}
       >
         <div className="flex justify-center px-4 pt-3">
           <div className="h-1.5 w-14 rounded-full bg-white/15" />

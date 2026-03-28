@@ -35,6 +35,7 @@ export interface WorkflowMarkedField {
   type: 'text' | 'number' | 'select' | 'textarea' | 'image'
   default_value?: string | number | boolean | null
   placeholder?: string
+  dropdown_list_name?: string
   options?: string[]
   required?: boolean
   min?: number
@@ -51,6 +52,10 @@ export interface GenerationWorkflow {
   marked_fields: WorkflowMarkedField[]
 }
 
+export interface GenerationWorkflowDetail extends GenerationWorkflow {
+  workflow_json: string
+}
+
 export interface ComfyUIServer {
   id: number
   name: string
@@ -59,10 +64,28 @@ export interface ComfyUIServer {
   is_active: boolean
 }
 
+export interface CustomDropdownList {
+  id: number
+  name: string
+  description?: string | null
+  items: string[]
+  is_auto_collected: boolean
+  source_path?: string | null
+  created_date?: string
+  updated_date?: string
+}
+
 export interface CreateComfyUIServerPayload {
   name: string
   endpoint: string
   description?: string
+}
+
+export interface UpdateComfyUIServerPayload {
+  name?: string
+  endpoint?: string
+  description?: string
+  is_active?: boolean
 }
 
 export interface ComfyUIServerConnectionStatus {
@@ -155,9 +178,24 @@ export interface ComfyUIGenerationResponse {
   }
 }
 
+export interface CreateGenerationWorkflowPayload {
+  name: string
+  description?: string
+  workflow_json: string
+  marked_fields?: WorkflowMarkedField[]
+  api_endpoint?: string
+  is_active?: boolean
+  color?: string
+}
+
 interface WorkflowListResponse {
   success: boolean
   data: GenerationWorkflow[]
+}
+
+interface WorkflowDetailResponse {
+  success: boolean
+  data: GenerationWorkflowDetail
 }
 
 interface ComfyUIServerListResponse {
@@ -165,7 +203,28 @@ interface ComfyUIServerListResponse {
   data: ComfyUIServer[]
 }
 
+interface CustomDropdownListResponse {
+  success: boolean
+  data: CustomDropdownList[]
+}
+
 interface CreateComfyUIServerResponse {
+  success: boolean
+  data: {
+    id: number
+    message: string
+  }
+}
+
+interface MutationResponse {
+  success: boolean
+  data: {
+    id?: number
+    message: string
+  }
+}
+
+interface CreateWorkflowResponse {
   success: boolean
   data: {
     id: number
@@ -241,6 +300,12 @@ export async function getGenerationWorkflows(activeOnly = true) {
   return response.data
 }
 
+/** Load the full detail for a single saved workflow. */
+export async function getGenerationWorkflow(workflowId: number) {
+  const response = await requestJson<WorkflowDetailResponse>(`/api/workflows/${workflowId}`)
+  return response.data
+}
+
 /** Load the registered ComfyUI servers. */
 export async function getGenerationComfyUIServers(activeOnly = true) {
   const searchParams = new URLSearchParams()
@@ -263,9 +328,106 @@ export async function createGenerationComfyUIServer(payload: CreateComfyUIServer
   })
 }
 
+/** Update a saved ComfyUI server entry. */
+export async function updateGenerationComfyUIServer(serverId: number, payload: UpdateComfyUIServerPayload) {
+  return requestJson<MutationResponse>(`/api/comfyui-servers/${serverId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Delete a saved ComfyUI server entry. */
+export async function deleteGenerationComfyUIServer(serverId: number) {
+  return requestJson<MutationResponse>(`/api/comfyui-servers/${serverId}`, {
+    method: 'DELETE',
+  })
+}
+
+/** Create a saved ComfyUI workflow definition. */
+export async function createGenerationWorkflow(payload: CreateGenerationWorkflowPayload) {
+  return requestJson<CreateWorkflowResponse>('/api/workflows', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Update a saved ComfyUI workflow definition. */
+export async function updateGenerationWorkflow(workflowId: number, payload: CreateGenerationWorkflowPayload) {
+  return requestJson<MutationResponse>(`/api/workflows/${workflowId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Delete a saved ComfyUI workflow definition. */
+export async function deleteGenerationWorkflow(workflowId: number) {
+  return requestJson<MutationResponse>(`/api/workflows/${workflowId}`, {
+    method: 'DELETE',
+  })
+}
+
+/** Link one or more ComfyUI servers to a saved workflow. */
+export async function linkGenerationWorkflowServers(workflowId: number, serverIds: number[]) {
+  return requestJson<{ success: boolean; data: { message: string; linked_count: number } }>(`/api/workflows/${workflowId}/servers`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ server_ids: serverIds }),
+  })
+}
+
+/** Remove a linked server from a saved workflow. */
+export async function unlinkGenerationWorkflowServer(workflowId: number, serverId: number) {
+  return requestJson<MutationResponse>(`/api/workflows/${workflowId}/servers/${serverId}`, {
+    method: 'DELETE',
+  })
+}
+
+/** Normalize ComfyUI server status fields from mixed backend payload shapes. */
+function normalizeComfyUIServerStatus(payload: Record<string, unknown>): ComfyUIServerConnectionStatus {
+  return {
+    server_id: Number(payload.server_id ?? payload.serverId ?? 0),
+    server_name: String(payload.server_name ?? payload.serverName ?? ''),
+    endpoint: String(payload.endpoint ?? ''),
+    is_connected: payload.is_connected === true || payload.isConnected === true,
+    response_time: typeof payload.response_time === 'number'
+      ? payload.response_time
+      : typeof payload.responseTime === 'number'
+        ? payload.responseTime
+        : undefined,
+    error_message: typeof payload.error_message === 'string'
+      ? payload.error_message
+      : typeof payload.error === 'string'
+        ? payload.error
+        : undefined,
+  }
+}
+
 /** Test whether a ComfyUI server endpoint is reachable. */
 export async function testGenerationComfyUIServer(serverId: number) {
   const response = await requestJson<TestComfyUIServerResponse>(`/api/comfyui-servers/${serverId}/test-connection`)
+  return normalizeComfyUIServerStatus(response.data as unknown as Record<string, unknown>)
+}
+
+/** Load the linked servers for a specific ComfyUI workflow. */
+export async function getGenerationWorkflowServers(workflowId: number) {
+  const response = await requestJson<ComfyUIServerListResponse>(`/api/workflows/${workflowId}/servers`)
+  return response.data
+}
+
+/** Load saved custom dropdown lists used by ComfyUI workflows. */
+export async function getGenerationCustomDropdownLists() {
+  const response = await requestJson<CustomDropdownListResponse>('/api/custom-dropdown-lists')
   return response.data
 }
 
@@ -277,6 +439,13 @@ export async function getGenerationHistory(serviceType?: GenerationServiceType) 
   }
 
   const response = await requestJson<GenerationHistoryResponse>(`/api/generation-history?${searchParams.toString()}`)
+  return response
+}
+
+/** Load generation history for a specific ComfyUI workflow. */
+export async function getGenerationWorkflowHistory(workflowId: number) {
+  const searchParams = new URLSearchParams({ limit: '30', offset: '0' })
+  const response = await requestJson<GenerationHistoryResponse>(`/api/generation-history/workflow/${workflowId}?${searchParams.toString()}`)
   return response
 }
 

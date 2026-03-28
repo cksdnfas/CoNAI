@@ -64,8 +64,8 @@ function GenerationControllerSheet({ open, title, onClose, children }: { open: b
         aria-modal="true"
         aria-label={`${title} 컨트롤 패널`}
         className={open
-          ? 'theme-floating-panel fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] flex-col rounded-t-[1.25rem] transition-transform duration-300'
-          : 'theme-floating-panel pointer-events-none fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] translate-y-full flex-col rounded-t-[1.25rem] transition-transform duration-300'}
+          ? 'theme-floating-panel theme-bottom-drawer fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] flex-col transition-transform duration-300'
+          : 'theme-floating-panel theme-bottom-drawer pointer-events-none fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] translate-y-full flex-col transition-transform duration-300'}
       >
         <div className="flex justify-center px-4 pt-3">
           <div className="h-1.5 w-14 rounded-full bg-white/15" />
@@ -99,6 +99,7 @@ export function ImageGenerationPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [globalRefreshNonce, setGlobalRefreshNonce] = useState(0)
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
+  const [selectedComfyWorkflowId, setSelectedComfyWorkflowId] = useState<number | null>(null)
   const [isControllerOpen, setIsControllerOpen] = useState(false)
   const isWideLayout = useMinWidth(1200)
   const activeTab = parseImageGenerationTab(searchParams.get('tab'))
@@ -120,15 +121,16 @@ export function ImageGenerationPage() {
 
   useEffect(() => {
     setIsControllerOpen(false)
-  }, [activeTab, isWideLayout])
+  }, [activeTab])
 
   const controllerPanel = activeTab === 'nai'
     ? <NaiGenerationPanel refreshNonce={globalRefreshNonce} onHistoryRefresh={handleHistoryRefresh} />
     : activeTab === 'comfyui'
-      ? <ComfyGenerationPanel refreshNonce={globalRefreshNonce} onHistoryRefresh={handleHistoryRefresh} />
+      ? <ComfyGenerationPanel refreshNonce={globalRefreshNonce} onHistoryRefresh={handleHistoryRefresh} onSelectedWorkflowChange={setSelectedComfyWorkflowId} />
       : null
 
   const controllerLabel = activeTab === 'nai' ? 'NAI' : 'ComfyUI'
+  const shouldShowHistory = activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null)
 
   return (
     <div className="space-y-6 pb-24 xl:pb-0">
@@ -169,15 +171,36 @@ export function ImageGenerationPage() {
 
       {activeTab !== 'workflows' && controllerPanel ? (
         isWideLayout ? (
-          <div className="grid gap-6 xl:grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]">
+          <div className={cn('grid gap-6', shouldShowHistory ? 'xl:grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]' : 'grid-cols-1')}>
             <div className="min-w-0">{controllerPanel}</div>
-            <div className="min-w-0">
-              <GenerationHistoryPanel refreshNonce={historyRefreshNonce} serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'} />
-            </div>
+            {shouldShowHistory ? (
+              <div className="min-w-0">
+                <GenerationHistoryPanel
+                  refreshNonce={historyRefreshNonce}
+                  serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'}
+                  workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
+                />
+              </div>
+            ) : null}
           </div>
-        ) : (
+        ) : activeTab === 'comfyui' ? (
+          <div className="space-y-6">
+            <div className="min-w-0">{controllerPanel}</div>
+            {shouldShowHistory ? (
+              <GenerationHistoryPanel
+                refreshNonce={historyRefreshNonce}
+                serviceType="comfyui"
+                workflowId={selectedComfyWorkflowId}
+              />
+            ) : null}
+          </div>
+        ) : shouldShowHistory ? (
           <>
-            <GenerationHistoryPanel refreshNonce={historyRefreshNonce} serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'} />
+            <GenerationHistoryPanel
+              refreshNonce={historyRefreshNonce}
+              serviceType="novelai"
+              workflowId={null}
+            />
 
             <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
               <Button
@@ -195,6 +218,8 @@ export function ImageGenerationPage() {
               {controllerPanel}
             </GenerationControllerSheet>
           </>
+        ) : (
+          <div className="min-w-0">{controllerPanel}</div>
         )
       ) : null}
     </div>
