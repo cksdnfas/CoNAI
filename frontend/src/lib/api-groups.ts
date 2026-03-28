@@ -1,10 +1,13 @@
-import { buildApiUrl, fetchJson } from '@/lib/api-client'
+import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import type { ApiResponse } from '@/types/image'
 import type {
+  GroupAutoCollectAllResult,
   GroupAutoCollectResult,
   GroupBreadcrumbItem,
   GroupBulkAddResult,
   GroupBulkRemoveResult,
+  GroupDownloadType,
+  GroupFileCounts,
   GroupImagesPayload,
   GroupMutationInput,
   GroupMutationMessage,
@@ -31,6 +34,48 @@ function normalizeGroupWithHierarchy(group: GroupWithHierarchy): GroupWithHierar
     child_count: Number(group.child_count ?? 0),
     has_children: Boolean(group.has_children),
   }
+}
+
+function normalizeGroupFileCounts(counts: GroupFileCounts): GroupFileCounts {
+  return {
+    thumbnail: Number(counts.thumbnail ?? 0),
+    original: Number(counts.original ?? 0),
+    video: Number(counts.video ?? 0),
+  }
+}
+
+function getDownloadFileName(contentDisposition: string | null, fallbackFileName: string) {
+  if (!contentDisposition) {
+    return fallbackFileName
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1])
+  }
+
+  const basicMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
+  if (basicMatch?.[1]) {
+    return basicMatch[1]
+  }
+
+  return fallbackFileName
+}
+
+async function readDownloadError(response: Response) {
+  const contentType = response.headers.get('Content-Type') || ''
+
+  if (contentType.includes('application/json')) {
+    try {
+      const payload = (await response.json()) as ApiResponse<unknown>
+      return payload.error || `Request failed: ${response.status}`
+    } catch {
+      return `Request failed: ${response.status}`
+    }
+  }
+
+  const text = await response.text().catch(() => '')
+  return text || `Request failed: ${response.status}`
 }
 
 export async function getGroupsHierarchyAll() {
@@ -208,6 +253,67 @@ export async function runGroupAutoCollect(groupId: number) {
   }
 
   return response.data
+}
+
+export async function runAllGroupsAutoCollect() {
+  const response = await fetchJson<ApiResponse<GroupAutoCollectAllResult>>('/api/groups/auto-collect-all', {
+    method: 'POST',
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '전체 자동수집을 실행하지 못했어.')
+  }
+
+  return response.data
+}
+
+export async function getGroupFileCounts(groupId: number) {
+  const response = await fetchJson<ApiResponse<GroupFileCounts>>(`/api/groups/${groupId}/file-counts`)
+
+  if (!response.success) {
+    throw new Error(response.error || '그룹 다운로드 가능 파일 수를 불러오지 못했어.')
+  }
+
+  return normalizeGroupFileCounts(response.data)
+}
+
+export async function downloadGroupArchive(
+  groupId: number,
+  options: {
+    type: GroupDownloadType
+    compositeHashes?: string[]
+    captionMode?: 'auto_tags' | 'merged'
+  },
+) {
+  const searchParams = new URLSearchParams()
+  searchParams.set('type', options.type)
+
+  if (options.compositeHashes && options.compositeHashes.length > 0) {
+    searchParams.set('hashes', JSON.stringify(options.compositeHashes))
+  }
+
+  if (options.captionMode) {
+    searchParams.set('captionMode', options.captionMode)
+  }
+
+  const response = await fetch(buildApiUrl(`/api/groups/${groupId}/download?${searchParams.toString()}`), {
+    headers: {
+      Accept: 'application/zip',
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(await readDownloadError(response))
+  }
+
+  const blob = await response.blob()
+  const fallbackFileName = `group-${groupId}-${options.type}.zip`
+  const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
+  triggerBlobDownload(blob, fileName)
+
+  return {
+    fileName,
+  }
 }
 
 export function getGroupThumbnailUrl(groupId: number) {

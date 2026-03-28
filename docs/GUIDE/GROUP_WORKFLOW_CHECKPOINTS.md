@@ -44,6 +44,16 @@ This note tracks the recently connected group-management workflows so they can b
   - remove selected images from the current custom group
   - remove a single image from the current custom group
 
+### 4. Download and maintenance workflows
+
+- Groups page:
+  - download the current group as `original / video / thumbnail` ZIP
+  - download the current selection as `original / video / thumbnail` ZIP
+- Custom groups:
+  - run auto-collect for all custom groups from the page header
+- Auto-folder groups:
+  - rebuild auto-folder groups from the page header
+
 ## Review checkpoints
 
 ### Group creation / editing
@@ -88,12 +98,19 @@ This note tracks the recently connected group-management workflows so they can b
 - [ ] Bulk remove reports removed / skipped counts correctly.
 - [ ] Group image count badges refresh after add/remove actions.
 
+### Download and maintenance
+
+- [ ] Current group download modal opens and shows `original / video / thumbnail` counts.
+- [ ] Selected-image download modal opens and downloads only the selected hashes.
+- [ ] Custom-group `전체 자동수집` action runs and refreshes counts/state.
+- [ ] Auto-folder `감시폴더 재구축` action rebuilds and refreshes the tree/detail/images.
+
 ### General UI sanity
 
 - [ ] Selection bar only appears when there is an active selection.
 - [ ] Group assign modal opens with custom-group list loaded.
 - [ ] Empty custom-group state is handled gracefully.
-- [ ] Snackbar feedback is shown for create / update / delete / assign / remove actions.
+- [ ] Snackbar feedback is shown for create / update / delete / assign / remove / download / rebuild actions.
 - [ ] No broken navigation between custom-group tab and watched-folder tab.
 
 ## Key files

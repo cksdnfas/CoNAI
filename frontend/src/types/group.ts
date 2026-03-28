@@ -78,3 +78,18 @@ export interface GroupAutoCollectResult {
   images_removed: number
   execution_time: number
 }
+
+export interface GroupAutoCollectAllResult {
+  results: GroupAutoCollectResult[]
+  total_groups: number
+  total_images_added: number
+  total_images_removed: number
+}
+
+export interface GroupFileCounts {
+  thumbnail: number
+  original: number
+  video: number
+}
+
+export type GroupDownloadType = 'thumbnail' | 'original' | 'video'

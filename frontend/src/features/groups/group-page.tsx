@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FolderMinus, FolderPlus, Pencil, Play, Trash2, X } from 'lucide-react'
+import { Download, FolderMinus, FolderPlus, Pencil, Play, RotateCcw, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -14,22 +14,28 @@ import {
   addImagesToGroup,
   createGroup,
   deleteGroup,
+  downloadAutoFolderGroupArchive,
+  downloadGroupArchive,
   getAutoFolderGroup,
   getAutoFolderGroupBreadcrumb,
+  getAutoFolderGroupFileCounts,
   getAutoFolderGroupImages,
   getAutoFolderGroupsHierarchyAll,
   getAutoFolderGroupThumbnailUrl,
   getGroup,
   getGroupBreadcrumb,
+  getGroupFileCounts,
   getGroupImages,
   getGroupsHierarchyAll,
   getGroupThumbnailUrl,
+  rebuildAutoFolderGroups,
   removeImagesFromGroup,
+  runAllGroupsAutoCollect,
   runGroupAutoCollect,
   updateGroup,
 } from '@/lib/api'
 import { useMinWidth } from '@/lib/use-min-width'
-import type { GroupMutationInput, GroupRecord } from '@/types/group'
+import type { GroupDownloadType, GroupFileCounts, GroupMutationInput, GroupRecord } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 import { GroupBreadcrumbs } from './components/group-breadcrumbs'
 import { GroupChildCard } from './components/group-child-card'
@@ -38,6 +44,7 @@ import { GroupAssignModal } from './components/group-assign-modal'
 import { GroupImageDrawer } from './components/group-image-drawer'
 import { GroupImageSection } from './components/group-image-section'
 import { GroupTree } from './components/group-tree'
+import { GroupDownloadModal } from './components/group-download-modal'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 
 const groupSources = {
@@ -100,6 +107,38 @@ function formatGroupTimestamp(value?: string | null) {
   return date.toLocaleString('ko-KR')
 }
 
+function createEmptyGroupFileCounts(): GroupFileCounts {
+  return {
+    thumbnail: 0,
+    original: 0,
+    video: 0,
+  }
+}
+
+function getDownloadCountsFromImages(images: ImageRecord[]): GroupFileCounts {
+  const counts = createEmptyGroupFileCounts()
+
+  for (const image of images) {
+    if (image.thumbnail_url) {
+      counts.thumbnail += 1
+    }
+
+    const ext = image.original_file_path?.split('.').pop()?.toLowerCase() ?? ''
+    const isVideoOrAnimated = image.file_type === 'video' || image.file_type === 'animated' || ['gif', 'mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)
+
+    if (isVideoOrAnimated) {
+      counts.video += 1
+      continue
+    }
+
+    if (image.original_file_path || image.thumbnail_url) {
+      counts.original += 1
+    }
+  }
+
+  return counts
+}
+
 export function GroupPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -110,6 +149,7 @@ export function GroupPage() {
   const [editorState, setEditorState] = useState<GroupEditorState | null>(null)
   const [selectedGroupImageIds, setSelectedGroupImageIds] = useState<string[]>([])
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
+  const [downloadScope, setDownloadScope] = useState<'group' | 'selection' | null>(null)
   const [groupImageCollectionFilter, setGroupImageCollectionFilter] = useState<'all' | 'manual' | 'auto'>('all')
   const isWideLayout = useMinWidth(1280)
   const selectedSourceKey = normalizeGroupSourceKey(searchParams.get('tab'))
@@ -150,6 +190,12 @@ export function GroupPage() {
       const { page, totalPages } = lastPage.pagination
       return page < totalPages ? page + 1 : undefined
     },
+    enabled: Number.isFinite(selectedGroupId),
+  })
+
+  const groupFileCountsQuery = useQuery({
+    queryKey: ['group-file-counts', selectedSource.key, selectedGroupId],
+    queryFn: () => (isCustomSource ? getGroupFileCounts(selectedGroupId!) : getAutoFolderGroupFileCounts(selectedGroupId!)),
     enabled: Number.isFinite(selectedGroupId),
   })
 
@@ -213,6 +259,67 @@ export function GroupPage() {
     },
   })
 
+  const autoCollectAllMutation = useMutation({
+    mutationFn: runAllGroupsAutoCollect,
+    onSuccess: async (result) => {
+      showSnackbar({
+        message: `전체 자동수집 완료: ${result.total_groups.toLocaleString('ko-KR')}개 그룹, ${result.total_images_added.toLocaleString('ko-KR')}개 추가, ${result.total_images_removed.toLocaleString('ko-KR')}개 정리`,
+        tone: 'info',
+      })
+      await refreshCustomGroupQueries()
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : '전체 자동수집 실행에 실패했어.', tone: 'error' })
+    },
+  })
+
+  const rebuildAutoFolderGroupsMutation = useMutation({
+    mutationFn: rebuildAutoFolderGroups,
+    onSuccess: async () => {
+      showSnackbar({ message: '감시폴더 그룹을 다시 읽어왔어.', tone: 'info' })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all', 'folders'] }),
+        queryClient.invalidateQueries({ queryKey: ['group-detail', 'folders'] }),
+        queryClient.invalidateQueries({ queryKey: ['group-breadcrumb', 'folders'] }),
+        queryClient.invalidateQueries({ queryKey: ['group-images', 'folders'] }),
+        queryClient.invalidateQueries({ queryKey: ['group-file-counts', 'folders'] }),
+      ])
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : '감시폴더 그룹 재구축에 실패했어.', tone: 'error' })
+    },
+  })
+
+  const downloadGroupArchiveMutation = useMutation({
+    mutationFn: async ({ type, scope }: { type: GroupDownloadType; scope: 'group' | 'selection' }) => {
+      if (!selectedGroupId) {
+        throw new Error('다운로드할 그룹이 선택되지 않았어.')
+      }
+
+      if (scope === 'selection' && selectedGroupCompositeHashes.length === 0) {
+        throw new Error('다운로드할 이미지를 먼저 선택해줘.')
+      }
+
+      const compositeHashes = scope === 'selection' ? selectedGroupCompositeHashes : undefined
+
+      if (isCustomSource) {
+        return downloadGroupArchive(selectedGroupId, { type, compositeHashes })
+      }
+
+      return downloadAutoFolderGroupArchive(selectedGroupId, { type, compositeHashes })
+    },
+    onSuccess: (_, variables) => {
+      setDownloadScope(null)
+      showSnackbar({
+        message: variables.scope === 'selection' ? '선택한 이미지 다운로드를 준비했어.' : '현재 그룹 다운로드를 준비했어.',
+        tone: 'info',
+      })
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : '그룹 다운로드에 실패했어.', tone: 'error' })
+    },
+  })
+
   const assignToGroupMutation = useMutation({
     mutationFn: ({ groupId: targetGroupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => addImagesToGroup(targetGroupId, compositeHashes),
     onSuccess: async (result) => {
@@ -247,6 +354,7 @@ export function GroupPage() {
   useEffect(() => {
     setSelectedGroupImageIds([])
     setIsAssignModalOpen(false)
+    setDownloadScope(null)
     setGroupImageCollectionFilter('all')
   }, [selectedGroupId, selectedSource.key])
 
@@ -258,13 +366,24 @@ export function GroupPage() {
   const rootGroups = useMemo(() => allGroups.filter((group) => group.parent_id == null), [allGroups])
   const childGroups = useMemo(() => allGroups.filter((group) => group.parent_id === selectedGroupId), [allGroups, selectedGroupId])
   const groupImages = useMemo(() => (groupImagesQuery.data?.pages ?? []).flatMap((page) => page.images), [groupImagesQuery.data?.pages])
+  const selectedGroupImages = useMemo(
+    () => groupImages.filter((image) => selectedGroupImageIds.includes(String(image.composite_hash ?? image.id))),
+    [groupImages, selectedGroupImageIds],
+  )
   const selectedGroupCompositeHashes = useMemo(
     () =>
-      groupImages
-        .filter((image) => selectedGroupImageIds.includes(String(image.composite_hash ?? image.id)))
+      selectedGroupImages
         .map((image) => image.composite_hash)
         .filter((value): value is string => typeof value === 'string' && value.length > 0),
-    [groupImages, selectedGroupImageIds],
+    [selectedGroupImages],
+  )
+  const selectedDownloadCounts = useMemo(() => getDownloadCountsFromImages(selectedGroupImages), [selectedGroupImages])
+  const activeDownloadCounts = downloadScope === 'selection'
+    ? selectedDownloadCounts
+    : groupFileCountsQuery.data ?? createEmptyGroupFileCounts()
+  const selectableDownloadCount = useMemo(
+    () => selectedGroupImages.filter((image) => image.original_file_path || image.thumbnail_url).length,
+    [selectedGroupImages],
   )
 
   const handleOpenGroup = (nextGroupId: number) => {
@@ -350,6 +469,48 @@ export function GroupPage() {
     }
 
     await autoCollectMutation.mutateAsync(selectedGroupId)
+  }
+
+  const handleRunAutoCollectAll = async () => {
+    const confirmed = window.confirm('현재 커스텀 그룹 전체에 자동수집을 한 번 돌릴까?')
+    if (!confirmed) {
+      return
+    }
+
+    await autoCollectAllMutation.mutateAsync()
+  }
+
+  const handleRebuildAutoFolderGroups = async () => {
+    const confirmed = window.confirm('감시폴더 그룹 구조를 다시 읽어와서 재구축할까?')
+    if (!confirmed) {
+      return
+    }
+
+    await rebuildAutoFolderGroupsMutation.mutateAsync()
+  }
+
+  const handleOpenGroupDownloadModal = () => {
+    if (!selectedGroupId) {
+      return
+    }
+
+    setDownloadScope('group')
+  }
+
+  const handleOpenSelectionDownloadModal = () => {
+    if (selectedGroupCompositeHashes.length === 0) {
+      return
+    }
+
+    setDownloadScope('selection')
+  }
+
+  const handleDownloadArchive = async (type: GroupDownloadType) => {
+    if (!downloadScope) {
+      return
+    }
+
+    await downloadGroupArchiveMutation.mutateAsync({ type, scope: downloadScope })
   }
 
   const handleOpenAssignModal = () => {
@@ -470,11 +631,22 @@ export function GroupPage() {
               </Button>
             ))}
             {isCustomSource ? (
-              <Button type="button" size="sm" onClick={handleOpenCreateModal}>
-                <FolderPlus className="h-4 w-4" />
-                {selectedGroupId ? '하위 그룹 추가' : '새 그룹'}
+              <>
+                <Button type="button" size="sm" variant="secondary" onClick={() => void handleRunAutoCollectAll()} disabled={autoCollectAllMutation.isPending}>
+                  <Play className="h-4 w-4" />
+                  {autoCollectAllMutation.isPending ? '전체 자동수집 실행 중…' : '전체 자동수집'}
+                </Button>
+                <Button type="button" size="sm" onClick={handleOpenCreateModal}>
+                  <FolderPlus className="h-4 w-4" />
+                  {selectedGroupId ? '하위 그룹 추가' : '새 그룹'}
+                </Button>
+              </>
+            ) : (
+              <Button type="button" size="sm" variant="secondary" onClick={() => void handleRebuildAutoFolderGroups()} disabled={rebuildAutoFolderGroupsMutation.isPending}>
+                <RotateCcw className="h-4 w-4" />
+                {rebuildAutoFolderGroupsMutation.isPending ? '감시폴더 재구축 중…' : '감시폴더 재구축'}
               </Button>
-            ) : null}
+            )}
           </>
         }
       />
@@ -562,26 +734,32 @@ export function GroupPage() {
                       <CardDescription>{groupSummaryDescription}</CardDescription>
                     </div>
 
-                    {isCustomSource ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button type="button" size="sm" variant="secondary" onClick={handleOpenCreateModal}>
-                          <FolderPlus className="h-4 w-4" />
-                          하위 그룹 추가
-                        </Button>
-                        <Button type="button" size="sm" variant="secondary" onClick={handleOpenEditModal}>
-                          <Pencil className="h-4 w-4" />
-                          편집
-                        </Button>
-                        <Button type="button" size="sm" variant="secondary" onClick={() => void handleRunAutoCollect()} disabled={autoCollectMutation.isPending}>
-                          <Play className="h-4 w-4" />
-                          {autoCollectMutation.isPending ? '실행 중…' : '자동수집 실행'}
-                        </Button>
-                        <Button type="button" size="sm" variant="destructive" onClick={() => void handleDeleteSelectedGroup()} disabled={deleteGroupMutation.isPending}>
-                          <Trash2 className="h-4 w-4" />
-                          삭제
-                        </Button>
-                      </div>
-                    ) : null}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button type="button" size="sm" variant="secondary" onClick={handleOpenGroupDownloadModal} disabled={groupFileCountsQuery.isLoading || downloadGroupArchiveMutation.isPending}>
+                        <Download className="h-4 w-4" />
+                        {downloadGroupArchiveMutation.isPending && downloadScope === 'group' ? '준비 중…' : '다운로드'}
+                      </Button>
+                      {isCustomSource ? (
+                        <>
+                          <Button type="button" size="sm" variant="secondary" onClick={handleOpenCreateModal}>
+                            <FolderPlus className="h-4 w-4" />
+                            하위 그룹 추가
+                          </Button>
+                          <Button type="button" size="sm" variant="secondary" onClick={handleOpenEditModal}>
+                            <Pencil className="h-4 w-4" />
+                            편집
+                          </Button>
+                          <Button type="button" size="sm" variant="secondary" onClick={() => void handleRunAutoCollect()} disabled={autoCollectMutation.isPending}>
+                            <Play className="h-4 w-4" />
+                            {autoCollectMutation.isPending ? '실행 중…' : '자동수집 실행'}
+                          </Button>
+                          <Button type="button" size="sm" variant="destructive" onClick={() => void handleDeleteSelectedGroup()} disabled={deleteGroupMutation.isPending}>
+                            <Trash2 className="h-4 w-4" />
+                            삭제
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -698,9 +876,10 @@ export function GroupPage() {
 
       <ImageSelectionBar
         selectedCount={selectedGroupImageIds.length}
-        downloadableCount={0}
-        showDownloadAction={false}
-        statusText="선택한 이미지를 다른 커스텀 그룹에 넣거나 현재 그룹에서 정리할 수 있어"
+        downloadableCount={selectableDownloadCount}
+        showDownloadAction={true}
+        isDownloading={downloadGroupArchiveMutation.isPending && downloadScope === 'selection'}
+        statusText="선택한 이미지를 다른 커스텀 그룹에 넣거나 현재 그룹에서 정리하거나 바로 내려받을 수 있어"
         extraActions={
           <>
             <Button
@@ -727,8 +906,19 @@ export function GroupPage() {
             ) : null}
           </>
         }
-        onDownload={() => {}}
+        onDownload={handleOpenSelectionDownloadModal}
         onClear={() => setSelectedGroupImageIds([])}
+      />
+
+      <GroupDownloadModal
+        open={downloadScope !== null}
+        title={downloadScope === 'selection' ? '선택한 이미지 다운로드' : '현재 그룹 다운로드'}
+        description={downloadScope === 'selection' ? `선택한 ${selectedGroupCompositeHashes.length.toLocaleString('ko-KR')}개 기준으로 내려받을 파일 종류를 골라줘.` : '현재 그룹 전체에서 내려받을 파일 종류를 골라줘.'}
+        counts={activeDownloadCounts}
+        isLoading={downloadScope === 'group' ? groupFileCountsQuery.isLoading : false}
+        isDownloading={downloadGroupArchiveMutation.isPending}
+        onClose={() => setDownloadScope(null)}
+        onDownload={handleDownloadArchive}
       />
 
       <GroupAssignModal
