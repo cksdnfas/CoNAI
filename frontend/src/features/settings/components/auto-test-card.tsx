@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
+import { SectionHeading } from '@/components/common/section-heading'
 import { WDTaggerResultBlock } from '@/components/common/wd-tagger-result-block'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,6 +13,8 @@ import { formatFileSize } from '../settings-utils'
 import { SettingsField, SettingsValueTile } from './settings-primitives'
 
 interface AutoTestCardProps {
+  heading: ReactNode
+  actions?: ReactNode
   autoTestHashInput: string
   autoTestMedia: AutoTestMediaRecord | null
   autoTestImage: ImageRecord | null
@@ -26,6 +30,8 @@ interface AutoTestCardProps {
 }
 
 export function AutoTestCard({
+  heading,
+  actions,
   autoTestHashInput,
   autoTestMedia,
   autoTestImage,
@@ -44,6 +50,7 @@ export function AutoTestCard({
   return (
     <Card className="bg-surface-container">
       <CardContent className="space-y-4">
+        <SectionHeading variant="inside" heading={heading} actions={actions} />
         <SettingsField label="Composite hash">
           <Input
             variant="settings"

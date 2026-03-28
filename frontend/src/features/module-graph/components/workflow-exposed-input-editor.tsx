@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, Trash2 } from 'lucide-react'
+import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -127,27 +128,26 @@ export function WorkflowExposedInputEditor({
 
   return (
     <Card className="bg-surface-container">
-      {showHeader ? (
-        <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle>Exposed Run Inputs</CardTitle>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">{selectedInputs.length} selected</Badge>
-              {collapseButton}
-            </div>
-          </div>
-        </CardHeader>
-      ) : null}
       {!isCollapsed ? (
         <CardContent className="space-y-5">
-          {!showHeader ? (
+          {showHeader ? (
+            <SectionHeading
+              variant="inside"
+              heading="Exposed Run Inputs"
+              description="러너에 노출할 입력과 기본값 표시를 정리해."
+              actions={
+                <>
+                  <Badge variant="outline">{selectedInputs.length} selected</Badge>
+                  {collapseButton}
+                </>
+              }
+            />
+          ) : (
             <div className="flex items-center justify-between gap-3">
               <Badge variant="outline">{selectedInputs.length} selected</Badge>
               {collapseButton}
             </div>
-          ) : null}
+          )}
 
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
@@ -285,12 +285,26 @@ export function WorkflowExposedInputEditor({
           </div>
         </CardContent>
       ) : (
-        !showHeader ? (
-          <CardContent className="flex justify-between gap-3">
-            <Badge variant="outline">{selectedInputs.length} selected</Badge>
-            {collapseButton}
-          </CardContent>
-        ) : null
+        <CardContent>
+          {showHeader ? (
+            <SectionHeading
+              variant="inside"
+              heading="Exposed Run Inputs"
+              description="러너에 노출할 입력과 기본값 표시를 정리해."
+              actions={
+                <>
+                  <Badge variant="outline">{selectedInputs.length} selected</Badge>
+                  {collapseButton}
+                </>
+              }
+            />
+          ) : (
+            <div className="flex justify-between gap-3">
+              <Badge variant="outline">{selectedInputs.length} selected</Badge>
+              {collapseButton}
+            </div>
+          )}
+        </CardContent>
       )}
     </Card>
   )

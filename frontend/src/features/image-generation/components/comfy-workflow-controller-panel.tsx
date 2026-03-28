@@ -69,13 +69,14 @@ export function ComfyWorkflowControllerPanel({
       </div>
 
       <section className="space-y-3">
-        <SectionHeading
-          heading="입력 필드"
-          actions={<Badge variant="outline">{workflowFields.length}</Badge>}
-          className="[&>div>h2]:text-sm [&>div>h2]:font-medium [&>div>h2]:tracking-normal"
-        />
+        <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
+          <SectionHeading
+            variant="inside"
+            className="border-b border-border/70 pb-4"
+            heading="입력 필드"
+            actions={<Badge variant="outline">{workflowFields.length}</Badge>}
+          />
 
-        <div className="rounded-sm border border-border bg-surface-low p-4">
           {workflowFields.length > 0 ? (
             <div className="grid gap-4">
               {workflowFields.map((field) => (
@@ -98,13 +99,14 @@ export function ComfyWorkflowControllerPanel({
       </section>
 
       <section className="space-y-3">
-        <SectionHeading
-          heading="대상 서버"
-          actions={selectedServer ? <Badge variant="secondary">{selectedServer.name}</Badge> : <Badge variant="outline">선택 안 됨</Badge>}
-          className="[&>div>h2]:text-sm [&>div>h2]:font-medium [&>div>h2]:tracking-normal"
-        />
+        <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
+          <SectionHeading
+            variant="inside"
+            className="border-b border-border/70 pb-4"
+            heading="대상 서버"
+            actions={selectedServer ? <Badge variant="secondary">{selectedServer.name}</Badge> : <Badge variant="outline">선택 안 됨</Badge>}
+          />
 
-        <div className="rounded-sm border border-border bg-surface-low p-4">
           <div className="space-y-4">
             {servers.length > 0 ? (
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">

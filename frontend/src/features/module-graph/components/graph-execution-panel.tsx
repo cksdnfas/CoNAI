@@ -1,8 +1,9 @@
 import { Play, RotateCcw, Square } from 'lucide-react'
+import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import type {
   GraphExecutionArtifactRecord,
   GraphExecutionLogRecord,
@@ -32,6 +33,7 @@ type GraphExecutionPanelProps = {
   onRerunGraph: () => void
   onRetryExecution: () => void
   onCancelExecution: () => void
+  description?: string
   showHeader?: boolean
 }
 
@@ -52,6 +54,7 @@ export function GraphExecutionPanel({
   onRerunGraph,
   onRetryExecution,
   onCancelExecution,
+  description = '최근 실행 상태와 결과 아티팩트, 로그를 여기서 확인해.',
   showHeader = true,
 }: GraphExecutionPanelProps) {
   const queuedExecutions = executionList
@@ -104,16 +107,16 @@ export function GraphExecutionPanel({
 
   return (
     <Card className="bg-surface-container">
-      {showHeader ? (
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-2">
-            <CardTitle className="text-base">Execution Results</CardTitle>
-            {actionButtons}
-          </div>
-        </CardHeader>
-      ) : null}
+      <CardContent className="space-y-3">
+        {showHeader ? (
+          <SectionHeading
+            variant="inside"
+            heading="Execution Results"
+            description={description}
+            actions={actionButtons}
+          />
+        ) : null}
 
-      <CardContent className={showHeader ? 'space-y-3 pt-0' : 'space-y-3'}>
         {!showHeader ? <div className="flex justify-end">{actionButtons}</div> : null}
 
         {!selectedGraphId ? <div className="text-sm text-muted-foreground">그래프를 먼저 골라줘.</div> : null}

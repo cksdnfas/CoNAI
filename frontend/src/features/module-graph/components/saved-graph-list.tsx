@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { PenSquare, Play, Search } from 'lucide-react'
+import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import type { GraphWorkflowRecord } from '@/lib/api'
 
@@ -60,12 +61,15 @@ export function SavedGraphList({
 
   return (
     <Card className="bg-surface-container">
-      {showHeader ? (
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Saved Workflows</CardTitle>
-        </CardHeader>
-      ) : null}
-      <CardContent className={showHeader ? 'space-y-2.5 pt-0' : 'space-y-2.5'}>
+      <CardContent className="space-y-2.5">
+        {showHeader ? (
+          <SectionHeading
+            variant="inside"
+            heading="Saved Workflows"
+            description="저장된 워크플로우를 선택하고 실행 흐름으로 이어가."
+          />
+        ) : null}
+
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="검색" className="h-8 pl-9 text-sm" />

@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { ChevronDown, Search } from 'lucide-react'
+import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { ModuleDefinitionRecord } from '@/lib/api'
@@ -41,27 +42,26 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
 
   return (
     <Card className="bg-surface-container">
-      {showHeader ? (
-        <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle>Modules</CardTitle>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">{filteredModules.length}</Badge>
-              {collapseButton}
-            </div>
-          </div>
-        </CardHeader>
-      ) : null}
       {!isCollapsed ? (
         <CardContent className="space-y-3">
-          {!showHeader ? (
+          {showHeader ? (
+            <SectionHeading
+              variant="inside"
+              heading="Modules"
+              description="재사용 가능한 모듈을 검색해서 캔버스에 추가해."
+              actions={
+                <>
+                  <Badge variant="outline">{filteredModules.length}</Badge>
+                  {collapseButton}
+                </>
+              }
+            />
+          ) : (
             <div className="flex items-center justify-between gap-3">
               <Badge variant="outline">{filteredModules.length}</Badge>
               {collapseButton}
             </div>
-          ) : null}
+          )}
 
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -107,12 +107,26 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
           </div>
         </CardContent>
       ) : (
-        !showHeader ? (
-          <CardContent className="flex justify-between gap-3">
-            <Badge variant="outline">{filteredModules.length}</Badge>
-            {collapseButton}
-          </CardContent>
-        ) : null
+        <CardContent>
+          {showHeader ? (
+            <SectionHeading
+              variant="inside"
+              heading="Modules"
+              description="재사용 가능한 모듈을 검색해서 캔버스에 추가해."
+              actions={
+                <>
+                  <Badge variant="outline">{filteredModules.length}</Badge>
+                  {collapseButton}
+                </>
+              }
+            />
+          ) : (
+            <div className="flex justify-between gap-3">
+              <Badge variant="outline">{filteredModules.length}</Badge>
+              {collapseButton}
+            </div>
+          )}
+        </CardContent>
       )}
     </Card>
   )

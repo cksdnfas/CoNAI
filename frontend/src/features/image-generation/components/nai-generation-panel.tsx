@@ -270,19 +270,23 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
       <div className="space-y-6">
         {!connected ? (
           <section className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <div className="truncate text-base font-semibold text-foreground">NovelAI</div>
-                <Badge variant="outline">미연결</Badge>
-              </div>
-              <Button type="button" variant="outline" size="icon-sm" asChild>
-                <a href="https://novelai.net/" target="_blank" rel="noreferrer noopener" aria-label="NovelAI 홈페이지 열기" title="NovelAI 홈페이지 열기">
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              </Button>
-            </div>
+            <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
+              <SectionHeading
+                variant="inside"
+                className="border-b border-border/70 pb-4"
+                heading="NovelAI"
+                actions={(
+                  <>
+                    <Badge variant="outline">미연결</Badge>
+                    <Button type="button" variant="outline" size="icon-sm" asChild>
+                      <a href="https://novelai.net/" target="_blank" rel="noreferrer noopener" aria-label="NovelAI 홈페이지 열기" title="NovelAI 홈페이지 열기">
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  </>
+                )}
+              />
 
-            <div className="rounded-sm border border-border bg-surface-low p-4">
               <div className="space-y-4">
                 <div className="flex gap-2 rounded-sm bg-surface-high p-1">
                   <button
@@ -379,8 +383,12 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             </section>
 
             <section className="space-y-3">
-              <SectionHeading heading="Prompt" className="[&>div>h2]:text-sm [&>div>h2]:font-medium [&>div>h2]:tracking-normal" />
-              <div className="rounded-sm border border-border bg-surface-low p-4">
+              <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
+                <SectionHeading
+                  variant="inside"
+                  className="border-b border-border/70 pb-4"
+                  heading="Prompt"
+                />
                 <div className="grid gap-4 xl:grid-cols-2">
                   <FormField label="Prompt">
                     <Textarea value={naiForm.prompt} onChange={(event) => handleNaiFieldChange('prompt', event.target.value)} rows={6} placeholder="1girl, solo, cinematic lighting" />
@@ -399,8 +407,12 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             </section>
 
             <section className="space-y-3">
-              <SectionHeading heading="Generation Settings" className="[&>div>h2]:text-sm [&>div>h2]:font-medium [&>div>h2]:tracking-normal" />
-              <div className="rounded-sm border border-border bg-surface-low p-4">
+              <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
+                <SectionHeading
+                  variant="inside"
+                  className="border-b border-border/70 pb-4"
+                  heading="Generation Settings"
+                />
                 <div className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-3">
                     <FormField label="Model">
@@ -456,8 +468,12 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
             {naiForm.action !== 'generate' ? (
               <section className="space-y-3">
-                <SectionHeading heading="Source Images" className="[&>div>h2]:text-sm [&>div>h2]:font-medium [&>div>h2]:tracking-normal" />
-                <div className="rounded-sm border border-border bg-surface-low p-4">
+                <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
+                  <SectionHeading
+                    variant="inside"
+                    className="border-b border-border/70 pb-4"
+                    heading="Source Images"
+                  />
                   <div className="space-y-4">
                     <FormField label="Source Image">
                       <div className="space-y-3">
@@ -500,17 +516,18 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             ) : null}
 
             <section className="space-y-3">
-              <SectionHeading
-                heading="Advanced"
-                actions={naiCostQuery.isSuccess ? (
-                  <Badge variant={naiCostQuery.data.canAfford ? 'secondary' : 'outline'}>
-                    {naiCostQuery.data.isOpusFree ? 'Opus 무료 생성' : naiCostQuery.data.canAfford ? '잔액 충분' : '잔액 부족'}
-                  </Badge>
-                ) : undefined}
-                className="[&>div>h2]:text-sm [&>div>h2]:font-medium [&>div>h2]:tracking-normal"
-              />
+              <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
+                <SectionHeading
+                  variant="inside"
+                  className="border-b border-border/70 pb-4"
+                  heading="Advanced"
+                  actions={naiCostQuery.isSuccess ? (
+                    <Badge variant={naiCostQuery.data.canAfford ? 'secondary' : 'outline'}>
+                      {naiCostQuery.data.isOpusFree ? 'Opus 무료 생성' : naiCostQuery.data.canAfford ? '잔액 충분' : '잔액 부족'}
+                    </Badge>
+                  ) : undefined}
+                />
 
-              <div className="rounded-sm border border-border bg-surface-low p-4">
                 <div className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <FormField label="ucPreset">
@@ -557,8 +574,12 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             </section>
 
             <section className="space-y-3">
-              <SectionHeading heading="Actions" className="[&>div>h2]:text-sm [&>div>h2]:font-medium [&>div>h2]:tracking-normal" />
-              <div className="rounded-sm border border-border bg-surface-low p-4">
+              <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
+                <SectionHeading
+                  variant="inside"
+                  className="border-b border-border/70 pb-4"
+                  heading="Actions"
+                />
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <Button type="button" variant="outline" onClick={() => setIsModuleSaveModalOpen(true)}>
                     <Save className="h-4 w-4" />

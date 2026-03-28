@@ -71,31 +71,32 @@ export function AppearanceTab({
         }}
       />
 
-      <section className="space-y-4">
-        <SectionHeading
-          heading="테마 슬롯"
-          actions={
-            <>
-              <Button type="button" size="icon-sm" variant="outline" onClick={onExport} disabled={isSaving} aria-label="외형 내보내기" title="외형 내보내기">
-                <Download className="h-4 w-4" />
-              </Button>
-              <Button type="button" size="icon-sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSaving} aria-label="외형 가져오기" title="외형 가져오기">
-                <Upload className="h-4 w-4" />
-              </Button>
-              <Button type="button" size="icon-sm" variant="outline" onClick={onReset} disabled={!appearanceDraft || isSaving} aria-label="기본값으로 되돌리기" title="기본값으로 되돌리기">
-                <RotateCcw className="h-4 w-4" />
-              </Button>
-              <Button type="button" size="icon-sm" variant="outline" onClick={onCancel} disabled={!isDirty || isSaving} aria-label="변경 취소" title="변경 취소">
-                <X className="h-4 w-4" />
-              </Button>
-              <Button type="button" size="icon-sm" onClick={onSave} disabled={!appearanceDraft || !isDirty || isSaving} aria-label="외형 저장" title="외형 저장">
-                <Save className="h-4 w-4" />
-              </Button>
-            </>
-          }
-        />
+      <section>
         <Card className="bg-surface-container">
-          <CardContent>
+          <CardContent className="space-y-4">
+            <SectionHeading
+              variant="inside"
+              heading="테마 슬롯"
+              actions={
+                <>
+                  <Button type="button" size="icon-sm" variant="outline" onClick={onExport} disabled={isSaving} aria-label="외형 내보내기" title="외형 내보내기">
+                    <Download className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" size="icon-sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSaving} aria-label="외형 가져오기" title="외형 가져오기">
+                    <Upload className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" size="icon-sm" variant="outline" onClick={onReset} disabled={!appearanceDraft || isSaving} aria-label="기본값으로 되돌리기" title="기본값으로 되돌리기">
+                    <RotateCcw className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" size="icon-sm" variant="outline" onClick={onCancel} disabled={!isDirty || isSaving} aria-label="변경 취소" title="변경 취소">
+                    <X className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" size="icon-sm" onClick={onSave} disabled={!appearanceDraft || !isDirty || isSaving} aria-label="외형 저장" title="외형 저장">
+                    <Save className="h-4 w-4" />
+                  </Button>
+                </>
+              }
+            />
             {appearanceDraft ? (
               <AppearanceTabSlotSection
                 appearanceDraft={appearanceDraft}
@@ -109,10 +110,10 @@ export function AppearanceTab({
         </Card>
       </section>
 
-      <section className="space-y-4">
-        <SectionHeading heading="세부 편집" />
+      <section>
         <Card className="bg-surface-container">
-          <CardContent>
+          <CardContent className="space-y-4">
+            <SectionHeading variant="inside" heading="세부 편집" />
             {appearanceDraft ? (
               <AppearanceTabEditorSection
                 appearanceDraft={appearanceDraft}

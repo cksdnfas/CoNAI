@@ -422,252 +422,260 @@ export function UploadPage() {
       <PageHeader title="Upload" description="파일 업로드와 단일 이미지 미리보기/메타 추출을 한 화면에서 처리해." />
 
       <div className="space-y-6">
-        <section className="space-y-4">
-          <SectionHeading
-            heading="파일 업로드"
-            description="여러 파일을 한 번에 올리고 진행 상황을 바로 확인해."
-            actions={
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setUploadFiles([])
-                    resetUploadState()
-                  }}
-                  disabled={uploadFiles.length === 0 && !uploadResult && !uploadError}
-                >
-                  초기화
-                </Button>
-                <Button type="button" onClick={handleUpload} disabled={uploadFiles.length === 0 || isUploading}>
-                  {isUploading ? '업로드 중…' : `업로드${uploadFiles.length > 0 ? ` (${uploadFiles.length})` : ''}`}
-                </Button>
-              </div>
-            }
-          />
+        <section>
+          <Card className="overflow-hidden bg-surface-container">
+            <CardContent className="p-0">
+              <SectionHeading
+                variant="inside"
+                className="border-b border-border/70 px-6 py-6"
+                heading="파일 업로드"
+                description="여러 파일을 한 번에 올리고 진행 상황을 바로 확인해."
+                actions={
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        setUploadFiles([])
+                        resetUploadState()
+                      }}
+                      disabled={uploadFiles.length === 0 && !uploadResult && !uploadError}
+                    >
+                      초기화
+                    </Button>
+                    <Button type="button" onClick={handleUpload} disabled={uploadFiles.length === 0 || isUploading}>
+                      {isUploading ? '업로드 중…' : `업로드${uploadFiles.length > 0 ? ` (${uploadFiles.length})` : ''}`}
+                    </Button>
+                  </div>
+                }
+              />
 
-          <Card className="bg-surface-container">
-            <CardContent className="space-y-4">
-            <input ref={uploadInputRef} type="file" multiple accept={UPLOAD_ACCEPT} className="hidden" onChange={handleUploadFileChange} />
+              <div className="space-y-4 px-6 py-6">
+                <input ref={uploadInputRef} type="file" multiple accept={UPLOAD_ACCEPT} className="hidden" onChange={handleUploadFileChange} />
 
-            <DropSurface
-              ariaLabel="업로드할 파일 선택"
-              active={uploadDropZone.isDragActive}
-              onClick={() => uploadInputRef.current?.click()}
-              onDrop={uploadDropZone.handleDrop}
-              onDragEnter={uploadDropZone.handleDragEnter}
-              onDragOver={uploadDropZone.handleDragOver}
-              onDragLeave={uploadDropZone.handleDragLeave}
-            />
+                <DropSurface
+                  ariaLabel="업로드할 파일 선택"
+                  active={uploadDropZone.isDragActive}
+                  onClick={() => uploadInputRef.current?.click()}
+                  onDrop={uploadDropZone.handleDrop}
+                  onDragEnter={uploadDropZone.handleDragEnter}
+                  onDragOver={uploadDropZone.handleDragOver}
+                  onDragLeave={uploadDropZone.handleDragLeave}
+                />
 
-            {uploadFiles.length > 0 ? (
-              <div className="space-y-3 rounded-sm bg-surface-low p-4">
-                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <Badge variant="secondary">{uploadFiles.length}개</Badge>
-                  <Badge variant="outline">{formatBytes(uploadTotalSize)}</Badge>
-                </div>
-                <div className="space-y-2 text-sm text-muted-foreground">
-                  {uploadFiles.slice(0, MAX_VISIBLE_FILES).map((file) => (
-                    <div key={`${file.name}:${file.size}:${file.lastModified}`} className="flex items-center justify-between gap-3 rounded-sm bg-surface-high px-3 py-2">
-                      <span className="min-w-0 truncate text-foreground">{file.name}</span>
-                      <span className="shrink-0 text-xs">{formatBytes(file.size)}</span>
+                {uploadFiles.length > 0 ? (
+                  <div className="space-y-3 rounded-sm bg-surface-low p-4">
+                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                      <Badge variant="secondary">{uploadFiles.length}개</Badge>
+                      <Badge variant="outline">{formatBytes(uploadTotalSize)}</Badge>
                     </div>
-                  ))}
-                  {uploadFiles.length > MAX_VISIBLE_FILES ? <div className="text-xs">…{uploadFiles.length - MAX_VISIBLE_FILES}개 더 있음</div> : null}
-                </div>
-              </div>
-            ) : null}
-
-            {(isUploading || uploadProgress || uploadResult) ? (
-              <div className="space-y-3 rounded-sm bg-surface-low p-4">
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <div className="font-medium text-foreground">진행률</div>
-                  <div className="text-muted-foreground">{uploadPercent}%</div>
-                </div>
-                <ProgressBar percent={uploadPercent} />
-                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                  <span>{formatBytes(uploadProgress?.loaded ?? 0)}</span>
-                  <span>/</span>
-                  <span>{formatBytes(uploadProgress?.total ?? uploadTotalSize)}</span>
-                </div>
-              </div>
-            ) : null}
-
-            {uploadError ? (
-              <Alert variant="destructive">
-                <AlertTitle>업로드 실패</AlertTitle>
-                <AlertDescription>{uploadError}</AlertDescription>
-              </Alert>
-            ) : null}
-
-            {uploadResult ? (
-              <div className="space-y-4 rounded-sm bg-surface-low p-4">
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">성공 {uploadResult.successful}</Badge>
-                  <Badge variant={uploadResult.failed_count > 0 ? 'outline' : 'secondary'}>실패 {uploadResult.failed_count}</Badge>
-                </div>
-
-                {uploadResult.uploaded.length > 0 ? (
-                  <div className="space-y-2 text-sm text-muted-foreground">
-                    {uploadResult.uploaded.slice(0, MAX_VISIBLE_FILES).map((file) => (
-                      <div key={`${file.filename}:${file.upload_date}`} className="rounded-sm bg-surface-high px-3 py-3">
-                        <div className="break-all text-foreground">{file.original_name}</div>
-                        <div className="mt-1 text-xs">{formatDimensions(file.width, file.height)} · {formatBytes(file.file_size)}</div>
-                      </div>
-                    ))}
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      {uploadFiles.slice(0, MAX_VISIBLE_FILES).map((file) => (
+                        <div key={`${file.name}:${file.size}:${file.lastModified}`} className="flex items-center justify-between gap-3 rounded-sm bg-surface-high px-3 py-2">
+                          <span className="min-w-0 truncate text-foreground">{file.name}</span>
+                          <span className="shrink-0 text-xs">{formatBytes(file.size)}</span>
+                        </div>
+                      ))}
+                      {uploadFiles.length > MAX_VISIBLE_FILES ? <div className="text-xs">…{uploadFiles.length - MAX_VISIBLE_FILES}개 더 있음</div> : null}
+                    </div>
                   </div>
                 ) : null}
 
-                {uploadResult.failed.length > 0 ? (
-                  <div className="space-y-2 text-sm text-muted-foreground">
-                    {uploadResult.failed.map((file) => (
-                      <div key={`${file.filename}:${file.error}`} className="rounded-sm bg-surface-high px-3 py-3">
-                        <div className="break-all text-foreground">{file.filename}</div>
-                        <div className="mt-1 text-xs" style={getThemeToneTextStyle('negative')}>{file.error}</div>
+                {(isUploading || uploadProgress || uploadResult) ? (
+                  <div className="space-y-3 rounded-sm bg-surface-low p-4">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <div className="font-medium text-foreground">진행률</div>
+                      <div className="text-muted-foreground">{uploadPercent}%</div>
+                    </div>
+                    <ProgressBar percent={uploadPercent} />
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      <span>{formatBytes(uploadProgress?.loaded ?? 0)}</span>
+                      <span>/</span>
+                      <span>{formatBytes(uploadProgress?.total ?? uploadTotalSize)}</span>
+                    </div>
+                  </div>
+                ) : null}
+
+                {uploadError ? (
+                  <Alert variant="destructive">
+                    <AlertTitle>업로드 실패</AlertTitle>
+                    <AlertDescription>{uploadError}</AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {uploadResult ? (
+                  <div className="space-y-4 rounded-sm bg-surface-low p-4">
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary">성공 {uploadResult.successful}</Badge>
+                      <Badge variant={uploadResult.failed_count > 0 ? 'outline' : 'secondary'}>실패 {uploadResult.failed_count}</Badge>
+                    </div>
+
+                    {uploadResult.uploaded.length > 0 ? (
+                      <div className="space-y-2 text-sm text-muted-foreground">
+                        {uploadResult.uploaded.slice(0, MAX_VISIBLE_FILES).map((file) => (
+                          <div key={`${file.filename}:${file.upload_date}`} className="rounded-sm bg-surface-high px-3 py-3">
+                            <div className="break-all text-foreground">{file.original_name}</div>
+                            <div className="mt-1 text-xs">{formatDimensions(file.width, file.height)} · {formatBytes(file.file_size)}</div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    ) : null}
+
+                    {uploadResult.failed.length > 0 ? (
+                      <div className="space-y-2 text-sm text-muted-foreground">
+                        {uploadResult.failed.map((file) => (
+                          <div key={`${file.filename}:${file.error}`} className="rounded-sm bg-surface-high px-3 py-3">
+                            <div className="break-all text-foreground">{file.filename}</div>
+                            <div className="mt-1 text-xs" style={getThemeToneTextStyle('negative')}>{file.error}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
-            ) : null}
             </CardContent>
           </Card>
         </section>
 
-        <section className="space-y-4">
-          <SectionHeading
-            heading="미리보기 / 추출"
-            description="단일 이미지를 열어 메타 확인, 변환, 보조 추출을 이어서 처리해."
-            actions={
-              <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" variant="ghost" onClick={() => applyExtractFile(null)} disabled={!extractFile && !extractResult && !taggerResult && !kaloscopeResult && !extractError}>
-                  초기화
-                </Button>
-                <Button type="button" variant="outline" onClick={handleConvertWebP} disabled={!extractFile || extractBusy}>
-                  <Download className="h-4 w-4" />
-                  {isConvertingWebP ? 'WebP 변환 중…' : 'WebP 변환'}
-                </Button>
-                <Button type="button" variant="outline" onClick={handleRewriteMetadata} disabled={!extractFile || extractBusy}>
-                  <Download className="h-4 w-4" />
-                  {isRewritingMetadata ? '메타 수정 중…' : '메타 수정 다운로드'}
-                </Button>
-                <div className="flex min-w-[220px] flex-1 flex-wrap items-center gap-2 sm:flex-none">
-                  <Select
-                    className="min-w-[140px] flex-1 sm:w-40 sm:flex-none"
-                    value={selectedExtractAction}
-                    onChange={(event) => setSelectedExtractAction(event.target.value as ManualExtractAction)}
-                    disabled={!extractFile || extractBusy}
-                  >
-                    <option value="all">한번에 추출</option>
-                    <option value="tagger">자동 추출</option>
-                    <option value="kaloscope">작가 추출</option>
-                  </Select>
-                  <Button type="button" onClick={handleRunSelectedExtract} disabled={!extractFile || extractBusy}>
-                    {activeExtractAction === selectedExtractAction ? '추출 중…' : '추출 실행'}
-                  </Button>
-                </div>
-              </div>
-            }
-          />
-
-          <Card className="bg-surface-container">
-            <CardContent className="space-y-4">
-            <input ref={extractInputRef} type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={handleExtractFileChange} />
-
-            <div className="rounded-sm bg-surface-low p-4">
-              <DropSurface
-                ariaLabel="미리보기할 이미지 선택"
-                active={extractDropZone.isDragActive}
-                onClick={() => extractInputRef.current?.click()}
-                onDrop={extractDropZone.handleDrop}
-                onDragEnter={extractDropZone.handleDragEnter}
-                onDragOver={extractDropZone.handleDragOver}
-                onDragLeave={extractDropZone.handleDragLeave}
+        <section>
+          <Card className="overflow-hidden bg-surface-container">
+            <CardContent className="p-0">
+              <SectionHeading
+                variant="inside"
+                className="border-b border-border/70 px-6 py-6"
+                heading="미리보기 / 추출"
+                description="단일 이미지를 열어 메타 확인, 변환, 보조 추출을 이어서 처리해."
+                actions={
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="button" variant="ghost" onClick={() => applyExtractFile(null)} disabled={!extractFile && !extractResult && !taggerResult && !kaloscopeResult && !extractError}>
+                      초기화
+                    </Button>
+                    <Button type="button" variant="outline" onClick={handleConvertWebP} disabled={!extractFile || extractBusy}>
+                      <Download className="h-4 w-4" />
+                      {isConvertingWebP ? 'WebP 변환 중…' : 'WebP 변환'}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={handleRewriteMetadata} disabled={!extractFile || extractBusy}>
+                      <Download className="h-4 w-4" />
+                      {isRewritingMetadata ? '메타 수정 중…' : '메타 수정 다운로드'}
+                    </Button>
+                    <div className="flex min-w-[220px] flex-1 flex-wrap items-center gap-2 sm:flex-none">
+                      <Select
+                        className="min-w-[140px] flex-1 sm:w-40 sm:flex-none"
+                        value={selectedExtractAction}
+                        onChange={(event) => setSelectedExtractAction(event.target.value as ManualExtractAction)}
+                        disabled={!extractFile || extractBusy}
+                      >
+                        <option value="all">한번에 추출</option>
+                        <option value="tagger">자동 추출</option>
+                        <option value="kaloscope">작가 추출</option>
+                      </Select>
+                      <Button type="button" onClick={handleRunSelectedExtract} disabled={!extractFile || extractBusy}>
+                        {activeExtractAction === selectedExtractAction ? '추출 중…' : '추출 실행'}
+                      </Button>
+                    </div>
+                  </div>
+                }
               />
-            </div>
 
-            {extractFile ? (
-              <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
-                <div className="space-y-4">
-                  <div className="space-y-4 rounded-sm bg-surface-low p-4">
-                    {extractPreviewUrl ? (
-                      <div className="overflow-hidden rounded-sm bg-surface-high p-4">
-                        <img src={extractPreviewUrl} alt={extractFile.name} className="max-h-[420px] w-full object-contain" />
-                      </div>
-                    ) : null}
+              <div className="space-y-4 px-6 py-6">
+                <input ref={extractInputRef} type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={handleExtractFileChange} />
 
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-3">
-                      <SummaryTile label="file" value={extractFile.name} />
-                      <SummaryTile label="size" value={formatBytes(extractFile.size)} />
-                      <SummaryTile label="type" value={extractFile.type || '—'} />
-                    </div>
-                  </div>
+                <div className="rounded-sm bg-surface-low p-4">
+                  <DropSurface
+                    ariaLabel="미리보기할 이미지 선택"
+                    active={extractDropZone.isDragActive}
+                    onClick={() => extractInputRef.current?.click()}
+                    onDrop={extractDropZone.handleDrop}
+                    onDragEnter={extractDropZone.handleDragEnter}
+                    onDragOver={extractDropZone.handleDragOver}
+                    onDragLeave={extractDropZone.handleDragLeave}
+                  />
                 </div>
 
-                <div className="space-y-4">
-                  <div className="rounded-sm bg-surface-low p-4">
-                    <div className="rounded-sm bg-surface-high p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="text-sm font-medium text-foreground">메타 수정</div>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => setIsRewritePanelOpen((current) => !current)}>
-                          {isRewritePanelOpen ? '접기' : '펼치기'}
-                        </Button>
-                      </div>
+                {extractFile ? (
+                  <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
+                    <div className="space-y-4">
+                      <div className="space-y-4 rounded-sm bg-surface-low p-4">
+                        {extractPreviewUrl ? (
+                          <div className="overflow-hidden rounded-sm bg-surface-high p-4">
+                            <img src={extractPreviewUrl} alt={extractFile.name} className="max-h-[420px] w-full object-contain" />
+                          </div>
+                        ) : null}
 
-                      {isRewritePanelOpen ? (
-                        <div className="mt-4 border-t border-border pt-4">
-                          <MetadataRewriteForm draft={rewriteDraft} disabled={extractBusy} showHeader={false} onDraftChange={patchRewriteDraft} />
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-3">
+                          <SummaryTile label="file" value={extractFile.name} />
+                          <SummaryTile label="size" value={formatBytes(extractFile.size)} />
+                          <SummaryTile label="type" value={extractFile.type || '—'} />
                         </div>
-                      ) : null}
+                      </div>
                     </div>
-                  </div>
 
-                  {extractResult ? (
-                    <div className="space-y-4 rounded-sm bg-surface-low p-4">
-                      <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-                        <SummaryTile label="dimensions" value={formatDimensions(extractResult.width, extractResult.height)} />
-                        <SummaryTile label="size" value={formatBytes(extractResult.file_size)} />
-                        <SummaryTile label="tool" value={extractResult.ai_metadata?.ai_tool || '—'} />
-                        <SummaryTile label="model" value={extractResult.ai_metadata?.model_name || '—'} />
-                        {extractedGenerationParamItems.map((item) => (
-                          <SummaryTile key={item.id} label={item.label} value={item.value} />
-                        ))}
+                    <div className="space-y-4">
+                      <div className="rounded-sm bg-surface-low p-4">
+                        <div className="rounded-sm bg-surface-high p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="text-sm font-medium text-foreground">메타 수정</div>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsRewritePanelOpen((current) => !current)}>
+                              {isRewritePanelOpen ? '접기' : '펼치기'}
+                            </Button>
+                          </div>
+
+                          {isRewritePanelOpen ? (
+                            <div className="mt-4 border-t border-border pt-4">
+                              <MetadataRewriteForm draft={rewriteDraft} disabled={extractBusy} showHeader={false} onDraftChange={patchRewriteDraft} />
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
 
-                      {extractResult.ai_metadata?.lora_models?.length ? (
-                        <div className="rounded-sm bg-surface-high p-4">
-                          <div className="flex flex-wrap gap-2">
-                            {extractResult.ai_metadata.lora_models.map((item) => (
-                              <Badge key={item} variant="outline">
-                                {item}
-                              </Badge>
+                      {extractResult ? (
+                        <div className="space-y-4 rounded-sm bg-surface-low p-4">
+                          <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+                            <SummaryTile label="dimensions" value={formatDimensions(extractResult.width, extractResult.height)} />
+                            <SummaryTile label="size" value={formatBytes(extractResult.file_size)} />
+                            <SummaryTile label="tool" value={extractResult.ai_metadata?.ai_tool || '—'} />
+                            <SummaryTile label="model" value={extractResult.ai_metadata?.model_name || '—'} />
+                            {extractedGenerationParamItems.map((item) => (
+                              <SummaryTile key={item.id} label={item.label} value={item.value} />
                             ))}
                           </div>
+
+                          {extractResult.ai_metadata?.lora_models?.length ? (
+                            <div className="rounded-sm bg-surface-high p-4">
+                              <div className="flex flex-wrap gap-2">
+                                {extractResult.ai_metadata.lora_models.map((item) => (
+                                  <Badge key={item} variant="outline">
+                                    {item}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {extractedPromptCards.length > 0 ? (
+                            <div className="rounded-sm bg-surface-high p-4">
+                              <ExtractedPromptSections items={extractedPromptCards} />
+                            </div>
+                          ) : (
+                            <div className="rounded-sm bg-surface-high px-4 py-3 text-sm text-muted-foreground">표시할 프롬프트가 없어.</div>
+                          )}
                         </div>
                       ) : null}
 
-                      {extractedPromptCards.length > 0 ? (
-                        <div className="rounded-sm bg-surface-high p-4">
-                          <ExtractedPromptSections items={extractedPromptCards} />
-                        </div>
-                      ) : (
-                        <div className="rounded-sm bg-surface-high px-4 py-3 text-sm text-muted-foreground">표시할 프롬프트가 없어.</div>
-                      )}
+                      {taggerResult ? <WDTaggerResultBlock result={taggerResult} title="자동" /> : null}
+                      {kaloscopeResult ? <KaloscopeResultBlock result={kaloscopeResult} title="작가" /> : null}
                     </div>
-                  ) : null}
+                  </div>
+                ) : null}
 
-                  {taggerResult ? <WDTaggerResultBlock result={taggerResult} title="자동" /> : null}
-                  {kaloscopeResult ? <KaloscopeResultBlock result={kaloscopeResult} title="작가" /> : null}
-                </div>
+                {extractError ? (
+                  <Alert variant="destructive">
+                    <AlertTitle>추출 실패</AlertTitle>
+                    <AlertDescription>{extractError}</AlertDescription>
+                  </Alert>
+                ) : null}
               </div>
-            ) : null}
-
-            {extractError ? (
-              <Alert variant="destructive">
-                <AlertTitle>추출 실패</AlertTitle>
-                <AlertDescription>{extractError}</AlertDescription>
-              </Alert>
-            ) : null}
             </CardContent>
           </Card>
         </section>

@@ -1,6 +1,7 @@
+import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -139,12 +140,14 @@ export function NodeInspectorPanel({
 
   return (
     <Card className="bg-surface-container">
-      {showHeader ? (
-        <CardHeader>
-          <CardTitle>Node Inspector</CardTitle>
-        </CardHeader>
-      ) : null}
-      <CardContent className={showHeader ? 'space-y-4' : 'space-y-4'}>
+      <CardContent className="space-y-4">
+        {showHeader ? (
+          <SectionHeading
+            variant="inside"
+            heading="Node Inspector"
+            description="선택한 노드나 엣지의 입력 오버라이드를 다듬어."
+          />
+        ) : null}
         {!selectedNode && !selectedEdge ? (
           <div className="rounded-sm bg-surface-low px-4 py-6 text-sm text-muted-foreground">캔버스에서 노드나 엣지를 하나 선택해봐.</div>
         ) : null}

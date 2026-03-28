@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/common/page-header'
 import { SectionHeading } from '@/components/common/section-heading'
 import { exportPromptGroups } from '@/lib/api'
@@ -303,26 +304,28 @@ export function PromptPage() {
         }
       />
 
-      <section className="space-y-3">
-        <SectionHeading heading="Prompt type" description={`${currentPromptTotal.toLocaleString('ko-KR')}개 항목`} />
-        <div className="rounded-sm bg-surface-lowest p-2">
-          <div className="flex flex-wrap gap-2">
-            {PROMPT_TYPE_TABS.map((tab) => (
-              <button
-                key={tab.value}
-                type="button"
-                onClick={() => handleChangeType(tab.value)}
-                className={cn(
-                  'rounded-sm px-4 py-2 text-sm font-semibold transition-colors',
-                  promptType === tab.value ? 'bg-surface-container text-primary' : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
+      <Card className="bg-surface-container">
+        <CardContent className="space-y-4">
+          <SectionHeading variant="inside" heading="Prompt type" description={`${currentPromptTotal.toLocaleString('ko-KR')}개 항목`} />
+          <div className="rounded-sm bg-surface-lowest p-2">
+            <div className="flex flex-wrap gap-2">
+              {PROMPT_TYPE_TABS.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => handleChangeType(tab.value)}
+                  className={cn(
+                    'rounded-sm px-4 py-2 text-sm font-semibold transition-colors',
+                    promptType === tab.value ? 'bg-surface-container text-primary' : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-8 min-[800px]:grid-cols-[260px_minmax(0,1fr)]">
         <PromptSidebar

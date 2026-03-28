@@ -1,4 +1,3 @@
-import { SectionHeading } from '@/components/common/section-heading'
 import { Button } from '@/components/ui/button'
 import { AutoOverviewCard } from './auto-overview-card'
 import { AutoTestCard } from './auto-test-card'
@@ -38,9 +37,9 @@ export function AutoTab({
 }: AutoTabProps) {
   return (
     <div className="space-y-8">
-      <section className="space-y-4">
-        <SectionHeading heading="개요" />
+      <section>
         <AutoOverviewCard
+          heading="개요"
           taggerStatus={taggerStatus}
           taggerDependencyResult={taggerDependencyResult}
           kaloscopeStatus={kaloscopeStatus}
@@ -48,40 +47,36 @@ export function AutoTab({
         />
       </section>
 
-      <section className="space-y-4">
-        <SectionHeading
+      <section>
+        <KaloscopeSettingsCard
           heading="Kaloscope"
           actions={
             <Button size="sm" onClick={onSaveKaloscope} disabled={!kaloscopeDraft || isSavingKaloscope}>
               저장
             </Button>
           }
-        />
-        <KaloscopeSettingsCard
           kaloscopeDraft={kaloscopeDraft}
           kaloscopeStatus={kaloscopeStatus}
           onPatchKaloscope={onPatchKaloscope}
         />
       </section>
 
-      <section className="space-y-4">
-        <SectionHeading
+      <section>
+        <TaggerSettingsCard
           heading="WD Tagger"
           actions={
             <Button size="sm" onClick={onSaveTagger} disabled={!taggerDraft || isSavingTagger || isCheckingTaggerDependencies}>
               {isCheckingTaggerDependencies ? '의존성 확인 중…' : '저장'}
             </Button>
           }
-        />
-        <TaggerSettingsCard
           taggerDraft={taggerDraft}
           taggerModels={taggerModels}
           onPatchTagger={onPatchTagger}
         />
       </section>
 
-      <section className="space-y-4">
-        <SectionHeading
+      <section>
+        <AutoTestCard
           heading="테스트"
           actions={
             <>
@@ -93,8 +88,6 @@ export function AutoTab({
               </Button>
             </>
           }
-        />
-        <AutoTestCard
           autoTestHashInput={autoTestHashInput}
           autoTestMedia={autoTestMedia}
           autoTestImage={autoTestImage}

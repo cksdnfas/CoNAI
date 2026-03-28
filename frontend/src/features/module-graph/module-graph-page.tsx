@@ -894,229 +894,36 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
       {workflowView === 'browse' ? (
         <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <div className="space-y-3">
-            <SectionHeading
-              heading={<span className="text-sm font-semibold">Saved Workflows</span>}
-              description="저장된 워크플로우를 선택하고 실행 흐름으로 이어가."
-            />
-            <SavedGraphList
-              graphs={graphWorkflowsQuery.data ?? []}
-              selectedGraphId={selectedGraphId}
-              executingGraphId={executingGraphId}
-              onLoadGraph={(graph) => {
-                void handleLoadGraph(graph, { silent: true })
-              }}
-              onEditGraph={(graph) => {
-                void handleLoadGraph(graph, { openEditor: true, silent: true })
-              }}
-              onExecuteGraph={(graphId) => void handleExecuteGraph(graphId)}
-              showExecuteButton={false}
-              showHeader={false}
-            />
-          </div>
+          <SavedGraphList
+            graphs={graphWorkflowsQuery.data ?? []}
+            selectedGraphId={selectedGraphId}
+            executingGraphId={executingGraphId}
+            onLoadGraph={(graph) => {
+              void handleLoadGraph(graph, { silent: true })
+            }}
+            onEditGraph={(graph) => {
+              void handleLoadGraph(graph, { openEditor: true, silent: true })
+            }}
+            onExecuteGraph={(graphId) => void handleExecuteGraph(graphId)}
+            showExecuteButton={false}
+          />
 
           <div className="space-y-6">
-            <div className="space-y-3">
-              <SectionHeading
-                heading={<span className="text-sm font-semibold">Workflow Runner</span>}
-                description="선택한 워크플로우를 그래프 편집기 없이 바로 실행해."
-              />
-              <WorkflowRunnerPanel
-                selectedGraph={selectedGraphRecord}
-                inputDefinitions={selectedGraphRecord?.graph.metadata?.exposed_inputs ?? []}
-                inputValues={workflowRunInputValues}
-                isExecuting={executingGraphId !== null}
-                latestExecution={latestExecution}
-                latestPreviewUrl={latestExecutionPreviewArtifact ? getArtifactPreviewUrl(latestExecutionPreviewArtifact) : null}
-                latestPreviewLabel={latestExecutionPreviewArtifact ? `${latestExecutionPreviewArtifact.node_id} · ${latestExecutionPreviewArtifact.port_key}` : null}
-                onInputValueChange={handleWorkflowRunInputChange}
-                onInputValueClear={handleWorkflowRunInputClear}
-                onInputImageChange={handleWorkflowRunInputImageChange}
-                onExecute={() => void handleRunSelectedWorkflow()}
-                onEdit={() => setWorkflowView('edit')}
-                showHeader={false}
-              />
-            </div>
-
-            <div className="space-y-3">
-              <SectionHeading
-                heading={<span className="text-sm font-semibold">Execution Results</span>}
-                description="최근 실행 상태와 결과 아티팩트, 로그를 여기서 확인해."
-              />
-              <GraphExecutionPanel
-                selectedGraphId={selectedGraphId}
-                selectedExecutionId={selectedExecutionId}
-                selectedExecutionStatus={selectedExecution?.status ?? null}
-                executionList={executionList}
-                executionListError={graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : '실행 목록을 불러오지 못했어.'}
-                executionListIsError={graphExecutionsQuery.isError}
-                executionDetail={executionDetailQuery.data}
-                executionDetailError={executionDetailQuery.error instanceof Error ? executionDetailQuery.error.message : '실행 상세를 불러오지 못했어.'}
-                executionDetailIsError={executionDetailQuery.isError}
-                isExecutingGraph={executingGraphId !== null}
-                isCancellingExecution={cancellingExecutionId === selectedExecutionId}
-                onSelectExecution={setSelectedExecutionId}
-                onRerunGraph={() => void handleRerunSelectedGraph()}
-                onRetryExecution={() => void handleRetrySelectedExecution()}
-                onCancelExecution={() => void handleCancelSelectedExecution()}
-                showHeader={false}
-              />
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
-            <div className="space-y-6">
-              <div className="space-y-3 xl:sticky xl:top-24">
-                <SectionHeading
-                  heading={<span className="text-sm font-semibold">Workflow Setup</span>}
-                  description="현재 편집 중인 워크플로우의 저장 상태와 메타데이터를 정리해."
-                  actions={
-                    <Button type="button" size="sm" variant="ghost" onClick={() => setIsSetupCollapsed((current) => !current)}>
-                      <ChevronDown className={`h-4 w-4 transition-transform ${isSetupCollapsed ? '-rotate-90' : 'rotate-0'}`} />
-                    </Button>
-                  }
-                />
-                <Card className="bg-surface-container">
-                  {!isSetupCollapsed ? (
-                    <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium text-foreground">{selectedGraphRecord?.name || workflowName}</span>
-                          {selectedGraphRecord ? <Badge variant="outline">v{selectedGraphRecord.version}</Badge> : <Badge variant="outline">draft</Badge>}
-                          {isDirty ? <Badge variant="outline">unsaved</Badge> : <Badge variant="secondary">saved</Badge>}
-                        </div>
-                        <div className="text-xs text-muted-foreground">노드 {nodes.length} · 엣지 {edges.length} · 노출 입력 {workflowExposedInputs.length}</div>
-                        {selectedGraphRecord?.description?.trim() || workflowDescription.trim() ? (
-                          <div className="text-xs text-muted-foreground">
-                            {selectedGraphRecord?.description?.trim() || workflowDescription.trim()}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <Button type="button" onClick={() => void handleSaveGraph()} disabled={isSavingGraph || workflowName.trim().length === 0}>
-                        <Save className="h-4 w-4" />
-                        {isSavingGraph ? '저장 중…' : selectedGraphId !== null ? '워크플로우 업데이트' : '워크플로우 저장'}
-                      </Button>
-                    </CardContent>
-                  ) : (
-                    <CardContent className="text-sm text-muted-foreground">워크플로우 메타데이터는 필요할 때만 펼쳐서 확인해.</CardContent>
-                  )}
-                </Card>
-              </div>
-
-              <div className="space-y-3">
-                <SectionHeading
-                  heading={<span className="text-sm font-semibold">Exposed Run Inputs</span>}
-                  description="러너에 노출할 입력과 기본값 표시를 정리해."
-                />
-                <WorkflowExposedInputEditor
-                  candidates={workflowInputCandidates}
-                  selectedInputs={workflowExposedInputs}
-                  onToggleInput={handleToggleWorkflowExposedInput}
-                  onUpdateInput={handleUpdateWorkflowExposedInput}
-                  onMoveInput={handleMoveWorkflowExposedInput}
-                  onChangeDefaultImage={handleWorkflowExposedInputDefaultImageChange}
-                  showHeader={false}
-                />
-              </div>
-
-              <div className="space-y-3">
-                <SectionHeading
-                  heading={<span className="text-sm font-semibold">Modules</span>}
-                  description="재사용 가능한 모듈을 검색해서 캔버스에 추가해."
-                />
-                <ModuleLibraryPanel
-                  modules={modules}
-                  isError={modulesQuery.isError}
-                  errorMessage={modulesQuery.error instanceof Error ? modulesQuery.error.message : '모듈 목록을 불러오지 못했어.'}
-                  onAddModule={handleAddModuleNode}
-                  showHeader={false}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <SectionHeading
-                heading={
-                  <span className="flex items-center gap-2 text-sm font-semibold">
-                    <Boxes className="h-4 w-4 text-primary" />
-                    Workflow Graph
-                  </span>
-                }
-                description="노드 배치와 연결을 여기서 편집해."
-                actions={
-                  <>
-                    <Badge variant="outline">노드 {nodes.length}</Badge>
-                    <Badge variant="outline">엣지 {edges.length}</Badge>
-                  </>
-                }
-              />
-
-              <Card className="bg-surface-container">
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Input value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} placeholder="Workflow name" />
-                    <Input value={workflowDescription} onChange={(event) => setWorkflowDescription(event.target.value)} placeholder="설명 (선택)" />
-                  </div>
-
-                  <div className="h-[760px] overflow-hidden rounded-sm border border-border bg-[#0b111c]">
-                    <ReactFlow
-                      nodes={nodes}
-                      edges={edges}
-                      onNodesChange={onNodesChange}
-                      onEdgesChange={onEdgesChange}
-                      onNodeClick={(_, node) => {
-                        setSelectedNodeId(node.id)
-                        setSelectedEdgeId(null)
-                      }}
-                      onEdgeClick={(_, edge) => {
-                        setSelectedEdgeId(edge.id)
-                        setSelectedNodeId(null)
-                      }}
-                      onPaneClick={() => {
-                        setSelectedNodeId(null)
-                        setSelectedEdgeId(null)
-                      }}
-                      onConnect={handleConnect}
-                      isValidConnection={isValidConnection}
-                      nodeTypes={nodeTypes}
-                      fitView
-                      snapToGrid
-                      deleteKeyCode={['Backspace', 'Delete']}
-                      defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed } }}
-                    >
-                      <MiniMap pannable zoomable />
-                      <Controls />
-                      <Background gap={20} size={1} />
-                    </ReactFlow>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="space-y-3 xl:sticky xl:top-24 xl:self-start">
-              <SectionHeading
-                heading={<span className="text-sm font-semibold">Node Inspector</span>}
-                description="선택한 노드나 엣지의 입력 오버라이드를 다듬어."
-              />
-              <NodeInspectorPanel
-                selectedNode={selectedNode}
-                selectedEdge={selectedEdge}
-                onNodeValueChange={handleNodeValueChange}
-                onNodeValueClear={handleNodeValueClear}
-                onNodeImageChange={handleNodeImageChange}
-                showHeader={false}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <SectionHeading
-              heading={<span className="text-sm font-semibold">Execution Results</span>}
-              description="선택한 그래프의 실행 상태와 상세 결과를 아래에서 이어서 확인해."
+            <WorkflowRunnerPanel
+              selectedGraph={selectedGraphRecord}
+              inputDefinitions={selectedGraphRecord?.graph.metadata?.exposed_inputs ?? []}
+              inputValues={workflowRunInputValues}
+              isExecuting={executingGraphId !== null}
+              latestExecution={latestExecution}
+              latestPreviewUrl={latestExecutionPreviewArtifact ? getArtifactPreviewUrl(latestExecutionPreviewArtifact) : null}
+              latestPreviewLabel={latestExecutionPreviewArtifact ? `${latestExecutionPreviewArtifact.node_id} · ${latestExecutionPreviewArtifact.port_key}` : null}
+              onInputValueChange={handleWorkflowRunInputChange}
+              onInputValueClear={handleWorkflowRunInputClear}
+              onInputImageChange={handleWorkflowRunInputImageChange}
+              onExecute={() => void handleRunSelectedWorkflow()}
+              onEdit={() => setWorkflowView('edit')}
             />
+
             <GraphExecutionPanel
               selectedGraphId={selectedGraphId}
               selectedExecutionId={selectedExecutionId}
@@ -1133,9 +940,159 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               onRerunGraph={() => void handleRerunSelectedGraph()}
               onRetryExecution={() => void handleRetrySelectedExecution()}
               onCancelExecution={() => void handleCancelSelectedExecution()}
-              showHeader={false}
             />
           </div>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
+            <div className="space-y-6">
+              <div className="xl:sticky xl:top-24">
+                <Card className="bg-surface-container">
+                  <CardContent className="space-y-4">
+                    <SectionHeading
+                      variant="inside"
+                      heading="Workflow Setup"
+                      description="현재 편집 중인 워크플로우의 저장 상태와 메타데이터를 정리해."
+                      actions={
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setIsSetupCollapsed((current) => !current)}>
+                          <ChevronDown className={`h-4 w-4 transition-transform ${isSetupCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+                        </Button>
+                      }
+                    />
+
+                    {!isSetupCollapsed ? (
+                      <>
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-foreground">{selectedGraphRecord?.name || workflowName}</span>
+                            {selectedGraphRecord ? <Badge variant="outline">v{selectedGraphRecord.version}</Badge> : <Badge variant="outline">draft</Badge>}
+                            {isDirty ? <Badge variant="outline">unsaved</Badge> : <Badge variant="secondary">saved</Badge>}
+                          </div>
+                          <div className="text-xs text-muted-foreground">노드 {nodes.length} · 엣지 {edges.length} · 노출 입력 {workflowExposedInputs.length}</div>
+                          {selectedGraphRecord?.description?.trim() || workflowDescription.trim() ? (
+                            <div className="text-xs text-muted-foreground">
+                              {selectedGraphRecord?.description?.trim() || workflowDescription.trim()}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <Button type="button" onClick={() => void handleSaveGraph()} disabled={isSavingGraph || workflowName.trim().length === 0}>
+                          <Save className="h-4 w-4" />
+                          {isSavingGraph ? '저장 중…' : selectedGraphId !== null ? '워크플로우 업데이트' : '워크플로우 저장'}
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">워크플로우 메타데이터는 필요할 때만 펼쳐서 확인해.</div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <WorkflowExposedInputEditor
+                candidates={workflowInputCandidates}
+                selectedInputs={workflowExposedInputs}
+                onToggleInput={handleToggleWorkflowExposedInput}
+                onUpdateInput={handleUpdateWorkflowExposedInput}
+                onMoveInput={handleMoveWorkflowExposedInput}
+                onChangeDefaultImage={handleWorkflowExposedInputDefaultImageChange}
+              />
+
+              <ModuleLibraryPanel
+                modules={modules}
+                isError={modulesQuery.isError}
+                errorMessage={modulesQuery.error instanceof Error ? modulesQuery.error.message : '모듈 목록을 불러오지 못했어.'}
+                onAddModule={handleAddModuleNode}
+              />
+            </div>
+
+            <Card className="bg-surface-container">
+              <CardContent className="space-y-4">
+                <SectionHeading
+                  variant="inside"
+                  heading={
+                    <span className="flex items-center gap-2 text-sm font-semibold">
+                      <Boxes className="h-4 w-4 text-primary" />
+                      Workflow Graph
+                    </span>
+                  }
+                  description="노드 배치와 연결을 여기서 편집해."
+                  actions={
+                    <>
+                      <Badge variant="outline">노드 {nodes.length}</Badge>
+                      <Badge variant="outline">엣지 {edges.length}</Badge>
+                    </>
+                  }
+                />
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Input value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} placeholder="Workflow name" />
+                  <Input value={workflowDescription} onChange={(event) => setWorkflowDescription(event.target.value)} placeholder="설명 (선택)" />
+                </div>
+
+                <div className="h-[760px] overflow-hidden rounded-sm border border-border bg-[#0b111c]">
+                  <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onNodeClick={(_, node) => {
+                      setSelectedNodeId(node.id)
+                      setSelectedEdgeId(null)
+                    }}
+                    onEdgeClick={(_, edge) => {
+                      setSelectedEdgeId(edge.id)
+                      setSelectedNodeId(null)
+                    }}
+                    onPaneClick={() => {
+                      setSelectedNodeId(null)
+                      setSelectedEdgeId(null)
+                    }}
+                    onConnect={handleConnect}
+                    isValidConnection={isValidConnection}
+                    nodeTypes={nodeTypes}
+                    fitView
+                    snapToGrid
+                    deleteKeyCode={['Backspace', 'Delete']}
+                    defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed } }}
+                  >
+                    <MiniMap pannable zoomable />
+                    <Controls />
+                    <Background gap={20} size={1} />
+                  </ReactFlow>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="xl:sticky xl:top-24 xl:self-start">
+              <NodeInspectorPanel
+                selectedNode={selectedNode}
+                selectedEdge={selectedEdge}
+                onNodeValueChange={handleNodeValueChange}
+                onNodeValueClear={handleNodeValueClear}
+                onNodeImageChange={handleNodeImageChange}
+              />
+            </div>
+          </div>
+
+          <GraphExecutionPanel
+            selectedGraphId={selectedGraphId}
+            selectedExecutionId={selectedExecutionId}
+            selectedExecutionStatus={selectedExecution?.status ?? null}
+            executionList={executionList}
+            executionListError={graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : '실행 목록을 불러오지 못했어.'}
+            executionListIsError={graphExecutionsQuery.isError}
+            executionDetail={executionDetailQuery.data}
+            executionDetailError={executionDetailQuery.error instanceof Error ? executionDetailQuery.error.message : '실행 상세를 불러오지 못했어.'}
+            executionDetailIsError={executionDetailQuery.isError}
+            isExecutingGraph={executingGraphId !== null}
+            isCancellingExecution={cancellingExecutionId === selectedExecutionId}
+            onSelectExecution={setSelectedExecutionId}
+            onRerunGraph={() => void handleRerunSelectedGraph()}
+            onRetryExecution={() => void handleRetrySelectedExecution()}
+            onCancelExecution={() => void handleCancelSelectedExecution()}
+            description="선택한 그래프의 실행 상태와 상세 결과를 아래에서 이어서 확인해."
+          />
         </div>
       )}
     </div>

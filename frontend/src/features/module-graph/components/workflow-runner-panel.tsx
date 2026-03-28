@@ -1,6 +1,7 @@
+import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -176,19 +177,22 @@ export function WorkflowRunnerPanel({
 
   return (
     <Card className="bg-surface-container">
-      {showHeader ? (
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className="text-base">Workflow Runner</CardTitle>
-            <Button type="button" size="sm" variant="outline" onClick={onEdit} disabled={!selectedGraph}>
-              구조 수정
-            </Button>
-          </div>
-        </CardHeader>
-      ) : null}
-      <CardContent className={showHeader ? 'pt-0' : undefined}>
+      <CardContent className="space-y-3.5">
+        {showHeader ? (
+          <SectionHeading
+            variant="inside"
+            heading="Workflow Runner"
+            description="선택한 워크플로우를 그래프 편집기 없이 바로 실행해."
+            actions={
+              <Button type="button" size="sm" variant="outline" onClick={onEdit} disabled={!selectedGraph}>
+                구조 수정
+              </Button>
+            }
+          />
+        ) : null}
+
         {!showHeader ? (
-          <div className="mb-3 flex justify-end">
+          <div className="flex justify-end">
             <Button type="button" size="sm" variant="outline" onClick={onEdit} disabled={!selectedGraph}>
               구조 수정
             </Button>

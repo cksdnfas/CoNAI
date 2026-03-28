@@ -693,83 +693,87 @@ export function GroupPage() {
 
           {selectedGroupId && selectedGroupQuery.data ? (
             <div className="space-y-8">
-              <section className="space-y-4">
-                <SectionHeading
-                  heading="그룹 개요"
-                  description="현재 그룹 상태와 수집 정보를 여기서 바로 확인해."
-                  actions={
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button type="button" size="sm" variant="secondary" onClick={handleOpenGroupDownloadModal} disabled={groupFileCountsQuery.isLoading || downloadGroupArchiveMutation.isPending}>
-                        <Download className="h-4 w-4" />
-                        {downloadGroupArchiveMutation.isPending && downloadScope === 'group' ? '준비 중…' : '다운로드'}
-                      </Button>
-                      {isCustomSource ? (
-                        <>
-                          <Button type="button" size="sm" variant="secondary" onClick={handleOpenCreateModal}>
-                            <FolderPlus className="h-4 w-4" />
-                            하위 그룹 추가
-                          </Button>
-                          <Button type="button" size="sm" variant="secondary" onClick={handleOpenEditModal}>
-                            <Pencil className="h-4 w-4" />
-                            편집
-                          </Button>
-                          <Button type="button" size="sm" variant="secondary" onClick={() => void handleRunAutoCollect()} disabled={autoCollectMutation.isPending}>
-                            <Play className="h-4 w-4" />
-                            {autoCollectMutation.isPending ? '실행 중…' : '자동수집 실행'}
-                          </Button>
-                          <Button type="button" size="sm" variant="destructive" onClick={() => void handleDeleteSelectedGroup()} disabled={deleteGroupMutation.isPending}>
-                            <Trash2 className="h-4 w-4" />
-                            삭제
-                          </Button>
-                        </>
-                      ) : null}
-                    </div>
-                  }
-                />
-
-                <Card className="bg-surface-container">
-                  <CardContent className="space-y-4">
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="secondary">이미지 {selectedGroupQuery.data.image_count.toLocaleString('ko-KR')}개</Badge>
-                      <Badge variant="outline">manual {selectedGroupQuery.data.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
-                      <Badge variant="outline">auto {selectedGroupQuery.data.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
-                      {isCustomSource ? (
-                        <Badge variant={selectedGroupQuery.data.auto_collect_enabled ? 'default' : 'outline'}>
-                          {selectedGroupQuery.data.auto_collect_enabled ? '자동수집 켜짐' : '자동수집 꺼짐'}
-                        </Badge>
-                      ) : null}
-                      {selectedGroupHierarchy?.has_children ? (
-                        <Badge variant="outline">하위 그룹 {selectedGroupHierarchy.child_count.toLocaleString('ko-KR')}개</Badge>
-                      ) : null}
-                    </div>
-
-                    {isCustomSource ? (
-                      <div className="space-y-3">
+              <section>
+                <Card className="overflow-hidden bg-surface-container">
+                  <CardContent className="p-0">
+                    <SectionHeading
+                      variant="inside"
+                      className="border-b border-border/70 px-6 py-6"
+                      heading="그룹 개요"
+                      description="현재 그룹 상태와 수집 정보를 여기서 바로 확인해."
+                      actions={
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Image filter</span>
-                          {(['all', 'manual', 'auto'] as const).map((filterValue) => (
-                            <Button
-                              key={filterValue}
-                              type="button"
-                              size="sm"
-                              variant={groupImageCollectionFilter === filterValue ? 'default' : 'secondary'}
-                              onClick={() => setGroupImageCollectionFilter(filterValue)}
-                            >
-                              {filterValue === 'all' ? '전체' : filterValue === 'manual' ? 'manual만' : 'auto만'}
-                            </Button>
-                          ))}
+                          <Button type="button" size="sm" variant="secondary" onClick={handleOpenGroupDownloadModal} disabled={groupFileCountsQuery.isLoading || downloadGroupArchiveMutation.isPending}>
+                            <Download className="h-4 w-4" />
+                            {downloadGroupArchiveMutation.isPending && downloadScope === 'group' ? '준비 중…' : '다운로드'}
+                          </Button>
+                          {isCustomSource ? (
+                            <>
+                              <Button type="button" size="sm" variant="secondary" onClick={handleOpenCreateModal}>
+                                <FolderPlus className="h-4 w-4" />
+                                하위 그룹 추가
+                              </Button>
+                              <Button type="button" size="sm" variant="secondary" onClick={handleOpenEditModal}>
+                                <Pencil className="h-4 w-4" />
+                                편집
+                              </Button>
+                              <Button type="button" size="sm" variant="secondary" onClick={() => void handleRunAutoCollect()} disabled={autoCollectMutation.isPending}>
+                                <Play className="h-4 w-4" />
+                                {autoCollectMutation.isPending ? '실행 중…' : '자동수집 실행'}
+                              </Button>
+                              <Button type="button" size="sm" variant="destructive" onClick={() => void handleDeleteSelectedGroup()} disabled={deleteGroupMutation.isPending}>
+                                <Trash2 className="h-4 w-4" />
+                                삭제
+                              </Button>
+                            </>
+                          ) : null}
                         </div>
+                      }
+                    />
 
-                        <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
-                          <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-2">
-                            마지막 자동수집: {formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run)}
+                    <div className="space-y-4 px-6 py-6">
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="secondary">이미지 {selectedGroupQuery.data.image_count.toLocaleString('ko-KR')}개</Badge>
+                        <Badge variant="outline">manual {selectedGroupQuery.data.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
+                        <Badge variant="outline">auto {selectedGroupQuery.data.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
+                        {isCustomSource ? (
+                          <Badge variant={selectedGroupQuery.data.auto_collect_enabled ? 'default' : 'outline'}>
+                            {selectedGroupQuery.data.auto_collect_enabled ? '자동수집 켜짐' : '자동수집 꺼짐'}
+                          </Badge>
+                        ) : null}
+                        {selectedGroupHierarchy?.has_children ? (
+                          <Badge variant="outline">하위 그룹 {selectedGroupHierarchy.child_count.toLocaleString('ko-KR')}개</Badge>
+                        ) : null}
+                      </div>
+
+                      {isCustomSource ? (
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Image filter</span>
+                            {(['all', 'manual', 'auto'] as const).map((filterValue) => (
+                              <Button
+                                key={filterValue}
+                                type="button"
+                                size="sm"
+                                variant={groupImageCollectionFilter === filterValue ? 'default' : 'secondary'}
+                                onClick={() => setGroupImageCollectionFilter(filterValue)}
+                              >
+                                {filterValue === 'all' ? '전체' : filterValue === 'manual' ? 'manual만' : 'auto만'}
+                              </Button>
+                            ))}
                           </div>
-                          <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-2">
-                            부모 그룹: {selectedGroupHierarchy?.parent_id == null ? '루트 그룹' : '하위 그룹으로 연결됨'}
+
+                          <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
+                            <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-2">
+                              마지막 자동수집: {formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run)}
+                            </div>
+                            <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-2">
+                              부모 그룹: {selectedGroupHierarchy?.parent_id == null ? '루트 그룹' : '하위 그룹으로 연결됨'}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ) : null}
+                      ) : null}
+                    </div>
                   </CardContent>
                 </Card>
               </section>

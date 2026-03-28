@@ -60,21 +60,22 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }
 
   return (
     <section className="space-y-3">
-      <SectionHeading
-        heading="생성 히스토리"
-        actions={(
-          <>
-            <Badge variant="outline">{historyLabel}</Badge>
-            <Badge variant="outline">{historyRecords.length}</Badge>
-            <Button type="button" size="icon-sm" variant="outline" onClick={() => void historyQuery.refetch()} title="새로고침" aria-label="히스토리 새로고침">
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          </>
-        )}
-        className="[&>div>h2]:text-base"
-      />
+      <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
+        <SectionHeading
+          variant="inside"
+          className="border-b border-border/70 pb-4"
+          heading="생성 히스토리"
+          actions={(
+            <>
+              <Badge variant="outline">{historyLabel}</Badge>
+              <Badge variant="outline">{historyRecords.length}</Badge>
+              <Button type="button" size="icon-sm" variant="outline" onClick={() => void historyQuery.refetch()} title="새로고침" aria-label="히스토리 새로고침">
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        />
 
-      <div className="rounded-sm border border-border bg-surface-low p-4">
         {historyQuery.isError ? (
           <Alert variant="destructive">
             <AlertTitle>히스토리를 불러오지 못했어</AlertTitle>
