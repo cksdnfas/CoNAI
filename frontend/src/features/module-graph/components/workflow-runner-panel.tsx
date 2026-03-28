@@ -19,6 +19,7 @@ type WorkflowRunnerPanelProps = {
   onInputImageChange: (inputId: string, file?: File) => Promise<void>
   onExecute: () => void
   onEdit: () => void
+  showHeader?: boolean
 }
 
 function hasExplicitValue(value: unknown) {
@@ -39,6 +40,7 @@ export function WorkflowRunnerPanel({
   onInputImageChange,
   onExecute,
   onEdit,
+  showHeader = true,
 }: WorkflowRunnerPanelProps) {
   const renderInputField = (inputDefinition: GraphWorkflowExposedInput) => {
     const rawValue = inputValues[inputDefinition.id]
@@ -174,15 +176,25 @@ export function WorkflowRunnerPanel({
 
   return (
     <Card className="bg-surface-container">
-      <CardHeader className="pb-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle className="text-base">Workflow Runner</CardTitle>
-          <Button type="button" size="sm" variant="outline" onClick={onEdit} disabled={!selectedGraph}>
-            구조 수정
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0">
+      {showHeader ? (
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base">Workflow Runner</CardTitle>
+            <Button type="button" size="sm" variant="outline" onClick={onEdit} disabled={!selectedGraph}>
+              구조 수정
+            </Button>
+          </div>
+        </CardHeader>
+      ) : null}
+      <CardContent className={showHeader ? 'pt-0' : undefined}>
+        {!showHeader ? (
+          <div className="mb-3 flex justify-end">
+            <Button type="button" size="sm" variant="outline" onClick={onEdit} disabled={!selectedGraph}>
+              구조 수정
+            </Button>
+          </div>
+        ) : null}
+
         {selectedGraph ? (
           <div className="space-y-3.5">
             <div className="space-y-2">

@@ -147,7 +147,7 @@ export function ImageGenerationPage() {
         }
       />
 
-      <div className="rounded-sm bg-surface-lowest p-2">
+      <div className="border-b border-border/70 pb-2">
         <div className="flex flex-wrap gap-2">
           {IMAGE_GENERATION_TABS.map((tab) => (
             <button
@@ -171,7 +171,7 @@ export function ImageGenerationPage() {
 
       {activeTab !== 'workflows' && controllerPanel ? (
         isWideLayout ? (
-          <div className={cn('grid gap-6', shouldShowHistory ? 'xl:grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]' : 'grid-cols-1')}>
+          <div className={cn('grid gap-8 xl:items-start', shouldShowHistory ? 'xl:grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]' : 'grid-cols-1')}>
             <div className="min-w-0">{controllerPanel}</div>
             {shouldShowHistory ? (
               <div className="min-w-0">

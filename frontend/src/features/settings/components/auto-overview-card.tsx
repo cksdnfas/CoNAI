@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { getThemeToneTextStyle } from '@/lib/theme-tones'
 import type { KaloscopeServerStatus, TaggerDependencyCheckResult, TaggerServerStatus } from '@/types/settings'
 import { SettingsValueTile } from './settings-primitives'
@@ -40,9 +40,6 @@ export function AutoOverviewCard({
 
   return (
     <Card className="bg-surface-container">
-      <CardHeader>
-        <CardTitle>Auto</CardTitle>
-      </CardHeader>
       <CardContent className="grid gap-4 min-[900px]:grid-cols-4">
         <SettingsValueTile label="loaded model" value={taggerStatus?.currentModel ?? '—'} />
         <SettingsValueTile label="current device" value={taggerStatus?.currentDevice ?? '—'} />

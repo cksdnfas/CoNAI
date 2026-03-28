@@ -55,51 +55,60 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }
     () => new Map(historyRecords.map((record) => [String(record.actual_composite_hash || record.composite_hash || `generation-history-${record.id}`), record])),
     [historyRecords],
   )
+  const historyLabel = serviceType === 'novelai' ? 'NAI' : workflowId ? 'ComfyUI Workflow' : 'ComfyUI'
 
   return (
     <section className="space-y-3">
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-base font-semibold tracking-tight text-foreground">생성 히스토리</h2>
+          <Badge variant="outline">{historyLabel}</Badge>
+          <Badge variant="outline">{historyRecords.length}</Badge>
+        </div>
+
         <Button type="button" size="icon-sm" variant="outline" onClick={() => void historyQuery.refetch()} title="새로고침" aria-label="히스토리 새로고침">
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
 
-      {historyQuery.isError ? (
-        <Alert variant="destructive">
-          <AlertTitle>히스토리를 불러오지 못했어</AlertTitle>
-          <AlertDescription>{getErrorMessage(historyQuery.error, '생성 히스토리 조회 실패')}</AlertDescription>
-        </Alert>
-      ) : null}
+      <div className="rounded-sm border border-border bg-surface-low p-4">
+        {historyQuery.isError ? (
+          <Alert variant="destructive">
+            <AlertTitle>히스토리를 불러오지 못했어</AlertTitle>
+            <AlertDescription>{getErrorMessage(historyQuery.error, '생성 히스토리 조회 실패')}</AlertDescription>
+          </Alert>
+        ) : null}
 
-      {historyQuery.isPending ? <div className="text-sm text-muted-foreground">히스토리 불러오는 중…</div> : null}
+        {historyQuery.isPending ? <div className="text-sm text-muted-foreground">히스토리 불러오는 중…</div> : null}
 
-      {!historyQuery.isPending && historyImages.length === 0 ? (
-        <div className="py-8 text-sm text-muted-foreground">아직 생성 이력이 없어.</div>
-      ) : null}
+        {!historyQuery.isPending && historyImages.length === 0 ? (
+          <div className="py-4 text-sm text-muted-foreground">아직 생성 이력이 없어.</div>
+        ) : null}
 
-      {!historyQuery.isPending && historyImages.length > 0 ? (
-        <ImageList
-          items={historyImages}
-          layout="masonry"
-          activationMode="navigate"
-          getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
-          minColumnWidth={220}
-          columnGap={16}
-          rowGap={16}
-          renderItemOverlay={(image) => {
-            const record = historyRecordMap.get(String(image.composite_hash ?? image.id))
-            if (!record || record.generation_status === 'completed') {
-              return null
-            }
+        {!historyQuery.isPending && historyImages.length > 0 ? (
+          <ImageList
+            items={historyImages}
+            layout="masonry"
+            activationMode="navigate"
+            getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
+            minColumnWidth={220}
+            columnGap={16}
+            rowGap={16}
+            renderItemOverlay={(image) => {
+              const record = historyRecordMap.get(String(image.composite_hash ?? image.id))
+              if (!record || record.generation_status === 'completed') {
+                return null
+              }
 
-            return (
-              <Badge variant={record.generation_status === 'failed' ? 'outline' : 'secondary'}>
-                {getHistoryStatusLabel(record.generation_status)}
-              </Badge>
-            )
-          }}
-        />
-      ) : null}
+              return (
+                <Badge variant={record.generation_status === 'failed' ? 'outline' : 'secondary'}>
+                  {getHistoryStatusLabel(record.generation_status)}
+                </Badge>
+              )
+            }}
+          />
+        ) : null}
+      </div>
     </section>
   )
 }

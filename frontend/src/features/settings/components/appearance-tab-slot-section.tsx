@@ -48,11 +48,8 @@ export function AppearanceTabSlotSection({
   onSavePresetSlots,
 }: AppearanceTabSlotSectionProps) {
   return (
-    <section className="space-y-4">
-      <div className="text-sm font-semibold text-foreground">저장 슬롯</div>
-
-      <div className="grid gap-3 xl:grid-cols-3">
-        {appearanceDraft.presetSlots.map((slot, index) => {
+    <div className="grid gap-3 xl:grid-cols-3">
+      {appearanceDraft.presetSlots.map((slot, index) => {
           const slotTheme = slot.appearance
           const slotColors = slotTheme ? resolveAppearanceColors(slotTheme) : null
           const slotSurface = slotTheme ? resolveSurfacePalette(slotTheme) : null
@@ -185,7 +182,6 @@ export function AppearanceTabSlotSection({
             </div>
           )
         })}
-      </div>
-    </section>
+    </div>
   )
 }

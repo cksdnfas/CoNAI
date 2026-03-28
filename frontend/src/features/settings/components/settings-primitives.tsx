@@ -30,6 +30,32 @@ export function SettingsToggleRow({ children, className, ...props }: SettingsTog
   )
 }
 
+interface SettingsSectionHeadingProps extends ComponentProps<'div'> {
+  heading: ReactNode
+  description?: ReactNode
+  actions?: ReactNode
+}
+
+// Shared section heading row used above settings cards.
+export function SettingsSectionHeading({
+  heading,
+  description,
+  actions,
+  className,
+  ...props
+}: SettingsSectionHeadingProps) {
+  return (
+    <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between', className)} {...props}>
+      <div className="space-y-1">
+        <h2 className="text-xl font-semibold tracking-tight text-foreground">{heading}</h2>
+        {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+      </div>
+
+      {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+    </div>
+  )
+}
+
 interface SettingsValueTileProps extends ComponentProps<'div'> {
   label: ReactNode
   value: ReactNode

@@ -1,5 +1,4 @@
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -10,31 +9,15 @@ interface TaggerSettingsCardProps {
   taggerDraft: TaggerSettings | null
   taggerModels: TaggerModelInfo[]
   onPatchTagger: (patch: Partial<TaggerSettings>) => void
-  onSaveTagger: () => void
-  isSavingTagger: boolean
-  isCheckingTaggerDependencies: boolean
 }
 
 export function TaggerSettingsCard({
   taggerDraft,
   taggerModels,
   onPatchTagger,
-  onSaveTagger,
-  isSavingTagger,
-  isCheckingTaggerDependencies,
 }: TaggerSettingsCardProps) {
   return (
     <Card className="bg-surface-container">
-      <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle>WD Tagger</CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={onSaveTagger} disabled={!taggerDraft || isSavingTagger || isCheckingTaggerDependencies}>
-              {isCheckingTaggerDependencies ? '의존성 확인 중…' : '저장'}
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
       <CardContent className="grid gap-4 md:grid-cols-2">
         {taggerDraft ? (
           <>

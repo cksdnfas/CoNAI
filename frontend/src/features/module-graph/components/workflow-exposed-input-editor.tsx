@@ -16,6 +16,7 @@ type WorkflowExposedInputEditorProps = {
   onUpdateInput: (inputId: string, patch: Partial<GraphWorkflowExposedInput>) => void
   onMoveInput: (inputId: string, direction: 'up' | 'down') => void
   onChangeDefaultImage: (inputId: string, file?: File) => Promise<void>
+  showHeader?: boolean
 }
 
 function hasExplicitValue(value: unknown) {
@@ -30,6 +31,7 @@ export function WorkflowExposedInputEditor({
   onUpdateInput,
   onMoveInput,
   onChangeDefaultImage,
+  showHeader = true,
 }: WorkflowExposedInputEditorProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [showAvailableInputs, setShowAvailableInputs] = useState(false)
@@ -117,23 +119,36 @@ export function WorkflowExposedInputEditor({
     )
   }
 
+  const collapseButton = (
+    <Button type="button" size="sm" variant="ghost" onClick={() => setIsCollapsed((current) => !current)}>
+      <ChevronDown className={cn('h-4 w-4 transition-transform', isCollapsed ? '-rotate-90' : 'rotate-0')} />
+    </Button>
+  )
+
   return (
     <Card className="bg-surface-container">
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle>Exposed Run Inputs</CardTitle>
+      {showHeader ? (
+        <CardHeader>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle>Exposed Run Inputs</CardTitle>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">{selectedInputs.length} selected</Badge>
+              {collapseButton}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">{selectedInputs.length} selected</Badge>
-            <Button type="button" size="sm" variant="ghost" onClick={() => setIsCollapsed((current) => !current)}>
-              <ChevronDown className={cn('h-4 w-4 transition-transform', isCollapsed ? '-rotate-90' : 'rotate-0')} />
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
+        </CardHeader>
+      ) : null}
       {!isCollapsed ? (
         <CardContent className="space-y-5">
+          {!showHeader ? (
+            <div className="flex items-center justify-between gap-3">
+              <Badge variant="outline">{selectedInputs.length} selected</Badge>
+              {collapseButton}
+            </div>
+          ) : null}
+
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-foreground">Selected Inputs</div>
@@ -269,7 +284,14 @@ export function WorkflowExposedInputEditor({
             )}
           </div>
         </CardContent>
-      ) : null}
+      ) : (
+        !showHeader ? (
+          <CardContent className="flex justify-between gap-3">
+            <Badge variant="outline">{selectedInputs.length} selected</Badge>
+            {collapseButton}
+          </CardContent>
+        ) : null
+      )}
     </Card>
   )
 }

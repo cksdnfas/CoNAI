@@ -7,7 +7,7 @@ import { WDTaggerResultBlock } from '@/components/common/wd-tagger-result-block'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
@@ -418,33 +418,35 @@ export function UploadPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Upload" />
+      <PageHeader title="Upload" description="파일 업로드와 단일 이미지 미리보기/메타 추출을 한 화면에서 처리해." />
 
       <div className="space-y-6">
-        <Card className="bg-surface-container">
-          <CardHeader>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle>Upload</CardTitle>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setUploadFiles([])
-                    resetUploadState()
-                  }}
-                  disabled={uploadFiles.length === 0 && !uploadResult && !uploadError}
-                >
-                  초기화
-                </Button>
-                <Button type="button" onClick={handleUpload} disabled={uploadFiles.length === 0 || isUploading}>
-                  {isUploading ? '업로드 중…' : `업로드${uploadFiles.length > 0 ? ` (${uploadFiles.length})` : ''}`}
-                </Button>
-              </div>
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-2">
+              <h2 className="text-xl font-semibold tracking-tight text-foreground">파일 업로드</h2>
+              <p className="text-sm text-muted-foreground">여러 파일을 한 번에 올리고 진행 상황을 바로 확인해.</p>
             </div>
-          </CardHeader>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setUploadFiles([])
+                  resetUploadState()
+                }}
+                disabled={uploadFiles.length === 0 && !uploadResult && !uploadError}
+              >
+                초기화
+              </Button>
+              <Button type="button" onClick={handleUpload} disabled={uploadFiles.length === 0 || isUploading}>
+                {isUploading ? '업로드 중…' : `업로드${uploadFiles.length > 0 ? ` (${uploadFiles.length})` : ''}`}
+              </Button>
+            </div>
+          </div>
 
-          <CardContent className="space-y-4">
+          <Card className="bg-surface-container">
+            <CardContent className="space-y-4">
             <input ref={uploadInputRef} type="file" multiple accept={UPLOAD_ACCEPT} className="hidden" onChange={handleUploadFileChange} />
 
             <DropSurface
@@ -527,45 +529,48 @@ export function UploadPage() {
                 ) : null}
               </div>
             ) : null}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </section>
 
-        <Card className="bg-surface-container">
-          <CardHeader>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle>Preview</CardTitle>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" variant="ghost" onClick={() => applyExtractFile(null)} disabled={!extractFile && !extractResult && !taggerResult && !kaloscopeResult && !extractError}>
-                  초기화
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-2">
+              <h2 className="text-xl font-semibold tracking-tight text-foreground">미리보기 / 추출</h2>
+              <p className="text-sm text-muted-foreground">단일 이미지를 열어 메타 확인, 변환, 보조 추출을 이어서 처리해.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="ghost" onClick={() => applyExtractFile(null)} disabled={!extractFile && !extractResult && !taggerResult && !kaloscopeResult && !extractError}>
+                초기화
+              </Button>
+              <Button type="button" variant="outline" onClick={handleConvertWebP} disabled={!extractFile || extractBusy}>
+                <Download className="h-4 w-4" />
+                {isConvertingWebP ? 'WebP 변환 중…' : 'WebP 변환'}
+              </Button>
+              <Button type="button" variant="outline" onClick={handleRewriteMetadata} disabled={!extractFile || extractBusy}>
+                <Download className="h-4 w-4" />
+                {isRewritingMetadata ? '메타 수정 중…' : '메타 수정 다운로드'}
+              </Button>
+              <div className="flex min-w-[220px] flex-1 flex-wrap items-center gap-2 sm:flex-none">
+                <Select
+                  className="min-w-[140px] flex-1 sm:w-40 sm:flex-none"
+                  value={selectedExtractAction}
+                  onChange={(event) => setSelectedExtractAction(event.target.value as ManualExtractAction)}
+                  disabled={!extractFile || extractBusy}
+                >
+                  <option value="all">한번에 추출</option>
+                  <option value="tagger">자동 추출</option>
+                  <option value="kaloscope">작가 추출</option>
+                </Select>
+                <Button type="button" onClick={handleRunSelectedExtract} disabled={!extractFile || extractBusy}>
+                  {activeExtractAction === selectedExtractAction ? '추출 중…' : '추출 실행'}
                 </Button>
-                <Button type="button" variant="outline" onClick={handleConvertWebP} disabled={!extractFile || extractBusy}>
-                  <Download className="h-4 w-4" />
-                  {isConvertingWebP ? 'WebP 변환 중…' : 'WebP 변환'}
-                </Button>
-                <Button type="button" variant="outline" onClick={handleRewriteMetadata} disabled={!extractFile || extractBusy}>
-                  <Download className="h-4 w-4" />
-                  {isRewritingMetadata ? '메타 수정 중…' : '메타 수정 다운로드'}
-                </Button>
-                <div className="flex min-w-[220px] flex-1 flex-wrap items-center gap-2 sm:flex-none">
-                  <Select
-                    className="min-w-[140px] flex-1 sm:w-40 sm:flex-none"
-                    value={selectedExtractAction}
-                    onChange={(event) => setSelectedExtractAction(event.target.value as ManualExtractAction)}
-                    disabled={!extractFile || extractBusy}
-                  >
-                    <option value="all">한번에 추출</option>
-                    <option value="tagger">자동 추출</option>
-                    <option value="kaloscope">작가 추출</option>
-                  </Select>
-                  <Button type="button" onClick={handleRunSelectedExtract} disabled={!extractFile || extractBusy}>
-                    {activeExtractAction === selectedExtractAction ? '추출 중…' : '추출 실행'}
-                  </Button>
-                </div>
               </div>
             </div>
-          </CardHeader>
+          </div>
 
-          <CardContent className="space-y-4">
+          <Card className="bg-surface-container">
+            <CardContent className="space-y-4">
             <input ref={extractInputRef} type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={handleExtractFileChange} />
 
             <div className="rounded-sm bg-surface-low p-4">
@@ -662,8 +667,9 @@ export function UploadPage() {
                 <AlertDescription>{extractError}</AlertDescription>
               </Alert>
             ) : null}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </section>
       </div>
     </div>
   )

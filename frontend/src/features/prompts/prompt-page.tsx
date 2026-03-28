@@ -85,6 +85,13 @@ export function PromptPage() {
     () => (groupsQuery.data ?? []).filter((group) => group.id !== 0 && !isLockedPromptGroup(group)),
     [groupsQuery.data],
   )
+  const promptTypeLabel = useMemo(
+    () => PROMPT_TYPE_TABS.find((tab) => tab.value === promptType)?.label ?? 'Prompt',
+    [promptType],
+  )
+  const currentPromptTotal = getPromptTypeTotal(promptType, statisticsQuery.data)
+  const currentSectionTitle = selectedGroup?.group_name ?? 'All prompts'
+  const currentSectionCount = pagination?.total ?? 0
 
   const {
     assignSinglePromptMutation,
@@ -287,7 +294,7 @@ export function PromptPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={selectedGroup?.group_name ?? 'Prompt'}
+        title="Prompt"
         actions={
           <Button type="button" variant="outline" onClick={() => setIsSummaryModalOpen(true)}>
             상태
@@ -295,23 +302,31 @@ export function PromptPage() {
         }
       />
 
-      <div className="rounded-sm bg-surface-lowest p-2">
-        <div className="flex flex-wrap gap-2">
-          {PROMPT_TYPE_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => handleChangeType(tab.value)}
-              className={cn(
-                'rounded-sm px-4 py-2 text-sm font-semibold transition-colors',
-                promptType === tab.value ? 'bg-surface-container text-primary' : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold tracking-tight text-foreground">Prompt type</h2>
+            <p className="text-sm text-muted-foreground">{currentPromptTotal.toLocaleString('ko-KR')}개 항목</p>
+          </div>
         </div>
-      </div>
+        <div className="rounded-sm bg-surface-lowest p-2">
+          <div className="flex flex-wrap gap-2">
+            {PROMPT_TYPE_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => handleChangeType(tab.value)}
+                className={cn(
+                  'rounded-sm px-4 py-2 text-sm font-semibold transition-colors',
+                  promptType === tab.value ? 'bg-surface-container text-primary' : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-8 min-[800px]:grid-cols-[260px_minmax(0,1fr)]">
         <PromptSidebar
@@ -335,7 +350,16 @@ export function PromptPage() {
           canMoveGroupDown={canMoveGroupDown}
         />
 
-        <div className="space-y-6">
+        <section className="space-y-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight text-foreground">{currentSectionTitle}</h2>
+              <p className="text-sm text-muted-foreground">
+                {promptTypeLabel} · {currentSectionCount.toLocaleString('ko-KR')}개 표시됨
+              </p>
+            </div>
+          </div>
+
           <PromptToolbar
             searchInput={searchInput}
             sortBy={sortBy}
@@ -378,7 +402,7 @@ export function PromptPage() {
             }}
             isLockedPromptItem={isLockedPromptItem}
           />
-        </div>
+        </section>
       </div>
 
       <PromptSelectionBar

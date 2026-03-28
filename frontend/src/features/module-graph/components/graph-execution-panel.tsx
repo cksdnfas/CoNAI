@@ -32,6 +32,7 @@ type GraphExecutionPanelProps = {
   onRerunGraph: () => void
   onRetryExecution: () => void
   onCancelExecution: () => void
+  showHeader?: boolean
 }
 
 /** Render graph execution history, selected detail, artifacts, and logs. */
@@ -51,6 +52,7 @@ export function GraphExecutionPanel({
   onRerunGraph,
   onRetryExecution,
   onCancelExecution,
+  showHeader = true,
 }: GraphExecutionPanelProps) {
   const queuedExecutions = executionList
     .filter((execution) => execution.status === 'queued')
@@ -62,50 +64,58 @@ export function GraphExecutionPanel({
   const activeRunningExecution = runningExecutions[0] ?? null
   const nextQueuedExecution = queuedExecutions[0] ?? null
 
+  const actionButtons = (
+    <div className="flex items-center gap-1">
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="outline"
+        onClick={onCancelExecution}
+        disabled={isCancellingExecution || (selectedExecutionStatus !== 'queued' && selectedExecutionStatus !== 'running')}
+        title={isCancellingExecution ? '취소 요청 중' : '실행 취소'}
+        aria-label={isCancellingExecution ? '실행 취소 요청 중' : '실행 취소'}
+      >
+        <Square className="h-4 w-4" />
+      </Button>
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="outline"
+        onClick={onRetryExecution}
+        disabled={!retryable || isExecutingGraph}
+        title="다시 시도"
+        aria-label="실행 다시 시도"
+      >
+        <RotateCcw className="h-4 w-4" />
+      </Button>
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="outline"
+        onClick={onRerunGraph}
+        disabled={!selectedGraphId || isExecutingGraph}
+        title={isExecutingGraph ? '실행 중' : '재실행'}
+        aria-label={isExecutingGraph ? '워크플로우 실행 중' : '워크플로우 재실행'}
+      >
+        <Play className="h-4 w-4" />
+      </Button>
+    </div>
+  )
+
   return (
     <Card className="bg-surface-container">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-base">Execution Results</CardTitle>
-          <div className="flex items-center gap-1">
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="outline"
-              onClick={onCancelExecution}
-              disabled={isCancellingExecution || (selectedExecutionStatus !== 'queued' && selectedExecutionStatus !== 'running')}
-              title={isCancellingExecution ? '취소 요청 중' : '실행 취소'}
-              aria-label={isCancellingExecution ? '실행 취소 요청 중' : '실행 취소'}
-            >
-              <Square className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="outline"
-              onClick={onRetryExecution}
-              disabled={!retryable || isExecutingGraph}
-              title="다시 시도"
-              aria-label="실행 다시 시도"
-            >
-              <RotateCcw className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="outline"
-              onClick={onRerunGraph}
-              disabled={!selectedGraphId || isExecutingGraph}
-              title={isExecutingGraph ? '실행 중' : '재실행'}
-              aria-label={isExecutingGraph ? '워크플로우 실행 중' : '워크플로우 재실행'}
-            >
-              <Play className="h-4 w-4" />
-            </Button>
+      {showHeader ? (
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-base">Execution Results</CardTitle>
+            {actionButtons}
           </div>
-        </div>
-      </CardHeader>
+        </CardHeader>
+      ) : null}
 
-      <CardContent className="space-y-3 pt-0">
+      <CardContent className={showHeader ? 'space-y-3 pt-0' : 'space-y-3'}>
+        {!showHeader ? <div className="flex justify-end">{actionButtons}</div> : null}
+
         {!selectedGraphId ? <div className="text-sm text-muted-foreground">그래프를 먼저 골라줘.</div> : null}
 
         {selectedGraphId && executionListIsError ? (

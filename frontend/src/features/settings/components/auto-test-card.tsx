@@ -2,7 +2,7 @@ import { ExtractedPromptSections } from '@/components/common/extracted-prompt-se
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
 import { WDTaggerResultBlock } from '@/components/common/wd-tagger-result-block'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
 import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult } from '@/lib/api'
@@ -19,11 +19,8 @@ interface AutoTestCardProps {
   kaloscopeTestResult: AutoTestKaloscopeResult | null
   onAutoTestHashInputChange: (value: string) => void
   onResolveAutoTestMedia: () => void
-  onRandomAutoTestMedia: () => void
   onRunTaggerAutoTest: () => void
   onRunKaloscopeAutoTest: () => void
-  isResolvingAutoTestMedia: boolean
-  isPickingRandomAutoTestMedia: boolean
   isRunningTaggerAutoTest: boolean
   isRunningKaloscopeAutoTest: boolean
 }
@@ -37,11 +34,8 @@ export function AutoTestCard({
   kaloscopeTestResult,
   onAutoTestHashInputChange,
   onResolveAutoTestMedia,
-  onRandomAutoTestMedia,
   onRunTaggerAutoTest,
   onRunKaloscopeAutoTest,
-  isResolvingAutoTestMedia,
-  isPickingRandomAutoTestMedia,
   isRunningTaggerAutoTest,
   isRunningKaloscopeAutoTest,
 }: AutoTestCardProps) {
@@ -49,19 +43,6 @@ export function AutoTestCard({
 
   return (
     <Card className="bg-surface-container">
-      <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle>Test</CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={onResolveAutoTestMedia} disabled={!autoTestHashInput.trim() || isResolvingAutoTestMedia}>
-              해시 확인
-            </Button>
-            <Button size="sm" variant="outline" onClick={onRandomAutoTestMedia} disabled={isPickingRandomAutoTestMedia}>
-              랜덤 선택
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
       <CardContent className="space-y-4">
         <SettingsField label="Composite hash">
           <Input

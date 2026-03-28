@@ -44,7 +44,7 @@ export function PromptSidebar({
 }: PromptSidebarProps) {
   return (
     <ExplorerSidebar
-      title="Explorer"
+      title="Groups"
       badge={<Badge variant="outline">{groups.length}</Badge>}
       className="min-[800px]:sticky min-[800px]:top-24 min-[800px]:self-start"
       headerExtra={

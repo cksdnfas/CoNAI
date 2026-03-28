@@ -13,10 +13,11 @@ type ModuleLibraryPanelProps = {
   isError: boolean
   errorMessage: string
   onAddModule: (module: ModuleDefinitionRecord) => void
+  showHeader?: boolean
 }
 
 /** Render the reusable module library for graph authoring. */
-export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule }: ModuleLibraryPanelProps) {
+export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule, showHeader = true }: ModuleLibraryPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -32,23 +33,36 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
     })
   }, [modules, searchQuery])
 
+  const collapseButton = (
+    <Button type="button" size="sm" variant="ghost" onClick={() => setIsCollapsed((current) => !current)}>
+      <ChevronDown className={cn('h-4 w-4 transition-transform', isCollapsed ? '-rotate-90' : 'rotate-0')} />
+    </Button>
+  )
+
   return (
     <Card className="bg-surface-container">
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle>Modules</CardTitle>
+      {showHeader ? (
+        <CardHeader>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle>Modules</CardTitle>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">{filteredModules.length}</Badge>
+              {collapseButton}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">{filteredModules.length}</Badge>
-            <Button type="button" size="sm" variant="ghost" onClick={() => setIsCollapsed((current) => !current)}>
-              <ChevronDown className={cn('h-4 w-4 transition-transform', isCollapsed ? '-rotate-90' : 'rotate-0')} />
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
+        </CardHeader>
+      ) : null}
       {!isCollapsed ? (
         <CardContent className="space-y-3">
+          {!showHeader ? (
+            <div className="flex items-center justify-between gap-3">
+              <Badge variant="outline">{filteredModules.length}</Badge>
+              {collapseButton}
+            </div>
+          ) : null}
+
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="모듈 검색" className="pl-9" />
@@ -92,7 +106,14 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
             ))}
           </div>
         </CardContent>
-      ) : null}
+      ) : (
+        !showHeader ? (
+          <CardContent className="flex justify-between gap-3">
+            <Badge variant="outline">{filteredModules.length}</Badge>
+            {collapseButton}
+          </CardContent>
+        ) : null
+      )}
     </Card>
   )
 }

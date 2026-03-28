@@ -1,9 +1,10 @@
 import { useRef } from 'react'
 import { Download, RotateCcw, Save, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { AppearanceTabEditorSection } from './appearance-tab-editor-section'
 import { AppearanceTabSlotSection } from './appearance-tab-slot-section'
+import { SettingsSectionHeading } from './settings-primitives'
 import type { AppearanceTabProps } from './appearance-tab.types'
 import { getAppearanceTabColorValues } from './appearance-tab.utils'
 
@@ -30,11 +31,51 @@ export function AppearanceTab({
 
   return (
     <div className="space-y-8">
-      <Card className="bg-surface-container">
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle>Appearance</CardTitle>
-            <div className="flex flex-wrap gap-2">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) {
+            void onImport(file)
+          }
+          event.target.value = ''
+        }}
+      />
+      <input
+        ref={sansFontInputRef}
+        type="file"
+        accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) {
+            void onUploadCustomFont('sans', file)
+          }
+          event.target.value = ''
+        }}
+      />
+      <input
+        ref={monoFontInputRef}
+        type="file"
+        accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) {
+            void onUploadCustomFont('mono', file)
+          }
+          event.target.value = ''
+        }}
+      />
+
+      <section className="space-y-4">
+        <SettingsSectionHeading
+          heading="테마 슬롯"
+          actions={
+            <>
               <Button type="button" size="icon-sm" variant="outline" onClick={onExport} disabled={isSaving} aria-label="외형 내보내기" title="외형 내보내기">
                 <Download className="h-4 w-4" />
               </Button>
@@ -50,52 +91,12 @@ export function AppearanceTab({
               <Button type="button" size="icon-sm" onClick={onSave} disabled={!appearanceDraft || !isDirty || isSaving} aria-label="외형 저장" title="외형 저장">
                 <Save className="h-4 w-4" />
               </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-8">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) {
-                void onImport(file)
-              }
-              event.target.value = ''
-            }}
-          />
-          <input
-            ref={sansFontInputRef}
-            type="file"
-            accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) {
-                void onUploadCustomFont('sans', file)
-              }
-              event.target.value = ''
-            }}
-          />
-          <input
-            ref={monoFontInputRef}
-            type="file"
-            accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) {
-                void onUploadCustomFont('mono', file)
-              }
-              event.target.value = ''
-            }}
-          />
-
-          {appearanceDraft ? (
-            <>
+            </>
+          }
+        />
+        <Card className="bg-surface-container">
+          <CardContent>
+            {appearanceDraft ? (
               <AppearanceTabSlotSection
                 appearanceDraft={appearanceDraft}
                 savedAppearance={savedAppearance}
@@ -103,7 +104,16 @@ export function AppearanceTab({
                 onPatchAppearance={onPatchAppearance}
                 onSavePresetSlots={onSavePresetSlots}
               />
+            ) : null}
+          </CardContent>
+        </Card>
+      </section>
 
+      <section className="space-y-4">
+        <SettingsSectionHeading heading="세부 편집" />
+        <Card className="bg-surface-container">
+          <CardContent>
+            {appearanceDraft ? (
               <AppearanceTabEditorSection
                 appearanceDraft={appearanceDraft}
                 colorValues={colorValues}
@@ -113,10 +123,10 @@ export function AppearanceTab({
                 onClearCustomFont={onClearCustomFont}
                 isUploadingFont={isUploadingFont}
               />
-            </>
-          ) : null}
-        </CardContent>
-      </Card>
+            ) : null}
+          </CardContent>
+        </Card>
+      </section>
     </div>
   )
 }

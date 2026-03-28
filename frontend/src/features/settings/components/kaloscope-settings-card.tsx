@@ -1,5 +1,4 @@
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -10,8 +9,6 @@ interface KaloscopeSettingsCardProps {
   kaloscopeDraft: KaloscopeSettings | null
   kaloscopeStatus: KaloscopeServerStatus | undefined
   onPatchKaloscope: (patch: Partial<KaloscopeSettings>) => void
-  onSaveKaloscope: () => void
-  isSavingKaloscope: boolean
 }
 
 function formatKaloscopeDependencyLabel(status: KaloscopeServerStatus | undefined) {
@@ -23,19 +20,9 @@ export function KaloscopeSettingsCard({
   kaloscopeDraft,
   kaloscopeStatus,
   onPatchKaloscope,
-  onSaveKaloscope,
-  isSavingKaloscope,
 }: KaloscopeSettingsCardProps) {
   return (
     <Card className="bg-surface-container">
-      <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle>Kaloscope</CardTitle>
-          <Button size="sm" onClick={onSaveKaloscope} disabled={!kaloscopeDraft || isSavingKaloscope}>
-            저장
-          </Button>
-        </div>
-      </CardHeader>
       <CardContent className="grid gap-4 md:grid-cols-2">
         {kaloscopeDraft ? (
           <>

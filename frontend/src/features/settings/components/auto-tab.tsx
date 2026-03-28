@@ -1,3 +1,5 @@
+import { Button } from '@/components/ui/button'
+import { SettingsSectionHeading } from './settings-primitives'
 import { AutoOverviewCard } from './auto-overview-card'
 import { AutoTestCard } from './auto-test-card'
 import { KaloscopeSettingsCard } from './kaloscope-settings-card'
@@ -36,47 +38,77 @@ export function AutoTab({
 }: AutoTabProps) {
   return (
     <div className="space-y-8">
-      <AutoOverviewCard
-        taggerStatus={taggerStatus}
-        taggerDependencyResult={taggerDependencyResult}
-        kaloscopeStatus={kaloscopeStatus}
-        isCheckingTaggerDependencies={isCheckingTaggerDependencies}
-      />
+      <section className="space-y-4">
+        <SettingsSectionHeading heading="개요" />
+        <AutoOverviewCard
+          taggerStatus={taggerStatus}
+          taggerDependencyResult={taggerDependencyResult}
+          kaloscopeStatus={kaloscopeStatus}
+          isCheckingTaggerDependencies={isCheckingTaggerDependencies}
+        />
+      </section>
 
-      <KaloscopeSettingsCard
-        kaloscopeDraft={kaloscopeDraft}
-        kaloscopeStatus={kaloscopeStatus}
-        onPatchKaloscope={onPatchKaloscope}
-        onSaveKaloscope={onSaveKaloscope}
-        isSavingKaloscope={isSavingKaloscope}
-      />
+      <section className="space-y-4">
+        <SettingsSectionHeading
+          heading="Kaloscope"
+          actions={
+            <Button size="sm" onClick={onSaveKaloscope} disabled={!kaloscopeDraft || isSavingKaloscope}>
+              저장
+            </Button>
+          }
+        />
+        <KaloscopeSettingsCard
+          kaloscopeDraft={kaloscopeDraft}
+          kaloscopeStatus={kaloscopeStatus}
+          onPatchKaloscope={onPatchKaloscope}
+        />
+      </section>
 
-      <TaggerSettingsCard
-        taggerDraft={taggerDraft}
-        taggerModels={taggerModels}
-        onPatchTagger={onPatchTagger}
-        onSaveTagger={onSaveTagger}
-        isSavingTagger={isSavingTagger}
-        isCheckingTaggerDependencies={isCheckingTaggerDependencies}
-      />
+      <section className="space-y-4">
+        <SettingsSectionHeading
+          heading="WD Tagger"
+          actions={
+            <Button size="sm" onClick={onSaveTagger} disabled={!taggerDraft || isSavingTagger || isCheckingTaggerDependencies}>
+              {isCheckingTaggerDependencies ? '의존성 확인 중…' : '저장'}
+            </Button>
+          }
+        />
+        <TaggerSettingsCard
+          taggerDraft={taggerDraft}
+          taggerModels={taggerModels}
+          onPatchTagger={onPatchTagger}
+        />
+      </section>
 
-      <AutoTestCard
-        autoTestHashInput={autoTestHashInput}
-        autoTestMedia={autoTestMedia}
-        autoTestImage={autoTestImage}
-        isLoadingAutoTestImage={isLoadingAutoTestImage}
-        taggerTestResult={taggerTestResult}
-        kaloscopeTestResult={kaloscopeTestResult}
-        onAutoTestHashInputChange={onAutoTestHashInputChange}
-        onResolveAutoTestMedia={onResolveAutoTestMedia}
-        onRandomAutoTestMedia={onRandomAutoTestMedia}
-        onRunTaggerAutoTest={onRunTaggerAutoTest}
-        onRunKaloscopeAutoTest={onRunKaloscopeAutoTest}
-        isResolvingAutoTestMedia={isResolvingAutoTestMedia}
-        isPickingRandomAutoTestMedia={isPickingRandomAutoTestMedia}
-        isRunningTaggerAutoTest={isRunningTaggerAutoTest}
-        isRunningKaloscopeAutoTest={isRunningKaloscopeAutoTest}
-      />
+      <section className="space-y-4">
+        <SettingsSectionHeading
+          heading="테스트"
+          actions={
+            <>
+              <Button size="sm" variant="outline" onClick={onResolveAutoTestMedia} disabled={!autoTestHashInput.trim() || isResolvingAutoTestMedia}>
+                해시 확인
+              </Button>
+              <Button size="sm" variant="outline" onClick={onRandomAutoTestMedia} disabled={isPickingRandomAutoTestMedia}>
+                랜덤 선택
+              </Button>
+            </>
+          }
+        />
+        <AutoTestCard
+          autoTestHashInput={autoTestHashInput}
+          autoTestMedia={autoTestMedia}
+          autoTestImage={autoTestImage}
+          isLoadingAutoTestImage={isLoadingAutoTestImage}
+          taggerTestResult={taggerTestResult}
+          kaloscopeTestResult={kaloscopeTestResult}
+          onAutoTestHashInputChange={onAutoTestHashInputChange}
+          onResolveAutoTestMedia={onResolveAutoTestMedia}
+          onRunTaggerAutoTest={onRunTaggerAutoTest}
+          onRunKaloscopeAutoTest={onRunKaloscopeAutoTest}
+          isRunningTaggerAutoTest={isRunningTaggerAutoTest}
+          isRunningKaloscopeAutoTest={isRunningKaloscopeAutoTest}
+        />
+      </section>
     </div>
   )
 }

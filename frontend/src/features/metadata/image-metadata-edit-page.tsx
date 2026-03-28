@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Download, Save } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { PageHeader } from '@/components/common/page-header'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -117,27 +118,26 @@ export function ImageMetadataEditPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">메타 수정</h1>
-          <p className="text-sm text-muted-foreground">{downloadName}</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="secondary" onClick={handleBack}>
-            <ArrowLeft className="h-4 w-4" />
-            돌아가기
-          </Button>
-          <Button variant="outline" onClick={handleDownload} disabled={!draft || busy || !isEditableImage}>
-            <Download className="h-4 w-4" />
-            다운로드
-          </Button>
-          <Button onClick={handleSave} disabled={!draft || busy || !isEditableImage}>
-            <Save className="h-4 w-4" />
-            저장
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="메타 수정"
+        description={downloadName}
+        actions={
+          <>
+            <Button variant="secondary" onClick={handleBack}>
+              <ArrowLeft className="h-4 w-4" />
+              돌아가기
+            </Button>
+            <Button variant="outline" onClick={handleDownload} disabled={!draft || busy || !isEditableImage}>
+              <Download className="h-4 w-4" />
+              다운로드
+            </Button>
+            <Button onClick={handleSave} disabled={!draft || busy || !isEditableImage}>
+              <Save className="h-4 w-4" />
+              저장
+            </Button>
+          </>
+        }
+      />
 
       {imageQuery.isLoading ? (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)]">

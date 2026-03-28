@@ -268,90 +268,95 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     <>
       <div className="space-y-6">
         {!connected ? (
-          <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Badge variant="outline">미연결</Badge>
-                  <div className="truncate text-base font-semibold text-foreground">NovelAI</div>
-                </div>
-                <Button type="button" variant="outline" size="icon-sm" asChild>
-                  <a href="https://novelai.net/" target="_blank" rel="noreferrer noopener" aria-label="NovelAI 홈페이지 열기" title="NovelAI 홈페이지 열기">
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                </Button>
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="truncate text-base font-semibold text-foreground">NovelAI</div>
+                <Badge variant="outline">미연결</Badge>
               </div>
+              <Button type="button" variant="outline" size="icon-sm" asChild>
+                <a href="https://novelai.net/" target="_blank" rel="noreferrer noopener" aria-label="NovelAI 홈페이지 열기" title="NovelAI 홈페이지 열기">
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              </Button>
+            </div>
 
-              <div className="flex gap-2 rounded-sm bg-surface-high p-1">
-                <button
-                  type="button"
-                  onClick={() => setLoginMode('account')}
-                  className={loginMode === 'account'
-                    ? 'flex-1 rounded-sm bg-surface-container px-3 py-2 text-sm font-medium text-foreground'
-                    : 'flex-1 rounded-sm px-3 py-2 text-sm font-medium text-muted-foreground'}
-                >
-                  로그인
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLoginMode('token')}
-                  className={loginMode === 'token'
-                    ? 'flex-1 rounded-sm bg-surface-container px-3 py-2 text-sm font-medium text-foreground'
-                    : 'flex-1 rounded-sm px-3 py-2 text-sm font-medium text-muted-foreground'}
-                >
-                  토큰
-                </button>
-              </div>
-
+            <div className="rounded-sm border border-border bg-surface-low p-4">
               <div className="space-y-4">
-                {loginMode === 'account' ? (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <FormField label="Username">
-                      <Input value={naiUsernameInput} onChange={(event) => setNaiUsernameInput(event.target.value)} autoComplete="username" />
-                    </FormField>
-                    <FormField label="Password">
-                      <Input type="password" value={naiPasswordInput} onChange={(event) => setNaiPasswordInput(event.target.value)} autoComplete="current-password" />
-                    </FormField>
-                  </div>
-                ) : (
-                  <FormField label="Access Token">
-                    <div className="space-y-3">
-                      <Input
-                        value={naiTokenInput}
-                        onChange={(event) => setNaiTokenInput(event.target.value)}
-                        placeholder="NovelAI access token"
-                        autoComplete="off"
-                      />
+                <div className="flex gap-2 rounded-sm bg-surface-high p-1">
+                  <button
+                    type="button"
+                    onClick={() => setLoginMode('account')}
+                    className={loginMode === 'account'
+                      ? 'flex-1 rounded-sm bg-surface-container px-3 py-2 text-sm font-medium text-foreground'
+                      : 'flex-1 rounded-sm px-3 py-2 text-sm font-medium text-muted-foreground'}
+                  >
+                    로그인
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLoginMode('token')}
+                    className={loginMode === 'token'
+                      ? 'flex-1 rounded-sm bg-surface-container px-3 py-2 text-sm font-medium text-foreground'
+                      : 'flex-1 rounded-sm px-3 py-2 text-sm font-medium text-muted-foreground'}
+                  >
+                    토큰
+                  </button>
+                </div>
 
-                      {naiUserQuery.isPending || naiUserQuery.isError ? (
-                        <div className="space-y-1">
-                          {naiUserQuery.isPending ? <div className="text-xs text-muted-foreground">연결 확인 중…</div> : null}
-                          {naiUserQuery.isError ? <div className="text-xs text-[#ffb4ab]">{naiConnectionHint}</div> : null}
-                        </div>
-                      ) : null}
+                <div className="space-y-4">
+                  {loginMode === 'account' ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FormField label="Username">
+                        <Input value={naiUsernameInput} onChange={(event) => setNaiUsernameInput(event.target.value)} autoComplete="username" />
+                      </FormField>
+                      <FormField label="Password">
+                        <Input type="password" value={naiPasswordInput} onChange={(event) => setNaiPasswordInput(event.target.value)} autoComplete="current-password" />
+                      </FormField>
                     </div>
-                  </FormField>
-                )}
+                  ) : (
+                    <FormField label="Access Token">
+                      <div className="space-y-3">
+                        <Input
+                          value={naiTokenInput}
+                          onChange={(event) => setNaiTokenInput(event.target.value)}
+                          placeholder="NovelAI access token"
+                          autoComplete="off"
+                        />
 
-                {loginMode === 'account' && (naiUserQuery.isPending || naiUserQuery.isError) ? (
-                  <div className="space-y-1 pt-1">
-                    {naiUserQuery.isPending ? <div className="text-xs text-muted-foreground">연결 확인 중…</div> : null}
-                    {naiUserQuery.isError ? <div className="text-xs text-[#ffb4ab]">{naiConnectionHint}</div> : null}
-                  </div>
-                ) : null}
-              </div>
+                        {naiUserQuery.isPending || naiUserQuery.isError ? (
+                          <div className="space-y-1">
+                            {naiUserQuery.isPending ? <div className="text-xs text-muted-foreground">연결 확인 중…</div> : null}
+                            {naiUserQuery.isError ? <div className="text-xs text-[#ffb4ab]">{naiConnectionHint}</div> : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    </FormField>
+                  )}
 
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  onClick={() => void (loginMode === 'account' ? handleNaiAccountLogin() : handleNaiTokenLogin())}
-                  disabled={isNaiLoggingIn || (loginMode === 'account' ? naiUsernameInput.trim().length === 0 || naiPasswordInput.length === 0 : naiTokenInput.trim().length === 0)}
-                >
-                  {isNaiLoggingIn ? '연결 중…' : loginMode === 'account' ? '로그인' : '토큰 연결'}
-                </Button>
+                  {loginMode === 'account' && (naiUserQuery.isPending || naiUserQuery.isError) ? (
+                    <div className="space-y-1 pt-1">
+                      {naiUserQuery.isPending ? <div className="text-xs text-muted-foreground">연결 확인 중…</div> : null}
+                      {naiUserQuery.isError ? <div className="text-xs text-[#ffb4ab]">{naiConnectionHint}</div> : null}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="flex justify-end border-t border-border/70 pt-4">
+                  <Button
+                    type="button"
+                    onClick={() => void (loginMode === 'account' ? handleNaiAccountLogin() : handleNaiTokenLogin())}
+                    disabled={isNaiLoggingIn || (loginMode === 'account' ? naiUsernameInput.trim().length === 0 || naiPasswordInput.length === 0 : naiTokenInput.trim().length === 0)}
+                  >
+                    {isNaiLoggingIn ? '연결 중…' : loginMode === 'account' ? '로그인' : '토큰 연결'}
+                  </Button>
+                </div>
               </div>
             </div>
-          ) : (
-            <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
+          </section>
+        ) : (
+          <>
+            <section className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <div className="truncate text-base font-semibold text-foreground">NovelAI</div>
@@ -370,10 +375,11 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                 <SummaryChip label="cost" value={naiCostQuery.isSuccess ? `${naiCostQuery.data.estimatedCost} Anlas` : naiCostQuery.isPending ? '계산 중…' : '—'} />
                 <SummaryChip label="max samples" value={naiCostQuery.isSuccess ? String(naiCostQuery.data.maxSamples) : '—'} />
               </div>
+            </section>
 
-              <div className="space-y-4 rounded-sm border border-border bg-surface-high p-4">
-                <div className="text-sm font-medium text-foreground">Prompt</div>
-
+            <section className="space-y-3">
+              <h2 className="text-sm font-medium text-foreground">Prompt</h2>
+              <div className="rounded-sm border border-border bg-surface-low p-4">
                 <div className="grid gap-4 xl:grid-cols-2">
                   <FormField label="Prompt">
                     <Textarea value={naiForm.prompt} onChange={(event) => handleNaiFieldChange('prompt', event.target.value)} rows={6} placeholder="1girl, solo, cinematic lighting" />
@@ -389,172 +395,188 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                   </FormField>
                 </div>
               </div>
+            </section>
 
-              <div className="space-y-4 rounded-sm border border-border bg-surface-high p-4">
-                <div className="text-sm font-medium text-foreground">Generation Settings</div>
+            <section className="space-y-3">
+              <h2 className="text-sm font-medium text-foreground">Generation Settings</h2>
+              <div className="rounded-sm border border-border bg-surface-low p-4">
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <FormField label="Model">
+                      <Select value={naiForm.model} onChange={(event) => handleNaiFieldChange('model', event.target.value)}>
+                        <option value="nai-diffusion-4-5-curated">NAI Diffusion 4.5 Curated</option>
+                        <option value="nai-diffusion-4-5-full">NAI Diffusion 4.5 Full</option>
+                        <option value="nai-diffusion-4-curated-preview">NAI Diffusion 4 Curated</option>
+                        <option value="nai-diffusion-3">NAI Diffusion 3</option>
+                      </Select>
+                    </FormField>
 
-                <div className="grid gap-4 md:grid-cols-3">
-                  <FormField label="Model">
-                    <Select value={naiForm.model} onChange={(event) => handleNaiFieldChange('model', event.target.value)}>
-                      <option value="nai-diffusion-4-5-curated">NAI Diffusion 4.5 Curated</option>
-                      <option value="nai-diffusion-4-5-full">NAI Diffusion 4.5 Full</option>
-                      <option value="nai-diffusion-4-curated-preview">NAI Diffusion 4 Curated</option>
-                      <option value="nai-diffusion-3">NAI Diffusion 3</option>
-                    </Select>
-                  </FormField>
+                    <FormField label="Action">
+                      <Select value={naiForm.action} onChange={(event) => handleNaiFieldChange('action', event.target.value)}>
+                        <option value="generate">generate</option>
+                        <option value="img2img">img2img</option>
+                        <option value="infill">infill</option>
+                      </Select>
+                    </FormField>
 
-                  <FormField label="Action">
-                    <Select value={naiForm.action} onChange={(event) => handleNaiFieldChange('action', event.target.value)}>
-                      <option value="generate">generate</option>
-                      <option value="img2img">img2img</option>
-                      <option value="infill">infill</option>
-                    </Select>
-                  </FormField>
+                    <FormField label="Sampler">
+                      <Select value={naiForm.sampler} onChange={(event) => handleNaiFieldChange('sampler', event.target.value)}>
+                        <option value="k_euler">k_euler</option>
+                        <option value="k_euler_ancestral">k_euler_ancestral</option>
+                        <option value="k_dpmpp_2s_ancestral">k_dpmpp_2s_ancestral</option>
+                        <option value="k_dpmpp_2m">k_dpmpp_2m</option>
+                      </Select>
+                    </FormField>
+                  </div>
 
-                  <FormField label="Sampler">
-                    <Select value={naiForm.sampler} onChange={(event) => handleNaiFieldChange('sampler', event.target.value)}>
-                      <option value="k_euler">k_euler</option>
-                      <option value="k_euler_ancestral">k_euler_ancestral</option>
-                      <option value="k_dpmpp_2s_ancestral">k_dpmpp_2s_ancestral</option>
-                      <option value="k_dpmpp_2m">k_dpmpp_2m</option>
-                    </Select>
-                  </FormField>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <FormField label="Width">
-                    <Input type="number" min={64} step={64} value={naiForm.width} onChange={(event) => handleNaiFieldChange('width', event.target.value)} />
-                  </FormField>
-                  <FormField label="Height">
-                    <Input type="number" min={64} step={64} value={naiForm.height} onChange={(event) => handleNaiFieldChange('height', event.target.value)} />
-                  </FormField>
-                  <FormField label="Steps">
-                    <Input type="number" min={1} max={100} value={naiForm.steps} onChange={(event) => handleNaiFieldChange('steps', event.target.value)} />
-                  </FormField>
-                  <FormField label="CFG Scale">
-                    <Input type="number" min={1} max={20} step={0.1} value={naiForm.scale} onChange={(event) => handleNaiFieldChange('scale', event.target.value)} />
-                  </FormField>
-                  <FormField label="Samples">
-                    <Input type="number" min={1} max={8} value={naiForm.samples} onChange={(event) => handleNaiFieldChange('samples', event.target.value)} />
-                  </FormField>
-                  <FormField label="Seed" hint="비우면 랜덤">
-                    <Input type="number" value={naiForm.seed} onChange={(event) => handleNaiFieldChange('seed', event.target.value)} placeholder="random" />
-                  </FormField>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <FormField label="Width">
+                      <Input type="number" min={64} step={64} value={naiForm.width} onChange={(event) => handleNaiFieldChange('width', event.target.value)} />
+                    </FormField>
+                    <FormField label="Height">
+                      <Input type="number" min={64} step={64} value={naiForm.height} onChange={(event) => handleNaiFieldChange('height', event.target.value)} />
+                    </FormField>
+                    <FormField label="Steps">
+                      <Input type="number" min={1} max={100} value={naiForm.steps} onChange={(event) => handleNaiFieldChange('steps', event.target.value)} />
+                    </FormField>
+                    <FormField label="CFG Scale">
+                      <Input type="number" min={1} max={20} step={0.1} value={naiForm.scale} onChange={(event) => handleNaiFieldChange('scale', event.target.value)} />
+                    </FormField>
+                    <FormField label="Samples">
+                      <Input type="number" min={1} max={8} value={naiForm.samples} onChange={(event) => handleNaiFieldChange('samples', event.target.value)} />
+                    </FormField>
+                    <FormField label="Seed" hint="비우면 랜덤">
+                      <Input type="number" value={naiForm.seed} onChange={(event) => handleNaiFieldChange('seed', event.target.value)} placeholder="random" />
+                    </FormField>
+                  </div>
                 </div>
               </div>
+            </section>
 
-              {naiForm.action !== 'generate' ? (
-                <div className="space-y-4 rounded-sm border border-border bg-surface-high p-4">
-                  <div className="text-sm font-medium text-foreground">Source Images</div>
-
-                  <FormField label="Source Image">
-                    <div className="space-y-3">
-                      <Input type="file" accept="image/*" onChange={(event) => void handleNaiImageChange('sourceImage', event.target.files?.[0])} />
-                      {naiForm.sourceImage ? (
-                        <div className="space-y-2">
-                          <div className="text-xs text-muted-foreground">{naiForm.sourceImage.fileName}</div>
-                          <img src={naiForm.sourceImage.dataUrl} alt="NAI source" className="max-h-48 rounded-sm border border-border object-contain" />
-                          <div className="flex justify-end">
-                            <Button type="button" size="sm" variant="ghost" onClick={() => void handleNaiImageChange('sourceImage')}>
-                              소스 제거
-                            </Button>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </FormField>
-
-                  {naiForm.action === 'infill' ? (
-                    <FormField label="Mask Image">
+            {naiForm.action !== 'generate' ? (
+              <section className="space-y-3">
+                <h2 className="text-sm font-medium text-foreground">Source Images</h2>
+                <div className="rounded-sm border border-border bg-surface-low p-4">
+                  <div className="space-y-4">
+                    <FormField label="Source Image">
                       <div className="space-y-3">
-                        <Input type="file" accept="image/*" onChange={(event) => void handleNaiImageChange('maskImage', event.target.files?.[0])} />
-                        {naiForm.maskImage ? (
-                          <div className="space-y-2">
-                            <div className="text-xs text-muted-foreground">{naiForm.maskImage.fileName}</div>
-                            <img src={naiForm.maskImage.dataUrl} alt="NAI mask" className="max-h-48 rounded-sm border border-border object-contain" />
+                        <Input type="file" accept="image/*" onChange={(event) => void handleNaiImageChange('sourceImage', event.target.files?.[0])} />
+                        {naiForm.sourceImage ? (
+                          <div className="space-y-2 rounded-sm border border-border bg-surface-container p-3">
+                            <div className="text-xs text-muted-foreground">{naiForm.sourceImage.fileName}</div>
+                            <img src={naiForm.sourceImage.dataUrl} alt="NAI source" className="max-h-48 rounded-sm border border-border object-contain" />
                             <div className="flex justify-end">
-                              <Button type="button" size="sm" variant="ghost" onClick={() => void handleNaiImageChange('maskImage')}>
-                                마스크 제거
+                              <Button type="button" size="sm" variant="ghost" onClick={() => void handleNaiImageChange('sourceImage')}>
+                                소스 제거
                               </Button>
                             </div>
                           </div>
                         ) : null}
                       </div>
                     </FormField>
-                  ) : null}
-                </div>
-              ) : null}
 
-              <div className="space-y-4 rounded-sm border border-border bg-surface-high p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm font-medium text-foreground">Advanced</div>
-                  {naiCostQuery.isSuccess ? (
-                    <Badge variant={naiCostQuery.data.canAfford ? 'secondary' : 'outline'}>
-                      {naiCostQuery.data.isOpusFree ? 'Opus 무료 생성' : naiCostQuery.data.canAfford ? '잔액 충분' : '잔액 부족'}
-                    </Badge>
-                  ) : null}
+                    {naiForm.action === 'infill' ? (
+                      <FormField label="Mask Image">
+                        <div className="space-y-3">
+                          <Input type="file" accept="image/*" onChange={(event) => void handleNaiImageChange('maskImage', event.target.files?.[0])} />
+                          {naiForm.maskImage ? (
+                            <div className="space-y-2 rounded-sm border border-border bg-surface-container p-3">
+                              <div className="text-xs text-muted-foreground">{naiForm.maskImage.fileName}</div>
+                              <img src={naiForm.maskImage.dataUrl} alt="NAI mask" className="max-h-48 rounded-sm border border-border object-contain" />
+                              <div className="flex justify-end">
+                                <Button type="button" size="sm" variant="ghost" onClick={() => void handleNaiImageChange('maskImage')}>
+                                  마스크 제거
+                                </Button>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      </FormField>
+                    ) : null}
+                  </div>
                 </div>
+              </section>
+            ) : null}
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField label="ucPreset">
-                    <Input type="number" min={0} max={3} value={naiForm.ucPreset} onChange={(event) => handleNaiFieldChange('ucPreset', event.target.value)} />
-                  </FormField>
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium text-foreground">Variety+</div>
-                    <ToggleRow variant="detail" className="justify-between">
-                      <div className="text-sm text-foreground">활성</div>
+            <section className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-sm font-medium text-foreground">Advanced</h2>
+                {naiCostQuery.isSuccess ? (
+                  <Badge variant={naiCostQuery.data.canAfford ? 'secondary' : 'outline'}>
+                    {naiCostQuery.data.isOpusFree ? 'Opus 무료 생성' : naiCostQuery.data.canAfford ? '잔액 충분' : '잔액 부족'}
+                  </Badge>
+                ) : null}
+              </div>
+
+              <div className="rounded-sm border border-border bg-surface-low p-4">
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField label="ucPreset">
+                      <Input type="number" min={0} max={3} value={naiForm.ucPreset} onChange={(event) => handleNaiFieldChange('ucPreset', event.target.value)} />
+                    </FormField>
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium text-foreground">Variety+</div>
+                      <ToggleRow variant="detail" className="justify-between rounded-sm border border-border bg-surface-container px-3 py-2.5">
+                        <div className="text-sm text-foreground">활성</div>
+                        <input
+                          type="checkbox"
+                          checked={naiForm.varietyPlus}
+                          onChange={(event) => setNaiForm((current) => ({ ...current, varietyPlus: event.target.checked }))}
+                        />
+                      </ToggleRow>
+                    </div>
+                  </div>
+
+                  {naiForm.action !== 'generate' ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FormField label="Strength">
+                        <Input type="number" min={0} max={1} step={0.01} value={naiForm.strength} onChange={(event) => handleNaiFieldChange('strength', event.target.value)} />
+                      </FormField>
+                      <FormField label="Noise">
+                        <Input type="number" min={0} max={1} step={0.01} value={naiForm.noise} onChange={(event) => handleNaiFieldChange('noise', event.target.value)} />
+                      </FormField>
+                    </div>
+                  ) : null}
+
+                  {naiForm.action === 'infill' ? (
+                    <ToggleRow variant="detail" className="justify-between rounded-sm border border-border bg-surface-container px-3 py-2.5">
+                      <div className="text-sm text-foreground">Add original image</div>
                       <input
                         type="checkbox"
-                        checked={naiForm.varietyPlus}
-                        onChange={(event) => setNaiForm((current) => ({ ...current, varietyPlus: event.target.checked }))}
+                        checked={naiForm.addOriginalImage}
+                        onChange={(event) => setNaiForm((current) => ({ ...current, addOriginalImage: event.target.checked }))}
                       />
                     </ToggleRow>
-                  </div>
-                </div>
+                  ) : null}
 
-                {naiForm.action !== 'generate' ? (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <FormField label="Strength">
-                      <Input type="number" min={0} max={1} step={0.01} value={naiForm.strength} onChange={(event) => handleNaiFieldChange('strength', event.target.value)} />
-                    </FormField>
-                    <FormField label="Noise">
-                      <Input type="number" min={0} max={1} step={0.01} value={naiForm.noise} onChange={(event) => handleNaiFieldChange('noise', event.target.value)} />
-                    </FormField>
-                  </div>
-                ) : null}
-
-                {naiForm.action === 'infill' ? (
-                  <ToggleRow variant="detail" className="justify-between">
-                    <div className="text-sm text-foreground">Add original image</div>
-                    <input
-                      type="checkbox"
-                      checked={naiForm.addOriginalImage}
-                      onChange={(event) => setNaiForm((current) => ({ ...current, addOriginalImage: event.target.checked }))}
-                    />
-                  </ToggleRow>
-                ) : null}
-
-                {naiCostQuery.isError ? <div className="text-xs text-[#ffb4ab]">{getErrorMessage(naiCostQuery.error, '예상 비용 계산에 실패했어.')}</div> : null}
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsModuleSaveModalOpen(true)}>
-                  <Save className="h-4 w-4" />
-                  모듈 저장
-                </Button>
-
-                <div className="flex flex-wrap justify-end gap-2">
-                  <Button type="button" variant="ghost" onClick={() => setNaiForm(DEFAULT_NAI_FORM)} disabled={isNaiGenerating}>
-                    초기화
-                  </Button>
-                  <Button type="button" onClick={handleNaiGenerate} disabled={isNaiGenerating || naiForm.prompt.trim().length === 0}>
-                    <ImagePlus className="h-4 w-4" />
-                    {isNaiGenerating ? '생성 요청 중…' : 'NAI 생성'}
-                  </Button>
+                  {naiCostQuery.isError ? <div className="text-xs text-[#ffb4ab]">{getErrorMessage(naiCostQuery.error, '예상 비용 계산에 실패했어.')}</div> : null}
                 </div>
               </div>
-            </div>
-          )}
+            </section>
+
+            <section className="space-y-3">
+              <h2 className="text-sm font-medium text-foreground">Actions</h2>
+              <div className="rounded-sm border border-border bg-surface-low p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <Button type="button" variant="outline" onClick={() => setIsModuleSaveModalOpen(true)}>
+                    <Save className="h-4 w-4" />
+                    모듈 저장
+                  </Button>
+
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button type="button" variant="ghost" onClick={() => setNaiForm(DEFAULT_NAI_FORM)} disabled={isNaiGenerating}>
+                      초기화
+                    </Button>
+                    <Button type="button" onClick={handleNaiGenerate} disabled={isNaiGenerating || naiForm.prompt.trim().length === 0}>
+                      <ImagePlus className="h-4 w-4" />
+                      {isNaiGenerating ? '생성 요청 중…' : 'NAI 생성'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </>
+        )}
       </div>
 
       <NaiModuleSaveModal

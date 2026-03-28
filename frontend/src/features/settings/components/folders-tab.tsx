@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BackupSource, BackupSourceUpdateInput, FolderScanLog, WatchedFolder, WatchedFolderUpdateInput, WatchersHealthSummary } from '@/types/folder'
 import { formatDateTime, type NewBackupSourceDraft, type NewWatchedFolderDraft } from '../settings-utils'
-import { SettingsValueTile } from './settings-primitives'
+import { SettingsSectionHeading, SettingsValueTile } from './settings-primitives'
 import { WatchedFolderCard } from './watched-folder-card'
 import { WatchedFolderListItem } from './watched-folder-list-item'
 import { WatchedFolderCreateForm } from './watched-folder-create-form'
@@ -293,38 +293,38 @@ export function FoldersTab({
           ) : null}
         </section>
 
-        <Card className="bg-surface-container">
-          <CardHeader>
-            <CardTitle>최근 스캔 로그</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {scanLogsLoading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 5 }).map((_, index) => (
-                  <Skeleton key={index} className="h-14 w-full rounded-sm" />
-                ))}
-              </div>
-            ) : null}
-
-            {!scanLogsLoading && scanLogs.length === 0 ? <p className="text-sm text-muted-foreground">아직 최근 스캔 로그가 없어.</p> : null}
-
-            {scanLogs.map((log) => (
-              <div key={log.id} className="rounded-sm bg-surface-low px-4 py-3 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-medium text-foreground">{log.folder_name || `Folder #${log.folder_id}`}</div>
-                  <div className="text-xs text-muted-foreground">{formatDateTime(log.scan_date)}</div>
+        <section className="space-y-4">
+          <SettingsSectionHeading heading="최근 스캔 로그" />
+          <Card className="bg-surface-container">
+            <CardContent className="space-y-3">
+              {scanLogsLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <Skeleton key={index} className="h-14 w-full rounded-sm" />
+                  ))}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <span>status {log.status}</span>
-                  <span>scanned {log.total_scanned}</span>
-                  <span>new {log.new_images}</span>
-                  <span>existing {log.existing_images}</span>
-                  <span>errors {log.error_count}</span>
+              ) : null}
+
+              {!scanLogsLoading && scanLogs.length === 0 ? <p className="text-sm text-muted-foreground">아직 최근 스캔 로그가 없어.</p> : null}
+
+              {scanLogs.map((log) => (
+                <div key={log.id} className="rounded-sm bg-surface-low px-4 py-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium text-foreground">{log.folder_name || `Folder #${log.folder_id}`}</div>
+                    <div className="text-xs text-muted-foreground">{formatDateTime(log.scan_date)}</div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <span>status {log.status}</span>
+                    <span>scanned {log.total_scanned}</span>
+                    <span>new {log.new_images}</span>
+                    <span>existing {log.existing_images}</span>
+                    <span>errors {log.error_count}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+              ))}
+            </CardContent>
+          </Card>
+        </section>
       </div>
 
       <SettingsModal

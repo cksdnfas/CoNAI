@@ -14,6 +14,7 @@ type SavedGraphListProps = {
   onExecuteGraph: (graphId: number) => void
   onEditGraph?: (graph: GraphWorkflowRecord) => void
   showExecuteButton?: boolean
+  showHeader?: boolean
 }
 
 function formatUpdatedDate(value?: string | null) {
@@ -33,7 +34,16 @@ function formatUpdatedDate(value?: string | null) {
 }
 
 /** Render saved workflows with quick run and edit actions. */
-export function SavedGraphList({ graphs, selectedGraphId, executingGraphId, onLoadGraph, onExecuteGraph, onEditGraph, showExecuteButton = true }: SavedGraphListProps) {
+export function SavedGraphList({
+  graphs,
+  selectedGraphId,
+  executingGraphId,
+  onLoadGraph,
+  onExecuteGraph,
+  onEditGraph,
+  showExecuteButton = true,
+  showHeader = true,
+}: SavedGraphListProps) {
   const [searchQuery, setSearchQuery] = useState('')
 
   const filteredGraphs = useMemo(() => {
@@ -50,10 +60,12 @@ export function SavedGraphList({ graphs, selectedGraphId, executingGraphId, onLo
 
   return (
     <Card className="bg-surface-container">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Saved Workflows</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2.5">
+      {showHeader ? (
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Saved Workflows</CardTitle>
+        </CardHeader>
+      ) : null}
+      <CardContent className={showHeader ? 'space-y-2.5 pt-0' : 'space-y-2.5'}>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="검색" className="h-8 pl-9 text-sm" />

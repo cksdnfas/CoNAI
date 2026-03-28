@@ -1,7 +1,6 @@
 import type { RefObject } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PromptCollectionItem } from '@/types/prompt'
 import { PromptListItem } from './prompt-list-item'
@@ -55,9 +54,7 @@ export function PromptListPanel({
       ) : null}
 
       {!isLoading && items.length === 0 ? (
-        <Card className="bg-surface-container">
-          <CardContent className="p-6 text-sm text-muted-foreground">항목 없음</CardContent>
-        </Card>
+        <div className="rounded-sm bg-surface-lowest p-6 text-sm text-muted-foreground">항목 없음</div>
       ) : null}
 
       <div ref={promptListRef} className={isDraggingSelection ? 'select-none' : undefined}>

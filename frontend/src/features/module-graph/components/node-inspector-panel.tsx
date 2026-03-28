@@ -13,10 +13,18 @@ type NodeInspectorPanelProps = {
   onNodeValueChange: (nodeId: string, portKey: string, value: unknown) => void
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, file?: File) => Promise<void>
+  showHeader?: boolean
 }
 
 /** Render editable node input overrides and selected edge details. */
-export function NodeInspectorPanel({ selectedNode, selectedEdge, onNodeValueChange, onNodeValueClear, onNodeImageChange }: NodeInspectorPanelProps) {
+export function NodeInspectorPanel({
+  selectedNode,
+  selectedEdge,
+  onNodeValueChange,
+  onNodeValueClear,
+  onNodeImageChange,
+  showHeader = true,
+}: NodeInspectorPanelProps) {
   const renderPortInput = (node: ModuleGraphNode, port: ModulePortDefinition) => {
     const rawValue = node.data.inputValues?.[port.key]
     const hasExplicitValue = rawValue !== undefined && rawValue !== null && rawValue !== ''
@@ -131,10 +139,12 @@ export function NodeInspectorPanel({ selectedNode, selectedEdge, onNodeValueChan
 
   return (
     <Card className="bg-surface-container">
-      <CardHeader>
-        <CardTitle>Node Inspector</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      {showHeader ? (
+        <CardHeader>
+          <CardTitle>Node Inspector</CardTitle>
+        </CardHeader>
+      ) : null}
+      <CardContent className={showHeader ? 'space-y-4' : 'space-y-4'}>
         {!selectedNode && !selectedEdge ? (
           <div className="rounded-sm bg-surface-low px-4 py-6 text-sm text-muted-foreground">캔버스에서 노드나 엣지를 하나 선택해봐.</div>
         ) : null}
