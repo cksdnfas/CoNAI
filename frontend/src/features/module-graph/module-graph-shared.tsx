@@ -6,6 +6,8 @@ import type {
   GraphWorkflowMetadata,
   GraphWorkflowRecord,
   ModuleDefinitionRecord,
+  ModulePortDataType,
+  ModulePortDefinition,
 } from '@/lib/api'
 
 export type ModuleGraphNodeData = {
@@ -13,6 +15,8 @@ export type ModuleGraphNodeData = {
   inputValues: Record<string, unknown>
   executionStatus?: 'idle' | 'completed' | 'failed' | 'blocked'
   executionArtifactCount?: number
+  connectedInputKeys?: string[]
+  connectedOutputKeys?: string[]
 }
 
 export type ModuleGraphNode = Node<ModuleGraphNodeData, 'module'>
@@ -46,9 +50,24 @@ export function readFileAsDataUrl(file: File) {
   })
 }
 
+const PORT_TYPE_COLORS: Record<ModulePortDataType, string> = {
+  image: '#4fc3f7',
+  mask: '#ffb74d',
+  prompt: '#ba68c8',
+  text: '#81c784',
+  number: '#ffd54f',
+  boolean: '#ef9a9a',
+  json: '#90a4ae',
+}
+
 /** Resolve a visible color for module nodes when the module does not define one. */
 export function getModuleColor(module: ModuleDefinitionRecord) {
   return module.color || (module.engine_type === 'nai' ? '#7c4dff' : '#2196f3')
+}
+
+/** Resolve a stable accent color for one module port data type. */
+export function getPortTypeColor(dataType: ModulePortDataType) {
+  return PORT_TYPE_COLORS[dataType]
 }
 
 /** Format timestamps for compact execution history display. */
@@ -139,6 +158,46 @@ export function getNodeExecutionStatus(params: {
   return nodeIndex > failedIndex ? 'blocked' : 'idle'
 }
 
+/** Resolve one module port from a node/handle pair. */
+export function findNodePort(node: ModuleGraphNode | undefined, direction: 'in' | 'out', portKey?: string | null): ModulePortDefinition | null {
+  if (!node || !portKey) {
+    return null
+  }
+
+  const portList = direction === 'out' ? node.data.module.output_ports : node.data.module.exposed_inputs
+  return portList.find((port) => port.key === portKey) ?? null
+}
+
+/** Build a readable edge label and styling from the connected module ports. */
+export function buildModuleEdgePresentation(sourcePort: ModulePortDefinition | null, targetPort: ModulePortDefinition | null) {
+  const dataType = sourcePort?.data_type ?? targetPort?.data_type ?? null
+  const accentColor = dataType ? getPortTypeColor(dataType) : '#94a3b8'
+  const label = sourcePort && targetPort
+    ? `${sourcePort.label} → ${targetPort.label}`
+    : sourcePort?.label ?? targetPort?.label ?? ''
+
+  return {
+    label,
+    style: {
+      stroke: accentColor,
+      strokeWidth: 2,
+    },
+    labelStyle: {
+      fill: '#e5eefb',
+      fontSize: 11,
+      fontWeight: 600,
+    },
+    labelBgStyle: {
+      fill: '#0f172a',
+      fillOpacity: 0.92,
+      stroke: accentColor,
+      strokeWidth: 1,
+    },
+    labelBgPadding: [6, 3] as [number, number],
+    labelBgBorderRadius: 6,
+  }
+}
+
 /** Clamp per-port handle offsets so small nodes stay readable. */
 export function getPortOffset(index: number, total: number) {
   if (total <= 1) {
@@ -172,14 +231,22 @@ export function buildFlowFromGraphRecord(graph: GraphWorkflowRecord, modules: Mo
     })
     .filter((node): node is ModuleGraphNode => node !== null)
 
-  const edges: ModuleGraphEdge[] = graph.graph.edges.map((edge) => ({
-    id: edge.id,
-    source: edge.source_node_id,
-    target: edge.target_node_id,
-    sourceHandle: buildHandleId('out', edge.source_port_key),
-    targetHandle: buildHandleId('in', edge.target_port_key),
-    markerEnd: { type: MarkerType.ArrowClosed },
-  }))
+  const edges: ModuleGraphEdge[] = graph.graph.edges.map((edge) => {
+    const sourceNode = nodes.find((node) => node.id === edge.source_node_id)
+    const targetNode = nodes.find((node) => node.id === edge.target_node_id)
+    const sourcePort = findNodePort(sourceNode, 'out', edge.source_port_key)
+    const targetPort = findNodePort(targetNode, 'in', edge.target_port_key)
+
+    return {
+      id: edge.id,
+      source: edge.source_node_id,
+      target: edge.target_node_id,
+      sourceHandle: buildHandleId('out', edge.source_port_key),
+      targetHandle: buildHandleId('in', edge.target_port_key),
+      markerEnd: { type: MarkerType.ArrowClosed },
+      ...buildModuleEdgePresentation(sourcePort, targetPort),
+    }
+  })
 
   return { nodes, edges }
 }

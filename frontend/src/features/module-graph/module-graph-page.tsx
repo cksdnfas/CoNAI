@@ -48,6 +48,8 @@ import {
   buildFlowFromGraphRecord,
   buildGraphEditorSnapshot,
   buildGraphPayload,
+  buildModuleEdgePresentation,
+  findNodePort,
   getArtifactPreviewUrl,
   getNodeExecutionStatus,
   parseHandleId,
@@ -248,6 +250,26 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   }, [executionList, showSnackbar])
 
   useEffect(() => {
+    const connectedInputMap = new Map<string, Set<string>>()
+    const connectedOutputMap = new Map<string, Set<string>>()
+
+    for (const edge of edges) {
+      const sourceHandle = parseHandleId(edge.sourceHandle)
+      const targetHandle = parseHandleId(edge.targetHandle)
+
+      if (sourceHandle?.portKey) {
+        const current = connectedOutputMap.get(edge.source) ?? new Set<string>()
+        current.add(sourceHandle.portKey)
+        connectedOutputMap.set(edge.source, current)
+      }
+
+      if (targetHandle?.portKey) {
+        const current = connectedInputMap.get(edge.target) ?? new Set<string>()
+        current.add(targetHandle.portKey)
+        connectedInputMap.set(edge.target, current)
+      }
+    }
+
     if (!executionDetailQuery.data) {
       setNodes((currentNodes) =>
         currentNodes.map((node) => ({
@@ -256,6 +278,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             ...node.data,
             executionStatus: 'idle',
             executionArtifactCount: 0,
+            connectedInputKeys: Array.from(connectedInputMap.get(node.id) ?? []),
+            connectedOutputKeys: Array.from(connectedOutputMap.get(node.id) ?? []),
           },
         })),
       )
@@ -286,10 +310,12 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             failedNodeId: executionDetailQuery.data.execution.failed_node_id,
           }),
           executionArtifactCount: artifactCounts[node.id] ?? 0,
+          connectedInputKeys: Array.from(connectedInputMap.get(node.id) ?? []),
+          connectedOutputKeys: Array.from(connectedOutputMap.get(node.id) ?? []),
         },
       })),
     )
-  }, [executionDetailQuery.data, setNodes])
+  }, [edges, executionDetailQuery.data, setNodes])
 
   const isValidConnection = useCallback(
     (edgeOrConnection: Connection | ModuleGraphEdge) => {
@@ -333,11 +359,19 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
         return
       }
 
+      const sourceNode = nodes.find((node) => node.id === connection.source)
+      const targetNode = nodes.find((node) => node.id === connection.target)
+      const sourceHandle = parseHandleId(connection.sourceHandle)
+      const targetHandle = parseHandleId(connection.targetHandle)
+      const sourcePort = findNodePort(sourceNode, 'out', sourceHandle?.portKey)
+      const targetPort = findNodePort(targetNode, 'in', targetHandle?.portKey)
+
       setEdges((currentEdges) =>
         addEdge(
           {
             ...connection,
             markerEnd: { type: MarkerType.ArrowClosed },
+            ...buildModuleEdgePresentation(sourcePort, targetPort),
           },
           currentEdges,
         ),
@@ -1125,3 +1159,4 @@ export function ModuleWorkflowWorkspace({ embedded = false }: ModuleWorkflowWork
 export function ModuleGraphPage() {
   return <ModuleWorkflowWorkspace />
 }
+
