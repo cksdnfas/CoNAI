@@ -1,10 +1,10 @@
+import { Folder, FolderOpen } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { buildPromptGroupOptionItems } from '@/features/prompts/prompt-group-option-utils'
 import type { PromptGroupRecord } from '@/types/prompt'
 
 interface PromptGroupEditorModalProps {
@@ -46,8 +46,8 @@ export function PromptGroupEditorModal({
     setFormError(null)
   }, [defaultParentId, group, open])
 
-  const parentOptions = useMemo(
-    () => buildPromptGroupOptionItems(groups.filter((item) => item.id !== 0 && item.id !== group?.id)),
+  const parentGroups = useMemo(
+    () => groups.filter((item) => item.id !== 0 && item.id !== group?.id),
     [group?.id, groups],
   )
 
@@ -92,14 +92,17 @@ export function PromptGroupEditorModal({
 
         <div className="space-y-2">
           <p className="text-sm font-medium text-foreground">부모 그룹</p>
-          <Select value={parentValue} onChange={(event) => setParentValue(event.target.value)}>
-            <option value="root">루트 그룹</option>
-            {parentOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
+          <HierarchyPicker
+            items={parentGroups}
+            selectedId={parentValue === 'root' ? null : Number(parentValue)}
+            onSelectRoot={() => setParentValue('root')}
+            onSelect={(candidate) => setParentValue(String(candidate.id))}
+            getId={(candidate) => candidate.id}
+            getParentId={(candidate) => candidate.parent_id}
+            getLabel={(candidate) => candidate.group_name}
+            sortItems={(left, right) => left.display_order - right.display_order || left.group_name.localeCompare(right.group_name)}
+            renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
+          />
         </div>
 
         <label className="flex items-center justify-between rounded-sm border border-border/70 bg-surface-low/50 px-3 py-3 text-sm">

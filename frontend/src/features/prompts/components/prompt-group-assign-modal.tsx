@@ -1,7 +1,8 @@
+import { Folder, FolderOpen } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Select } from '@/components/ui/select'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { buildPromptGroupOptionItems } from '@/features/prompts/prompt-group-option-utils'
 import type { PromptGroupRecord } from '@/types/prompt'
@@ -45,7 +46,7 @@ export function PromptGroupAssignModal({
     }
 
     setFormError(null)
-    await onSubmit(selectedGroupId === '0' ? null : Number(selectedGroupId))
+    await onSubmit(Number(selectedGroupId))
   }
 
   return (
@@ -65,13 +66,22 @@ export function PromptGroupAssignModal({
 
         <div className="space-y-2">
           <p className="text-sm font-medium text-foreground">대상 그룹</p>
-          <Select value={selectedGroupId} onChange={(event) => setSelectedGroupId(event.target.value)}>
-            {groupOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
+          <HierarchyPicker
+            items={groups}
+            selectedId={selectedGroupId ? Number(selectedGroupId) : null}
+            onSelect={(group) => setSelectedGroupId(String(group.id))}
+            getId={(group) => group.id}
+            getParentId={(group) => group.parent_id}
+            getLabel={(group) => (
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <span className="truncate">{group.group_name}</span>
+                <span className="shrink-0 text-xs">{(group.prompt_count ?? 0).toLocaleString('ko-KR')}</span>
+              </div>
+            )}
+            sortItems={(left, right) => left.display_order - right.display_order || left.group_name.localeCompare(right.group_name)}
+            renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
+            showRootOption={false}
+          />
         </div>
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4">

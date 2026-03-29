@@ -1,12 +1,13 @@
+import { Folder, FolderOpen } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { buildGroupOptionItems, collectDescendantGroupIds } from '@/features/groups/group-option-utils'
+import { collectDescendantGroupIds } from '@/features/groups/group-option-utils'
 import type { GroupMutationInput, GroupRecord, GroupWithHierarchy } from '@/types/group'
 import { AutoCollectChipEditor } from './auto-collect-chip-editor'
 
@@ -84,8 +85,8 @@ export function GroupEditorModal({
     return descendantIds
   }, [group, groups, mode])
 
-  const parentOptions = useMemo(
-    () => buildGroupOptionItems(groups, { excludeIds: excludedParentIds }),
+  const parentGroups = useMemo(
+    () => groups.filter((candidate) => !excludedParentIds?.has(candidate.id)),
     [excludedParentIds, groups],
   )
 
@@ -151,14 +152,17 @@ export function GroupEditorModal({
 
           <div className="space-y-2">
             <p className="text-sm font-medium text-foreground">부모 그룹</p>
-            <Select value={parentValue} onChange={(event) => setParentValue(event.target.value)}>
-              <option value="root">루트 그룹</option>
-              {parentOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
+            <HierarchyPicker
+              items={parentGroups}
+              selectedId={parentValue === 'root' ? null : Number(parentValue)}
+              onSelectRoot={() => setParentValue('root')}
+              onSelect={(candidate) => setParentValue(String(candidate.id))}
+              getId={(candidate) => candidate.id}
+              getParentId={(candidate) => candidate.parent_id}
+              getLabel={(candidate) => candidate.name}
+              sortItems={(left, right) => left.name.localeCompare(right.name)}
+              renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
+            />
           </div>
         </div>
 
