@@ -5,7 +5,6 @@ import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { ImageRecord } from '@/types/image'
 import { getGenerationHistory, getGenerationWorkflowHistory } from '@/lib/api'
@@ -60,62 +59,57 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }
   const historyLabel = serviceType === 'novelai' ? 'NAI' : workflowId ? 'ComfyUI Workflow' : 'ComfyUI'
 
   return (
-    <section className="space-y-3">
-      <Card>
-        <CardContent className="space-y-4">
-          <SectionHeading
-          variant="inside"
-          className="border-b border-border/70 pb-4"
-          heading="생성 히스토리"
-          actions={(
-            <>
-              <Badge variant="outline">{historyLabel}</Badge>
-              <Badge variant="outline">{historyRecords.length}</Badge>
-              <Button type="button" size="icon-sm" variant="outline" onClick={() => void historyQuery.refetch()} title="새로고침" aria-label="히스토리 새로고침">
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-            </>
-          )}
+    <section className="space-y-4">
+      <SectionHeading
+        className="border-b border-border/70 pb-4"
+        heading="생성 히스토리"
+        actions={(
+          <>
+            <Badge variant="outline">{historyLabel}</Badge>
+            <Badge variant="outline">{historyRecords.length}</Badge>
+            <Button type="button" size="icon-sm" variant="outline" onClick={() => void historyQuery.refetch()} title="히스토리 새로고침" aria-label="히스토리 새로고침">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </>
+        )}
+      />
+
+      {historyQuery.isError ? (
+        <Alert variant="destructive">
+          <AlertTitle>히스토리를 불러오지 못했어</AlertTitle>
+          <AlertDescription>{getErrorMessage(historyQuery.error, '생성 히스토리 조회 실패')}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {historyQuery.isPending ? <div className="text-sm text-muted-foreground">히스토리 불러오는 중…</div> : null}
+
+      {!historyQuery.isPending && historyImages.length === 0 ? (
+        <div className="py-4 text-sm text-muted-foreground">아직 생성 이력이 없어.</div>
+      ) : null}
+
+      {!historyQuery.isPending && historyImages.length > 0 ? (
+        <ImageList
+          items={historyImages}
+          layout="masonry"
+          activationMode="navigate"
+          getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
+          minColumnWidth={220}
+          columnGap={16}
+          rowGap={16}
+          renderItemOverlay={(image) => {
+            const record = historyRecordMap.get(String(image.composite_hash ?? image.id))
+            if (!record || record.generation_status === 'completed') {
+              return null
+            }
+
+            return (
+              <Badge variant={record.generation_status === 'failed' ? 'outline' : 'secondary'}>
+                {getHistoryStatusLabel(record.generation_status)}
+              </Badge>
+            )
+          }}
         />
-
-        {historyQuery.isError ? (
-          <Alert variant="destructive">
-            <AlertTitle>히스토리를 불러오지 못했어</AlertTitle>
-            <AlertDescription>{getErrorMessage(historyQuery.error, '생성 히스토리 조회 실패')}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        {historyQuery.isPending ? <div className="text-sm text-muted-foreground">히스토리 불러오는 중…</div> : null}
-
-        {!historyQuery.isPending && historyImages.length === 0 ? (
-          <div className="py-4 text-sm text-muted-foreground">아직 생성 이력이 없어.</div>
-        ) : null}
-
-        {!historyQuery.isPending && historyImages.length > 0 ? (
-          <ImageList
-            items={historyImages}
-            layout="masonry"
-            activationMode="navigate"
-            getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
-            minColumnWidth={220}
-            columnGap={16}
-            rowGap={16}
-            renderItemOverlay={(image) => {
-              const record = historyRecordMap.get(String(image.composite_hash ?? image.id))
-              if (!record || record.generation_status === 'completed') {
-                return null
-              }
-
-              return (
-                <Badge variant={record.generation_status === 'failed' ? 'outline' : 'secondary'}>
-                  {getHistoryStatusLabel(record.generation_status)}
-                </Badge>
-              )
-            }}
-          />
-        ) : null}
-        </CardContent>
-      </Card>
+      ) : null}
     </section>
   )
 }

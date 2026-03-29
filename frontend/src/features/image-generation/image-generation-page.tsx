@@ -1,9 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
-import { ChevronDown, RefreshCw, SlidersHorizontal } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { Button } from '@/components/ui/button'
+import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
+import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
 import { ModuleWorkflowWorkspace } from '@/features/module-graph/module-graph-page'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
@@ -25,74 +26,6 @@ function parseImageGenerationTab(value?: string | null): ImageGenerationTab {
   }
 
   return 'nai'
-}
-
-function GenerationControllerSheet({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: ReactNode }) {
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-
-    const previousOverflow = document.body.style.overflow
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose()
-      }
-    }
-
-    document.body.style.overflow = 'hidden'
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.body.style.overflow = previousOverflow
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [open, onClose])
-
-  if (typeof document === 'undefined') {
-    return null
-  }
-
-  return createPortal(
-    <>
-      <div
-        className={open ? 'fixed inset-0 z-[84] bg-black/50 transition-opacity' : 'pointer-events-none fixed inset-0 z-[84] bg-black/0 transition-opacity'}
-        onClick={onClose}
-      />
-
-      <aside
-        role="dialog"
-        aria-modal="true"
-        aria-label={`${title} 컨트롤 패널`}
-        className={open
-          ? 'theme-floating-panel theme-bottom-drawer fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] flex-col transition-transform duration-300'
-          : 'theme-floating-panel theme-bottom-drawer pointer-events-none fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] translate-y-full flex-col transition-transform duration-300'}
-      >
-        <div className="flex justify-center px-4 pt-3">
-          <div className="h-1.5 w-14 rounded-full bg-white/15" />
-        </div>
-
-        <div className="theme-drawer-header border-b border-white/5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="truncate text-lg font-semibold tracking-tight text-foreground">{title}</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="theme-drawer-body min-h-0 flex-1 overflow-y-auto pb-20">
-          {children}
-        </div>
-
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4">
-          <Button type="button" size="sm" className="pointer-events-auto w-[30vw] min-w-[112px] max-w-[180px]" onClick={onClose}>
-            <ChevronDown className="h-4 w-4" />
-            접기
-          </Button>
-        </div>
-      </aside>
-    </>,
-    document.body,
-  )
 }
 
 export function ImageGenerationPage() {
@@ -119,10 +52,6 @@ export function ImageGenerationPage() {
     setSearchParams(nextSearchParams)
   }
 
-  useEffect(() => {
-    setIsControllerOpen(false)
-  }, [activeTab])
-
   const controllerPanel = activeTab === 'nai'
     ? <NaiGenerationPanel refreshNonce={globalRefreshNonce} onHistoryRefresh={handleHistoryRefresh} />
     : activeTab === 'comfyui'
@@ -131,6 +60,17 @@ export function ImageGenerationPage() {
 
   const controllerLabel = activeTab === 'nai' ? 'NAI' : 'ComfyUI'
   const shouldShowHistory = activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null)
+  const shouldUseControllerDrawer = !isWideLayout && (activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null))
+
+  useEffect(() => {
+    setIsControllerOpen(false)
+  }, [activeTab])
+
+  useEffect(() => {
+    if (!shouldUseControllerDrawer) {
+      setIsControllerOpen(false)
+    }
+  }, [shouldUseControllerDrawer])
 
   return (
     <div className={cn('space-y-6', isWideLayout ? 'pb-0' : 'pb-24')}>
@@ -171,7 +111,7 @@ export function ImageGenerationPage() {
 
       {activeTab !== 'workflows' && controllerPanel ? (
         isWideLayout ? (
-          <div className={cn('grid gap-8 items-start', shouldShowHistory ? 'grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]' : 'grid-cols-1')}>
+          <div className={cn('grid items-start gap-8', shouldShowHistory ? 'grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]' : 'grid-cols-1')}>
             <div className="min-w-0">{controllerPanel}</div>
             {shouldShowHistory ? (
               <div className="min-w-0">
@@ -183,6 +123,28 @@ export function ImageGenerationPage() {
               </div>
             ) : null}
           </div>
+        ) : shouldUseControllerDrawer && shouldShowHistory ? (
+          <>
+            <GenerationHistoryPanel
+              refreshNonce={historyRefreshNonce}
+              serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'}
+              workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
+            />
+
+            <FloatingBottomAction type="button" onClick={() => setIsControllerOpen(true)}>
+              <SlidersHorizontal className="h-4 w-4" />
+              {controllerLabel}
+            </FloatingBottomAction>
+
+            <BottomDrawerSheet
+              open={isControllerOpen}
+              title={controllerLabel}
+              ariaLabel={`${controllerLabel} 컨트롤 패널`}
+              onClose={() => setIsControllerOpen(false)}
+            >
+              {controllerPanel}
+            </BottomDrawerSheet>
+          </>
         ) : activeTab === 'comfyui' ? (
           <div className="space-y-6">
             <div className="min-w-0">{controllerPanel}</div>
@@ -194,30 +156,6 @@ export function ImageGenerationPage() {
               />
             ) : null}
           </div>
-        ) : shouldShowHistory ? (
-          <>
-            <GenerationHistoryPanel
-              refreshNonce={historyRefreshNonce}
-              serviceType="novelai"
-              workflowId={null}
-            />
-
-            <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
-              <Button
-                type="button"
-                size="sm"
-                className="theme-floating-panel pointer-events-auto w-[30vw] min-w-[112px] max-w-[180px] shadow-[0_18px_48px_rgba(0,0,0,0.35)]"
-                onClick={() => setIsControllerOpen(true)}
-              >
-                <SlidersHorizontal className="h-4 w-4" />
-                {controllerLabel}
-              </Button>
-            </div>
-
-            <GenerationControllerSheet open={isControllerOpen} title={controllerLabel} onClose={() => setIsControllerOpen(false)}>
-              {controllerPanel}
-            </GenerationControllerSheet>
-          </>
         ) : (
           <div className="min-w-0">{controllerPanel}</div>
         )
