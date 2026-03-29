@@ -143,6 +143,8 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
 
   const hexColorFields: Array<keyof Pick<AppearanceThemeSettings,
     'customSurfaceBackgroundColor' |
+    'customSurfaceLowestColor' |
+    'customSurfaceLowColor' |
     'customSurfaceContainerColor' |
     'customSurfaceHighColor' |
     'positiveBadgeColor' |
@@ -151,6 +153,8 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
     'ratingBadgeColor'
   >> = [
     'customSurfaceBackgroundColor',
+    'customSurfaceLowestColor',
+    'customSurfaceLowColor',
     'customSurfaceContainerColor',
     'customSurfaceHighColor',
     'positiveBadgeColor',
@@ -197,8 +201,10 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
     'searchDrawerWidth' |
     'desktopSearchMinWidth' |
     'desktopNavMinWidth' |
+    'desktopPageColumnsMinWidth' |
     'detailRelatedImageMobileColumns' |
-    'detailRelatedImageColumns'
+    'detailRelatedImageColumns' |
+    'selectionOutlineWidth'
   >; min: number; max: number }> = [
     { key: 'fontScalePercent', min: 85, max: 200 },
     { key: 'textScalePercent', min: 85, max: 200 },
@@ -206,8 +212,10 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
     { key: 'searchDrawerWidth', min: 320, max: 720 },
     { key: 'desktopSearchMinWidth', min: 640, max: 1600 },
     { key: 'desktopNavMinWidth', min: 768, max: 1800 },
+    { key: 'desktopPageColumnsMinWidth', min: 768, max: 1800 },
     { key: 'detailRelatedImageMobileColumns', min: 1, max: 6 },
     { key: 'detailRelatedImageColumns', min: 1, max: 6 },
+    { key: 'selectionOutlineWidth', min: 1, max: 8 },
   ]
 
   for (const { key, min, max } of boundedIntegers) {

@@ -5,6 +5,7 @@ import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { ImageRecord } from '@/types/image'
 import { getGenerationHistory, getGenerationWorkflowHistory } from '@/lib/api'
@@ -60,8 +61,9 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }
 
   return (
     <section className="space-y-3">
-      <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
-        <SectionHeading
+      <Card>
+        <CardContent className="space-y-4">
+          <SectionHeading
           variant="inside"
           className="border-b border-border/70 pb-4"
           heading="생성 히스토리"
@@ -112,7 +114,8 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }
             }}
           />
         ) : null}
-      </div>
+        </CardContent>
+      </Card>
     </section>
   )
 }

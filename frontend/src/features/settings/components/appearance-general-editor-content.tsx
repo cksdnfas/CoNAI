@@ -158,7 +158,7 @@ export function AppearanceGeneralEditorContent({
 
       <section className="space-y-4">
         <EditorSectionLead title="검색 / 반응형" />
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <SettingsField label="검색창 너비 (px)">
             <Input
               type="number"
@@ -204,6 +204,18 @@ export function AppearanceGeneralEditorContent({
               variant="settings"
               value={appearanceDraft.desktopNavMinWidth}
               onChange={(event) => onPatchAppearance({ desktopNavMinWidth: Number.parseInt(event.target.value || '1024', 10) })}
+            />
+          </SettingsField>
+
+          <SettingsField label="데스크톱 본문 2칼럼 전환폭 (px)">
+            <Input
+              type="number"
+              min={768}
+              max={1800}
+              step={10}
+              variant="settings"
+              value={appearanceDraft.desktopPageColumnsMinWidth}
+              onChange={(event) => onPatchAppearance({ desktopPageColumnsMinWidth: Number.parseInt(event.target.value || '1280', 10) })}
             />
           </SettingsField>
         </div>

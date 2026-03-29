@@ -182,7 +182,6 @@ export function WorkflowRunnerPanel({
           <SectionHeading
             variant="inside"
             heading="Workflow Runner"
-            description="선택한 워크플로우를 그래프 편집기 없이 바로 실행해."
             actions={
               <Button type="button" size="sm" variant="outline" onClick={onEdit} disabled={!selectedGraph}>
                 구조 수정
@@ -210,7 +209,6 @@ export function WorkflowRunnerPanel({
                 <Badge variant="outline">I {inputDefinitions.length}</Badge>
                 {latestExecution ? <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>{latestExecution.status}</Badge> : null}
               </div>
-              {selectedGraph.description?.trim() ? <div className="text-xs text-muted-foreground">{selectedGraph.description.trim()}</div> : null}
             </div>
 
             {latestExecution || latestPreviewUrl ? (

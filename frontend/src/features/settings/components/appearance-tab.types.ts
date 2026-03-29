@@ -21,6 +21,8 @@ export interface AppearanceTabColorValues {
   customPrimaryColorValue: string
   customSecondaryColorValue: string
   customSurfaceBackgroundColorValue: string
+  customSurfaceLowestColorValue: string
+  customSurfaceLowColorValue: string
   customSurfaceContainerColorValue: string
   customSurfaceHighColorValue: string
   positiveBadgeColorValue: string

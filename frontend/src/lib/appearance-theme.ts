@@ -64,8 +64,25 @@ export function resolveAppearanceColors(appearance: AppearanceThemeSettings) {
   }
 }
 
+export function resolveCustomSurfaceToneColors(appearance: Pick<AppearanceThemeSettings,
+  'themeMode' |
+  'customSurfaceBackgroundColor' |
+  'customSurfaceLowestColor' |
+  'customSurfaceLowColor' |
+  'customSurfaceContainerColor'
+>) {
+  const mode = resolveThemeMode(appearance.themeMode)
+  const tintBase = mode === 'light' ? '#ffffff' : '#050505'
+
+  return {
+    surfaceLowest: appearance.customSurfaceLowestColor ?? mixColors(appearance.customSurfaceBackgroundColor, tintBase, mode === 'light' ? 0.04 : 0.08),
+    surfaceLow: appearance.customSurfaceLowColor ?? mixColors(appearance.customSurfaceBackgroundColor, appearance.customSurfaceContainerColor, 0.62),
+  }
+}
+
 function buildCustomSurfacePalette(appearance: AppearanceThemeSettings, mode: 'dark' | 'light'): SurfacePalette {
   const background = appearance.customSurfaceBackgroundColor
+  const { surfaceLowest, surfaceLow } = resolveCustomSurfaceToneColors(appearance)
   const surfaceContainer = appearance.customSurfaceContainerColor
   const surfaceHigh = appearance.customSurfaceHighColor
   const tintBase = mode === 'light' ? '#ffffff' : '#050505'
@@ -84,8 +101,8 @@ function buildCustomSurfacePalette(appearance: AppearanceThemeSettings, mode: 'd
     accentForeground,
     border: toAlphaColor(mixColors(surfaceHigh, foreground, 0.35), mode === 'light' ? 0.18 : 0.22),
     input: mixColors(background, surfaceContainer, 0.48),
-    surfaceLowest: mixColors(background, tintBase, mode === 'light' ? 0.04 : 0.08),
-    surfaceLow: mixColors(background, surfaceContainer, 0.62),
+    surfaceLowest,
+    surfaceLow,
     surfaceContainer,
     surfaceHigh,
     surfaceHighest: mixColors(surfaceHigh, tintBase, mode === 'light' ? 0.16 : 0.22),
@@ -189,6 +206,8 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
     '--theme-text-scale': `${appearance.textScalePercent / 100}`,
     '--theme-search-box-width': `${appearance.searchBoxWidth}px`,
     '--theme-search-drawer-width': `${appearance.searchDrawerWidth}px`,
+    '--theme-selection-outline-width': `${appearance.selectionOutlineWidth}px`,
+    '--theme-selection-outline-width-strong': `calc(${appearance.selectionOutlineWidth}px + 1px)`,
     '--theme-badge-positive': appearance.positiveBadgeColor,
     '--theme-badge-positive-soft': toAlphaColor(appearance.positiveBadgeColor, 0.14),
     '--theme-badge-negative': appearance.negativeBadgeColor,

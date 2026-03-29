@@ -90,6 +90,8 @@ export interface AppearanceThemeSettings {
   customSecondaryColor: string
   surfacePreset: SurfacePreset
   customSurfaceBackgroundColor: string
+  customSurfaceLowestColor?: string
+  customSurfaceLowColor?: string
   customSurfaceContainerColor: string
   customSurfaceHighColor: string
   radiusPreset: RadiusPreset
@@ -111,9 +113,11 @@ export interface AppearanceThemeSettings {
   searchDrawerWidth: number
   desktopSearchMinWidth: number
   desktopNavMinWidth: number
+  desktopPageColumnsMinWidth: number
   detailRelatedImageMobileColumns: number
   detailRelatedImageColumns: number
   detailRelatedImageAspectRatio: RelatedImageCardAspectRatio
+  selectionOutlineWidth: number
   positiveBadgeColor: string
   negativeBadgeColor: string
   autoBadgeColor: string

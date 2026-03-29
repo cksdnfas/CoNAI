@@ -1,4 +1,4 @@
-import { DatabaseZap, Search } from 'lucide-react'
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import type { PromptSortBy, PromptSortOrder } from '@/types/prompt'
@@ -7,65 +7,65 @@ interface PromptToolbarProps {
   searchInput: string
   sortBy: PromptSortBy
   sortOrder: PromptSortOrder
-  canCollect?: boolean
   onSearchInputChange: (value: string) => void
   onApplySearch: () => void
   onChangeSortBy: (value: PromptSortBy) => void
   onChangeSortOrder: (value: PromptSortOrder) => void
-  onOpenCollect?: () => void
 }
 
 export function PromptToolbar({
   searchInput,
   sortBy,
   sortOrder,
-  canCollect = true,
   onSearchInputChange,
   onApplySearch,
   onChangeSortBy,
   onChangeSortOrder,
-  onOpenCollect,
 }: PromptToolbarProps) {
+  const SortOrderIcon = sortOrder === 'DESC' ? ArrowDownWideNarrow : ArrowUpNarrowWide
+
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-      <div className="w-full max-w-xl space-y-2">
-        <div className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">Search</div>
-        <div className="flex items-center gap-2 rounded-sm bg-surface-lowest px-3 py-2">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <input
-            value={searchInput}
-            onChange={(event) => onSearchInputChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                onApplySearch()
-              }
-            }}
-            placeholder="프롬프트 검색"
-            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-          />
-          <Button size="sm" onClick={onApplySearch}>
-            적용
-          </Button>
-        </div>
+    <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
+      <div className="flex w-full min-w-0 items-center gap-1 rounded-sm bg-surface-lowest px-2 py-1.5 sm:min-w-[300px] sm:flex-1 lg:min-w-[360px]">
+        <input
+          value={searchInput}
+          onChange={(event) => onSearchInputChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              onApplySearch()
+            }
+          }}
+          placeholder="프롬프트 검색"
+          className="w-full min-w-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+        />
+        <Button type="button" size="icon-xs" variant="outline" className="bg-surface-container" onClick={onApplySearch} aria-label="검색" title="검색">
+          <Search className="h-3.5 w-3.5" />
+        </Button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {canCollect ? (
-          <Button type="button" variant="secondary" onClick={onOpenCollect}>
-            <DatabaseZap className="h-4 w-4" />
-            수동 수집
-          </Button>
-        ) : null}
-        <Select value={sortBy} onChange={(event) => onChangeSortBy(event.target.value as PromptSortBy)} className="border-0 bg-surface-lowest">
-          <option value="usage_count">usage</option>
-          <option value="created_at">created</option>
-          <option value="prompt">prompt</option>
-        </Select>
-        <Select value={sortOrder} onChange={(event) => onChangeSortOrder(event.target.value as PromptSortOrder)} className="border-0 bg-surface-lowest">
-          <option value="DESC">DESC</option>
-          <option value="ASC">ASC</option>
-        </Select>
-      </div>
+      <Select
+        value={sortBy}
+        onChange={(event) => onChangeSortBy(event.target.value as PromptSortBy)}
+        className="h-8 w-[86px] border-0 bg-surface-lowest px-1.5 text-xs"
+        aria-label="정렬 기준"
+        title="정렬 기준"
+      >
+        <option value="usage_count">사용량</option>
+        <option value="created_at">생성순</option>
+        <option value="prompt">이름순</option>
+      </Select>
+
+      <Button
+        type="button"
+        size="icon-xs"
+        variant="outline"
+        className="bg-surface-container"
+        onClick={() => onChangeSortOrder(sortOrder === 'DESC' ? 'ASC' : 'DESC')}
+        aria-label={sortOrder === 'DESC' ? '내림차순' : '오름차순'}
+        title={sortOrder === 'DESC' ? '내림차순' : '오름차순'}
+      >
+        <SortOrderIcon className="h-3.5 w-3.5" />
+      </Button>
     </div>
   )
 }

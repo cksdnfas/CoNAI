@@ -1,3 +1,4 @@
+import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { AppearanceSettings } from '@/types/settings'
 import {
@@ -42,6 +43,23 @@ export function AppearanceListEditorContent({
                 </option>
               ))}
             </Select>
+          </SettingsField>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <EditorSectionLead title="선택 표시" />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <SettingsField label="선택 테두리 두께 (px)">
+            <Input
+              type="number"
+              min={1}
+              max={8}
+              step={1}
+              variant="settings"
+              value={appearanceDraft.selectionOutlineWidth}
+              onChange={(event) => onPatchAppearance({ selectionOutlineWidth: Number.parseInt(event.target.value || '3', 10) })}
+            />
           </SettingsField>
         </div>
       </section>

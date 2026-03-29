@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { PageHeader } from '@/components/common/page-header'
-import { SectionHeading } from '@/components/common/section-heading'
 import { exportPromptGroups } from '@/lib/api'
+import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import type { PromptCollectionItem, PromptGroupExportData, PromptGroupRecord, PromptSortBy, PromptSortOrder, PromptTypeFilter } from '@/types/prompt'
 import { PromptCollectModal } from './components/prompt-collect-modal'
@@ -16,7 +13,7 @@ import { PromptSidebar } from './components/prompt-sidebar'
 import { PromptSummaryModal } from './components/prompt-summary-modal'
 import { PromptToolbar } from './components/prompt-toolbar'
 import { usePromptListSelection } from './components/use-prompt-list-selection'
-import { PROMPT_TYPE_TABS, getPromptTypeTotal, isLockedPromptGroup, isLockedPromptItem } from './prompt-page-utils'
+import { PROMPT_TYPE_TABS, isLockedPromptGroup, isLockedPromptItem } from './prompt-page-utils'
 import { usePromptPageMutations } from './use-prompt-page-mutations'
 import { usePromptPageQueries } from './use-prompt-page-queries'
 
@@ -34,6 +31,7 @@ export function PromptPage() {
   const { showSnackbar } = useSnackbar()
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const promptListRef = useRef<HTMLDivElement | null>(null)
+  const isDesktopPageLayout = useDesktopPageLayout()
 
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
   const [isCollectModalOpen, setIsCollectModalOpen] = useState(false)
@@ -87,13 +85,9 @@ export function PromptPage() {
     () => (groupsQuery.data ?? []).filter((group) => group.id !== 0 && !isLockedPromptGroup(group)),
     [groupsQuery.data],
   )
-  const promptTypeLabel = useMemo(
-    () => PROMPT_TYPE_TABS.find((tab) => tab.value === promptType)?.label ?? 'Prompt',
-    [promptType],
-  )
-  const currentPromptTotal = getPromptTypeTotal(promptType, statisticsQuery.data)
   const currentSectionTitle = selectedGroup?.group_name ?? 'All prompts'
   const currentSectionCount = pagination?.total ?? 0
+  const sidebarTotalCount = selectedGroupId == null && currentSectionCount > 0 ? currentSectionCount : totalCount
 
   const {
     assignSinglePromptMutation,
@@ -295,45 +289,34 @@ export function PromptPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Prompt"
-        actions={
-          <Button type="button" variant="outline" onClick={() => setIsSummaryModalOpen(true)}>
-            상태
-          </Button>
-        }
-      />
+      <div className="border-b border-border/70 pb-2">
+        <div className="flex flex-wrap gap-2">
+          {PROMPT_TYPE_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => handleChangeType(tab.value)}
+              className={cn(
+                'rounded-sm px-4 py-2 text-sm font-semibold transition-colors',
+                promptType === tab.value
+                  ? 'bg-surface-container text-primary'
+                  : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      <Card className="bg-surface-container">
-        <CardContent className="space-y-4">
-          <SectionHeading variant="inside" heading="Prompt type" description={`${currentPromptTotal.toLocaleString('ko-KR')}개 항목`} />
-          <div className="rounded-sm bg-surface-lowest p-2">
-            <div className="flex flex-wrap gap-2">
-              {PROMPT_TYPE_TABS.map((tab) => (
-                <button
-                  key={tab.value}
-                  type="button"
-                  onClick={() => handleChangeType(tab.value)}
-                  className={cn(
-                    'rounded-sm px-4 py-2 text-sm font-semibold transition-colors',
-                    promptType === tab.value ? 'bg-surface-container text-primary' : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
-                  )}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-8 min-[800px]:grid-cols-[260px_minmax(0,1fr)]">
+      <div className={cn('grid gap-8', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <PromptSidebar
           groups={groupsQuery.data ?? []}
           selectedGroupId={selectedGroupId}
-          totalCount={totalCount}
+          totalCount={sidebarTotalCount}
           groupsLoading={groupsQuery.isLoading}
           groupsError={groupsQuery.error instanceof Error ? groupsQuery.error.message : groupsQuery.isError ? '알 수 없는 오류가 발생했어.' : null}
+          canCollect={promptType !== 'auto'}
           onSelectGroup={(groupId) => {
             setSelectedGroupId(groupId)
             setPage(1)
@@ -345,33 +328,34 @@ export function PromptPage() {
           onMoveGroupDown={canMoveGroupDown ? () => void handleMoveSelectedGroup('down') : undefined}
           onExportGroups={() => void handleExportGroups()}
           onImportGroups={() => importInputRef.current?.click()}
+          onOpenSummary={() => setIsSummaryModalOpen(true)}
+          onOpenCollect={() => setIsCollectModalOpen(true)}
           canMoveGroupUp={canMoveGroupUp}
           canMoveGroupDown={canMoveGroupDown}
         />
 
-        <section className="space-y-6">
-          <SectionHeading
-            heading={currentSectionTitle}
-            description={`${promptTypeLabel} · ${currentSectionCount.toLocaleString('ko-KR')}개 표시됨`}
-          />
-
-          <PromptToolbar
-            searchInput={searchInput}
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            canCollect={promptType !== 'auto'}
-            onSearchInputChange={setSearchInput}
-            onApplySearch={handleApplySearch}
-            onChangeSortBy={(value) => {
-              setSortBy(value)
-              setPage(1)
-            }}
-            onChangeSortOrder={(value) => {
-              setSortOrder(value)
-              setPage(1)
-            }}
-            onOpenCollect={() => setIsCollectModalOpen(true)}
-          />
+        <section className="space-y-4">
+          <div className="space-y-2">
+            <h2 className="text-xl font-semibold tracking-tight text-foreground">{currentSectionTitle}</h2>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">{currentSectionCount.toLocaleString('ko-KR')}개 표시됨</p>
+              <PromptToolbar
+                searchInput={searchInput}
+                sortBy={sortBy}
+                sortOrder={sortOrder}
+                onSearchInputChange={setSearchInput}
+                onApplySearch={handleApplySearch}
+                onChangeSortBy={(value) => {
+                  setSortBy(value)
+                  setPage(1)
+                }}
+                onChangeSortOrder={(value) => {
+                  setSortOrder(value)
+                  setPage(1)
+                }}
+              />
+            </div>
+          </div>
 
           <PromptListPanel
             items={items}

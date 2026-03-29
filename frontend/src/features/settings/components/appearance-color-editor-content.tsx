@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { APPEARANCE_PRESETS, DEFAULT_APPEARANCE_SETTINGS, SURFACE_PRESETS } from '@/lib/appearance'
+import { APPEARANCE_PRESETS, DEFAULT_APPEARANCE_SETTINGS, SURFACE_PRESETS, resolveCustomSurfaceToneColors } from '@/lib/appearance'
 import type { AppearanceSettings } from '@/types/settings'
 import {
   type AppearanceTabEditorSectionProps,
@@ -16,6 +16,8 @@ export function AppearanceColorEditorContent({
   colorValues,
   onPatchAppearance,
 }: AppearanceTabEditorSectionProps) {
+  const defaultSurfaceToneColors = resolveCustomSurfaceToneColors(DEFAULT_APPEARANCE_SETTINGS)
+
   return (
     <div className="space-y-8">
       <section className="space-y-4">
@@ -145,7 +147,7 @@ export function AppearanceColorEditorContent({
         </div>
 
         {appearanceDraft.surfacePreset === 'custom' ? (
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <SettingsField label="배경">
               <AppearanceColorControl
                 colorValue={colorValues.customSurfaceBackgroundColorValue}
@@ -153,6 +155,26 @@ export function AppearanceColorEditorContent({
                 onChangeColor={(value) => onPatchAppearance({ customSurfaceBackgroundColor: value })}
                 onChangeText={(value) => onPatchAppearance({ customSurfaceBackgroundColor: value })}
                 placeholder={DEFAULT_APPEARANCE_SETTINGS.customSurfaceBackgroundColor}
+              />
+            </SettingsField>
+
+            <SettingsField label="사이드바 바탕">
+              <AppearanceColorControl
+                colorValue={colorValues.customSurfaceLowestColorValue}
+                textValue={appearanceDraft.customSurfaceLowestColor ?? ''}
+                onChangeColor={(value) => onPatchAppearance({ customSurfaceLowestColor: value })}
+                onChangeText={(value) => onPatchAppearance({ customSurfaceLowestColor: value || undefined })}
+                placeholder={defaultSurfaceToneColors.surfaceLowest}
+              />
+            </SettingsField>
+
+            <SettingsField label="호버 바탕">
+              <AppearanceColorControl
+                colorValue={colorValues.customSurfaceLowColorValue}
+                textValue={appearanceDraft.customSurfaceLowColor ?? ''}
+                onChangeColor={(value) => onPatchAppearance({ customSurfaceLowColor: value })}
+                onChangeText={(value) => onPatchAppearance({ customSurfaceLowColor: value || undefined })}
+                placeholder={defaultSurfaceToneColors.surfaceLow}
               />
             </SettingsField>
 

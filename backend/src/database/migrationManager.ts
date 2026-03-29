@@ -71,7 +71,7 @@ export class MigrationManager {
     }
 
     const files = fs.readdirSync(migrationsPath)
-      .filter(file => file.endsWith('.ts') || file.endsWith('.js'))
+      .filter(file => (file.endsWith('.ts') || file.endsWith('.js')) && !file.endsWith('.d.ts'))
       .sort();
 
     for (const file of files) {

@@ -169,12 +169,21 @@ export class PromptCollectionQueryService {
     groupId?: number | null
   ): Promise<{ prompts: any[], total: number, group_info?: any }> {
     try {
+      const normalizedQuery = normalizeSearchTerm(query);
       let result;
-      let groupInfo = null;
+      let groupInfo: any = null;
 
       if (groupId !== undefined) {
         // @ts-ignore
-        result = await PromptGroupService.getPromptsInGroup(groupId, type as 'positive' | 'negative' | 'auto', page, limit);
+        result = await PromptGroupService.getPromptsInGroup(
+          groupId,
+          type as 'positive' | 'negative' | 'auto',
+          page,
+          limit,
+          normalizedQuery,
+          sortBy,
+          sortOrder,
+        );
 
         if (groupId !== null) {
           // @ts-ignore
@@ -183,10 +192,15 @@ export class PromptCollectionQueryService {
           groupInfo = { id: 0, group_name: 'Unclassified' };
         }
 
-        return { prompts: result.prompts, total: result.total, group_info: groupInfo };
+        const enrichedPrompts = result.prompts.map((prompt: any) => ({
+          ...prompt,
+          group_info: groupInfo,
+        }));
+
+        return { prompts: enrichedPrompts, total: result.total, group_info: groupInfo };
       }
 
-      result = await this.searchPrompts(query, type, page, limit, sortBy, sortOrder);
+      result = await this.searchPrompts(normalizedQuery, type, page, limit, sortBy, sortOrder);
 
       const enrichedPrompts = await Promise.all(
         result.prompts.map(async (prompt) => ({

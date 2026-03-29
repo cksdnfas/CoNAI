@@ -38,6 +38,8 @@ import type { SettingsTab } from './settings-tabs'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { applyAppearanceTheme } from '@/lib/appearance'
 import { buildAppearancePackage, restoreAppearancePackage } from '@/lib/appearance-package'
+import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
+import { cn } from '@/lib/utils'
 import { useFolderSettingsTab } from './use-folder-settings-tab'
 
 export function SettingsPage() {
@@ -54,6 +56,7 @@ export function SettingsPage() {
   const [autoTestMedia, setAutoTestMedia] = useState<AutoTestMediaRecord | null>(null)
   const [taggerTestResult, setTaggerTestResult] = useState<AutoTestTaggerResult | null>(null)
   const [kaloscopeTestResult, setKaloscopeTestResult] = useState<AutoTestKaloscopeResult | null>(null)
+  const isDesktopPageLayout = useDesktopPageLayout()
 
   const settingsQuery = useQuery({
     queryKey: ['app-settings'],
@@ -427,7 +430,7 @@ export function SettingsPage() {
     <div className="space-y-6">
       <PageHeader title="Settings" />
 
-      <div className="grid gap-8 min-[800px]:grid-cols-[260px_minmax(0,1fr)]">
+      <div className={cn('grid gap-8', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <SettingsTabNav activeTab={activeTab} onChange={setActiveTab} />
 
         <section className="space-y-8">

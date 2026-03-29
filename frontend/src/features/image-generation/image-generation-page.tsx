@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { Button } from '@/components/ui/button'
 import { ModuleWorkflowWorkspace } from '@/features/module-graph/module-graph-page'
-import { useMinWidth } from '@/lib/use-min-width'
+import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { ComfyGenerationPanel } from './components/comfy-generation-panel'
 import { GenerationHistoryPanel } from './components/generation-history-panel'
@@ -101,7 +101,7 @@ export function ImageGenerationPage() {
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
   const [selectedComfyWorkflowId, setSelectedComfyWorkflowId] = useState<number | null>(null)
   const [isControllerOpen, setIsControllerOpen] = useState(false)
-  const isWideLayout = useMinWidth(1200)
+  const isWideLayout = useDesktopPageLayout()
   const activeTab = parseImageGenerationTab(searchParams.get('tab'))
 
   const handleGlobalRefresh = () => {
@@ -133,7 +133,7 @@ export function ImageGenerationPage() {
   const shouldShowHistory = activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null)
 
   return (
-    <div className="space-y-6 pb-24 xl:pb-0">
+    <div className={cn('space-y-6', isWideLayout ? 'pb-0' : 'pb-24')}>
       <PageHeader
         eyebrow="Create"
         title="Image Generation"
@@ -171,7 +171,7 @@ export function ImageGenerationPage() {
 
       {activeTab !== 'workflows' && controllerPanel ? (
         isWideLayout ? (
-          <div className={cn('grid gap-8 xl:items-start', shouldShowHistory ? 'xl:grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]' : 'grid-cols-1')}>
+          <div className={cn('grid gap-8 items-start', shouldShowHistory ? 'grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]' : 'grid-cols-1')}>
             <div className="min-w-0">{controllerPanel}</div>
             {shouldShowHistory ? (
               <div className="min-w-0">

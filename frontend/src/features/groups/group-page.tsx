@@ -35,7 +35,8 @@ import {
   runGroupAutoCollect,
   updateGroup,
 } from '@/lib/api'
-import { useMinWidth } from '@/lib/use-min-width'
+import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
+import { cn } from '@/lib/utils'
 import type { GroupDownloadType, GroupFileCounts, GroupMutationInput, GroupRecord } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 import { GroupBreadcrumbs } from './components/group-breadcrumbs'
@@ -51,7 +52,7 @@ import { ImageSelectionBar } from '@/features/images/components/image-selection-
 const groupSources = {
   custom: {
     key: 'custom',
-    tabLabel: '사용자 커스텀 그룹',
+    tabLabel: '커스텀 그룹',
     rootTitle: '사용자 커스텀 그룹',
     rootSectionTitle: '루트 그룹',
     getAllGroups: getGroupsHierarchyAll,
@@ -152,7 +153,7 @@ export function GroupPage() {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
   const [downloadScope, setDownloadScope] = useState<'group' | 'selection' | null>(null)
   const [groupImageCollectionFilter, setGroupImageCollectionFilter] = useState<'all' | 'manual' | 'auto'>('all')
-  const isWideLayout = useMinWidth(1280)
+  const isWideLayout = useDesktopPageLayout()
   const selectedSourceKey = normalizeGroupSourceKey(searchParams.get('tab'))
   const selectedSource = groupSources[selectedSourceKey]
   const selectedGroupId = groupId ? Number(groupId) : undefined
@@ -570,31 +571,13 @@ export function GroupPage() {
     })
   }
 
-  const groupSummaryDescription = selectedGroupQuery.data?.description?.trim()
-    ? selectedGroupQuery.data.description
-    : isCustomSource
-      ? '수동 할당과 자동수집을 함께 쓸 수 있는 사용자 정의 그룹이야.'
-      : '감시폴더 기준으로 구성된 읽기 전용 그룹 뷰야.'
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader
         eyebrow={isWideLayout ? 'Groups' : undefined}
-        title={selectedGroupQuery.data?.name ?? selectedSource.rootTitle}
-        description={selectedGroupId ? groupSummaryDescription : `${selectedSource.rootTitle}를 탐색하고 연결된 이미지를 빠르게 훑을 수 있어.`}
+        title="Groups"
         actions={
           <>
-            {Object.values(groupSources).map((source) => (
-              <Button
-                key={source.key}
-                type="button"
-                variant={selectedSource.key === source.key ? 'default' : 'secondary'}
-                size="sm"
-                onClick={() => handleSelectSource(source.key)}
-              >
-                {source.tabLabel}
-              </Button>
-            ))}
             {isCustomSource ? (
               <>
                 <Button type="button" size="sm" variant="secondary" onClick={() => void handleRunAutoCollectAll()} disabled={autoCollectAllMutation.isPending}>
@@ -616,12 +599,29 @@ export function GroupPage() {
         }
       />
 
-      <div className="grid gap-8 xl:grid-cols-[280px_minmax(0,1fr)]">
+      <div className="border-b border-border/70 pb-2">
+        <div className="flex flex-wrap gap-2">
+          {Object.values(groupSources).map((source) => (
+            <button
+              key={source.key}
+              type="button"
+              onClick={() => handleSelectSource(source.key)}
+              className={selectedSource.key === source.key
+                ? 'rounded-sm bg-surface-container px-4 py-2 text-sm font-semibold text-primary transition-colors'
+                : 'rounded-sm px-4 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-surface-low hover:text-foreground'}
+            >
+              {source.tabLabel}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className={cn('grid gap-8', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <ExplorerSidebar
           title="Explorer"
           badge={<Badge variant="outline">{allGroups.length}</Badge>}
-          className="xl:sticky xl:top-24 xl:self-start xl:flex xl:max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] xl:flex-col"
-          bodyClassName="xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:pr-1"
+          className={cn(isWideLayout && 'sticky top-24 self-start flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
+          bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}
         >
           {groupsQuery.isLoading ? (
             <div className="space-y-2">
@@ -659,11 +659,6 @@ export function GroupPage() {
             <section className="space-y-4">
               <SectionHeading
                 heading={selectedSource.rootSectionTitle}
-                description={
-                  isCustomSource
-                    ? '새 그룹을 만들고, 필요하면 하위 그룹으로 세분화해봐.'
-                    : '감시폴더 구조를 따라 만들어진 그룹들을 여기서 탐색할 수 있어.'
-                }
                 actions={<Badge variant="secondary">{rootGroups.length.toLocaleString('ko-KR')}개</Badge>}
               />
 
@@ -699,8 +694,7 @@ export function GroupPage() {
                     <SectionHeading
                       variant="inside"
                       className="border-b border-border/70 px-6 py-6"
-                      heading="그룹 개요"
-                      description="현재 그룹 상태와 수집 정보를 여기서 바로 확인해."
+                      heading={selectedGroupQuery.data.name}
                       actions={
                         <div className="flex flex-wrap items-center gap-2">
                           <Button type="button" size="sm" variant="secondary" onClick={handleOpenGroupDownloadModal} disabled={groupFileCountsQuery.isLoading || downloadGroupArchiveMutation.isPending}>

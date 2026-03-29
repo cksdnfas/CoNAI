@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { PenSquare, Play, Search } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +16,7 @@ type SavedGraphListProps = {
   onEditGraph?: (graph: GraphWorkflowRecord) => void
   showExecuteButton?: boolean
   showHeader?: boolean
+  headerActions?: ReactNode
 }
 
 function formatUpdatedDate(value?: string | null) {
@@ -44,6 +45,7 @@ export function SavedGraphList({
   onEditGraph,
   showExecuteButton = true,
   showHeader = true,
+  headerActions,
 }: SavedGraphListProps) {
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -66,7 +68,7 @@ export function SavedGraphList({
           <SectionHeading
             variant="inside"
             heading="Saved Workflows"
-            description="저장된 워크플로우를 선택하고 실행 흐름으로 이어가."
+            actions={headerActions}
           />
         ) : null}
 

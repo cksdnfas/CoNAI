@@ -25,6 +25,8 @@ import {
 } from '@/lib/api'
 import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
 import { getThemeToneTextStyle } from '@/lib/theme-tones'
+import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
+import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import { MetadataRewriteForm } from '../metadata/components/metadata-rewrite-form'
 import { buildMetadataRewritePatch, useMetadataRewriteDraft } from '../metadata/use-metadata-rewrite-draft'
@@ -113,6 +115,7 @@ export function UploadPage() {
   const [isRewritingMetadata, setIsRewritingMetadata] = useState(false)
   const [isRewritePanelOpen, setIsRewritePanelOpen] = useState(false)
   const { draft: rewriteDraft, patchDraft: patchRewriteDraft } = useMetadataRewriteDraft(extractFile, extractResult)
+  const isDesktopPageLayout = useDesktopPageLayout()
 
   useEffect(() => {
     if (!extractFile) {
@@ -418,8 +421,8 @@ export function UploadPage() {
   })
 
   return (
-    <div className="space-y-8">
-      <PageHeader title="Upload" description="파일 업로드와 단일 이미지 미리보기/메타 추출을 한 화면에서 처리해." />
+    <div className="space-y-6">
+      <PageHeader title="Upload" />
 
       <div className="space-y-6">
         <section>
@@ -427,7 +430,7 @@ export function UploadPage() {
             <CardContent className="p-0">
               <SectionHeading
                 variant="inside"
-                className="border-b border-border/70 px-6 py-6"
+                className="border-b border-border/70 px-4 pb-4"
                 heading="파일 업로드"
                 description="여러 파일을 한 번에 올리고 진행 상황을 바로 확인해."
                 actions={
@@ -450,7 +453,7 @@ export function UploadPage() {
                 }
               />
 
-              <div className="space-y-4 px-6 py-6">
+              <div className="space-y-4 px-4 pb-4">
                 <input ref={uploadInputRef} type="file" multiple accept={UPLOAD_ACCEPT} className="hidden" onChange={handleUploadFileChange} />
 
                 <DropSurface
@@ -543,7 +546,7 @@ export function UploadPage() {
             <CardContent className="p-0">
               <SectionHeading
                 variant="inside"
-                className="border-b border-border/70 px-6 py-6"
+                className="border-b border-border/70 px-4 pb-4"
                 heading="미리보기 / 추출"
                 description="단일 이미지를 열어 메타 확인, 변환, 보조 추출을 이어서 처리해."
                 actions={
@@ -578,7 +581,7 @@ export function UploadPage() {
                 }
               />
 
-              <div className="space-y-4 px-6 py-6">
+              <div className="space-y-4 px-4 pb-4">
                 <input ref={extractInputRef} type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={handleExtractFileChange} />
 
                 <div className="rounded-sm bg-surface-low p-4">
@@ -594,7 +597,7 @@ export function UploadPage() {
                 </div>
 
                 {extractFile ? (
-                  <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
+                  <div className={cn('grid gap-4', isDesktopPageLayout ? 'grid-cols-2 items-start' : 'grid-cols-1')}>
                     <div className="space-y-4">
                       <div className="space-y-4 rounded-sm bg-surface-low p-4">
                         {extractPreviewUrl ? (

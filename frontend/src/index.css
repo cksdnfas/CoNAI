@@ -81,9 +81,9 @@
   --theme-shell-header-height: 4rem;
   --theme-shell-inline-padding: 1.5rem;
   --theme-shell-main-padding-bottom: 4rem;
-  --theme-card-padding-x: 1.5rem;
-  --theme-card-padding-y: 1.5rem;
-  --theme-card-gap: 1.5rem;
+  --theme-card-padding-x: 1rem;
+  --theme-card-padding-y: 1rem;
+  --theme-card-gap: 1rem;
   --theme-field-gap: 0.5rem;
   --theme-control-height: 2.5rem;
   --theme-control-padding-x: 0.75rem;
@@ -106,6 +106,8 @@
   --font-weight-extrabold: 800;
   --theme-search-box-width: 380px;
   --theme-search-drawer-width: 420px;
+  --theme-selection-outline-width: 3px;
+  --theme-selection-outline-width-strong: 4px;
   --theme-badge-positive: #34d399;
   --theme-badge-positive-soft: rgb(52 211 153 / 0.14);
   --theme-badge-negative: #fb7185;
@@ -185,21 +187,21 @@
 @keyframes image-list-selection-pulse {
   0% {
     box-shadow:
-      inset 0 0 0 4px color-mix(in srgb, var(--primary) 84%, transparent),
+      inset 0 0 0 var(--theme-selection-outline-width) color-mix(in srgb, var(--primary) 84%, transparent),
       0 0 0 1px color-mix(in srgb, var(--secondary) 18%, transparent),
       0 0 16px color-mix(in srgb, var(--primary) 14%, transparent);
   }
 
   50% {
     box-shadow:
-      inset 0 0 0 5px color-mix(in srgb, var(--primary) 98%, transparent),
+      inset 0 0 0 var(--theme-selection-outline-width-strong) color-mix(in srgb, var(--primary) 98%, transparent),
       0 0 0 1px color-mix(in srgb, var(--secondary) 24%, transparent),
       0 0 24px color-mix(in srgb, var(--primary) 24%, transparent);
   }
 
   100% {
     box-shadow:
-      inset 0 0 0 4px color-mix(in srgb, var(--primary) 84%, transparent),
+      inset 0 0 0 var(--theme-selection-outline-width) color-mix(in srgb, var(--primary) 84%, transparent),
       0 0 0 1px color-mix(in srgb, var(--secondary) 18%, transparent),
       0 0 16px color-mix(in srgb, var(--primary) 14%, transparent);
   }
@@ -369,7 +371,7 @@
   .image-list-selectable.is-selection-preview .image-list-selection-frame {
     opacity: 1;
     box-shadow:
-      inset 0 0 0 5px color-mix(in srgb, var(--primary) 98%, transparent),
+      inset 0 0 0 var(--theme-selection-outline-width-strong) color-mix(in srgb, var(--primary) 98%, transparent),
       0 0 0 1px color-mix(in srgb, var(--secondary) 22%, transparent),
       0 0 28px color-mix(in srgb, var(--primary) 26%, transparent);
   }
@@ -388,7 +390,7 @@
   .prompt-list-selectable.is-selection-preview .prompt-list-selection-frame {
     opacity: 1;
     box-shadow:
-      inset 0 0 0 4px color-mix(in srgb, var(--primary) 98%, transparent),
+      inset 0 0 0 var(--theme-selection-outline-width) color-mix(in srgb, var(--primary) 98%, transparent),
       0 0 0 1px color-mix(in srgb, var(--secondary) 22%, transparent),
       0 0 24px color-mix(in srgb, var(--primary) 20%, transparent);
   }

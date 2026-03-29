@@ -316,22 +316,28 @@ export class PromptGroupService {
     groupId: number | null,
     type: 'positive' | 'negative' | 'auto' = 'positive',
     page: number = 1,
-    limit: number = 20
+    limit: number = 20,
+    query: string = '',
+    sortBy: 'usage_count' | 'created_at' | 'prompt' = 'usage_count',
+    sortOrder: 'ASC' | 'DESC' = 'DESC'
   ): Promise<{ prompts: any[], total: number }> {
     try {
       const tableName = getPromptTableName(type);
       const offset = (page - 1) * limit;
+      const searchPattern = `%${query}%`;
+      const orderBy = sortBy === 'created_at' ? 'created_at' : sortBy === 'prompt' ? 'prompt' : 'usage_count';
+      const orderDirection = sortOrder === 'ASC' ? 'ASC' : 'DESC';
 
       // 총 개수 조회
       let countQuery: string;
       let countParams: any[];
 
       if (groupId === null || groupId === 0) {
-        countQuery = `SELECT COUNT(*) as total FROM ${tableName} WHERE group_id IS NULL`;
-        countParams = [];
+        countQuery = `SELECT COUNT(*) as total FROM ${tableName} WHERE group_id IS NULL AND prompt LIKE ?`;
+        countParams = [searchPattern];
       } else {
-        countQuery = `SELECT COUNT(*) as total FROM ${tableName} WHERE group_id = ?`;
-        countParams = [groupId];
+        countQuery = `SELECT COUNT(*) as total FROM ${tableName} WHERE group_id = ? AND prompt LIKE ?`;
+        countParams = [groupId, searchPattern];
       }
 
       const countRow = db.prepare(countQuery).get(...countParams) as { total: number };
@@ -342,17 +348,22 @@ export class PromptGroupService {
       let dataParams: any[];
 
       if (groupId === null || groupId === 0) {
-        dataQuery = `SELECT * FROM ${tableName} WHERE group_id IS NULL ORDER BY usage_count DESC, prompt ASC LIMIT ? OFFSET ?`;
-        dataParams = [limit, offset];
+        dataQuery = `SELECT * FROM ${tableName} WHERE group_id IS NULL AND prompt LIKE ? ORDER BY ${orderBy} ${orderDirection}, prompt ASC LIMIT ? OFFSET ?`;
+        dataParams = [searchPattern, limit, offset];
       } else {
-        dataQuery = `SELECT * FROM ${tableName} WHERE group_id = ? ORDER BY usage_count DESC, prompt ASC LIMIT ? OFFSET ?`;
-        dataParams = [groupId, limit, offset];
+        dataQuery = `SELECT * FROM ${tableName} WHERE group_id = ? AND prompt LIKE ? ORDER BY ${orderBy} ${orderDirection}, prompt ASC LIMIT ? OFFSET ?`;
+        dataParams = [groupId, searchPattern, limit, offset];
       }
 
       const rows = db.prepare(dataQuery).all(...dataParams) as any[];
+      const prompts = rows.map((row) => ({
+        ...row,
+        synonyms: row.synonyms ? JSON.parse(row.synonyms) : [],
+        type,
+      }));
 
       return {
-        prompts: rows || [],
+        prompts,
         total
       };
     } catch (error) {

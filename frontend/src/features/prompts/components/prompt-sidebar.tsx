@@ -1,4 +1,4 @@
-import { FolderPlus, Pencil, Trash2, ChevronUp, ChevronDown, Download, Upload } from 'lucide-react'
+import { BarChart3, ChevronDown, ChevronUp, Download, FolderPlus, Pencil, Trash2, Upload, Wrench } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,7 @@ interface PromptSidebarProps {
   totalCount?: number
   groupsLoading: boolean
   groupsError: string | null
+  canCollect?: boolean
   onSelectGroup: (groupId?: number | null) => void
   onCreateGroup?: () => void
   onEditGroup?: () => void
@@ -21,6 +22,8 @@ interface PromptSidebarProps {
   onMoveGroupDown?: () => void
   onExportGroups?: () => void
   onImportGroups?: () => void
+  onOpenSummary?: () => void
+  onOpenCollect?: () => void
   canMoveGroupUp?: boolean
   canMoveGroupDown?: boolean
 }
@@ -31,6 +34,7 @@ export function PromptSidebar({
   totalCount = 0,
   groupsLoading,
   groupsError,
+  canCollect = true,
   onSelectGroup,
   onCreateGroup,
   onEditGroup,
@@ -39,6 +43,8 @@ export function PromptSidebar({
   onMoveGroupDown,
   onExportGroups,
   onImportGroups,
+  onOpenSummary,
+  onOpenCollect,
   canMoveGroupUp = false,
   canMoveGroupDown = false,
 }: PromptSidebarProps) {
@@ -47,38 +53,24 @@ export function PromptSidebar({
       title="Groups"
       badge={<Badge variant="outline">{groups.length}</Badge>}
       className="min-[800px]:sticky min-[800px]:top-24 min-[800px]:self-start"
+      bodyClassName="space-y-4"
       headerExtra={
-        <div className="space-y-2 border-b border-white/5 pb-2">
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="secondary" onClick={() => onCreateGroup?.()} disabled={!onCreateGroup}>
-              <FolderPlus className="h-4 w-4" />
-              그룹 추가
-            </Button>
-            <Button type="button" size="sm" variant="secondary" onClick={() => onEditGroup?.()} disabled={!onEditGroup || selectedGroupId == null || selectedGroupId === 0}>
-              <Pencil className="h-4 w-4" />
-              편집
-            </Button>
-            <Button type="button" size="sm" variant="secondary" onClick={() => onMoveGroupUp?.()} disabled={!onMoveGroupUp || !canMoveGroupUp}>
-              <ChevronUp className="h-4 w-4" />
-              위로
-            </Button>
-            <Button type="button" size="sm" variant="secondary" onClick={() => onMoveGroupDown?.()} disabled={!onMoveGroupDown || !canMoveGroupDown}>
-              <ChevronDown className="h-4 w-4" />
-              아래로
-            </Button>
-            <Button type="button" size="sm" variant="secondary" onClick={() => onDeleteGroup?.()} disabled={!onDeleteGroup || selectedGroupId == null || selectedGroupId === 0}>
-              <Trash2 className="h-4 w-4" />
-              삭제
-            </Button>
-            <Button type="button" size="sm" variant="secondary" onClick={() => onExportGroups?.()} disabled={!onExportGroups}>
-              <Download className="h-4 w-4" />
-              Export
-            </Button>
-            <Button type="button" size="sm" variant="secondary" onClick={() => onImportGroups?.()} disabled={!onImportGroups}>
-              <Upload className="h-4 w-4" />
-              Import
-            </Button>
-          </div>
+        <div className="flex flex-wrap gap-2 border-b border-white/5 pb-3">
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onOpenSummary?.()} disabled={!onOpenSummary} aria-label="상태" title="상태">
+            <BarChart3 className="h-4 w-4" />
+          </Button>
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onOpenCollect?.()} disabled={!onOpenCollect || !canCollect} aria-label="수동 수집" title={canCollect ? '수동 수집' : 'Auto에서는 수동 수집 불가'}>
+            <Wrench className="h-4 w-4" />
+          </Button>
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onCreateGroup?.()} disabled={!onCreateGroup} aria-label="그룹 추가" title="그룹 추가">
+            <FolderPlus className="h-4 w-4" />
+          </Button>
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onExportGroups?.()} disabled={!onExportGroups} aria-label="내보내기" title="내보내기">
+            <Download className="h-4 w-4" />
+          </Button>
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onImportGroups?.()} disabled={!onImportGroups} aria-label="가져오기" title="가져오기">
+            <Upload className="h-4 w-4" />
+          </Button>
         </div>
       }
     >
@@ -98,7 +90,26 @@ export function PromptSidebar({
       ) : null}
 
       {!groupsLoading && !groupsError ? (
-        <PromptTree groups={groups} selectedGroupId={selectedGroupId} totalCount={totalCount} onSelectGroup={onSelectGroup} />
+        <>
+          <PromptTree groups={groups} selectedGroupId={selectedGroupId} totalCount={totalCount} onSelectGroup={onSelectGroup} />
+
+          <div className="border-t border-white/5 pt-3">
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onMoveGroupUp?.()} disabled={!onMoveGroupUp || !canMoveGroupUp} aria-label="위로 이동" title="위로 이동">
+                <ChevronUp className="h-4 w-4" />
+              </Button>
+              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onMoveGroupDown?.()} disabled={!onMoveGroupDown || !canMoveGroupDown} aria-label="아래로 이동" title="아래로 이동">
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onEditGroup?.()} disabled={!onEditGroup || selectedGroupId == null || selectedGroupId === 0} aria-label="편집" title="편집">
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onDeleteGroup?.()} disabled={!onDeleteGroup || selectedGroupId == null || selectedGroupId === 0} aria-label="삭제" title="삭제">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </>
       ) : null}
     </ExplorerSidebar>
   )

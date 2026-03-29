@@ -1,4 +1,4 @@
-import { DEFAULT_APPEARANCE_SETTINGS, extractAppearanceTheme } from '@/lib/appearance'
+import { DEFAULT_APPEARANCE_SETTINGS, extractAppearanceTheme, resolveCustomSurfaceToneColors } from '@/lib/appearance'
 import type { AppearancePresetSlot, AppearanceSettings } from '@/types/settings'
 import type { AppearanceTabColorValues } from './appearance-tab.types'
 
@@ -31,6 +31,8 @@ export function formatSlotTimestamp(value: string | null) {
 }
 
 export function getAppearanceTabColorValues(appearanceDraft: AppearanceSettings | null): AppearanceTabColorValues {
+  const surfaceToneColors = resolveCustomSurfaceToneColors(appearanceDraft ?? DEFAULT_APPEARANCE_SETTINGS)
+
   return {
     customPrimaryColorValue: appearanceDraft && isHexColor(appearanceDraft.customPrimaryColor)
       ? appearanceDraft.customPrimaryColor
@@ -41,6 +43,12 @@ export function getAppearanceTabColorValues(appearanceDraft: AppearanceSettings 
     customSurfaceBackgroundColorValue: appearanceDraft && isHexColor(appearanceDraft.customSurfaceBackgroundColor)
       ? appearanceDraft.customSurfaceBackgroundColor
       : DEFAULT_APPEARANCE_SETTINGS.customSurfaceBackgroundColor,
+    customSurfaceLowestColorValue: appearanceDraft?.customSurfaceLowestColor && isHexColor(appearanceDraft.customSurfaceLowestColor)
+      ? appearanceDraft.customSurfaceLowestColor
+      : surfaceToneColors.surfaceLowest,
+    customSurfaceLowColorValue: appearanceDraft?.customSurfaceLowColor && isHexColor(appearanceDraft.customSurfaceLowColor)
+      ? appearanceDraft.customSurfaceLowColor
+      : surfaceToneColors.surfaceLow,
     customSurfaceContainerColorValue: appearanceDraft && isHexColor(appearanceDraft.customSurfaceContainerColor)
       ? appearanceDraft.customSurfaceContainerColor
       : DEFAULT_APPEARANCE_SETTINGS.customSurfaceContainerColor,

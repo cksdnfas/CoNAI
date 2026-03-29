@@ -329,11 +329,15 @@ async function registerRoutes() {
   console.log('✅ All API routes registered successfully');
 
   // Frontend static file serving (must come AFTER API routes but BEFORE error handlers)
-  const frontendDistPath = process.env.FRONTEND_DIST_PATH
-    ? path.resolve(process.env.FRONTEND_DIST_PATH)
-    : path.join(__dirname, 'frontend');  // SEA integrated build uses dist/frontend
+  const frontendDistCandidates = process.env.FRONTEND_DIST_PATH
+    ? [path.resolve(process.env.FRONTEND_DIST_PATH)]
+    : [
+        path.join(__dirname, 'frontend'),
+        path.join(__dirname, '..', '..', 'frontend'),
+      ];
+  const frontendDistPath = frontendDistCandidates.find(candidate => fs.existsSync(candidate));
 
-  if (fs.existsSync(frontendDistPath)) {
+  if (frontendDistPath) {
     console.log(`🎨 Serving frontend from: ${frontendDistPath}`);
     app.use(express.static(frontendDistPath));
 
@@ -353,7 +357,7 @@ async function registerRoutes() {
     });
   } else {
     console.warn('⚠️  Frontend dist not found. API-only mode.');
-    console.warn(`   Expected location: ${frontendDistPath}`);
+    console.warn(`   Tried locations: ${frontendDistCandidates.join(', ')}`);
     console.warn('   Run "npm run build:integrated" to build with frontend.\n');
   }
 

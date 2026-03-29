@@ -83,7 +83,9 @@ export class TaggerDaemon {
       path.join(__dirname, 'python', 'wdv3_tagger_daemon.py'),
       // Development: backend/src/services -> backend/python
       path.join(__dirname, '..', '..', 'python', 'wdv3_tagger_daemon.py'),
-      // Compiled: backend/dist/services -> backend/python
+      // Compiled integrated build: backend/dist/backend/src/services -> backend/python
+      path.join(__dirname, '..', '..', '..', '..', 'python', 'wdv3_tagger_daemon.py'),
+      // Compiled build with bundled runtime assets: backend/dist/backend/src/services -> backend/dist/python
       path.join(__dirname, '..', '..', '..', 'python', 'wdv3_tagger_daemon.py'),
       // Portable build: dist/services -> app/python
       path.join(__dirname, '..', 'python', 'wdv3_tagger_daemon.py'),

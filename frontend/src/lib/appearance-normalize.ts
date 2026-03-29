@@ -18,6 +18,8 @@ export function extractAppearanceTheme(appearance: AppearanceSettings | Appearan
     customSecondaryColor: appearance.customSecondaryColor,
     surfacePreset: appearance.surfacePreset,
     customSurfaceBackgroundColor: appearance.customSurfaceBackgroundColor,
+    customSurfaceLowestColor: appearance.customSurfaceLowestColor,
+    customSurfaceLowColor: appearance.customSurfaceLowColor,
     customSurfaceContainerColor: appearance.customSurfaceContainerColor,
     customSurfaceHighColor: appearance.customSurfaceHighColor,
     radiusPreset: appearance.radiusPreset,
@@ -39,9 +41,11 @@ export function extractAppearanceTheme(appearance: AppearanceSettings | Appearan
     searchDrawerWidth: appearance.searchDrawerWidth,
     desktopSearchMinWidth: appearance.desktopSearchMinWidth,
     desktopNavMinWidth: appearance.desktopNavMinWidth,
+    desktopPageColumnsMinWidth: appearance.desktopPageColumnsMinWidth,
     detailRelatedImageMobileColumns: appearance.detailRelatedImageMobileColumns,
     detailRelatedImageColumns: appearance.detailRelatedImageColumns,
     detailRelatedImageAspectRatio: appearance.detailRelatedImageAspectRatio,
+    selectionOutlineWidth: appearance.selectionOutlineWidth,
     positiveBadgeColor: appearance.positiveBadgeColor,
     negativeBadgeColor: appearance.negativeBadgeColor,
     autoBadgeColor: appearance.autoBadgeColor,
@@ -84,6 +88,8 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
 
   const hexAppearanceFields: Array<keyof Pick<AppearanceThemeSettings,
     'customSurfaceBackgroundColor' |
+    'customSurfaceLowestColor' |
+    'customSurfaceLowColor' |
     'customSurfaceContainerColor' |
     'customSurfaceHighColor' |
     'positiveBadgeColor' |
@@ -92,6 +98,8 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
     'ratingBadgeColor'
   >> = [
     'customSurfaceBackgroundColor',
+    'customSurfaceLowestColor',
+    'customSurfaceLowColor',
     'customSurfaceContainerColor',
     'customSurfaceHighColor',
     'positiveBadgeColor',
@@ -185,8 +193,10 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
     'searchDrawerWidth' |
     'desktopSearchMinWidth' |
     'desktopNavMinWidth' |
+    'desktopPageColumnsMinWidth' |
     'detailRelatedImageMobileColumns' |
-    'detailRelatedImageColumns'
+    'detailRelatedImageColumns' |
+    'selectionOutlineWidth'
   >; min: number; max: number }> = [
     { key: 'fontScalePercent', min: 85, max: 200 },
     { key: 'textScalePercent', min: 85, max: 200 },
@@ -194,8 +204,10 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
     { key: 'searchDrawerWidth', min: 320, max: 720 },
     { key: 'desktopSearchMinWidth', min: 640, max: 1600 },
     { key: 'desktopNavMinWidth', min: 768, max: 1800 },
+    { key: 'desktopPageColumnsMinWidth', min: 768, max: 1800 },
     { key: 'detailRelatedImageMobileColumns', min: 1, max: 6 },
     { key: 'detailRelatedImageColumns', min: 1, max: 6 },
+    { key: 'selectionOutlineWidth', min: 1, max: 8 },
   ]
 
   for (const { key, min, max } of boundedIntegerFields) {

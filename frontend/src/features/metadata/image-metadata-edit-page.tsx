@@ -10,6 +10,8 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ImageDetailMedia } from '@/features/images/components/detail/image-detail-media'
 import { getDownloadName, getImageDetailRenderUrl } from '@/features/images/components/detail/image-detail-utils'
 import { downloadExistingImageWithRewrittenMetadata, getImage, saveImageMetadata } from '@/lib/api'
+import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
+import { cn } from '@/lib/utils'
 import { MetadataRewriteForm } from './components/metadata-rewrite-form'
 import { buildMetadataRewritePatch, createRewriteDraftFromImage, type RewriteMetadataDraft } from './use-metadata-rewrite-draft'
 
@@ -19,6 +21,7 @@ export function ImageMetadataEditPage() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const [draft, setDraft] = useState<RewriteMetadataDraft | null>(null)
+  const isDesktopPageLayout = useDesktopPageLayout()
 
   const imageQuery = useQuery({
     queryKey: ['image-detail', compositeHash],
@@ -140,7 +143,7 @@ export function ImageMetadataEditPage() {
       />
 
       {imageQuery.isLoading ? (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)]">
+        <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)]' : 'grid-cols-1')}>
           <Skeleton className="min-h-[420px] w-full rounded-sm" />
           <Skeleton className="min-h-[420px] w-full rounded-sm" />
         </div>
@@ -154,7 +157,7 @@ export function ImageMetadataEditPage() {
       ) : null}
 
       {!imageQuery.isLoading && !imageQuery.isError && image ? (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)] xl:items-start">
+        <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)] items-start' : 'grid-cols-1')}>
           <div className="space-y-4">
             <div className="overflow-hidden rounded-sm bg-surface-low shadow-[0_0_40px_rgba(14,14,14,0.22)]">
               <div className="flex min-h-[420px] items-center justify-center bg-surface-lowest">

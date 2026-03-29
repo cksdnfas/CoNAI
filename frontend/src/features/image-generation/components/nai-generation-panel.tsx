@@ -4,6 +4,7 @@ import { ExternalLink, ImagePlus, Save } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -270,8 +271,9 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
       <div className="space-y-6">
         {!connected ? (
           <section className="space-y-3">
-            <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
-              <SectionHeading
+            <Card>
+              <CardContent className="space-y-4">
+                <SectionHeading
                 variant="inside"
                 className="border-b border-border/70 pb-4"
                 heading="NovelAI"
@@ -357,7 +359,8 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                   </Button>
                 </div>
               </div>
-            </div>
+            </CardContent>
+            </Card>
           </section>
         ) : (
           <>
@@ -383,12 +386,13 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             </section>
 
             <section className="space-y-3">
-              <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
-                <SectionHeading
-                  variant="inside"
-                  className="border-b border-border/70 pb-4"
-                  heading="Prompt"
-                />
+              <Card>
+                <CardContent className="space-y-4">
+                  <SectionHeading
+                    variant="inside"
+                    className="border-b border-border/70 pb-4"
+                    heading="Prompt"
+                  />
                 <div className="grid gap-4 xl:grid-cols-2">
                   <FormField label="Prompt">
                     <Textarea value={naiForm.prompt} onChange={(event) => handleNaiFieldChange('prompt', event.target.value)} rows={6} placeholder="1girl, solo, cinematic lighting" />
@@ -403,16 +407,18 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     />
                   </FormField>
                 </div>
-              </div>
-            </section>
+              </CardContent>
+            </Card>
+          </section>
 
             <section className="space-y-3">
-              <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
-                <SectionHeading
-                  variant="inside"
-                  className="border-b border-border/70 pb-4"
-                  heading="Generation Settings"
-                />
+              <Card>
+                <CardContent className="space-y-4">
+                  <SectionHeading
+                    variant="inside"
+                    className="border-b border-border/70 pb-4"
+                    heading="Generation Settings"
+                  />
                 <div className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-3">
                     <FormField label="Model">
@@ -463,17 +469,19 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     </FormField>
                   </div>
                 </div>
-              </div>
-            </section>
+              </CardContent>
+            </Card>
+          </section>
 
             {naiForm.action !== 'generate' ? (
               <section className="space-y-3">
-                <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
-                  <SectionHeading
-                    variant="inside"
-                    className="border-b border-border/70 pb-4"
-                    heading="Source Images"
-                  />
+                <Card>
+                  <CardContent className="space-y-4">
+                    <SectionHeading
+                      variant="inside"
+                      className="border-b border-border/70 pb-4"
+                      heading="Source Images"
+                    />
                   <div className="space-y-4">
                     <FormField label="Source Image">
                       <div className="space-y-3">
@@ -511,16 +519,18 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                       </FormField>
                     ) : null}
                   </div>
-                </div>
-              </section>
-            ) : null}
+                </CardContent>
+              </Card>
+            </section>
+          ) : null}
 
             <section className="space-y-3">
-              <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
-                <SectionHeading
-                  variant="inside"
-                  className="border-b border-border/70 pb-4"
-                  heading="Advanced"
+              <Card>
+                <CardContent className="space-y-4">
+                  <SectionHeading
+                    variant="inside"
+                    className="border-b border-border/70 pb-4"
+                    heading="Advanced"
                   actions={naiCostQuery.isSuccess ? (
                     <Badge variant={naiCostQuery.data.canAfford ? 'secondary' : 'outline'}>
                       {naiCostQuery.data.isOpusFree ? 'Opus 무료 생성' : naiCostQuery.data.canAfford ? '잔액 충분' : '잔액 부족'}
@@ -570,11 +580,13 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
                   {naiCostQuery.isError ? <div className="text-xs text-[#ffb4ab]">{getErrorMessage(naiCostQuery.error, '예상 비용 계산에 실패했어.')}</div> : null}
                 </div>
-              </div>
-            </section>
+              </CardContent>
+            </Card>
+          </section>
 
-            <section className="space-y-3">
-              <div className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
+          <section className="space-y-3">
+            <Card>
+              <CardContent className="space-y-4">
                 <SectionHeading
                   variant="inside"
                   className="border-b border-border/70 pb-4"
@@ -596,8 +608,9 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     </Button>
                   </div>
                 </div>
-              </div>
-            </section>
+              </CardContent>
+            </Card>
+          </section>
           </>
         )}
       </div>

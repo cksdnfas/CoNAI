@@ -134,7 +134,6 @@ export function WorkflowExposedInputEditor({
             <SectionHeading
               variant="inside"
               heading="Exposed Run Inputs"
-              description="러너에 노출할 입력과 기본값 표시를 정리해."
               actions={
                 <>
                   <Badge variant="outline">{selectedInputs.length} selected</Badge>
@@ -152,7 +151,6 @@ export function WorkflowExposedInputEditor({
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-foreground">Selected Inputs</div>
-              <div className="text-xs text-muted-foreground">드래그 대신 위/아래로 순서 조정</div>
             </div>
             {selectedInputs.length === 0 ? (
               <div className="rounded-sm bg-surface-low px-4 py-6 text-sm text-muted-foreground">아직 실행 폼에 노출된 입력이 없어. 아래에서 필요한 입력을 골라줘.</div>
@@ -279,9 +277,7 @@ export function WorkflowExposedInputEditor({
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="rounded-sm bg-surface-low px-4 py-4 text-sm text-muted-foreground">필요할 때만 펼쳐서 입력을 추가해. 지금은 선택된 입력 편집에 집중하면 돼.</div>
-            )}
+            ) : null}
           </div>
         </CardContent>
       ) : (
@@ -290,7 +286,6 @@ export function WorkflowExposedInputEditor({
             <SectionHeading
               variant="inside"
               heading="Exposed Run Inputs"
-              description="러너에 노출할 입력과 기본값 표시를 정리해."
               actions={
                 <>
                   <Badge variant="outline">{selectedInputs.length} selected</Badge>

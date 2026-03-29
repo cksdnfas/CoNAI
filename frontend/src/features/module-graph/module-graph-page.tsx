@@ -55,6 +55,8 @@ import {
   type ModuleGraphEdge,
   type ModuleGraphNode,
 } from './module-graph-shared'
+import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
+import { cn } from '@/lib/utils'
 
 type ModuleWorkflowWorkspaceProps = {
   embedded?: boolean
@@ -73,6 +75,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const [selectedExecutionId, setSelectedExecutionId] = useState<number | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const isDesktopPageLayout = useDesktopPageLayout()
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState(() =>
     buildGraphEditorSnapshot({
       name: 'Workflow Draft',
@@ -849,51 +852,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             )
           }
         />
-      ) : (
-        <Card className="bg-surface-container">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-            <div>
-              <div className="text-sm font-semibold text-foreground">{workflowView === 'browse' ? 'Workflow' : 'Workflow Editor'}</div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {workflowView === 'edit' ? (
-                <>
-                  <Button type="button" variant="outline" onClick={() => setWorkflowView('browse')}>
-                    <ArrowLeft className="h-4 w-4" />
-                    목록으로
-                  </Button>
-                  <Button type="button" variant="outline" onClick={handleAutoLayout} disabled={nodes.length === 0}>
-                    자동 정렬
-                  </Button>
-                  <Button type="button" variant="outline" onClick={handleDuplicateSelectedNode} disabled={!selectedNode}>
-                    <Copy className="h-4 w-4" />
-                    노드 복제
-                  </Button>
-                  <Button type="button" variant="outline" onClick={handleRemoveSelectedNode} disabled={!selectedNode}>
-                    <Trash2 className="h-4 w-4" />
-                    노드 삭제
-                  </Button>
-                  <Button type="button" variant="outline" onClick={handleRemoveSelectedEdge} disabled={!selectedEdge}>
-                    <Trash2 className="h-4 w-4" />
-                    엣지 삭제
-                  </Button>
-                  <Button type="button" variant="outline" onClick={handleResetCanvas}>
-                    <Trash2 className="h-4 w-4" />
-                    초기화
-                  </Button>
-                </>
-              ) : null}
-              <Button type="button" variant="outline" onClick={handleCreateWorkflow}>
-                <Plus className="h-4 w-4" />
-                새 워크플로우
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      ) : null}
 
       {workflowView === 'browse' ? (
-        <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[320px_minmax(0,1fr)]' : 'grid-cols-1')}>
           <SavedGraphList
             graphs={graphWorkflowsQuery.data ?? []}
             selectedGraphId={selectedGraphId}
@@ -906,6 +868,28 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             }}
             onExecuteGraph={(graphId) => void handleExecuteGraph(graphId)}
             showExecuteButton={false}
+            headerActions={embedded ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    void Promise.all([
+                      modulesQuery.refetch(),
+                      graphWorkflowsQuery.refetch(),
+                      ...(selectedGraphId !== null ? [graphExecutionsQuery.refetch()] : []),
+                    ])
+                  }
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  새로고침
+                </Button>
+                <Button type="button" onClick={handleCreateWorkflow}>
+                  <Plus className="h-4 w-4" />
+                  새 워크플로우
+                </Button>
+              </>
+            ) : undefined}
           />
 
           <div className="space-y-6">
@@ -945,15 +929,14 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
         </div>
       ) : (
         <div className="space-y-6">
-          <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
+          <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[320px_minmax(0,1fr)_320px]' : 'grid-cols-1')}>
             <div className="space-y-6">
-              <div className="xl:sticky xl:top-24">
+              <div className={cn(isDesktopPageLayout && 'sticky top-24')}>
                 <Card className="bg-surface-container">
                   <CardContent className="space-y-4">
                     <SectionHeading
                       variant="inside"
                       heading="Workflow Setup"
-                      description="현재 편집 중인 워크플로우의 저장 상태와 메타데이터를 정리해."
                       actions={
                         <Button type="button" size="sm" variant="ghost" onClick={() => setIsSetupCollapsed((current) => !current)}>
                           <ChevronDown className={`h-4 w-4 transition-transform ${isSetupCollapsed ? '-rotate-90' : 'rotate-0'}`} />
@@ -963,18 +946,17 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
                     {!isSetupCollapsed ? (
                       <>
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-medium text-foreground">{selectedGraphRecord?.name || workflowName}</span>
                             {selectedGraphRecord ? <Badge variant="outline">v{selectedGraphRecord.version}</Badge> : <Badge variant="outline">draft</Badge>}
                             {isDirty ? <Badge variant="outline">unsaved</Badge> : <Badge variant="secondary">saved</Badge>}
                           </div>
                           <div className="text-xs text-muted-foreground">노드 {nodes.length} · 엣지 {edges.length} · 노출 입력 {workflowExposedInputs.length}</div>
-                          {selectedGraphRecord?.description?.trim() || workflowDescription.trim() ? (
-                            <div className="text-xs text-muted-foreground">
-                              {selectedGraphRecord?.description?.trim() || workflowDescription.trim()}
-                            </div>
-                          ) : null}
+                          <div className="grid gap-3">
+                            <Input value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} placeholder="Workflow name" />
+                            <Input value={workflowDescription} onChange={(event) => setWorkflowDescription(event.target.value)} placeholder="설명 (선택)" />
+                          </div>
                         </div>
 
                         <Button type="button" onClick={() => void handleSaveGraph()} disabled={isSavingGraph || workflowName.trim().length === 0}>
@@ -982,9 +964,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                           {isSavingGraph ? '저장 중…' : selectedGraphId !== null ? '워크플로우 업데이트' : '워크플로우 저장'}
                         </Button>
                       </>
-                    ) : (
-                      <div className="text-sm text-muted-foreground">워크플로우 메타데이터는 필요할 때만 펼쳐서 확인해.</div>
-                    )}
+                    ) : null}
                   </CardContent>
                 </Card>
               </div>
@@ -1016,19 +996,54 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                       Workflow Graph
                     </span>
                   }
-                  description="노드 배치와 연결을 여기서 편집해."
                   actions={
                     <>
                       <Badge variant="outline">노드 {nodes.length}</Badge>
                       <Badge variant="outline">엣지 {edges.length}</Badge>
+                      {embedded ? (
+                        <>
+                          <Button type="button" variant="outline" onClick={() => setWorkflowView('browse')}>
+                            <ArrowLeft className="h-4 w-4" />
+                            목록으로
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                              void Promise.all([
+                                modulesQuery.refetch(),
+                                graphWorkflowsQuery.refetch(),
+                                ...(selectedGraphId !== null ? [graphExecutionsQuery.refetch()] : []),
+                              ])
+                            }
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                            새로고침
+                          </Button>
+                          <Button type="button" variant="outline" onClick={handleAutoLayout} disabled={nodes.length === 0}>
+                            자동 정렬
+                          </Button>
+                          <Button type="button" variant="outline" onClick={handleDuplicateSelectedNode} disabled={!selectedNode}>
+                            <Copy className="h-4 w-4" />
+                            노드 복제
+                          </Button>
+                          <Button type="button" variant="outline" onClick={handleRemoveSelectedNode} disabled={!selectedNode}>
+                            <Trash2 className="h-4 w-4" />
+                            노드 삭제
+                          </Button>
+                          <Button type="button" variant="outline" onClick={handleRemoveSelectedEdge} disabled={!selectedEdge}>
+                            <Trash2 className="h-4 w-4" />
+                            엣지 삭제
+                          </Button>
+                          <Button type="button" variant="outline" onClick={handleResetCanvas}>
+                            <Trash2 className="h-4 w-4" />
+                            초기화
+                          </Button>
+                        </>
+                      ) : null}
                     </>
                   }
                 />
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Input value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} placeholder="Workflow name" />
-                  <Input value={workflowDescription} onChange={(event) => setWorkflowDescription(event.target.value)} placeholder="설명 (선택)" />
-                </div>
 
                 <div className="h-[760px] overflow-hidden rounded-sm border border-border bg-[#0b111c]">
                   <ReactFlow
@@ -1064,7 +1079,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               </CardContent>
             </Card>
 
-            <div className="xl:sticky xl:top-24 xl:self-start">
+            <div className={cn(isDesktopPageLayout && 'sticky top-24 self-start')}>
               <NodeInspectorPanel
                 selectedNode={selectedNode}
                 selectedEdge={selectedEdge}
@@ -1091,7 +1106,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             onRerunGraph={() => void handleRerunSelectedGraph()}
             onRetryExecution={() => void handleRetrySelectedExecution()}
             onCancelExecution={() => void handleCancelSelectedExecution()}
-            description="선택한 그래프의 실행 상태와 상세 결과를 아래에서 이어서 확인해."
           />
         </div>
       )}

@@ -2,12 +2,12 @@
   "name": "conai-backend",
   "version": "26.3.26",
   "description": "Backend API server for CoNAI",
-  "main": "dist/index.js",
+  "main": "dist/backend/src/index.js",
   "scripts": {
     "dev": "nodemon --watch src --ext ts,json --ignore 'database/**' --ignore 'uploads/**' --ignore '**/*.db' --signal SIGTERM --exec tsx src/index.ts",
     "build": "tsc && npm run copy:migrations",
     "copy:migrations": "copyfiles -u 1 \"src/database/migrations/**/*.sql\" dist/",
-    "start": "node dist/index.js",
+    "start": "node dist/backend/src/index.js",
     "db:migrate": "tsx src/database/migrate.ts",
     "validate:metadata": "tsx src/scripts/validateMetadataExtraction.ts"
   },
