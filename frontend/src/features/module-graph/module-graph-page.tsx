@@ -1081,6 +1081,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
             <div className={cn(isDesktopPageLayout && 'sticky top-24 self-start')}>
               <NodeInspectorPanel
+                nodes={nodes}
                 selectedNode={selectedNode}
                 selectedEdge={selectedEdge}
                 onNodeValueChange={handleNodeValueChange}
