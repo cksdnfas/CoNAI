@@ -3,13 +3,16 @@ import path from 'path'
 import { runtimePaths } from '../../config/runtimePaths'
 import { db } from '../../database/init'
 import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact'
+import { ImageFileModel } from '../../models/Image/ImageFileModel'
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel'
 import { PromptCollectionModel } from '../../models/PromptCollection'
 import { PromptGroupModel } from '../../models/PromptGroup'
 import { ImageSimilarityService } from '../imageSimilarity'
+import { saveArtifactBuffer } from './artifacts'
 import { SIMILARITY_THRESHOLDS } from '../../types/similarity'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import {
+  bufferToDataUrl,
   normalizeBase64ImageData,
   sanitizeFileSegment,
   writeExecutionLog,
@@ -455,6 +458,77 @@ async function executeLoadPromptFromReference(
   })
 }
 
+/** Load one referenced library image into a graph image artifact. */
+async function executeLoadImageFromReference(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  const compositeHash = resolveCompositeHashFromReference(
+    resolvedInputs.reference,
+    resolvedInputs.composite_hash,
+    resolvedInputs.index,
+  )
+  const metadata = MediaMetadataModel.findByHash(compositeHash)
+  if (!metadata) {
+    throw new Error(`Referenced image metadata not found: ${compositeHash}`)
+  }
+
+  const activeFiles = ImageFileModel.findActiveByHash(compositeHash)
+  const activeFile = activeFiles[0]
+  if (!activeFile) {
+    throw new Error(`Referenced image file not found: ${compositeHash}`)
+  }
+
+  const imageBuffer = await fs.promises.readFile(activeFile.original_file_path)
+  const mimeType = activeFile.mime_type || 'image/png'
+  const imageDataUrl = bufferToDataUrl(imageBuffer, mimeType)
+  const storagePath = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer)
+
+  const referenceValue = {
+    composite_hash: metadata.composite_hash,
+    original_file_path: activeFile.original_file_path,
+    mime_type: activeFile.mime_type,
+    file_size: activeFile.file_size,
+    thumbnail_path: metadata.thumbnail_path,
+    prompt: metadata.prompt,
+    negative_prompt: metadata.negative_prompt,
+    auto_tags: metadata.auto_tags,
+  }
+
+  const nodeArtifacts = {
+    image: {
+      type: 'image' as const,
+      value: imageDataUrl,
+      storagePath,
+      metadata: {
+        kind: 'system-load-image-from-reference',
+        composite_hash: metadata.composite_hash,
+      },
+    },
+    image_ref: buildRuntimeArtifact(context.executionId, node.id, 'image_ref', 'json', referenceValue, {
+      kind: 'system-image-reference',
+      composite_hash: metadata.composite_hash,
+    }),
+  }
+
+  context.artifactsByNode.set(node.id, nodeArtifacts)
+
+  writeExecutionLog({
+    executionId: context.executionId,
+    nodeId: node.id,
+    eventType: 'node_engine_complete',
+    message: `System module completed: ${moduleDefinition.name}`,
+    details: {
+      engine: 'system',
+      operationKey: 'system.load_image_from_reference',
+      compositeHash: metadata.composite_hash,
+      storagePath,
+    },
+  })
+}
+
 /** Execute a CoNAI system-native module node through a stable operation key. */
 export async function executeSystemModule(
   context: ExecutionContext,
@@ -497,6 +571,11 @@ export async function executeSystemModule(
 
   if (operationKey === 'system.load_prompt_from_reference') {
     await executeLoadPromptFromReference(context, node, moduleDefinition, resolvedInputs)
+    return
+  }
+
+  if (operationKey === 'system.load_image_from_reference') {
+    await executeLoadImageFromReference(context, node, moduleDefinition, resolvedInputs)
     return
   }
 

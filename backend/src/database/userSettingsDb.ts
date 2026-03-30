@@ -848,6 +848,75 @@ function ensureBuiltinSystemModules(): void {
     ],
     '#66bb6a',
   );
+
+  insertIfMissing(
+    'Load Image From Reference',
+    'Resolve one image reference into an actual graph image artifact.',
+    'retrieval',
+    [
+      {
+        key: 'reference',
+        label: 'Reference',
+        direction: 'input',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+        description: 'Structured reference JSON, such as the output of Find Similar Images.',
+      },
+      {
+        key: 'composite_hash',
+        label: 'Composite Hash',
+        direction: 'input',
+        data_type: 'text',
+        required: false,
+        multiple: false,
+        description: 'Direct image composite hash. If set, this wins over reference JSON.',
+      },
+      {
+        key: 'index',
+        label: 'Index',
+        direction: 'input',
+        data_type: 'number',
+        required: false,
+        multiple: false,
+        default_value: 0,
+        description: 'Which item to read when the reference contains an items array.',
+      },
+    ],
+    [
+      {
+        key: 'image',
+        label: 'Image',
+        direction: 'output',
+        data_type: 'image',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'image_ref',
+        label: 'Image Reference',
+        direction: 'output',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.load_image_from_reference' },
+    [
+      {
+        key: 'composite_hash',
+        label: 'Composite Hash',
+        data_type: 'text',
+      },
+      {
+        key: 'index',
+        label: 'Index',
+        data_type: 'number',
+        default_value: 0,
+      },
+    ],
+    '#29b6f6',
+  );
 }
 
 /**
