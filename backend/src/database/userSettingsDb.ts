@@ -16,7 +16,7 @@ const getMigrationsPath = (): string => {
     path.join(process.cwd(), 'app', 'migrations', 'user-settings'),
     // Bundle: relative to bundle location
     path.join(path.dirname(process.argv[1] || ''), 'migrations', 'user-settings'),
-    // Alternative relative path
+    // Alternative: one level up from compiled file
     path.join(__dirname, '../migrations/user-settings')
   ];
 
@@ -26,26 +26,16 @@ const getMigrationsPath = (): string => {
     }
   }
 
-  // Return first path as fallback (will cause warning later)
+  // Default to first path even if it doesn't exist (will be handled later)
   return possiblePaths[0];
 };
 
 const MIGRATIONS_PATH = getMigrationsPath();
 
-/**
- * User Settings Database Instance
- * Uses better-sqlite3 for synchronous operations
- * Separated from main images.db for user settings management
- * Tables: workflows, comfyui_servers, workflow_servers, user_preferences, wildcards, wildcard_items, custom_dropdown_lists, external_api_providers
- * Note: Authentication tables (auth_credentials, sessions) moved to auth.db
- */
 export let userSettingsDb: Database.Database;
 
 /**
- * Initialize User Settings Database
- * - Creates database file if not exists
- * - Runs migrations automatically
- * - Synchronous operation (better-sqlite3 style)
+ * Initialize User Settings database
  */
 export function initializeUserSettingsDb(): void {
   try {
@@ -55,10 +45,8 @@ export function initializeUserSettingsDb(): void {
       fs.mkdirSync(dbDir, { recursive: true });
     }
 
-    // Check if database is new
     const isNewDatabase = !fs.existsSync(USER_SETTINGS_DB_PATH);
 
-    // Create database connection
     userSettingsDb = new Database(USER_SETTINGS_DB_PATH);
 
     if (isNewDatabase) {
@@ -67,7 +55,6 @@ export function initializeUserSettingsDb(): void {
       console.log('✅ Connected to existing user settings database');
     }
 
-    // Run migrations
     runMigrations();
   } catch (error) {
     console.error('Failed to initialize user settings database:', error);
@@ -92,7 +79,7 @@ function createMigrationsTable(): void {
  * Get list of applied migrations
  */
 function getAppliedMigrations(): string[] {
-  const rows = userSettingsDb.prepare('SELECT version FROM user_settings_migrations ORDER BY version').all() as any[];
+  const rows = userSettingsDb.prepare('SELECT version FROM user_settings_migrations ORDER BY version').all() as { version: string }[];
   return rows.map(row => row.version);
 }
 
@@ -104,12 +91,12 @@ function recordMigration(version: string): void {
 }
 
 /**
- * Create all tables directly (no migration files needed)
+ * Create all user settings tables if they don't exist
  */
 function createTables(): void {
   console.log('📊 Creating user settings tables...');
 
-  // 1. Workflows table
+  // 1. Workflows table (stores ComfyUI workflows)
   userSettingsDb.exec(`
     CREATE TABLE IF NOT EXISTS workflows (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -130,9 +117,9 @@ function createTables(): void {
     CREATE TABLE IF NOT EXISTS comfyui_servers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name VARCHAR(255) NOT NULL UNIQUE,
-      endpoint VARCHAR(500) NOT NULL,
-      description TEXT,
+      url VARCHAR(500) NOT NULL,
       is_active BOOLEAN DEFAULT 1,
+      is_default BOOLEAN DEFAULT 0,
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -285,6 +272,7 @@ function createTables(): void {
       error_message TEXT,
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      failed_node_id TEXT,
       FOREIGN KEY (graph_workflow_id) REFERENCES graph_workflows(id) ON DELETE CASCADE
     )
   `);
@@ -566,28 +554,52 @@ function ensureModuleDefinitionsSupportsSystemEngine(): void {
  * Seed built-in system-native workflow modules that should always be available.
  */
 function ensureBuiltinSystemModules(): void {
-  const existing = userSettingsDb
-    .prepare("SELECT id FROM module_definitions WHERE name = ?")
-    .get('Random Prompt From Group') as { id: number } | undefined;
+  const insertIfMissing = (
+    name: string,
+    description: string,
+    category: string,
+    exposedInputs: unknown,
+    outputPorts: unknown,
+    internalFixedValues: unknown,
+    uiSchema: unknown,
+    color: string,
+  ) => {
+    const existing = userSettingsDb
+      .prepare('SELECT id FROM module_definitions WHERE name = ?')
+      .get(name) as { id: number } | undefined;
 
-  if (existing) {
-    return;
-  }
+    if (existing) {
+      return;
+    }
 
-  userSettingsDb.prepare(`
-    INSERT INTO module_definitions (
-      name, description, engine_type, authoring_source, category,
-      template_defaults, exposed_inputs, output_ports, internal_fixed_values, ui_schema,
-      version, is_active, color
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+    userSettingsDb.prepare(`
+      INSERT INTO module_definitions (
+        name, description, engine_type, authoring_source, category,
+        template_defaults, exposed_inputs, output_ports, internal_fixed_values, ui_schema,
+        version, is_active, color
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      name,
+      description,
+      'system',
+      'manual',
+      category,
+      JSON.stringify({}),
+      JSON.stringify(exposedInputs),
+      JSON.stringify(outputPorts),
+      JSON.stringify(internalFixedValues),
+      JSON.stringify(uiSchema),
+      1,
+      1,
+      color,
+    );
+  };
+
+  insertIfMissing(
     'Random Prompt From Group',
     'Pick one prompt entry from a stored prompt group and expose it as reusable workflow text.',
-    'system',
-    'manual',
     'prompt-source',
-    JSON.stringify({}),
-    JSON.stringify([
+    [
       {
         key: 'group_name',
         label: 'Group Name',
@@ -624,9 +636,9 @@ function ensureBuiltinSystemModules(): void {
         required: false,
         multiple: false,
         description: 'Optional deterministic selector seed.',
-      }
-    ]),
-    JSON.stringify([
+      },
+    ],
+    [
       {
         key: 'prompt',
         label: 'Prompt',
@@ -650,10 +662,10 @@ function ensureBuiltinSystemModules(): void {
         data_type: 'json',
         required: false,
         multiple: false,
-      }
-    ]),
-    JSON.stringify({ operation_key: 'system.random_prompt_from_group' }),
-    JSON.stringify([
+      },
+    ],
+    { operation_key: 'system.random_prompt_from_group' },
+    [
       {
         key: 'group_name',
         label: 'Group Name',
@@ -676,11 +688,88 @@ function ensureBuiltinSystemModules(): void {
         key: 'seed',
         label: 'Seed',
         data_type: 'number',
-      }
-    ]),
-    1,
-    1,
+      },
+    ],
     '#26a69a',
+  );
+
+  insertIfMissing(
+    'Find Similar Images',
+    'Search the active library for visually similar images based on one input image.',
+    'retrieval',
+    [
+      {
+        key: 'image',
+        label: 'Image',
+        direction: 'input',
+        data_type: 'image',
+        required: true,
+        multiple: false,
+        description: 'Input image used as the similarity search target.',
+      },
+      {
+        key: 'limit',
+        label: 'Limit',
+        direction: 'input',
+        data_type: 'number',
+        required: false,
+        multiple: false,
+        default_value: 12,
+        description: 'Maximum number of similar images to return.',
+      },
+      {
+        key: 'threshold',
+        label: 'Threshold',
+        direction: 'input',
+        data_type: 'number',
+        required: false,
+        multiple: false,
+        default_value: 15,
+        description: 'Maximum perceptual hash distance allowed for matches.',
+      },
+      {
+        key: 'include_prompt',
+        label: 'Include Prompt',
+        direction: 'input',
+        data_type: 'boolean',
+        required: false,
+        multiple: false,
+        default_value: true,
+        description: 'Include prompt metadata in each returned match record.',
+      },
+    ],
+    [
+      {
+        key: 'matches',
+        label: 'Matches',
+        direction: 'output',
+        data_type: 'json',
+        required: true,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.find_similar_images' },
+    [
+      {
+        key: 'limit',
+        label: 'Limit',
+        data_type: 'number',
+        default_value: 12,
+      },
+      {
+        key: 'threshold',
+        label: 'Threshold',
+        data_type: 'number',
+        default_value: 15,
+      },
+      {
+        key: 'include_prompt',
+        label: 'Include Prompt',
+        data_type: 'checkbox',
+        default_value: true,
+      },
+    ],
+    '#42a5f5',
   );
 }
 
@@ -756,4 +845,3 @@ export function getUserSettingsDb(): Database.Database {
   }
   return userSettingsDb;
 }
-
