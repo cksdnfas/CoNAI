@@ -1247,7 +1247,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                     fitView
                     colorMode={reactFlowColorMode}
                     snapToGrid
-                    connectionRadius={28}
+                    connectionRadius={32}
                     deleteKeyCode={['Backspace', 'Delete']}
                     defaultMarkerColor="var(--foreground)"
                     defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed } }}

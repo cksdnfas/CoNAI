@@ -180,33 +180,17 @@ export function findNodePort(node: ModuleGraphNode | undefined, direction: 'in' 
   return portList.find((port) => port.key === portKey) ?? null
 }
 
-/** Build a readable edge label and styling from the connected module ports. */
+/** Build a minimal colored edge style so graph wiring stays readable without extra labels. */
 export function buildModuleEdgePresentation(sourcePort: ModulePortDefinition | null, targetPort: ModulePortDefinition | null) {
   const dataType = sourcePort?.data_type ?? targetPort?.data_type ?? null
   const accentColor = dataType ? getPortTypeColor(dataType) : '#94a3b8'
-  const label = sourcePort && targetPort
-    ? `${sourcePort.label} → ${targetPort.label}`
-    : sourcePort?.label ?? targetPort?.label ?? ''
 
   return {
-    label,
+    label: '',
     style: {
       stroke: accentColor,
-      strokeWidth: 2,
+      strokeWidth: 2.5,
     },
-    labelStyle: {
-      fill: '#e5eefb',
-      fontSize: 11,
-      fontWeight: 600,
-    },
-    labelBgStyle: {
-      fill: '#0f172a',
-      fillOpacity: 0.92,
-      stroke: accentColor,
-      strokeWidth: 1,
-    },
-    labelBgPadding: [6, 3] as [number, number],
-    labelBgBorderRadius: 6,
   }
 }
 

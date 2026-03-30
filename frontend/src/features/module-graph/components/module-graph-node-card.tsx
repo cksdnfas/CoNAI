@@ -46,7 +46,7 @@ function buildPortTooltip(port: ModulePortDefinition, statusLabel: string) {
 /** Render one compact port row with a label and a colored type badge only. */
 function PortCell({ port, side, accentColor, connected, satisfied, requiredMissing }: PortCellProps) {
   if (!port) {
-    return <div className="min-h-[38px] rounded-sm border border-dashed border-border/35 bg-surface-low/20" aria-hidden="true" />
+    return <div className="min-h-[34px] rounded-sm border border-dashed border-border/35 bg-surface-low/20" aria-hidden="true" />
   }
 
   const portTypeColor = getPortTypeColor(port.data_type)
@@ -59,19 +59,19 @@ function PortCell({ port, side, accentColor, connected, satisfied, requiredMissi
 
   return (
     <div
-      className={`min-h-[38px] rounded-sm border ${alignmentClass}`}
+      className={`min-h-[34px] rounded-sm border ${alignmentClass}`}
       style={{ borderColor, backgroundColor } as CSSProperties}
       title={buildPortTooltip(port, statusLabel)}
     >
-      <div className={`flex min-h-[36px] items-center gap-2 ${rowJustifyClass}`}>
+      <div className={`flex min-h-[32px] items-center gap-2 ${rowJustifyClass}`}>
         {side === 'input' ? <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: portTypeColor }} aria-hidden="true" /> : null}
-        <span className={`min-w-0 flex-1 truncate text-xs font-medium text-foreground ${labelAlignmentClass}`}>
+        <span className={`min-w-0 flex-1 truncate text-[11px] font-medium text-foreground ${labelAlignmentClass}`}>
           {port.label}
           {port.required ? <span className="ml-1 text-[11px] text-amber-300">*</span> : null}
         </span>
         <Badge
           variant="outline"
-          className="shrink-0 px-1.5 py-0 text-[10px] font-semibold uppercase tracking-[0.08em]"
+          className="shrink-0 px-1.5 py-0 text-[9px] font-semibold uppercase tracking-[0.08em]"
           style={{ borderColor: `${portTypeColor}88`, color: portTypeColor } as CSSProperties}
         >
           {PORT_TYPE_LABELS[port.data_type]}
@@ -86,14 +86,14 @@ function PortCell({ port, side, accentColor, connected, satisfied, requiredMissi
 function buildHandleStyle(params: { side: 'input' | 'output'; top: string; color: string }): CSSProperties {
   return {
     top: params.top,
-    width: 16,
-    height: 16,
+    width: 18,
+    height: 18,
     borderRadius: 999,
     background: params.color,
     border: '2px solid var(--surface-container)',
     boxShadow: `0 0 0 4px ${params.color}22`,
-    left: params.side === 'input' ? -9 : undefined,
-    right: params.side === 'output' ? -9 : undefined,
+    left: params.side === 'input' ? -10 : undefined,
+    right: params.side === 'output' ? -10 : undefined,
   }
 }
 
@@ -140,32 +140,22 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
 
   return (
     <div
-      className="min-w-[300px] rounded-sm border bg-surface-container px-3 py-3 text-foreground shadow-lg"
+      className="min-w-[280px] rounded-sm border bg-surface-container px-3 py-2.5 text-foreground shadow-lg"
       style={{ borderColor: statusBorderColor, boxShadow: `0 0 0 1px ${accentColor}22` } as CSSProperties}
       title={`${module.name}\nmodule id: ${module.id}${module.description ? `\n${module.description}` : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-foreground">{module.name}</div>
-          <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-            <span>{module.engine_type}</span>
-            <span>#{module.id}</span>
+          <div className="mt-0.5 text-[11px] text-muted-foreground">
+            {module.engine_type} · in {connectedInputCount}/{inputPorts.length} · out {connectedOutputCount}/{outputPorts.length}
+            {missingRequiredInputCount > 0 ? ` · missing ${missingRequiredInputCount}` : ''}
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Badge variant="outline" style={{ borderColor: `${accentColor}66`, color: accentColor } as CSSProperties}>
-            {module.engine_type}
-          </Badge>
-          {statusLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
-        </div>
+        {statusLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
       </div>
 
-      <div className="mt-2 text-[11px] text-muted-foreground">
-        입력 {connectedInputCount}/{inputPorts.length} · 출력 {connectedOutputCount}/{outputPorts.length}
-        {missingRequiredInputCount > 0 ? ` · 필수 부족 ${missingRequiredInputCount}` : ''}
-      </div>
-
-      <div className="mt-3 grid gap-1.5">
+      <div className="mt-2.5 grid gap-1">
         {Array.from({ length: portRowCount }, (_, index) => {
           const inputPort = inputPorts[index]
           const outputPort = outputPorts[index]
@@ -175,7 +165,7 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
           const outputConnected = Boolean(outputPort && connectedOutputKeys.has(outputPort.key))
 
           return (
-            <div key={`port-row-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1.5">
+            <div key={`port-row-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
               <PortCell
                 port={inputPort}
                 side="input"
