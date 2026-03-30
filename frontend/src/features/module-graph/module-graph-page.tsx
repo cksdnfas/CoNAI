@@ -60,6 +60,7 @@ import {
   type ModuleGraphEdge,
   type ModuleGraphNode,
 } from './module-graph-shared'
+import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import type { AppSettings } from '@/types/settings'
@@ -227,6 +228,9 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     queryKey: ['app-settings', 'module-graph-validation'],
     queryFn: getAppSettings,
   })
+
+  const reactFlowColorMode: 'light' | 'dark' | 'system' =
+    settingsQuery.data?.appearance.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode
 
   const graphWorkflowsQuery = useQuery({
     queryKey: ['module-graph-workflows'],
@@ -1280,8 +1284,9 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                   }
                 />
 
-                <div className="h-[760px] overflow-hidden rounded-sm border border-border bg-[#0b111c]">
+                <div className="h-[760px] overflow-hidden rounded-sm border border-border bg-surface-lowest">
                   <ReactFlow
+                    className="theme-graph-flow"
                     nodes={nodes}
                     edges={edges}
                     onNodesChange={onNodesChange}
@@ -1305,13 +1310,21 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                     isValidConnection={isValidConnection}
                     nodeTypes={nodeTypes}
                     fitView
+                    colorMode={reactFlowColorMode}
                     snapToGrid
                     deleteKeyCode={['Backspace', 'Delete']}
+                    defaultMarkerColor="var(--foreground)"
                     defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed } }}
                   >
-                    <MiniMap pannable zoomable />
+                    <MiniMap
+                      pannable
+                      zoomable
+                      nodeColor="var(--primary)"
+                      maskColor="color-mix(in srgb, var(--background) 72%, transparent)"
+                      className="!bg-surface-lowest"
+                    />
                     <Controls />
-                    <Background gap={20} size={1} />
+                    <Background gap={20} size={1} color="color-mix(in srgb, var(--foreground) 10%, transparent)" />
                   </ReactFlow>
                 </div>
               </CardContent>

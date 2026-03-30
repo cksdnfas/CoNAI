@@ -10,6 +10,7 @@ import {
   type NodeProps,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { useQuery } from '@tanstack/react-query'
 import { Check, Plus, Trash2, Upload } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,7 +20,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import {
+  getAppSettings,
   createGenerationWorkflow,
   updateGenerationWorkflow,
   type CustomDropdownList,
@@ -313,6 +316,10 @@ export function ComfyWorkflowAuthoringModal({
   onSaved,
 }: ComfyWorkflowAuthoringModalProps) {
   const { showSnackbar } = useSnackbar()
+  const settingsQuery = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: getAppSettings,
+  })
   const [workflowName, setWorkflowName] = useState('')
   const [workflowDescription, setWorkflowDescription] = useState('')
   const [workflowJson, setWorkflowJson] = useState('')
@@ -403,6 +410,9 @@ export function ComfyWorkflowAuthoringModal({
       return null
     }
   }, [jsonError, markedFields, workflowJson])
+
+  const reactFlowColorMode: 'light' | 'dark' | 'system' =
+    settingsQuery.data?.appearance.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode
 
   const dropdownListNames = dropdownLists.map((list) => list.name)
 
@@ -539,16 +549,18 @@ export function ComfyWorkflowAuthoringModal({
                 <div className="mt-1 text-xs text-muted-foreground">노드 안의 입력 항목을 눌러 marked field로 추가해.</div>
               </div>
 
-              <div className="h-[500px] overflow-hidden rounded-sm border border-border bg-background 2xl:h-[560px]">
+              <div className="h-[500px] overflow-hidden rounded-sm border border-border bg-surface-lowest 2xl:h-[560px]">
                 {parsedGraph ? (
                   <ReactFlowProvider>
                     <ReactFlow<AuthoringNode, AuthoringEdge>
+                      className="theme-graph-flow"
                       nodes={parsedGraph.nodes}
                       edges={parsedGraph.edges}
                       nodeTypes={nodeTypes}
                       fitView
-                      colorMode="dark"
+                      colorMode={reactFlowColorMode}
                       proOptions={{ hideAttribution: true }}
+                      defaultMarkerColor="var(--foreground)"
                       defaultEdgeOptions={{ animated: false }}
                       nodesDraggable
                       nodesConnectable={false}

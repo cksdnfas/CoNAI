@@ -344,6 +344,52 @@
     align-items: start;
   }
 
+  .theme-graph-flow {
+    background: var(--surface-lowest);
+  }
+
+  .theme-graph-flow .react-flow__panel {
+    color: var(--foreground);
+  }
+
+  .theme-graph-flow .react-flow__controls {
+    overflow: hidden;
+    border: 1px solid var(--theme-floating-border);
+    border-radius: var(--radius);
+    background: var(--theme-floating-surface);
+    backdrop-filter: blur(var(--theme-floating-blur));
+    box-shadow: var(--theme-floating-shadow);
+  }
+
+  .theme-graph-flow .react-flow__controls-button {
+    border-bottom-color: color-mix(in srgb, var(--border) 72%, transparent);
+    background: transparent;
+    color: var(--foreground);
+  }
+
+  .theme-graph-flow .react-flow__controls-button:hover {
+    background: var(--surface-high);
+  }
+
+  .theme-graph-flow .react-flow__controls-button svg {
+    fill: currentColor;
+  }
+
+  .theme-graph-flow .react-flow__minimap {
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--surface-lowest) 90%, transparent);
+    box-shadow: var(--theme-card-shadow);
+  }
+
+  .theme-graph-flow .react-flow__attribution {
+    border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+    border-radius: calc(var(--radius) - 2px);
+    background: color-mix(in srgb, var(--surface-container) 88%, transparent);
+    color: var(--muted-foreground);
+    backdrop-filter: blur(var(--theme-floating-blur));
+  }
+
   .image-list-grid-item {
     display: flex;
   }
