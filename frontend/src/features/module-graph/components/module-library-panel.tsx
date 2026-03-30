@@ -83,20 +83,24 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
           ) : null}
 
           {modules.length > 0 && filteredModules.length === 0 ? (
-            <div className="rounded-sm bg-surface-low px-4 py-6 text-sm text-muted-foreground">검색 결과가 없어. 다른 이름이나 엔진 타입으로 찾아봐.</div>
+            <Alert>
+              <AlertTitle>검색 결과가 없어</AlertTitle>
+              <AlertDescription>다른 이름, 카테고리, 엔진 타입 키워드로 다시 찾아봐.</AlertDescription>
+            </Alert>
           ) : null}
 
           <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
             {filteredModules.map((module) => (
-              <div key={module.id} className="rounded-sm bg-surface-low p-3">
+              <div key={module.id} className={cn('rounded-sm border p-3', module.engine_type === 'system' ? 'border-primary/40 bg-surface-high' : 'border-border bg-surface-low')}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
+                  <div className="min-w-0 space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium text-foreground">{module.name}</span>
                       <Badge variant="outline">{module.engine_type}</Badge>
+                      {module.category ? <Badge variant="secondary">{module.category}</Badge> : null}
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground">입력 {module.exposed_inputs.length} · 출력 {module.output_ports.length}</div>
-                    {module.description ? <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{module.description}</div> : null}
+                    <div className="text-xs text-muted-foreground">입력 {module.exposed_inputs.length} · 출력 {module.output_ports.length}</div>
+                    {module.description ? <div className="line-clamp-2 text-xs text-muted-foreground">{module.description}</div> : null}
                   </div>
                   <Button type="button" size="sm" variant="outline" onClick={() => onAddModule(module)}>
                     추가

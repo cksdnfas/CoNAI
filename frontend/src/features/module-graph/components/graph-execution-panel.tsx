@@ -196,43 +196,39 @@ export function GraphExecutionPanel({
         ) : null}
 
         {selectedExecutionId && executionDetail ? (
-          <div className="space-y-3 rounded-sm bg-surface-low p-2.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium text-foreground">#{executionDetail.execution.id}</span>
+          <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+            <Alert>
+              <AlertTitle className="flex flex-wrap items-center gap-2">
+                <span>#{executionDetail.execution.id}</span>
                 <Badge variant={executionDetail.execution.status === 'completed' ? 'secondary' : 'outline'}>{executionDetail.execution.status}</Badge>
                 <span className="text-[11px] text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
-              </div>
-            </div>
-
-            {executionDetail.execution.status === 'queued' && executionDetail.execution.queue_position ? (
-              <div className="text-[11px] text-[#ffd180]">큐 순번 {executionDetail.execution.queue_position}</div>
-            ) : null}
-
-            {executionDetail.execution.cancel_requested ? (
-              <div className="text-[11px] text-[#ffd180]">취소 요청 접수됨</div>
-            ) : null}
-
-            {executionDetail.execution.error_message ? (
-              <div className="text-[11px] text-[#ffb4ab]">{executionDetail.execution.error_message}</div>
-            ) : null}
-
-            {executionDetail.execution.failed_node_id ? (
-              <div className="text-[11px] text-[#ffd180]">실패 노드 {executionDetail.execution.failed_node_id}</div>
-            ) : null}
+              </AlertTitle>
+              <AlertDescription>
+                {executionDetail.execution.status === 'queued' && executionDetail.execution.queue_position ? <div>큐 순번 {executionDetail.execution.queue_position}</div> : null}
+                {executionDetail.execution.cancel_requested ? <div>취소 요청 접수됨</div> : null}
+                {executionDetail.execution.error_message ? <div>{executionDetail.execution.error_message}</div> : null}
+                {executionDetail.execution.failed_node_id ? <div>실패 노드 {executionDetail.execution.failed_node_id}</div> : null}
+              </AlertDescription>
+            </Alert>
 
             <div className="space-y-2.5">
-              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Artifacts</div>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <span>Artifacts</span>
+                <Badge variant="outline">{executionDetail.artifacts.length}</Badge>
+              </div>
               {executionDetail.artifacts.map((artifact) => {
                 const previewUrl = getArtifactPreviewUrl(artifact)
                 const parsedMetadata = parseMetadataValue(artifact.metadata)
 
                 return (
-                  <div key={artifact.id} className="rounded-sm bg-surface-container p-2.5">
+                  <div key={artifact.id} className="rounded-sm border border-border bg-surface-container p-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="text-sm font-medium text-foreground">{artifact.node_id} · {artifact.port_key}</div>
-                        <div className="text-[11px] text-muted-foreground">{artifact.artifact_type} · {formatDateTime(artifact.created_date)}</div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-sm font-medium text-foreground">{artifact.node_id} · {artifact.port_key}</span>
+                          <Badge variant="outline">{artifact.artifact_type}</Badge>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">{formatDateTime(artifact.created_date)}</div>
                       </div>
                     </div>
 
@@ -240,7 +236,7 @@ export function GraphExecutionPanel({
                       <img src={previewUrl} alt={`${artifact.node_id}-${artifact.port_key}`} className="mt-2 max-h-44 rounded-sm border border-border object-contain" />
                     ) : null}
 
-                    {artifact.storage_path ? <div className="mt-2 break-all text-[11px] text-muted-foreground">{artifact.storage_path}</div> : null}
+                    {artifact.storage_path ? <div className="mt-2 rounded-sm bg-surface-high px-2 py-1.5 break-all text-[11px] text-muted-foreground">{artifact.storage_path}</div> : null}
 
                     {parsedMetadata ? (
                       <pre className="mt-2 overflow-auto rounded-sm bg-[#0b111c] p-2.5 text-[11px] text-[#d7e3ff]">{typeof parsedMetadata === 'string' ? parsedMetadata : JSON.stringify(parsedMetadata, null, 2)}</pre>
@@ -251,7 +247,10 @@ export function GraphExecutionPanel({
             </div>
 
             <div className="space-y-2.5">
-              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Logs</div>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <span>Logs</span>
+                <Badge variant="outline">{executionDetail.logs.length}</Badge>
+              </div>
               {executionDetail.logs.length === 0 ? (
                 <Alert>
                   <AlertTitle>저장된 로그가 없어</AlertTitle>
@@ -261,7 +260,7 @@ export function GraphExecutionPanel({
                 executionDetail.logs.map((log) => {
                   const parsedDetails = parseMetadataValue(log.details)
                   return (
-                    <div key={log.id} className="rounded-sm bg-surface-container p-2.5">
+                    <div key={log.id} className="rounded-sm border border-border bg-surface-container p-2.5">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Badge variant={log.level === 'error' ? 'outline' : 'secondary'}>{log.level}</Badge>

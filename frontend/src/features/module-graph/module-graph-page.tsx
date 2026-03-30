@@ -17,6 +17,7 @@ import { ArrowLeft, Boxes, ChevronDown, Copy, Plus, RefreshCw, Save, Trash2 } fr
 import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '@/components/common/page-header'
 import { SectionHeading } from '@/components/common/section-heading'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -1170,25 +1171,33 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                       variant="inside"
                       heading="Workflow Setup"
                       actions={
-                        <Button type="button" size="sm" variant="ghost" onClick={() => setIsSetupCollapsed((current) => !current)}>
-                          <ChevronDown className={`h-4 w-4 transition-transform ${isSetupCollapsed ? '-rotate-90' : 'rotate-0'}`} />
-                        </Button>
+                        <>
+                          <Badge variant="outline">N {nodes.length}</Badge>
+                          <Badge variant="outline">E {edges.length}</Badge>
+                          <Button type="button" size="sm" variant="ghost" onClick={() => setIsSetupCollapsed((current) => !current)}>
+                            <ChevronDown className={`h-4 w-4 transition-transform ${isSetupCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+                          </Button>
+                        </>
                       }
                     />
 
                     {!isSetupCollapsed ? (
                       <>
-                        <div className="space-y-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium text-foreground">{selectedGraphRecord?.name || workflowName}</span>
+                        <Alert>
+                          <AlertTitle className="flex flex-wrap items-center gap-2">
+                            <span>{selectedGraphRecord?.name || workflowName || 'Untitled workflow'}</span>
                             {selectedGraphRecord ? <Badge variant="outline">v{selectedGraphRecord.version}</Badge> : <Badge variant="outline">draft</Badge>}
                             {isDirty ? <Badge variant="outline">unsaved</Badge> : <Badge variant="secondary">saved</Badge>}
-                          </div>
-                          <div className="text-xs text-muted-foreground">노드 {nodes.length} · 엣지 {edges.length} · 노출 입력 {workflowExposedInputs.length}</div>
-                          <div className="grid gap-3">
-                            <Input value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} placeholder="Workflow name" />
-                            <Input value={workflowDescription} onChange={(event) => setWorkflowDescription(event.target.value)} placeholder="설명 (선택)" />
-                          </div>
+                          </AlertTitle>
+                          <AlertDescription>
+                            <div>노드 {nodes.length} · 엣지 {edges.length} · 노출 입력 {workflowExposedInputs.length}</div>
+                            <div>{selectedGraphRecord ? '현재 저장된 워크플로우를 편집 중이야.' : '아직 저장되지 않은 새 워크플로우 초안이야.'}</div>
+                          </AlertDescription>
+                        </Alert>
+
+                        <div className="grid gap-3">
+                          <Input value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} placeholder="Workflow name" />
+                          <Input value={workflowDescription} onChange={(event) => setWorkflowDescription(event.target.value)} placeholder="설명 (선택)" />
                         </div>
 
                         <Button type="button" onClick={() => void handleSaveGraph()} disabled={isSavingGraph || workflowName.trim().length === 0}>
