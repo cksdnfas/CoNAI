@@ -16,7 +16,7 @@ type SavedGraphListProps = {
   onEditGraph?: (graph: GraphWorkflowRecord) => void
   showExecuteButton?: boolean
   headerActions?: ReactNode
-  isDesktopPageLayout?: boolean
+  topToolbar?: ReactNode
 }
 
 /** Render saved workflows with quick run and edit actions. */
@@ -29,7 +29,7 @@ export function SavedGraphList({
   onEditGraph,
   showExecuteButton = true,
   headerActions,
-  isDesktopPageLayout = false,
+  topToolbar,
 }: SavedGraphListProps) {
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -50,12 +50,15 @@ export function SavedGraphList({
       title="Workflows"
       badge={headerActions}
       floatingFrame
-      className={cn('sticky top-24 z-30 isolate self-start', isDesktopPageLayout && 'flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
-      bodyClassName={cn('space-y-2', isDesktopPageLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}
+      className="sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col"
+      bodyClassName="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1"
       headerExtra={
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="검색" className="h-8 bg-surface-container pl-9 text-sm" />
+        <div className="space-y-3">
+          {topToolbar ? <div className="flex flex-wrap gap-2">{topToolbar}</div> : null}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="검색" className="h-8 bg-surface-container pl-9 text-sm" />
+          </div>
         </div>
       }
     >

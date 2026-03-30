@@ -19,6 +19,7 @@ import { PageHeader } from '@/components/common/page-header'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -212,6 +213,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const [executingGraphId, setExecutingGraphId] = useState<number | null>(null)
   const [cancellingExecutionId, setCancellingExecutionId] = useState<number | null>(null)
   const [workflowView, setWorkflowView] = useState<'browse' | 'edit'>('browse')
+  const [isModuleLibraryOpen, setIsModuleLibraryOpen] = useState(false)
   const [isSetupCollapsed, setIsSetupCollapsed] = useState(false)
   const [workflowExposedInputs, setWorkflowExposedInputs] = useState<GraphWorkflowExposedInput[]>([])
   const [workflowRunInputValues, setWorkflowRunInputValues] = useState<Record<string, unknown>>({})
@@ -597,6 +599,11 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     setSelectedNodeId(nodeId)
   }
 
+  const handleAddModuleFromLibrary = (module: ModuleDefinitionRecord) => {
+    handleAddModuleNode(module)
+    setIsModuleLibraryOpen(false)
+  }
+
   /** Confirm before replacing or clearing unsaved graph edits. */
   const confirmDiscardUnsavedChanges = () => {
     if (!isDirty) {
@@ -973,6 +980,13 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     await handleExecuteGraph(selectedExecution.graph_workflow_id)
   }
 
+  const handleRefreshWorkspace = () =>
+    Promise.all([
+      modulesQuery.refetch(),
+      graphWorkflowsQuery.refetch(),
+      ...(selectedGraphId !== null ? [graphExecutionsQuery.refetch()] : []),
+    ])
+
   const handleAutoLayout = () => {
     if (nodes.length === 0) {
       return
@@ -1029,28 +1043,38 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       onExecuteGraph={(graphId) => void handleExecuteGraph(graphId)}
       showExecuteButton={false}
       headerActions={
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="outline"
-            className="bg-surface-container"
-            onClick={() =>
-              void Promise.all([
-                modulesQuery.refetch(),
-                graphWorkflowsQuery.refetch(),
-                ...(selectedGraphId !== null ? [graphExecutionsQuery.refetch()] : []),
-              ])
-            }
-            aria-label="새로고침"
-            title="새로고침"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={handleCreateWorkflow} aria-label="새 워크플로우" title="새 워크플로우">
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
+        workflowView === 'browse' ? (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="bg-surface-container"
+              onClick={() => void handleRefreshWorkspace()}
+              aria-label="새로고침"
+              title="새로고침"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={handleCreateWorkflow} aria-label="새 워크플로우" title="새 워크플로우">
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : undefined
+      }
+      topToolbar={
+        workflowView === 'edit' ? (
+          <>
+            <Button type="button" size="sm" variant="outline" onClick={() => setWorkflowView('browse')}>
+              <ArrowLeft className="h-4 w-4" />
+              목록으로
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => void handleRefreshWorkspace()}>
+              <RefreshCw className="h-4 w-4" />
+              새로고침
+            </Button>
+          </>
+        ) : undefined
       }
     />
   )
@@ -1061,51 +1085,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
         <PageHeader
           eyebrow="Create"
           title={workflowView === 'browse' ? 'Workflow' : 'Workflow Editor'}
-          actions={
-            workflowView === 'browse' ? undefined : (
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" onClick={() => setWorkflowView('browse')}>
-                  <ArrowLeft className="h-4 w-4" />
-                  워크플로우로 돌아가기
-                </Button>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  onClick={() =>
-                    void Promise.all([
-                      modulesQuery.refetch(),
-                      graphWorkflowsQuery.refetch(),
-                      ...(selectedGraphId !== null ? [graphExecutionsQuery.refetch()] : []),
-                    ])
-                  }
-                  aria-label="새로고침"
-                  title="새로고침"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-                <Button type="button" variant="outline" onClick={handleAutoLayout} disabled={nodes.length === 0}>
-                  자동 정렬
-                </Button>
-                <Button type="button" variant="outline" onClick={handleRemoveSelectedEdge} disabled={!selectedEdge}>
-                  <Trash2 className="h-4 w-4" />
-                  선택 엣지 삭제
-                </Button>
-                <Button type="button" variant="outline" onClick={handleDuplicateSelectedNode} disabled={!selectedNode}>
-                  <Copy className="h-4 w-4" />
-                  선택 노드 복제
-                </Button>
-                <Button type="button" variant="outline" onClick={handleRemoveSelectedNode} disabled={!selectedNode}>
-                  <Trash2 className="h-4 w-4" />
-                  선택 노드 삭제
-                </Button>
-                <Button type="button" variant="outline" onClick={handleResetCanvas}>
-                  <Trash2 className="h-4 w-4" />
-                  캔버스 초기화
-                </Button>
-              </div>
-            )
-          }
         />
       ) : null}
 
@@ -1172,49 +1151,29 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                     <>
                       <Badge variant="outline">노드 {nodes.length}</Badge>
                       <Badge variant="outline">엣지 {edges.length}</Badge>
-                      {embedded ? (
-                        <>
-                          <Button type="button" variant="outline" onClick={() => setWorkflowView('browse')}>
-                            <ArrowLeft className="h-4 w-4" />
-                            목록으로
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="outline"
-                            onClick={() =>
-                              void Promise.all([
-                                modulesQuery.refetch(),
-                                graphWorkflowsQuery.refetch(),
-                                ...(selectedGraphId !== null ? [graphExecutionsQuery.refetch()] : []),
-                              ])
-                            }
-                            aria-label="새로고침"
-                            title="새로고침"
-                          >
-                            <RefreshCw className="h-4 w-4" />
-                          </Button>
-                          <Button type="button" variant="outline" onClick={handleAutoLayout} disabled={nodes.length === 0}>
-                            자동 정렬
-                          </Button>
-                          <Button type="button" variant="outline" onClick={handleDuplicateSelectedNode} disabled={!selectedNode}>
-                            <Copy className="h-4 w-4" />
-                            노드 복제
-                          </Button>
-                          <Button type="button" variant="outline" onClick={handleRemoveSelectedNode} disabled={!selectedNode}>
-                            <Trash2 className="h-4 w-4" />
-                            노드 삭제
-                          </Button>
-                          <Button type="button" variant="outline" onClick={handleRemoveSelectedEdge} disabled={!selectedEdge}>
-                            <Trash2 className="h-4 w-4" />
-                            엣지 삭제
-                          </Button>
-                          <Button type="button" variant="outline" onClick={handleResetCanvas}>
-                            <Trash2 className="h-4 w-4" />
-                            초기화
-                          </Button>
-                        </>
-                      ) : null}
+                      <Button type="button" variant="outline" onClick={() => setIsModuleLibraryOpen(true)}>
+                        <Plus className="h-4 w-4" />
+                        모듈 추가
+                      </Button>
+                      <Button type="button" variant="outline" onClick={handleAutoLayout} disabled={nodes.length === 0}>
+                        자동 정렬
+                      </Button>
+                      <Button type="button" variant="outline" onClick={handleDuplicateSelectedNode} disabled={!selectedNode}>
+                        <Copy className="h-4 w-4" />
+                        노드 복제
+                      </Button>
+                      <Button type="button" variant="outline" onClick={handleRemoveSelectedNode} disabled={!selectedNode}>
+                        <Trash2 className="h-4 w-4" />
+                        노드 삭제
+                      </Button>
+                      <Button type="button" variant="outline" onClick={handleRemoveSelectedEdge} disabled={!selectedEdge}>
+                        <Trash2 className="h-4 w-4" />
+                        엣지 삭제
+                      </Button>
+                      <Button type="button" variant="outline" onClick={handleResetCanvas}>
+                        <Trash2 className="h-4 w-4" />
+                        초기화
+                      </Button>
                     </>
                   }
                 />
@@ -1335,13 +1294,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               onIssueSelect={focusValidationIssue}
             />
 
-            <ModuleLibraryPanel
-              modules={modules}
-              isError={modulesQuery.isError}
-              errorMessage={modulesQuery.error instanceof Error ? modulesQuery.error.message : '모듈 목록을 불러오지 못했어.'}
-              onAddModule={handleAddModuleNode}
-            />
-
             <GraphExecutionPanel
               selectedGraphId={selectedGraphId}
               selectedExecutionId={selectedExecutionId}
@@ -1362,6 +1314,25 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           </div>
         </div>
       )}
+
+      <BottomDrawerSheet
+        open={isModuleLibraryOpen}
+        title="모듈 추가"
+        subtitle="그래프에 넣을 모듈을 골라서 바로 추가해."
+        onClose={() => setIsModuleLibraryOpen(false)}
+        ariaLabel="모듈 추가 패널"
+        className="max-w-5xl mx-auto"
+        bodyClassName="p-4"
+        closeLabel="닫기"
+      >
+        <ModuleLibraryPanel
+          modules={modules}
+          isError={modulesQuery.isError}
+          errorMessage={modulesQuery.error instanceof Error ? modulesQuery.error.message : '모듈 목록을 불러오지 못했어.'}
+          onAddModule={handleAddModuleFromLibrary}
+          surface="plain"
+        />
+      </BottomDrawerSheet>
     </div>
   )
 }
