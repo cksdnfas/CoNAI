@@ -10,6 +10,7 @@ import type {
   GraphExecutionRecord,
 } from '@/lib/api'
 import { formatDateTime, getArtifactPreviewUrl, parseMetadataValue } from '../module-graph-shared'
+import { cn } from '@/lib/utils'
 
 type GraphExecutionDetail = {
   execution: GraphExecutionRecord
@@ -119,7 +120,12 @@ export function GraphExecutionPanel({
 
         {!showHeader ? <div className="flex justify-end">{actionButtons}</div> : null}
 
-        {!selectedGraphId ? <div className="text-sm text-muted-foreground">그래프를 먼저 골라줘.</div> : null}
+        {!selectedGraphId ? (
+          <Alert>
+            <AlertTitle>그래프를 먼저 골라줘</AlertTitle>
+            <AlertDescription>워크플로우를 선택하면 최근 실행, 큐 상태, 결과 아티팩트와 로그를 여기서 확인할 수 있어.</AlertDescription>
+          </Alert>
+        ) : null}
 
         {selectedGraphId && executionListIsError ? (
           <Alert variant="destructive">
@@ -129,7 +135,10 @@ export function GraphExecutionPanel({
         ) : null}
 
         {selectedGraphId && executionList.length === 0 ? (
-          <div className="text-sm text-muted-foreground">아직 실행 기록이 없어.</div>
+          <Alert>
+            <AlertTitle>아직 실행 기록이 없어</AlertTitle>
+            <AlertDescription>첫 실행을 돌리면 여기서 큐 상태와 결과 아티팩트를 계속 추적할 수 있어.</AlertDescription>
+          </Alert>
         ) : null}
 
         {selectedGraphId ? (
@@ -140,10 +149,13 @@ export function GraphExecutionPanel({
             </div>
 
             {queuedCount > 0 || runningCount > 0 ? (
-              <div className="rounded-sm bg-surface-low px-2.5 py-2 text-xs text-muted-foreground">
-                {activeRunningExecution ? <div>실행 중 #{activeRunningExecution.id}</div> : null}
-                {nextQueuedExecution ? <div>다음 #{nextQueuedExecution.id} · 순번 {nextQueuedExecution.queue_position ?? '?'}</div> : null}
-              </div>
+              <Alert>
+                <AlertTitle>큐/실행 상태</AlertTitle>
+                <AlertDescription>
+                  {activeRunningExecution ? <div>실행 중 #{activeRunningExecution.id}</div> : null}
+                  {nextQueuedExecution ? <div>다음 #{nextQueuedExecution.id} · 순번 {nextQueuedExecution.queue_position ?? '?'}</div> : null}
+                </AlertDescription>
+              </Alert>
             ) : null}
           </div>
         ) : null}
@@ -154,7 +166,7 @@ export function GraphExecutionPanel({
               key={execution.id}
               type="button"
               onClick={() => onSelectExecution(execution.id)}
-              className="block w-full rounded-sm bg-surface-low px-2.5 py-2 text-left transition-colors hover:bg-surface-high"
+              className={cn('block w-full rounded-sm border px-2.5 py-2 text-left transition-colors hover:bg-surface-high', selectedExecutionId === execution.id ? 'border-primary/50 bg-surface-high' : 'border-border bg-surface-low')}
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
@@ -241,7 +253,10 @@ export function GraphExecutionPanel({
             <div className="space-y-2.5">
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Logs</div>
               {executionDetail.logs.length === 0 ? (
-                <div className="text-[11px] text-muted-foreground">저장된 로그가 없어.</div>
+                <Alert>
+                  <AlertTitle>저장된 로그가 없어</AlertTitle>
+                  <AlertDescription>이번 실행은 별도 로그 이벤트 없이 끝났어.</AlertDescription>
+                </Alert>
               ) : (
                 executionDetail.logs.map((log) => {
                   const parsedDetails = parseMetadataValue(log.details)

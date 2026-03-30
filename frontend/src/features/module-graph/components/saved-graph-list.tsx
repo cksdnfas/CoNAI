@@ -1,11 +1,13 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { PenSquare, Play, Search } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import type { GraphWorkflowRecord } from '@/lib/api'
+import { cn } from '@/lib/utils'
 
 type SavedGraphListProps = {
   graphs: GraphWorkflowRecord[]
@@ -68,7 +70,12 @@ export function SavedGraphList({
           <SectionHeading
             variant="inside"
             heading="Saved Workflows"
-            actions={headerActions}
+            actions={
+              <>
+                <Badge variant="outline">{filteredGraphs.length} shown</Badge>
+                {headerActions}
+              </>
+            }
           />
         ) : null}
 
@@ -81,7 +88,7 @@ export function SavedGraphList({
           {filteredGraphs.map((graph) => {
             const exposedInputCount = graph.graph.metadata?.exposed_inputs?.length ?? 0
             return (
-              <div key={graph.id} className="rounded-sm bg-surface-low px-2.5 py-2.5">
+              <div key={graph.id} className={cn('rounded-sm border px-2.5 py-2.5', selectedGraphId === graph.id ? 'border-primary/50 bg-surface-high' : 'border-border bg-surface-low')}>
                 <div className="flex items-start justify-between gap-2">
                   <button
                     type="button"
@@ -131,8 +138,18 @@ export function SavedGraphList({
           })}
         </div>
 
-        {graphs.length === 0 ? <div className="text-sm text-muted-foreground">저장된 워크플로우가 아직 없어.</div> : null}
-        {graphs.length > 0 && filteredGraphs.length === 0 ? <div className="text-sm text-muted-foreground">검색 결과가 없어.</div> : null}
+        {graphs.length === 0 ? (
+          <Alert>
+            <AlertTitle>저장된 워크플로우가 아직 없어</AlertTitle>
+            <AlertDescription>새 워크플로우를 만들면 여기서 바로 선택하고 실행 흐름으로 넘길 수 있어.</AlertDescription>
+          </Alert>
+        ) : null}
+        {graphs.length > 0 && filteredGraphs.length === 0 ? (
+          <Alert>
+            <AlertTitle>검색 결과가 없어</AlertTitle>
+            <AlertDescription>검색어를 줄이거나 다른 이름/설명 키워드로 찾아봐.</AlertDescription>
+          </Alert>
+        ) : null}
       </CardContent>
     </Card>
   )

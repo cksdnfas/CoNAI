@@ -1,4 +1,5 @@
 import { SectionHeading } from '@/components/common/section-heading'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -219,30 +220,29 @@ export function WorkflowRunnerPanel({
             </div>
 
             {latestExecution || latestPreviewUrl ? (
-              <div className="grid gap-3 rounded-sm bg-surface-low p-3 md:grid-cols-[minmax(0,1fr)_168px]">
-                <div className="space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <span className="font-medium text-foreground">최근 결과</span>
-                    {latestExecution ? (
-                      <>
-                        <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>#{latestExecution.id}</Badge>
-                        <Badge variant="outline">{latestExecution.status}</Badge>
-                      </>
-                    ) : null}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
+              <Alert>
+                <AlertTitle className="flex flex-wrap items-center gap-1.5">
+                  <span>최근 결과</span>
+                  {latestExecution ? (
+                    <>
+                      <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>#{latestExecution.id}</Badge>
+                      <Badge variant="outline">{latestExecution.status}</Badge>
+                    </>
+                  ) : null}
+                </AlertTitle>
+                <AlertDescription className="space-y-3">
+                  <div>
                     {latestPreviewUrl
                       ? `미리보기${latestPreviewLabel ? ` · ${latestPreviewLabel}` : ''}`
                       : latestExecution
                         ? '이미지 결과 없음'
                         : '실행 결과 없음'}
                   </div>
-                </div>
-
-                {latestPreviewUrl ? (
-                  <img src={latestPreviewUrl} alt={latestPreviewLabel || selectedGraph.name} className="max-h-40 w-full rounded-sm border border-border object-contain" />
-                ) : null}
-              </div>
+                  {latestPreviewUrl ? (
+                    <img src={latestPreviewUrl} alt={latestPreviewLabel || selectedGraph.name} className="max-h-40 w-full rounded-sm border border-border object-contain md:max-w-[168px]" />
+                  ) : null}
+                </AlertDescription>
+              </Alert>
             ) : null}
 
             <WorkflowValidationPanel
@@ -256,9 +256,10 @@ export function WorkflowRunnerPanel({
             {inputDefinitions.length > 0 ? (
               <div className="space-y-2.5">{inputDefinitions.map((inputDefinition) => renderInputField(inputDefinition))}</div>
             ) : (
-              <div className="rounded-sm bg-surface-low px-4 py-6 text-sm text-muted-foreground">
-                아직 노출된 실행 입력이 없어. 지금은 저장된 기본값만으로 바로 실행돼.
-              </div>
+              <Alert>
+                <AlertTitle>추가 입력 없이 실행 가능</AlertTitle>
+                <AlertDescription>아직 노출된 실행 입력이 없어. 지금은 저장된 기본값만으로 바로 실행돼.</AlertDescription>
+              </Alert>
             )}
 
             <div className="flex flex-wrap gap-2 pt-1">
@@ -268,9 +269,10 @@ export function WorkflowRunnerPanel({
             </div>
           </div>
         ) : (
-          <div className="rounded-sm bg-surface-low px-4 py-8 text-sm text-muted-foreground">
-            왼쪽에서 워크플로우를 선택해줘. 선택한 워크플로우의 실행 입력만 여기서 보여줄 거야.
-          </div>
+          <Alert>
+            <AlertTitle>워크플로우를 먼저 선택해줘</AlertTitle>
+            <AlertDescription>왼쪽 목록에서 워크플로우를 고르면 실행 입력과 최근 실행 결과를 여기서 이어서 볼 수 있어.</AlertDescription>
+          </Alert>
         )}
       </CardContent>
     </Card>

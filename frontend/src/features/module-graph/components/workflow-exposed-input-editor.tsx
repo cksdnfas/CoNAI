@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ToggleRow } from '@/components/ui/toggle-row'
 import { cn } from '@/lib/utils'
 import type { GraphWorkflowExposedInput } from '@/lib/api'
 
@@ -153,7 +155,10 @@ export function WorkflowExposedInputEditor({
               <div className="text-sm font-semibold text-foreground">Selected Inputs</div>
             </div>
             {selectedInputs.length === 0 ? (
-              <div className="rounded-sm bg-surface-low px-4 py-6 text-sm text-muted-foreground">아직 실행 폼에 노출된 입력이 없어. 아래에서 필요한 입력을 골라줘.</div>
+              <Alert>
+                <AlertTitle>노출된 실행 입력이 아직 없어</AlertTitle>
+                <AlertDescription>아래 Available Inputs에서 필요한 입력을 골라 런너 폼으로 올려봐.</AlertDescription>
+              </Alert>
             ) : (
               selectedInputs.map((inputDefinition, index) => {
                 const expanded = expandedInputId === inputDefinition.id
@@ -219,14 +224,14 @@ export function WorkflowExposedInputEditor({
                         </div>
 
                         <div className="flex flex-wrap items-center gap-6">
-                          <label className="flex items-center gap-2 text-sm text-foreground">
+                          <ToggleRow variant="detail" className="cursor-pointer px-3 py-2">
                             <input
                               type="checkbox"
                               checked={!!inputDefinition.required}
                               onChange={(event) => onUpdateInput(inputDefinition.id, { required: event.target.checked })}
                             />
-                            필수 입력
-                          </label>
+                            <span>필수 입력</span>
+                          </ToggleRow>
                         </div>
 
                         <div className="space-y-2">
@@ -254,9 +259,15 @@ export function WorkflowExposedInputEditor({
               <div className="space-y-3">
                 <Input value={availableSearchQuery} onChange={(event) => setAvailableSearchQuery(event.target.value)} placeholder="추가할 입력 검색" />
                 {candidates.length === 0 ? (
-                  <div className="rounded-sm bg-surface-low px-4 py-6 text-sm text-muted-foreground">먼저 캔버스에 모듈을 배치해야 노출 가능한 입력이 생겨.</div>
+                  <Alert>
+                    <AlertTitle>노출 가능한 입력이 아직 없어</AlertTitle>
+                    <AlertDescription>먼저 캔버스에 모듈을 배치해야 runner에 노출할 입력 후보가 생겨.</AlertDescription>
+                  </Alert>
                 ) : filteredAvailableCandidates.length === 0 ? (
-                  <div className="rounded-sm bg-surface-low px-4 py-6 text-sm text-muted-foreground">추가 가능한 입력이 없거나 검색 결과가 비어 있어.</div>
+                  <Alert>
+                    <AlertTitle>추가 가능한 입력이 없어</AlertTitle>
+                    <AlertDescription>이미 모두 선택했거나 검색 조건에 맞는 입력이 없어.</AlertDescription>
+                  </Alert>
                 ) : (
                   <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
                     {filteredAvailableCandidates.map((candidate) => (
