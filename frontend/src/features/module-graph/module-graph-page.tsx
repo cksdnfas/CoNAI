@@ -171,6 +171,7 @@ function buildWorkflowValidationIssues(params: {
         issues.push({
           id: `missing-input:${node.id}:${port.key}`,
           nodeId: node.id,
+          portKey: port.key,
           nodeLabel,
           severity: 'error',
           title: `필수 입력 누락 · ${port.label}`,
@@ -192,6 +193,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const [selectedExecutionId, setSelectedExecutionId] = useState<number | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [selectedValidationPortKey, setSelectedValidationPortKey] = useState<string | null>(null)
   const isDesktopPageLayout = useDesktopPageLayout()
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState(() =>
     buildGraphEditorSnapshot({
@@ -352,6 +354,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
       setSelectedNodeId(targetNode.id)
       setSelectedEdgeId(null)
+      setSelectedValidationPortKey(issue.portKey ?? null)
       void reactFlow.setCenter(targetNode.position.x + 180, targetNode.position.y + 80, { zoom: 1.1, duration: 220 })
     }
 
@@ -1290,14 +1293,17 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                     onNodeClick={(_, node) => {
                       setSelectedNodeId(node.id)
                       setSelectedEdgeId(null)
+                      setSelectedValidationPortKey(null)
                     }}
                     onEdgeClick={(_, edge) => {
                       setSelectedEdgeId(edge.id)
                       setSelectedNodeId(null)
+                      setSelectedValidationPortKey(null)
                     }}
                     onPaneClick={() => {
                       setSelectedNodeId(null)
                       setSelectedEdgeId(null)
+                      setSelectedValidationPortKey(null)
                     }}
                     onConnect={handleConnect}
                     isValidConnection={isValidConnection}
@@ -1323,6 +1329,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                 onNodeValueChange={handleNodeValueChange}
                 onNodeValueClear={handleNodeValueClear}
                 onNodeImageChange={handleNodeImageChange}
+                highlightedPortKey={selectedValidationPortKey}
               />
             </div>
           </div>

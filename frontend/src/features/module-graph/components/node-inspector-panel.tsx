@@ -16,6 +16,7 @@ type NodeInspectorPanelProps = {
   onNodeValueChange: (nodeId: string, portKey: string, value: unknown) => void
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, file?: File) => Promise<void>
+  highlightedPortKey?: string | null
   showHeader?: boolean
 }
 
@@ -135,21 +136,25 @@ export function NodeInspectorPanel({
   onNodeValueChange,
   onNodeValueClear,
   onNodeImageChange,
+  highlightedPortKey = null,
   showHeader = true,
 }: NodeInspectorPanelProps) {
   const renderPortInput = (node: ModuleGraphNode, port: ModulePortDefinition) => {
     const rawValue = node.data.inputValues?.[port.key]
     const hasExplicitValue = hasMeaningfulValue(rawValue)
     const missingRequired = Boolean(port.required && !isNodeInputSatisfied(node, port))
+    const isHighlightedPort = highlightedPortKey === port.key
     const clearPortValue = () => onNodeValueClear(node.id, port.key)
-    const cardStyle = missingRequired
-      ? ({ borderColor: '#f59e0b99', backgroundColor: 'rgba(245, 158, 11, 0.08)' } as CSSProperties)
-      : undefined
+    const cardStyle = isHighlightedPort
+      ? ({ borderColor: '#60a5fa', backgroundColor: 'rgba(96, 165, 250, 0.10)', boxShadow: '0 0 0 1px rgba(96, 165, 250, 0.35)' } as CSSProperties)
+      : missingRequired
+        ? ({ borderColor: '#f59e0b99', backgroundColor: 'rgba(245, 158, 11, 0.08)' } as CSSProperties)
+        : undefined
 
     if (port.data_type === 'prompt' || port.data_type === 'json') {
       return (
         <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired} onClear={clearPortValue} />
+          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <Textarea
             rows={port.data_type === 'json' ? 6 : 4}
             value={typeof rawValue === 'string' ? rawValue : rawValue ? JSON.stringify(rawValue, null, 2) : ''}
@@ -163,7 +168,7 @@ export function NodeInspectorPanel({
     if (port.data_type === 'number') {
       return (
         <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired} onClear={clearPortValue} />
+          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <Input
             type="number"
             value={typeof rawValue === 'number' ? String(rawValue) : typeof rawValue === 'string' ? rawValue : ''}
@@ -177,7 +182,7 @@ export function NodeInspectorPanel({
     if (port.data_type === 'boolean') {
       return (
         <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired} onClear={clearPortValue} />
+          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <Select
             value={typeof rawValue === 'boolean' ? String(rawValue) : ''}
             onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value === 'true')}
@@ -193,7 +198,7 @@ export function NodeInspectorPanel({
     if (port.data_type === 'image' || port.data_type === 'mask') {
       return (
         <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired} onClear={clearPortValue} />
+          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <Input type="file" accept="image/*" onChange={(event) => void onNodeImageChange(node.id, port.key, event.target.files?.[0])} />
           {typeof rawValue === 'string' && rawValue.startsWith('data:image/') ? (
             <img src={rawValue} alt={port.label} className="max-h-40 rounded-sm border border-border object-contain" />
@@ -204,7 +209,7 @@ export function NodeInspectorPanel({
 
     return (
       <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
-        <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired} onClear={clearPortValue} />
+        <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
         <Input
           value={typeof rawValue === 'string' ? rawValue : rawValue ? String(rawValue) : ''}
           onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value)}
@@ -226,6 +231,12 @@ export function NodeInspectorPanel({
     : []
   const sortedSelectedNodeInputs = selectedNode
     ? [...(selectedNode.data.module.exposed_inputs ?? [])].sort((left, right) => {
+        const leftHighlighted = left.key === highlightedPortKey ? 1 : 0
+        const rightHighlighted = right.key === highlightedPortKey ? 1 : 0
+        if (leftHighlighted !== rightHighlighted) {
+          return rightHighlighted - leftHighlighted
+        }
+
         const leftMissing = left.required && !isNodeInputSatisfied(selectedNode, left) ? 1 : 0
         const rightMissing = right.required && !isNodeInputSatisfied(selectedNode, right) ? 1 : 0
         if (leftMissing !== rightMissing) {
@@ -278,6 +289,7 @@ export function NodeInspectorPanel({
                 <Badge variant="outline">입력 {(selectedNode.data.module.exposed_inputs ?? []).length}</Badge>
                 <Badge variant="outline">출력 {(selectedNode.data.module.output_ports ?? []).length}</Badge>
                 {missingRequiredInputs.length > 0 ? <Badge variant="outline">필수 부족 {missingRequiredInputs.length}</Badge> : <Badge variant="secondary">필수 입력 충족</Badge>}
+                {highlightedPortKey ? <Badge variant="secondary">focus {highlightedPortKey}</Badge> : null}
               </div>
             </div>
 

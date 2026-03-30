@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 export type WorkflowValidationIssue = {
   id: string
   nodeId?: string
+  portKey?: string
   nodeLabel: string
   severity: 'error' | 'warning'
   title: string
