@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { resolvePromptGroups } from '@/lib/api'
-import { formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTerms } from '@/lib/image-extracted-prompts'
+import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTerms } from '@/lib/image-extracted-prompts'
 import type { ImageRecord } from '@/types/image'
 import { formatBytes, getImageArtistPromptSection, getImageAutoPromptContent, getImageGenerationParamItems } from './image-detail-utils'
 
@@ -63,8 +63,9 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         }
 
         if (positivePromptGroupQuery.data) {
-          const groupedText = formatGroupedPromptText(positivePromptTerms, positivePromptGroupQuery.data)
-          return { ...item, text: groupedText || item.text }
+          const groupedSections = buildGroupedPromptSections(positivePromptTerms, positivePromptGroupQuery.data)
+          const groupedText = formatGroupedPromptText(groupedSections)
+          return { ...item, text: groupedText || item.text, groupedSections }
         }
       }
 
@@ -74,8 +75,9 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         }
 
         if (negativePromptGroupQuery.data) {
-          const groupedText = formatGroupedPromptText(negativePromptTerms, negativePromptGroupQuery.data)
-          return { ...item, text: groupedText || item.text }
+          const groupedSections = buildGroupedPromptSections(negativePromptTerms, negativePromptGroupQuery.data)
+          const groupedText = formatGroupedPromptText(groupedSections)
+          return { ...item, text: groupedText || item.text, groupedSections }
         }
       }
 

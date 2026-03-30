@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { ChevronDown, Copy } from 'lucide-react'
+import { ChevronDown, Copy, FolderTree, GitBranch } from 'lucide-react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Badge } from '@/components/ui/badge'
 import { getThemeToneStyle, getThemeToneTextStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
-import type { ExtractedPromptCardItem } from '@/lib/image-extracted-prompts'
+import type { ExtractedPromptCardItem, ExtractedPromptGroupedSection } from '@/lib/image-extracted-prompts'
 
 function getPromptToneStyle(tone: ExtractedPromptCardItem['tone']) {
   switch (tone) {
@@ -27,8 +27,58 @@ function getPromptBadgeStyle(label: string) {
   return undefined
 }
 
+function getGroupedSectionIcon(section: ExtractedPromptGroupedSection) {
+  if (section.kind === 'root') {
+    return <FolderTree className="h-3.5 w-3.5 text-primary/80" />
+  }
+
+  if (section.kind === 'child') {
+    return <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+  }
+
+  return null
+}
+
+function getGroupedSectionTooltip(section: ExtractedPromptGroupedSection) {
+  if (!section.hierarchyPath || section.hierarchyPath.length === 0) {
+    return undefined
+  }
+
+  return section.hierarchyPath.join(' > ')
+}
+
 interface ExtractedPromptCardProps {
   item: ExtractedPromptCardItem
+}
+
+function ExtractedPromptGroupedBody({ sections }: { sections: ExtractedPromptGroupedSection[] }) {
+  return (
+    <div className="space-y-4">
+      {sections.map((section) => {
+        const tooltip = getGroupedSectionTooltip(section)
+
+        return (
+          <div key={section.id} className="space-y-2">
+            <div className="flex items-center gap-2">
+              {getGroupedSectionIcon(section)}
+              <span
+                className={cn(
+                  'inline-flex max-w-full items-center rounded-sm border border-border/70 bg-surface-low px-2 py-1 text-sm font-semibold text-foreground',
+                  tooltip && 'cursor-help',
+                )}
+                title={tooltip}
+              >
+                {section.label}
+              </span>
+            </div>
+            <div className="text-base leading-8 text-foreground/92 break-words">
+              {section.prompts.join(', ')}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function ExtractedPromptCard({ item }: ExtractedPromptCardProps) {
@@ -75,7 +125,15 @@ function ExtractedPromptCard({ item }: ExtractedPromptCardProps) {
         </div>
       </div>
 
-      {expanded ? <div className="px-4 py-4 text-base leading-8 text-foreground/92 whitespace-pre-wrap break-words">{item.text}</div> : null}
+      {expanded ? (
+        <div className="px-4 py-4 text-base text-foreground/92 whitespace-pre-wrap break-words">
+          {item.groupedSections?.length ? (
+            <ExtractedPromptGroupedBody sections={item.groupedSections} />
+          ) : (
+            <div className="leading-8">{item.text}</div>
+          )}
+        </div>
+      ) : null}
     </section>
   )
 }

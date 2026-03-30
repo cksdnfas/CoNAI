@@ -245,17 +245,44 @@ export class PromptCollectionQueryService {
         }
       }
 
+      const groups = await PromptGroupService.getAllGroups(true, type);
+      const groupsById = new Map(groups.map((group) => [group.id, group] as const));
+
+      const getGroupPath = (groupId: number | null | undefined) => {
+        if (groupId === null || groupId === undefined || groupId === 0) {
+          return ['Unclassified'];
+        }
+
+        const visited = new Set<number>();
+        const path: string[] = [];
+        let currentId: number | null | undefined = groupId;
+
+        while (currentId !== null && currentId !== undefined && currentId !== 0 && !visited.has(currentId)) {
+          visited.add(currentId);
+          const currentGroup = groupsById.get(currentId);
+          if (!currentGroup) {
+            break;
+          }
+
+          path.unshift(currentGroup.group_name);
+          currentId = currentGroup.parent_id;
+        }
+
+        return path.length > 0 ? path : ['Unclassified'];
+      };
+
       return Promise.all(
         [...uniquePromptMap.values()].map(async (prompt) => {
           const matchedPrompt = await SynonymService.findInSynonymGroup(prompt, type);
           const groupInfo = matchedPrompt
             ? await PromptGroupService.getGroupById(matchedPrompt.group_id ?? null, type)
             : null;
+          const groupPath = matchedPrompt ? getGroupPath(matchedPrompt.group_id ?? null) : null;
 
           return {
             query: prompt,
             matched_prompt: matchedPrompt?.prompt ?? null,
-            group_info: groupInfo,
+            group_info: groupInfo && groupPath ? { ...groupInfo, group_path: groupPath } : groupInfo,
           };
         }),
       );

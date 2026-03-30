@@ -1,12 +1,21 @@
 import type { ImageAiRawNaiParameters, ImageRecord } from '@/types/image'
 import type { PromptGroupResolveItem } from '@/types/prompt'
 
+export interface ExtractedPromptGroupedSection {
+  id: string
+  label: string
+  prompts: string[]
+  hierarchyPath?: string[]
+  kind: 'root' | 'child' | 'unclassified'
+}
+
 export interface ExtractedPromptCardItem {
   id: string
   title: string
   text: string
   tone: 'positive' | 'negative' | 'character' | 'neutral'
   badges?: string[]
+  groupedSections?: ExtractedPromptGroupedSection[]
 }
 
 function getTrimmedText(value?: string | null) {
@@ -145,9 +154,30 @@ function getPromptGroupingOrder(groupInfo?: PromptGroupResolveItem['group_info']
     return Number.MAX_SAFE_INTEGER
   }
 
-  return 'display_order' in groupInfo && typeof groupInfo.display_order === 'number'
+  return typeof groupInfo.display_order === 'number'
     ? groupInfo.display_order
     : Number.MAX_SAFE_INTEGER - 1
+}
+
+function getPromptGroupingPath(groupInfo?: PromptGroupResolveItem['group_info']) {
+  const path = Array.isArray(groupInfo?.group_path) ? groupInfo.group_path.filter(Boolean) : []
+  if (path.length > 0) {
+    return path
+  }
+
+  if (!groupInfo?.group_name || groupInfo.group_name === 'Unclassified') {
+    return ['미분류']
+  }
+
+  return [groupInfo.group_name]
+}
+
+function getPromptGroupingKind(groupInfo?: PromptGroupResolveItem['group_info']): ExtractedPromptGroupedSection['kind'] {
+  if (!groupInfo || groupInfo.group_name === 'Unclassified') {
+    return 'unclassified'
+  }
+
+  return groupInfo.parent_id === null || groupInfo.parent_id === undefined ? 'root' : 'child'
 }
 
 export function getImagePromptTerms(image: ImageRecord, type: 'positive' | 'negative') {
@@ -179,21 +209,23 @@ export function getImageLoraModels(image: ImageRecord) {
   ])
 }
 
-export function formatGroupedPromptText(terms: string[], resolvedItems: PromptGroupResolveItem[]) {
+export function buildGroupedPromptSections(terms: string[], resolvedItems: PromptGroupResolveItem[]) {
   if (terms.length === 0) {
-    return ''
+    return [] as ExtractedPromptGroupedSection[]
   }
 
   const resolvedByKey = new Map(
     resolvedItems.map((item) => [item.query.trim().toLowerCase(), item] as const),
   )
 
-  const grouped = new Map<string, { label: string; order: number; prompts: string[] }>()
+  const grouped = new Map<string, { id: string; label: string; order: number; prompts: string[]; hierarchyPath?: string[]; kind: ExtractedPromptGroupedSection['kind'] }>()
 
   terms.forEach((term) => {
     const resolvedItem = resolvedByKey.get(term.trim().toLowerCase())
     const label = getPromptGroupingLabel(resolvedItem?.group_info)
     const order = getPromptGroupingOrder(resolvedItem?.group_info)
+    const hierarchyPath = getPromptGroupingPath(resolvedItem?.group_info)
+    const kind = getPromptGroupingKind(resolvedItem?.group_info)
     const existing = grouped.get(label)
 
     if (existing) {
@@ -202,14 +234,32 @@ export function formatGroupedPromptText(terms: string[], resolvedItems: PromptGr
     }
 
     grouped.set(label, {
+      id: label.toLowerCase(),
       label,
       order,
       prompts: [term],
+      hierarchyPath,
+      kind,
     })
   })
 
   return [...grouped.values()]
     .sort((left, right) => left.order - right.order || left.label.localeCompare(right.label, 'ko'))
+    .map((group) => ({
+      id: group.id,
+      label: group.label,
+      prompts: group.prompts,
+      hierarchyPath: group.hierarchyPath,
+      kind: group.kind,
+    }))
+}
+
+export function formatGroupedPromptText(sections: ExtractedPromptGroupedSection[]) {
+  if (sections.length === 0) {
+    return ''
+  }
+
+  return sections
     .map((group) => `${group.label}\n${group.prompts.join(', ')}`)
     .join('\n\n')
 }

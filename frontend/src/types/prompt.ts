@@ -37,10 +37,16 @@ export interface PromptSearchPayload {
   }
 }
 
+export interface PromptGroupResolveInfo extends Partial<PromptGroupRecord> {
+  id: number
+  group_name: string
+  group_path?: string[]
+}
+
 export interface PromptGroupResolveItem {
   query: string
   matched_prompt: string | null
-  group_info?: PromptGroupRecord | { id: 0; group_name: 'Unclassified' } | null
+  group_info?: PromptGroupResolveInfo | null
 }
 
 export interface PromptStatistics {
