@@ -37,6 +37,12 @@ export interface PromptSearchPayload {
   }
 }
 
+export interface PromptGroupResolveItem {
+  query: string
+  matched_prompt: string | null
+  group_info?: PromptGroupRecord | { id: 0; group_name: 'Unclassified' } | null
+}
+
 export interface PromptStatistics {
   total_prompts: number
   total_negative_prompts: number

@@ -225,4 +225,43 @@ export class PromptCollectionQueryService {
       throw error;
     }
   }
+
+  static async resolvePromptsWithGroups(
+    prompts: string[],
+    type: 'positive' | 'negative' | 'auto' = 'positive'
+  ): Promise<Array<{ query: string; matched_prompt: string | null; group_info: any | null }>> {
+    try {
+      const uniquePromptMap = new Map<string, string>();
+
+      for (const prompt of prompts) {
+        const normalizedPrompt = normalizeSearchTerm(String(prompt ?? '')).trim();
+        if (!normalizedPrompt) {
+          continue;
+        }
+
+        const lookupKey = normalizedPrompt.toLowerCase();
+        if (!uniquePromptMap.has(lookupKey)) {
+          uniquePromptMap.set(lookupKey, normalizedPrompt);
+        }
+      }
+
+      return Promise.all(
+        [...uniquePromptMap.values()].map(async (prompt) => {
+          const matchedPrompt = await SynonymService.findInSynonymGroup(prompt, type);
+          const groupInfo = matchedPrompt
+            ? await PromptGroupService.getGroupById(matchedPrompt.group_id ?? null, type)
+            : null;
+
+          return {
+            query: prompt,
+            matched_prompt: matchedPrompt?.prompt ?? null,
+            group_info: groupInfo,
+          };
+        }),
+      );
+    } catch (error) {
+      console.error('Error resolving prompts with groups:', error);
+      throw error;
+    }
+  }
 }

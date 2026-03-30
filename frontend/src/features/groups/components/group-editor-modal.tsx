@@ -109,8 +109,8 @@ export function GroupEditorModal({
     if (autoCollectEnabled && autoCollectEditorState.parsedValue === undefined) {
       setFormError(
         autoCollectEditorState.mode === 'chip'
-          ? '자동수집을 켰다면 조건 칩을 하나 이상 넣어줘야 해.'
-          : '자동수집을 켰다면 조건 JSON도 같이 넣어줘야 해.',
+          ? '필터를 켰다면 조건 칩을 하나 이상 넣어줘야 해.'
+          : '필터를 켰다면 조건 JSON도 같이 넣어줘야 해.',
       )
       return
     }
@@ -133,8 +133,7 @@ export function GroupEditorModal({
       open={open}
       onClose={onClose}
       title={mode === 'create' ? '커스텀 그룹 만들기' : '커스텀 그룹 편집'}
-      description="중첩 그룹, 수동 이미지 할당, 자동수집 조건까지 한 번에 관리할 수 있어."
-      widthClassName="max-w-4xl"
+      widthClassName="max-w-3xl"
     >
       <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
@@ -144,14 +143,23 @@ export function GroupEditorModal({
           </Alert>
         ) : null}
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-5">
           <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">그룹 이름</p>
+            <p className="text-sm font-medium text-foreground">그룹명</p>
             <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="예: 컨셉 아트 / 캐릭터 / 즐겨찾기" />
           </div>
 
           <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">부모 그룹</p>
+            <p className="text-sm font-medium text-foreground">설명</p>
+            <Textarea
+              rows={3}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">그룹 위치</p>
             <HierarchyPicker
               items={parentGroups}
               selectedId={parentValue === 'root' ? null : Number(parentValue)}
@@ -164,17 +172,16 @@ export function GroupEditorModal({
               renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
             />
           </div>
-        </div>
 
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">설명</p>
-            <Textarea
-              rows={3}
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="이 그룹이 어떤 용도인지 짧게 적어두면 나중에 덜 헷갈려."
-            />
+          <div className="space-y-3 rounded-sm border border-border/70 bg-surface-low/50 p-3">
+            <ToggleRow className="justify-between px-0 py-0" variant="detail">
+              <p className="text-sm font-medium text-foreground">필터 적용</p>
+              <input type="checkbox" checked={autoCollectEnabled} onChange={(event) => setAutoCollectEnabled(event.target.checked)} />
+            </ToggleRow>
+
+            {autoCollectEnabled ? (
+              <AutoCollectChipEditor initialJsonText={autoCollectInitialText} onChange={setAutoCollectEditorState} />
+            ) : null}
           </div>
 
           <div className="space-y-2">
@@ -182,16 +189,6 @@ export function GroupEditorModal({
             <Input value={color} onChange={(event) => setColor(event.target.value)} placeholder="#7c3aed" />
           </div>
         </div>
-
-        <ToggleRow className="justify-between px-3 py-3" variant="detail">
-          <div className="space-y-1">
-            <p className="font-medium text-foreground">자동수집 사용</p>
-            <p className="text-xs text-muted-foreground">새 이미지 유입 시 조건에 맞으면 이 그룹으로 자동 할당돼.</p>
-          </div>
-          <input type="checkbox" checked={autoCollectEnabled} onChange={(event) => setAutoCollectEnabled(event.target.checked)} />
-        </ToggleRow>
-
-        <AutoCollectChipEditor initialJsonText={autoCollectInitialText} onChange={setAutoCollectEditorState} />
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4">
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>

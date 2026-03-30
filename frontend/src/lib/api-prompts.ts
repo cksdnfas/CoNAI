@@ -5,6 +5,7 @@ import type {
   PromptGroupExportData,
   PromptGroupImportResult,
   PromptGroupRecord,
+  PromptGroupResolveItem,
   PromptSearchPayload,
   PromptSortBy,
   PromptSortOrder,
@@ -76,6 +77,25 @@ export async function getPromptStatistics() {
   if (!response.success) {
     throw new Error(response.error || '프롬프트 통계를 불러오지 못했어.')
   }
+  return response.data
+}
+
+export async function resolvePromptGroups(prompts: string[], type: PromptTypeFilter = 'positive') {
+  const response = await fetchJson<ApiResponse<PromptGroupResolveItem[]>>('/api/prompt-collection/resolve-groups', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      prompts,
+      type,
+    }),
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '프롬프트 그룹 정렬 정보를 불러오지 못했어.')
+  }
+
   return response.data
 }
 

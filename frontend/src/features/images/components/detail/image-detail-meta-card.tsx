@@ -1,3 +1,5 @@
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { FilePenLine } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
@@ -10,7 +12,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
-import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
+import { resolvePromptGroups } from '@/lib/api'
+import { formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTerms } from '@/lib/image-extracted-prompts'
 import type { ImageRecord } from '@/types/image'
 import { formatBytes, getImageArtistPromptSection, getImageAutoPromptContent, getImageGenerationParamItems } from './image-detail-utils'
 
@@ -18,15 +21,76 @@ interface ImageDetailMetaCardProps {
   image: ImageRecord
 }
 
+type PromptDisplayMode = 'plain' | 'grouped'
+
 export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const navigate = useNavigate()
   const imageViewModal = useImageViewModal()
-  const extractedPromptCards = getImageExtractedPromptCards(image)
+  const [promptDisplayMode, setPromptDisplayMode] = useState<PromptDisplayMode>('plain')
+  const extractedPromptCards = useMemo(() => getImageExtractedPromptCards(image), [image])
+  const positivePromptTerms = useMemo(() => getImagePromptTerms(image, 'positive'), [image])
+  const negativePromptTerms = useMemo(() => getImagePromptTerms(image, 'negative'), [image])
   const autoPromptContent = getImageAutoPromptContent(image)
   const artistPromptSection = getImageArtistPromptSection(image)
   const generationParamItems = getImageGenerationParamItems(image)
   const canEditMetadata = Boolean(image.composite_hash) && image.file_type === 'image'
+  const canTogglePromptGrouping = positivePromptTerms.length > 0 || negativePromptTerms.length > 0
   const metaItemClassName = 'rounded-sm border border-border bg-surface-container p-4'
+
+  const positivePromptGroupQuery = useQuery({
+    queryKey: ['prompt-group-resolve', 'positive', positivePromptTerms],
+    queryFn: () => resolvePromptGroups(positivePromptTerms, 'positive'),
+    enabled: promptDisplayMode === 'grouped' && positivePromptTerms.length > 0,
+    staleTime: 60_000,
+  })
+
+  const negativePromptGroupQuery = useQuery({
+    queryKey: ['prompt-group-resolve', 'negative', negativePromptTerms],
+    queryFn: () => resolvePromptGroups(negativePromptTerms, 'negative'),
+    enabled: promptDisplayMode === 'grouped' && negativePromptTerms.length > 0,
+    staleTime: 60_000,
+  })
+
+  const displayedPromptCards = useMemo(() => {
+    if (promptDisplayMode !== 'grouped') {
+      return extractedPromptCards
+    }
+
+    return extractedPromptCards.map((item) => {
+      if (item.id === 'positive-prompt' && positivePromptTerms.length > 0) {
+        if (positivePromptGroupQuery.isPending) {
+          return { ...item, text: '그룹 정리 중…' }
+        }
+
+        if (positivePromptGroupQuery.data) {
+          const groupedText = formatGroupedPromptText(positivePromptTerms, positivePromptGroupQuery.data)
+          return { ...item, text: groupedText || item.text }
+        }
+      }
+
+      if (item.id === 'negative-prompt' && negativePromptTerms.length > 0) {
+        if (negativePromptGroupQuery.isPending) {
+          return { ...item, text: '그룹 정리 중…' }
+        }
+
+        if (negativePromptGroupQuery.data) {
+          const groupedText = formatGroupedPromptText(negativePromptTerms, negativePromptGroupQuery.data)
+          return { ...item, text: groupedText || item.text }
+        }
+      }
+
+      return item
+    })
+  }, [
+    extractedPromptCards,
+    negativePromptGroupQuery.data,
+    negativePromptGroupQuery.isPending,
+    negativePromptTerms,
+    positivePromptGroupQuery.data,
+    positivePromptGroupQuery.isPending,
+    positivePromptTerms,
+    promptDisplayMode,
+  ])
 
   return (
     <div className="space-y-3 text-sm text-muted-foreground">
@@ -84,9 +148,29 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         ) : null}
         {extractedPromptCards.length > 0 ? (
           <div className={`${metaItemClassName} sm:col-span-2`}>
-            <p className="text-[11px] uppercase tracking-[0.18em]">Extracted prompt</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[11px] uppercase tracking-[0.18em]">Extracted prompt</p>
+              {canTogglePromptGrouping ? (
+                <div className="inline-flex rounded-sm border border-border bg-background p-1">
+                  <button
+                    type="button"
+                    className={promptDisplayMode === 'plain' ? 'rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground' : 'rounded-sm px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-surface-high hover:text-foreground'}
+                    onClick={() => setPromptDisplayMode('plain')}
+                  >
+                    일반
+                  </button>
+                  <button
+                    type="button"
+                    className={promptDisplayMode === 'grouped' ? 'rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground' : 'rounded-sm px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-surface-high hover:text-foreground'}
+                    onClick={() => setPromptDisplayMode('grouped')}
+                  >
+                    그룹
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <div className="mt-3">
-              <ExtractedPromptSections items={extractedPromptCards} />
+              <ExtractedPromptSections items={displayedPromptCards} />
             </div>
           </div>
         ) : null}

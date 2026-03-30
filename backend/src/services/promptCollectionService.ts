@@ -86,4 +86,11 @@ export class PromptCollectionService {
   ): Promise<{ created: number; updated: number; failed: string[] }> {
     return PromptCollectionMutationService.batchAssignPromptsToGroup(prompts, groupId, type);
   }
+
+  static async resolvePromptsWithGroups(
+    prompts: string[],
+    type: 'positive' | 'negative' | 'auto' = 'positive'
+  ): Promise<Array<{ query: string; matched_prompt: string | null; group_info: any | null }>> {
+    return PromptCollectionQueryService.resolvePromptsWithGroups(prompts, type);
+  }
 }

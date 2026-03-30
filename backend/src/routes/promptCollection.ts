@@ -202,6 +202,30 @@ router.delete('/synonyms/:promptId', async (req: Request, res: Response) => {
 });
 
 /**
+ * 프롬프트 그룹 일괄 해석
+ * POST /api/prompt-collection/resolve-groups
+ */
+router.post('/resolve-groups', async (req: Request, res: Response) => {
+  try {
+    const { prompts, type = 'positive' } = req.body;
+
+    if (!Array.isArray(prompts)) {
+      return res.status(400).json(errorResponse('prompts array is required'));
+    }
+
+    const result = await PromptCollectionService.resolvePromptsWithGroups(
+      prompts.map((value) => String(value ?? '')),
+      type as 'positive' | 'negative' | 'auto'
+    );
+
+    return res.json(successResponse(result));
+  } catch (error) {
+    console.error('Error resolving prompt groups:', error);
+    return res.status(500).json(errorResponse('Failed to resolve prompt groups'));
+  }
+});
+
+/**
  * 프롬프트 삭제
  * DELETE /api/prompt-collection/:promptId
  */

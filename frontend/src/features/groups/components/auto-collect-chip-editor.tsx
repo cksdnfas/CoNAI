@@ -40,11 +40,11 @@ function createAutoCollectChip(scope: SearchScope, operator: SearchOperator, val
 }
 
 const SEARCH_SCOPE_PLACEHOLDERS: Partial<Record<SearchScope, string>> = {
-  positive: '긍정 프롬프트를 입력하고 Enter',
-  negative: '부정 프롬프트를 입력하고 Enter',
-  auto: '오토 태그를 입력하고 Enter',
-  model: '모델명을 입력하고 Enter',
-  lora: 'LoRA 이름을 입력하고 Enter',
+  positive: '긍정 프롬프트',
+  negative: '부정 프롬프트',
+  auto: '오토 태그',
+  model: '모델명',
+  lora: 'LoRA 이름',
 }
 
 /** Render the group auto-collect editor with chip-first and JSON fallback modes. */
@@ -142,10 +142,7 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-foreground">자동수집 조건</p>
-          <p className="text-xs text-muted-foreground">검색과 같은 필터 모듈을 그대로 써서 조건을 구성해. 복잡한 예외만 JSON으로 내려가면 돼.</p>
-        </div>
+        <p className="text-sm font-medium text-foreground">자동수집 조건</p>
 
         <div className="inline-flex rounded-sm border border-border bg-background p-1">
           <button
@@ -216,7 +213,7 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
                 onSelectRatingTier={(tier) => appendChip(createRatingSearchChip(tier, { operator: 'OR' }))}
                 onSelectAIToolSuggestion={(tool) => appendChip(createAIToolSearchChip(tool, { operator: 'OR' }))}
                 emptyRatingText="사용 가능한 평가 티어가 없어."
-                idlePromptText="먼저 검색어를 입력하면 추천 프롬프트가 보여."
+                idlePromptText="검색어 입력"
               />
             </div>
           </div>
@@ -237,15 +234,7 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
           rows={12}
           value={jsonText}
           onChange={(event) => setJsonText(event.target.value)}
-          placeholder={[
-            '{',
-            '  "or_group": [',
-            '    { "category": "auto_tag", "type": "auto_tag_any", "value": "1girl" }',
-            '  ],',
-            '  "and_group": [],',
-            '  "exclude_group": []',
-            '}',
-          ].join('\n')}
+          placeholder="{ ... }"
         />
       )}
     </div>
