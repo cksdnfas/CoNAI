@@ -13,7 +13,7 @@ import {
   type Connection,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Boxes, ChevronDown, Copy, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { ArrowLeft, Boxes, ChevronDown, Copy, Plus, RefreshCw, RotateCcw, Save, Trash2, Unplug, Workflow } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '@/components/common/page-header'
 import { SectionHeading } from '@/components/common/section-heading'
@@ -1065,13 +1065,27 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       topToolbar={
         workflowView === 'edit' ? (
           <>
-            <Button type="button" size="sm" variant="outline" onClick={() => setWorkflowView('browse')}>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="bg-surface-container"
+              onClick={() => setWorkflowView('browse')}
+              aria-label="목록으로"
+              title="목록으로"
+            >
               <ArrowLeft className="h-4 w-4" />
-              목록으로
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => void handleRefreshWorkspace()}>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="bg-surface-container"
+              onClick={() => void handleRefreshWorkspace()}
+              aria-label="새로고침"
+              title="새로고침"
+            >
               <RefreshCw className="h-4 w-4" />
-              새로고침
             </Button>
           </>
         ) : undefined
@@ -1151,28 +1165,69 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                     <>
                       <Badge variant="outline">노드 {nodes.length}</Badge>
                       <Badge variant="outline">엣지 {edges.length}</Badge>
-                      <Button type="button" variant="outline" onClick={() => setIsModuleLibraryOpen(true)}>
-                        <Plus className="h-4 w-4" />
-                        모듈 추가
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="outline"
+                        onClick={() => setIsModuleLibraryOpen(true)}
+                        aria-label="모듈 추가"
+                        title="모듈 추가"
+                      >
+                        <Boxes className="h-4 w-4" />
                       </Button>
-                      <Button type="button" variant="outline" onClick={handleAutoLayout} disabled={nodes.length === 0}>
-                        자동 정렬
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="outline"
+                        onClick={handleAutoLayout}
+                        disabled={nodes.length === 0}
+                        aria-label="자동 정렬"
+                        title="자동 정렬"
+                      >
+                        <Workflow className="h-4 w-4" />
                       </Button>
-                      <Button type="button" variant="outline" onClick={handleDuplicateSelectedNode} disabled={!selectedNode}>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="outline"
+                        onClick={handleDuplicateSelectedNode}
+                        disabled={!selectedNode}
+                        aria-label="노드 복제"
+                        title="노드 복제"
+                      >
                         <Copy className="h-4 w-4" />
-                        노드 복제
                       </Button>
-                      <Button type="button" variant="outline" onClick={handleRemoveSelectedNode} disabled={!selectedNode}>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="outline"
+                        onClick={handleRemoveSelectedNode}
+                        disabled={!selectedNode}
+                        aria-label="노드 삭제"
+                        title="노드 삭제"
+                      >
                         <Trash2 className="h-4 w-4" />
-                        노드 삭제
                       </Button>
-                      <Button type="button" variant="outline" onClick={handleRemoveSelectedEdge} disabled={!selectedEdge}>
-                        <Trash2 className="h-4 w-4" />
-                        엣지 삭제
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="outline"
+                        onClick={handleRemoveSelectedEdge}
+                        disabled={!selectedEdge}
+                        aria-label="엣지 삭제"
+                        title="엣지 삭제"
+                      >
+                        <Unplug className="h-4 w-4" />
                       </Button>
-                      <Button type="button" variant="outline" onClick={handleResetCanvas}>
-                        <Trash2 className="h-4 w-4" />
-                        초기화
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="outline"
+                        onClick={handleResetCanvas}
+                        aria-label="초기화"
+                        title="초기화"
+                      >
+                        <RotateCcw className="h-4 w-4" />
                       </Button>
                     </>
                   }
