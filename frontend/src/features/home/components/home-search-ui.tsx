@@ -123,7 +123,7 @@ function HomeSearchSuggestionPanel({
           onSelectRatingTier={(tier: RatingTierRecord) => addRatingChip(createRatingSearchChip(tier))}
           onSelectAIToolSuggestion={addAIToolChip}
           emptyRatingText="일치하는 평가 티어가 없어."
-          idlePromptText="먼저 검색어를 입력하면 추천 프롬프트가 보여."
+          idlePromptText="검색어 입력"
         />
       </div>
     </div>

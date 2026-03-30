@@ -35,7 +35,14 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
   }, [modules, searchQuery])
 
   const collapseButton = (
-    <Button type="button" size="sm" variant="ghost" onClick={() => setIsCollapsed((current) => !current)}>
+    <Button
+      type="button"
+      size="icon-sm"
+      variant="ghost"
+      onClick={() => setIsCollapsed((current) => !current)}
+      aria-label={isCollapsed ? '모듈 펼치기' : '모듈 접기'}
+      title={isCollapsed ? '모듈 펼치기' : '모듈 접기'}
+    >
       <ChevronDown className={cn('h-4 w-4 transition-transform', isCollapsed ? '-rotate-90' : 'rotate-0')} />
     </Button>
   )
@@ -48,7 +55,6 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
             <SectionHeading
               variant="inside"
               heading="Modules"
-              description="재사용 가능한 모듈을 검색해서 캔버스에 추가해."
               actions={
                 <>
                   <Badge variant="outline">{filteredModules.length}</Badge>
@@ -78,14 +84,14 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
           {modules.length === 0 ? (
             <Alert>
               <AlertTitle>모듈 없음</AlertTitle>
-              <AlertDescription>먼저 Generate 페이지에서 NAI 또는 ComfyUI 모듈을 하나 저장해줘.</AlertDescription>
+              <AlertDescription>먼저 모듈을 저장해.</AlertDescription>
             </Alert>
           ) : null}
 
           {modules.length > 0 && filteredModules.length === 0 ? (
             <Alert>
               <AlertTitle>검색 결과가 없어</AlertTitle>
-              <AlertDescription>다른 이름, 카테고리, 엔진 타입 키워드로 다시 찾아봐.</AlertDescription>
+              <AlertDescription>다른 키워드로 찾아봐.</AlertDescription>
             </Alert>
           ) : null}
 
@@ -116,7 +122,6 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
             <SectionHeading
               variant="inside"
               heading="Modules"
-              description="재사용 가능한 모듈을 검색해서 캔버스에 추가해."
               actions={
                 <>
                   <Badge variant="outline">{filteredModules.length}</Badge>

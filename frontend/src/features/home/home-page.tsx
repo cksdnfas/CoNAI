@@ -147,8 +147,8 @@ export function HomePage() {
 
   const emptyStateTitle = isSearchMode ? '검색 결과가 없어' : '표시할 이미지가 아직 없어'
   const emptyStateDescription = isSearchMode
-    ? '상단 검색창을 눌러 필터를 바꾸거나 히스토리를 다시 불러와봐.'
-    : '업로드를 연결하거나 백엔드 데이터 상태를 먼저 확인하면 돼.'
+    ? '검색 조건을 바꿔봐.'
+    : '업로드나 데이터 상태를 확인해.'
 
   const errorTitle = isSearchMode ? '검색 결과를 불러오지 못했어' : '홈 피드를 불러오지 못했어'
 

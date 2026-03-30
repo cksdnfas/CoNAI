@@ -49,9 +49,9 @@ export function SearchSuggestionList({
   onSelectMetadataSuggestion,
   onSelectRatingTier,
   onSelectAIToolSuggestion,
-  emptyPromptText = '일치하는 추천 프롬프트가 아직 없어.',
+  emptyPromptText = '일치하는 추천 프롬프트가 없어.',
   emptyRatingText = '사용 가능한 평가 티어가 없어.',
-  idlePromptText = '먼저 검색어를 입력하면 추천 프롬프트가 보여.',
+  idlePromptText = '검색어 입력',
 }: SearchSuggestionListProps) {
   if (searchScope === 'positive' || searchScope === 'negative' || searchScope === 'auto') {
     return (

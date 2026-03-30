@@ -79,9 +79,8 @@ export function ImageGenerationPage() {
         title="Image Generation"
         actions={
           activeTab !== 'workflows' ? (
-            <Button type="button" variant="outline" onClick={handleGlobalRefresh}>
+            <Button type="button" size="icon-sm" variant="outline" onClick={handleGlobalRefresh} aria-label="새로고침" title="새로고침">
               <RefreshCw className="h-4 w-4" />
-              새로고침
             </Button>
           ) : undefined
         }

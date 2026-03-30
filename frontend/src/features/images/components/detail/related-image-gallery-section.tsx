@@ -62,12 +62,12 @@ export function RelatedImageGallerySection({
       imageViewModal.openImageView(
         activationMode === 'modal'
           ? {
-              compositeHash: imageId,
-              compositeHashes: itemCompositeHashes,
-            }
+            compositeHash: imageId,
+            compositeHashes: itemCompositeHashes,
+          }
           : {
-              compositeHash: imageId,
-            },
+            compositeHash: imageId,
+          },
       )
       return
     }
@@ -125,7 +125,7 @@ export function RelatedImageGallerySection({
 
       {!isLoading && !errorMessage && items.length === 0 ? (
         <Card className="bg-surface-container">
-          <CardContent className="p-6 text-sm text-muted-foreground">{emptyMessage}</CardContent>
+          <CardContent className="text-sm text-muted-foreground">{emptyMessage}</CardContent>
         </Card>
       ) : null}
     </section>

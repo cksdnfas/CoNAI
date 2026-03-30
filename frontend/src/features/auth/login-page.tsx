@@ -12,8 +12,7 @@ export function LoginPage() {
       <div className="w-full space-y-8">
         <PageHeader
           eyebrow="Phase 1"
-          title="로그인 영역은 다음 단계에서 복구한다"
-          description="지금은 인증 화면 자리를 먼저 확보한 상태야. 실제 계정 흐름은 앱 셸과 홈 MVP를 안정화한 뒤 연결할 거야."
+          title="로그인 준비 중"
         />
 
         <Card className="border-primary/15 bg-card">
@@ -21,7 +20,6 @@ export function LoginPage() {
             <SectionHeading
               variant="inside"
               heading="현재 상태"
-              description="인증 플로우는 보류 중이고, 이 화면은 진입 지점만 안정적으로 확보해 둔 상태야."
             />
 
             <div className="flex items-start gap-3">
@@ -29,8 +27,8 @@ export function LoginPage() {
                 <ShieldCheck className="h-6 w-6" />
               </div>
               <div className="space-y-1">
-                <div className="text-sm font-semibold text-foreground">인증 복구 대기 상태</div>
-                <div className="text-sm text-muted-foreground">현재는 구조 우선 단계라 실제 로그인 폼은 아직 붙이지 않았다.</div>
+                <div className="text-sm font-semibold text-foreground">인증 복구 대기</div>
+                <div className="text-sm text-muted-foreground">실제 로그인 폼은 아직 비활성화돼 있어.</div>
               </div>
             </div>
 

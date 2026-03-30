@@ -54,7 +54,7 @@ export function PromptListPanel({
       ) : null}
 
       {!isLoading && items.length === 0 ? (
-        <div className="rounded-sm bg-surface-lowest p-6 text-sm text-muted-foreground">항목 없음</div>
+        <div className="rounded-sm bg-surface-lowest text-sm text-muted-foreground">항목 없음</div>
       ) : null}
 
       <div ref={promptListRef} className={isDraggingSelection ? 'select-none' : undefined}>
@@ -76,22 +76,22 @@ export function PromptListPanel({
 
           {!isLoading && items.length > 0
             ? items.map((item) => {
-                const isLocked = isLockedPromptItem(item)
-                return (
-                  <PromptListItem
-                    key={`${item.type}-${item.id}`}
-                    item={item}
-                    selected={selectedPromptIds.includes(item.id)}
-                    canAssign={!isLocked}
-                    canDelete={!isLocked}
-                    onCopy={onCopyPrompt}
-                    onToggleSelect={(checked) => onTogglePromptSelection(item.id, checked)}
-                    onAssignGroup={() => onAssignPrompt(item)}
-                    onDelete={() => onDeletePrompt(item)}
-                    onActivate={() => onActivatePrompt(item)}
-                  />
-                )
-              })
+              const isLocked = isLockedPromptItem(item)
+              return (
+                <PromptListItem
+                  key={`${item.type}-${item.id}`}
+                  item={item}
+                  selected={selectedPromptIds.includes(item.id)}
+                  canAssign={!isLocked}
+                  canDelete={!isLocked}
+                  onCopy={onCopyPrompt}
+                  onToggleSelect={(checked) => onTogglePromptSelection(item.id, checked)}
+                  onAssignGroup={() => onAssignPrompt(item)}
+                  onDelete={() => onDeletePrompt(item)}
+                  onActivate={() => onActivatePrompt(item)}
+                />
+              )
+            })
             : null}
         </div>
       </div>

@@ -93,8 +93,8 @@ export function ComfyWorkflowControllerPanel({
               </div>
             ) : (
               <Alert>
-                <AlertTitle>Marked Field 없음</AlertTitle>
-                <AlertDescription>이 워크플로우에는 아직 입력으로 노출된 필드가 없어.</AlertDescription>
+                <AlertTitle>입력 필드 없음</AlertTitle>
+                <AlertDescription>노출된 필드가 없어.</AlertDescription>
               </Alert>
             )}
           </CardContent>
@@ -148,7 +148,7 @@ export function ComfyWorkflowControllerPanel({
               ) : (
                 <Alert>
                   <AlertTitle>서버 필요</AlertTitle>
-                  <AlertDescription>ComfyUI 서버를 먼저 하나 이상 등록해줘.</AlertDescription>
+                  <AlertDescription>서버를 먼저 등록해줘.</AlertDescription>
                 </Alert>
               )}
 

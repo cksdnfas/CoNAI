@@ -256,11 +256,10 @@ export function NodeInspectorPanel({
           <SectionHeading
             variant="inside"
             heading="Node Inspector"
-            description="선택한 노드나 엣지의 포트 정보와 입력 오버라이드를 다듬어."
           />
         ) : null}
         {!selectedNode && !selectedEdge ? (
-          <div className="rounded-sm bg-surface-low px-4 py-6 text-sm text-muted-foreground">캔버스에서 노드나 엣지를 하나 선택해봐.</div>
+          <div className="rounded-sm bg-surface-low px-4 py-6 text-sm text-muted-foreground">노드나 엣지를 선택해.</div>
         ) : null}
 
         {!selectedNode && selectedEdge && sourceEndpoint && targetEndpoint ? (

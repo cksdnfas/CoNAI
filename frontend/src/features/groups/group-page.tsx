@@ -363,6 +363,24 @@ export function GroupPage() {
     () => allGroups.find((group) => group.id === selectedGroupHierarchy?.parent_id) ?? null,
     [allGroups, selectedGroupHierarchy?.parent_id],
   )
+  const backNavigationGroup = useMemo(() => {
+    if (!selectedGroupHierarchy) {
+      return null
+    }
+
+    if (parentGroupHierarchy) {
+      return parentGroupHierarchy
+    }
+
+    return {
+      ...selectedGroupHierarchy,
+      id: 0,
+      name: selectedSource.rootTitle,
+      image_count: rootGroups.length,
+      child_count: rootGroups.length,
+      has_children: true,
+    }
+  }, [parentGroupHierarchy, rootGroups.length, selectedGroupHierarchy, selectedSource.rootTitle])
   const groupImages = useMemo(() => (groupImagesQuery.data?.pages ?? []).flatMap((page) => page.images), [groupImagesQuery.data?.pages])
   const selectedGroupImages = useMemo(
     () => groupImages.filter((image) => selectedGroupImageIds.includes(String(image.composite_hash ?? image.id))),
@@ -689,17 +707,15 @@ export function GroupPage() {
                                 <FolderPlus className="h-4 w-4" />
                                 하위 그룹 추가
                               </Button>
-                              <Button type="button" size="sm" variant="secondary" onClick={handleOpenEditModal}>
+                              <Button type="button" size="icon-sm" variant="secondary" onClick={handleOpenEditModal} aria-label="그룹 편집" title="편집">
                                 <Pencil className="h-4 w-4" />
-                                편집
                               </Button>
                               <Button type="button" size="sm" variant="secondary" onClick={() => void handleRunAutoCollect()} disabled={autoCollectMutation.isPending}>
                                 <Play className="h-4 w-4" />
                                 {autoCollectMutation.isPending ? '실행 중…' : '자동수집 실행'}
                               </Button>
-                              <Button type="button" size="sm" variant="destructive" onClick={() => void handleDeleteSelectedGroup()} disabled={deleteGroupMutation.isPending}>
+                              <Button type="button" size="icon-sm" variant="destructive" onClick={() => void handleDeleteSelectedGroup()} disabled={deleteGroupMutation.isPending} aria-label="그룹 삭제" title="삭제">
                                 <Trash2 className="h-4 w-4" />
-                                삭제
                               </Button>
                             </>
                           ) : null}
@@ -754,18 +770,11 @@ export function GroupPage() {
                 </Card>
               </section>
 
-              {selectedGroupHierarchy ? (
+              {backNavigationGroup ? (
                 <section className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     <GroupChildCard
-                      group={parentGroupHierarchy ?? {
-                        ...selectedGroupHierarchy,
-                        id: parentGroupHierarchy?.id ?? 0,
-                        name: parentGroupHierarchy?.name ?? selectedSource.rootTitle,
-                        image_count: parentGroupHierarchy?.image_count ?? rootGroups.length,
-                        child_count: parentGroupHierarchy?.child_count ?? rootGroups.length,
-                        has_children: parentGroupHierarchy?.has_children ?? true,
-                      }}
+                      group={backNavigationGroup}
                       variant="back"
                       titleOverride={parentGroupHierarchy?.name ?? selectedSource.rootTitle}
                       subtitleOverride={parentGroupHierarchy ? '상위 그룹으로 이동' : '루트 목록으로 이동'}
@@ -799,6 +808,7 @@ export function GroupPage() {
                 hasMore={Boolean(groupImagesQuery.hasNextPage)}
                 isLoadingMore={groupImagesQuery.isFetchingNextPage}
                 onLoadMore={() => void groupImagesQuery.fetchNextPage()}
+                hideHeader
                 selectable={true}
                 selectedIds={selectedGroupImageIds}
                 onSelectedIdsChange={setSelectedGroupImageIds}

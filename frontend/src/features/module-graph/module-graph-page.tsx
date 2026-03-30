@@ -1018,28 +1018,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           eyebrow="Create"
           title={workflowView === 'browse' ? 'Workflow' : 'Workflow Editor'}
           actions={
-            workflowView === 'browse' ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    void Promise.all([
-                      modulesQuery.refetch(),
-                      graphWorkflowsQuery.refetch(),
-                      ...(selectedGraphId !== null ? [graphExecutionsQuery.refetch()] : []),
-                    ])
-                  }
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  새로고침
-                </Button>
-                <Button type="button" onClick={handleCreateWorkflow}>
-                  <Plus className="h-4 w-4" />
-                  새 워크플로우
-                </Button>
-              </div>
-            ) : (
+            workflowView === 'browse' ? undefined : (
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" onClick={() => setWorkflowView('browse')}>
                   <ArrowLeft className="h-4 w-4" />
@@ -1047,6 +1026,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                 </Button>
                 <Button
                   type="button"
+                  size="icon-sm"
                   variant="outline"
                   onClick={() =>
                     void Promise.all([
@@ -1055,9 +1035,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                       ...(selectedGraphId !== null ? [graphExecutionsQuery.refetch()] : []),
                     ])
                   }
+                  aria-label="새로고침"
+                  title="새로고침"
                 >
                   <RefreshCw className="h-4 w-4" />
-                  새로고침
                 </Button>
                 <Button type="button" variant="outline" onClick={handleAutoLayout} disabled={nodes.length === 0}>
                   자동 정렬
@@ -1098,11 +1079,14 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             }}
             onExecuteGraph={(graphId) => void handleExecuteGraph(graphId)}
             showExecuteButton={false}
-            headerActions={embedded ? (
-              <>
+            isDesktopPageLayout={isDesktopPageLayout}
+            headerActions={
+              <div className="flex items-center gap-2">
                 <Button
                   type="button"
+                  size="icon-sm"
                   variant="outline"
+                  className="bg-surface-container"
                   onClick={() =>
                     void Promise.all([
                       modulesQuery.refetch(),
@@ -1110,36 +1094,38 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                       ...(selectedGraphId !== null ? [graphExecutionsQuery.refetch()] : []),
                     ])
                   }
+                  aria-label="새로고침"
+                  title="새로고침"
                 >
                   <RefreshCw className="h-4 w-4" />
-                  새로고침
                 </Button>
-                <Button type="button" onClick={handleCreateWorkflow}>
+                <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={handleCreateWorkflow} aria-label="새 워크플로우" title="새 워크플로우">
                   <Plus className="h-4 w-4" />
-                  새 워크플로우
                 </Button>
-              </>
-            ) : undefined}
+              </div>
+            }
           />
 
           <div className="space-y-6">
-            <WorkflowRunnerPanel
-              selectedGraph={selectedGraphRecord}
-              inputDefinitions={selectedGraphRecord?.graph.metadata?.exposed_inputs ?? []}
-              inputValues={workflowRunInputValues}
-              isExecuting={executingGraphId !== null}
-              latestExecution={latestExecution}
-              latestPreviewUrl={latestExecutionPreviewArtifact ? getArtifactPreviewUrl(latestExecutionPreviewArtifact) : null}
-              latestPreviewLabel={latestExecutionPreviewArtifact ? `${latestExecutionPreviewArtifact.node_id} · ${latestExecutionPreviewArtifact.port_key}` : null}
-              onInputValueChange={handleWorkflowRunInputChange}
-              onInputValueClear={handleWorkflowRunInputClear}
-              onInputImageChange={handleWorkflowRunInputImageChange}
-              onExecute={() => void handleRunSelectedWorkflow()}
-              onEdit={() => setWorkflowView('edit')}
-              canExecute={selectedWorkflowCanExecute}
-              validationIssues={selectedWorkflowValidationIssues}
-              onValidationIssueSelect={focusValidationIssue}
-            />
+            {selectedGraphRecord ? (
+              <WorkflowRunnerPanel
+                selectedGraph={selectedGraphRecord}
+                inputDefinitions={selectedGraphRecord.graph.metadata?.exposed_inputs ?? []}
+                inputValues={workflowRunInputValues}
+                isExecuting={executingGraphId !== null}
+                latestExecution={latestExecution}
+                latestPreviewUrl={latestExecutionPreviewArtifact ? getArtifactPreviewUrl(latestExecutionPreviewArtifact) : null}
+                latestPreviewLabel={latestExecutionPreviewArtifact ? `${latestExecutionPreviewArtifact.node_id} · ${latestExecutionPreviewArtifact.port_key}` : null}
+                onInputValueChange={handleWorkflowRunInputChange}
+                onInputValueClear={handleWorkflowRunInputClear}
+                onInputImageChange={handleWorkflowRunInputImageChange}
+                onExecute={() => void handleRunSelectedWorkflow()}
+                onEdit={() => setWorkflowView('edit')}
+                canExecute={selectedWorkflowCanExecute}
+                validationIssues={selectedWorkflowValidationIssues}
+                onValidationIssueSelect={focusValidationIssue}
+              />
+            ) : null}
 
             <GraphExecutionPanel
               selectedGraphId={selectedGraphId}
@@ -1191,7 +1177,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                           </AlertTitle>
                           <AlertDescription>
                             <div>노드 {nodes.length} · 엣지 {edges.length} · 노출 입력 {workflowExposedInputs.length}</div>
-                            <div>{selectedGraphRecord ? '현재 저장된 워크플로우를 편집 중이야.' : '아직 저장되지 않은 새 워크플로우 초안이야.'}</div>
                           </AlertDescription>
                         </Alert>
 
@@ -1222,7 +1207,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               <WorkflowValidationPanel
                 issues={editorValidationIssues}
                 title="Editor Validation"
-                description="현재 캔버스 기준으로 실행을 막는 문제를 먼저 확인해."
+                description="실행 전 확인"
                 onIssueSelect={focusValidationIssue}
               />
 
@@ -1256,6 +1241,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                           </Button>
                           <Button
                             type="button"
+                            size="icon-sm"
                             variant="outline"
                             onClick={() =>
                               void Promise.all([
@@ -1264,9 +1250,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                                 ...(selectedGraphId !== null ? [graphExecutionsQuery.refetch()] : []),
                               ])
                             }
+                            aria-label="새로고침"
+                            title="새로고침"
                           >
                             <RefreshCw className="h-4 w-4" />
-                            새로고침
                           </Button>
                           <Button type="button" variant="outline" onClick={handleAutoLayout} disabled={nodes.length === 0}>
                             자동 정렬

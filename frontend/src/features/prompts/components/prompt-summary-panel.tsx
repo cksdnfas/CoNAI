@@ -55,7 +55,7 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
                   <span className="min-w-0 truncate text-foreground">{group.group_name}</span>
                   <Badge variant="secondary">{(group.prompt_count ?? 0).toLocaleString('ko-KR')}</Badge>
                 </div>
-              )) : <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-4 text-sm text-muted-foreground">표시할 그룹 통계가 아직 없어.</div>}
+              )) : <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-4 text-sm text-muted-foreground">표시할 그룹 통계가 없어.</div>}
             </div>
           </CardContent>
         </Card>
@@ -71,7 +71,7 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
                   <div className="truncate text-sm font-medium text-foreground">{item.prompt}</div>
                   <div className="mt-1 text-xs text-muted-foreground">usage {item.usage_count.toLocaleString('ko-KR')}</div>
                 </div>
-              )) : <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-4 text-sm text-muted-foreground md:col-span-2 xl:col-span-3">표시할 상위 프롬프트가 아직 없어.</div>}
+              )) : <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-4 text-sm text-muted-foreground md:col-span-2 xl:col-span-3">표시할 상위 프롬프트가 없어.</div>}
             </div>
           </CardContent>
         </Card>

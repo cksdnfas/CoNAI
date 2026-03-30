@@ -156,8 +156,8 @@ export function WorkflowExposedInputEditor({
             </div>
             {selectedInputs.length === 0 ? (
               <Alert>
-                <AlertTitle>노출된 실행 입력이 아직 없어</AlertTitle>
-                <AlertDescription>아래 Available Inputs에서 필요한 입력을 골라 런너 폼으로 올려봐.</AlertDescription>
+                <AlertTitle>노출된 실행 입력이 없어</AlertTitle>
+                <AlertDescription>아래 입력에서 추가해.</AlertDescription>
               </Alert>
             ) : (
               selectedInputs.map((inputDefinition, index) => {
@@ -260,13 +260,13 @@ export function WorkflowExposedInputEditor({
                 <Input value={availableSearchQuery} onChange={(event) => setAvailableSearchQuery(event.target.value)} placeholder="추가할 입력 검색" />
                 {candidates.length === 0 ? (
                   <Alert>
-                    <AlertTitle>노출 가능한 입력이 아직 없어</AlertTitle>
-                    <AlertDescription>먼저 캔버스에 모듈을 배치해야 runner에 노출할 입력 후보가 생겨.</AlertDescription>
+                    <AlertTitle>노출 가능한 입력이 없어</AlertTitle>
+                    <AlertDescription>먼저 모듈을 배치해.</AlertDescription>
                   </Alert>
                 ) : filteredAvailableCandidates.length === 0 ? (
                   <Alert>
                     <AlertTitle>추가 가능한 입력이 없어</AlertTitle>
-                    <AlertDescription>이미 모두 선택했거나 검색 조건에 맞는 입력이 없어.</AlertDescription>
+                    <AlertDescription>이미 모두 선택했거나 검색 결과가 없어.</AlertDescription>
                   </Alert>
                 ) : (
                   <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">

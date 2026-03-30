@@ -123,7 +123,7 @@ export function GraphExecutionPanel({
         {!selectedGraphId ? (
           <Alert>
             <AlertTitle>그래프를 먼저 골라줘</AlertTitle>
-            <AlertDescription>워크플로우를 선택하면 최근 실행, 큐 상태, 결과 아티팩트와 로그를 여기서 확인할 수 있어.</AlertDescription>
+            <AlertDescription>워크플로우를 먼저 선택해.</AlertDescription>
           </Alert>
         ) : null}
 
@@ -136,8 +136,8 @@ export function GraphExecutionPanel({
 
         {selectedGraphId && executionList.length === 0 ? (
           <Alert>
-            <AlertTitle>아직 실행 기록이 없어</AlertTitle>
-            <AlertDescription>첫 실행을 돌리면 여기서 큐 상태와 결과 아티팩트를 계속 추적할 수 있어.</AlertDescription>
+            <AlertTitle>실행 기록이 없어</AlertTitle>
+            <AlertDescription>먼저 실행해줘.</AlertDescription>
           </Alert>
         ) : null}
 

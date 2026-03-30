@@ -40,7 +40,7 @@ export function PromptListItem({ item, selected = false, canAssign = true, canDe
           type="button"
           className="rounded-sm p-2 text-muted-foreground transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
           onClick={() => onAssignGroup?.()}
-          aria-label="assign prompt group"
+          aria-label="프롬프트 그룹 지정"
           title="그룹 지정"
           disabled={!canAssign}
         >
@@ -50,7 +50,7 @@ export function PromptListItem({ item, selected = false, canAssign = true, canDe
           type="button"
           className="rounded-sm p-2 text-muted-foreground transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
           onClick={() => onDelete?.()}
-          aria-label="delete prompt"
+          aria-label="프롬프트 삭제"
           title="삭제"
           disabled={!canDelete}
         >
@@ -60,7 +60,7 @@ export function PromptListItem({ item, selected = false, canAssign = true, canDe
           type="button"
           className="rounded-sm p-2 text-muted-foreground transition-colors hover:text-primary"
           onClick={() => onCopy(item.prompt)}
-          aria-label="copy prompt"
+          aria-label="프롬프트 복사"
           title="복사"
         >
           <Copy className="h-4 w-4" />

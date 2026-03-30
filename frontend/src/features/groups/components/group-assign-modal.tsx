@@ -19,7 +19,7 @@ interface GroupAssignModalProps {
 export function GroupAssignModal({
   open,
   groups,
-  selectedCount,
+  selectedCount: _selectedCount,
   isSubmitting = false,
   onClose,
   onSubmit,
@@ -54,7 +54,6 @@ export function GroupAssignModal({
       open={open}
       onClose={onClose}
       title="선택 이미지를 그룹에 추가"
-      description={`${selectedCount.toLocaleString('ko-KR')}개 선택 항목을 원하는 커스텀 그룹에 넣어둘 수 있어.`}
       widthClassName="max-w-xl"
     >
       <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
@@ -87,8 +86,8 @@ export function GroupAssignModal({
           </div>
         ) : (
           <Alert>
-            <AlertTitle>먼저 그룹부터 하나 만들어야 해</AlertTitle>
-            <AlertDescription>커스텀 그룹이 아직 없어서 지금은 이미지를 할당할 수 없어.</AlertDescription>
+            <AlertTitle>그룹이 없어</AlertTitle>
+            <AlertDescription>먼저 그룹을 만들어줘.</AlertDescription>
           </Alert>
         )}
 

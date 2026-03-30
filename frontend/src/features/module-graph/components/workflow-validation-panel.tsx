@@ -25,7 +25,7 @@ type WorkflowValidationPanelProps = {
 export function WorkflowValidationPanel({
   issues,
   title = 'Execution Readiness',
-  description = '실행 전에 막히는 입력/설정 문제를 여기서 먼저 보여줘.',
+  description = '실행 전 확인',
   showHeader = true,
   onIssueSelect,
 }: WorkflowValidationPanelProps) {
@@ -52,7 +52,7 @@ export function WorkflowValidationPanel({
             {warningCount > 0 ? <Badge variant="outline">warnings {warningCount}</Badge> : null}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
-            {isReady ? '필수 입력과 주요 시스템 설정이 현재 기준으로는 충족돼.' : '아래 이슈들을 해결해야 실행이 덜 막혀.'}
+            {isReady ? '필수 입력 확인 완료.' : '아래 이슈를 확인해.'}
           </div>
         </div>
 

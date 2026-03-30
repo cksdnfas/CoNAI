@@ -1,11 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { PenSquare, Play, Search } from 'lucide-react'
-import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import type { GraphWorkflowRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -17,24 +15,8 @@ type SavedGraphListProps = {
   onExecuteGraph: (graphId: number) => void
   onEditGraph?: (graph: GraphWorkflowRecord) => void
   showExecuteButton?: boolean
-  showHeader?: boolean
   headerActions?: ReactNode
-}
-
-function formatUpdatedDate(value?: string | null) {
-  if (!value) {
-    return '시간 없음'
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat('ko-KR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(date)
+  isDesktopPageLayout?: boolean
 }
 
 /** Render saved workflows with quick run and edit actions. */
@@ -46,8 +28,8 @@ export function SavedGraphList({
   onExecuteGraph,
   onEditGraph,
   showExecuteButton = true,
-  showHeader = true,
   headerActions,
+  isDesktopPageLayout = false,
 }: SavedGraphListProps) {
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -64,93 +46,80 @@ export function SavedGraphList({
   }, [graphs, searchQuery])
 
   return (
-    <Card className="bg-surface-container">
-      <CardContent className="space-y-2.5">
-        {showHeader ? (
-          <SectionHeading
-            variant="inside"
-            heading="Saved Workflows"
-            actions={
-              <>
-                <Badge variant="outline">{filteredGraphs.length} shown</Badge>
-                {headerActions}
-              </>
-            }
-          />
-        ) : null}
-
+    <ExplorerSidebar
+      title="Workflows"
+      badge={headerActions}
+      floatingFrame
+      className={cn('sticky top-24 z-30 isolate self-start', isDesktopPageLayout && 'flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
+      bodyClassName={cn('space-y-2', isDesktopPageLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}
+      headerExtra={
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="검색" className="h-8 pl-9 text-sm" />
+          <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="검색" className="h-8 bg-surface-container pl-9 text-sm" />
         </div>
-
-        <div className="space-y-2">
-          {filteredGraphs.map((graph) => {
-            const exposedInputCount = graph.graph.metadata?.exposed_inputs?.length ?? 0
-            return (
-              <div key={graph.id} className={cn('rounded-sm border px-2.5 py-2.5', selectedGraphId === graph.id ? 'border-primary/50 bg-surface-high' : 'border-border bg-surface-low')}>
-                <div className="flex items-start justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onLoadGraph(graph)}
-                    className="min-w-0 flex-1 text-left"
-                  >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="truncate text-sm font-medium text-foreground">{graph.name}</span>
-                      {selectedGraphId === graph.id ? <Badge variant="secondary">선택</Badge> : null}
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
-                      <span>v{graph.version}</span>
-                      <span>·</span>
-                      <span>N {graph.graph.nodes.length}</span>
-                      <span>·</span>
-                      <span>E {graph.graph.edges.length}</span>
-                      <span>·</span>
-                      <span>I {exposedInputCount}</span>
-                    </div>
-                    {graph.description ? <div className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">{graph.description}</div> : null}
-                    <div className="mt-1 text-[10px] text-muted-foreground">{formatUpdatedDate(graph.updated_date)}</div>
-                  </button>
-
-                  <div className="flex shrink-0 gap-1">
-                    {onEditGraph ? (
-                      <Button type="button" size="icon-sm" variant="outline" onClick={() => onEditGraph(graph)} title="편집" aria-label="워크플로우 편집">
-                        <PenSquare className="h-4 w-4" />
-                      </Button>
-                    ) : null}
-                    {showExecuteButton ? (
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="outline"
-                        onClick={() => onExecuteGraph(graph.id)}
-                        disabled={executingGraphId !== null}
-                        title={executingGraphId === graph.id ? '실행 중' : '실행'}
-                        aria-label={executingGraphId === graph.id ? '워크플로우 실행 중' : '워크플로우 실행'}
-                      >
-                        <Play className="h-4 w-4" />
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
+      }
+    >
+      {filteredGraphs.map((graph) => (
+        <div
+          key={graph.id}
+          className={cn(
+            'flex items-start gap-2 rounded-sm px-3 py-3 transition-colors',
+            selectedGraphId === graph.id
+              ? 'bg-surface-container text-primary'
+              : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
+          )}
+        >
+          <button
+            type="button"
+            onClick={() => onLoadGraph(graph)}
+            className="min-w-0 flex-1 text-left"
+            title={graph.description?.trim() || graph.name}
+          >
+            <div className={cn('truncate text-sm font-semibold', selectedGraphId === graph.id ? 'text-primary' : 'text-foreground')}>
+              {graph.name}
+            </div>
+            {graph.description ? (
+              <div className="mt-1 line-clamp-1 text-xs text-muted-foreground" title={graph.description}>
+                {graph.description}
               </div>
-            )
-          })}
-        </div>
+            ) : null}
+          </button>
 
-        {graphs.length === 0 ? (
-          <Alert>
-            <AlertTitle>저장된 워크플로우가 아직 없어</AlertTitle>
-            <AlertDescription>새 워크플로우를 만들면 여기서 바로 선택하고 실행 흐름으로 넘길 수 있어.</AlertDescription>
-          </Alert>
-        ) : null}
-        {graphs.length > 0 && filteredGraphs.length === 0 ? (
-          <Alert>
-            <AlertTitle>검색 결과가 없어</AlertTitle>
-            <AlertDescription>검색어를 줄이거나 다른 이름/설명 키워드로 찾아봐.</AlertDescription>
-          </Alert>
-        ) : null}
-      </CardContent>
-    </Card>
+          <div className="flex shrink-0 gap-1">
+            {onEditGraph ? (
+              <Button type="button" size="icon-sm" variant="ghost" onClick={() => onEditGraph(graph)} title="편집" aria-label="워크플로우 편집">
+                <PenSquare className="h-4 w-4" />
+              </Button>
+            ) : null}
+            {showExecuteButton ? (
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => onExecuteGraph(graph.id)}
+                disabled={executingGraphId !== null}
+                title={executingGraphId === graph.id ? '실행 중' : '실행'}
+                aria-label={executingGraphId === graph.id ? '워크플로우 실행 중' : '워크플로우 실행'}
+              >
+                <Play className="h-4 w-4" />
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ))}
+
+      {graphs.length === 0 ? (
+        <Alert>
+          <AlertTitle>저장된 워크플로우가 없어</AlertTitle>
+          <AlertDescription>새 워크플로우를 만들면 여기서 바로 불러올 수 있어.</AlertDescription>
+        </Alert>
+      ) : null}
+      {graphs.length > 0 && filteredGraphs.length === 0 ? (
+        <Alert>
+          <AlertTitle>검색 결과가 없어</AlertTitle>
+          <AlertDescription>다른 키워드로 찾아봐.</AlertDescription>
+        </Alert>
+      ) : null}
+    </ExplorerSidebar>
   )
 }

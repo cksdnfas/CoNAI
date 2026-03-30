@@ -432,7 +432,6 @@ export function UploadPage() {
                 variant="inside"
                 className="border-b border-border/70 px-4 pb-4"
                 heading="파일 업로드"
-                description="여러 파일을 한 번에 올리고 진행 상황을 바로 확인해."
                 actions={
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -453,7 +452,7 @@ export function UploadPage() {
                 }
               />
 
-              <div className="space-y-4 px-4 pb-4">
+              <div className="space-y-4 px-4 pt-4">
                 <input ref={uploadInputRef} type="file" multiple accept={UPLOAD_ACCEPT} className="hidden" onChange={handleUploadFileChange} />
 
                 <DropSurface
@@ -548,7 +547,6 @@ export function UploadPage() {
                 variant="inside"
                 className="border-b border-border/70 px-4 pb-4"
                 heading="미리보기 / 추출"
-                description="단일 이미지를 열어 메타 확인, 변환, 보조 추출을 이어서 처리해."
                 actions={
                   <div className="flex flex-wrap items-center gap-2">
                     <Button type="button" variant="ghost" onClick={() => applyExtractFile(null)} disabled={!extractFile && !extractResult && !taggerResult && !kaloscopeResult && !extractError}>
@@ -560,7 +558,7 @@ export function UploadPage() {
                     </Button>
                     <Button type="button" variant="outline" onClick={handleRewriteMetadata} disabled={!extractFile || extractBusy}>
                       <Download className="h-4 w-4" />
-                      {isRewritingMetadata ? '메타 수정 중…' : '메타 수정 다운로드'}
+                      {isRewritingMetadata ? '메타 수정 중…' : '메타 수정'}
                     </Button>
                     <div className="flex min-w-[220px] flex-1 flex-wrap items-center gap-2 sm:flex-none">
                       <Select
@@ -569,7 +567,7 @@ export function UploadPage() {
                         onChange={(event) => setSelectedExtractAction(event.target.value as ManualExtractAction)}
                         disabled={!extractFile || extractBusy}
                       >
-                        <option value="all">한번에 추출</option>
+                        <option value="all">전체 추출</option>
                         <option value="tagger">자동 추출</option>
                         <option value="kaloscope">작가 추출</option>
                       </Select>
@@ -581,7 +579,7 @@ export function UploadPage() {
                 }
               />
 
-              <div className="space-y-4 px-4 pb-4">
+              <div className="space-y-4 px-4 pt-4">
                 <input ref={extractInputRef} type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={handleExtractFileChange} />
 
                 <div className="rounded-sm bg-surface-low p-4">

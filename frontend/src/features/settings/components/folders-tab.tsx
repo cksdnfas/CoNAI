@@ -148,13 +148,11 @@ export function FoldersTab({
               heading="감시 폴더 운영"
               actions={
                 <>
-                  <Button size="sm" variant="outline" onClick={onRefresh}>
+                  <Button size="icon-sm" variant="outline" onClick={onRefresh} aria-label="새로고침" title="새로고침">
                     <RefreshCcw className="h-4 w-4" />
-                    새로고침
                   </Button>
-                  <Button size="sm" onClick={onScanAll}>
+                  <Button size="icon-sm" onClick={onScanAll} aria-label="전체 스캔" title="전체 스캔">
                     <ScanSearch className="h-4 w-4" />
-                    전체 스캔
                   </Button>
                 </>
               }
@@ -228,7 +226,7 @@ export function FoldersTab({
                     </div>
                   </>
                 ) : (
-                  <div className="px-4 py-6 text-sm text-muted-foreground">아직 등록된 감시 폴더가 없어. 오른쪽 `+` 버튼으로 추가하면 돼.</div>
+                  <div className="px-4 py-6 text-sm text-muted-foreground">등록된 감시 폴더가 없어.</div>
                 )}
               </CardContent>
             </Card>
@@ -292,7 +290,7 @@ export function FoldersTab({
                     </div>
                   </>
                 ) : (
-                  <div className="px-4 py-6 text-sm text-muted-foreground">아직 등록된 백업 소스가 없어. 오른쪽 `+` 버튼으로 추가하면 돼.</div>
+                  <div className="px-4 py-6 text-sm text-muted-foreground">등록된 백업 소스가 없어.</div>
                 )}
               </CardContent>
             </Card>
@@ -315,7 +313,7 @@ export function FoldersTab({
                 </div>
               ) : null}
 
-              {!scanLogsLoading && scanLogs.length === 0 ? <p className="text-sm text-muted-foreground">아직 최근 스캔 로그가 없어.</p> : null}
+              {!scanLogsLoading && scanLogs.length === 0 ? <p className="text-sm text-muted-foreground">최근 스캔 로그가 없어.</p> : null}
 
               {scanLogs.map((log) => (
                 <div key={log.id} className="rounded-sm bg-surface-low px-4 py-3 text-sm">
@@ -341,7 +339,6 @@ export function FoldersTab({
         open={isAddFolderModalOpen}
         onClose={() => setIsAddFolderModalOpen(false)}
         title="감시 폴더 추가"
-        description="새 감시 폴더를 등록하고 기본 스캔/워처 옵션을 설정해."
       >
         <WatchedFolderCreateForm
           newFolder={newFolder}
@@ -381,7 +378,6 @@ export function FoldersTab({
         open={isAddBackupSourceModalOpen}
         onClose={() => setIsAddBackupSourceModalOpen(false)}
         title="백업 소스 추가"
-        description="백업 소스를 등록하고 가져오기 모드와 워처 옵션을 설정해."
       >
         <BackupSourceCreateForm
           newBackupSource={newBackupSource}

@@ -598,12 +598,7 @@ export function ComfyGenerationPanel({ refreshNonce, onHistoryRefresh, onSelecte
             onGenerateSelected={() => void handleGenerateSelected()}
             onGenerateAll={() => void handleGenerateAllServers()}
           />
-        ) : (
-          <Alert>
-            <AlertTitle>워크플로우 필요</AlertTitle>
-            <AlertDescription>먼저 사용할 ComfyUI 워크플로우를 골라줘.</AlertDescription>
-          </Alert>
-        )}
+        ) : null}
       </div>
 
       <ComfyWorkflowAuthoringModal

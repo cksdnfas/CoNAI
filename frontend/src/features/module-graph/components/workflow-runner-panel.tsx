@@ -210,13 +210,12 @@ export function WorkflowRunnerPanel({
           <div className="space-y-3.5">
             <div className="space-y-2">
               <div className="text-base font-semibold text-foreground">{selectedGraph.name}</div>
-              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                <Badge variant="outline">v{selectedGraph.version}</Badge>
-                <Badge variant="outline">N {selectedGraph.graph.nodes.length}</Badge>
-                <Badge variant="outline">E {selectedGraph.graph.edges.length}</Badge>
-                <Badge variant="outline">I {inputDefinitions.length}</Badge>
-                {latestExecution ? <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>{latestExecution.status}</Badge> : null}
-              </div>
+              {selectedGraph.description ? <div className="text-sm text-muted-foreground">{selectedGraph.description}</div> : null}
+              {latestExecution ? (
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>{latestExecution.status}</Badge>
+                </div>
+              ) : null}
             </div>
 
             {latestExecution || latestPreviewUrl ? (
@@ -248,7 +247,7 @@ export function WorkflowRunnerPanel({
             <WorkflowValidationPanel
               issues={validationIssues}
               title="Run Validation"
-              description="실행 전에 막히는 포인트를 여기서 먼저 확인해."
+              description="실행 전 확인"
               showHeader={false}
               onIssueSelect={onValidationIssueSelect}
             />
@@ -258,7 +257,7 @@ export function WorkflowRunnerPanel({
             ) : (
               <Alert>
                 <AlertTitle>추가 입력 없이 실행 가능</AlertTitle>
-                <AlertDescription>아직 노출된 실행 입력이 없어. 지금은 저장된 기본값만으로 바로 실행돼.</AlertDescription>
+                <AlertDescription>기본값으로 실행돼.</AlertDescription>
               </Alert>
             )}
 
@@ -268,12 +267,7 @@ export function WorkflowRunnerPanel({
               </Button>
             </div>
           </div>
-        ) : (
-          <Alert>
-            <AlertTitle>워크플로우를 먼저 선택해줘</AlertTitle>
-            <AlertDescription>왼쪽 목록에서 워크플로우를 고르면 실행 입력과 최근 실행 결과를 여기서 이어서 볼 수 있어.</AlertDescription>
-          </Alert>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   )

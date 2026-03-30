@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { exportPromptGroups } from '@/lib/api'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -289,6 +290,8 @@ export function PromptPage() {
 
   return (
     <div className="space-y-6">
+      <PageHeader title="Prompts" />
+
       <div className="border-b border-border/70 pb-2">
         <div className="flex flex-wrap gap-2">
           {PROMPT_TYPE_TABS.map((tab) => (

@@ -122,7 +122,7 @@ export function ComfyWorkflowListSection({
               })}
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">등록된 ComfyUI 워크플로우가 아직 없어.</div>
+            <div className="text-sm text-muted-foreground">등록된 워크플로우가 없어.</div>
           )}
         </CardContent>
       </Card>
@@ -208,7 +208,7 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
               })}
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">연결된 서버가 아직 없어.</div>
+            <div className="text-sm text-muted-foreground">연결된 서버가 없어.</div>
           )}
         </CardContent>
       </Card>
@@ -247,7 +247,7 @@ export function ComfyDropdownListsSection({ dropdownLists }: DropdownListsSectio
               ))}
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">등록된 드롭다운 목록이 아직 없어.</div>
+            <div className="text-sm text-muted-foreground">등록된 드롭다운 목록이 없어.</div>
           )}
         </CardContent>
       </Card>

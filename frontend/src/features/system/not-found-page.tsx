@@ -10,12 +10,11 @@ export function NotFoundPage() {
         <PageHeader
           eyebrow="System"
           title="페이지를 찾지 못했어"
-          description="라우트 맵에 아직 없는 경로거나 잘못 들어온 거야."
         />
 
         <Card className="w-full">
           <CardContent className="space-y-4">
-            <div className="text-sm text-muted-foreground">홈으로 돌아가서 다시 경로를 잡으면 돼.</div>
+            <div className="text-sm text-muted-foreground">홈으로 돌아가.</div>
             <Button asChild>
               <Link to="/">홈으로 이동</Link>
             </Button>

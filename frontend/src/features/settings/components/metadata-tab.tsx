@@ -35,7 +35,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving }
               {metadataDraft ? (
                 <>
                   <div className="rounded-sm bg-surface-low px-4 py-3 text-sm text-muted-foreground md:col-span-2">
-                    표준 메타(XMP / EXIF / PNG text)는 항상 먼저 읽고, 여기 옵션은 주로 stealth 계열 보조 스캔 범위를 조절해. 지금 기준으로는 PNG secondary fallback과 WebP stealth reader가 이 제한을 같이 참고해.
+                    표준 메타를 먼저 읽고, 아래 옵션은 stealth 스캔 범위를 조절해.
                   </div>
 
                   <SettingsToggleRow className="md:col-span-2">
@@ -53,7 +53,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving }
                       <option value="full">full</option>
                       <option value="skip">skip</option>
                     </Select>
-                    <span className="mt-2 text-xs text-muted-foreground">fast/full은 PNG stealth fallback 쪽에서 의미가 크고, WebP stealth는 skip 여부와 크기/해상도 제한을 같이 따라.</span>
+                    <span className="mt-2 text-xs text-muted-foreground">stealth 스캔 범위를 조절해.</span>
                   </SettingsField>
 
                   <SettingsField label="최대 파일 크기(MB)">
