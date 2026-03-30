@@ -9,6 +9,7 @@ import { PromptCollectionModel } from '../../models/PromptCollection'
 import { PromptGroupModel } from '../../models/PromptGroup'
 import { ImageSimilarityService } from '../imageSimilarity'
 import { imageTaggerService } from '../imageTaggerService'
+import { kaloscopeTaggerService } from '../kaloscopeTaggerService'
 import { settingsService } from '../settingsService'
 import { saveArtifactBuffer } from './artifacts'
 import { SIMILARITY_THRESHOLDS } from '../../types/similarity'
@@ -608,6 +609,76 @@ async function executeExtractTagsFromImage(
   }
 }
 
+/** Extract artist/style hints from one input image using the configured Kaloscope tagger. */
+async function executeExtractArtistFromImage(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  if (typeof resolvedInputs.image !== 'string' || !resolvedInputs.image.startsWith('data:image/')) {
+    throw new Error('Extract Artist From Image requires an image input')
+  }
+
+  const settings = settingsService.loadSettings()
+  if (!settings.kaloscope.enabled) {
+    throw new Error('Extract Artist From Image requires the kaloscope feature to be enabled')
+  }
+
+  const tempFilePath = await writeTempImageInput(context.executionId, node.id, resolvedInputs.image)
+
+  try {
+    const kaloscopeResult = await kaloscopeTaggerService.tagImage(tempFilePath)
+    if (!kaloscopeResult.success) {
+      throw new Error(kaloscopeResult.error || 'Kaloscope extraction failed')
+    }
+
+    const artistText = typeof kaloscopeResult.taglist === 'string' && kaloscopeResult.taglist.trim()
+      ? kaloscopeResult.taglist.trim()
+      : Object.keys(kaloscopeResult.artists || {}).join(', ')
+
+    if (!artistText) {
+      throw new Error('Kaloscope returned no usable artist/style hints')
+    }
+
+    const artistJsonValue = {
+      artists: kaloscopeResult.artists || {},
+      taglist: kaloscopeResult.taglist || '',
+      model: kaloscopeResult.model || 'kaloscope-onnx',
+      topk: kaloscopeResult.topk || settings.kaloscope.topK,
+      tagged_at: kaloscopeResult.tagged_at || new Date().toISOString(),
+    }
+
+    const nodeArtifacts = {
+      artist_text: buildRuntimeArtifact(context.executionId, node.id, 'artist_text', 'text', artistText, {
+        kind: 'system-extract-artist',
+      }),
+      artist_prompt: buildRuntimeArtifact(context.executionId, node.id, 'artist_prompt', 'prompt', artistText, {
+        kind: 'system-extract-artist',
+      }),
+      artist_json: buildRuntimeArtifact(context.executionId, node.id, 'artist_json', 'json', artistJsonValue, {
+        kind: 'system-extract-artist-json',
+      }),
+    }
+
+    context.artifactsByNode.set(node.id, nodeArtifacts)
+
+    writeExecutionLog({
+      executionId: context.executionId,
+      nodeId: node.id,
+      eventType: 'node_engine_complete',
+      message: `System module completed: ${moduleDefinition.name}`,
+      details: {
+        engine: 'system',
+        operationKey: 'system.extract_artist_from_image',
+        artistCount: Object.keys(kaloscopeResult.artists || {}).length,
+      },
+    })
+  } finally {
+    await fs.promises.unlink(tempFilePath).catch(() => undefined)
+  }
+}
+
 /** Execute a CoNAI system-native module node through a stable operation key. */
 export async function executeSystemModule(
   context: ExecutionContext,
@@ -660,6 +731,11 @@ export async function executeSystemModule(
 
   if (operationKey === 'system.extract_tags_from_image') {
     await executeExtractTagsFromImage(context, node, moduleDefinition, resolvedInputs)
+    return
+  }
+
+  if (operationKey === 'system.extract_artist_from_image') {
+    await executeExtractArtistFromImage(context, node, moduleDefinition, resolvedInputs)
     return
   }
 

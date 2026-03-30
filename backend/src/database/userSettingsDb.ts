@@ -963,6 +963,52 @@ function ensureBuiltinSystemModules(): void {
     [],
     '#ab47bc',
   );
+
+  insertIfMissing(
+    'Extract Artist From Image',
+    'Run the configured Kaloscope artist tagger on one image input and expose artist/style hints.',
+    'analysis',
+    [
+      {
+        key: 'image',
+        label: 'Image',
+        direction: 'input',
+        data_type: 'image',
+        required: true,
+        multiple: false,
+        description: 'Input image used for artist/style extraction.',
+      },
+    ],
+    [
+      {
+        key: 'artist_text',
+        label: 'Artist Text',
+        direction: 'output',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'artist_prompt',
+        label: 'Artist Prompt',
+        direction: 'output',
+        data_type: 'prompt',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'artist_json',
+        label: 'Artist JSON',
+        direction: 'output',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.extract_artist_from_image' },
+    [],
+    '#ef5350',
+  );
 }
 
 /**

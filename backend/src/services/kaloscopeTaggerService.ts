@@ -29,7 +29,27 @@ export class KaloscopeTaggerService {
   private readonly scriptPath: string;
 
   constructor() {
-    this.scriptPath = path.join(__dirname, '..', '..', 'python', 'kaloscope_tagger.py');
+    this.scriptPath = this.findScriptPath();
+  }
+
+  /** Resolve the Kaloscope Python script path across dev and compiled layouts. */
+  private findScriptPath(): string {
+    const possiblePaths = [
+      path.join(__dirname, 'python', 'kaloscope_tagger.py'),
+      path.join(__dirname, '..', '..', 'python', 'kaloscope_tagger.py'),
+      path.join(__dirname, '..', '..', '..', '..', 'python', 'kaloscope_tagger.py'),
+      path.join(__dirname, '..', '..', '..', 'python', 'kaloscope_tagger.py'),
+      path.join(__dirname, '..', 'python', 'kaloscope_tagger.py'),
+      path.join(process.cwd(), 'app', 'python', 'kaloscope_tagger.py'),
+    ];
+
+    const foundPath = possiblePaths.find((candidate) => fs.existsSync(candidate));
+    if (!foundPath) {
+      console.error('[Kaloscope] Script not found in any location:', possiblePaths);
+      return possiblePaths[0];
+    }
+
+    return foundPath;
   }
 
   private getKaloscopeSettings(): KaloscopeSettings {
