@@ -3,6 +3,7 @@ import path from 'path'
 import { runtimePaths } from '../../config/runtimePaths'
 import { db } from '../../database/init'
 import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact'
+import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel'
 import { PromptCollectionModel } from '../../models/PromptCollection'
 import { PromptGroupModel } from '../../models/PromptGroup'
 import { ImageSimilarityService } from '../imageSimilarity'
@@ -173,6 +174,62 @@ function listSimilarImageCandidates(): SimilarImageCandidate[] {
   `).all() as SimilarImageCandidate[]
 }
 
+/** Resolve one composite hash from a direct input or a structured reference payload. */
+function resolveCompositeHashFromReference(referenceValue: unknown, compositeHashValue: unknown, indexValue: unknown) {
+  if (typeof compositeHashValue === 'string' && compositeHashValue.trim()) {
+    return compositeHashValue.trim()
+  }
+
+  let normalizedReference = referenceValue
+  if (typeof normalizedReference === 'string' && normalizedReference.trim()) {
+    const trimmed = normalizedReference.trim()
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+      return trimmed
+    }
+
+    try {
+      normalizedReference = JSON.parse(trimmed)
+    } catch {
+      throw new Error('Load Prompt From Reference received invalid reference JSON')
+    }
+  }
+
+  const selectedIndex = Math.max(0, Math.trunc(normalizeNumberInput(indexValue, 0)))
+
+  if (normalizedReference && typeof normalizedReference === 'object' && !Array.isArray(normalizedReference)) {
+    const referenceObject = normalizedReference as { composite_hash?: unknown; items?: unknown }
+    const directCompositeHash = referenceObject.composite_hash
+    if (typeof directCompositeHash === 'string' && directCompositeHash.trim()) {
+      return directCompositeHash.trim()
+    }
+
+    const itemList = referenceObject.items
+    if (Array.isArray(itemList) && itemList.length > 0) {
+      const selectedItem = itemList[Math.min(selectedIndex, itemList.length - 1)]
+      const itemCompositeHash = selectedItem && typeof selectedItem === 'object'
+        ? selectedItem.composite_hash
+        : null
+
+      if (typeof itemCompositeHash === 'string' && itemCompositeHash.trim()) {
+        return itemCompositeHash.trim()
+      }
+    }
+  }
+
+  if (Array.isArray(normalizedReference) && normalizedReference.length > 0) {
+    const selectedItem = normalizedReference[Math.min(selectedIndex, normalizedReference.length - 1)]
+    const itemCompositeHash = selectedItem && typeof selectedItem === 'object'
+      ? selectedItem.composite_hash
+      : null
+
+    if (typeof itemCompositeHash === 'string' && itemCompositeHash.trim()) {
+      return itemCompositeHash.trim()
+    }
+  }
+
+  throw new Error('Load Prompt From Reference requires a reference JSON or composite_hash input')
+}
+
 /** Execute the built-in random prompt from group system module. */
 async function executeRandomPromptFromGroup(
   context: ExecutionContext,
@@ -333,6 +390,71 @@ async function executeFindSimilarImages(
   }
 }
 
+/** Load prompt metadata from one referenced library image. */
+async function executeLoadPromptFromReference(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  const compositeHash = resolveCompositeHashFromReference(
+    resolvedInputs.reference,
+    resolvedInputs.composite_hash,
+    resolvedInputs.index,
+  )
+  const metadata = MediaMetadataModel.findByHash(compositeHash)
+
+  if (!metadata) {
+    throw new Error(`Referenced image metadata not found: ${compositeHash}`)
+  }
+
+  const promptText = metadata.prompt?.trim() || metadata.character_prompt_text?.trim() || ''
+  if (!promptText) {
+    throw new Error(`Referenced image does not have prompt text: ${compositeHash}`)
+  }
+
+  const metadataValue = {
+    composite_hash: metadata.composite_hash,
+    prompt: metadata.prompt,
+    negative_prompt: metadata.negative_prompt,
+    auto_tags: metadata.auto_tags,
+    character_prompt_text: metadata.character_prompt_text,
+    model_name: metadata.model_name,
+    ai_tool: metadata.ai_tool,
+    first_seen_date: metadata.first_seen_date,
+    metadata_updated_date: metadata.metadata_updated_date,
+  }
+
+  const nodeArtifacts = {
+    prompt: buildRuntimeArtifact(context.executionId, node.id, 'prompt', 'prompt', promptText, {
+      kind: 'system-load-prompt-from-reference',
+      composite_hash: metadata.composite_hash,
+    }),
+    text: buildRuntimeArtifact(context.executionId, node.id, 'text', 'text', promptText, {
+      kind: 'system-load-prompt-from-reference',
+      composite_hash: metadata.composite_hash,
+    }),
+    metadata: buildRuntimeArtifact(context.executionId, node.id, 'metadata', 'json', metadataValue, {
+      kind: 'system-load-prompt-metadata',
+      composite_hash: metadata.composite_hash,
+    }),
+  }
+
+  context.artifactsByNode.set(node.id, nodeArtifacts)
+
+  writeExecutionLog({
+    executionId: context.executionId,
+    nodeId: node.id,
+    eventType: 'node_engine_complete',
+    message: `System module completed: ${moduleDefinition.name}`,
+    details: {
+      engine: 'system',
+      operationKey: 'system.load_prompt_from_reference',
+      compositeHash: metadata.composite_hash,
+    },
+  })
+}
+
 /** Execute a CoNAI system-native module node through a stable operation key. */
 export async function executeSystemModule(
   context: ExecutionContext,
@@ -370,6 +492,11 @@ export async function executeSystemModule(
 
   if (operationKey === 'system.find_similar_images') {
     await executeFindSimilarImages(context, node, moduleDefinition, resolvedInputs)
+    return
+  }
+
+  if (operationKey === 'system.load_prompt_from_reference') {
+    await executeLoadPromptFromReference(context, node, moduleDefinition, resolvedInputs)
     return
   }
 

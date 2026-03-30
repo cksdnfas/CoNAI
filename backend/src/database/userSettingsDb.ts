@@ -771,6 +771,83 @@ function ensureBuiltinSystemModules(): void {
     ],
     '#42a5f5',
   );
+
+  insertIfMissing(
+    'Load Prompt From Reference',
+    'Resolve one image reference into reusable prompt text and metadata.',
+    'retrieval',
+    [
+      {
+        key: 'reference',
+        label: 'Reference',
+        direction: 'input',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+        description: 'Structured reference JSON, such as the output of Find Similar Images.',
+      },
+      {
+        key: 'composite_hash',
+        label: 'Composite Hash',
+        direction: 'input',
+        data_type: 'text',
+        required: false,
+        multiple: false,
+        description: 'Direct image composite hash. If set, this wins over reference JSON.',
+      },
+      {
+        key: 'index',
+        label: 'Index',
+        direction: 'input',
+        data_type: 'number',
+        required: false,
+        multiple: false,
+        default_value: 0,
+        description: 'Which item to read when the reference contains an items array.',
+      },
+    ],
+    [
+      {
+        key: 'prompt',
+        label: 'Prompt',
+        direction: 'output',
+        data_type: 'prompt',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'text',
+        label: 'Text',
+        direction: 'output',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'metadata',
+        label: 'Metadata',
+        direction: 'output',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.load_prompt_from_reference' },
+    [
+      {
+        key: 'composite_hash',
+        label: 'Composite Hash',
+        data_type: 'text',
+      },
+      {
+        key: 'index',
+        label: 'Index',
+        data_type: 'number',
+        default_value: 0,
+      },
+    ],
+    '#66bb6a',
+  );
 }
 
 /**
