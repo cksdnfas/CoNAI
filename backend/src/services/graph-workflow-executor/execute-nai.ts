@@ -67,6 +67,47 @@ export async function executeNaiModule(context: ExecutionContext, node: GraphWor
     baseParams.prefer_brownian = true
     baseParams.stream = 'msgpack'
     baseParams.negative_prompt = metadata.negative_prompt || ''
+
+    const characterPrompts: Array<{ prompt: string; uc: string; center: { x: number; y: number } }> = (metadata.characters || [])
+      .filter((entry) => typeof entry.prompt === 'string' && entry.prompt.trim().length > 0)
+      .map((entry) => {
+        const center = {
+          x: typeof entry.center_x === 'number' ? entry.center_x : 0.5,
+          y: typeof entry.center_y === 'number' ? entry.center_y : 0.5,
+        }
+
+        return {
+          prompt: entry.prompt.trim(),
+          uc: (entry.uc || '').trim(),
+          center,
+        }
+      })
+
+    baseParams.characterPrompts = characterPrompts
+    baseParams.use_coords = characterPrompts.length > 0
+
+    baseParams.v4_prompt = {
+      caption: {
+        base_caption: metadata.prompt,
+        char_captions: characterPrompts.map((entry) => ({
+          char_caption: entry.prompt,
+          centers: [entry.center],
+        })),
+      },
+      use_coords: characterPrompts.length > 0,
+      use_order: true,
+    }
+
+    baseParams.v4_negative_prompt = {
+      caption: {
+        base_caption: metadata.negative_prompt || '',
+        char_captions: characterPrompts.map((entry) => ({
+          char_caption: entry.uc,
+          centers: [entry.center],
+        })),
+      },
+      legacy_uc: false,
+    }
   } else {
     baseParams.params_version = 1
     baseParams.ucPreset = metadata.ucPreset || 0
@@ -117,6 +158,7 @@ export async function executeNaiModule(context: ExecutionContext, node: GraphWor
   const metadataValue = {
     prompt: metadata.prompt,
     negative_prompt: metadata.negative_prompt,
+    characters: metadata.characters,
     model: metadata.model,
     action: metadata.action,
     width: metadata.width,

@@ -14,6 +14,13 @@ export type SelectedImageDraft = {
   dataUrl: string
 }
 
+export type NAICharacterPromptDraft = {
+  prompt: string
+  uc: string
+  centerX: string
+  centerY: string
+}
+
 export type NAIFormDraft = {
   prompt: string
   negativePrompt: string
@@ -26,7 +33,7 @@ export type NAIFormDraft = {
   scale: string
   samples: string
   seed: string
-  ucPreset: string
+  characters: NAICharacterPromptDraft[]
   varietyPlus: boolean
   strength: string
   noise: string
@@ -55,6 +62,13 @@ export type ModuleFieldOption = {
   dataType: ModulePortDataType
 }
 
+export const EMPTY_NAI_CHARACTER_PROMPT: NAICharacterPromptDraft = {
+  prompt: '',
+  uc: '',
+  centerX: '0.5',
+  centerY: '0.5',
+}
+
 export const DEFAULT_NAI_FORM: NAIFormDraft = {
   prompt: '',
   negativePrompt: '',
@@ -67,7 +81,7 @@ export const DEFAULT_NAI_FORM: NAIFormDraft = {
   scale: '6',
   samples: '1',
   seed: '',
-  ucPreset: '0',
+  characters: [],
   varietyPlus: false,
   strength: '0.3',
   noise: '0',
@@ -218,6 +232,23 @@ export function toggleSelectionItem(items: string[], value: string) {
   return items.includes(value) ? items.filter((item) => item !== value) : [...items, value]
 }
 
+/** Check whether the selected NAI model supports v4 character prompts. */
+export function supportsNaiCharacterPrompts(model: string) {
+  return model.includes('nai-diffusion-4')
+}
+
+/** Convert the editable character-prompt rows into the backend payload shape. */
+export function buildNaiCharacterPromptPayload(characters: NAICharacterPromptDraft[]) {
+  return characters
+    .map((character) => ({
+      prompt: character.prompt.trim(),
+      uc: character.uc.trim(),
+      center_x: parseNumberInput(character.centerX, 0.5),
+      center_y: parseNumberInput(character.centerY, 0.5),
+    }))
+    .filter((character) => character.prompt.length > 0)
+}
+
 /** Build a backend-ready NAI snapshot from the current form draft. */
 export function buildNaiModuleSnapshot(form: NAIFormDraft) {
   return {
@@ -232,7 +263,7 @@ export function buildNaiModuleSnapshot(form: NAIFormDraft) {
     scale: parseNumberInput(form.scale, 6),
     n_samples: parseNumberInput(form.samples, 1),
     seed: form.seed.trim().length > 0 ? Number(form.seed) : null,
-    ucPreset: parseNumberInput(form.ucPreset, 0),
+    characters: buildNaiCharacterPromptPayload(form.characters),
     variety_plus: form.varietyPlus,
     image: form.sourceImage?.dataUrl || null,
     mask: form.maskImage?.dataUrl || null,
@@ -256,9 +287,12 @@ export function buildNaiModuleFieldOptions(form: NAIFormDraft): ModuleFieldOptio
     { key: 'scale', label: 'CFG Scale', dataType: 'number' },
     { key: 'n_samples', label: 'Samples', dataType: 'number' },
     { key: 'seed', label: 'Seed', dataType: 'number' },
-    { key: 'ucPreset', label: 'ucPreset', dataType: 'number' },
     { key: 'variety_plus', label: 'Variety+', dataType: 'boolean' },
   ]
+
+  if (supportsNaiCharacterPrompts(form.model)) {
+    options.push({ key: 'characters', label: 'Character Prompts', dataType: 'json' })
+  }
 
   if (form.action !== 'generate') {
     options.push(

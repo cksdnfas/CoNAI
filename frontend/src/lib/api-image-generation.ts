@@ -135,13 +135,18 @@ export interface NAIImageGenerationPayload {
   sampler?: string
   n_samples?: number
   seed?: number
-  ucPreset?: number
   variety_plus?: boolean
   image?: string
   mask?: string
   strength?: number
   noise?: number
   add_original_image?: boolean
+  characters?: Array<{
+    prompt: string
+    uc?: string
+    center_x?: number
+    center_y?: number
+  }>
 }
 
 export interface NAIImageGenerationResponse {

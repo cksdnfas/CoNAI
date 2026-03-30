@@ -68,7 +68,7 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataParams>, res: Respo
       baseParams.stream = 'msgpack';
       baseParams.negative_prompt = metadata.negative_prompt || '';
 
-      const characterPrompts = (metadata.characters || [])
+      const characterPrompts: Array<{ prompt: string; uc: string; center: { x: number; y: number } }> = (metadata.characters || [])
         .filter((entry) => typeof entry.prompt === 'string' && entry.prompt.trim().length > 0)
         .map((entry) => {
           const center = {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ExternalLink, ImagePlus, Save } from 'lucide-react'
+import { ExternalLink, ImagePlus, Plus, Save, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,14 +19,18 @@ import {
   loginNaiWithToken,
 } from '@/lib/api'
 import {
+  buildNaiCharacterPromptPayload,
   buildNaiModuleFieldOptions,
   buildNaiModuleSnapshot,
   DEFAULT_NAI_FORM,
+  EMPTY_NAI_CHARACTER_PROMPT,
   FormField,
   getErrorMessage,
   parseNumberInput,
   readFileAsDataUrl,
   SummaryChip,
+  supportsNaiCharacterPrompts,
+  type NAICharacterPromptDraft,
   type NAIFormDraft,
 } from '../image-generation-shared'
 import { NaiModuleSaveModal } from './nai-module-save-modal'
@@ -52,7 +56,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
   const [naiForm, setNaiForm] = useState<NAIFormDraft>(DEFAULT_NAI_FORM)
   const [naiModuleName, setNaiModuleName] = useState('NAI Module')
   const [naiModuleDescription, setNaiModuleDescription] = useState('')
-  const [naiExposedFieldKeys, setNaiExposedFieldKeys] = useState<string[]>(['prompt', 'negative_prompt', 'seed'])
+  const [naiExposedFieldKeys, setNaiExposedFieldKeys] = useState<string[]>(['prompt', 'negative_prompt', 'characters', 'seed'])
 
   const naiUserQuery = useQuery({
     queryKey: ['image-generation-nai-user'],
@@ -87,6 +91,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
   })
 
   const naiModuleFieldOptions = useMemo(() => buildNaiModuleFieldOptions(naiForm), [naiForm])
+  const supportsCharacterPrompts = useMemo(() => supportsNaiCharacterPrompts(naiForm.model), [naiForm.model])
 
   useEffect(() => {
     if (refreshNonce === 0) {
@@ -105,6 +110,34 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     setNaiForm((current) => ({
       ...current,
       [field]: value,
+    }))
+  }
+
+  const handleAddCharacterPrompt = () => {
+    setNaiForm((current) => ({
+      ...current,
+      characters: [...current.characters, { ...EMPTY_NAI_CHARACTER_PROMPT }],
+    }))
+  }
+
+  const handleCharacterPromptChange = (index: number, field: keyof NAICharacterPromptDraft, value: string) => {
+    setNaiForm((current) => ({
+      ...current,
+      characters: current.characters.map((character, characterIndex) => (
+        characterIndex === index
+          ? {
+              ...character,
+              [field]: value,
+            }
+          : character
+      )),
+    }))
+  }
+
+  const handleRemoveCharacterPrompt = (index: number) => {
+    setNaiForm((current) => ({
+      ...current,
+      characters: current.characters.filter((_, characterIndex) => characterIndex !== index),
     }))
   }
 
@@ -204,7 +237,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
         scale: Number(naiForm.scale),
         n_samples: Number(naiForm.samples),
         seed: naiForm.seed.trim().length > 0 ? Number(naiForm.seed) : undefined,
-        ucPreset: Number(naiForm.ucPreset),
+        characters: buildNaiCharacterPromptPayload(naiForm.characters),
         variety_plus: naiForm.varietyPlus,
         image: naiForm.sourceImage?.dataUrl,
         mask: naiForm.maskImage?.dataUrl,
@@ -393,23 +426,89 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     className="border-b border-border/70 pb-4"
                     heading="Prompt"
                   />
-                <div className="grid gap-4 xl:grid-cols-2">
-                  <FormField label="Prompt">
-                    <Textarea value={naiForm.prompt} onChange={(event) => handleNaiFieldChange('prompt', event.target.value)} rows={6} placeholder="1girl, solo, cinematic lighting" />
-                  </FormField>
+                  <div className="space-y-4">
+                    <FormField label="Prompt">
+                      <Textarea value={naiForm.prompt} onChange={(event) => handleNaiFieldChange('prompt', event.target.value)} rows={6} placeholder="1girl, solo, cinematic lighting" />
+                    </FormField>
 
-                  <FormField label="Negative Prompt">
-                    <Textarea
-                      value={naiForm.negativePrompt}
-                      onChange={(event) => handleNaiFieldChange('negativePrompt', event.target.value)}
-                      rows={6}
-                      placeholder="low quality, blurry"
-                    />
-                  </FormField>
-                </div>
-              </CardContent>
-            </Card>
-          </section>
+                    <FormField label="Negative Prompt">
+                      <Textarea
+                        value={naiForm.negativePrompt}
+                        onChange={(event) => handleNaiFieldChange('negativePrompt', event.target.value)}
+                        rows={6}
+                        placeholder="low quality, blurry"
+                      />
+                    </FormField>
+
+                    <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-foreground">Character Prompt</div>
+                          <div className="text-xs text-muted-foreground">
+                            캐릭터 프롬프트는 부정 프롬프트 아래에서 관리해. NAI Diffusion 4 / 4.5 기준 구조야.
+                          </div>
+                        </div>
+                        <Button type="button" variant="outline" size="sm" onClick={handleAddCharacterPrompt} disabled={!supportsCharacterPrompts}>
+                          <Plus className="h-4 w-4" />
+                          캐릭터 추가
+                        </Button>
+                      </div>
+
+                      {!supportsCharacterPrompts ? (
+                        <div className="text-xs text-[#ffb4ab]">Character Prompt는 NAI Diffusion 4 / 4.5 모델에서만 적용돼.</div>
+                      ) : null}
+
+                      {naiForm.characters.length === 0 ? (
+                        <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
+                          아직 캐릭터 프롬프트가 없어. 필요하면 추가해서 prompt / negative / center 좌표를 넣어줘.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {naiForm.characters.map((character, index) => (
+                            <div key={`nai-character-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-container p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-sm font-medium text-foreground">Character {index + 1}</div>
+                                <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveCharacterPrompt(index)}>
+                                  <Trash2 className="h-4 w-4" />
+                                  제거
+                                </Button>
+                              </div>
+
+                              <FormField label="Character Prompt">
+                                <Textarea
+                                  value={character.prompt}
+                                  onChange={(event) => handleCharacterPromptChange(index, 'prompt', event.target.value)}
+                                  rows={4}
+                                  placeholder="girl, ibuki (blue archive), blonde hair, halo"
+                                />
+                              </FormField>
+
+                              <FormField label="Character Negative Prompt">
+                                <Textarea
+                                  value={character.uc}
+                                  onChange={(event) => handleCharacterPromptChange(index, 'uc', event.target.value)}
+                                  rows={3}
+                                  placeholder="narrow waist, wide hips"
+                                />
+                              </FormField>
+
+                              <div className="grid gap-4 sm:grid-cols-2">
+                                <FormField label="Center X">
+                                  <Input type="number" min={0} max={1} step={0.01} value={character.centerX} onChange={(event) => handleCharacterPromptChange(index, 'centerX', event.target.value)} />
+                                </FormField>
+                                <FormField label="Center Y">
+                                  <Input type="number" min={0} max={1} step={0.01} value={character.centerY} onChange={(event) => handleCharacterPromptChange(index, 'centerY', event.target.value)} />
+                                </FormField>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </section>
 
             <section className="space-y-3">
               <Card>
@@ -539,21 +638,16 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                 />
 
                 <div className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <FormField label="ucPreset">
-                      <Input type="number" min={0} max={3} value={naiForm.ucPreset} onChange={(event) => handleNaiFieldChange('ucPreset', event.target.value)} />
-                    </FormField>
-                    <div className="space-y-2">
-                      <div className="text-sm font-medium text-foreground">Variety+</div>
-                      <ToggleRow variant="detail" className="justify-between rounded-sm border border-border bg-surface-container px-3 py-2.5">
-                        <div className="text-sm text-foreground">활성</div>
-                        <input
-                          type="checkbox"
-                          checked={naiForm.varietyPlus}
-                          onChange={(event) => setNaiForm((current) => ({ ...current, varietyPlus: event.target.checked }))}
-                        />
-                      </ToggleRow>
-                    </div>
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium text-foreground">Variety+</div>
+                    <ToggleRow variant="detail" className="justify-between rounded-sm border border-border bg-surface-container px-3 py-2.5">
+                      <div className="text-sm text-foreground">활성</div>
+                      <input
+                        type="checkbox"
+                        checked={naiForm.varietyPlus}
+                        onChange={(event) => setNaiForm((current) => ({ ...current, varietyPlus: event.target.checked }))}
+                      />
+                    </ToggleRow>
                   </div>
 
                   {naiForm.action !== 'generate' ? (
