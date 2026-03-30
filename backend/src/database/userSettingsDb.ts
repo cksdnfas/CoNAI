@@ -917,6 +917,52 @@ function ensureBuiltinSystemModules(): void {
     ],
     '#29b6f6',
   );
+
+  insertIfMissing(
+    'Extract Tags From Image',
+    'Run the configured image tagger on one image input and expose prompt-friendly tags.',
+    'analysis',
+    [
+      {
+        key: 'image',
+        label: 'Image',
+        direction: 'input',
+        data_type: 'image',
+        required: true,
+        multiple: false,
+        description: 'Input image used for tag extraction.',
+      },
+    ],
+    [
+      {
+        key: 'tags_text',
+        label: 'Tags Text',
+        direction: 'output',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'tags_prompt',
+        label: 'Tags Prompt',
+        direction: 'output',
+        data_type: 'prompt',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'tags_json',
+        label: 'Tags JSON',
+        direction: 'output',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.extract_tags_from_image' },
+    [],
+    '#ab47bc',
+  );
 }
 
 /**

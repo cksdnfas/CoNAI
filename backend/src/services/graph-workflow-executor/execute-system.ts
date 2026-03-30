@@ -8,6 +8,8 @@ import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel'
 import { PromptCollectionModel } from '../../models/PromptCollection'
 import { PromptGroupModel } from '../../models/PromptGroup'
 import { ImageSimilarityService } from '../imageSimilarity'
+import { imageTaggerService } from '../imageTaggerService'
+import { settingsService } from '../settingsService'
 import { saveArtifactBuffer } from './artifacts'
 import { SIMILARITY_THRESHOLDS } from '../../types/similarity'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
@@ -529,6 +531,83 @@ async function executeLoadImageFromReference(
   })
 }
 
+/** Extract prompt-friendly tags from one input image using the configured WD tagger. */
+async function executeExtractTagsFromImage(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  if (typeof resolvedInputs.image !== 'string' || !resolvedInputs.image.startsWith('data:image/')) {
+    throw new Error('Extract Tags From Image requires an image input')
+  }
+
+  const settings = settingsService.loadSettings()
+  if (!settings.tagger.enabled) {
+    throw new Error('Extract Tags From Image requires the tagger feature to be enabled')
+  }
+
+  const tempFilePath = await writeTempImageInput(context.executionId, node.id, resolvedInputs.image)
+
+  try {
+    const taggerResult = await imageTaggerService.tagImage(tempFilePath)
+    if (!taggerResult.success) {
+      throw new Error(taggerResult.error || 'Tagger extraction failed')
+    }
+
+    const tagsText = typeof taggerResult.taglist === 'string' && taggerResult.taglist.trim()
+      ? taggerResult.taglist.trim()
+      : typeof taggerResult.caption === 'string' && taggerResult.caption.trim()
+        ? taggerResult.caption.trim()
+        : Object.keys(taggerResult.general || {}).join(', ')
+
+    if (!tagsText) {
+      throw new Error('Tagger returned no usable tags')
+    }
+
+    const tagsJsonValue = {
+      caption: taggerResult.caption || '',
+      taglist: taggerResult.taglist || '',
+      general: taggerResult.general || {},
+      character: taggerResult.character || {},
+      rating: taggerResult.rating || {},
+      model: taggerResult.model || settings.tagger.model,
+      thresholds: taggerResult.thresholds || {
+        general: settings.tagger.generalThreshold,
+        character: settings.tagger.characterThreshold,
+      },
+    }
+
+    const nodeArtifacts = {
+      tags_text: buildRuntimeArtifact(context.executionId, node.id, 'tags_text', 'text', tagsText, {
+        kind: 'system-extract-tags',
+      }),
+      tags_prompt: buildRuntimeArtifact(context.executionId, node.id, 'tags_prompt', 'prompt', tagsText, {
+        kind: 'system-extract-tags',
+      }),
+      tags_json: buildRuntimeArtifact(context.executionId, node.id, 'tags_json', 'json', tagsJsonValue, {
+        kind: 'system-extract-tags-json',
+      }),
+    }
+
+    context.artifactsByNode.set(node.id, nodeArtifacts)
+
+    writeExecutionLog({
+      executionId: context.executionId,
+      nodeId: node.id,
+      eventType: 'node_engine_complete',
+      message: `System module completed: ${moduleDefinition.name}`,
+      details: {
+        engine: 'system',
+        operationKey: 'system.extract_tags_from_image',
+        tagCount: tagsText.split(',').map((tag) => tag.trim()).filter(Boolean).length,
+      },
+    })
+  } finally {
+    await fs.promises.unlink(tempFilePath).catch(() => undefined)
+  }
+}
+
 /** Execute a CoNAI system-native module node through a stable operation key. */
 export async function executeSystemModule(
   context: ExecutionContext,
@@ -576,6 +655,11 @@ export async function executeSystemModule(
 
   if (operationKey === 'system.load_image_from_reference') {
     await executeLoadImageFromReference(context, node, moduleDefinition, resolvedInputs)
+    return
+  }
+
+  if (operationKey === 'system.extract_tags_from_image') {
+    await executeExtractTagsFromImage(context, node, moduleDefinition, resolvedInputs)
     return
   }
 
