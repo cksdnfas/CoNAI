@@ -563,6 +563,128 @@ function ensureModuleDefinitionsSupportsSystemEngine(): void {
 }
 
 /**
+ * Seed built-in system-native workflow modules that should always be available.
+ */
+function ensureBuiltinSystemModules(): void {
+  const existing = userSettingsDb
+    .prepare("SELECT id FROM module_definitions WHERE name = ?")
+    .get('Random Prompt From Group') as { id: number } | undefined;
+
+  if (existing) {
+    return;
+  }
+
+  userSettingsDb.prepare(`
+    INSERT INTO module_definitions (
+      name, description, engine_type, authoring_source, category,
+      template_defaults, exposed_inputs, output_ports, internal_fixed_values, ui_schema,
+      version, is_active, color
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    'Random Prompt From Group',
+    'Pick one prompt entry from a stored prompt group and expose it as reusable workflow text.',
+    'system',
+    'manual',
+    'prompt-source',
+    JSON.stringify({}),
+    JSON.stringify([
+      {
+        key: 'group_name',
+        label: 'Group Name',
+        direction: 'input',
+        data_type: 'text',
+        required: false,
+        multiple: false,
+        description: 'Exact prompt group name to sample from when group_id is not provided.',
+      },
+      {
+        key: 'group_id',
+        label: 'Group ID',
+        direction: 'input',
+        data_type: 'number',
+        required: false,
+        multiple: false,
+        description: 'Prompt group id. If set, this wins over group_name.',
+      },
+      {
+        key: 'type',
+        label: 'Collection Type',
+        direction: 'input',
+        data_type: 'text',
+        required: false,
+        multiple: false,
+        default_value: 'positive',
+        description: 'positive, negative, or auto',
+      },
+      {
+        key: 'seed',
+        label: 'Seed',
+        direction: 'input',
+        data_type: 'number',
+        required: false,
+        multiple: false,
+        description: 'Optional deterministic selector seed.',
+      }
+    ]),
+    JSON.stringify([
+      {
+        key: 'prompt',
+        label: 'Prompt',
+        direction: 'output',
+        data_type: 'prompt',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'text',
+        label: 'Text',
+        direction: 'output',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'entry_json',
+        label: 'Entry JSON',
+        direction: 'output',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+      }
+    ]),
+    JSON.stringify({ operation_key: 'system.random_prompt_from_group' }),
+    JSON.stringify([
+      {
+        key: 'group_name',
+        label: 'Group Name',
+        data_type: 'text',
+        placeholder: '예: Character Pose / Costume / Auto Tags',
+      },
+      {
+        key: 'group_id',
+        label: 'Group ID',
+        data_type: 'number',
+      },
+      {
+        key: 'type',
+        label: 'Collection Type',
+        data_type: 'select',
+        default_value: 'positive',
+        options: ['positive', 'negative', 'auto'],
+      },
+      {
+        key: 'seed',
+        label: 'Seed',
+        data_type: 'number',
+      }
+    ]),
+    1,
+    1,
+    '#26a69a',
+  );
+}
+
+/**
  * Run all migration files in order
  */
 function runMigrations(): void {
@@ -574,6 +696,7 @@ function runMigrations(): void {
     console.log('📊 No migrations folder found, creating tables directly...');
     createTables();
     ensureModuleDefinitionsSupportsSystemEngine();
+    ensureBuiltinSystemModules();
     return;
   }
 
@@ -592,6 +715,7 @@ function runMigrations(): void {
   if (pendingMigrations.length === 0) {
     console.log('  ✓ All migrations already applied');
     ensureModuleDefinitionsSupportsSystemEngine();
+    ensureBuiltinSystemModules();
     return;
   }
 
@@ -610,6 +734,7 @@ function runMigrations(): void {
   }
 
   ensureModuleDefinitionsSupportsSystemEngine();
+  ensureBuiltinSystemModules();
 }
 
 /**

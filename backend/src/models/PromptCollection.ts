@@ -342,6 +342,21 @@ export class PromptCollectionModel {
   }
 
   /**
+   * 그룹에 속한 전체 프롬프트 조회
+   */
+  static getPromptsByGroupId(groupId: number | null, type: 'positive' | 'negative' | 'auto' = 'positive'): any[] {
+    const tableName = getTableName(type);
+    const rows = groupId === null
+      ? db.prepare(`SELECT * FROM ${tableName} WHERE group_id IS NULL ORDER BY usage_count DESC, prompt ASC`).all() as any[]
+      : db.prepare(`SELECT * FROM ${tableName} WHERE group_id = ? ORDER BY usage_count DESC, prompt ASC`).all(groupId) as any[];
+
+    return rows.map((row) => ({
+      ...row,
+      synonyms: row.synonyms ? JSON.parse(row.synonyms) : [],
+    }));
+  }
+
+  /**
    * ID로 프롬프트 조회
    */
   static findById(id: number, type: 'positive' | 'negative' | 'auto' = 'positive'): any | null {

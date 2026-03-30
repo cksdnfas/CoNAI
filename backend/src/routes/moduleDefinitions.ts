@@ -50,7 +50,28 @@ function inferPortLabel(key: string): string {
     .join(' ')
 }
 
-function createDefaultOutputPorts(engineType: 'nai' | 'comfyui'): ModulePortDefinition[] {
+function createDefaultOutputPorts(engineType: 'nai' | 'comfyui' | 'system'): ModulePortDefinition[] {
+  if (engineType === 'system') {
+    return [
+      {
+        key: 'text',
+        label: 'System Text',
+        direction: 'output',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'metadata',
+        label: 'Metadata',
+        direction: 'output',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+      },
+    ]
+  }
+
   return [
     {
       key: 'image',
