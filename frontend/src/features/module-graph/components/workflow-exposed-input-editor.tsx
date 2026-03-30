@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { cn } from '@/lib/utils'
 import type { GraphWorkflowExposedInput } from '@/lib/api'
+import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 
 type WorkflowExposedInputEditorProps = {
   candidates: GraphWorkflowExposedInput[]
@@ -66,6 +67,15 @@ export function WorkflowExposedInputEditor({
 
   const renderDefaultValueEditor = (inputDefinition: GraphWorkflowExposedInput) => {
     const rawValue = inputDefinition.default_value
+
+    if (isNaiCharacterPromptPort(inputDefinition.port_key, inputDefinition.data_type)) {
+      return (
+        <NaiCharacterPromptsInput
+          value={rawValue}
+          onChange={(value) => onUpdateInput(inputDefinition.id, { default_value: value })}
+        />
+      )
+    }
 
     if (inputDefinition.data_type === 'prompt' || inputDefinition.data_type === 'json') {
       return (
