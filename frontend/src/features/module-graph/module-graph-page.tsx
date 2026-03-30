@@ -26,6 +26,7 @@ import {
   cancelGraphExecution,
   createGraphWorkflow,
   executeGraphWorkflow,
+  getAppSettings,
   getGraphExecution,
   getGraphWorkflowExecutions,
   getGraphWorkflows,
@@ -43,6 +44,7 @@ import { NodeInspectorPanel } from './components/node-inspector-panel'
 import { SavedGraphList } from './components/saved-graph-list'
 import { WorkflowExposedInputEditor } from './components/workflow-exposed-input-editor'
 import { WorkflowRunnerPanel } from './components/workflow-runner-panel'
+import { WorkflowValidationPanel, type WorkflowValidationIssue } from './components/workflow-validation-panel'
 import {
   buildAutoLayoutedNodes,
   buildFlowFromGraphRecord,
@@ -59,6 +61,7 @@ import {
 } from './module-graph-shared'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
+import type { AppSettings } from '@/types/settings'
 
 type ModuleWorkflowWorkspaceProps = {
   embedded?: boolean
@@ -66,6 +69,118 @@ type ModuleWorkflowWorkspaceProps = {
 
 function buildWorkflowExposedInputId(nodeId: string, portKey: string) {
   return `${nodeId}:${portKey}`
+}
+
+type ValidationNodeRecord = {
+  id: string
+  module: ModuleDefinitionRecord | null
+  inputValues: Record<string, unknown>
+}
+
+type ValidationEdgeRecord = {
+  targetNodeId: string
+  targetPortKey: string
+}
+
+function hasMeaningfulValue(value: unknown) {
+  return value !== undefined && value !== null && value !== ''
+}
+
+function resolveSystemCapabilityIssue(module: ModuleDefinitionRecord, settings?: AppSettings | null) {
+  if (module.engine_type !== 'system' || !settings) {
+    return null
+  }
+
+  const operationKey = typeof module.internal_fixed_values?.operation_key === 'string'
+    ? module.internal_fixed_values.operation_key
+    : typeof module.template_defaults?.operation_key === 'string'
+      ? module.template_defaults.operation_key
+      : null
+
+  if (operationKey === 'system.extract_tags_from_image' && !settings.tagger.enabled) {
+    return 'WD Tagger 기능이 비활성화돼 있어.'
+  }
+
+  if (operationKey === 'system.extract_artist_from_image' && !settings.kaloscope.enabled) {
+    return 'Kaloscope 기능이 비활성화돼 있어.'
+  }
+
+  return null
+}
+
+function buildWorkflowValidationIssues(params: {
+  nodes: ValidationNodeRecord[]
+  edges: ValidationEdgeRecord[]
+  exposedInputs: GraphWorkflowExposedInput[]
+  runtimeInputValues?: Record<string, unknown>
+  settings?: AppSettings | null
+}) {
+  const { nodes, edges, exposedInputs, runtimeInputValues = {}, settings } = params
+  const issues: WorkflowValidationIssue[] = []
+  const connectedInputMap = new Map<string, Set<string>>()
+  const exposedInputMap = new Map(exposedInputs.map((inputDefinition) => [buildWorkflowExposedInputId(inputDefinition.node_id, inputDefinition.port_key), inputDefinition]))
+
+  for (const edge of edges) {
+    const current = connectedInputMap.get(edge.targetNodeId) ?? new Set<string>()
+    current.add(edge.targetPortKey)
+    connectedInputMap.set(edge.targetNodeId, current)
+  }
+
+  for (const node of nodes) {
+    const nodeLabel = node.module?.name ?? '알 수 없는 모듈'
+
+    if (!node.module) {
+      issues.push({
+        id: `missing-module:${node.id}`,
+        nodeId: node.id,
+        nodeLabel,
+        severity: 'error',
+        title: '모듈 정의를 찾지 못했어',
+        detail: '이 노드가 참조하는 모듈이 현재 목록에 없어. 저장된 워크플로우와 모듈 카탈로그를 확인해봐.',
+      })
+      continue
+    }
+
+    const capabilityIssue = resolveSystemCapabilityIssue(node.module, settings)
+    if (capabilityIssue) {
+      issues.push({
+        id: `capability:${node.id}`,
+        nodeId: node.id,
+        nodeLabel,
+        severity: 'error',
+        title: '시스템 기능이 비활성화돼 있어',
+        detail: capabilityIssue,
+      })
+    }
+
+    const connectedInputKeys = connectedInputMap.get(node.id) ?? new Set<string>()
+    for (const port of node.module.exposed_inputs ?? []) {
+      if (!port.required) {
+        continue
+      }
+
+      const exposedInput = exposedInputMap.get(buildWorkflowExposedInputId(node.id, port.key))
+      const runtimeValue = exposedInput ? runtimeInputValues[exposedInput.id] : undefined
+      const satisfied = connectedInputKeys.has(port.key)
+        || hasMeaningfulValue(node.inputValues?.[port.key])
+        || hasMeaningfulValue(port.default_value)
+        || hasMeaningfulValue(exposedInput?.default_value)
+        || hasMeaningfulValue(runtimeValue)
+
+      if (!satisfied) {
+        issues.push({
+          id: `missing-input:${node.id}:${port.key}`,
+          nodeId: node.id,
+          nodeLabel,
+          severity: 'error',
+          title: `필수 입력 누락 · ${port.label}`,
+          detail: `${port.label} (${port.key}) 입력이 연결되지 않았고 값도 비어 있어.`,
+        })
+      }
+    }
+  }
+
+  return issues
 }
 
 function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorkspaceProps) {
@@ -103,6 +218,11 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const modulesQuery = useQuery({
     queryKey: ['module-graph-modules'],
     queryFn: () => getModuleDefinitions(true),
+  })
+
+  const settingsQuery = useQuery({
+    queryKey: ['app-settings', 'module-graph-validation'],
+    queryFn: getAppSettings,
   })
 
   const graphWorkflowsQuery = useQuery({
@@ -147,6 +267,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   )
   const isDirty = currentSnapshot !== lastSavedSnapshot
   const selectedGraphRecord = useMemo(() => (graphWorkflowsQuery.data ?? []).find((graph) => graph.id === selectedGraphId) ?? null, [graphWorkflowsQuery.data, selectedGraphId])
+  const moduleDefinitionById = useMemo(() => new Map(modules.map((module) => [module.id, module])), [modules])
   const workflowInputCandidates = useMemo(
     () =>
       nodes.flatMap((node) =>
@@ -177,6 +298,46 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const selectedExecution = useMemo(() => executionList.find((execution) => execution.id === selectedExecutionId) ?? executionDetailQuery.data?.execution ?? null, [executionDetailQuery.data?.execution, executionList, selectedExecutionId])
   const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedNodeId) ?? null, [nodes, selectedNodeId])
   const selectedEdge = useMemo(() => edges.find((edge) => edge.id === selectedEdgeId) ?? null, [edges, selectedEdgeId])
+  const editorValidationIssues = useMemo(
+    () =>
+      buildWorkflowValidationIssues({
+        nodes: nodes.map((node) => ({
+          id: node.id,
+          module: node.data.module,
+          inputValues: node.data.inputValues ?? {},
+        })),
+        edges: edges
+          .map((edge) => ({
+            targetNodeId: edge.target,
+            targetPortKey: parseHandleId(edge.targetHandle)?.portKey ?? '',
+          }))
+          .filter((edge) => edge.targetPortKey.length > 0),
+        exposedInputs: workflowExposedInputs,
+        settings: settingsQuery.data,
+      }),
+    [edges, nodes, settingsQuery.data, workflowExposedInputs],
+  )
+  const selectedWorkflowValidationIssues = useMemo(() => {
+    if (!selectedGraphRecord) {
+      return []
+    }
+
+    return buildWorkflowValidationIssues({
+      nodes: selectedGraphRecord.graph.nodes.map((node) => ({
+        id: node.id,
+        module: moduleDefinitionById.get(node.module_id) ?? null,
+        inputValues: node.input_values ?? {},
+      })),
+      edges: selectedGraphRecord.graph.edges.map((edge) => ({
+        targetNodeId: edge.target_node_id,
+        targetPortKey: edge.target_port_key,
+      })),
+      exposedInputs: selectedGraphRecord.graph.metadata?.exposed_inputs ?? [],
+      runtimeInputValues: workflowRunInputValues,
+      settings: settingsQuery.data,
+    })
+  }, [moduleDefinitionById, selectedGraphRecord, settingsQuery.data, workflowRunInputValues])
+  const selectedWorkflowCanExecute = selectedWorkflowValidationIssues.every((issue) => issue.severity !== 'error')
 
   useEffect(() => {
     if (selectedGraphId === null || executionList.length === 0) {
@@ -719,6 +880,12 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       return
     }
 
+    const blockingValidationIssue = selectedWorkflowValidationIssues.find((issue) => issue.severity === 'error')
+    if (blockingValidationIssue) {
+      showSnackbar({ message: `${blockingValidationIssue.nodeLabel}: ${blockingValidationIssue.title}`, tone: 'error' })
+      return
+    }
+
     const exposedInputs = selectedGraphRecord.graph.metadata?.exposed_inputs ?? []
     const missingRequiredInput = exposedInputs.find((inputDefinition) => {
       if (!inputDefinition.required) {
@@ -940,6 +1107,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               onInputImageChange={handleWorkflowRunInputImageChange}
               onExecute={() => void handleRunSelectedWorkflow()}
               onEdit={() => setWorkflowView('edit')}
+              canExecute={selectedWorkflowCanExecute}
+              validationIssues={selectedWorkflowValidationIssues}
             />
 
             <GraphExecutionPanel
@@ -1010,6 +1179,12 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                 onUpdateInput={handleUpdateWorkflowExposedInput}
                 onMoveInput={handleMoveWorkflowExposedInput}
                 onChangeDefaultImage={handleWorkflowExposedInputDefaultImageChange}
+              />
+
+              <WorkflowValidationPanel
+                issues={editorValidationIssues}
+                title="Editor Validation"
+                description="현재 캔버스 기준으로 실행을 막는 문제를 먼저 확인해."
               />
 
               <ModuleLibraryPanel

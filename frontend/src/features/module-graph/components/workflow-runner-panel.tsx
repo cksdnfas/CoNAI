@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import type { GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowRecord } from '@/lib/api'
+import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
 
 type WorkflowRunnerPanelProps = {
   selectedGraph: GraphWorkflowRecord | null
@@ -20,6 +21,8 @@ type WorkflowRunnerPanelProps = {
   onInputImageChange: (inputId: string, file?: File) => Promise<void>
   onExecute: () => void
   onEdit: () => void
+  canExecute?: boolean
+  validationIssues?: WorkflowValidationIssue[]
   showHeader?: boolean
 }
 
@@ -41,6 +44,8 @@ export function WorkflowRunnerPanel({
   onInputImageChange,
   onExecute,
   onEdit,
+  canExecute = true,
+  validationIssues = [],
   showHeader = true,
 }: WorkflowRunnerPanelProps) {
   const renderInputField = (inputDefinition: GraphWorkflowExposedInput) => {
@@ -238,6 +243,13 @@ export function WorkflowRunnerPanel({
               </div>
             ) : null}
 
+            <WorkflowValidationPanel
+              issues={validationIssues}
+              title="Run Validation"
+              description="실행 전에 막히는 포인트를 여기서 먼저 확인해."
+              showHeader={false}
+            />
+
             {inputDefinitions.length > 0 ? (
               <div className="space-y-2.5">{inputDefinitions.map((inputDefinition) => renderInputField(inputDefinition))}</div>
             ) : (
@@ -247,8 +259,8 @@ export function WorkflowRunnerPanel({
             )}
 
             <div className="flex flex-wrap gap-2 pt-1">
-              <Button type="button" onClick={onExecute} disabled={isExecuting}>
-                {isExecuting ? '실행 요청 중…' : '실행'}
+              <Button type="button" onClick={onExecute} disabled={isExecuting || !canExecute}>
+                {isExecuting ? '실행 요청 중…' : canExecute ? '실행' : '실행 불가'}
               </Button>
             </div>
           </div>
