@@ -19,10 +19,17 @@ type PortCellProps = {
   side: 'input' | 'output'
   accentColor: string
   connected: boolean
+  satisfied: boolean
+  requiredMissing: boolean
+}
+
+/** Check whether a node input has any explicit or default value. */
+function hasMeaningfulValue(value: unknown) {
+  return value !== undefined && value !== null && value !== ''
 }
 
 /** Render one visible port row so graph nodes show each port label and type without hover. */
-function PortCell({ port, side, accentColor, connected }: PortCellProps) {
+function PortCell({ port, side, accentColor, connected, satisfied, requiredMissing }: PortCellProps) {
   if (!port) {
     return <div className="min-h-[54px] rounded-sm border border-dashed border-border/40 bg-surface-low/30" aria-hidden="true" />
   }
@@ -31,12 +38,14 @@ function PortCell({ port, side, accentColor, connected }: PortCellProps) {
   const badgeWrapClass = side === 'input' ? 'justify-start' : 'justify-end'
   const markerJustifyClass = side === 'input' ? 'justify-start' : 'justify-end'
   const portTypeColor = getPortTypeColor(port.data_type)
-  const statusLabel = connected ? 'linked' : 'open'
+  const statusLabel = requiredMissing ? 'needs input' : connected ? 'linked' : satisfied ? 'set' : 'open'
+  const borderColor = requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}88` : `${accentColor}33`
+  const backgroundColor = requiredMissing ? 'rgba(245, 158, 11, 0.08)' : connected ? undefined : 'rgba(148, 163, 184, 0.08)'
 
   return (
     <div
-      className={`min-h-[54px] rounded-sm border px-2.5 py-2 ${alignClass} ${connected ? 'bg-surface-low' : 'bg-surface-low/45 opacity-80'}`}
-      style={{ borderColor: connected ? `${portTypeColor}88` : `${accentColor}33` } as CSSProperties}
+      className={`min-h-[54px] rounded-sm border px-2.5 py-2 ${alignClass}`}
+      style={{ borderColor, backgroundColor } as CSSProperties}
       title={port.description || `${port.label} (${port.data_type})`}
     >
       <div className={`flex w-full ${markerJustifyClass}`}>
@@ -46,7 +55,7 @@ function PortCell({ port, side, accentColor, connected }: PortCellProps) {
       <div className={`mt-1 flex w-full flex-wrap gap-1 ${badgeWrapClass}`}>
         <Badge variant="outline" style={{ borderColor: `${portTypeColor}88`, color: portTypeColor } as CSSProperties}>{PORT_TYPE_LABELS[port.data_type]}</Badge>
         <Badge variant="secondary">{port.key}</Badge>
-        <Badge variant={connected ? 'secondary' : 'outline'}>{statusLabel}</Badge>
+        <Badge variant={connected || satisfied ? 'secondary' : 'outline'}>{statusLabel}</Badge>
         {port.required ? <Badge variant="outline">required</Badge> : null}
         {port.multiple ? <Badge variant="outline">multi</Badge> : null}
       </div>
@@ -67,6 +76,12 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
   const connectedOutputKeys = new Set(data.connectedOutputKeys ?? [])
   const connectedInputCount = connectedInputKeys.size
   const connectedOutputCount = connectedOutputKeys.size
+  const missingRequiredInputCount = inputPorts.filter((port) => {
+    const connected = connectedInputKeys.has(port.key)
+    const explicitValue = hasMeaningfulValue(data.inputValues?.[port.key])
+    const defaultValue = hasMeaningfulValue(port.default_value)
+    return port.required && !connected && !explicitValue && !defaultValue
+  }).length
 
   const statusLabel =
     executionStatus === 'completed'
@@ -75,7 +90,9 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
         ? 'failed'
         : executionStatus === 'blocked'
           ? 'blocked'
-          : null
+          : missingRequiredInputCount > 0
+            ? 'needs input'
+            : null
 
   const statusBorderColor =
     executionStatus === 'completed'
@@ -84,7 +101,9 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
         ? '#ff8a80'
         : executionStatus === 'blocked'
           ? '#ffd180'
-          : `${accentColor}66`
+          : missingRequiredInputCount > 0
+            ? '#f59e0b'
+            : `${accentColor}66`
 
   return (
     <div
@@ -106,16 +125,40 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
       <div className="mt-3 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
         <Badge variant="outline">입력 {connectedInputCount}/{inputPorts.length}</Badge>
         <Badge variant="outline">출력 {connectedOutputCount}/{outputPorts.length}</Badge>
+        {missingRequiredInputCount > 0 ? <Badge variant="outline">필수 부족 {missingRequiredInputCount}</Badge> : null}
         {typeof data.executionArtifactCount === 'number' && data.executionArtifactCount > 0 ? <Badge variant="outline">아티팩트 {data.executionArtifactCount}</Badge> : null}
       </div>
 
       <div className="mt-4 grid gap-2">
-        {Array.from({ length: portRowCount }, (_, index) => (
-          <div key={`port-row-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
-            <PortCell port={inputPorts[index]} side="input" accentColor={accentColor} connected={Boolean(inputPorts[index] && connectedInputKeys.has(inputPorts[index].key))} />
-            <PortCell port={outputPorts[index]} side="output" accentColor={accentColor} connected={Boolean(outputPorts[index] && connectedOutputKeys.has(outputPorts[index].key))} />
-          </div>
-        ))}
+        {Array.from({ length: portRowCount }, (_, index) => {
+          const inputPort = inputPorts[index]
+          const outputPort = outputPorts[index]
+          const inputConnected = Boolean(inputPort && connectedInputKeys.has(inputPort.key))
+          const inputSatisfied = Boolean(inputPort && (inputConnected || hasMeaningfulValue(data.inputValues?.[inputPort.key]) || hasMeaningfulValue(inputPort.default_value)))
+          const inputRequiredMissing = Boolean(inputPort && inputPort.required && !inputSatisfied)
+          const outputConnected = Boolean(outputPort && connectedOutputKeys.has(outputPort.key))
+
+          return (
+            <div key={`port-row-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
+              <PortCell
+                port={inputPort}
+                side="input"
+                accentColor={accentColor}
+                connected={inputConnected}
+                satisfied={inputSatisfied}
+                requiredMissing={inputRequiredMissing}
+              />
+              <PortCell
+                port={outputPort}
+                side="output"
+                accentColor={accentColor}
+                connected={outputConnected}
+                satisfied={outputConnected}
+                requiredMissing={false}
+              />
+            </div>
+          )
+        })}
       </div>
 
       {inputPorts.map((port, index) => (
