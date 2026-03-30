@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { CircleHelp } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,6 +30,15 @@ type ResolvedEdgeEndpoint = {
 /** Check whether a node input has any explicit or default value. */
 function hasMeaningfulValue(value: unknown) {
   return value !== undefined && value !== null && value !== ''
+}
+
+/** Render a compact tooltip icon for internal node, edge, and port references. */
+function TechnicalReferenceHint({ title, label }: { title: string; label: string }) {
+  return (
+    <span className="inline-flex cursor-help text-muted-foreground" title={title} aria-label={label}>
+      <CircleHelp className="h-3.5 w-3.5" />
+    </span>
+  )
 }
 
 /** Resolve whether one node input is already satisfied by a connection or value. */
@@ -67,8 +77,10 @@ function PortHeader({
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <div className="text-sm font-medium text-foreground">{port.label}</div>
-        <div className="mt-1 text-[11px] text-muted-foreground">{nodeId}.{port.key}</div>
+        <div className="flex items-center gap-1">
+          <div className="text-sm font-medium text-foreground">{port.label}</div>
+          <TechnicalReferenceHint title={`node ${nodeId}\nport ${port.key}`} label="포트 내부 키 보기" />
+        </div>
         <PortBadges port={port} missingRequired={missingRequired} />
         {port.description ? <div className="mt-1 text-xs text-muted-foreground">{port.description}</div> : null}
       </div>
@@ -112,17 +124,25 @@ function EdgeEndpointCard({
   return (
     <div className="rounded-sm border border-border bg-surface-container px-3 py-3">
       <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{heading}</div>
-      <div className="mt-2 text-sm font-medium text-foreground">{endpoint.node?.data.module.name ?? endpoint.node?.id ?? '알 수 없는 노드'}</div>
-      <div className="mt-1 text-[11px] text-muted-foreground">node · {endpoint.node?.id ?? 'unknown'}</div>
+      <div className="mt-2 flex items-center gap-1">
+        <div className="text-sm font-medium text-foreground">{endpoint.node?.data.module.name ?? endpoint.node?.id ?? '알 수 없는 노드'}</div>
+        {endpoint.node?.id ? <TechnicalReferenceHint title={`node ${endpoint.node.id}`} label="노드 내부 식별자 보기" /> : null}
+      </div>
       <div className="mt-3 text-xs font-medium text-foreground">{role} 포트</div>
       {endpoint.port ? (
         <>
-          <div className="mt-1 text-sm text-foreground">{endpoint.port.label}</div>
+          <div className="mt-1 flex items-center gap-1">
+            <div className="text-sm text-foreground">{endpoint.port.label}</div>
+            <TechnicalReferenceHint title={`port ${endpoint.port.key}`} label="포트 내부 키 보기" />
+          </div>
           <PortBadges port={endpoint.port} />
           {endpoint.port.description ? <div className="mt-1 text-xs text-muted-foreground">{endpoint.port.description}</div> : null}
         </>
       ) : (
-        <div className="mt-1 text-xs text-muted-foreground">{endpoint.portKey ? `port key · ${endpoint.portKey}` : '포트 정보를 찾지 못했어.'}</div>
+        <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+          <span>{endpoint.portKey ? '포트 세부 정보' : '포트 정보를 찾지 못했어.'}</span>
+          {endpoint.portKey ? <TechnicalReferenceHint title={`port ${endpoint.portKey}`} label="포트 내부 키 보기" /> : null}
+        </div>
       )}
     </div>
   )
@@ -267,12 +287,12 @@ export function NodeInspectorPanel({
             <div className="flex items-center gap-2">
               <div className="font-medium text-foreground">Selected Edge</div>
               {selectedEdgeType ? <Badge variant="outline">{selectedEdgeType}</Badge> : null}
+              <TechnicalReferenceHint title={`edge ${selectedEdge.id}`} label="엣지 내부 식별자 보기" />
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <EdgeEndpointCard heading="Source" endpoint={sourceEndpoint} role="출력" />
               <EdgeEndpointCard heading="Target" endpoint={targetEndpoint} role="입력" />
             </div>
-            <div className="text-[11px] text-muted-foreground">{selectedEdge.id}</div>
           </div>
         ) : null}
 
@@ -282,13 +302,14 @@ export function NodeInspectorPanel({
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium text-foreground">{selectedNode.data.module.name}</span>
                 <Badge variant="outline">{selectedNode.data.module.engine_type}</Badge>
-                <Badge variant="secondary">node {selectedNode.id}</Badge>
+                <TechnicalReferenceHint title={`node ${selectedNode.id}`} label="노드 내부 식별자 보기" />
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
                 <Badge variant="outline">입력 {(selectedNode.data.module.exposed_inputs ?? []).length}</Badge>
                 <Badge variant="outline">출력 {(selectedNode.data.module.output_ports ?? []).length}</Badge>
                 {missingRequiredInputs.length > 0 ? <Badge variant="outline">필수 부족 {missingRequiredInputs.length}</Badge> : <Badge variant="secondary">필수 입력 충족</Badge>}
-                {highlightedPortKey ? <Badge variant="secondary">focus {highlightedPortKey}</Badge> : null}
+                {highlightedPortKey ? <Badge variant="secondary">선택 포트 강조</Badge> : null}
+                {highlightedPortKey ? <TechnicalReferenceHint title={`focus port ${highlightedPortKey}`} label="강조 중인 포트 내부 키 보기" /> : null}
               </div>
             </div>
 

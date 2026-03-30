@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, CircleHelp } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,6 +11,14 @@ export type WorkflowValidationIssue = {
   severity: 'error' | 'warning'
   title: string
   detail: string
+}
+
+function TechnicalReferenceHint({ title, label }: { title: string; label: string }) {
+  return (
+    <span className="inline-flex cursor-help text-muted-foreground" title={title} aria-label={label}>
+      <CircleHelp className="h-3.5 w-3.5" />
+    </span>
+  )
 }
 
 type WorkflowValidationPanelProps = {
@@ -72,7 +80,7 @@ export function WorkflowValidationPanel({
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-sm font-medium text-foreground">{issue.title}</div>
                     <Badge variant={issue.severity === 'error' ? 'outline' : 'secondary'}>{issue.nodeLabel}</Badge>
-                    {issue.nodeId ? <Badge variant="outline">node {issue.nodeId}</Badge> : null}
+                    {issue.nodeId ? <TechnicalReferenceHint title={`node ${issue.nodeId}${issue.portKey ? `\nport ${issue.portKey}` : ''}`} label="이슈 대상 내부 식별자 보기" /> : null}
                     {canFocusNode ? <Badge variant="secondary">노드로 이동</Badge> : null}
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">{issue.detail}</div>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, ChevronDown, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, CircleHelp, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -24,6 +24,15 @@ type WorkflowExposedInputEditorProps = {
 
 function hasExplicitValue(value: unknown) {
   return value !== undefined && value !== null && value !== ''
+}
+
+/** Render a compact tooltip icon for internal node and port references. */
+function TechnicalReferenceHint({ title, label }: { title: string; label: string }) {
+  return (
+    <span className="inline-flex cursor-help text-muted-foreground" title={title} aria-label={label}>
+      <CircleHelp className="h-3.5 w-3.5" />
+    </span>
+  )
 }
 
 /** Render workflow-level exposed input selection and presentation editing for the runner form. */
@@ -172,7 +181,13 @@ export function WorkflowExposedInputEditor({
                           <Badge variant="outline">{inputDefinition.data_type}</Badge>
                           {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
                         </div>
-                        <div className="mt-1 text-xs text-muted-foreground">{inputDefinition.module_name || inputDefinition.node_id} · {inputDefinition.node_id}.{inputDefinition.port_key}</div>
+                        <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                          <span>{inputDefinition.module_name || '연결된 모듈 입력'}</span>
+                          <TechnicalReferenceHint
+                            title={`module ${inputDefinition.module_name || '-'}\nnode ${inputDefinition.node_id}\nport ${inputDefinition.port_key}`}
+                            label="선택 입력의 내부 연결 정보 보기"
+                          />
+                        </div>
                       </button>
                       <div className="flex flex-wrap gap-2">
                         <Button type="button" size="sm" variant="outline" onClick={() => onMoveInput(inputDefinition.id, 'up')} disabled={index === 0}>
@@ -280,9 +295,15 @@ export function WorkflowExposedInputEditor({
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium text-foreground">{candidate.label}</span>
                           <Badge variant="outline">{candidate.data_type}</Badge>
-                          <Badge variant="outline">{candidate.module_name || candidate.node_id}</Badge>
+                          {candidate.module_name ? <Badge variant="outline">{candidate.module_name}</Badge> : null}
                         </div>
-                        <div className="mt-1 text-xs text-muted-foreground">{candidate.description || `${candidate.node_id}.${candidate.port_key}`}</div>
+                        <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                          <span className="min-w-0 flex-1 truncate">{candidate.description || '연결 가능한 입력'}</span>
+                          <TechnicalReferenceHint
+                            title={`module ${candidate.module_name || '-'}\nnode ${candidate.node_id}\nport ${candidate.port_key}`}
+                            label="추가 가능한 입력의 내부 연결 정보 보기"
+                          />
+                        </div>
                       </button>
                     ))}
                   </div>

@@ -1,4 +1,4 @@
-import { Play, RotateCcw, Square } from 'lucide-react'
+import { CircleHelp, Play, RotateCcw, Square } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +16,14 @@ type GraphExecutionDetail = {
   execution: GraphExecutionRecord
   artifacts: GraphExecutionArtifactRecord[]
   logs: GraphExecutionLogRecord[]
+}
+
+function TechnicalReferenceHint({ title, label }: { title: string; label: string }) {
+  return (
+    <span className="inline-flex cursor-help text-muted-foreground" title={title} aria-label={label}>
+      <CircleHelp className="h-3.5 w-3.5" />
+    </span>
+  )
 }
 
 type GraphExecutionPanelProps = {
@@ -207,7 +215,12 @@ export function GraphExecutionPanel({
                 {executionDetail.execution.status === 'queued' && executionDetail.execution.queue_position ? <div>큐 순번 {executionDetail.execution.queue_position}</div> : null}
                 {executionDetail.execution.cancel_requested ? <div>취소 요청 접수됨</div> : null}
                 {executionDetail.execution.error_message ? <div>{executionDetail.execution.error_message}</div> : null}
-                {executionDetail.execution.failed_node_id ? <div>실패 노드 {executionDetail.execution.failed_node_id}</div> : null}
+                {executionDetail.execution.failed_node_id ? (
+                  <div className="flex items-center gap-1">
+                    <span>실패 노드 있음</span>
+                    <TechnicalReferenceHint title={`node ${executionDetail.execution.failed_node_id}`} label="실패 노드 내부 식별자 보기" />
+                  </div>
+                ) : null}
               </AlertDescription>
             </Alert>
 
@@ -225,8 +238,9 @@ export function GraphExecutionPanel({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-sm font-medium text-foreground">{artifact.node_id} · {artifact.port_key}</span>
+                          <span className="text-sm font-medium text-foreground">출력 아티팩트</span>
                           <Badge variant="outline">{artifact.artifact_type}</Badge>
+                          <TechnicalReferenceHint title={`node ${artifact.node_id}\nport ${artifact.port_key}`} label="아티팩트 내부 연결 정보 보기" />
                         </div>
                         <div className="text-[11px] text-muted-foreground">{formatDateTime(artifact.created_date)}</div>
                       </div>
@@ -265,7 +279,7 @@ export function GraphExecutionPanel({
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Badge variant={log.level === 'error' ? 'outline' : 'secondary'}>{log.level}</Badge>
                           <span className="text-sm font-medium text-foreground">{log.event_type}</span>
-                          {log.node_id ? <Badge variant="outline">{log.node_id}</Badge> : null}
+                          {log.node_id ? <TechnicalReferenceHint title={`node ${log.node_id}`} label="로그 대상 노드 내부 식별자 보기" /> : null}
                         </div>
                         <div className="text-[11px] text-muted-foreground">{formatDateTime(log.created_date)}</div>
                       </div>
