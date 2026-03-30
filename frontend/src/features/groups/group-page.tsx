@@ -43,7 +43,6 @@ import { GroupBreadcrumbs } from './components/group-breadcrumbs'
 import { GroupChildCard } from './components/group-child-card'
 import { GroupEditorModal } from './components/group-editor-modal'
 import { GroupAssignModal } from './components/group-assign-modal'
-import { GroupImageDrawer } from './components/group-image-drawer'
 import { GroupImageSection } from './components/group-image-section'
 import { GroupTree } from './components/group-tree'
 import { GroupDownloadModal } from './components/group-download-modal'
@@ -78,13 +77,13 @@ type GroupSourceKey = keyof typeof groupSources
 
 type GroupEditorState =
   | {
-      mode: 'create'
-      defaultParentId: number | null
-    }
+    mode: 'create'
+    defaultParentId: number | null
+  }
   | {
-      mode: 'edit'
-      group: GroupRecord
-    }
+    mode: 'edit'
+    group: GroupRecord
+  }
 
 function normalizeGroupSourceKey(value: string | null): GroupSourceKey {
   return value === 'folders' ? 'folders' : 'custom'
@@ -147,7 +146,6 @@ export function GroupPage() {
   const { showSnackbar } = useSnackbar()
   const { groupId } = useParams<{ groupId?: string }>()
   const [searchParams] = useSearchParams()
-  const [isImageDrawerOpen, setIsImageDrawerOpen] = useState(false)
   const [editorState, setEditorState] = useState<GroupEditorState | null>(null)
   const [selectedGroupImageIds, setSelectedGroupImageIds] = useState<string[]>([])
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
@@ -348,22 +346,6 @@ export function GroupPage() {
   })
 
   useEffect(() => {
-    if (isWideLayout) {
-      setIsImageDrawerOpen(false)
-    }
-  }, [isWideLayout])
-
-  useEffect(() => {
-    if (isWideLayout || isImageDrawerOpen || selectedGroupImageIds.length === 0) {
-      return
-    }
-
-    setSelectedGroupImageIds([])
-    setIsAssignModalOpen(false)
-    setDownloadScope(null)
-  }, [isWideLayout, isImageDrawerOpen, selectedGroupImageIds.length])
-
-  useEffect(() => {
     setSelectedGroupImageIds([])
     setIsAssignModalOpen(false)
     setDownloadScope(null)
@@ -377,6 +359,10 @@ export function GroupPage() {
   )
   const rootGroups = useMemo(() => allGroups.filter((group) => group.parent_id == null), [allGroups])
   const childGroups = useMemo(() => allGroups.filter((group) => group.parent_id === selectedGroupId), [allGroups, selectedGroupId])
+  const parentGroupHierarchy = useMemo(
+    () => allGroups.find((group) => group.id === selectedGroupHierarchy?.parent_id) ?? null,
+    [allGroups, selectedGroupHierarchy?.parent_id],
+  )
   const groupImages = useMemo(() => (groupImagesQuery.data?.pages ?? []).flatMap((page) => page.images), [groupImagesQuery.data?.pages])
   const selectedGroupImages = useMemo(
     () => groupImages.filter((image) => selectedGroupImageIds.includes(String(image.composite_hash ?? image.id))),
@@ -399,19 +385,14 @@ export function GroupPage() {
   )
 
   const handleOpenGroup = (nextGroupId: number) => {
-    if (!isWideLayout) {
-      setIsImageDrawerOpen(true)
-    }
     navigate(`/groups/${nextGroupId}?tab=${selectedSource.key}`)
   }
 
   const handleOpenRoot = () => {
-    setIsImageDrawerOpen(false)
     navigate(`/groups?tab=${selectedSource.key}`)
   }
 
   const handleSelectSource = (nextSource: GroupSourceKey) => {
-    setIsImageDrawerOpen(false)
     setEditorState(null)
     navigate(`/groups?tab=${nextSource}`)
   }
@@ -620,6 +601,7 @@ export function GroupPage() {
         <ExplorerSidebar
           title="Explorer"
           badge={<Badge variant="outline">{allGroups.length}</Badge>}
+          floatingFrame
           className={cn(isWideLayout && 'sticky top-24 self-start flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
           bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}
         >
@@ -693,7 +675,7 @@ export function GroupPage() {
                   <CardContent className="p-0">
                     <SectionHeading
                       variant="inside"
-                      className="border-b border-border/70 px-6 py-6"
+                      className="border-b border-border/70 px-4 pb-4"
                       heading={selectedGroupQuery.data.name}
                       actions={
                         <div className="flex flex-wrap items-center gap-2">
@@ -725,7 +707,7 @@ export function GroupPage() {
                       }
                     />
 
-                    <div className="space-y-4 px-6 py-6">
+                    <div className="space-y-4 px-4 pt-4">
                       <div className="flex flex-wrap gap-2">
                         <Badge variant="secondary">이미지 {selectedGroupQuery.data.image_count.toLocaleString('ko-KR')}개</Badge>
                         <Badge variant="outline">manual {selectedGroupQuery.data.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
@@ -772,13 +754,30 @@ export function GroupPage() {
                 </Card>
               </section>
 
-              {childGroups.length > 0 ? (
+              {selectedGroupHierarchy ? (
                 <section className="space-y-4">
-                  <SectionHeading
-                    heading="하위 그룹"
-                    actions={<Badge variant="secondary">{childGroups.length.toLocaleString('ko-KR')}</Badge>}
-                  />
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <GroupChildCard
+                      group={parentGroupHierarchy ?? {
+                        ...selectedGroupHierarchy,
+                        id: parentGroupHierarchy?.id ?? 0,
+                        name: parentGroupHierarchy?.name ?? selectedSource.rootTitle,
+                        image_count: parentGroupHierarchy?.image_count ?? rootGroups.length,
+                        child_count: parentGroupHierarchy?.child_count ?? rootGroups.length,
+                        has_children: parentGroupHierarchy?.has_children ?? true,
+                      }}
+                      variant="back"
+                      titleOverride={parentGroupHierarchy?.name ?? selectedSource.rootTitle}
+                      subtitleOverride={parentGroupHierarchy ? '상위 그룹으로 이동' : '루트 목록으로 이동'}
+                      onOpen={(groupId) => {
+                        if (parentGroupHierarchy) {
+                          handleOpenGroup(groupId)
+                        } else {
+                          handleOpenRoot()
+                        }
+                      }}
+                    />
+
                     {childGroups.map((group) => (
                       <GroupChildCard
                         key={group.id}
@@ -791,51 +790,23 @@ export function GroupPage() {
                 </section>
               ) : null}
 
-              {isWideLayout ? (
-                <GroupImageSection
-                  group={selectedGroupQuery.data}
-                  groupImages={groupImages}
-                  isLoading={groupImagesQuery.isLoading}
-                  isError={groupImagesQuery.isError}
-                  errorMessage={groupImagesQuery.error instanceof Error ? groupImagesQuery.error.message : null}
-                  hasMore={Boolean(groupImagesQuery.hasNextPage)}
-                  isLoadingMore={groupImagesQuery.isFetchingNextPage}
-                  onLoadMore={() => void groupImagesQuery.fetchNextPage()}
-                  selectable={true}
-                  selectedIds={selectedGroupImageIds}
-                  onSelectedIdsChange={setSelectedGroupImageIds}
-                />
-              ) : null}
+              <GroupImageSection
+                group={selectedGroupQuery.data}
+                groupImages={groupImages}
+                isLoading={groupImagesQuery.isLoading}
+                isError={groupImagesQuery.isError}
+                errorMessage={groupImagesQuery.error instanceof Error ? groupImagesQuery.error.message : null}
+                hasMore={Boolean(groupImagesQuery.hasNextPage)}
+                isLoadingMore={groupImagesQuery.isFetchingNextPage}
+                onLoadMore={() => void groupImagesQuery.fetchNextPage()}
+                selectable={true}
+                selectedIds={selectedGroupImageIds}
+                onSelectedIdsChange={setSelectedGroupImageIds}
+              />
             </div>
           ) : null}
         </section>
       </div>
-
-      {!isWideLayout && selectedGroupId && selectedGroupQuery.data && selectedGroupQuery.data.image_count > 0 ? (
-        <>
-          <div className="fixed inset-x-0 bottom-4 z-[70] flex justify-center px-4">
-            <Button type="button" size="sm" className="theme-floating-panel w-[30vw] min-w-[112px] max-w-[180px] shadow-[0_18px_48px_rgba(0,0,0,0.35)]" onClick={() => setIsImageDrawerOpen(true)}>
-              이미지 보기
-            </Button>
-          </div>
-
-          <GroupImageDrawer
-            open={isImageDrawerOpen}
-            group={selectedGroupQuery.data}
-            groupImages={groupImages}
-            isLoading={groupImagesQuery.isLoading}
-            isError={groupImagesQuery.isError}
-            errorMessage={groupImagesQuery.error instanceof Error ? groupImagesQuery.error.message : null}
-            hasMore={Boolean(groupImagesQuery.hasNextPage)}
-            isLoadingMore={groupImagesQuery.isFetchingNextPage}
-            onLoadMore={() => void groupImagesQuery.fetchNextPage()}
-            selectable={true}
-            selectedIds={selectedGroupImageIds}
-            onSelectedIdsChange={setSelectedGroupImageIds}
-            onClose={() => setIsImageDrawerOpen(false)}
-          />
-        </>
-      ) : null}
 
       <ImageSelectionBar
         selectedCount={selectedGroupImageIds.length}

@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
+import { cn } from '@/lib/utils'
 import type { PromptGroupRecord } from '@/types/prompt'
 import { PromptTree } from './prompt-tree'
 
@@ -13,6 +14,7 @@ interface PromptSidebarProps {
   totalCount?: number
   groupsLoading: boolean
   groupsError: string | null
+  isDesktopPageLayout?: boolean
   canCollect?: boolean
   onSelectGroup: (groupId?: number | null) => void
   onCreateGroup?: () => void
@@ -34,6 +36,7 @@ export function PromptSidebar({
   totalCount = 0,
   groupsLoading,
   groupsError,
+  isDesktopPageLayout = false,
   canCollect = true,
   onSelectGroup,
   onCreateGroup,
@@ -52,8 +55,9 @@ export function PromptSidebar({
     <ExplorerSidebar
       title="Groups"
       badge={<Badge variant="outline">{groups.length}</Badge>}
-      className="min-[800px]:sticky min-[800px]:top-24 min-[800px]:self-start"
-      bodyClassName="space-y-4"
+      floatingFrame
+      className={cn('sticky top-24 z-30 isolate self-start', isDesktopPageLayout && 'flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
+      bodyClassName={cn('space-y-4', isDesktopPageLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}
       headerExtra={
         <div className="flex flex-wrap gap-2 border-b border-white/5 pb-3">
           <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onOpenSummary?.()} disabled={!onOpenSummary} aria-label="상태" title="상태">

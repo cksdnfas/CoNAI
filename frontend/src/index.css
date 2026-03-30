@@ -400,4 +400,17 @@
     opacity: 1;
     animation: image-list-selection-pulse 1.7s ease-in-out infinite;
   }
+
+  .explorer-sidebar-floating-frame {
+    opacity: 0;
+    transition: opacity 140ms ease, box-shadow 140ms ease;
+  }
+
+  .explorer-sidebar[data-floating='true'] .explorer-sidebar-floating-frame {
+    opacity: 1;
+    box-shadow:
+      inset 0 0 0 calc(var(--theme-selection-outline-width) / 2) color-mix(in srgb, var(--primary) 98%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--secondary) 22%, transparent),
+      0 0 24px color-mix(in srgb, var(--primary) 20%, transparent);
+  }
 }

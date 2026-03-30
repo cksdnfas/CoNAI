@@ -316,6 +316,7 @@ export function PromptPage() {
           totalCount={sidebarTotalCount}
           groupsLoading={groupsQuery.isLoading}
           groupsError={groupsQuery.error instanceof Error ? groupsQuery.error.message : groupsQuery.isError ? '알 수 없는 오류가 발생했어.' : null}
+          isDesktopPageLayout={isDesktopPageLayout}
           canCollect={promptType !== 'auto'}
           onSelectGroup={(groupId) => {
             setSelectedGroupId(groupId)
@@ -334,7 +335,7 @@ export function PromptPage() {
           canMoveGroupDown={canMoveGroupDown}
         />
 
-        <section className="space-y-4">
+        <section className="relative z-0 space-y-4">
           <div className="space-y-2">
             <h2 className="text-xl font-semibold tracking-tight text-foreground">{currentSectionTitle}</h2>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
