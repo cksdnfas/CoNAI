@@ -23,6 +23,7 @@ type WorkflowRunnerPanelProps = {
   onEdit: () => void
   canExecute?: boolean
   validationIssues?: WorkflowValidationIssue[]
+  onValidationIssueSelect?: (issue: WorkflowValidationIssue) => void
   showHeader?: boolean
 }
 
@@ -46,6 +47,7 @@ export function WorkflowRunnerPanel({
   onEdit,
   canExecute = true,
   validationIssues = [],
+  onValidationIssueSelect,
   showHeader = true,
 }: WorkflowRunnerPanelProps) {
   const renderInputField = (inputDefinition: GraphWorkflowExposedInput) => {
@@ -248,6 +250,7 @@ export function WorkflowRunnerPanel({
               title="Run Validation"
               description="실행 전에 막히는 포인트를 여기서 먼저 확인해."
               showHeader={false}
+              onIssueSelect={onValidationIssueSelect}
             />
 
             {inputDefinitions.length > 0 ? (

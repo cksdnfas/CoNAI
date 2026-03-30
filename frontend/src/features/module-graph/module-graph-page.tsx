@@ -339,6 +339,31 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   }, [moduleDefinitionById, selectedGraphRecord, settingsQuery.data, workflowRunInputValues])
   const selectedWorkflowCanExecute = selectedWorkflowValidationIssues.every((issue) => issue.severity !== 'error')
 
+  const focusValidationIssue = useCallback((issue: WorkflowValidationIssue) => {
+    if (!issue.nodeId) {
+      return
+    }
+
+    const focusNode = () => {
+      const targetNode = nodes.find((node) => node.id === issue.nodeId)
+      if (!targetNode) {
+        return
+      }
+
+      setSelectedNodeId(targetNode.id)
+      setSelectedEdgeId(null)
+      void reactFlow.setCenter(targetNode.position.x + 180, targetNode.position.y + 80, { zoom: 1.1, duration: 220 })
+    }
+
+    if (workflowView !== 'edit') {
+      setWorkflowView('edit')
+      requestAnimationFrame(() => requestAnimationFrame(focusNode))
+      return
+    }
+
+    focusNode()
+  }, [nodes, reactFlow, workflowView])
+
   useEffect(() => {
     if (selectedGraphId === null || executionList.length === 0) {
       return
@@ -1109,6 +1134,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               onEdit={() => setWorkflowView('edit')}
               canExecute={selectedWorkflowCanExecute}
               validationIssues={selectedWorkflowValidationIssues}
+              onValidationIssueSelect={focusValidationIssue}
             />
 
             <GraphExecutionPanel
@@ -1185,6 +1211,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                 issues={editorValidationIssues}
                 title="Editor Validation"
                 description="현재 캔버스 기준으로 실행을 막는 문제를 먼저 확인해."
+                onIssueSelect={focusValidationIssue}
               />
 
               <ModuleLibraryPanel

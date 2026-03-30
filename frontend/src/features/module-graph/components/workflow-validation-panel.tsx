@@ -17,6 +17,7 @@ type WorkflowValidationPanelProps = {
   title?: string
   description?: string
   showHeader?: boolean
+  onIssueSelect?: (issue: WorkflowValidationIssue) => void
 }
 
 /** Summarize whether a workflow can run and list blocking reasons in plain language. */
@@ -25,6 +26,7 @@ export function WorkflowValidationPanel({
   title = 'Execution Readiness',
   description = '실행 전에 막히는 입력/설정 문제를 여기서 먼저 보여줘.',
   showHeader = true,
+  onIssueSelect,
 }: WorkflowValidationPanelProps) {
   const errorCount = issues.filter((issue) => issue.severity === 'error').length
   const warningCount = issues.filter((issue) => issue.severity === 'warning').length
@@ -55,16 +57,27 @@ export function WorkflowValidationPanel({
 
         {issues.length > 0 ? (
           <div className="space-y-2">
-            {issues.map((issue) => (
-              <div key={issue.id} className={`rounded-sm border px-3 py-3 ${issue.severity === 'error' ? 'border-amber-500/40 bg-amber-500/10' : 'border-border bg-surface-low'}`}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-sm font-medium text-foreground">{issue.title}</div>
-                  <Badge variant={issue.severity === 'error' ? 'outline' : 'secondary'}>{issue.nodeLabel}</Badge>
-                  {issue.nodeId ? <Badge variant="outline">node {issue.nodeId}</Badge> : null}
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">{issue.detail}</div>
-              </div>
-            ))}
+            {issues.map((issue) => {
+              const canFocusNode = Boolean(issue.nodeId && onIssueSelect)
+
+              return (
+                <button
+                  key={issue.id}
+                  type="button"
+                  onClick={() => onIssueSelect?.(issue)}
+                  disabled={!canFocusNode}
+                  className={`w-full rounded-sm border px-3 py-3 text-left ${issue.severity === 'error' ? 'border-amber-500/40 bg-amber-500/10' : 'border-border bg-surface-low'} ${canFocusNode ? 'cursor-pointer transition hover:border-primary/50 hover:bg-surface-high' : 'cursor-default'}`}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-sm font-medium text-foreground">{issue.title}</div>
+                    <Badge variant={issue.severity === 'error' ? 'outline' : 'secondary'}>{issue.nodeLabel}</Badge>
+                    {issue.nodeId ? <Badge variant="outline">node {issue.nodeId}</Badge> : null}
+                    {canFocusNode ? <Badge variant="secondary">노드로 이동</Badge> : null}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">{issue.detail}</div>
+                </button>
+              )
+            })}
           </div>
         ) : null}
       </CardContent>
