@@ -1,7 +1,7 @@
 import { buildApiUrl } from '@/lib/api-client'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation'
 
-export type ModuleEngineType = 'nai' | 'comfyui'
+export type ModuleEngineType = 'nai' | 'comfyui' | 'system'
 export type ModuleAuthoringSource = 'nai_form_snapshot' | 'comfyui_workflow_wrap' | 'manual'
 export type ModulePortDirection = 'input' | 'output'
 export type ModulePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json'

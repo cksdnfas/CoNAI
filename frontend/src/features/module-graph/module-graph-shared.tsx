@@ -62,7 +62,19 @@ const PORT_TYPE_COLORS: Record<ModulePortDataType, string> = {
 
 /** Resolve a visible color for module nodes when the module does not define one. */
 export function getModuleColor(module: ModuleDefinitionRecord) {
-  return module.color || (module.engine_type === 'nai' ? '#7c4dff' : '#2196f3')
+  if (module.color) {
+    return module.color
+  }
+
+  if (module.engine_type === 'nai') {
+    return '#7c4dff'
+  }
+
+  if (module.engine_type === 'comfyui') {
+    return '#2196f3'
+  }
+
+  return '#26a69a'
 }
 
 /** Resolve a stable accent color for one module port data type. */

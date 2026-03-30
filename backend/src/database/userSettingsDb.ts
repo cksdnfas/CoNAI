@@ -220,13 +220,13 @@ function createTables(): void {
     )
   `);
 
-  // 9. Module definitions table (generic NAI/ComfyUI module metadata)
+  // 9. Module definitions table (generic NAI/ComfyUI/System module metadata)
   userSettingsDb.exec(`
     CREATE TABLE IF NOT EXISTS module_definitions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       description TEXT,
-      engine_type TEXT NOT NULL CHECK(engine_type IN ('nai', 'comfyui')),
+      engine_type TEXT NOT NULL CHECK(engine_type IN ('nai', 'comfyui', 'system')),
       authoring_source TEXT NOT NULL CHECK(authoring_source IN ('nai_form_snapshot', 'comfyui_workflow_wrap', 'manual')),
       category TEXT,
       source_workflow_id INTEGER,
@@ -504,6 +504,65 @@ function migrateExistingTables(): void {
 }
 
 /**
+ * Recreate module_definitions when an older database still restricts engine_type to nai/comfyui.
+ */
+function ensureModuleDefinitionsSupportsSystemEngine(): void {
+  const schemaRow = userSettingsDb
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='module_definitions'")
+    .get() as { sql?: string } | undefined;
+
+  if (!schemaRow?.sql || schemaRow.sql.includes("'system'")) {
+    return;
+  }
+
+  console.log('🔧 Updating module_definitions schema to support system engine...');
+
+  try {
+    userSettingsDb.exec(`
+      BEGIN TRANSACTION;
+      CREATE TABLE module_definitions__new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        engine_type TEXT NOT NULL CHECK(engine_type IN ('nai', 'comfyui', 'system')),
+        authoring_source TEXT NOT NULL CHECK(authoring_source IN ('nai_form_snapshot', 'comfyui_workflow_wrap', 'manual')),
+        category TEXT,
+        source_workflow_id INTEGER,
+        template_defaults TEXT NOT NULL,
+        exposed_inputs TEXT NOT NULL,
+        output_ports TEXT NOT NULL,
+        internal_fixed_values TEXT,
+        ui_schema TEXT,
+        version INTEGER NOT NULL DEFAULT 1,
+        is_active INTEGER DEFAULT 1,
+        color TEXT DEFAULT '#7c4dff',
+        created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (source_workflow_id) REFERENCES workflows(id) ON DELETE SET NULL
+      );
+
+      INSERT INTO module_definitions__new (
+        id, name, description, engine_type, authoring_source, category, source_workflow_id,
+        template_defaults, exposed_inputs, output_ports, internal_fixed_values, ui_schema,
+        version, is_active, color, created_date, updated_date
+      )
+      SELECT
+        id, name, description, engine_type, authoring_source, category, source_workflow_id,
+        template_defaults, exposed_inputs, output_ports, internal_fixed_values, ui_schema,
+        version, is_active, color, created_date, updated_date
+      FROM module_definitions;
+
+      DROP TABLE module_definitions;
+      ALTER TABLE module_definitions__new RENAME TO module_definitions;
+      COMMIT;
+    `);
+  } catch (error) {
+    userSettingsDb.exec('ROLLBACK;');
+    throw error;
+  }
+}
+
+/**
  * Run all migration files in order
  */
 function runMigrations(): void {
@@ -514,6 +573,7 @@ function runMigrations(): void {
   if (!fs.existsSync(MIGRATIONS_PATH)) {
     console.log('📊 No migrations folder found, creating tables directly...');
     createTables();
+    ensureModuleDefinitionsSupportsSystemEngine();
     return;
   }
 
@@ -531,6 +591,7 @@ function runMigrations(): void {
 
   if (pendingMigrations.length === 0) {
     console.log('  ✓ All migrations already applied');
+    ensureModuleDefinitionsSupportsSystemEngine();
     return;
   }
 
@@ -547,6 +608,8 @@ function runMigrations(): void {
       throw error;
     }
   }
+
+  ensureModuleDefinitionsSupportsSystemEngine();
 }
 
 /**
@@ -568,3 +631,4 @@ export function getUserSettingsDb(): Database.Database {
   }
   return userSettingsDb;
 }
+

@@ -6,6 +6,7 @@ import { ModuleDefinitionModel } from '../models/ModuleDefinition'
 import { getIncomingArtifacts, resolveNodeInputs } from './graph-workflow-executor/artifacts'
 import { executeComfyModule } from './graph-workflow-executor/execute-comfy'
 import { executeNaiModule } from './graph-workflow-executor/execute-nai'
+import { executeSystemModule } from './graph-workflow-executor/execute-system'
 import {
   applyWorkflowRuntimeInputs,
   parseGraphWorkflowRecord,
@@ -126,6 +127,8 @@ export class GraphWorkflowExecutor {
           await executeNaiModule(context, node, moduleDefinition, resolvedInputs)
         } else if (moduleDefinition.engine_type === 'comfyui') {
           await executeComfyModule(context, node, moduleDefinition, resolvedInputs)
+        } else if (moduleDefinition.engine_type === 'system') {
+          await executeSystemModule(context, node, moduleDefinition, resolvedInputs)
         } else {
           throw new Error(`Unsupported module engine type: ${moduleDefinition.engine_type}`)
         }
@@ -194,3 +197,4 @@ export class GraphWorkflowExecutor {
     }
   }
 }
+
