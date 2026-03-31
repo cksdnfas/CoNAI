@@ -7,8 +7,8 @@ const textareaVariants = cva(
   {
     variants: {
       variant: {
-        default: 'border border-border bg-surface-low px-3 py-2 transition focus:border-primary',
-        settings: 'theme-settings-control bg-surface-lowest px-3 py-2 focus:ring-1 focus:ring-primary',
+        default: 'border border-border bg-surface-container px-3 py-2 transition focus:border-primary',
+        settings: 'theme-settings-control border border-border bg-surface-container px-3 py-2 focus:ring-1 focus:ring-primary',
       },
     },
     defaultVariants: {

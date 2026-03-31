@@ -16,7 +16,7 @@ interface MetadataRewriteFormProps {
 /** Render reusable metadata rewrite controls for prompt and generation fields. */
 export function MetadataRewriteForm({ draft, disabled = false, formatLabel = '출력 포맷', showHeader = true, onDraftChange }: MetadataRewriteFormProps) {
   return (
-    <div className={showHeader ? 'space-y-4 rounded-sm bg-surface-high p-4' : 'space-y-4'}>
+    <div className={showHeader ? 'space-y-4 rounded-sm bg-surface-container p-4' : 'space-y-4'}>
       {showHeader ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm font-medium text-foreground">메타 수정</div>

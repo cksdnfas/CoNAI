@@ -299,7 +299,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
 
   const similarSectionActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <div className="inline-flex items-center rounded-sm border border-border bg-surface-high p-1">
+      <div className="inline-flex items-center rounded-sm border border-border bg-surface-container p-1">
         {(['image', 'text'] as SimilarImageTab[]).map((tab) => (
           <Button
             key={tab}
@@ -403,7 +403,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
               useSplitPaneScroll && 'xl:min-h-0 xl:overflow-y-auto xl:pr-2 image-detail-scroll-pane',
             )}
           >
-            <div className="overflow-hidden rounded-sm bg-surface-low shadow-[0_0_40px_rgba(14,14,14,0.22)]">
+            <div className="overflow-hidden rounded-sm bg-surface-container shadow-[0_0_40px_rgba(14,14,14,0.22)]">
               <div className="flex min-h-[540px] items-center justify-center bg-surface-lowest">
                 <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} />
               </div>

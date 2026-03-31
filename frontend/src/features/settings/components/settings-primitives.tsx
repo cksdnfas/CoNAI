@@ -39,7 +39,7 @@ interface SettingsValueTileProps extends ComponentProps<'div'> {
 // Shared labeled value tile for settings summaries and metadata blocks.
 export function SettingsValueTile({ label, value, className, valueClassName, ...props }: SettingsValueTileProps) {
   return (
-    <div className={cn('theme-settings-panel min-w-0 rounded-sm bg-surface-low', className)} {...props}>
+    <div className={cn('theme-settings-panel min-w-0 rounded-sm bg-surface-container', className)} {...props}>
       <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
       <div className={cn('mt-2 text-sm font-semibold text-foreground', valueClassName)}>{value}</div>
     </div>

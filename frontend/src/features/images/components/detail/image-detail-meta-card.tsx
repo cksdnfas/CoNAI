@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { FilePenLine } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import {
   ArtistPromptSection,
   CharacterPromptSection,
@@ -23,11 +24,34 @@ interface ImageDetailMetaCardProps {
 
 type PromptDisplayMode = 'plain' | 'grouped'
 
+const PROMPT_DISPLAY_MODE_STORAGE_KEY = 'conai:image-detail:prompt-display-mode'
+
+function loadPromptDisplayMode(): PromptDisplayMode {
+  if (typeof window === 'undefined') {
+    return 'plain'
+  }
+
+  return window.localStorage.getItem(PROMPT_DISPLAY_MODE_STORAGE_KEY) === 'grouped' ? 'grouped' : 'plain'
+}
+
+function persistPromptDisplayMode(mode: PromptDisplayMode) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(PROMPT_DISPLAY_MODE_STORAGE_KEY, mode)
+}
+
 export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const navigate = useNavigate()
   const imageViewModal = useImageViewModal()
-  const [promptDisplayMode, setPromptDisplayMode] = useState<PromptDisplayMode>('plain')
+  const [promptDisplayMode, setPromptDisplayMode] = useState<PromptDisplayMode>(() => loadPromptDisplayMode())
   const extractedPromptCards = useMemo(() => getImageExtractedPromptCards(image), [image])
+
+  const handlePromptDisplayModeChange = (nextMode: PromptDisplayMode) => {
+    setPromptDisplayMode(nextMode)
+    persistPromptDisplayMode(nextMode)
+  }
   const positivePromptTerms = useMemo(() => getImagePromptTerms(image, 'positive'), [image])
   const negativePromptTerms = useMemo(() => getImagePromptTerms(image, 'negative'), [image])
   const autoPromptContent = getImageAutoPromptContent(image)
@@ -153,22 +177,15 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[11px] uppercase tracking-[0.18em]">Extracted prompt</p>
               {canTogglePromptGrouping ? (
-                <div className="inline-flex rounded-sm border border-border bg-background p-1">
-                  <button
-                    type="button"
-                    className={promptDisplayMode === 'plain' ? 'rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground' : 'rounded-sm px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-surface-high hover:text-foreground'}
-                    onClick={() => setPromptDisplayMode('plain')}
-                  >
-                    일반
-                  </button>
-                  <button
-                    type="button"
-                    className={promptDisplayMode === 'grouped' ? 'rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground' : 'rounded-sm px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-surface-high hover:text-foreground'}
-                    onClick={() => setPromptDisplayMode('grouped')}
-                  >
-                    그룹
-                  </button>
-                </div>
+                <SegmentedControl
+                  value={promptDisplayMode}
+                  items={[
+                    { value: 'plain', label: '일반' },
+                    { value: 'grouped', label: '그룹' },
+                  ]}
+                  onChange={(nextMode) => handlePromptDisplayModeChange(nextMode as PromptDisplayMode)}
+                  size="xs"
+                />
               ) : null}
             </div>
             <div className="mt-3">
