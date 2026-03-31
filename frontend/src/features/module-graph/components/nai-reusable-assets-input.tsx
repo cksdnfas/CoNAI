@@ -35,6 +35,8 @@ type NaiCharacterReferenceDraft = {
   fidelity: string
 }
 
+type SavedAssetSortOption = 'latest' | 'oldest' | 'name'
+
 /** Detect whether one JSON input should render the reusable vibe picker/editor. */
 export function isNaiVibePort(portKey: string, dataType: string) {
   return dataType === 'json' && portKey === 'vibes'
@@ -169,10 +171,27 @@ function buildNaiCharacterReferenceValue(drafts: NaiCharacterReferenceDraft[]) {
   return nextValue.length > 0 ? nextValue : undefined
 }
 
+/** Sort saved asset cards so users can switch between recency and name ordering. */
+function sortSavedAssets<T extends { label: string; created_date: string }>(items: T[], sort: SavedAssetSortOption) {
+  const nextItems = [...items]
+
+  if (sort === 'name') {
+    return nextItems.sort((left, right) => left.label.localeCompare(right.label, 'ko-KR'))
+  }
+
+  return nextItems.sort((left, right) => {
+    const leftTime = new Date(left.created_date).getTime()
+    const rightTime = new Date(right.created_date).getTime()
+    return sort === 'oldest' ? leftTime - rightTime : rightTime - leftTime
+  })
+}
+
 /** Render the reusable editor and saved-asset picker for NAI vibe and reference JSON inputs. */
 export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAssetInputProps) {
   const [savedVibeSearch, setSavedVibeSearch] = useState('')
+  const [savedVibeSort, setSavedVibeSort] = useState<SavedAssetSortOption>('latest')
   const [savedCharacterReferenceSearch, setSavedCharacterReferenceSearch] = useState('')
+  const [savedCharacterReferenceSort, setSavedCharacterReferenceSort] = useState<SavedAssetSortOption>('latest')
   const vibeDrafts = useMemo(() => (kind === 'vibes' ? parseNaiVibeDrafts(value) : []), [kind, value])
   const characterReferenceDrafts = useMemo(() => (kind === 'character_refs' ? parseNaiCharacterReferenceDrafts(value) : []), [kind, value])
 
@@ -191,22 +210,22 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
   const filteredSavedVibes = useMemo(() => {
     const items = savedVibesQuery.data || []
     const keyword = savedVibeSearch.trim().toLowerCase()
-    if (!keyword) {
-      return items
-    }
+    const filteredItems = keyword
+      ? items.filter((item) => `${item.label} ${item.model}`.toLowerCase().includes(keyword))
+      : items
 
-    return items.filter((item) => `${item.label} ${item.model}`.toLowerCase().includes(keyword))
-  }, [savedVibeSearch, savedVibesQuery.data])
+    return sortSavedAssets(filteredItems, savedVibeSort)
+  }, [savedVibeSearch, savedVibeSort, savedVibesQuery.data])
 
   const filteredSavedCharacterReferences = useMemo(() => {
     const items = savedCharacterReferencesQuery.data || []
     const keyword = savedCharacterReferenceSearch.trim().toLowerCase()
-    if (!keyword) {
-      return items
-    }
+    const filteredItems = keyword
+      ? items.filter((item) => `${item.label} ${item.type}`.toLowerCase().includes(keyword))
+      : items
 
-    return items.filter((item) => `${item.label} ${item.type}`.toLowerCase().includes(keyword))
-  }, [savedCharacterReferenceSearch, savedCharacterReferencesQuery.data])
+    return sortSavedAssets(filteredItems, savedCharacterReferenceSort)
+  }, [savedCharacterReferenceSearch, savedCharacterReferenceSort, savedCharacterReferencesQuery.data])
 
   const updateVibes = (nextDrafts: NaiVibeDraft[]) => {
     onChange(buildNaiVibeValue(nextDrafts))
@@ -334,8 +353,13 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
               <div className="text-sm font-medium text-foreground">Saved Vibes</div>
               <Badge variant="outline">{savedVibesQuery.data?.length ?? 0}</Badge>
             </div>
-            <div className="w-full sm:w-64">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[280px] sm:flex-row">
               <Input value={savedVibeSearch} onChange={(event) => setSavedVibeSearch(event.target.value)} placeholder="이름 / 모델 검색" />
+              <Select value={savedVibeSort} onChange={(event) => setSavedVibeSort(event.target.value as SavedAssetSortOption)}>
+                <option value="latest">최신순</option>
+                <option value="oldest">오래된순</option>
+                <option value="name">이름순</option>
+              </Select>
             </div>
           </div>
           {savedVibesQuery.isLoading ? (
@@ -439,8 +463,13 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
             <div className="text-sm font-medium text-foreground">Saved Character References</div>
             <Badge variant="outline">{savedCharacterReferencesQuery.data?.length ?? 0}</Badge>
           </div>
-          <div className="w-full sm:w-64">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[280px] sm:flex-row">
             <Input value={savedCharacterReferenceSearch} onChange={(event) => setSavedCharacterReferenceSearch(event.target.value)} placeholder="이름 / 타입 검색" />
+            <Select value={savedCharacterReferenceSort} onChange={(event) => setSavedCharacterReferenceSort(event.target.value as SavedAssetSortOption)}>
+              <option value="latest">최신순</option>
+              <option value="oldest">오래된순</option>
+              <option value="name">이름순</option>
+            </Select>
           </div>
         </div>
         {savedCharacterReferencesQuery.isLoading ? (
