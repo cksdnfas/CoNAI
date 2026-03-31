@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Plus, Save, Trash2 } from 'lucide-react'
+import { Pin, PinOff, Plus, Save, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,7 +35,7 @@ type NaiCharacterReferenceDraft = {
   fidelity: string
 }
 
-type SavedAssetSortOption = 'recent' | 'latest' | 'oldest' | 'name'
+type SavedAssetSortOption = 'pinned' | 'recent' | 'latest' | 'oldest' | 'name'
 
 /** Detect whether one JSON input should render the reusable vibe picker/editor. */
 export function isNaiVibePort(portKey: string, dataType: string) {
@@ -201,9 +201,50 @@ function saveRecentAssetIds(storageKey: string, assetId: string, currentIds: str
   return nextIds
 }
 
-/** Sort saved asset cards so users can switch between recent use, recency, and name ordering. */
-function sortSavedAssets<T extends { id: string; label: string; created_date: string }>(items: T[], sort: SavedAssetSortOption, recentIds: string[]) {
+/** Load pinned asset ids from localStorage so favorites can survive refreshes. */
+function loadPinnedAssetIds(storageKey: string) {
+  return loadRecentAssetIds(storageKey)
+}
+
+/** Toggle one pinned asset id and persist the updated favorite list. */
+function togglePinnedAssetIds(storageKey: string, assetId: string, currentIds: string[]) {
+  const nextIds = currentIds.includes(assetId)
+    ? currentIds.filter((entry) => entry !== assetId)
+    : [assetId, ...currentIds]
+
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(storageKey, JSON.stringify(nextIds))
+  }
+
+  return nextIds
+}
+
+/** Sort saved asset cards so users can switch between pinned, recent use, recency, and name ordering. */
+function sortSavedAssets<T extends { id: string; label: string; created_date: string }>(items: T[], sort: SavedAssetSortOption, recentIds: string[], pinnedIds: string[]) {
   const nextItems = [...items]
+
+  if (sort === 'pinned') {
+    return nextItems.sort((left, right) => {
+      const leftPinnedIndex = pinnedIds.indexOf(left.id)
+      const rightPinnedIndex = pinnedIds.indexOf(right.id)
+      const normalizedLeftPinned = leftPinnedIndex === -1 ? Number.MAX_SAFE_INTEGER : leftPinnedIndex
+      const normalizedRightPinned = rightPinnedIndex === -1 ? Number.MAX_SAFE_INTEGER : rightPinnedIndex
+
+      if (normalizedLeftPinned !== normalizedRightPinned) {
+        return normalizedLeftPinned - normalizedRightPinned
+      }
+
+      const leftRecentIndex = recentIds.indexOf(left.id)
+      const rightRecentIndex = recentIds.indexOf(right.id)
+      const normalizedLeftRecent = leftRecentIndex === -1 ? Number.MAX_SAFE_INTEGER : leftRecentIndex
+      const normalizedRightRecent = rightRecentIndex === -1 ? Number.MAX_SAFE_INTEGER : rightRecentIndex
+      if (normalizedLeftRecent !== normalizedRightRecent) {
+        return normalizedLeftRecent - normalizedRightRecent
+      }
+
+      return new Date(right.created_date).getTime() - new Date(left.created_date).getTime()
+    })
+  }
 
   if (sort === 'recent') {
     return nextItems.sort((left, right) => {
@@ -236,9 +277,11 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
   const [savedVibeSearch, setSavedVibeSearch] = useState('')
   const [savedVibeSort, setSavedVibeSort] = useState<SavedAssetSortOption>('recent')
   const [recentVibeIds, setRecentVibeIds] = useState<string[]>(() => loadRecentAssetIds('conai.nai.vibes.recent'))
+  const [pinnedVibeIds, setPinnedVibeIds] = useState<string[]>(() => loadPinnedAssetIds('conai.nai.vibes.pinned'))
   const [savedCharacterReferenceSearch, setSavedCharacterReferenceSearch] = useState('')
   const [savedCharacterReferenceSort, setSavedCharacterReferenceSort] = useState<SavedAssetSortOption>('recent')
   const [recentCharacterReferenceIds, setRecentCharacterReferenceIds] = useState<string[]>(() => loadRecentAssetIds('conai.nai.character_refs.recent'))
+  const [pinnedCharacterReferenceIds, setPinnedCharacterReferenceIds] = useState<string[]>(() => loadPinnedAssetIds('conai.nai.character_refs.pinned'))
   const vibeDrafts = useMemo(() => (kind === 'vibes' ? parseNaiVibeDrafts(value) : []), [kind, value])
   const characterReferenceDrafts = useMemo(() => (kind === 'character_refs' ? parseNaiCharacterReferenceDrafts(value) : []), [kind, value])
 
@@ -261,8 +304,8 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
       ? items.filter((item) => `${item.label} ${item.model}`.toLowerCase().includes(keyword))
       : items
 
-    return sortSavedAssets(filteredItems, savedVibeSort, recentVibeIds)
-  }, [recentVibeIds, savedVibeSearch, savedVibeSort, savedVibesQuery.data])
+    return sortSavedAssets(filteredItems, savedVibeSort, recentVibeIds, pinnedVibeIds)
+  }, [pinnedVibeIds, recentVibeIds, savedVibeSearch, savedVibeSort, savedVibesQuery.data])
 
   const filteredSavedCharacterReferences = useMemo(() => {
     const items = savedCharacterReferencesQuery.data || []
@@ -271,8 +314,8 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
       ? items.filter((item) => `${item.label} ${item.type}`.toLowerCase().includes(keyword))
       : items
 
-    return sortSavedAssets(filteredItems, savedCharacterReferenceSort, recentCharacterReferenceIds)
-  }, [recentCharacterReferenceIds, savedCharacterReferenceSearch, savedCharacterReferenceSort, savedCharacterReferencesQuery.data])
+    return sortSavedAssets(filteredItems, savedCharacterReferenceSort, recentCharacterReferenceIds, pinnedCharacterReferenceIds)
+  }, [pinnedCharacterReferenceIds, recentCharacterReferenceIds, savedCharacterReferenceSearch, savedCharacterReferenceSort, savedCharacterReferencesQuery.data])
 
   const updateVibes = (nextDrafts: NaiVibeDraft[]) => {
     onChange(buildNaiVibeValue(nextDrafts))
@@ -344,6 +387,14 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
     ])
   }
 
+  const togglePinnedVibe = (assetId: string) => {
+    setPinnedVibeIds((current) => togglePinnedAssetIds('conai.nai.vibes.pinned', assetId, current))
+  }
+
+  const togglePinnedCharacterReference = (assetId: string) => {
+    setPinnedCharacterReferenceIds((current) => togglePinnedAssetIds('conai.nai.character_refs.pinned', assetId, current))
+  }
+
   if (kind === 'vibes') {
     return (
       <div className="space-y-3">
@@ -405,6 +456,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[280px] sm:flex-row">
               <Input value={savedVibeSearch} onChange={(event) => setSavedVibeSearch(event.target.value)} placeholder="이름 / 모델 검색" />
               <Select value={savedVibeSort} onChange={(event) => setSavedVibeSort(event.target.value as SavedAssetSortOption)}>
+                <option value="pinned">핀 우선</option>
                 <option value="recent">최근 사용순</option>
                 <option value="latest">최신순</option>
                 <option value="oldest">오래된순</option>
@@ -430,13 +482,18 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                       <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
                       <div className="truncate text-xs text-muted-foreground">{asset.model}</div>
                       <div className="flex flex-wrap gap-1.5">
+                        {pinnedVibeIds.includes(asset.id) ? <Badge variant="secondary">핀</Badge> : null}
                         <Badge variant="outline">strength {asset.strength}</Badge>
                         <Badge variant="outline">IE {asset.information_extracted}</Badge>
                       </div>
                       <div className="text-[11px] text-muted-foreground">{new Date(asset.created_date).toLocaleString('ko-KR')}</div>
                     </div>
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" size="sm" variant="ghost" onClick={() => togglePinnedVibe(asset.id)}>
+                      {pinnedVibeIds.includes(asset.id) ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                      {pinnedVibeIds.includes(asset.id) ? '핀 해제' : '핀'}
+                    </Button>
                     <Button type="button" size="sm" variant="outline" onClick={() => appendSavedVibe(asset)}>
                       <Save className="h-4 w-4" />
                       추가
@@ -516,6 +573,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[280px] sm:flex-row">
             <Input value={savedCharacterReferenceSearch} onChange={(event) => setSavedCharacterReferenceSearch(event.target.value)} placeholder="이름 / 타입 검색" />
             <Select value={savedCharacterReferenceSort} onChange={(event) => setSavedCharacterReferenceSort(event.target.value as SavedAssetSortOption)}>
+              <option value="pinned">핀 우선</option>
               <option value="recent">최근 사용순</option>
               <option value="latest">최신순</option>
               <option value="oldest">오래된순</option>
@@ -534,6 +592,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                   <div className="min-w-0 space-y-2">
                     <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
                     <div className="flex flex-wrap gap-1.5">
+                      {pinnedCharacterReferenceIds.includes(asset.id) ? <Badge variant="secondary">핀</Badge> : null}
                       <Badge variant="outline">{asset.type}</Badge>
                       <Badge variant="outline">strength {asset.strength}</Badge>
                       <Badge variant="outline">fidelity {asset.fidelity}</Badge>
@@ -541,7 +600,11 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                     <div className="text-[11px] text-muted-foreground">{new Date(asset.created_date).toLocaleString('ko-KR')}</div>
                   </div>
                 </div>
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  <Button type="button" size="sm" variant="ghost" onClick={() => togglePinnedCharacterReference(asset.id)}>
+                    {pinnedCharacterReferenceIds.includes(asset.id) ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                    {pinnedCharacterReferenceIds.includes(asset.id) ? '핀 해제' : '핀'}
+                  </Button>
                   <Button type="button" size="sm" variant="outline" onClick={() => appendSavedCharacterReference(asset)}>
                     <Save className="h-4 w-4" />
                     추가
