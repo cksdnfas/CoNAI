@@ -982,7 +982,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             <section className="space-y-3">
               <Card>
                 <CardContent className="space-y-4">
-                  <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Generation Settings" />
+                  <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Settings" />
                   <div className="space-y-4">
                     <div className="grid gap-4 md:grid-cols-4">
                       <FormField label="Model">
@@ -1022,7 +1022,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-3">
-                      <FormField label="Resolution Preset">
+                      <FormField label="Preset">
                         <Select value={naiForm.resolutionPreset} onChange={(event) => handleResolutionPresetChange(event.target.value)}>
                           {NAI_RESOLUTION_PRESETS.map((preset) => (
                             <option key={preset.key} value={preset.key}>{preset.label}</option>
@@ -1041,9 +1041,9 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                       </FormField>
 
                       <div className="space-y-2">
-                        <div className="text-sm font-medium text-foreground">Quality Tags</div>
+                        <div className="text-sm font-medium text-foreground">Tags</div>
                         <ToggleRow variant="detail" className="justify-between rounded-sm border border-border bg-surface-container px-3 py-2.5">
-                          <div className="text-sm text-foreground">모델별 품질 태그 자동 추가</div>
+                          <div className="text-sm text-foreground">자동</div>
                           <input type="checkbox" checked={naiForm.applyQualityTags} onChange={(event) => setNaiForm((current) => ({ ...current, applyQualityTags: event.target.checked }))} />
                         </ToggleRow>
                       </div>
@@ -1077,7 +1077,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             <section className="space-y-3">
               <Card>
                 <CardContent className="space-y-4">
-                  <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Source Images" />
+                  <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Images" />
                   <div className="space-y-4">
                     <FormField label="Source Image">
                       <div className="space-y-3">
@@ -1102,7 +1102,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             <section className="space-y-3">
               <Card>
                 <CardContent className="space-y-4">
-                  <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Vibe Transfer" />
+                  <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Vibes" />
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low p-3">
                       <div className="text-sm font-medium text-foreground">Vibes</div>
@@ -1140,7 +1140,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                               <FormField label="Strength">
                                 <Input type="number" min={0.01} max={1} step={0.01} value={vibe.strength} onChange={(event) => handleVibeFieldChange(index, 'strength', event.target.value)} />
                               </FormField>
-                              <FormField label="Information Extracted">
+                              <FormField label="Info">
                                 <Input type="number" min={0.01} max={1} step={0.01} value={vibe.informationExtracted} onChange={(event) => handleVibeFieldChange(index, 'informationExtracted', event.target.value)} />
                               </FormField>
                             </div>
@@ -1152,11 +1152,11 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                             <div className="flex justify-end gap-2">
                               <Button type="button" variant="outline" onClick={() => void handleSaveVibeToStore(index)} disabled={!vibe.encoded}>
                                 <Save className="h-4 w-4" />
-                                Store 저장
+                                저장
                               </Button>
                               <Button type="button" variant="outline" onClick={() => void handleEncodeVibe(index)} disabled={!vibe.image || encodingVibeIndex !== null}>
                                 <WandSparkles className="h-4 w-4" />
-                                {encodingVibeIndex === index ? '인코딩 중…' : 'Vibe 인코딩'}
+                                {encodingVibeIndex === index ? '인코딩 중…' : '인코딩'}
                               </Button>
                             </div>
                           </div>
@@ -1166,7 +1166,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
                     <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="text-sm font-medium text-foreground">Saved Vibes</div>
+                        <div className="text-sm font-medium text-foreground">Saved</div>
                         <div className="w-full sm:w-72">
                           <Input value={savedVibeSearch} onChange={(event) => setSavedVibeSearch(event.target.value)} placeholder="검색" />
                         </div>
@@ -1206,7 +1206,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             <section className="space-y-3">
               <Card>
                 <CardContent className="space-y-4">
-                  <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Character Reference" />
+                  <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="References" />
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low p-3">
                       <div className="text-sm font-medium text-foreground">References</div>
@@ -1258,7 +1258,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                             <div className="flex justify-end">
                               <Button type="button" variant="outline" onClick={() => void handleSaveCharacterReferenceToStore(index)} disabled={!reference.image}>
                                 <Save className="h-4 w-4" />
-                                Store 저장
+                                저장
                               </Button>
                             </div>
                           </div>
@@ -1268,7 +1268,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
                     <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="text-sm font-medium text-foreground">Saved References</div>
+                        <div className="text-sm font-medium text-foreground">Saved</div>
                         <div className="w-full sm:w-72">
                           <Input value={savedCharacterReferenceSearch} onChange={(event) => setSavedCharacterReferenceSearch(event.target.value)} placeholder="검색" />
                         </div>
@@ -1323,7 +1323,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     <div className="space-y-2">
                       <div className="text-sm font-medium text-foreground">Variety+</div>
                       <ToggleRow variant="detail" className="justify-between rounded-sm border border-border bg-surface-container px-3 py-2.5">
-                        <div className="text-sm text-foreground">활성</div>
+                        <div className="text-sm text-foreground">사용</div>
                         <input type="checkbox" checked={naiForm.varietyPlus} onChange={(event) => setNaiForm((current) => ({ ...current, varietyPlus: event.target.checked }))} />
                       </ToggleRow>
                     </div>
@@ -1341,7 +1341,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
                     {naiForm.action === 'infill' ? (
                       <ToggleRow variant="detail" className="justify-between rounded-sm border border-border bg-surface-container px-3 py-2.5">
-                        <div className="text-sm text-foreground">Add original image</div>
+                        <div className="text-sm text-foreground">Original</div>
                         <input type="checkbox" checked={naiForm.addOriginalImage} onChange={(event) => setNaiForm((current) => ({ ...current, addOriginalImage: event.target.checked }))} />
                       </ToggleRow>
                     ) : null}
