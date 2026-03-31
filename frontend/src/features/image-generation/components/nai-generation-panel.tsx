@@ -911,7 +911,13 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                       ) : (
                         <div className="space-y-3">
                           {naiForm.characters.map((character, index) => (
-                            <div key={`nai-character-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-container p-3">
+                            <div
+                              key={`nai-character-${index}`}
+                              className={index === selectedCharacterIndex
+                                ? 'space-y-3 rounded-sm border border-accent bg-surface-container p-3 ring-1 ring-accent/50'
+                                : 'space-y-3 rounded-sm border border-border bg-surface-container p-3'}
+                              onClick={() => setSelectedCharacterIndex(index)}
+                            >
                               <div className="flex items-center justify-between gap-3">
                                 <div className="text-sm font-medium text-foreground">Character {index + 1}</div>
                                 <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveCharacterPrompt(index)}>

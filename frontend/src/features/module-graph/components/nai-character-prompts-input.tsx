@@ -171,7 +171,13 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
         </div>
       ) : (
         drafts.map((draft, index) => (
-          <div key={`nai-character-input-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-container p-3">
+          <div
+            key={`nai-character-input-${index}`}
+            className={index === selectedIndex
+              ? 'space-y-3 rounded-sm border border-accent bg-surface-container p-3 ring-1 ring-accent/50'
+              : 'space-y-3 rounded-sm border border-border bg-surface-container p-3'}
+            onClick={() => setSelectedIndex(index)}
+          >
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-medium text-foreground">Character {index + 1}</div>
               <Button type="button" size="sm" variant="ghost" onClick={() => handleRemove(index)}>

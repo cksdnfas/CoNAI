@@ -29,6 +29,35 @@ function snapBoardPointerPosition(clientX: number, clientY: number, rect: DOMRec
   }
 }
 
+/** Spread markers slightly when multiple characters share the same snapped cell. */
+function buildMarkerOffsets(characters: CharacterPositionBoardItem[]) {
+  const markersByCell = new Map<string, number[]>()
+
+  characters.forEach((character, index) => {
+    const cellKey = `${character.centerX}:${character.centerY}`
+    const currentIndexes = markersByCell.get(cellKey) || []
+    currentIndexes.push(index)
+    markersByCell.set(cellKey, currentIndexes)
+  })
+
+  const markerOffsets = new Map<number, { offsetX: number; offsetY: number }>()
+  const offsetPattern = [
+    { offsetX: 0, offsetY: 0 },
+    { offsetX: -16, offsetY: -12 },
+    { offsetX: 16, offsetY: -12 },
+    { offsetX: -16, offsetY: 12 },
+    { offsetX: 16, offsetY: 12 },
+  ]
+
+  markersByCell.forEach((indexes) => {
+    indexes.forEach((index, offsetIndex) => {
+      markerOffsets.set(index, offsetPattern[offsetIndex % offsetPattern.length])
+    })
+  })
+
+  return markerOffsets
+}
+
 /** Render a shared 5x5 drag board for NAI character prompt placement. */
 export function NaiCharacterPositionBoard({
   characters,
@@ -42,6 +71,7 @@ export function NaiCharacterPositionBoard({
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
 
   const gridLines = useMemo(() => GRID_VALUES.map((value) => `${Number(value) * 100}%`), [])
+  const markerOffsets = useMemo(() => buildMarkerOffsets(characters), [characters])
 
   const commitPointerPosition = (characterIndex: number, clientX: number, clientY: number) => {
     const boardRect = boardRef.current?.getBoundingClientRect()
@@ -108,18 +138,19 @@ export function NaiCharacterPositionBoard({
           const top = `${Number(character.centerY) * 100}%`
           const isSelected = selectedIndex === index
           const isDragging = draggingIndex === index
+          const offset = markerOffsets.get(index) || { offsetX: 0, offsetY: 0 }
 
           return (
             <button
               key={`character-position-marker-${index}`}
               type="button"
               className={cn(
-                'absolute -translate-x-1/2 -translate-y-1/2 rounded-full border px-2 py-1 text-xs font-medium shadow-sm transition-colors',
+                'absolute rounded-full border px-2 py-1 text-xs font-medium shadow-sm transition-colors',
                 isSelected || isDragging
-                  ? 'border-accent bg-accent text-accent-foreground'
-                  : 'border-border bg-background text-foreground hover:bg-surface-high',
+                  ? 'z-20 border-accent bg-accent text-accent-foreground'
+                  : 'z-10 border-border bg-background text-foreground hover:bg-surface-high',
               )}
-              style={{ left, top }}
+              style={{ left, top, transform: `translate(calc(-50% + ${offset.offsetX}px), calc(-50% + ${offset.offsetY}px))` }}
               onClick={() => onSelectIndex?.(index)}
               onPointerDown={(event) => {
                 event.preventDefault()
