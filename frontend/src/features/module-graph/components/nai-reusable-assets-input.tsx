@@ -341,17 +341,33 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
           {savedVibesQuery.isLoading ? (
             <div className="text-sm text-muted-foreground">불러오는 중…</div>
           ) : filteredSavedVibes.length > 0 ? (
-            <div className="grid gap-2">
+            <div className="grid gap-3 md:grid-cols-2">
               {filteredSavedVibes.map((asset) => (
-                <div key={asset.id} className="flex items-center justify-between gap-3 rounded-sm border border-border bg-surface-low px-3 py-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
-                    <div className="truncate text-xs text-muted-foreground">{asset.model} · strength {asset.strength}</div>
+                <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+                  <div className="flex gap-3">
+                    {asset.image_data_url ? (
+                      <img src={asset.image_data_url} alt={asset.label} className="h-20 w-20 shrink-0 rounded-sm border border-border object-contain" />
+                    ) : (
+                      <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-sm border border-dashed border-border text-[11px] text-muted-foreground">
+                        no preview
+                      </div>
+                    )}
+                    <div className="min-w-0 space-y-2">
+                      <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
+                      <div className="truncate text-xs text-muted-foreground">{asset.model}</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <Badge variant="outline">strength {asset.strength}</Badge>
+                        <Badge variant="outline">IE {asset.information_extracted}</Badge>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">{new Date(asset.created_date).toLocaleString('ko-KR')}</div>
+                    </div>
                   </div>
-                  <Button type="button" size="sm" variant="outline" onClick={() => appendSavedVibe(asset)}>
-                    <Save className="h-4 w-4" />
-                    추가
-                  </Button>
+                  <div className="flex justify-end">
+                    <Button type="button" size="sm" variant="outline" onClick={() => appendSavedVibe(asset)}>
+                      <Save className="h-4 w-4" />
+                      추가
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -430,17 +446,27 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
         {savedCharacterReferencesQuery.isLoading ? (
           <div className="text-sm text-muted-foreground">불러오는 중…</div>
         ) : filteredSavedCharacterReferences.length > 0 ? (
-          <div className="grid gap-2">
+          <div className="grid gap-3 md:grid-cols-2">
             {filteredSavedCharacterReferences.map((asset) => (
-              <div key={asset.id} className="flex items-center justify-between gap-3 rounded-sm border border-border bg-surface-low px-3 py-2">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
-                  <div className="truncate text-xs text-muted-foreground">{asset.type} · strength {asset.strength} · fidelity {asset.fidelity}</div>
+              <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+                <div className="flex gap-3">
+                  <img src={asset.image_data_url} alt={asset.label} className="h-20 w-20 shrink-0 rounded-sm border border-border object-contain" />
+                  <div className="min-w-0 space-y-2">
+                    <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge variant="outline">{asset.type}</Badge>
+                      <Badge variant="outline">strength {asset.strength}</Badge>
+                      <Badge variant="outline">fidelity {asset.fidelity}</Badge>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">{new Date(asset.created_date).toLocaleString('ko-KR')}</div>
+                  </div>
                 </div>
-                <Button type="button" size="sm" variant="outline" onClick={() => appendSavedCharacterReference(asset)}>
-                  <Save className="h-4 w-4" />
-                  추가
-                </Button>
+                <div className="flex justify-end">
+                  <Button type="button" size="sm" variant="outline" onClick={() => appendSavedCharacterReference(asset)}>
+                    <Save className="h-4 w-4" />
+                    추가
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
