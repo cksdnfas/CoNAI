@@ -12,6 +12,7 @@ import { ToggleRow } from '@/components/ui/toggle-row'
 import { cn } from '@/lib/utils'
 import type { GraphWorkflowExposedInput } from '@/lib/api'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
+import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 
 type WorkflowExposedInputEditorProps = {
   candidates: GraphWorkflowExposedInput[]
@@ -71,6 +72,26 @@ export function WorkflowExposedInputEditor({
     if (isNaiCharacterPromptPort(inputDefinition.port_key, inputDefinition.data_type)) {
       return (
         <NaiCharacterPromptsInput
+          value={rawValue}
+          onChange={(value) => onUpdateInput(inputDefinition.id, { default_value: value })}
+        />
+      )
+    }
+
+    if (isNaiVibePort(inputDefinition.port_key, inputDefinition.data_type)) {
+      return (
+        <NaiReusableAssetInput
+          kind="vibes"
+          value={rawValue}
+          onChange={(value) => onUpdateInput(inputDefinition.id, { default_value: value })}
+        />
+      )
+    }
+
+    if (isNaiCharacterReferencePort(inputDefinition.port_key, inputDefinition.data_type)) {
+      return (
+        <NaiReusableAssetInput
+          kind="character_refs"
           value={rawValue}
           onChange={(value) => onUpdateInput(inputDefinition.id, { default_value: value })}
         />

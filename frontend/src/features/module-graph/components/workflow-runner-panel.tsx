@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import type { GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowRecord } from '@/lib/api'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
+import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
 
 type WorkflowRunnerPanelProps = {
@@ -73,6 +74,48 @@ export function WorkflowRunnerPanel({
           </div>
           {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
           <NaiCharacterPromptsInput value={rawValue} onChange={(value) => onInputValueChange(inputDefinition.id, value)} />
+        </div>
+      )
+    }
+
+    if (isNaiVibePort(inputDefinition.port_key, inputDefinition.data_type)) {
+      return (
+        <div key={inputDefinition.id} className="space-y-2 rounded-sm bg-surface-low p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-sm font-medium text-foreground">{inputDefinition.label}</div>
+                {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
+              </div>
+              <div className="text-xs text-muted-foreground">{inputDefinition.module_name || inputDefinition.node_id} · {inputDefinition.data_type}</div>
+            </div>
+            <Button type="button" size="sm" variant="ghost" onClick={() => onInputValueClear(inputDefinition.id)} disabled={!explicitValue}>
+              값 지우기
+            </Button>
+          </div>
+          {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
+          <NaiReusableAssetInput kind="vibes" value={rawValue} onChange={(value) => onInputValueChange(inputDefinition.id, value)} />
+        </div>
+      )
+    }
+
+    if (isNaiCharacterReferencePort(inputDefinition.port_key, inputDefinition.data_type)) {
+      return (
+        <div key={inputDefinition.id} className="space-y-2 rounded-sm bg-surface-low p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-sm font-medium text-foreground">{inputDefinition.label}</div>
+                {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
+              </div>
+              <div className="text-xs text-muted-foreground">{inputDefinition.module_name || inputDefinition.node_id} · {inputDefinition.data_type}</div>
+            </div>
+            <Button type="button" size="sm" variant="ghost" onClick={() => onInputValueClear(inputDefinition.id)} disabled={!explicitValue}>
+              값 지우기
+            </Button>
+          </div>
+          {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
+          <NaiReusableAssetInput kind="character_refs" value={rawValue} onChange={(value) => onInputValueChange(inputDefinition.id, value)} />
         </div>
       )
     }
