@@ -55,6 +55,7 @@ import {
   buildModuleEdgePresentation,
   findNodePort,
   getArtifactPreviewUrl,
+  getModulePortCompatibility,
   getNodeExecutionStatus,
   parseHandleId,
   readFileAsDataUrl,
@@ -543,7 +544,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
         return false
       }
 
-      return sourcePort.data_type === targetPort.data_type
+      return getModulePortCompatibility(sourcePort.data_type, targetPort.data_type) !== 'incompatible'
     },
     [nodes],
   )
@@ -561,6 +562,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       const targetHandle = parseHandleId(connection.targetHandle)
       const sourcePort = findNodePort(sourceNode, 'out', sourceHandle?.portKey)
       const targetPort = findNodePort(targetNode, 'in', targetHandle?.portKey)
+      const compatibility = getModulePortCompatibility(sourcePort?.data_type, targetPort?.data_type)
 
       setEdges((currentEdges) =>
         addEdge(
@@ -572,6 +574,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           currentEdges,
         ),
       )
+
+      if (compatibility === 'string-bridge') {
+        showSnackbar({ message: 'text ↔ prompt 연결은 허용돼. 이런 브리지 연결은 점선으로 표시해둘게.', tone: 'info' })
+      }
     },
     [isValidConnection, setEdges, showSnackbar],
   )

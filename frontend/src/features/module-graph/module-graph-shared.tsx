@@ -180,16 +180,33 @@ export function findNodePort(node: ModuleGraphNode | undefined, direction: 'in' 
   return portList.find((port) => port.key === portKey) ?? null
 }
 
+/** Group prompt/text into one string family so graph users can bridge them intentionally. */
+export function getModulePortCompatibility(sourceType?: ModulePortDataType | null, targetType?: ModulePortDataType | null) {
+  if (!sourceType || !targetType) {
+    return 'incompatible' as const
+  }
+
+  if (sourceType === targetType) {
+    return 'exact' as const
+  }
+
+  const isStringBridge = (sourceType === 'text' && targetType === 'prompt') || (sourceType === 'prompt' && targetType === 'text')
+  return isStringBridge ? 'string-bridge' as const : 'incompatible' as const
+}
+
 /** Build a minimal colored edge style so graph wiring stays readable without extra labels. */
 export function buildModuleEdgePresentation(sourcePort: ModulePortDefinition | null, targetPort: ModulePortDefinition | null) {
   const dataType = sourcePort?.data_type ?? targetPort?.data_type ?? null
   const accentColor = dataType ? getPortTypeColor(dataType) : '#94a3b8'
+  const compatibility = getModulePortCompatibility(sourcePort?.data_type, targetPort?.data_type)
 
   return {
     label: '',
     style: {
       stroke: accentColor,
-      strokeWidth: 2.5,
+      strokeWidth: compatibility === 'string-bridge' ? 3 : 2.5,
+      strokeDasharray: compatibility === 'string-bridge' ? '7 5' : undefined,
+      opacity: compatibility === 'string-bridge' ? 0.9 : 1,
     },
   }
 }
