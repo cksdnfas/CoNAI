@@ -920,7 +920,15 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                             >
                               <div className="flex items-center justify-between gap-3">
                                 <div className="text-sm font-medium text-foreground">Character {index + 1}</div>
-                                <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveCharacterPrompt(index)}>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    handleRemoveCharacterPrompt(index)
+                                  }}
+                                >
                                   <Trash2 className="h-4 w-4" />
                                   제거
                                 </Button>

@@ -103,7 +103,6 @@ function buildNaiCharacterPromptValue(drafts: NaiCharacterPromptDraft[]) {
       center_x: draft.centerX.trim(),
       center_y: draft.centerY.trim(),
     }))
-    .filter((draft) => draft.prompt.length > 0)
 
   return nextValue.length > 0 ? nextValue : undefined
 }
@@ -118,7 +117,9 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
   }
 
   const handleAdd = () => {
-    updateDrafts([...drafts, createEmptyCharacterDraft()])
+    const nextDrafts = [...drafts, createEmptyCharacterDraft()]
+    updateDrafts(nextDrafts)
+    setSelectedIndex(nextDrafts.length - 1)
   }
 
   const handleChange = (index: number, field: keyof NaiCharacterPromptDraft, fieldValue: string) => {
@@ -134,6 +135,15 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
 
   const handleRemove = (index: number) => {
     updateDrafts(drafts.filter((_, draftIndex) => draftIndex !== index))
+    setSelectedIndex((current) => {
+      if (current === null) {
+        return null
+      }
+      if (current === index) {
+        return null
+      }
+      return current > index ? current - 1 : current
+    })
   }
 
   return (
@@ -180,7 +190,15 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
           >
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-medium text-foreground">Character {index + 1}</div>
-              <Button type="button" size="sm" variant="ghost" onClick={() => handleRemove(index)}>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  handleRemove(index)
+                }}
+              >
                 <Trash2 className="h-4 w-4" />
                 제거
               </Button>
