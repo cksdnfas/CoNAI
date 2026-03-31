@@ -36,6 +36,7 @@ export function ImageGenerationPage() {
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
   const [selectedComfyWorkflowId, setSelectedComfyWorkflowId] = useState<number | null>(null)
   const [isControllerOpen, setIsControllerOpen] = useState(false)
+  const [pendingNaiPromptInsert, setPendingNaiPromptInsert] = useState<{ id: number; text: string; sourceLabel: string } | null>(null)
   const isWideLayout = useDesktopPageLayout()
   const activeTab = parseImageGenerationTab(searchParams.get('tab'))
 
@@ -54,12 +55,36 @@ export function ImageGenerationPage() {
     setSearchParams(nextSearchParams)
   }
 
+  const handleInsertIntoNaiPrompt = (text: string, sourceLabel: string) => {
+    const normalizedText = text.trim()
+    if (!normalizedText) {
+      return
+    }
+
+    setPendingNaiPromptInsert({
+      id: Date.now(),
+      text: normalizedText,
+      sourceLabel,
+    })
+
+    const nextSearchParams = new URLSearchParams(searchParams)
+    nextSearchParams.set('tab', 'nai')
+    setSearchParams(nextSearchParams)
+  }
+
   const controllerPanel = activeTab === 'nai'
-    ? <NaiGenerationPanel refreshNonce={globalRefreshNonce} onHistoryRefresh={handleHistoryRefresh} />
+    ? (
+        <NaiGenerationPanel
+          refreshNonce={globalRefreshNonce}
+          onHistoryRefresh={handleHistoryRefresh}
+          incomingPromptInsert={pendingNaiPromptInsert}
+          onIncomingPromptInsertConsumed={() => setPendingNaiPromptInsert(null)}
+        />
+      )
     : activeTab === 'comfyui'
       ? <ComfyGenerationPanel refreshNonce={globalRefreshNonce} onHistoryRefresh={handleHistoryRefresh} onSelectedWorkflowChange={setSelectedComfyWorkflowId} />
       : activeTab === 'wildcards'
-        ? <WildcardGenerationPanel refreshNonce={globalRefreshNonce} />
+        ? <WildcardGenerationPanel refreshNonce={globalRefreshNonce} onInsertToNaiPrompt={handleInsertIntoNaiPrompt} />
         : null
 
   const controllerLabel = activeTab === 'nai' ? 'NAI' : activeTab === 'wildcards' ? 'Wildcard' : 'ComfyUI'

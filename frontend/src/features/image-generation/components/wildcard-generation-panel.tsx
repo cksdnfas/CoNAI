@@ -26,6 +26,7 @@ import { getErrorMessage } from '../image-generation-shared'
 
 type WildcardGenerationPanelProps = {
   refreshNonce: number
+  onInsertToNaiPrompt: (text: string, sourceLabel: string) => void
 }
 
 type WildcardTreeEntry = {
@@ -210,7 +211,7 @@ function WildcardScanLogCard({ log }: { log: WildcardScanLog | null }) {
 }
 
 /** Render a wildcard browser/preview tab inside the image generation page. */
-export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPanelProps) {
+export function WildcardGenerationPanel({ refreshNonce, onInsertToNaiPrompt }: WildcardGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
   const [searchInput, setSearchInput] = useState('')
   const [selectedWildcardId, setSelectedWildcardId] = useState<number | null>(null)
@@ -312,6 +313,25 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, '와일드카드 프리뷰 생성에 실패했어.'), tone: 'error' })
     }
+  }
+
+  const handleInsertSelectedTokenToNai = () => {
+    if (!selectedToken) {
+      showSnackbar({ message: '먼저 와일드카드를 골라줘.', tone: 'error' })
+      return
+    }
+
+    onInsertToNaiPrompt(selectedToken, '와일드카드 토큰')
+  }
+
+  const handleInsertPreviewResultToNai = (result: string, index: number) => {
+    const text = result.trim()
+    if (!text) {
+      showSnackbar({ message: '비어 있는 프리뷰 결과는 보낼 수 없어.', tone: 'error' })
+      return
+    }
+
+    onInsertToNaiPrompt(text, `프리뷰 결과 ${index + 1}`)
   }
 
   return (
@@ -423,6 +443,10 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
                   <>
                     <Badge variant={selectedWildcard.type === 'chain' ? 'secondary' : 'outline'}>{selectedWildcard.type === 'chain' ? 'Chain' : 'Wildcard'}</Badge>
                     {selectedWildcard.is_auto_collected === 1 ? <Badge variant="outline">Auto LoRA</Badge> : null}
+                    <Button type="button" variant="outline" size="sm" onClick={handleInsertSelectedTokenToNai}>
+                      <Sparkles className="h-4 w-4" />
+                      NAI로 보내기
+                    </Button>
                     <Button type="button" variant="outline" size="sm" onClick={() => void handleCopy(selectedToken, '와일드카드 토큰')}>
                       <Copy className="h-4 w-4" />
                       토큰 복사
@@ -498,11 +522,20 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
                   <Braces className="h-4 w-4" />
                   토큰만 넣기
                 </Button>
+                <Button type="button" variant="outline" onClick={handleInsertSelectedTokenToNai} disabled={!selectedToken}>
+                  <Sparkles className="h-4 w-4" />
+                  선택 토큰 NAI로 보내기
+                </Button>
                 <Button type="button" onClick={() => void handleParsePreview()} disabled={parseMutation.isPending || previewText.trim().length === 0}>
                   <Sparkles className="h-4 w-4" />
                   {parseMutation.isPending ? '프리뷰 생성 중…' : '프리뷰 생성'}
                 </Button>
               </div>
+
+              <Alert>
+                <AlertTitle>NAI 연동</AlertTitle>
+                <AlertDescription>선택 토큰이나 프리뷰 결과를 누르면 NAI 탭으로 이동하면서 현재 prompt 뒤에 바로 붙여줘.</AlertDescription>
+              </Alert>
 
               {parseMutation.isError ? (
                 <Alert variant="destructive">
@@ -523,10 +556,16 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
                       <div key={`${index}:${result}`} className="rounded-sm border border-border bg-surface-container p-3 text-sm text-muted-foreground">
                         <div className="flex items-center justify-between gap-3">
                           <div className="text-xs uppercase tracking-[0.18em]">sample {index + 1}</div>
-                          <Button type="button" size="sm" variant="ghost" onClick={() => void handleCopy(result, `프리뷰 결과 ${index + 1}`)}>
-                            <Copy className="h-4 w-4" />
-                            복사
-                          </Button>
+                          <div className="flex flex-wrap gap-2">
+                            <Button type="button" size="sm" variant="ghost" onClick={() => handleInsertPreviewResultToNai(result, index)}>
+                              <Sparkles className="h-4 w-4" />
+                              NAI로 보내기
+                            </Button>
+                            <Button type="button" size="sm" variant="ghost" onClick={() => void handleCopy(result, `프리뷰 결과 ${index + 1}`)}>
+                              <Copy className="h-4 w-4" />
+                              복사
+                            </Button>
+                          </div>
                         </div>
                         <div className="mt-2 break-words whitespace-pre-wrap text-foreground">{result}</div>
                       </div>
