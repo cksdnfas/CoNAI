@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Braces, Copy, FolderPlus, ListTree, Pencil, RefreshCw, Sparkles, Trash2, WandSparkles } from 'lucide-react'
+import { Braces, Copy, FolderPlus, History, ListTree, Pencil, RefreshCw, Sparkles, Trash2, Upload, WandSparkles } from 'lucide-react'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -15,15 +15,20 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   createWildcard,
   deleteWildcard,
+  getWildcardLastScanLog,
   getWildcards,
   parseWildcards,
+  scanWildcardLoraFolder,
   updateWildcard,
+  type LoraScanRequest,
   type WildcardItemRecord,
   type WildcardRecord,
+  type WildcardScanLog,
   type WildcardTool,
 } from '@/lib/api'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
+import { LoraAutoCollectModal } from './lora-auto-collect-modal'
 import { WildcardEditorModal, type WildcardEditorModalInput } from './wildcard-editor-modal'
 import { getErrorMessage } from '../image-generation-shared'
 
@@ -121,6 +126,22 @@ function getWorkspaceTabRecordType(tab: WildcardWorkspaceTab) {
 /** Guard create actions for tabs backed by auto-collected data. */
 function canCreateWorkspaceTabItem(tab: WildcardWorkspaceTab) {
   return tab !== 'lora'
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return '—'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
 }
 
 async function copyText(text: string) {
@@ -280,6 +301,61 @@ function WildcardDetailCard({
   )
 }
 
+function LoraScanLogCard({ log }: { log: WildcardScanLog | null }) {
+  return (
+    <Card>
+      <CardContent className="space-y-4">
+        <SectionHeading
+          variant="inside"
+          className="border-b border-border/70 pb-4"
+          heading="최근 자동 수집 로그"
+          description="마지막 LoRA 자동 수집 결과 요약이야."
+          actions={log ? <Badge variant="outline">{log.totalWildcards}</Badge> : undefined}
+        />
+
+        {log ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-sm border border-border bg-surface-container p-3">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">시간</div>
+                <div className="mt-1 text-sm text-foreground">{formatDateTime(log.timestamp)}</div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface-container p-3">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">LoRA weight</div>
+                <div className="mt-1 text-sm text-foreground">{log.loraWeight}</div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface-container p-3">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">중복 처리</div>
+                <div className="mt-1 text-sm text-foreground">{log.duplicateHandling}</div>
+              </div>
+              <div className="rounded-sm border border-border bg-surface-container p-3">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">생성 항목</div>
+                <div className="mt-1 text-sm text-foreground">{log.totalItems}</div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {log.wildcards.slice(0, 8).map((entry) => (
+                <div key={entry.id} className="rounded-sm border border-border bg-surface-container px-3 py-2 text-xs text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-foreground">++{entry.name}++</span>
+                    <Badge variant="outline">items {entry.itemCount}</Badge>
+                    <Badge variant="outline">level {entry.level}</Badge>
+                  </div>
+                  <div className="mt-1 break-all">{entry.folderName}</div>
+                </div>
+              ))}
+              {log.wildcards.length > 8 ? <div className="text-xs text-muted-foreground">외 {log.wildcards.length - 8}개 더 있어.</div> : null}
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground">아직 기록된 자동 수집 로그가 없어.</div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 /** Render the shared wildcard/preprocess/lora workspace with one common UI and tab-based data filters. */
 export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPanelProps) {
   const queryClient = useQueryClient()
@@ -293,10 +369,16 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   const [previewText, setPreviewText] = useState('')
   const [previewCount, setPreviewCount] = useState('5')
   const [editorState, setEditorState] = useState<WildcardEditorState>(null)
+  const [isLoraCollectModalOpen, setIsLoraCollectModalOpen] = useState(false)
 
   const wildcardsQuery = useQuery({
     queryKey: ['wildcards', 'hierarchical-browser', refreshNonce],
     queryFn: () => getWildcards({ hierarchical: true, withItems: true }),
+  })
+
+  const loraScanLogQuery = useQuery({
+    queryKey: ['wildcards', 'lora-scan-log', refreshNonce],
+    queryFn: getWildcardLastScanLog,
   })
 
   const parseMutation = useMutation({
@@ -338,6 +420,22 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     },
     onError: (error) => {
       showSnackbar({ message: getErrorMessage(error, '항목 삭제에 실패했어.'), tone: 'error' })
+    },
+  })
+
+  const loraCollectMutation = useMutation({
+    mutationFn: (input: LoraScanRequest) => scanWildcardLoraFolder(input),
+    onSuccess: async (result) => {
+      setIsLoraCollectModalOpen(false)
+      showSnackbar({ message: `LoRA 자동 수집 완료. ${result.created}개 항목을 만들었어.`, tone: 'info' })
+      setSelectedWildcardId(null)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['wildcards'] }),
+        queryClient.invalidateQueries({ queryKey: ['wildcards', 'lora-scan-log'] }),
+      ])
+    },
+    onError: (error) => {
+      showSnackbar({ message: getErrorMessage(error, 'LoRA 자동 수집에 실패했어.'), tone: 'error' })
     },
   })
 
@@ -484,6 +582,10 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     })
   }
 
+  const handleSubmitLoraCollect = async (input: LoraScanRequest) => {
+    await loraCollectMutation.mutateAsync(input)
+  }
+
   return (
     <div className="space-y-6">
       <div className="border-b border-border/70 pb-2">
@@ -532,26 +634,41 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
                 </Button>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => handleOpenCreateModal(null)}
-                  disabled={!canCreateInActiveTab}
-                >
-                  <FolderPlus className="h-4 w-4" />
-                  새 항목
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => handleOpenCreateModal(selectedWildcard?.id ?? null)}
-                  disabled={!canCreateInActiveTab || !selectedWildcard}
-                >
-                  <FolderPlus className="h-4 w-4" />
-                  하위 추가
-                </Button>
+                {activeWorkspaceTab === 'lora' ? (
+                  <>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => setIsLoraCollectModalOpen(true)}>
+                      <Upload className="h-4 w-4" />
+                      자동 수집
+                    </Button>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => void loraScanLogQuery.refetch()} disabled={loraScanLogQuery.isFetching}>
+                      <History className="h-4 w-4" />
+                      로그 새로고침
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleOpenCreateModal(null)}
+                      disabled={!canCreateInActiveTab}
+                    >
+                      <FolderPlus className="h-4 w-4" />
+                      새 항목
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleOpenCreateModal(selectedWildcard?.id ?? null)}
+                      disabled={!canCreateInActiveTab || !selectedWildcard}
+                    >
+                      <FolderPlus className="h-4 w-4" />
+                      하위 추가
+                    </Button>
+                  </>
+                )}
                 <Button type="button" size="icon-sm" variant="outline" onClick={handleOpenEditModal} disabled={!selectedWildcard} aria-label="편집" title="편집">
                   <Pencil className="h-4 w-4" />
                 </Button>
@@ -719,8 +836,26 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
               )}
             </CardContent>
           </Card>
+
+          {activeWorkspaceTab === 'lora' ? (
+            loraScanLogQuery.isError ? (
+              <Alert variant="destructive">
+                <AlertTitle>LoRA 스캔 로그를 불러오지 못했어</AlertTitle>
+                <AlertDescription>{getErrorMessage(loraScanLogQuery.error, '최근 스캔 로그를 불러오지 못했어.')}</AlertDescription>
+              </Alert>
+            ) : (
+              <LoraScanLogCard log={loraScanLogQuery.data ?? null} />
+            )
+          ) : null}
         </section>
       </div>
+
+      <LoraAutoCollectModal
+        open={isLoraCollectModalOpen}
+        isSubmitting={loraCollectMutation.isPending}
+        onClose={() => setIsLoraCollectModalOpen(false)}
+        onSubmit={handleSubmitLoraCollect}
+      />
 
       <WildcardEditorModal
         open={editorState !== null}

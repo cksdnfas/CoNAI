@@ -84,6 +84,26 @@ export interface WildcardScanLog {
   wildcards: WildcardScanLogEntry[]
 }
 
+export interface LoraFileData {
+  folderName: string
+  loraName: string
+  promptLines: string[]
+}
+
+export interface LoraScanRequest {
+  loraFiles: LoraFileData[]
+  loraWeight: number
+  duplicateHandling: 'number' | 'parent'
+  matchingMode?: 'filename' | 'common'
+  commonTextFilename?: string
+  matchingPriority?: 'filename' | 'common'
+}
+
+export interface LoraScanResponse {
+  created: number
+  log: WildcardScanLog
+}
+
 /** Load wildcard records from the backend with optional hierarchical expansion. */
 export async function getWildcards(params?: { hierarchical?: boolean; rootsOnly?: boolean; withItems?: boolean }) {
   const searchParams = new URLSearchParams()
@@ -180,6 +200,23 @@ export async function getWildcardLastScanLog() {
   }
 
   return response.data ?? null
+}
+
+/** Scan a LoRA folder dump and rebuild the auto-collected wildcard tree. */
+export async function scanWildcardLoraFolder(input: LoraScanRequest) {
+  const response = await fetchJson<ApiResponse<LoraScanResponse>>('/api/wildcards/scan-lora-folder', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'LoRA 자동 수집에 실패했어.')
+  }
+
+  return response.data
 }
 
 /** Ask the backend wildcard parser to preview one or more resolved prompt results. */
