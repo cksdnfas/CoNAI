@@ -843,11 +843,13 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                       />
                     </FormField>
 
-                    <FormField label="Negative Prompt">
-                      <Textarea
-                        value={naiForm.negativePrompt}
-                        onChange={(event) => handleNaiFieldChange('negativePrompt', event.target.value)}
+                    <FormField label="Negative Prompt" hint="`++`를 입력하면 와일드카드 검색 팝업이 열려.">
+                      <WildcardInlinePickerField
+                        tool="nai"
+                        multiline
                         rows={6}
+                        value={naiForm.negativePrompt}
+                        onChange={(value) => handleNaiFieldChange('negativePrompt', value)}
                         placeholder="low quality, blurry"
                       />
                     </FormField>
@@ -884,12 +886,26 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                                 </Button>
                               </div>
 
-                              <FormField label="Character Prompt">
-                                <Textarea value={character.prompt} onChange={(event) => handleCharacterPromptChange(index, 'prompt', event.target.value)} rows={4} placeholder="girl, ibuki (blue archive), halo" />
+                              <FormField label="Character Prompt" hint="`++` wildcard">
+                                <WildcardInlinePickerField
+                                  tool="nai"
+                                  multiline
+                                  rows={4}
+                                  value={character.prompt}
+                                  onChange={(value) => handleCharacterPromptChange(index, 'prompt', value)}
+                                  placeholder="girl, ibuki (blue archive), halo"
+                                />
                               </FormField>
 
-                              <FormField label="Character Negative Prompt">
-                                <Textarea value={character.uc} onChange={(event) => handleCharacterPromptChange(index, 'uc', event.target.value)} rows={3} placeholder="bad anatomy, glowing eyes" />
+                              <FormField label="Character Negative Prompt" hint="`++` wildcard">
+                                <WildcardInlinePickerField
+                                  tool="nai"
+                                  multiline
+                                  rows={3}
+                                  value={character.uc}
+                                  onChange={(value) => handleCharacterPromptChange(index, 'uc', value)}
+                                  placeholder="bad anatomy, glowing eyes"
+                                />
                               </FormField>
 
                               <div className="grid gap-4 sm:grid-cols-2">

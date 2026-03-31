@@ -32,6 +32,8 @@ type ActiveWildcardQuery = {
   query: string
 }
 
+type WildcardFilterMode = 'available-only' | 'all'
+
 function flattenWildcards(nodes: WildcardRecord[], parentPath: string[] = []): FlattenedWildcardRecord[] {
   const entries: FlattenedWildcardRecord[] = []
 
@@ -132,6 +134,7 @@ export function WildcardInlinePickerField({
   const [caretPosition, setCaretPosition] = useState(0)
   const [activeIndex, setActiveIndex] = useState(0)
   const [isFocused, setIsFocused] = useState(false)
+  const [filterMode, setFilterMode] = useState<WildcardFilterMode>('available-only')
 
   const wildcardsQuery = useQuery({
     queryKey: ['wildcards', 'inline-picker'],
@@ -153,8 +156,20 @@ export function WildcardInlinePickerField({
         record,
         score: scoreWildcardMatch(record, normalizedQuery),
         toolItemCount: countItemsForTool(record.items, tool),
+        naiItemCount: countItemsForTool(record.items, 'nai'),
+        comfyuiItemCount: countItemsForTool(record.items, 'comfyui'),
       }))
-      .filter(({ score }) => normalizedQuery.length === 0 || score >= 0)
+      .filter(({ score, toolItemCount }) => {
+        if (normalizedQuery.length > 0 && score < 0) {
+          return false
+        }
+
+        if (filterMode === 'available-only' && toolItemCount === 0) {
+          return false
+        }
+
+        return true
+      })
       .sort((left, right) => {
         if (right.score !== left.score) {
           return right.score - left.score
@@ -169,13 +184,13 @@ export function WildcardInlinePickerField({
       .slice(0, 8)
 
     return records
-  }, [activeQuery, flattenedWildcards, tool])
+  }, [activeQuery, filterMode, flattenedWildcards, tool])
 
   const isPopupOpen = isFocused && activeQuery !== null && !disabled
 
   useEffect(() => {
     setActiveIndex(0)
-  }, [activeQuery?.query, tool])
+  }, [activeQuery?.query, filterMode, tool])
 
   useEffect(() => () => {
     if (closeTimerRef.current !== null) {
@@ -287,18 +302,49 @@ export function WildcardInlinePickerField({
 
       {isPopupOpen ? (
         <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-sm border border-border bg-surface-container shadow-lg">
-          <div className="flex items-center justify-between gap-2 border-b border-border/70 px-3 py-2 text-xs text-muted-foreground">
-            <span>
-              `++` 와일드카드 {tool === 'nai' ? 'NAI' : 'ComfyUI'} 검색
-            </span>
-            <Badge variant="outline">{suggestions.length}</Badge>
+          <div className="space-y-2 border-b border-border/70 px-3 py-2 text-xs text-muted-foreground">
+            <div className="flex items-center justify-between gap-2">
+              <span>
+                `++` 와일드카드 {tool === 'nai' ? 'NAI' : 'ComfyUI'} 검색
+              </span>
+              <Badge variant="outline">{suggestions.length}</Badge>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  setFilterMode('available-only')
+                }}
+                className={cn(
+                  'rounded-sm border px-2 py-1 transition-colors',
+                  filterMode === 'available-only' ? 'border-primary bg-surface-high text-foreground' : 'border-border bg-surface-lowest hover:bg-surface-high',
+                )}
+              >
+                현재 툴 항목만
+              </button>
+              <button
+                type="button"
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  setFilterMode('all')
+                }}
+                className={cn(
+                  'rounded-sm border px-2 py-1 transition-colors',
+                  filterMode === 'all' ? 'border-primary bg-surface-high text-foreground' : 'border-border bg-surface-lowest hover:bg-surface-high',
+                )}
+              >
+                전체 보기
+              </button>
+            </div>
           </div>
 
           {wildcardsQuery.isLoading ? (
             <div className="px-3 py-3 text-sm text-muted-foreground">와일드카드 불러오는 중…</div>
           ) : suggestions.length > 0 ? (
             <div className="max-h-72 overflow-y-auto p-2">
-              {suggestions.map(({ record, toolItemCount }, index) => {
+              {suggestions.map(({ record, toolItemCount, naiItemCount, comfyuiItemCount }, index) => {
                 const isActive = index === activeIndex
                 return (
                   <button
@@ -318,19 +364,24 @@ export function WildcardInlinePickerField({
                         <span className="truncate text-sm font-medium text-foreground">{record.name}</span>
                         <Badge variant={record.type === 'chain' ? 'secondary' : 'outline'}>{record.type === 'chain' ? 'Chain' : 'Wildcard'}</Badge>
                         {record.isAutoCollected ? <Badge variant="outline">Auto LoRA</Badge> : null}
+                        {toolItemCount === 0 ? <Badge variant="outline">현재 툴 비어있음</Badge> : null}
                       </div>
                       <div className="mt-1 truncate text-xs text-muted-foreground">{record.path.join(' / ')}</div>
                     </div>
 
-                    <div className="shrink-0">
-                      <Badge variant="outline">{tool.toUpperCase()} {toolItemCount}</Badge>
+                    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                      <Badge variant={tool === 'nai' ? 'secondary' : 'outline'}>NAI {naiItemCount}</Badge>
+                      <Badge variant={tool === 'comfyui' ? 'secondary' : 'outline'}>Comfy {comfyuiItemCount}</Badge>
                     </div>
                   </button>
                 )
               })}
             </div>
           ) : (
-            <div className="px-3 py-3 text-sm text-muted-foreground">검색되는 와일드카드가 없어.</div>
+            <div className="space-y-2 px-3 py-3 text-sm text-muted-foreground">
+              <div>검색되는 와일드카드가 없어.</div>
+              {filterMode === 'available-only' ? <div className="text-xs">현재 툴 항목만 켜져 있으면 다른 툴 전용 와일드카드는 숨겨질 수 있어.</div> : null}
+            </div>
           )}
         </div>
       ) : null}
