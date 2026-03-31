@@ -21,19 +21,54 @@ export type NAICharacterPromptDraft = {
   centerY: string
 }
 
+export type NAIVibeDraft = {
+  image?: SelectedImageDraft
+  encoded: string
+  strength: string
+  informationExtracted: string
+}
+
+export type NAICharacterReferenceDraft = {
+  image?: SelectedImageDraft
+  type: 'character' | 'style' | 'character&style'
+  strength: string
+  fidelity: string
+}
+
+export type NAIResolutionPreset = {
+  key: string
+  label: string
+  width: number
+  height: number
+}
+
+export const NAI_RESOLUTION_PRESETS: NAIResolutionPreset[] = [
+  { key: 'portrait-832', label: 'Portrait 832×1216', width: 832, height: 1216 },
+  { key: 'landscape-832', label: 'Landscape 1216×832', width: 1216, height: 832 },
+  { key: 'portrait-1024', label: 'Portrait 1024×1536', width: 1024, height: 1536 },
+  { key: 'landscape-1024', label: 'Landscape 1536×1024', width: 1536, height: 1024 },
+  { key: 'square-1024', label: 'Square 1024×1024', width: 1024, height: 1024 },
+]
+
 export type NAIFormDraft = {
   prompt: string
   negativePrompt: string
   model: string
   action: 'generate' | 'img2img' | 'infill'
   sampler: string
+  scheduler: string
   width: string
   height: string
+  resolutionPreset: string
   steps: string
   scale: string
   samples: string
   seed: string
+  rating: 'general' | 'sensitive' | 'questionable' | 'explicit'
+  applyQualityTags: boolean
   characters: NAICharacterPromptDraft[]
+  vibes: NAIVibeDraft[]
+  characterReferences: NAICharacterReferenceDraft[]
   varietyPlus: boolean
   strength: string
   noise: string
@@ -69,19 +104,37 @@ export const EMPTY_NAI_CHARACTER_PROMPT: NAICharacterPromptDraft = {
   centerY: '0.5',
 }
 
+export const EMPTY_NAI_VIBE: NAIVibeDraft = {
+  encoded: '',
+  strength: '0.6',
+  informationExtracted: '1',
+}
+
+export const EMPTY_NAI_CHARACTER_REFERENCE: NAICharacterReferenceDraft = {
+  type: 'character&style',
+  strength: '0.6',
+  fidelity: '1',
+}
+
 export const DEFAULT_NAI_FORM: NAIFormDraft = {
   prompt: '',
   negativePrompt: '',
   model: 'nai-diffusion-4-5-curated',
   action: 'generate',
   sampler: 'k_euler',
+  scheduler: 'karras',
   width: '1024',
   height: '1024',
+  resolutionPreset: 'square-1024',
   steps: '28',
   scale: '6',
   samples: '1',
   seed: '',
+  rating: 'sensitive',
+  applyQualityTags: true,
   characters: [],
+  vibes: [],
+  characterReferences: [],
   varietyPlus: false,
   strength: '0.3',
   noise: '0',
@@ -237,6 +290,19 @@ export function supportsNaiCharacterPrompts(model: string) {
   return model.includes('nai-diffusion-4')
 }
 
+/** Check whether the selected NAI model supports 4.5-only character references. */
+export function supportsNaiCharacterReferences(model: string) {
+  return model.includes('nai-diffusion-4-5')
+}
+
+/** Resolve the resolution preset key for a width/height pair. */
+export function resolveNaiResolutionPreset(width: string, height: string) {
+  const numericWidth = Number(width)
+  const numericHeight = Number(height)
+  const preset = NAI_RESOLUTION_PRESETS.find((entry) => entry.width === numericWidth && entry.height === numericHeight)
+  return preset?.key || 'custom'
+}
+
 /** Convert the editable character-prompt rows into the backend payload shape. */
 export function buildNaiCharacterPromptPayload(characters: NAICharacterPromptDraft[]) {
   return characters
@@ -249,6 +315,29 @@ export function buildNaiCharacterPromptPayload(characters: NAICharacterPromptDra
     .filter((character) => character.prompt.length > 0)
 }
 
+/** Convert Vibe rows into the backend payload shape. */
+export function buildNaiVibePayload(vibes: NAIVibeDraft[]) {
+  return vibes
+    .map((vibe) => ({
+      encoded: vibe.encoded.trim(),
+      strength: parseNumberInput(vibe.strength, 0.6),
+      information_extracted: parseNumberInput(vibe.informationExtracted, 1),
+    }))
+    .filter((vibe) => vibe.encoded.length > 0)
+}
+
+/** Convert character-reference rows into the backend payload shape. */
+export function buildNaiCharacterReferencePayload(characterReferences: NAICharacterReferenceDraft[]) {
+  return characterReferences
+    .map((reference) => ({
+      image: reference.image?.dataUrl || '',
+      type: reference.type,
+      strength: parseNumberInput(reference.strength, 0.6),
+      fidelity: parseNumberInput(reference.fidelity, 1),
+    }))
+    .filter((reference) => reference.image.length > 0)
+}
+
 /** Build a backend-ready NAI snapshot from the current form draft. */
 export function buildNaiModuleSnapshot(form: NAIFormDraft) {
   return {
@@ -257,13 +346,18 @@ export function buildNaiModuleSnapshot(form: NAIFormDraft) {
     model: form.model,
     action: form.action,
     sampler: form.sampler,
+    noise_schedule: form.scheduler,
     width: parseNumberInput(form.width, 1024),
     height: parseNumberInput(form.height, 1024),
     steps: parseNumberInput(form.steps, 28),
     scale: parseNumberInput(form.scale, 6),
     n_samples: parseNumberInput(form.samples, 1),
     seed: form.seed.trim().length > 0 ? Number(form.seed) : null,
+    rating: form.rating,
+    quality_tags_enabled: form.applyQualityTags,
     characters: buildNaiCharacterPromptPayload(form.characters),
+    vibes: buildNaiVibePayload(form.vibes),
+    character_refs: buildNaiCharacterReferencePayload(form.characterReferences),
     variety_plus: form.varietyPlus,
     image: form.sourceImage?.dataUrl || null,
     mask: form.maskImage?.dataUrl || null,
@@ -281,17 +375,26 @@ export function buildNaiModuleFieldOptions(form: NAIFormDraft): ModuleFieldOptio
     { key: 'model', label: 'Model', dataType: 'text' },
     { key: 'action', label: 'Action', dataType: 'text' },
     { key: 'sampler', label: 'Sampler', dataType: 'text' },
+    { key: 'noise_schedule', label: 'Scheduler', dataType: 'text' },
     { key: 'width', label: 'Width', dataType: 'number' },
     { key: 'height', label: 'Height', dataType: 'number' },
     { key: 'steps', label: 'Steps', dataType: 'number' },
     { key: 'scale', label: 'CFG Scale', dataType: 'number' },
     { key: 'n_samples', label: 'Samples', dataType: 'number' },
     { key: 'seed', label: 'Seed', dataType: 'number' },
+    { key: 'rating', label: 'Rating', dataType: 'text' },
+    { key: 'quality_tags_enabled', label: 'Quality Tags', dataType: 'boolean' },
     { key: 'variety_plus', label: 'Variety+', dataType: 'boolean' },
   ]
 
   if (supportsNaiCharacterPrompts(form.model)) {
     options.push({ key: 'characters', label: 'Character Prompts', dataType: 'json' })
+  }
+
+  options.push({ key: 'vibes', label: 'Vibe Transfer', dataType: 'json' })
+
+  if (supportsNaiCharacterReferences(form.model)) {
+    options.push({ key: 'character_refs', label: 'Character References', dataType: 'json' })
   }
 
   if (form.action !== 'generate') {

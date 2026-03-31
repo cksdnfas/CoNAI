@@ -1,145 +1,286 @@
 /**
- * NovelAI 메타데이터 전처리 유틸리티
+ * NovelAI metadata normalization helpers shared by direct generation and graph execution.
  */
 
-interface NAICharacterPrompt {
-  prompt: string;
-  uc?: string;
-  center_x?: number;
-  center_y?: number;
+export type NAIRatingMode = 'general' | 'sensitive' | 'questionable' | 'explicit'
+
+export interface NAICharacterPrompt {
+  prompt: string
+  uc?: string
+  center_x?: number
+  center_y?: number
 }
 
-interface NAIMetadataParams {
-  prompt: string;
-  negative_prompt?: string;
-  model?: string;
-  action?: string;
-  width?: number;
-  height?: number;
-  steps?: number;
-  scale?: number;
-  sampler?: string;
-  variety_plus?: boolean;
-  n_samples?: number;
-  seed?: number;
-  ucPreset?: number;
-  uncond_scale?: number;
-  cfg_rescale?: number;
-  noise_schedule?: string;
-  // img2img/inpaint 관련
-  image?: string;
-  strength?: number;
-  noise?: number;
-  extra_noise_seed?: number;
-  mask?: string;
-  add_original_image?: boolean;
-  // Vibe Transfer
-  reference_image_multiple?: string[];
-  reference_information_extracted_multiple?: number[];
-  reference_strength_multiple?: number[];
-  // Character Prompts (V4+)
-  characters?: NAICharacterPrompt[];
-  // Group Assignment
-  groupId?: number;
+export interface NAIVibeTransfer {
+  encoded: string
+  strength?: number
+  information_extracted?: number
 }
 
-interface NAIMetadataInputParams extends Omit<NAIMetadataParams, 'characters'> {
-  characters?: NAICharacterPrompt[] | string;
+export interface NAICharacterReference {
+  image: string
+  type?: 'character' | 'style' | 'character&style'
+  strength?: number
+  fidelity?: number
 }
 
-function normalizeCharacters(value: NAIMetadataInputParams['characters']): NAICharacterPrompt[] {
+export interface NAIMetadataParams {
+  prompt: string
+  negative_prompt?: string
+  model?: string
+  action?: 'generate' | 'img2img' | 'infill' | string
+  width?: number
+  height?: number
+  steps?: number
+  scale?: number
+  sampler?: string
+  variety_plus?: boolean
+  n_samples?: number
+  seed?: number
+  ucPreset?: number
+  uncond_scale?: number
+  cfg_rescale?: number
+  noise_schedule?: string
+  rating?: NAIRatingMode
+  quality_tags_enabled?: boolean
+  image?: string
+  strength?: number
+  noise?: number
+  extra_noise_seed?: number
+  mask?: string
+  add_original_image?: boolean
+  reference_image_multiple?: string[]
+  reference_information_extracted_multiple?: number[]
+  reference_strength_multiple?: number[]
+  director_reference_images?: string[]
+  director_reference_information_extracted?: number[]
+  director_reference_strength_values?: number[]
+  director_reference_secondary_strength_values?: number[]
+  director_reference_descriptions?: Array<Record<string, unknown>>
+  characters?: NAICharacterPrompt[]
+  vibes?: NAIVibeTransfer[]
+  character_refs?: NAICharacterReference[]
+  groupId?: number
+}
+
+export interface NAIMetadataInputParams extends Omit<NAIMetadataParams, 'characters' | 'vibes' | 'character_refs'> {
+  characters?: NAICharacterPrompt[] | string
+  vibes?: NAIVibeTransfer[] | string
+  character_refs?: NAICharacterReference[] | string
+}
+
+const QUALITY_TAGS_BY_MODEL: Record<string, string> = {
+  'nai-diffusion-4-5-full': ', location, very aesthetic, masterpiece, no text',
+  'nai-diffusion-4-5-curated': ', location, very aesthetic, masterpiece, no text',
+  'nai-diffusion-4-curated-preview': ', no text, amazing quality, very aesthetic, absurdres',
+  'nai-diffusion-3': ', best quality, amazing quality, very aesthetic, absurdres',
+}
+
+const RATING_PROMPT_TAGS: Record<NAIRatingMode, string> = {
+  general: 'rating:general, safe',
+  sensitive: 'rating:sensitive',
+  questionable: 'rating:questionable, nsfw',
+  explicit: 'rating:explicit, nsfw',
+}
+
+const RATING_NEGATIVE_TAGS: Partial<Record<NAIRatingMode, string>> = {
+  general: 'nsfw',
+  sensitive: 'nsfw',
+}
+
+/** Parse JSON-or-array payloads into a safe array shape. */
+function normalizeListInput(value: unknown): unknown[] {
   if (!value) {
-    return [];
+    return []
   }
 
-  let source: unknown = value;
-
+  let source: unknown = value
   if (typeof value === 'string') {
-    const trimmed = value.trim();
+    const trimmed = value.trim()
     if (!trimmed) {
-      return [];
+      return []
     }
 
     try {
-      source = JSON.parse(trimmed);
+      source = JSON.parse(trimmed)
     } catch {
-      return [];
+      return []
     }
   }
 
-  if (!Array.isArray(source)) {
-    return [];
-  }
+  return Array.isArray(source) ? source : []
+}
 
-  const normalized: NAICharacterPrompt[] = [];
+/** Normalize character prompt rows into a typed payload. */
+function normalizeCharacters(value: NAIMetadataInputParams['characters']): NAICharacterPrompt[] {
+  const normalized: NAICharacterPrompt[] = []
 
-  for (const entry of source) {
+  for (const entry of normalizeListInput(value)) {
     if (!entry || typeof entry !== 'object') {
-      continue;
+      continue
     }
 
-    const rawEntry = entry as Record<string, unknown>;
-    const prompt = typeof rawEntry.prompt === 'string' ? rawEntry.prompt.trim() : '';
+    const rawEntry = entry as Record<string, unknown>
+    const prompt = typeof rawEntry.prompt === 'string' ? rawEntry.prompt.trim() : ''
     if (!prompt) {
-      continue;
+      continue
     }
 
-    const uc = typeof rawEntry.uc === 'string' ? rawEntry.uc.trim() : undefined;
-    const centerX = typeof rawEntry.center_x === 'number'
-      ? rawEntry.center_x
-      : typeof rawEntry.center_x === 'string'
-        ? Number(rawEntry.center_x)
-        : 0.5;
-    const centerY = typeof rawEntry.center_y === 'number'
-      ? rawEntry.center_y
-      : typeof rawEntry.center_y === 'string'
-        ? Number(rawEntry.center_y)
-        : 0.5;
+    const centerX = typeof rawEntry.center_x === 'number' ? rawEntry.center_x : Number(rawEntry.center_x ?? 0.5)
+    const centerY = typeof rawEntry.center_y === 'number' ? rawEntry.center_y : Number(rawEntry.center_y ?? 0.5)
 
     normalized.push({
       prompt,
-      uc,
+      uc: typeof rawEntry.uc === 'string' ? rawEntry.uc.trim() : undefined,
       center_x: Number.isFinite(centerX) ? centerX : 0.5,
       center_y: Number.isFinite(centerY) ? centerY : 0.5,
-    });
+    })
   }
 
-  return normalized;
+  return normalized
 }
 
-/**
- * 메타데이터 전처리
- */
+/** Normalize vibe-transfer entries into a typed payload. */
+function normalizeVibes(value: NAIMetadataInputParams['vibes']): NAIVibeTransfer[] {
+  const normalized: NAIVibeTransfer[] = []
+
+  for (const entry of normalizeListInput(value)) {
+    if (!entry || typeof entry !== 'object') {
+      continue
+    }
+
+    const rawEntry = entry as Record<string, unknown>
+    const encoded = typeof rawEntry.encoded === 'string' ? rawEntry.encoded.trim() : ''
+    if (!encoded) {
+      continue
+    }
+
+    const strength = typeof rawEntry.strength === 'number' ? rawEntry.strength : Number(rawEntry.strength ?? 0.6)
+    const informationExtracted = typeof rawEntry.information_extracted === 'number'
+      ? rawEntry.information_extracted
+      : Number(rawEntry.information_extracted ?? 1)
+
+    normalized.push({
+      encoded,
+      strength: Number.isFinite(strength) ? strength : 0.6,
+      information_extracted: Number.isFinite(informationExtracted) ? informationExtracted : 1,
+    })
+  }
+
+  return normalized
+}
+
+/** Normalize character-reference entries into a typed payload. */
+function normalizeCharacterReferences(value: NAIMetadataInputParams['character_refs']): NAICharacterReference[] {
+  const normalized: NAICharacterReference[] = []
+
+  for (const entry of normalizeListInput(value)) {
+    if (!entry || typeof entry !== 'object') {
+      continue
+    }
+
+    const rawEntry = entry as Record<string, unknown>
+    const image = typeof rawEntry.image === 'string' ? rawEntry.image.trim() : ''
+    if (!image) {
+      continue
+    }
+
+    const strength = typeof rawEntry.strength === 'number' ? rawEntry.strength : Number(rawEntry.strength ?? 0.6)
+    const fidelity = typeof rawEntry.fidelity === 'number' ? rawEntry.fidelity : Number(rawEntry.fidelity ?? 1)
+    const type = rawEntry.type === 'character' || rawEntry.type === 'style' || rawEntry.type === 'character&style'
+      ? rawEntry.type
+      : 'character&style'
+
+    normalized.push({
+      image,
+      type,
+      strength: Number.isFinite(strength) ? strength : 0.6,
+      fidelity: Number.isFinite(fidelity) ? fidelity : 1,
+    })
+  }
+
+  return normalized
+}
+
+/** Append a comma-separated prompt suffix while avoiding simple duplicates. */
+function appendPromptSuffix(base: string, suffix: string) {
+  const trimmedBase = base.trim()
+  const normalizedSuffix = suffix.trim().replace(/^,\s*/, '')
+  if (!normalizedSuffix) {
+    return trimmedBase
+  }
+
+  const lowerBase = trimmedBase.toLowerCase()
+  const lowerSuffix = normalizedSuffix.toLowerCase()
+  if (lowerBase.includes(lowerSuffix)) {
+    return trimmedBase
+  }
+
+  return trimmedBase.length > 0 ? `${trimmedBase}, ${normalizedSuffix}` : normalizedSuffix
+}
+
+/** Apply rating and quality-tag helpers so generated prompts match the requested mode. */
+function applyPromptEnhancers(prompt: string, negativePrompt: string, model: string, rating: NAIRatingMode, qualityTagsEnabled: boolean) {
+  let nextPrompt = prompt.trim()
+  let nextNegativePrompt = negativePrompt.trim()
+
+  nextPrompt = appendPromptSuffix(nextPrompt, RATING_PROMPT_TAGS[rating])
+  if (RATING_NEGATIVE_TAGS[rating]) {
+    nextNegativePrompt = appendPromptSuffix(nextNegativePrompt, RATING_NEGATIVE_TAGS[rating]!)
+  }
+
+  if (qualityTagsEnabled) {
+    nextPrompt = appendPromptSuffix(nextPrompt, QUALITY_TAGS_BY_MODEL[model] ?? '')
+  }
+
+  return {
+    prompt: nextPrompt,
+    negativePrompt: nextNegativePrompt,
+  }
+}
+
+/** Normalize and enrich one NovelAI payload before request building. */
 export function preprocessMetadata(params: NAIMetadataInputParams): NAIMetadataParams {
   const metadata: NAIMetadataParams = {
     ...params,
+    prompt: typeof params.prompt === 'string' ? params.prompt.trim() : '',
+    negative_prompt: typeof params.negative_prompt === 'string' ? params.negative_prompt.trim() : '',
     characters: normalizeCharacters(params.characters),
-  };
-
-  // 기본값 설정 (2025년 최신 모델 및 권장 설정)
-  metadata.model = metadata.model || 'nai-diffusion-4-5-curated';
-  metadata.action = metadata.action || 'generate';
-  metadata.width = metadata.width || 1024;
-  metadata.height = metadata.height || 1024;
-  metadata.steps = metadata.steps || 28;
-  metadata.scale = metadata.scale || 6.0;
-  metadata.sampler = metadata.sampler || 'k_euler';
-  metadata.variety_plus = metadata.variety_plus ?? false; // 기본값 false
-  metadata.n_samples = metadata.n_samples || 1;
-  metadata.seed = metadata.seed || Math.floor(Math.random() * 4294967288);
-  metadata.uncond_scale = metadata.uncond_scale ?? 1.0;
-  metadata.cfg_rescale = metadata.cfg_rescale ?? 0.0;
-  metadata.noise_schedule = metadata.noise_schedule || 'karras';
-
-  // img2img/inpaint 특수 처리
-  if (metadata.action === 'img2img' || metadata.action === 'infill') {
-    metadata.strength = metadata.strength || 0.3;
-    metadata.noise = metadata.noise || 0;
-    metadata.extra_noise_seed = metadata.extra_noise_seed ||
-      Math.floor(Math.random() * 4294967288);
+    vibes: normalizeVibes(params.vibes),
+    character_refs: normalizeCharacterReferences(params.character_refs),
   }
 
-  return metadata;
-}
+  metadata.model = metadata.model || 'nai-diffusion-4-5-curated'
+  metadata.action = metadata.action || 'generate'
+  metadata.width = metadata.width || 1024
+  metadata.height = metadata.height || 1024
+  metadata.steps = metadata.steps || 28
+  metadata.scale = metadata.scale || 6.0
+  metadata.sampler = metadata.sampler || 'k_euler'
+  metadata.variety_plus = metadata.variety_plus ?? false
+  metadata.n_samples = metadata.n_samples || 1
+  metadata.seed = metadata.seed || Math.floor(Math.random() * 4294967288)
+  metadata.uncond_scale = metadata.uncond_scale ?? 1.0
+  metadata.cfg_rescale = metadata.cfg_rescale ?? 0.0
+  metadata.noise_schedule = metadata.noise_schedule || 'karras'
+  metadata.rating = metadata.rating || 'sensitive'
+  metadata.quality_tags_enabled = metadata.quality_tags_enabled ?? true
 
-export type { NAICharacterPrompt, NAIMetadataInputParams, NAIMetadataParams };
+  const promptBundle = applyPromptEnhancers(
+    metadata.prompt,
+    metadata.negative_prompt || '',
+    metadata.model,
+    metadata.rating,
+    metadata.quality_tags_enabled,
+  )
+  metadata.prompt = promptBundle.prompt
+  metadata.negative_prompt = promptBundle.negativePrompt
+
+  if (metadata.action === 'img2img' || metadata.action === 'infill') {
+    metadata.strength = metadata.strength || 0.3
+    metadata.noise = metadata.noise || 0
+    metadata.extra_noise_seed = metadata.extra_noise_seed || Math.floor(Math.random() * 4294967288)
+  }
+
+  return metadata
+}

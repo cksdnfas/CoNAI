@@ -133,8 +133,11 @@ export interface NAIImageGenerationPayload {
   steps?: number
   scale?: number
   sampler?: string
+  noise_schedule?: string
   n_samples?: number
   seed?: number
+  rating?: 'general' | 'sensitive' | 'questionable' | 'explicit'
+  quality_tags_enabled?: boolean
   variety_plus?: boolean
   image?: string
   mask?: string
@@ -146,6 +149,17 @@ export interface NAIImageGenerationPayload {
     uc?: string
     center_x?: number
     center_y?: number
+  }>
+  vibes?: Array<{
+    encoded: string
+    strength?: number
+    information_extracted?: number
+  }>
+  character_refs?: Array<{
+    image: string
+    type?: 'character' | 'style' | 'character&style'
+    strength?: number
+    fidelity?: number
   }>
 }
 
@@ -160,8 +174,30 @@ export interface NAIImageGenerationResponse {
     steps?: number
     scale?: number
     sampler?: string
+    scheduler?: string
     model?: string
   }
+}
+
+export interface NAIEncodeVibePayload {
+  image: string
+  model?: string
+  information_extracted?: number
+}
+
+export interface NAIEncodeVibeResponse {
+  encoded: string
+}
+
+export interface NAIUpscalePayload {
+  image: string
+  scale?: number
+}
+
+export interface NAIUpscaleResponse {
+  image: string
+  filename: string
+  sourceBytes: number
 }
 
 export interface ComfyUIImageFieldValue {
@@ -502,6 +538,28 @@ export async function getNaiCostEstimate(payload: {
 /** Start a NovelAI image generation request. */
 export async function generateNaiImage(payload: NAIImageGenerationPayload) {
   return requestJson<NAIImageGenerationResponse>('/api/nai/generate/image', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Encode one image into a reusable NovelAI vibe payload. */
+export async function encodeNaiVibe(payload: NAIEncodeVibePayload) {
+  return requestJson<NAIEncodeVibeResponse>('/api/nai/generate/encode-vibe', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Upscale one image through NovelAI and return the generated PNG bytes as base64. */
+export async function upscaleNaiImage(payload: NAIUpscalePayload) {
+  return requestJson<NAIUpscaleResponse>('/api/nai/generate/upscale', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
