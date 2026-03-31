@@ -57,6 +57,12 @@ import { NaiModuleSaveModal } from './nai-module-save-modal'
 type NaiGenerationPanelProps = {
   refreshNonce: number
   onHistoryRefresh: () => void
+  incomingPromptInsert?: {
+    id: number
+    text: string
+    sourceLabel: string
+  } | null
+  onIncomingPromptInsertConsumed?: () => void
 }
 
 type NaiLoginMode = 'account' | 'token'
@@ -70,6 +76,22 @@ function decodeBase64Png(data: string) {
   }
 
   return new Blob([bytes], { type: 'image/png' })
+}
+
+/** Append one prompt fragment into an existing prompt string without losing manual edits. */
+function appendPromptFragment(currentPrompt: string, nextFragment: string) {
+  const normalizedCurrent = currentPrompt.trim()
+  const normalizedNext = nextFragment.trim()
+
+  if (!normalizedNext) {
+    return normalizedCurrent
+  }
+
+  if (!normalizedCurrent) {
+    return normalizedNext
+  }
+
+  return `${normalizedCurrent}, ${normalizedNext}`
 }
 
 /** Render a compact selected-image preview card. */
@@ -88,7 +110,12 @@ function SelectedImageCard({ image, alt, onRemove }: { image: SelectedImageDraft
 }
 
 /** Render the NAI login, generation, and module-authoring workflow. */
-export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenerationPanelProps) {
+export function NaiGenerationPanel({
+  refreshNonce,
+  onHistoryRefresh,
+  incomingPromptInsert = null,
+  onIncomingPromptInsertConsumed,
+}: NaiGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
   const [loginMode, setLoginMode] = useState<NaiLoginMode>('account')
   const [naiUsernameInput, setNaiUsernameInput] = useState('')
@@ -100,6 +127,8 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
   const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
   const [isUpscaling, setIsUpscaling] = useState(false)
   const [encodingVibeIndex, setEncodingVibeIndex] = useState<number | null>(null)
+  const [savedVibeSearch, setSavedVibeSearch] = useState('')
+  const [savedCharacterReferenceSearch, setSavedCharacterReferenceSearch] = useState('')
   const [naiForm, setNaiForm] = useState<NAIFormDraft>(DEFAULT_NAI_FORM)
   const [naiModuleName, setNaiModuleName] = useState('NAI Module')
   const [naiModuleDescription, setNaiModuleDescription] = useState('')
@@ -152,6 +181,37 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
   const naiModuleFieldOptions = useMemo(() => buildNaiModuleFieldOptions(naiForm), [naiForm])
   const supportsCharacterPrompts = useMemo(() => supportsNaiCharacterPrompts(naiForm.model), [naiForm.model])
   const supportsCharacterReference = useMemo(() => supportsNaiCharacterReferences(naiForm.model), [naiForm.model])
+  const filteredSavedVibes = useMemo(() => {
+    const items = savedVibesQuery.data || []
+    const keyword = savedVibeSearch.trim().toLowerCase()
+    if (!keyword) {
+      return items
+    }
+
+    return items.filter((item) => `${item.label} ${item.model}`.toLowerCase().includes(keyword))
+  }, [savedVibeSearch, savedVibesQuery.data])
+  const filteredSavedCharacterReferences = useMemo(() => {
+    const items = savedCharacterReferencesQuery.data || []
+    const keyword = savedCharacterReferenceSearch.trim().toLowerCase()
+    if (!keyword) {
+      return items
+    }
+
+    return items.filter((item) => `${item.label} ${item.type}`.toLowerCase().includes(keyword))
+  }, [savedCharacterReferenceSearch, savedCharacterReferencesQuery.data])
+
+  useEffect(() => {
+    if (!incomingPromptInsert) {
+      return
+    }
+
+    setNaiForm((current) => ({
+      ...current,
+      prompt: appendPromptFragment(current.prompt, incomingPromptInsert.text),
+    }))
+    showSnackbar({ message: `${incomingPromptInsert.sourceLabel}를 NAI prompt에 넣었어.`, tone: 'info' })
+    onIncomingPromptInsertConsumed?.()
+  }, [incomingPromptInsert, onIncomingPromptInsertConsumed, showSnackbar])
 
   useEffect(() => {
     if (refreshNonce === 0) {
@@ -1071,19 +1131,31 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     )}
 
                     <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
-                      <div className="text-sm font-medium text-foreground">Saved Vibes</div>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium text-foreground">Saved Vibes</div>
+                          <div className="text-xs text-muted-foreground">현재 모델 기준 저장소야. 검색으로 빠르게 골라.</div>
+                        </div>
+                        <div className="w-full sm:w-72">
+                          <Input value={savedVibeSearch} onChange={(event) => setSavedVibeSearch(event.target.value)} placeholder="이름 또는 모델 검색" />
+                        </div>
+                      </div>
                       {savedVibesQuery.isLoading ? (
                         <div className="text-sm text-muted-foreground">불러오는 중…</div>
-                      ) : savedVibesQuery.data && savedVibesQuery.data.length > 0 ? (
+                      ) : filteredSavedVibes.length > 0 ? (
                         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                          {savedVibesQuery.data.map((asset) => (
+                          {filteredSavedVibes.map((asset) => (
                             <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-container p-3">
                               <div className="space-y-1">
                                 <div className="text-sm font-medium text-foreground">{asset.label}</div>
-                                <div className="text-xs text-muted-foreground">{asset.model}</div>
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                  <span>{asset.model}</span>
+                                  <Badge variant="outline">strength {asset.strength}</Badge>
+                                  <Badge variant="outline">IE {asset.information_extracted}</Badge>
+                                </div>
                               </div>
                               {asset.image_data_url ? <img src={asset.image_data_url} alt={asset.label} className="max-h-40 w-full rounded-sm border border-border object-contain" /> : null}
-                              <div className="text-xs text-muted-foreground">strength {asset.strength} · IE {asset.information_extracted}</div>
+                              <div className="text-[11px] text-muted-foreground">{new Date(asset.created_date).toLocaleString('ko-KR')}</div>
                               <div className="flex justify-end gap-2">
                                 <Button type="button" size="sm" variant="outline" onClick={() => handleLoadVibeFromStore(asset.id)}>불러오기</Button>
                                 <Button type="button" size="sm" variant="ghost" onClick={() => void handleDeleteVibeFromStore(asset.id)}>삭제</Button>
@@ -1092,7 +1164,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                           ))}
                         </div>
                       ) : (
-                        <div className="text-sm text-muted-foreground">저장된 Vibe가 아직 없어.</div>
+                        <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 Vibe가 아직 없어.</div>
                       )}
                     </div>
                   </div>
@@ -1167,18 +1239,31 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     )}
 
                     <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
-                      <div className="text-sm font-medium text-foreground">Saved Character References</div>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium text-foreground">Saved Character References</div>
+                          <div className="text-xs text-muted-foreground">4.5 레퍼런스를 이름/타입으로 바로 찾아서 재사용해.</div>
+                        </div>
+                        <div className="w-full sm:w-72">
+                          <Input value={savedCharacterReferenceSearch} onChange={(event) => setSavedCharacterReferenceSearch(event.target.value)} placeholder="이름 또는 타입 검색" />
+                        </div>
+                      </div>
                       {savedCharacterReferencesQuery.isLoading ? (
                         <div className="text-sm text-muted-foreground">불러오는 중…</div>
-                      ) : savedCharacterReferencesQuery.data && savedCharacterReferencesQuery.data.length > 0 ? (
+                      ) : filteredSavedCharacterReferences.length > 0 ? (
                         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                          {savedCharacterReferencesQuery.data.map((asset) => (
+                          {filteredSavedCharacterReferences.map((asset) => (
                             <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-container p-3">
                               <div className="space-y-1">
                                 <div className="text-sm font-medium text-foreground">{asset.label}</div>
-                                <div className="text-xs text-muted-foreground">{asset.type} · strength {asset.strength} · fidelity {asset.fidelity}</div>
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                  <Badge variant="outline">{asset.type}</Badge>
+                                  <Badge variant="outline">strength {asset.strength}</Badge>
+                                  <Badge variant="outline">fidelity {asset.fidelity}</Badge>
+                                </div>
                               </div>
                               <img src={asset.image_data_url} alt={asset.label} className="max-h-40 w-full rounded-sm border border-border object-contain" />
+                              <div className="text-[11px] text-muted-foreground">{new Date(asset.created_date).toLocaleString('ko-KR')}</div>
                               <div className="flex justify-end gap-2">
                                 <Button type="button" size="sm" variant="outline" onClick={() => handleLoadCharacterReferenceFromStore(asset.id)}>불러오기</Button>
                                 <Button type="button" size="sm" variant="ghost" onClick={() => void handleDeleteCharacterReferenceFromStore(asset.id)}>삭제</Button>
@@ -1187,7 +1272,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                           ))}
                         </div>
                       ) : (
-                        <div className="text-sm text-muted-foreground">저장된 Character Reference가 아직 없어.</div>
+                        <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 Character Reference가 아직 없어.</div>
                       )}
                     </div>
                   </div>
