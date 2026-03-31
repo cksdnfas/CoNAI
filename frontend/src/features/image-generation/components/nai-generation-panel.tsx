@@ -53,16 +53,11 @@ import {
   type SelectedImageDraft,
 } from '../image-generation-shared'
 import { NaiModuleSaveModal } from './nai-module-save-modal'
+import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
 
 type NaiGenerationPanelProps = {
   refreshNonce: number
   onHistoryRefresh: () => void
-  incomingPromptInsert?: {
-    id: number
-    text: string
-    sourceLabel: string
-  } | null
-  onIncomingPromptInsertConsumed?: () => void
 }
 
 type NaiLoginMode = 'account' | 'token'
@@ -76,22 +71,6 @@ function decodeBase64Png(data: string) {
   }
 
   return new Blob([bytes], { type: 'image/png' })
-}
-
-/** Append one prompt fragment into an existing prompt string without losing manual edits. */
-function appendPromptFragment(currentPrompt: string, nextFragment: string) {
-  const normalizedCurrent = currentPrompt.trim()
-  const normalizedNext = nextFragment.trim()
-
-  if (!normalizedNext) {
-    return normalizedCurrent
-  }
-
-  if (!normalizedCurrent) {
-    return normalizedNext
-  }
-
-  return `${normalizedCurrent}, ${normalizedNext}`
 }
 
 /** Render a compact selected-image preview card. */
@@ -110,12 +89,7 @@ function SelectedImageCard({ image, alt, onRemove }: { image: SelectedImageDraft
 }
 
 /** Render the NAI login, generation, and module-authoring workflow. */
-export function NaiGenerationPanel({
-  refreshNonce,
-  onHistoryRefresh,
-  incomingPromptInsert = null,
-  onIncomingPromptInsertConsumed,
-}: NaiGenerationPanelProps) {
+export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
   const [loginMode, setLoginMode] = useState<NaiLoginMode>('account')
   const [naiUsernameInput, setNaiUsernameInput] = useState('')
@@ -199,19 +173,6 @@ export function NaiGenerationPanel({
 
     return items.filter((item) => `${item.label} ${item.type}`.toLowerCase().includes(keyword))
   }, [savedCharacterReferenceSearch, savedCharacterReferencesQuery.data])
-
-  useEffect(() => {
-    if (!incomingPromptInsert) {
-      return
-    }
-
-    setNaiForm((current) => ({
-      ...current,
-      prompt: appendPromptFragment(current.prompt, incomingPromptInsert.text),
-    }))
-    showSnackbar({ message: `${incomingPromptInsert.sourceLabel}를 NAI prompt에 넣었어.`, tone: 'info' })
-    onIncomingPromptInsertConsumed?.()
-  }, [incomingPromptInsert, onIncomingPromptInsertConsumed, showSnackbar])
 
   useEffect(() => {
     if (refreshNonce === 0) {
@@ -871,8 +832,15 @@ export function NaiGenerationPanel({
                 <CardContent className="space-y-4">
                   <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Prompt" />
                   <div className="space-y-4">
-                    <FormField label="Prompt">
-                      <Textarea value={naiForm.prompt} onChange={(event) => handleNaiFieldChange('prompt', event.target.value)} rows={6} placeholder="1girl, solo, cinematic lighting" />
+                    <FormField label="Prompt" hint="`++`를 입력하면 와일드카드 검색 팝업이 열려.">
+                      <WildcardInlinePickerField
+                        tool="nai"
+                        multiline
+                        rows={6}
+                        value={naiForm.prompt}
+                        onChange={(value) => handleNaiFieldChange('prompt', value)}
+                        placeholder="1girl, solo, cinematic lighting"
+                      />
                     </FormField>
 
                     <FormField label="Negative Prompt">

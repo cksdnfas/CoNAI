@@ -1,9 +1,9 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import type { WorkflowMarkedField } from '@/lib/api'
 import { FormField, type WorkflowFieldDraftValue } from '../image-generation-shared'
+import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
 
 type WorkflowFieldInputProps = {
   field: WorkflowMarkedField
@@ -18,12 +18,14 @@ export function WorkflowFieldInput({ field, value, onChange, onImageChange }: Wo
 
   if (field.type === 'textarea') {
     return (
-      <FormField label={field.label} hint={hint}>
-        <Textarea
+      <FormField label={field.label} hint={[hint, '`++` wildcard'].filter(Boolean).join(' · ')}>
+        <WildcardInlinePickerField
+          tool="comfyui"
+          multiline
           rows={4}
           value={typeof value === 'string' ? value : ''}
           placeholder={field.placeholder || ''}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={onChange}
         />
         {field.description ? <div className="text-xs text-muted-foreground">{field.description}</div> : null}
       </FormField>
@@ -65,6 +67,20 @@ export function WorkflowFieldInput({ field, value, onChange, onImageChange }: Wo
             </div>
           ) : null}
         </div>
+        {field.description ? <div className="text-xs text-muted-foreground">{field.description}</div> : null}
+      </FormField>
+    )
+  }
+
+  if (field.type === 'text') {
+    return (
+      <FormField label={field.label} hint={[hint, '`++` wildcard'].filter(Boolean).join(' · ')}>
+        <WildcardInlinePickerField
+          tool="comfyui"
+          value={typeof value === 'string' ? value : ''}
+          placeholder={field.placeholder || ''}
+          onChange={onChange}
+        />
         {field.description ? <div className="text-xs text-muted-foreground">{field.description}</div> : null}
       </FormField>
     )
