@@ -146,14 +146,6 @@ function normalizeCharacters(value: NAIMetadataInputParams['characters']): NAICh
     })
   }
 
-  if (normalized.length === 1) {
-    return normalized.map((character) => ({
-      ...character,
-      center_x: 0.5,
-      center_y: 0.5,
-    }))
-  }
-
   return normalized
 }
 

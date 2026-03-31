@@ -317,23 +317,13 @@ export function snapNaiCharacterGridValue(value: string | number) {
   return nearestValue.toFixed(1)
 }
 
-/** Apply the test-folder character-position rule: single character => forced center. */
+/** Normalize character positions onto the documented 5x5 grid while keeping user edits intact. */
 export function normalizeNaiCharacterPromptDrafts(characters: NAICharacterPromptDraft[]) {
-  const normalizedCharacters = characters.map((character) => ({
+  return characters.map((character) => ({
     ...character,
     centerX: snapNaiCharacterGridValue(character.centerX),
     centerY: snapNaiCharacterGridValue(character.centerY),
   }))
-
-  if (normalizedCharacters.length === 1) {
-    return normalizedCharacters.map((character) => ({
-      ...character,
-      centerX: '0.5',
-      centerY: '0.5',
-    }))
-  }
-
-  return normalizedCharacters
 }
 
 /** Check whether the selected NAI model supports v4 character prompts. */

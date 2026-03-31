@@ -861,7 +861,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="space-y-1">
                           <div className="text-sm font-medium text-foreground">Character Prompt</div>
-                          <div className="text-xs text-muted-foreground">테스트 API 기준으로 5x5 grid를 쓰고, 캐릭터가 1명이면 좌표는 중앙(C3)로 고정돼.</div>
+                          <div className="text-xs text-muted-foreground">테스트 API 기준 5x5 grid를 쓰고, 기본값은 중앙(C3)이지만 직접 수정할 수 있어.</div>
                         </div>
                         <Button type="button" variant="outline" size="sm" onClick={handleAddCharacterPrompt} disabled={!supportsCharacterPrompts}>
                           <Plus className="h-4 w-4" />
@@ -871,10 +871,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
                       {!supportsCharacterPrompts ? (
                         <div className="text-xs text-[#ffb4ab]">Character Prompt는 NAI Diffusion 4 / 4.5 모델에서만 적용돼.</div>
-                      ) : null}
-
-                      {naiForm.characters.length === 1 ? (
-                        <div className="text-xs text-muted-foreground">캐릭터 1명일 때는 center_x / center_y가 자동으로 0.5(C3)로 고정돼.</div>
                       ) : null}
 
                       {naiForm.characters.length === 0 ? (
@@ -916,15 +912,15 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                               </FormField>
 
                               <div className="grid gap-4 sm:grid-cols-2">
-                                <FormField label="Center X" hint={naiForm.characters.length === 1 ? 'Single character => C (0.5) fixed' : 'A=0.1, B=0.3, C=0.5, D=0.7, E=0.9'}>
-                                  <Select value={character.centerX} onChange={(event) => handleCharacterPromptChange(index, 'centerX', event.target.value)} disabled={naiForm.characters.length === 1}>
+                                <FormField label="Center X" hint="A=0.1, B=0.3, C=0.5, D=0.7, E=0.9">
+                                  <Select value={character.centerX} onChange={(event) => handleCharacterPromptChange(index, 'centerX', event.target.value)}>
                                     {NAI_CHARACTER_GRID_X_OPTIONS.map((option) => (
                                       <option key={option.value} value={option.value}>{option.label}</option>
                                     ))}
                                   </Select>
                                 </FormField>
-                                <FormField label="Center Y" hint={naiForm.characters.length === 1 ? 'Single character => 3 (0.5) fixed' : '1=0.1, 2=0.3, 3=0.5, 4=0.7, 5=0.9'}>
-                                  <Select value={character.centerY} onChange={(event) => handleCharacterPromptChange(index, 'centerY', event.target.value)} disabled={naiForm.characters.length === 1}>
+                                <FormField label="Center Y" hint="1=0.1, 2=0.3, 3=0.5, 4=0.7, 5=0.9">
+                                  <Select value={character.centerY} onChange={(event) => handleCharacterPromptChange(index, 'centerY', event.target.value)}>
                                     {NAI_CHARACTER_GRID_Y_OPTIONS.map((option) => (
                                       <option key={option.value} value={option.value}>{option.label}</option>
                                     ))}
