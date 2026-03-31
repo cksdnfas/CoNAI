@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { Braces, Copy, ListTree, RefreshCw, Sparkles, WandSparkles } from 'lucide-react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Braces, Copy, FolderPlus, ListTree, Pencil, RefreshCw, Sparkles, Trash2, WandSparkles } from 'lucide-react'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -13,14 +13,18 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
+  createWildcard,
+  deleteWildcard,
   getWildcards,
   parseWildcards,
+  updateWildcard,
   type WildcardItemRecord,
   type WildcardRecord,
   type WildcardTool,
 } from '@/lib/api'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
+import { WildcardEditorModal, type WildcardEditorModalInput } from './wildcard-editor-modal'
 import { getErrorMessage } from '../image-generation-shared'
 
 type WildcardGenerationPanelProps = {
@@ -34,6 +38,17 @@ type WildcardTreeEntry = {
   depth: number
   path: string[]
 }
+
+type WildcardEditorState =
+  | {
+    mode: 'create'
+    defaultParentId: number | null
+  }
+  | {
+    mode: 'edit'
+    wildcard: WildcardRecord
+  }
+  | null
 
 const WORKSPACE_TABS: Array<{ value: WildcardWorkspaceTab; label: string }> = [
   { value: 'wildcards', label: '와일드카드' },
@@ -96,6 +111,16 @@ function matchesWorkspaceTab(node: WildcardRecord, tab: WildcardWorkspaceTab) {
   }
 
   return node.type !== 'chain' && node.is_auto_collected !== 1
+}
+
+/** Return the persistence type that should be used for each workspace tab. */
+function getWorkspaceTabRecordType(tab: WildcardWorkspaceTab) {
+  return tab === 'preprocess' ? 'chain' : 'wildcard'
+}
+
+/** Guard create actions for tabs backed by auto-collected data. */
+function canCreateWorkspaceTabItem(tab: WildcardWorkspaceTab) {
+  return tab !== 'lora'
 }
 
 async function copyText(text: string) {
@@ -186,9 +211,11 @@ function WildcardItemSection({ title, items }: { title: string; items: WildcardI
 function WildcardDetailCard({
   selectedEntry,
   onCopyToken,
+  extraActions,
 }: {
   selectedEntry: WildcardTreeEntry | null
   onCopyToken: (text: string, label: string) => Promise<void>
+  extraActions?: ReactNode
 }) {
   const selectedWildcard = selectedEntry?.wildcard ?? null
   const selectedToken = selectedWildcard ? `++${selectedWildcard.name}++` : ''
@@ -213,6 +240,7 @@ function WildcardDetailCard({
             <>
               <Badge variant={selectedWildcard.type === 'chain' ? 'secondary' : 'outline'}>{selectedWildcard.type === 'chain' ? 'Chain' : 'Wildcard'}</Badge>
               {selectedWildcard.is_auto_collected === 1 ? <Badge variant="outline">Auto LoRA</Badge> : null}
+              {extraActions}
               <Button type="button" variant="outline" size="sm" onClick={() => void onCopyToken(selectedToken, '토큰')}>
                 <Copy className="h-4 w-4" />
                 토큰 복사
@@ -254,6 +282,7 @@ function WildcardDetailCard({
 
 /** Render the shared wildcard/preprocess/lora workspace with one common UI and tab-based data filters. */
 export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPanelProps) {
+  const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const isWideLayout = useDesktopPageLayout()
 
@@ -263,6 +292,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   const [previewTool, setPreviewTool] = useState<WildcardTool>('nai')
   const [previewText, setPreviewText] = useState('')
   const [previewCount, setPreviewCount] = useState('5')
+  const [editorState, setEditorState] = useState<WildcardEditorState>(null)
 
   const wildcardsQuery = useQuery({
     queryKey: ['wildcards', 'hierarchical-browser', refreshNonce],
@@ -271,6 +301,44 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
 
   const parseMutation = useMutation({
     mutationFn: (input: { text: string; tool: WildcardTool; count: number }) => parseWildcards(input),
+  })
+
+  const createMutation = useMutation({
+    mutationFn: createWildcard,
+    onSuccess: async (result) => {
+      setEditorState(null)
+      showSnackbar({ message: '항목을 만들었어.', tone: 'info' })
+      await queryClient.invalidateQueries({ queryKey: ['wildcards'] })
+      setSelectedWildcardId(result.id)
+    },
+    onError: (error) => {
+      showSnackbar({ message: getErrorMessage(error, '항목 생성에 실패했어.'), tone: 'error' })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ wildcardId, input }: { wildcardId: number; input: Parameters<typeof updateWildcard>[1] }) => updateWildcard(wildcardId, input),
+    onSuccess: async (result) => {
+      setEditorState(null)
+      showSnackbar({ message: '항목을 저장했어.', tone: 'info' })
+      await queryClient.invalidateQueries({ queryKey: ['wildcards'] })
+      setSelectedWildcardId(result.id)
+    },
+    onError: (error) => {
+      showSnackbar({ message: getErrorMessage(error, '항목 저장에 실패했어.'), tone: 'error' })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: ({ wildcardId, cascade }: { wildcardId: number; cascade: boolean }) => deleteWildcard(wildcardId, { cascade }),
+    onSuccess: async () => {
+      showSnackbar({ message: '항목을 삭제했어.', tone: 'info' })
+      await queryClient.invalidateQueries({ queryKey: ['wildcards'] })
+      setSelectedWildcardId(null)
+    },
+    onError: (error) => {
+      showSnackbar({ message: getErrorMessage(error, '항목 삭제에 실패했어.'), tone: 'error' })
+    },
   })
 
   const browserTreeNodes = useMemo(
@@ -295,7 +363,10 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     () => browserEntries.find((entry) => entry.wildcard.id === selectedWildcardId) ?? null,
     [browserEntries, selectedWildcardId],
   )
+  const selectedWildcard = selectedEntry?.wildcard ?? null
   const selectedToken = selectedEntry ? `++${selectedEntry.wildcard.name}++` : ''
+  const activeTabLabel = WORKSPACE_TABS.find((tab) => tab.value === activeWorkspaceTab)?.label ?? '와일드카드'
+  const canCreateInActiveTab = canCreateWorkspaceTabItem(activeWorkspaceTab)
 
   useEffect(() => {
     if (browserEntries.length === 0) {
@@ -343,6 +414,76 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     }
   }
 
+  const handleOpenCreateModal = (defaultParentId: number | null) => {
+    if (!canCreateInActiveTab) {
+      showSnackbar({ message: '로라 탭은 자동 수집 항목 기반이라 새 항목 생성은 막아둘게.', tone: 'info' })
+      return
+    }
+
+    setEditorState({
+      mode: 'create',
+      defaultParentId,
+    })
+  }
+
+  const handleOpenEditModal = () => {
+    if (!selectedWildcard) {
+      return
+    }
+
+    setEditorState({
+      mode: 'edit',
+      wildcard: selectedWildcard,
+    })
+  }
+
+  const handleDeleteSelected = async () => {
+    if (!selectedWildcard) {
+      return
+    }
+
+    const hasChildren = browserEntries.some((entry) => entry.wildcard.parent_id === selectedWildcard.id)
+    const confirmed = window.confirm(
+      hasChildren
+        ? `${selectedWildcard.name} 항목을 삭제할까? 하위 항목 처리 방식도 바로 이어서 물어볼게.`
+        : `${selectedWildcard.name} 항목을 삭제할까?`,
+    )
+    if (!confirmed) {
+      return
+    }
+
+    const cascade = hasChildren
+      ? window.confirm('하위 항목까지 전부 같이 삭제할까?\n확인 = 하위까지 삭제\n취소 = 현재 항목만 삭제하고 자식은 위로 올림')
+      : false
+
+    await deleteMutation.mutateAsync({
+      wildcardId: selectedWildcard.id,
+      cascade,
+    })
+  }
+
+  const handleSubmitEditor = async (input: WildcardEditorModalInput) => {
+    if (!editorState) {
+      return
+    }
+
+    if (editorState.mode === 'create') {
+      await createMutation.mutateAsync({
+        ...input,
+        type: getWorkspaceTabRecordType(activeWorkspaceTab),
+      })
+      return
+    }
+
+    await updateMutation.mutateAsync({
+      wildcardId: editorState.wildcard.id,
+      input: {
+        ...input,
+        type: editorState.wildcard.type,
+      },
+    })
+  }
+
   return (
     <div className="space-y-6">
       <div className="border-b border-border/70 pb-2">
@@ -388,6 +529,34 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
                   title="새로고침"
                 >
                   <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => handleOpenCreateModal(null)}
+                  disabled={!canCreateInActiveTab}
+                >
+                  <FolderPlus className="h-4 w-4" />
+                  새 항목
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => handleOpenCreateModal(selectedWildcard?.id ?? null)}
+                  disabled={!canCreateInActiveTab || !selectedWildcard}
+                >
+                  <FolderPlus className="h-4 w-4" />
+                  하위 추가
+                </Button>
+                <Button type="button" size="icon-sm" variant="outline" onClick={handleOpenEditModal} disabled={!selectedWildcard} aria-label="편집" title="편집">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button type="button" size="icon-sm" variant="outline" onClick={() => void handleDeleteSelected()} disabled={!selectedWildcard || deleteMutation.isPending} aria-label="삭제" title="삭제">
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -453,7 +622,22 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
         </ExplorerSidebar>
 
         <section className="space-y-6">
-          <WildcardDetailCard selectedEntry={selectedEntry} onCopyToken={handleCopy} />
+          <WildcardDetailCard
+            selectedEntry={selectedEntry}
+            onCopyToken={handleCopy}
+            extraActions={selectedWildcard ? (
+              <>
+                <Button type="button" variant="outline" size="sm" onClick={handleOpenEditModal}>
+                  <Pencil className="h-4 w-4" />
+                  편집
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => void handleDeleteSelected()} disabled={deleteMutation.isPending}>
+                  <Trash2 className="h-4 w-4" />
+                  삭제
+                </Button>
+              </>
+            ) : undefined}
+          />
 
           <Card>
             <CardContent className="space-y-4">
@@ -537,6 +721,19 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
           </Card>
         </section>
       </div>
+
+      <WildcardEditorModal
+        open={editorState !== null}
+        mode={editorState?.mode ?? 'create'}
+        tabLabel={activeTabLabel}
+        isChainTab={activeWorkspaceTab === 'preprocess'}
+        wildcards={browserEntries.map((entry) => entry.wildcard)}
+        wildcard={editorState?.mode === 'edit' ? editorState.wildcard : null}
+        defaultParentId={editorState?.mode === 'create' ? editorState.defaultParentId : null}
+        isSubmitting={createMutation.isPending || updateMutation.isPending}
+        onClose={() => setEditorState(null)}
+        onSubmit={handleSubmitEditor}
+      />
     </div>
   )
 }

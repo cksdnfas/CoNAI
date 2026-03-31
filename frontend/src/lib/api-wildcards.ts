@@ -36,6 +36,20 @@ export interface WildcardRecord {
   lora_weight?: number | null
 }
 
+export interface WildcardMutationInput {
+  name: string
+  description?: string
+  parent_id?: number | null
+  include_children?: number
+  only_children?: number
+  type?: 'wildcard' | 'chain'
+  chain_option?: 'replace' | 'append'
+  items: {
+    comfyui: Array<{ content: string; weight: number }>
+    nai: Array<{ content: string; weight: number }>
+  }
+}
+
 export interface WildcardParseResponse {
   original: string
   results: string[]
@@ -93,6 +107,59 @@ export async function getWildcards(params?: { hierarchical?: boolean; rootsOnly?
   }
 
   return response.data
+}
+
+/** Create a new wildcard-like record in the shared wildcard store. */
+export async function createWildcard(input: WildcardMutationInput) {
+  const response = await fetchJson<ApiResponse<WildcardRecord>>('/api/wildcards', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || '항목을 만들지 못했어.')
+  }
+
+  return response.data
+}
+
+/** Update an existing wildcard-like record in the shared wildcard store. */
+export async function updateWildcard(wildcardId: number, input: WildcardMutationInput) {
+  const response = await fetchJson<ApiResponse<WildcardRecord>>(`/api/wildcards/${wildcardId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || '항목을 저장하지 못했어.')
+  }
+
+  return response.data
+}
+
+/** Remove a wildcard-like record, optionally cascading through its children. */
+export async function deleteWildcard(wildcardId: number, options?: { cascade?: boolean }) {
+  const searchParams = new URLSearchParams()
+  if (options?.cascade) {
+    searchParams.set('cascade', 'true')
+  }
+
+  const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ''
+  const response = await fetchJson<ApiResponse<{ message?: string }>>(`/api/wildcards/${wildcardId}${suffix}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '항목을 삭제하지 못했어.')
+  }
+
+  return response
 }
 
 /** Load aggregate wildcard statistics for the browser tab header. */
