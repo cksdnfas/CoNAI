@@ -787,7 +787,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                           <Input
                             value={naiTokenInput}
                             onChange={(event) => setNaiTokenInput(event.target.value)}
-                            placeholder="NovelAI access token"
+                            placeholder=""
                             autoComplete="off"
                           />
 
@@ -850,25 +850,25 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                 <CardContent className="space-y-4">
                   <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Prompt" />
                   <div className="space-y-4">
-                    <FormField label="Prompt" hint="`++`를 입력하면 와일드카드 검색 팝업이 열려.">
+                    <FormField label="Prompt">
                       <WildcardInlinePickerField
                         tool="nai"
                         multiline
                         rows={6}
                         value={naiForm.prompt}
                         onChange={(value) => handleNaiFieldChange('prompt', value)}
-                        placeholder="1girl, solo, cinematic lighting"
+                        placeholder=""
                       />
                     </FormField>
 
-                    <FormField label="Negative Prompt" hint="`++`를 입력하면 와일드카드 검색 팝업이 열려.">
+                    <FormField label="Negative Prompt">
                       <WildcardInlinePickerField
                         tool="nai"
                         multiline
                         rows={6}
                         value={naiForm.negativePrompt}
                         onChange={(value) => handleNaiFieldChange('negativePrompt', value)}
-                        placeholder="low quality, blurry"
+                        placeholder=""
                       />
                     </FormField>
 
@@ -1065,8 +1065,8 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                       <FormField label="Samples">
                         <Input type="number" min={1} max={8} value={naiForm.samples} onChange={(event) => handleNaiFieldChange('samples', event.target.value)} />
                       </FormField>
-                      <FormField label="Seed" hint="비우면 랜덤">
-                        <Input type="number" value={naiForm.seed} onChange={(event) => handleNaiFieldChange('seed', event.target.value)} placeholder="random" />
+                      <FormField label="Seed">
+                        <Input type="number" value={naiForm.seed} onChange={(event) => handleNaiFieldChange('seed', event.target.value)} />
                       </FormField>
                     </div>
                   </div>
@@ -1079,7 +1079,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                 <CardContent className="space-y-4">
                   <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Source Images" />
                   <div className="space-y-4">
-                    <FormField label="Source Image" hint="img2img / infill / upscale 공용">
+                    <FormField label="Source Image">
                       <div className="space-y-3">
                         <Input type="file" accept="image/*" onChange={(event) => void handleNaiImageChange('sourceImage', event.target.files?.[0])} />
                         {naiForm.sourceImage ? <SelectedImageCard image={naiForm.sourceImage} alt="NAI source" onRemove={() => void handleNaiImageChange('sourceImage')} /> : null}
@@ -1105,10 +1105,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                   <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Vibe Transfer" />
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low p-3">
-                      <div>
-                        <div className="text-sm font-medium text-foreground">Encoded vibes</div>
-                        <div className="text-xs text-muted-foreground">encode를 직접 눌러야 Anlas가 사용돼. 인코딩 결과는 그대로 재사용해.</div>
-                      </div>
+                      <div className="text-sm font-medium text-foreground">Vibes</div>
                       <Button type="button" variant="outline" size="sm" onClick={handleAddVibe}>
                         <Plus className="h-4 w-4" />
                         Vibe 추가
@@ -1116,7 +1113,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     </div>
 
                     {naiForm.vibes.length === 0 ? (
-                      <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">아직 Vibe Transfer 항목이 없어.</div>
+                      <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">Vibe 없음</div>
                     ) : (
                       <div className="space-y-3">
                         {naiForm.vibes.map((vibe, index) => (
@@ -1169,12 +1166,9 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
                     <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-medium text-foreground">Saved Vibes</div>
-                          <div className="text-xs text-muted-foreground">현재 모델 기준 저장소야. 검색으로 빠르게 골라.</div>
-                        </div>
+                        <div className="text-sm font-medium text-foreground">Saved Vibes</div>
                         <div className="w-full sm:w-72">
-                          <Input value={savedVibeSearch} onChange={(event) => setSavedVibeSearch(event.target.value)} placeholder="이름 또는 모델 검색" />
+                          <Input value={savedVibeSearch} onChange={(event) => setSavedVibeSearch(event.target.value)} placeholder="검색" />
                         </div>
                       </div>
                       {savedVibesQuery.isLoading ? (
@@ -1201,7 +1195,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                           ))}
                         </div>
                       ) : (
-                        <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 Vibe가 아직 없어.</div>
+                        <div className="text-sm text-muted-foreground">결과 없음</div>
                       )}
                     </div>
                   </div>
@@ -1215,20 +1209,17 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                   <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Character Reference" />
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low p-3">
-                      <div>
-                        <div className="text-sm font-medium text-foreground">Director reference images</div>
-                        <div className="text-xs text-muted-foreground">NAI Diffusion 4.5 전용. 업로드하면 서버에서 자동 레터박싱해서 전달해.</div>
-                      </div>
+                      <div className="text-sm font-medium text-foreground">References</div>
                       <Button type="button" variant="outline" size="sm" onClick={handleAddCharacterReference} disabled={!supportsCharacterReference}>
                         <Plus className="h-4 w-4" />
                         Reference 추가
                       </Button>
                     </div>
 
-                    {!supportsCharacterReference ? <div className="text-xs text-[#ffb4ab]">Character Reference는 NAI Diffusion 4.5 모델에서만 쓸 수 있어.</div> : null}
+                    {!supportsCharacterReference ? <div className="text-xs text-[#ffb4ab]">현재 모델에서는 Character Reference를 사용할 수 없어.</div> : null}
 
                     {naiForm.characterReferences.length === 0 ? (
-                      <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">아직 Character Reference가 없어.</div>
+                      <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">Reference 없음</div>
                     ) : (
                       <div className="space-y-3">
                         {naiForm.characterReferences.map((reference, index) => (
@@ -1277,12 +1268,9 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
                     <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-medium text-foreground">Saved Character References</div>
-                          <div className="text-xs text-muted-foreground">4.5 레퍼런스를 이름/타입으로 바로 찾아서 재사용해.</div>
-                        </div>
+                        <div className="text-sm font-medium text-foreground">Saved References</div>
                         <div className="w-full sm:w-72">
-                          <Input value={savedCharacterReferenceSearch} onChange={(event) => setSavedCharacterReferenceSearch(event.target.value)} placeholder="이름 또는 타입 검색" />
+                          <Input value={savedCharacterReferenceSearch} onChange={(event) => setSavedCharacterReferenceSearch(event.target.value)} placeholder="검색" />
                         </div>
                       </div>
                       {savedCharacterReferencesQuery.isLoading ? (
@@ -1309,7 +1297,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                           ))}
                         </div>
                       ) : (
-                        <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 Character Reference가 아직 없어.</div>
+                        <div className="text-sm text-muted-foreground">결과 없음</div>
                       )}
                     </div>
                   </div>
