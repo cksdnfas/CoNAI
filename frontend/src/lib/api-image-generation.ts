@@ -200,6 +200,28 @@ export interface NAIUpscaleResponse {
   sourceBytes: number
 }
 
+export interface StoredNaiVibeAsset {
+  id: string
+  label: string
+  model: string
+  image_data_url?: string
+  encoded: string
+  strength: number
+  information_extracted: number
+  created_date: string
+}
+
+export interface StoredNaiCharacterReferenceAsset {
+  id: string
+  label: string
+  image_data_url: string
+  type: 'character' | 'style' | 'character&style'
+  strength: number
+  fidelity: number
+  created_date: string
+  has_letterbox: boolean
+}
+
 export interface ComfyUIImageFieldValue {
   fileName: string
   dataUrl: string
@@ -565,6 +587,72 @@ export async function upscaleNaiImage(payload: NAIUpscalePayload) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
+  })
+}
+
+/** Load saved reusable vibe-transfer assets. */
+export async function listNaiVibeAssets(model?: string) {
+  const searchParams = new URLSearchParams()
+  if (model) {
+    searchParams.set('model', model)
+  }
+
+  const response = await requestJson<{ items: StoredNaiVibeAsset[] }>(`/api/nai/store/vibes${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
+  return response.items
+}
+
+/** Save one reusable vibe-transfer asset for later use. */
+export async function saveNaiVibeAsset(payload: {
+  label?: string
+  model: string
+  image?: string
+  encoded: string
+  strength?: number
+  information_extracted?: number
+}) {
+  return requestJson<StoredNaiVibeAsset>('/api/nai/store/vibes', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Delete one saved vibe-transfer asset. */
+export async function deleteNaiVibeAsset(assetId: string) {
+  return requestJson<{ success: boolean }>(`/api/nai/store/vibes/${assetId}`, {
+    method: 'DELETE',
+  })
+}
+
+/** Load saved character-reference assets. */
+export async function listNaiCharacterReferenceAssets() {
+  const response = await requestJson<{ items: StoredNaiCharacterReferenceAsset[] }>('/api/nai/store/character-references')
+  return response.items
+}
+
+/** Save one reusable character-reference asset. */
+export async function saveNaiCharacterReferenceAsset(payload: {
+  label?: string
+  image: string
+  type?: 'character' | 'style' | 'character&style'
+  strength?: number
+  fidelity?: number
+}) {
+  return requestJson<StoredNaiCharacterReferenceAsset>('/api/nai/store/character-references', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Delete one saved character-reference asset. */
+export async function deleteNaiCharacterReferenceAsset(assetId: string) {
+  return requestJson<{ success: boolean }>(`/api/nai/store/character-references/${assetId}`, {
+    method: 'DELETE',
   })
 }
 

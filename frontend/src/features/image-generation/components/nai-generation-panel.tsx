@@ -13,12 +13,18 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { triggerBlobDownload } from '@/lib/api-client'
 import {
   createNaiModuleFromSnapshot,
+  deleteNaiCharacterReferenceAsset,
+  deleteNaiVibeAsset,
   encodeNaiVibe,
   generateNaiImage,
   getNaiCostEstimate,
   getNaiUserData,
+  listNaiCharacterReferenceAssets,
+  listNaiVibeAssets,
   loginNai,
   loginNaiWithToken,
+  saveNaiCharacterReferenceAsset,
+  saveNaiVibeAsset,
   upscaleNaiImage,
 } from '@/lib/api'
 import {
@@ -103,6 +109,18 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     queryKey: ['image-generation-nai-user'],
     queryFn: getNaiUserData,
     retry: false,
+  })
+
+  const savedVibesQuery = useQuery({
+    queryKey: ['image-generation-nai-vibe-assets', naiForm.model],
+    queryFn: () => listNaiVibeAssets(naiForm.model),
+    enabled: naiUserQuery.isSuccess,
+  })
+
+  const savedCharacterReferencesQuery = useQuery({
+    queryKey: ['image-generation-nai-character-reference-assets'],
+    queryFn: listNaiCharacterReferenceAssets,
+    enabled: naiUserQuery.isSuccess,
   })
 
   const naiCostInputs = useMemo(
@@ -336,6 +354,57 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     }))
   }
 
+  const handleSaveVibeToStore = async (index: number) => {
+    const vibe = naiForm.vibes[index]
+    if (!vibe || !vibe.encoded) {
+      showSnackbar({ message: '저장하려면 먼저 Vibe 인코딩이 필요해.', tone: 'error' })
+      return
+    }
+
+    try {
+      await saveNaiVibeAsset({
+        label: vibe.image?.fileName,
+        model: naiForm.model,
+        image: vibe.image?.dataUrl,
+        encoded: vibe.encoded,
+        strength: parseNumberInput(vibe.strength, 0.6),
+        information_extracted: parseNumberInput(vibe.informationExtracted, 1),
+      })
+      await savedVibesQuery.refetch()
+      showSnackbar({ message: `Vibe ${index + 1} 저장 완료.`, tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, 'Vibe 저장에 실패했어.'), tone: 'error' })
+    }
+  }
+
+  const handleLoadVibeFromStore = (assetId: string) => {
+    const asset = savedVibesQuery.data?.find((entry) => entry.id === assetId)
+    if (!asset) {
+      return
+    }
+
+    setNaiForm((current) => ({
+      ...current,
+      vibes: [...current.vibes, {
+        image: asset.image_data_url ? { fileName: asset.label, dataUrl: asset.image_data_url } : undefined,
+        encoded: asset.encoded,
+        strength: String(asset.strength),
+        informationExtracted: String(asset.information_extracted),
+      }],
+    }))
+    showSnackbar({ message: `${asset.label} 불러왔어.`, tone: 'info' })
+  }
+
+  const handleDeleteVibeFromStore = async (assetId: string) => {
+    try {
+      await deleteNaiVibeAsset(assetId)
+      await savedVibesQuery.refetch()
+      showSnackbar({ message: '저장된 Vibe를 삭제했어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, '저장된 Vibe 삭제에 실패했어.'), tone: 'error' })
+    }
+  }
+
   const handleAddCharacterReference = () => {
     setNaiForm((current) => ({
       ...current,
@@ -399,6 +468,56 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
       ...current,
       characterReferences: current.characterReferences.filter((_, referenceIndex) => referenceIndex !== index),
     }))
+  }
+
+  const handleSaveCharacterReferenceToStore = async (index: number) => {
+    const reference = naiForm.characterReferences[index]
+    if (!reference?.image) {
+      showSnackbar({ message: '저장하려면 Character Reference 이미지가 필요해.', tone: 'error' })
+      return
+    }
+
+    try {
+      await saveNaiCharacterReferenceAsset({
+        label: reference.image.fileName,
+        image: reference.image.dataUrl,
+        type: reference.type,
+        strength: parseNumberInput(reference.strength, 0.6),
+        fidelity: parseNumberInput(reference.fidelity, 1),
+      })
+      await savedCharacterReferencesQuery.refetch()
+      showSnackbar({ message: `Reference ${index + 1} 저장 완료.`, tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, 'Character Reference 저장에 실패했어.'), tone: 'error' })
+    }
+  }
+
+  const handleLoadCharacterReferenceFromStore = (assetId: string) => {
+    const asset = savedCharacterReferencesQuery.data?.find((entry) => entry.id === assetId)
+    if (!asset) {
+      return
+    }
+
+    setNaiForm((current) => ({
+      ...current,
+      characterReferences: [...current.characterReferences, {
+        image: { fileName: asset.label, dataUrl: asset.image_data_url },
+        type: asset.type,
+        strength: String(asset.strength),
+        fidelity: String(asset.fidelity),
+      }],
+    }))
+    showSnackbar({ message: `${asset.label} 불러왔어.`, tone: 'info' })
+  }
+
+  const handleDeleteCharacterReferenceFromStore = async (assetId: string) => {
+    try {
+      await deleteNaiCharacterReferenceAsset(assetId)
+      await savedCharacterReferencesQuery.refetch()
+      showSnackbar({ message: '저장된 Character Reference를 삭제했어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, '저장된 Character Reference 삭제에 실패했어.'), tone: 'error' })
+    }
   }
 
   const handleNaiAccountLogin = async () => {
@@ -936,7 +1055,11 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                               {vibe.encoded ? `encoded: ${vibe.encoded.slice(0, 64)}…` : '아직 인코딩 안 됨'}
                             </div>
 
-                            <div className="flex justify-end">
+                            <div className="flex justify-end gap-2">
+                              <Button type="button" variant="outline" onClick={() => void handleSaveVibeToStore(index)} disabled={!vibe.encoded}>
+                                <Save className="h-4 w-4" />
+                                Store 저장
+                              </Button>
                               <Button type="button" variant="outline" onClick={() => void handleEncodeVibe(index)} disabled={!vibe.image || encodingVibeIndex !== null}>
                                 <WandSparkles className="h-4 w-4" />
                                 {encodingVibeIndex === index ? '인코딩 중…' : 'Vibe 인코딩'}
@@ -946,6 +1069,32 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                         ))}
                       </div>
                     )}
+
+                    <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
+                      <div className="text-sm font-medium text-foreground">Saved Vibes</div>
+                      {savedVibesQuery.isLoading ? (
+                        <div className="text-sm text-muted-foreground">불러오는 중…</div>
+                      ) : savedVibesQuery.data && savedVibesQuery.data.length > 0 ? (
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                          {savedVibesQuery.data.map((asset) => (
+                            <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-container p-3">
+                              <div className="space-y-1">
+                                <div className="text-sm font-medium text-foreground">{asset.label}</div>
+                                <div className="text-xs text-muted-foreground">{asset.model}</div>
+                              </div>
+                              {asset.image_data_url ? <img src={asset.image_data_url} alt={asset.label} className="max-h-40 w-full rounded-sm border border-border object-contain" /> : null}
+                              <div className="text-xs text-muted-foreground">strength {asset.strength} · IE {asset.information_extracted}</div>
+                              <div className="flex justify-end gap-2">
+                                <Button type="button" size="sm" variant="outline" onClick={() => handleLoadVibeFromStore(asset.id)}>불러오기</Button>
+                                <Button type="button" size="sm" variant="ghost" onClick={() => void handleDeleteVibeFromStore(asset.id)}>삭제</Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">저장된 Vibe가 아직 없어.</div>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1005,10 +1154,42 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                                 <Input type="number" min={0} max={1} step={0.01} value={reference.fidelity} onChange={(event) => handleCharacterReferenceFieldChange(index, 'fidelity', event.target.value)} />
                               </FormField>
                             </div>
+
+                            <div className="flex justify-end">
+                              <Button type="button" variant="outline" onClick={() => void handleSaveCharacterReferenceToStore(index)} disabled={!reference.image}>
+                                <Save className="h-4 w-4" />
+                                Store 저장
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
                     )}
+
+                    <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
+                      <div className="text-sm font-medium text-foreground">Saved Character References</div>
+                      {savedCharacterReferencesQuery.isLoading ? (
+                        <div className="text-sm text-muted-foreground">불러오는 중…</div>
+                      ) : savedCharacterReferencesQuery.data && savedCharacterReferencesQuery.data.length > 0 ? (
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                          {savedCharacterReferencesQuery.data.map((asset) => (
+                            <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-container p-3">
+                              <div className="space-y-1">
+                                <div className="text-sm font-medium text-foreground">{asset.label}</div>
+                                <div className="text-xs text-muted-foreground">{asset.type} · strength {asset.strength} · fidelity {asset.fidelity}</div>
+                              </div>
+                              <img src={asset.image_data_url} alt={asset.label} className="max-h-40 w-full rounded-sm border border-border object-contain" />
+                              <div className="flex justify-end gap-2">
+                                <Button type="button" size="sm" variant="outline" onClick={() => handleLoadCharacterReferenceFromStore(asset.id)}>불러오기</Button>
+                                <Button type="button" size="sm" variant="ghost" onClick={() => void handleDeleteCharacterReferenceFromStore(asset.id)}>삭제</Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">저장된 Character Reference가 아직 없어.</div>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>

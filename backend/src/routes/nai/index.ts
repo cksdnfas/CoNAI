@@ -3,6 +3,7 @@ import authRouter from './auth';
 import generateRouter from './generate';
 import userRouter from './user';
 import costRouter from './cost';
+import storeRouter from './store';
 
 const router = Router();
 
@@ -17,5 +18,8 @@ router.use('/user', userRouter);
 
 // NAI Cost Calculation routes
 router.use('/cost', costRouter);
+
+// NAI reusable asset store routes
+router.use('/store', storeRouter);
 
 export default router;
