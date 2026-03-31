@@ -874,10 +874,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
                     <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="space-y-1">
-                          <div className="text-sm font-medium text-foreground">Character Prompt</div>
-                          <div className="text-xs text-muted-foreground">테스트 API 기준 5x5 grid를 쓰고, 기본값은 중앙(C3)이지만 직접 수정할 수 있어.</div>
-                        </div>
+                        <div className="text-sm font-medium text-foreground">Character Prompt</div>
                         <Button type="button" variant="outline" size="sm" onClick={handleAddCharacterPrompt} disabled={!supportsCharacterPrompts}>
                           <Plus className="h-4 w-4" />
                           캐릭터 추가
@@ -885,11 +882,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                       </div>
 
                       {!supportsCharacterPrompts ? (
-                        <div className="text-xs text-[#ffb4ab]">
-                          {naiForm.characters.length > 0
-                            ? '현재 모델에서는 Character Prompt가 적용되지 않아. 입력값은 보존되지만 이번 생성 요청에는 포함되지 않아.'
-                            : 'Character Prompt는 NAI Diffusion 4 / 4.5 모델에서만 적용돼.'}
-                        </div>
+                        <div className="text-xs text-[#ffb4ab]">현재 모델에서는 Character Prompt를 사용할 수 없어.</div>
                       ) : null}
 
                       {naiForm.characters.length > 0 ? (
@@ -938,7 +931,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                                 </Button>
                               </div>
 
-                              <FormField label="Character Prompt" hint="`++` wildcard">
+                              <FormField label="Character Prompt">
                                 <WildcardInlinePickerField
                                   tool="nai"
                                   multiline
@@ -949,7 +942,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                                 />
                               </FormField>
 
-                              <FormField label="Character Negative Prompt" hint="`++` wildcard">
+                              <FormField label="Character Negative Prompt">
                                 <WildcardInlinePickerField
                                   tool="nai"
                                   multiline
@@ -961,14 +954,14 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                               </FormField>
 
                               <div className="grid gap-4 sm:grid-cols-2">
-                                <FormField label="Center X" hint="A=0.1, B=0.3, C=0.5, D=0.7, E=0.9">
+                                <FormField label="Center X">
                                   <Select value={character.centerX} onChange={(event) => handleCharacterPromptChange(index, 'centerX', event.target.value)}>
                                     {NAI_CHARACTER_GRID_X_OPTIONS.map((option) => (
                                       <option key={option.value} value={option.value}>{option.label}</option>
                                     ))}
                                   </Select>
                                 </FormField>
-                                <FormField label="Center Y" hint="1=0.1, 2=0.3, 3=0.5, 4=0.7, 5=0.9">
+                                <FormField label="Center Y">
                                   <Select value={character.centerY} onChange={(event) => handleCharacterPromptChange(index, 'centerY', event.target.value)}>
                                     {NAI_CHARACTER_GRID_Y_OPTIONS.map((option) => (
                                       <option key={option.value} value={option.value}>{option.label}</option>

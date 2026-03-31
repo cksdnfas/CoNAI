@@ -85,14 +85,6 @@ export function NaiCharacterPositionBoard({
 
   return (
     <div className={cn('space-y-3', className)}>
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-medium text-foreground">Character Position Board</div>
-          <div className="text-xs text-muted-foreground">한 보드에서 전부 보고 드래그해서 5x5 grid 칸으로 배치해.</div>
-        </div>
-        <div className="text-xs text-muted-foreground">A-E / 1-5</div>
-      </div>
-
       <div
         ref={boardRef}
         className="relative aspect-square rounded-sm border border-border bg-surface-container select-none touch-none"

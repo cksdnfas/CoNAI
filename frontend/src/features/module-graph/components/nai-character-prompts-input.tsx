@@ -149,10 +149,7 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-container px-3 py-2.5">
-        <div>
-          <div className="text-sm font-medium text-foreground">Character Prompt</div>
-          <div className="text-xs text-muted-foreground">테스트 API 기준 5x5 grid를 쓰고, 기본값은 중앙(C3)이지만 직접 수정할 수 있어.</div>
-        </div>
+        <div className="text-sm font-medium text-foreground">Character Prompt</div>
         <Button type="button" size="sm" variant="outline" onClick={handleAdd}>
           <Plus className="h-4 w-4" />
           추가
