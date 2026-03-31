@@ -148,7 +148,7 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-container px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low px-3 py-2.5">
         <div className="text-sm font-medium text-foreground">Character Prompt</div>
         <Button type="button" size="sm" variant="outline" onClick={handleAdd}>
           <Plus className="h-4 w-4" />
@@ -181,8 +181,8 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
           <div
             key={`nai-character-input-${index}`}
             className={index === selectedIndex
-              ? 'space-y-3 rounded-sm border border-accent bg-surface-container p-3 ring-1 ring-accent/50'
-              : 'space-y-3 rounded-sm border border-border bg-surface-container p-3'}
+              ? 'space-y-3 rounded-sm border border-accent bg-surface-low p-3 ring-1 ring-accent/50'
+              : 'space-y-3 rounded-sm border border-border bg-surface-low p-3'}
             onClick={() => setSelectedIndex(index)}
           >
             <div className="flex items-center justify-between gap-3">

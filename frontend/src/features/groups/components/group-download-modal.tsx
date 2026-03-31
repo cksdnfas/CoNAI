@@ -77,7 +77,7 @@ export function GroupDownloadModal({
             const availableCount = counts[card.countKey]
 
             return (
-              <Card key={card.type} className="bg-surface-container">
+              <Card key={card.type} >
                 <CardHeader className="space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-sm bg-surface-highest text-foreground">

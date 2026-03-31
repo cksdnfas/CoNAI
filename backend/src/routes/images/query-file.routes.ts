@@ -195,8 +195,9 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
     }
 
     const mimeType = files[0].mime_type;
+    const fileType = files[0].file_type;
 
-    if (mimeType && mimeType.startsWith('video/')) {
+    if ((mimeType && mimeType.startsWith('video/')) || fileType === 'animated') {
       const originalPath = resolveUploadsPath(files[0].original_file_path);
 
       if (!fs.existsSync(originalPath)) {

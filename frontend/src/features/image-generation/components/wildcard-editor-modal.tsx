@@ -128,7 +128,6 @@ export function WildcardEditorModal({
       open={open}
       onClose={onClose}
       title={mode === 'create' ? `${tabLabel} 항목 만들기` : `${tabLabel} 항목 편집`}
-      description={isChainTab ? '전처리 탭은 chain 타입으로 저장돼.' : '같은 편집기로 항목 구조를 맞춰 관리해.'}
       widthClassName="max-w-4xl"
     >
       <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>

@@ -141,8 +141,6 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataInputParams>, res: 
             n_samples: metadata.n_samples,
             batch_index: index,
             noise_schedule: metadata.noise_schedule,
-            rating: metadata.rating,
-            quality_tags_enabled: metadata.quality_tags_enabled,
           },
         })
 

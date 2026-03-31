@@ -185,6 +185,18 @@ export function getRelatedImageAspectRatioLabel(ratio: AppearanceSettings['detai
   }
 }
 
+/** Map group-explorer card style values to localized labels. */
+export function getGroupExplorerCardStyleLabel(style: AppearanceSettings['groupExplorerCardStyle']) {
+  switch (style) {
+    case 'compact-row':
+      return '기본 목록형'
+    case 'media-tile':
+      return '미디어 타일형'
+    default:
+      return String(style)
+  }
+}
+
 /** Render a compact slider for related-image column counts. */
 export function RelatedImageColumnSlider({
   label,

@@ -125,7 +125,7 @@ export function ComfyWorkflowControllerPanel({
                         key={server.id}
                         type="button"
                         onClick={() => onSelectServer(String(server.id))}
-                        className="block w-full rounded-sm border border-border bg-surface-container px-3 py-2.5 text-left transition-colors hover:bg-surface-high"
+                        className="block w-full rounded-sm border border-border bg-surface-low px-3 py-2.5 text-left transition-colors hover:border-primary/35"
                         style={isSelected ? { borderColor: 'var(--color-primary)' } : undefined}
                       >
                         <div className="flex items-start justify-between gap-2">

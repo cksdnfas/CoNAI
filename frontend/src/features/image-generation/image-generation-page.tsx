@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
@@ -91,23 +92,11 @@ export function ImageGenerationPage() {
       />
 
       <div className="border-b border-border/70 pb-2">
-        <div className="flex flex-wrap gap-2">
-          {IMAGE_GENERATION_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => handleChangeTab(tab.value)}
-              className={cn(
-                'rounded-sm px-4 py-2 text-sm font-semibold transition-colors',
-                activeTab === tab.value
-                  ? 'bg-surface-container text-primary'
-                  : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          value={activeTab}
+          items={IMAGE_GENERATION_TABS}
+          onChange={(nextTab) => handleChangeTab(nextTab as ImageGenerationTab)}
+        />
       </div>
 
       {activeTab === 'workflows' ? <ModuleWorkflowWorkspace embedded /> : null}

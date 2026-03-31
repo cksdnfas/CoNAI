@@ -9,9 +9,7 @@ errorResponse,
 PAGINATION } from '@conai/shared';
 import { asyncHandler } from '../middleware/errorHandler';
 import { enrichImageWithFileView } from './images/utils';
-import path from 'path';
 import fs from 'fs';
-import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
 
 const router = Router();
 
@@ -64,44 +62,11 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
       return res.status(404).json(errorResponse('No images found in group'));
     }
 
-    // 썸네일 파일 경로 사용 (media_metadata에 저장됨)
-    if (!randomImage.thumbnail_path) {
+    if (!randomImage.composite_hash) {
       return res.status(404).json(errorResponse('Thumbnail not found for image'));
     }
 
-    // 썸네일은 temp 폴더에 저장됨
-    const fullPath = path.join(runtimePaths.tempDir, randomImage.thumbnail_path);
-
-    // 파일 존재 여부 확인
-    if (!fs.existsSync(fullPath)) {
-      return res.status(404).json(errorResponse('Image file not found'));
-    }
-
-    // 이미지 파일 직접 전송
-    const ext = path.extname(fullPath).toLowerCase();
-    let contentType = 'image/jpeg'; // 기본값
-
-    switch (ext) {
-      case '.png':
-        contentType = 'image/png';
-        break;
-      case '.gif':
-        contentType = 'image/gif';
-        break;
-      case '.webp':
-        contentType = 'image/webp';
-        break;
-      case '.jpg':
-      case '.jpeg':
-      default:
-        contentType = 'image/jpeg';
-        break;
-    }
-
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=3600'); // 1시간 캐시
-
-    return res.sendFile(fullPath);
+    return res.redirect(`/api/images/${encodeURIComponent(randomImage.composite_hash)}/thumbnail`);
   } catch (error) {
     console.error('Error getting group thumbnail:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to get group thumbnail';

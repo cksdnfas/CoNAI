@@ -1,5 +1,5 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
-import type { ApiResponse } from '@/types/image'
+import type { ApiResponse, ImageRecord } from '@/types/image'
 import type {
   GroupAutoCollectAllResult,
   GroupAutoCollectResult,
@@ -277,6 +277,20 @@ export async function getGroupFileCounts(groupId: number) {
   return normalizeGroupFileCounts(response.data)
 }
 
+export async function getGroupPreviewImage(groupId: number, params?: { includeChildren?: boolean }) {
+  const searchParams = new URLSearchParams()
+  searchParams.set('count', '1')
+  searchParams.set('includeChildren', String(params?.includeChildren ?? true))
+
+  const response = await fetchJson<ApiResponse<ImageRecord[]>>(`/api/groups/${groupId}/preview-images?${searchParams.toString()}`)
+
+  if (!response.success) {
+    throw new Error(response.error || '그룹 미리보기를 불러오지 못했어.')
+  }
+
+  return response.data[0] ?? null
+}
+
 export async function downloadGroupArchive(
   groupId: number,
   options: {
@@ -316,6 +330,3 @@ export async function downloadGroupArchive(
   }
 }
 
-export function getGroupThumbnailUrl(groupId: number) {
-  return buildApiUrl(`/api/groups/${groupId}/thumbnail`)
-}

@@ -398,7 +398,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
   if (kind === 'vibes') {
     return (
       <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-container px-3 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low px-3 py-2.5">
           <div>
             <div className="text-sm font-medium text-foreground">Vibe Transfer</div>
             <div className="text-xs text-muted-foreground">encoded vibe를 직접 넣거나 saved vibe를 바로 추가해.</div>
@@ -413,7 +413,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
           <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">아직 vibe 입력이 없어.</div>
         ) : (
           vibeDrafts.map((draft, index) => (
-            <div key={`nai-vibe-input-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-container p-3">
+            <div key={`nai-vibe-input-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-medium text-foreground">Vibe {index + 1}</div>
                 <Button type="button" size="sm" variant="ghost" onClick={() => updateVibes(vibeDrafts.filter((_, draftIndex) => draftIndex !== index))}>
@@ -447,7 +447,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
           ))
         )}
 
-        <div className="space-y-2 rounded-sm border border-border bg-surface-container p-3">
+        <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <div className="text-sm font-medium text-foreground">Saved Vibes</div>
@@ -512,7 +512,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-container px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low px-3 py-2.5">
         <div>
           <div className="text-sm font-medium text-foreground">Character Reference</div>
           <div className="text-xs text-muted-foreground">reference 이미지를 직접 넣거나 saved reference를 추가해.</div>
@@ -527,7 +527,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
         <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">아직 reference 입력이 없어.</div>
       ) : (
         characterReferenceDrafts.map((draft, index) => (
-          <div key={`nai-character-reference-input-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-container p-3">
+          <div key={`nai-character-reference-input-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-medium text-foreground">Reference {index + 1}</div>
               <Button type="button" size="sm" variant="ghost" onClick={() => updateCharacterReferences(characterReferenceDrafts.filter((_, draftIndex) => draftIndex !== index))}>
@@ -564,7 +564,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
         ))
       )}
 
-      <div className="space-y-2 rounded-sm border border-border bg-surface-container p-3">
+      <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <div className="text-sm font-medium text-foreground">Saved Character References</div>

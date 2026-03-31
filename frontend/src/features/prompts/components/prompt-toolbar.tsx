@@ -38,7 +38,7 @@ export function PromptToolbar({
           placeholder="프롬프트 검색"
           className="w-full min-w-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
         />
-        <Button type="button" size="icon-xs" variant="outline" className="bg-surface-container" onClick={onApplySearch} aria-label="검색" title="검색">
+        <Button type="button" size="icon-xs" variant="outline" className="bg-surface-low" onClick={onApplySearch} aria-label="검색" title="검색">
           <Search className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -59,7 +59,7 @@ export function PromptToolbar({
         type="button"
         size="icon-xs"
         variant="outline"
-        className="bg-surface-container"
+        className="bg-surface-low"
         onClick={() => onChangeSortOrder(sortOrder === 'DESC' ? 'ASC' : 'DESC')}
         aria-label={sortOrder === 'DESC' ? '내림차순' : '오름차순'}
         title={sortOrder === 'DESC' ? '내림차순' : '오름차순'}

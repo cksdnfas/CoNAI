@@ -141,7 +141,7 @@ export function FoldersTab({
   return (
     <>
       <div className="space-y-8">
-        <Card className="bg-surface-container">
+        <Card>
           <CardContent className="space-y-4">
             <SectionHeading
               variant="inside"
@@ -185,7 +185,7 @@ export function FoldersTab({
           ) : null}
 
           {!foldersLoading && !foldersError ? (
-            <Card className="overflow-hidden bg-surface-container">
+            <Card className="overflow-hidden">
               <CardContent className="p-0">
                 <SectionHeading
                   variant="inside"
@@ -250,7 +250,7 @@ export function FoldersTab({
           ) : null}
 
           {!backupSourcesLoading && !backupSourcesError ? (
-            <Card className="overflow-hidden bg-surface-container">
+            <Card className="overflow-hidden">
               <CardContent className="p-0">
                 <SectionHeading
                   variant="inside"
@@ -298,7 +298,7 @@ export function FoldersTab({
         </section>
 
         <section className="space-y-4">
-          <Card className="bg-surface-container">
+          <Card>
             <CardContent className="space-y-4">
               <SectionHeading
                 variant="inside"

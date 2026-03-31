@@ -48,7 +48,7 @@ export function AutoTestCard({
   const extractedPromptCards = autoTestImage ? getImageExtractedPromptCards(autoTestImage) : []
 
   return (
-    <Card className="bg-surface-container">
+    <Card>
       <CardContent className="space-y-4">
         <SectionHeading variant="inside" heading={heading} actions={actions} />
         <SettingsField label="Composite hash">

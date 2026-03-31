@@ -169,7 +169,7 @@ export function WorkflowExposedInputEditor({
   )
 
   return (
-    <Card className="bg-surface-container">
+    <Card>
       {!isCollapsed ? (
         <CardContent className="space-y-5">
           {showHeader ? (

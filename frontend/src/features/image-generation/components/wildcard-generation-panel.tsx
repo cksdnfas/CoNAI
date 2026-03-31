@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Braces, Copy, FolderPlus, History, ListTree, Pencil, RefreshCw, Sparkles, Trash2, Upload, WandSparkles } from 'lucide-react'
+import { Braces, Copy, Folder, FolderOpen, FolderPlus, History, Pencil, RefreshCw, Sparkles, Trash2, Upload, WandSparkles } from 'lucide-react'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
+import { HierarchyNav } from '@/components/common/hierarchy-nav'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -28,6 +30,7 @@ import {
 } from '@/lib/api'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
+import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { LoraAutoCollectModal } from './lora-auto-collect-modal'
 import { WildcardEditorModal, type WildcardEditorModalInput } from './wildcard-editor-modal'
 import { getErrorMessage } from '../image-generation-shared'
@@ -90,22 +93,6 @@ function filterWildcardTree(nodes: WildcardRecord[], predicate: (node: WildcardR
   })
 }
 
-function countItemsByTool(items: WildcardItemRecord[] | undefined, tool: WildcardTool) {
-  return (items ?? []).filter((item) => item.tool === tool).length
-}
-
-function getWorkspaceTabDescription(tab: WildcardWorkspaceTab) {
-  if (tab === 'preprocess') {
-    return '전처리용 chain 항목만 같은 방식으로 관리해.'
-  }
-
-  if (tab === 'lora') {
-    return '자동 수집된 LoRA 항목만 같은 방식으로 보여줘.'
-  }
-
-  return '와일드카드는 그룹처럼 묶어 쓰니까 폴더 트리 기준으로 탐색하면 된다.'
-}
-
 function matchesWorkspaceTab(node: WildcardRecord, tab: WildcardWorkspaceTab) {
   if (tab === 'preprocess') {
     return node.type === 'chain' && node.is_auto_collected !== 1
@@ -128,6 +115,10 @@ function canCreateWorkspaceTabItem(tab: WildcardWorkspaceTab) {
   return tab !== 'lora'
 }
 
+function isReadonlyWorkspaceTab(tab: WildcardWorkspaceTab) {
+  return tab === 'lora'
+}
+
 function formatDateTime(value?: string | null) {
   if (!value) {
     return '—'
@@ -148,66 +139,33 @@ async function copyText(text: string) {
   await navigator.clipboard.writeText(text)
 }
 
-function WildcardTreeList({
-  nodes,
+function WildcardTree({
+  entries,
   selectedId,
   onSelect,
-  depth = 0,
 }: {
-  nodes: WildcardRecord[]
+  entries: WildcardTreeEntry[]
   selectedId: number | null
   onSelect: (wildcardId: number) => void
-  depth?: number
 }) {
   return (
-    <div className="space-y-1">
-      {nodes.map((node) => {
-        const comfyCount = countItemsByTool(node.items, 'comfyui')
-        const naiCount = countItemsByTool(node.items, 'nai')
-        const isSelected = node.id === selectedId
-
-        return (
-          <div key={node.id} className="space-y-1">
-            <button
-              type="button"
-              onClick={() => onSelect(node.id)}
-              className={cn(
-                'flex w-full items-center justify-between gap-3 rounded-sm border px-3 py-2 text-left transition-colors',
-                isSelected
-                  ? 'border-primary bg-surface-container text-foreground'
-                  : 'border-border bg-surface-lowest text-foreground hover:bg-surface-high',
-              )}
-              style={{ marginLeft: depth * 14 }}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="truncate text-sm font-medium">{node.name}</span>
-                  <Badge variant={node.type === 'chain' ? 'secondary' : 'outline'}>{node.type === 'chain' ? 'Chain' : 'Wildcard'}</Badge>
-                  {node.is_auto_collected === 1 ? <Badge variant="outline">Auto LoRA</Badge> : null}
-                </div>
-                {node.description ? <div className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">{node.description}</div> : null}
-              </div>
-
-              <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-                <Badge variant="outline">NAI {naiCount}</Badge>
-                <Badge variant="outline">Comfy {comfyCount}</Badge>
-                {node.children && node.children.length > 0 ? <Badge variant="outline">하위 {node.children.length}</Badge> : null}
-              </div>
-            </button>
-
-            {node.children && node.children.length > 0 ? (
-              <WildcardTreeList nodes={node.children} selectedId={selectedId} onSelect={onSelect} depth={depth + 1} />
-            ) : null}
-          </div>
-        )
-      })}
-    </div>
+    <HierarchyNav
+      items={entries.map((entry) => entry.wildcard)}
+      expandable
+      selectedId={selectedId}
+      onSelect={(wildcard) => onSelect(wildcard.id)}
+      getId={(wildcard) => wildcard.id}
+      getParentId={(wildcard) => wildcard.parent_id}
+      getLabel={(wildcard) => <span className="truncate">{wildcard.name}</span>}
+      sortItems={(left, right) => left.name.localeCompare(right.name)}
+      renderIcon={(_, state) => (state.hasChildren || state.isSelected ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
+    />
   )
 }
 
 function WildcardItemSection({ title, items }: { title: string; items: WildcardItemRecord[] }) {
   return (
-    <div className="space-y-2 rounded-sm border border-border bg-surface-container p-3">
+    <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
       <div className="flex items-center justify-between gap-2">
         <div className="text-sm font-medium text-foreground">{title}</div>
         <Badge variant="outline">{items.length}</Badge>
@@ -231,15 +189,16 @@ function WildcardItemSection({ title, items }: { title: string; items: WildcardI
 
 function WildcardDetailCard({
   selectedEntry,
-  onCopyToken,
+  onCopySyntax,
   extraActions,
 }: {
   selectedEntry: WildcardTreeEntry | null
-  onCopyToken: (text: string, label: string) => Promise<void>
+  onCopySyntax: (text: string, label: string) => Promise<void>
   extraActions?: ReactNode
 }) {
   const selectedWildcard = selectedEntry?.wildcard ?? null
-  const selectedToken = selectedWildcard ? `++${selectedWildcard.name}++` : ''
+  const selectedWildcardSyntax = selectedWildcard ? `++${selectedWildcard.name}++` : ''
+  const [activeItemTool, setActiveItemTool] = useState<WildcardTool>('comfyui')
   const selectedNaiItems = useMemo(
     () => (selectedWildcard?.items ?? []).filter((item) => item.tool === 'nai'),
     [selectedWildcard],
@@ -248,6 +207,11 @@ function WildcardDetailCard({
     () => (selectedWildcard?.items ?? []).filter((item) => item.tool === 'comfyui'),
     [selectedWildcard],
   )
+  const activeItems = activeItemTool === 'comfyui' ? selectedComfyItems : selectedNaiItems
+
+  useEffect(() => {
+    setActiveItemTool('comfyui')
+  }, [selectedWildcard?.id])
 
   return (
     <Card>
@@ -256,28 +220,21 @@ function WildcardDetailCard({
           variant="inside"
           className="border-b border-border/70 pb-4"
           heading={selectedWildcard ? selectedWildcard.name : '항목 선택'}
-          description={selectedWildcard ? '선택한 항목의 토큰과 실제 내용을 확인해.' : '왼쪽 사이드바에서 항목을 하나 골라줘.'}
-          actions={selectedWildcard ? (
-            <>
-              <Badge variant={selectedWildcard.type === 'chain' ? 'secondary' : 'outline'}>{selectedWildcard.type === 'chain' ? 'Chain' : 'Wildcard'}</Badge>
-              {selectedWildcard.is_auto_collected === 1 ? <Badge variant="outline">Auto LoRA</Badge> : null}
-              {extraActions}
-              <Button type="button" variant="outline" size="sm" onClick={() => void onCopyToken(selectedToken, '토큰')}>
-                <Copy className="h-4 w-4" />
-                토큰 복사
-              </Button>
-            </>
-          ) : undefined}
+          actions={selectedWildcard ? extraActions : undefined}
         />
 
         {selectedWildcard ? (
           <div className="space-y-4">
-            <div className="rounded-sm border border-border bg-surface-container p-3 text-sm text-muted-foreground">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">token</Badge>
-                <code className="rounded-sm bg-surface-lowest px-2 py-1 text-xs text-foreground">{selectedToken}</code>
-              </div>
-              <div className="mt-2 break-words text-xs">경로: {selectedEntry?.path.join(' / ') ?? selectedWildcard.name}</div>
+            <div className="rounded-sm border border-border bg-surface-low p-3 text-sm text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => void onCopySyntax(selectedWildcardSyntax, '와일드카드 문법')}
+                className="inline-flex max-w-full items-center rounded-sm bg-surface-lowest px-3 py-2 text-left transition-colors hover:bg-surface-high"
+                title="클릭해서 복사"
+              >
+                <code className="truncate text-base font-semibold text-foreground md:text-lg">{selectedWildcardSyntax}</code>
+              </button>
+              <div className="mt-3 break-words text-xs">경로: {selectedEntry?.path.join(' / ') ?? selectedWildcard.name}</div>
               {selectedWildcard.description ? <div className="mt-2 text-xs">설명: {selectedWildcard.description}</div> : null}
               {selectedWildcard.source_path ? <div className="mt-2 break-all text-xs">소스: {selectedWildcard.source_path}</div> : null}
               <div className="mt-2 flex flex-wrap gap-2 text-xs">
@@ -288,9 +245,35 @@ function WildcardDetailCard({
               </div>
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-2">
-              <WildcardItemSection title="NAI 항목" items={selectedNaiItems} />
-              <WildcardItemSection title="ComfyUI 항목" items={selectedComfyItems} />
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2 border-b border-border/70 pb-3">
+                <button
+                  type="button"
+                  onClick={() => setActiveItemTool('comfyui')}
+                  className={cn(
+                    'rounded-sm px-3 py-1.5 text-sm font-medium transition-colors',
+                    activeItemTool === 'comfyui'
+                      ? 'bg-surface-high text-primary'
+                      : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
+                  )}
+                >
+                  ComfyUI
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveItemTool('nai')}
+                  className={cn(
+                    'rounded-sm px-3 py-1.5 text-sm font-medium transition-colors',
+                    activeItemTool === 'nai'
+                      ? 'bg-surface-high text-primary'
+                      : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
+                  )}
+                >
+                  NAI
+                </button>
+              </div>
+
+              <WildcardItemSection title={activeItemTool === 'comfyui' ? 'ComfyUI 항목' : 'NAI 항목'} items={activeItems} />
             </div>
           </div>
         ) : (
@@ -309,26 +292,25 @@ function LoraScanLogCard({ log }: { log: WildcardScanLog | null }) {
           variant="inside"
           className="border-b border-border/70 pb-4"
           heading="최근 자동 수집 로그"
-          description="마지막 LoRA 자동 수집 결과 요약이야."
           actions={log ? <Badge variant="outline">{log.totalWildcards}</Badge> : undefined}
         />
 
         {log ? (
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-sm border border-border bg-surface-container p-3">
+              <div className="rounded-sm border border-border bg-surface-low p-3">
                 <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">시간</div>
                 <div className="mt-1 text-sm text-foreground">{formatDateTime(log.timestamp)}</div>
               </div>
-              <div className="rounded-sm border border-border bg-surface-container p-3">
+              <div className="rounded-sm border border-border bg-surface-low p-3">
                 <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">LoRA weight</div>
                 <div className="mt-1 text-sm text-foreground">{log.loraWeight}</div>
               </div>
-              <div className="rounded-sm border border-border bg-surface-container p-3">
+              <div className="rounded-sm border border-border bg-surface-low p-3">
                 <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">중복 처리</div>
                 <div className="mt-1 text-sm text-foreground">{log.duplicateHandling}</div>
               </div>
-              <div className="rounded-sm border border-border bg-surface-container p-3">
+              <div className="rounded-sm border border-border bg-surface-low p-3">
                 <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">생성 항목</div>
                 <div className="mt-1 text-sm text-foreground">{log.totalItems}</div>
               </div>
@@ -336,7 +318,7 @@ function LoraScanLogCard({ log }: { log: WildcardScanLog | null }) {
 
             <div className="space-y-2">
               {log.wildcards.slice(0, 8).map((entry) => (
-                <div key={entry.id} className="rounded-sm border border-border bg-surface-container px-3 py-2 text-xs text-muted-foreground">
+                <div key={entry.id} className="rounded-sm border border-border bg-surface-low px-3 py-2 text-xs text-muted-foreground">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-foreground">++{entry.name}++</span>
                     <Badge variant="outline">items {entry.itemCount}</Badge>
@@ -368,6 +350,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   const [previewTool, setPreviewTool] = useState<WildcardTool>('nai')
   const [previewText, setPreviewText] = useState('')
   const [previewCount, setPreviewCount] = useState('5')
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false)
   const [editorState, setEditorState] = useState<WildcardEditorState>(null)
   const [isLoraCollectModalOpen, setIsLoraCollectModalOpen] = useState(false)
 
@@ -462,9 +445,10 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     [browserEntries, selectedWildcardId],
   )
   const selectedWildcard = selectedEntry?.wildcard ?? null
-  const selectedToken = selectedEntry ? `++${selectedEntry.wildcard.name}++` : ''
+  const selectedWildcardSyntax = selectedEntry ? `++${selectedEntry.wildcard.name}++` : ''
   const activeTabLabel = WORKSPACE_TABS.find((tab) => tab.value === activeWorkspaceTab)?.label ?? '와일드카드'
   const canCreateInActiveTab = canCreateWorkspaceTabItem(activeWorkspaceTab)
+  const isReadonlyActiveTab = isReadonlyWorkspaceTab(activeWorkspaceTab)
 
   useEffect(() => {
     if (browserEntries.length === 0) {
@@ -478,12 +462,12 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   }, [browserEntries, selectedWildcardId])
 
   useEffect(() => {
-    if (!selectedToken) {
+    if (!selectedWildcardSyntax) {
       return
     }
 
-    setPreviewText((current) => (current.trim().length === 0 ? selectedToken : current))
-  }, [selectedToken])
+    setPreviewText((current) => (current.trim().length === 0 ? selectedWildcardSyntax : current))
+  }, [selectedWildcardSyntax])
 
   const handleCopy = async (text: string, label: string) => {
     try {
@@ -525,6 +509,11 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   }
 
   const handleOpenEditModal = () => {
+    if (isReadonlyActiveTab) {
+      showSnackbar({ message: '로라 탭 항목은 자동 수집 기반이라 편집할 수 없어.', tone: 'info' })
+      return
+    }
+
     if (!selectedWildcard) {
       return
     }
@@ -536,6 +525,11 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   }
 
   const handleDeleteSelected = async () => {
+    if (isReadonlyActiveTab) {
+      showSnackbar({ message: '로라 탭 항목은 자동 수집 기반이라 삭제할 수 없어.', tone: 'info' })
+      return
+    }
+
     if (!selectedWildcard) {
       return
     }
@@ -588,24 +582,22 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
 
   return (
     <div className="space-y-6">
-      <div className="border-b border-border/70 pb-2">
-        <div className="flex flex-wrap gap-2">
-          {WORKSPACE_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => setActiveWorkspaceTab(tab.value)}
-              className={cn(
-                'rounded-sm px-4 py-2 text-sm font-semibold transition-colors',
-                activeWorkspaceTab === tab.value
-                  ? 'bg-surface-container text-primary'
-                  : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-2">
+        <SegmentedControl
+          value={activeWorkspaceTab}
+          items={WORKSPACE_TABS}
+          onChange={(nextTab) => setActiveWorkspaceTab(nextTab as WildcardWorkspaceTab)}
+        />
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="outline"
+          onClick={() => setIsPreviewModalOpen(true)}
+          aria-label="파싱 테스트"
+          title="파싱 테스트"
+        >
+          <WandSparkles className="h-4 w-4" />
+        </Button>
       </div>
 
       <div className={cn('grid gap-8', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
@@ -617,13 +609,82 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
           bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 space-y-4 overflow-y-auto pr-1')}
           headerExtra={(
             <div className="space-y-3 border-b border-white/5 pb-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {activeWorkspaceTab === 'lora' ? (
+                  <>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      className="bg-surface-low"
+                      onClick={() => setIsLoraCollectModalOpen(true)}
+                      aria-label="자동 수집"
+                      title="자동 수집"
+                    >
+                      <Upload className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      className="bg-surface-low"
+                      onClick={() => void loraScanLogQuery.refetch()}
+                      disabled={loraScanLogQuery.isFetching}
+                      aria-label="로그 새로고침"
+                      title="로그 새로고침"
+                    >
+                      <History className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      className="bg-surface-low"
+                      onClick={() => handleOpenCreateModal(selectedWildcard?.id ?? null)}
+                      disabled={!canCreateInActiveTab}
+                      aria-label="항목 추가"
+                      title="항목 추가"
+                    >
+                      <FolderPlus className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      className="bg-surface-low"
+                      onClick={handleOpenEditModal}
+                      disabled={!selectedWildcard}
+                      aria-label="편집"
+                      title="편집"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      className="ml-2 bg-surface-low"
+                      onClick={() => void handleDeleteSelected()}
+                      disabled={!selectedWildcard || deleteMutation.isPending}
+                      aria-label="삭제"
+                      title="삭제"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
+              </div>
+
               <div className="flex items-center gap-2">
                 <Input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="이름 또는 경로 검색" />
                 <Button
                   type="button"
                   variant="outline"
                   size="icon-sm"
-                  className="shrink-0 bg-surface-container"
+                  className="shrink-0 bg-surface-low"
                   onClick={() => {
                     void wildcardsQuery.refetch()
                   }}
@@ -632,53 +693,6 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
                 >
                   <RefreshCw className="h-4 w-4" />
                 </Button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {activeWorkspaceTab === 'lora' ? (
-                  <>
-                    <Button type="button" size="sm" variant="secondary" onClick={() => setIsLoraCollectModalOpen(true)}>
-                      <Upload className="h-4 w-4" />
-                      자동 수집
-                    </Button>
-                    <Button type="button" size="sm" variant="secondary" onClick={() => void loraScanLogQuery.refetch()} disabled={loraScanLogQuery.isFetching}>
-                      <History className="h-4 w-4" />
-                      로그 새로고침
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => handleOpenCreateModal(null)}
-                      disabled={!canCreateInActiveTab}
-                    >
-                      <FolderPlus className="h-4 w-4" />
-                      새 항목
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => handleOpenCreateModal(selectedWildcard?.id ?? null)}
-                      disabled={!canCreateInActiveTab || !selectedWildcard}
-                    >
-                      <FolderPlus className="h-4 w-4" />
-                      하위 추가
-                    </Button>
-                  </>
-                )}
-                <Button type="button" size="icon-sm" variant="outline" onClick={handleOpenEditModal} disabled={!selectedWildcard} aria-label="편집" title="편집">
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button type="button" size="icon-sm" variant="outline" onClick={() => void handleDeleteSelected()} disabled={!selectedWildcard || deleteMutation.isPending} aria-label="삭제" title="삭제">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <ListTree className="h-3.5 w-3.5" />
-                <span>{getWorkspaceTabDescription(activeWorkspaceTab)}</span>
               </div>
             </div>
           )}
@@ -713,16 +727,15 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
                         className={cn(
                           'w-full rounded-sm border px-3 py-2 text-left transition-colors',
                           isSelected
-                            ? 'border-primary bg-surface-container'
-                            : 'border-border bg-surface-lowest hover:bg-surface-high',
+                            ? 'border-primary bg-surface-high'
+                            : 'border-border bg-surface-lowest hover:border-primary/35',
                         )}
                       >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-medium text-foreground">{wildcard.name}</span>
-                          <Badge variant={wildcard.type === 'chain' ? 'secondary' : 'outline'}>{wildcard.type === 'chain' ? 'Chain' : 'Wildcard'}</Badge>
-                          {wildcard.is_auto_collected === 1 ? <Badge variant="outline">Auto LoRA</Badge> : null}
+                        <div className="flex items-center gap-2">
+                          <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="truncate text-sm font-medium text-foreground">{wildcard.name}</span>
                         </div>
-                        <div className="mt-1 text-xs text-muted-foreground">{entry.path.join(' / ')}</div>
+                        <div className="mt-1 truncate text-xs text-muted-foreground">{entry.path.join(' / ')}</div>
                       </button>
                     )
                   })}
@@ -731,7 +744,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
                 <div className="text-sm text-muted-foreground">검색 결과가 없어.</div>
               )
             ) : browserTreeNodes.length > 0 ? (
-              <WildcardTreeList nodes={browserTreeNodes} selectedId={selectedWildcardId} onSelect={setSelectedWildcardId} />
+              <WildcardTree entries={browserEntries} selectedId={selectedWildcardId} onSelect={setSelectedWildcardId} />
             ) : (
               <div className="text-sm text-muted-foreground">표시할 항목이 아직 없어.</div>
             )
@@ -741,101 +754,19 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
         <section className="space-y-6">
           <WildcardDetailCard
             selectedEntry={selectedEntry}
-            onCopyToken={handleCopy}
-            extraActions={selectedWildcard ? (
+            onCopySyntax={handleCopy}
+            extraActions={selectedWildcard && !isReadonlyActiveTab ? (
               <>
-                <Button type="button" variant="outline" size="sm" onClick={handleOpenEditModal}>
+                <Button type="button" variant="outline" size="icon-sm" className="bg-surface-low" onClick={handleOpenEditModal} aria-label="편집" title="편집">
                   <Pencil className="h-4 w-4" />
-                  편집
                 </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => void handleDeleteSelected()} disabled={deleteMutation.isPending}>
+                <Button type="button" variant="outline" size="icon-sm" className="bg-surface-low" onClick={() => void handleDeleteSelected()} disabled={deleteMutation.isPending} aria-label="삭제" title="삭제">
                   <Trash2 className="h-4 w-4" />
-                  삭제
                 </Button>
               </>
             ) : undefined}
           />
 
-          <Card>
-            <CardContent className="space-y-4">
-              <SectionHeading
-                variant="inside"
-                className="border-b border-border/70 pb-4"
-                heading={(
-                  <span className="flex items-center gap-2">
-                    <WandSparkles className="h-4 w-4 text-primary" />
-                    파싱 프리뷰
-                  </span>
-                )}
-                description="선택한 토큰이나 임의 프롬프트를 넣고 결과 샘플을 미리 확인해."
-                actions={parseMutation.data ? <Badge variant="outline">{parseMutation.data.results.length}</Badge> : undefined}
-              />
-
-              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px]">
-                <Input value={selectedToken} readOnly placeholder="선택한 토큰" />
-                <Select value={previewTool} onChange={(event) => setPreviewTool(event.target.value as WildcardTool)}>
-                  <option value="nai">NAI</option>
-                  <option value="comfyui">ComfyUI</option>
-                </Select>
-                <Select value={previewCount} onChange={(event) => setPreviewCount(event.target.value)}>
-                  <option value="3">3개</option>
-                  <option value="5">5개</option>
-                  <option value="10">10개</option>
-                </Select>
-              </div>
-
-              <Textarea
-                value={previewText}
-                onChange={(event) => setPreviewText(event.target.value)}
-                rows={5}
-                placeholder="예: masterpiece, ++character_pose++, cinematic lighting"
-              />
-
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" onClick={() => setPreviewText(selectedToken)} disabled={!selectedToken}>
-                  <Braces className="h-4 w-4" />
-                  토큰만 넣기
-                </Button>
-                <Button type="button" onClick={() => void handleParsePreview()} disabled={parseMutation.isPending || previewText.trim().length === 0}>
-                  <Sparkles className="h-4 w-4" />
-                  {parseMutation.isPending ? '프리뷰 생성 중…' : '프리뷰 생성'}
-                </Button>
-              </div>
-
-              {parseMutation.isError ? (
-                <Alert variant="destructive">
-                  <AlertTitle>프리뷰 생성 실패</AlertTitle>
-                  <AlertDescription>{getErrorMessage(parseMutation.error, '프리뷰 생성 중 오류가 났어.')}</AlertDescription>
-                </Alert>
-              ) : null}
-
-              {parseMutation.data ? (
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <Badge variant="outline">used</Badge>
-                    {parseMutation.data.usedWildcards.length > 0 ? parseMutation.data.usedWildcards.map((name) => <Badge key={name} variant="outline">{name}</Badge>) : <span>감지된 와일드카드가 없어.</span>}
-                  </div>
-
-                  <div className="space-y-2">
-                    {parseMutation.data.results.map((result, index) => (
-                      <div key={`${index}:${result}`} className="rounded-sm border border-border bg-surface-container p-3 text-sm text-muted-foreground">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-xs uppercase tracking-[0.18em]">sample {index + 1}</div>
-                          <Button type="button" size="sm" variant="ghost" onClick={() => void handleCopy(result, `프리뷰 결과 ${index + 1}`)}>
-                            <Copy className="h-4 w-4" />
-                            복사
-                          </Button>
-                        </div>
-                        <div className="mt-2 break-words whitespace-pre-wrap text-foreground">{result}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">프리뷰를 실행하면 파싱 결과 샘플을 여기 보여줄게.</div>
-              )}
-            </CardContent>
-          </Card>
 
           {activeWorkspaceTab === 'lora' ? (
             loraScanLogQuery.isError ? (
@@ -857,6 +788,82 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
         onSubmit={handleSubmitLoraCollect}
       />
 
+      <SettingsModal
+        open={isPreviewModalOpen}
+        onClose={() => setIsPreviewModalOpen(false)}
+        title={(
+          <span className="flex items-center gap-2">
+            <WandSparkles className="h-4 w-4 text-primary" />
+            파싱 테스트
+          </span>
+        )}
+        widthClassName="max-w-4xl"
+      >
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px]">
+            <Input value={selectedWildcardSyntax} readOnly placeholder="선택한 와일드카드 문법" />
+            <Select value={previewTool} onChange={(event) => setPreviewTool(event.target.value as WildcardTool)}>
+              <option value="nai">NAI</option>
+              <option value="comfyui">ComfyUI</option>
+            </Select>
+            <Select value={previewCount} onChange={(event) => setPreviewCount(event.target.value)}>
+              <option value="3">3개</option>
+              <option value="5">5개</option>
+              <option value="10">10개</option>
+            </Select>
+          </div>
+
+          <Textarea
+            value={previewText}
+            onChange={(event) => setPreviewText(event.target.value)}
+            rows={5}
+            placeholder="예: masterpiece, ++character_pose++, cinematic lighting"
+          />
+
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={() => setPreviewText(selectedWildcardSyntax)} disabled={!selectedWildcardSyntax}>
+              <Braces className="h-4 w-4" />
+              선택 항목 넣기
+            </Button>
+            <Button type="button" onClick={() => void handleParsePreview()} disabled={parseMutation.isPending || previewText.trim().length === 0}>
+              <Sparkles className="h-4 w-4" />
+              {parseMutation.isPending ? '테스트 중…' : '테스트'}
+            </Button>
+          </div>
+
+          {parseMutation.isError ? (
+            <Alert variant="destructive">
+              <AlertTitle>테스트 실패</AlertTitle>
+              <AlertDescription>{getErrorMessage(parseMutation.error, '테스트 중 오류가 났어.')}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {parseMutation.data ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <Badge variant="outline">used</Badge>
+                {parseMutation.data.usedWildcards.length > 0 ? parseMutation.data.usedWildcards.map((name) => <Badge key={name} variant="outline">{name}</Badge>) : <span>감지된 와일드카드가 없어.</span>}
+              </div>
+
+              <div className="space-y-2">
+                {parseMutation.data.results.map((result, index) => (
+                  <div key={`${index}:${result}`} className="rounded-sm border border-border bg-surface-low p-3 text-sm text-muted-foreground">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs uppercase tracking-[0.18em]">sample {index + 1}</div>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => void handleCopy(result, `프리뷰 결과 ${index + 1}`)}>
+                        <Copy className="h-4 w-4" />
+                        복사
+                      </Button>
+                    </div>
+                    <div className="mt-2 break-words whitespace-pre-wrap text-foreground">{result}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </SettingsModal>
+
       <WildcardEditorModal
         open={editorState !== null}
         mode={editorState?.mode ?? 'create'}
@@ -872,3 +879,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     </div>
   )
 }
+
+
+
+

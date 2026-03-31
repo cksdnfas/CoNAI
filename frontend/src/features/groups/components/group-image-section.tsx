@@ -98,7 +98,7 @@ export function GroupImageSection({
       ) : null}
 
       {!isLoading && !isError && groupImages.length === 0 ? (
-        <Card className="bg-surface-container">
+        <Card >
           <CardContent className="text-sm text-muted-foreground">표시할 이미지가 없어.</CardContent>
         </Card>
       ) : null}

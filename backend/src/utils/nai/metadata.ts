@@ -2,8 +2,6 @@
  * NovelAI metadata normalization helpers shared by direct generation and graph execution.
  */
 
-export type NAIRatingMode = 'general' | 'sensitive' | 'questionable' | 'explicit'
-
 export interface NAICharacterPrompt {
   prompt: string
   uc?: string
@@ -35,14 +33,13 @@ export interface NAIMetadataParams {
   scale?: number
   sampler?: string
   variety_plus?: boolean
+  use_coords?: boolean
   n_samples?: number
   seed?: number
   ucPreset?: number
   uncond_scale?: number
   cfg_rescale?: number
   noise_schedule?: string
-  rating?: NAIRatingMode
-  quality_tags_enabled?: boolean
   image?: string
   strength?: number
   noise?: number
@@ -67,25 +64,6 @@ export interface NAIMetadataInputParams extends Omit<NAIMetadataParams, 'charact
   characters?: NAICharacterPrompt[] | string
   vibes?: NAIVibeTransfer[] | string
   character_refs?: NAICharacterReference[] | string
-}
-
-const QUALITY_TAGS_BY_MODEL: Record<string, string> = {
-  'nai-diffusion-4-5-full': ', location, very aesthetic, masterpiece, no text',
-  'nai-diffusion-4-5-curated': ', location, very aesthetic, masterpiece, no text',
-  'nai-diffusion-4-curated-preview': ', no text, amazing quality, very aesthetic, absurdres',
-  'nai-diffusion-3': ', best quality, amazing quality, very aesthetic, absurdres',
-}
-
-const RATING_PROMPT_TAGS: Record<NAIRatingMode, string> = {
-  general: 'rating:general, safe',
-  sensitive: 'rating:sensitive',
-  questionable: 'rating:questionable, nsfw',
-  explicit: 'rating:explicit, nsfw',
-}
-
-const RATING_NEGATIVE_TAGS: Partial<Record<NAIRatingMode, string>> = {
-  general: 'nsfw',
-  sensitive: 'nsfw',
 }
 
 const CHARACTER_GRID_VALUES = [0.1, 0.3, 0.5, 0.7, 0.9] as const
@@ -211,43 +189,6 @@ function normalizeCharacterReferences(value: NAIMetadataInputParams['character_r
   return normalized
 }
 
-/** Append a comma-separated prompt suffix while avoiding simple duplicates. */
-function appendPromptSuffix(base: string, suffix: string) {
-  const trimmedBase = base.trim()
-  const normalizedSuffix = suffix.trim().replace(/^,\s*/, '')
-  if (!normalizedSuffix) {
-    return trimmedBase
-  }
-
-  const lowerBase = trimmedBase.toLowerCase()
-  const lowerSuffix = normalizedSuffix.toLowerCase()
-  if (lowerBase.includes(lowerSuffix)) {
-    return trimmedBase
-  }
-
-  return trimmedBase.length > 0 ? `${trimmedBase}, ${normalizedSuffix}` : normalizedSuffix
-}
-
-/** Apply rating and quality-tag helpers so generated prompts match the requested mode. */
-function applyPromptEnhancers(prompt: string, negativePrompt: string, model: string, rating: NAIRatingMode, qualityTagsEnabled: boolean) {
-  let nextPrompt = prompt.trim()
-  let nextNegativePrompt = negativePrompt.trim()
-
-  nextPrompt = appendPromptSuffix(nextPrompt, RATING_PROMPT_TAGS[rating])
-  if (RATING_NEGATIVE_TAGS[rating]) {
-    nextNegativePrompt = appendPromptSuffix(nextNegativePrompt, RATING_NEGATIVE_TAGS[rating]!)
-  }
-
-  if (qualityTagsEnabled) {
-    nextPrompt = appendPromptSuffix(nextPrompt, QUALITY_TAGS_BY_MODEL[model] ?? '')
-  }
-
-  return {
-    prompt: nextPrompt,
-    negativePrompt: nextNegativePrompt,
-  }
-}
-
 /** Normalize and enrich one NovelAI payload before request building. */
 export function preprocessMetadata(params: NAIMetadataInputParams): NAIMetadataParams {
   const metadata: NAIMetadataParams = {
@@ -272,18 +213,6 @@ export function preprocessMetadata(params: NAIMetadataInputParams): NAIMetadataP
   metadata.uncond_scale = metadata.uncond_scale ?? 1.0
   metadata.cfg_rescale = metadata.cfg_rescale ?? 0.0
   metadata.noise_schedule = metadata.noise_schedule || 'karras'
-  metadata.rating = metadata.rating || 'sensitive'
-  metadata.quality_tags_enabled = metadata.quality_tags_enabled ?? true
-
-  const promptBundle = applyPromptEnhancers(
-    metadata.prompt,
-    metadata.negative_prompt || '',
-    metadata.model,
-    metadata.rating,
-    metadata.quality_tags_enabled,
-  )
-  metadata.prompt = promptBundle.prompt
-  metadata.negative_prompt = promptBundle.negativePrompt
 
   if (metadata.action === 'img2img' || metadata.action === 'infill') {
     metadata.strength = metadata.strength || 0.3

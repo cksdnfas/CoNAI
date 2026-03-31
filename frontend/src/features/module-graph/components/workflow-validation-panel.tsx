@@ -42,7 +42,7 @@ export function WorkflowValidationPanel({
   const isReady = errorCount === 0
 
   return (
-    <Card className="bg-surface-container">
+    <Card>
       <CardContent className="space-y-3.5">
         {showHeader ? (
           <SectionHeading

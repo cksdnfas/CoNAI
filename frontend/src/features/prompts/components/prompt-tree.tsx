@@ -1,6 +1,6 @@
 import { Folder, FolderOpen } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
-import { cn } from '@/lib/utils'
+import { getNavigationItemClassName } from '@/components/common/navigation-item'
 import type { PromptGroupRecord } from '@/types/prompt'
 
 interface PromptTreeProps {
@@ -16,12 +16,10 @@ export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGr
       <button
         type="button"
         onClick={() => onSelectGroup(undefined)}
-        className={cn(
-          'flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm transition-colors',
-          selectedGroupId == null
-            ? 'bg-surface-container text-primary'
-            : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
-        )}
+        className={getNavigationItemClassName({
+          active: selectedGroupId == null,
+          className: 'flex items-center justify-between',
+        })}
       >
         <span>{`All prompts (${totalCount.toLocaleString('ko-KR')})`}</span>
       </button>

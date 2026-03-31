@@ -72,7 +72,7 @@ export function AppearanceTab({
       />
 
       <section>
-        <Card className="bg-surface-container">
+        <Card>
           <CardContent className="space-y-4">
             <SectionHeading
               variant="inside"
@@ -111,7 +111,7 @@ export function AppearanceTab({
       </section>
 
       <section>
-        <Card className="bg-surface-container">
+        <Card>
           <CardContent className="space-y-4">
             <SectionHeading variant="inside" heading="세부 편집" />
             {appearanceDraft ? (

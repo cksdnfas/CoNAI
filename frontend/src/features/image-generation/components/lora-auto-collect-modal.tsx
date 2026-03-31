@@ -210,7 +210,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
 
         <input ref={inputRef} type="file" className="hidden" multiple onChange={(event) => void handleFileChange(event)} />
 
-        <div className="space-y-3 rounded-sm border border-border bg-surface-container p-4">
+        <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" onClick={handlePickFolder} disabled={isSubmitting || isPreparingFiles}>
               <FolderOpen className="h-4 w-4" />

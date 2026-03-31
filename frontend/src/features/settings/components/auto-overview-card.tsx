@@ -45,7 +45,7 @@ export function AutoOverviewCard({
   const kaloscopeReady = kaloscopeStatus ? kaloscopeStatus.scriptExists && kaloscopeStatus.dependenciesAvailable : null
 
   return (
-    <Card className="bg-surface-container">
+    <Card>
       <CardContent className="space-y-4">
         <SectionHeading variant="inside" heading={heading} actions={actions} />
         <div className="grid gap-4 min-[900px]:grid-cols-4">

@@ -1,10 +1,10 @@
 import { useState } from 'react'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { AppearanceColorEditorContent } from './appearance-color-editor-content'
 import { AppearanceGeneralEditorContent } from './appearance-general-editor-content'
 import { AppearanceListEditorContent } from './appearance-list-editor-content'
 import {
   APPEARANCE_EDITOR_TABS,
-  AppearanceEditorTabButton,
   type AppearanceEditorTab,
   type AppearanceTabEditorSectionProps,
 } from './appearance-tab-editor-shared'
@@ -15,15 +15,13 @@ export function AppearanceTabEditorSection(props: AppearanceTabEditorSectionProp
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2 border-b border-white/5 pb-2">
-        {APPEARANCE_EDITOR_TABS.map((tab) => (
-          <AppearanceEditorTabButton
-            key={tab.value}
-            label={tab.label}
-            isActive={activeTab === tab.value}
-            onClick={() => setActiveTab(tab.value)}
-          />
-        ))}
+      <div className="border-b border-white/5 pb-2">
+        <SegmentedControl
+          value={activeTab}
+          items={APPEARANCE_EDITOR_TABS}
+          onChange={(nextTab) => setActiveTab(nextTab as AppearanceEditorTab)}
+          size="xs"
+        />
       </div>
 
       {activeTab === 'general' ? <AppearanceGeneralEditorContent {...props} /> : null}

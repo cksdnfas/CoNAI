@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { getNavigationItemClassName } from './navigation-item'
 import { HierarchyNav, type HierarchyNodeId, type HierarchyNavItemState } from './hierarchy-nav'
 
 interface HierarchyPickerProps<T> {
@@ -40,12 +41,10 @@ export function HierarchyPicker<T>({
         <button
           type="button"
           onClick={onSelectRoot}
-          className={cn(
-            'flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm transition-colors',
-            selectedId == null
-              ? 'bg-surface-container text-primary'
-              : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
-          )}
+          className={getNavigationItemClassName({
+            active: selectedId == null,
+            className: 'flex items-center justify-between',
+          })}
         >
           <span>{rootLabel}</span>
         </button>

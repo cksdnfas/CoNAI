@@ -70,7 +70,7 @@ export function WatchedFolderCard({
   }
 
   return (
-    <Card className="bg-surface-container">
+    <Card>
       <CardHeader>
         <SettingsResourceCardHeader
           title={folder.folder_name || '이름 없는 폴더'}

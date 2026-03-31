@@ -24,7 +24,7 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
       <section>
-        <Card className="bg-surface-container">
+        <Card>
           <CardContent className="space-y-4">
             <SectionHeading variant="inside" heading={`${getTypeLabel(promptType)} 요약`} />
             <div className="grid gap-3 sm:grid-cols-3">
@@ -46,7 +46,7 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
       </section>
 
       <section>
-        <Card className="bg-surface-container">
+        <Card>
           <CardContent className="space-y-4">
             <SectionHeading variant="inside" heading="Top groups" />
             <div className="space-y-2">
@@ -62,7 +62,7 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
       </section>
 
       <section className="xl:col-span-2">
-        <Card className="bg-surface-container">
+        <Card>
           <CardContent className="space-y-4">
             <SectionHeading variant="inside" heading="Top prompts" />
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">

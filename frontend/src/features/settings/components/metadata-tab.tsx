@@ -19,7 +19,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving }
   return (
     <div className="space-y-8">
       <section>
-        <Card className="bg-surface-container">
+        <Card>
           <CardContent className="space-y-4">
             <SectionHeading
               variant="inside"

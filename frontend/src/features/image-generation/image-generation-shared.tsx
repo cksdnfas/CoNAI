@@ -82,8 +82,7 @@ export type NAIFormDraft = {
   scale: string
   samples: string
   seed: string
-  rating: 'general' | 'sensitive' | 'questionable' | 'explicit'
-  applyQualityTags: boolean
+  characterPositionAiChoice: boolean
   characters: NAICharacterPromptDraft[]
   vibes: NAIVibeDraft[]
   characterReferences: NAICharacterReferenceDraft[]
@@ -148,8 +147,7 @@ export const DEFAULT_NAI_FORM: NAIFormDraft = {
   scale: '6',
   samples: '1',
   seed: '',
-  rating: 'sensitive',
-  applyQualityTags: true,
+  characterPositionAiChoice: true,
   characters: [],
   vibes: [],
   characterReferences: [],
@@ -283,19 +281,24 @@ export function FormField({ label, children, hint }: { label: string; children: 
   )
 }
 
-export function SummaryChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-sm bg-surface-high px-3 py-2">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
-      <div className="mt-1 text-sm text-foreground">{value}</div>
-    </div>
-  )
-}
-
 /** Parse a numeric text input while keeping a safe fallback. */
 export function parseNumberInput(value: string, fallback: number) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+export const NAI_SAMPLE_COUNT_MIN = 1
+export const NAI_SAMPLE_COUNT_MAX = 4
+
+/** Clamp the NAI sample count into the supported integer range. */
+export function clampNaiSampleCount(value: string | number, fallback = NAI_SAMPLE_COUNT_MIN) {
+  const parsed = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(parsed)) {
+    return fallback
+  }
+
+  const integerValue = Math.trunc(parsed)
+  return Math.min(NAI_SAMPLE_COUNT_MAX, Math.max(NAI_SAMPLE_COUNT_MIN, integerValue))
 }
 
 /** Toggle a string item inside a selection array. */
@@ -324,6 +327,16 @@ export function normalizeNaiCharacterPromptDrafts(characters: NAICharacterPrompt
     centerX: snapNaiCharacterGridValue(character.centerX),
     centerY: snapNaiCharacterGridValue(character.centerY),
   }))
+}
+
+/** Check whether a character prompt list can use manual 5x5 placement. */
+export function canUseNaiCharacterPositions(characterCount: number) {
+  return characterCount >= 2
+}
+
+/** Resolve whether the current NAI form should send manual character positions. */
+export function shouldUseNaiCharacterPositions(form: Pick<NAIFormDraft, 'characterPositionAiChoice' | 'characters'>) {
+  return canUseNaiCharacterPositions(form.characters.length) && !form.characterPositionAiChoice
 }
 
 /** Check whether the selected NAI model supports v4 character prompts. */
@@ -392,16 +405,15 @@ export function buildNaiModuleSnapshot(form: NAIFormDraft) {
     height: parseNumberInput(form.height, 1024),
     steps: parseNumberInput(form.steps, 28),
     scale: parseNumberInput(form.scale, 6),
-    n_samples: parseNumberInput(form.samples, 1),
+    n_samples: clampNaiSampleCount(form.samples),
     seed: form.seed.trim().length > 0 ? Number(form.seed) : null,
-    rating: form.rating,
-    quality_tags_enabled: form.applyQualityTags,
+    use_coords: shouldUseNaiCharacterPositions(form),
     characters: buildNaiCharacterPromptPayload(form.characters),
     vibes: buildNaiVibePayload(form.vibes),
     character_refs: buildNaiCharacterReferencePayload(form.characterReferences),
     variety_plus: form.varietyPlus,
-    image: form.sourceImage?.dataUrl || null,
-    mask: form.maskImage?.dataUrl || null,
+    image: form.action !== 'generate' ? form.sourceImage?.dataUrl || null : null,
+    mask: form.action === 'infill' ? form.maskImage?.dataUrl || null : null,
     strength: form.action !== 'generate' ? parseNumberInput(form.strength, 0.3) : null,
     noise: form.action !== 'generate' ? parseNumberInput(form.noise, 0) : null,
     add_original_image: form.action === 'infill' ? form.addOriginalImage : null,
@@ -423,8 +435,6 @@ export function buildNaiModuleFieldOptions(form: NAIFormDraft): ModuleFieldOptio
     { key: 'scale', label: 'CFG Scale', dataType: 'number' },
     { key: 'n_samples', label: 'Samples', dataType: 'number' },
     { key: 'seed', label: 'Seed', dataType: 'number' },
-    { key: 'rating', label: 'Rating', dataType: 'text' },
-    { key: 'quality_tags_enabled', label: 'Quality Tags', dataType: 'boolean' },
     { key: 'variety_plus', label: 'Variety+', dataType: 'boolean' },
   ]
 

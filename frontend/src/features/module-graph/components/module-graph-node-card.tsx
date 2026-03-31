@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { Badge } from '@/components/ui/badge'
 import type { ModulePortDefinition } from '@/lib/api'
-import { buildHandleId, getModuleColor, getPortOffset, getPortTypeColor, type ModuleGraphNode } from '../module-graph-shared'
+import { buildHandleId, getModuleColor, getPortTypeColor, type ModuleGraphNode } from '../module-graph-shared'
 
 const PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], string> = {
   image: 'image',
@@ -52,7 +52,7 @@ function buildPortTooltip(port: ModulePortDefinition, statusLabel: string) {
     .join('\n')
 }
 
-/** Render one compact port row with a label and a colored type badge only. */
+/** Render one port row whose label and handle share the same visual center line. */
 function PortCell({ port, side, accentColor, connected, satisfied, requiredMissing }: PortCellProps) {
   if (!port) {
     return <div className="min-h-[34px] rounded-sm border border-dashed border-border/35 bg-surface-low/20" aria-hidden="true" />
@@ -69,12 +69,19 @@ function PortCell({ port, side, accentColor, connected, satisfied, requiredMissi
 
   return (
     <div
-      className={`min-h-[34px] rounded-sm border ${alignmentClass}`}
+      className={`relative min-h-[34px] rounded-sm border ${alignmentClass}`}
       style={{ borderColor, backgroundColor } as CSSProperties}
       title={buildPortTooltip(port, statusLabel)}
     >
+      <Handle
+        id={buildHandleId(side === 'input' ? 'in' : 'out', port.key)}
+        type={side === 'input' ? 'target' : 'source'}
+        position={side === 'input' ? Position.Left : Position.Right}
+        style={buildHandleStyle({ side, color: portTypeColor })}
+        title={buildPortTooltip(port, statusLabel)}
+      />
+
       <div className={`flex min-h-[32px] items-center gap-2 ${rowJustifyClass}`}>
-        {side === 'input' ? <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: portTypeColor }} aria-hidden="true" /> : null}
         <span className={`min-w-0 flex-1 truncate text-[11px] font-medium text-foreground ${labelAlignmentClass}`}>
           {port.label}
           {port.required ? <span className="ml-1 text-[11px] text-amber-300">*</span> : null}
@@ -83,9 +90,9 @@ function PortCell({ port, side, accentColor, connected, satisfied, requiredMissi
           <span
             className="shrink-0 rounded-sm border px-1.5 py-0 text-[9px] font-semibold uppercase tracking-[0.08em]"
             style={{
-              borderColor: `${portTypeColor}88`,
+              borderColor: `${portTypeColor}66`,
               color: portTypeColor,
-              background: `linear-gradient(90deg, ${TEXT_PORT_COLOR}22 0 50%, ${PROMPT_PORT_COLOR}22 50% 100%)`,
+              background: `linear-gradient(90deg, ${TEXT_PORT_COLOR}16 0 50%, ${PROMPT_PORT_COLOR}16 50% 100%)`,
             } as CSSProperties}
           >
             T↔P
@@ -93,30 +100,30 @@ function PortCell({ port, side, accentColor, connected, satisfied, requiredMissi
         ) : (
           <Badge
             variant="outline"
-            className="shrink-0 px-1.5 py-0 text-[9px] font-semibold uppercase tracking-[0.08em]"
-            style={{ borderColor: `${portTypeColor}88`, color: portTypeColor } as CSSProperties}
+            className="shrink-0 px-1.5 py-0 text-[9px] font-medium uppercase tracking-[0.08em]"
+            style={{ borderColor: `${portTypeColor}66`, color: portTypeColor } as CSSProperties}
           >
             {PORT_TYPE_LABELS[port.data_type]}
           </Badge>
         )}
-        {side === 'output' ? <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: portTypeColor }} aria-hidden="true" /> : null}
       </div>
     </div>
   )
 }
 
-/** Build a larger handle target so graph connections are easier to click and drag. */
-function buildHandleStyle(params: { side: 'input' | 'output'; top: string; color: string }): CSSProperties {
+/** Build a smaller handle target that aligns directly with its port row. */
+function buildHandleStyle(params: { side: 'input' | 'output'; color: string }): CSSProperties {
   return {
-    top: params.top,
-    width: 18,
-    height: 18,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    width: 12,
+    height: 12,
     borderRadius: 999,
     background: params.color,
     border: '2px solid var(--surface-container)',
-    boxShadow: `0 0 0 4px ${params.color}22`,
-    left: params.side === 'input' ? -10 : undefined,
-    right: params.side === 'output' ? -10 : undefined,
+    boxShadow: `0 0 0 2px ${params.color}22`,
+    left: params.side === 'input' ? -7 : undefined,
+    right: params.side === 'output' ? -7 : undefined,
   }
 }
 
@@ -209,28 +216,6 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
           )
         })}
       </div>
-
-      {inputPorts.map((port, index) => (
-        <Handle
-          key={port.key}
-          id={buildHandleId('in', port.key)}
-          type="target"
-          position={Position.Left}
-          style={buildHandleStyle({ side: 'input', top: getPortOffset(index, inputPorts.length), color: getPortTypeColor(port.data_type) })}
-          title={buildPortTooltip(port, connectedInputKeys.has(port.key) ? 'linked' : 'open')}
-        />
-      ))}
-
-      {outputPorts.map((port, index) => (
-        <Handle
-          key={port.key}
-          id={buildHandleId('out', port.key)}
-          type="source"
-          position={Position.Right}
-          style={buildHandleStyle({ side: 'output', top: getPortOffset(index, outputPorts.length), color: getPortTypeColor(port.data_type) })}
-          title={buildPortTooltip(port, connectedOutputKeys.has(port.key) ? 'linked' : 'open')}
-        />
-      ))}
     </div>
   )
 }

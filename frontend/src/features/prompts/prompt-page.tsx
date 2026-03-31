@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { PageHeader } from '@/components/common/page-header'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { exportPromptGroups } from '@/lib/api'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -293,23 +294,11 @@ export function PromptPage() {
       <PageHeader title="Prompts" />
 
       <div className="border-b border-border/70 pb-2">
-        <div className="flex flex-wrap gap-2">
-          {PROMPT_TYPE_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => handleChangeType(tab.value)}
-              className={cn(
-                'rounded-sm px-4 py-2 text-sm font-semibold transition-colors',
-                promptType === tab.value
-                  ? 'bg-surface-container text-primary'
-                  : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          value={promptType}
+          items={PROMPT_TYPE_TABS}
+          onChange={(nextType) => handleChangeType(nextType as PromptTypeFilter)}
+        />
       </div>
 
       <div className={cn('grid gap-8', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
@@ -319,7 +308,6 @@ export function PromptPage() {
           totalCount={sidebarTotalCount}
           groupsLoading={groupsQuery.isLoading}
           groupsError={groupsQuery.error instanceof Error ? groupsQuery.error.message : groupsQuery.isError ? '알 수 없는 오류가 발생했어.' : null}
-          isDesktopPageLayout={isDesktopPageLayout}
           canCollect={promptType !== 'auto'}
           onSelectGroup={(groupId) => {
             setSelectedGroupId(groupId)

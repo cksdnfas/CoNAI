@@ -1,10 +1,10 @@
 import { memo, type DragEvent, type ReactNode } from 'react'
+import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import {
   getImageListDisplayName,
   getImageListItemId,
-  getImageListMediaKind,
   getImageListPreviewUrl,
 } from './image-list-utils'
 
@@ -36,7 +36,6 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   renderOverlay,
 }: ImageListItemProps) {
   const previewUrl = getImageListPreviewUrl(image)
-  const mediaKind = getImageListMediaKind(image)
   const imageId = getImageListItemId(image)
   const displayName = getImageListDisplayName(image)
   const aspectRatio = image.width && image.height ? `${image.width} / ${image.height}` : undefined
@@ -49,33 +48,15 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
         : { aspectRatio: '4 / 5', minHeight: 240 }
 
   const content = previewUrl ? (
-    mediaKind === 'video' ? (
-      <video
-        src={previewUrl}
-        className="block h-full w-full object-cover"
-        style={mediaFrameStyle}
-        muted
-        loop
-        autoPlay
-        playsInline
-        preload="metadata"
-        draggable={false}
-        controls={false}
-        disablePictureInPicture
-        controlsList="nodownload noplaybackrate noremoteplayback"
-        onDragStart={preventNativeDrag}
-      />
-    ) : (
-      <img
-        src={previewUrl}
-        alt={displayName}
-        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-        style={mediaFrameStyle}
-        loading="lazy"
-        draggable={false}
-        onDragStart={preventNativeDrag}
-      />
-    )
+    <ImagePreviewMedia
+      image={image}
+      alt={displayName}
+      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+      style={mediaFrameStyle}
+      loading="lazy"
+      draggable={false}
+      onDragStart={preventNativeDrag}
+    />
   ) : (
     <div
       className="flex items-center justify-center text-sm text-muted-foreground"

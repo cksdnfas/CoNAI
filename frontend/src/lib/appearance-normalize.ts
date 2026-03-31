@@ -45,6 +45,7 @@ export function extractAppearanceTheme(appearance: AppearanceSettings | Appearan
     detailRelatedImageMobileColumns: appearance.detailRelatedImageMobileColumns,
     detailRelatedImageColumns: appearance.detailRelatedImageColumns,
     detailRelatedImageAspectRatio: appearance.detailRelatedImageAspectRatio,
+    groupExplorerCardStyle: appearance.groupExplorerCardStyle,
     selectionOutlineWidth: appearance.selectionOutlineWidth,
     positiveBadgeColor: appearance.positiveBadgeColor,
     negativeBadgeColor: appearance.negativeBadgeColor,
@@ -154,6 +155,11 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
   if (source.detailRelatedImageAspectRatio !== undefined) {
     if (!isEnumValue(source.detailRelatedImageAspectRatio, ['original', 'square', 'portrait', 'landscape'])) return null
     next.detailRelatedImageAspectRatio = source.detailRelatedImageAspectRatio
+  }
+
+  if (source.groupExplorerCardStyle !== undefined) {
+    if (!isEnumValue(source.groupExplorerCardStyle, ['compact-row', 'media-tile'])) return null
+    next.groupExplorerCardStyle = source.groupExplorerCardStyle
   }
 
   if (source.customFontFamily !== undefined) {

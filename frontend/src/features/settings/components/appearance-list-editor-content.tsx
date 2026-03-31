@@ -4,6 +4,7 @@ import type { AppearanceSettings } from '@/types/settings'
 import {
   type AppearanceTabEditorSectionProps,
   EditorSectionLead,
+  getGroupExplorerCardStyleLabel,
   getRelatedImageAspectRatioLabel,
   RelatedImageColumnSlider,
 } from './appearance-tab-editor-shared'
@@ -16,6 +17,25 @@ export function AppearanceListEditorContent({
 }: AppearanceTabEditorSectionProps) {
   return (
     <div className="space-y-8">
+      <section className="space-y-4">
+        <EditorSectionLead title="그룹 탐색 목록" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SettingsField label="그룹 카드 스타일">
+            <Select
+              variant="settings"
+              value={appearanceDraft.groupExplorerCardStyle}
+              onChange={(event) => onPatchAppearance({ groupExplorerCardStyle: event.target.value as AppearanceSettings['groupExplorerCardStyle'] })}
+            >
+              {(['compact-row', 'media-tile'] as AppearanceSettings['groupExplorerCardStyle'][]).map((style) => (
+                <option key={style} value={style}>
+                  {getGroupExplorerCardStyleLabel(style)}
+                </option>
+              ))}
+            </Select>
+          </SettingsField>
+        </div>
+      </section>
+
       <section className="space-y-4">
         <EditorSectionLead title="유사 / 중복 이미지" />
         <div className="grid gap-4 lg:grid-cols-2">

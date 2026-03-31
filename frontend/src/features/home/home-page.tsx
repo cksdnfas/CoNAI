@@ -177,7 +177,7 @@ export function HomePage() {
       ) : null}
 
       {!imagesQuery.isPending && !imagesQuery.isError && images.length === 0 ? (
-        <Card className="bg-surface-container">
+        <Card >
           <CardHeader>
             <CardTitle>{emptyStateTitle}</CardTitle>
             <CardDescription>{emptyStateDescription}</CardDescription>

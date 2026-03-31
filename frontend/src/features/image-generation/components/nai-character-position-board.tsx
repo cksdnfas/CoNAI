@@ -87,7 +87,7 @@ export function NaiCharacterPositionBoard({
     <div className={cn('space-y-3', className)}>
       <div
         ref={boardRef}
-        className="relative aspect-square rounded-sm border border-border bg-surface-container select-none touch-none"
+        className="relative aspect-square rounded-sm border border-border bg-surface-low select-none touch-none"
         onPointerMove={(event) => {
           if (draggingIndexRef.current === null) {
             return

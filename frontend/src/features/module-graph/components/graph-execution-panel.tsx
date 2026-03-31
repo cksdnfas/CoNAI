@@ -115,7 +115,7 @@ export function GraphExecutionPanel({
   )
 
   return (
-    <Card className="bg-surface-container">
+    <Card>
       <CardContent className="space-y-3">
         {showHeader ? (
           <SectionHeading
@@ -234,7 +234,7 @@ export function GraphExecutionPanel({
                 const parsedMetadata = parseMetadataValue(artifact.metadata)
 
                 return (
-                  <div key={artifact.id} className="rounded-sm border border-border bg-surface-container p-2.5">
+                  <div key={artifact.id} className="rounded-sm border border-border bg-surface-low p-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -274,7 +274,7 @@ export function GraphExecutionPanel({
                 executionDetail.logs.map((log) => {
                   const parsedDetails = parseMetadataValue(log.details)
                   return (
-                    <div key={log.id} className="rounded-sm border border-border bg-surface-container p-2.5">
+                    <div key={log.id} className="rounded-sm border border-border bg-surface-low p-2.5">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Badge variant={log.level === 'error' ? 'outline' : 'secondary'}>{log.level}</Badge>

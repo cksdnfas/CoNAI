@@ -446,29 +446,43 @@ export class ImageGroupModel {
    * 그룹의 랜덤 이미지 조회 (썸네일용)
    */
   static findRandomImageForGroup(groupId: number): ImageMetadataRecord | null {
-    // ✅ LEFT JOIN으로 비디오 파일도 포함
+    // Keep this query aligned with the current media_metadata schema.
     const query = `
       SELECT
         COALESCE(im.composite_hash, ig.composite_hash) as composite_hash,
+        im.perceptual_hash,
+        im.dhash,
+        im.ahash,
+        im.color_histogram,
         im.width,
         im.height,
-        im.format,
         im.thumbnail_path,
-        im.prompt,
-        im.negative_prompt,
-        im.seed,
+        im.ai_tool,
+        im.model_name,
+        im.lora_models,
         im.steps,
         im.cfg_scale,
         im.sampler,
-        im.model,
-        im.upscaler,
-        im.upscale_factor,
-        im.denoising_strength,
-        im.hires_upscaler,
-        im.created_date,
-        im.positive_tags,
-        im.negative_tags,
-        im.caption
+        im.seed,
+        im.scheduler,
+        im.prompt,
+        im.negative_prompt,
+        im.denoise_strength,
+        im.generation_time,
+        im.batch_size,
+        im.batch_index,
+        im.auto_tags,
+        im.model_references,
+        im.character_prompt_text,
+        im.raw_nai_parameters,
+        im.duration,
+        im.fps,
+        im.video_codec,
+        im.audio_codec,
+        im.bitrate,
+        im.rating_score,
+        im.first_seen_date,
+        im.metadata_updated_date
       FROM image_groups ig
       LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
       WHERE ig.group_id = ?

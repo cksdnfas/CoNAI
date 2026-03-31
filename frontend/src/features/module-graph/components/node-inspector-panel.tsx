@@ -124,7 +124,7 @@ function EdgeEndpointCard({
   role: '입력' | '출력'
 }) {
   return (
-    <div className="rounded-sm border border-border bg-surface-container px-3 py-3">
+    <div className="rounded-sm border border-border bg-surface-low px-3 py-3">
       <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{heading}</div>
       <div className="mt-2 flex items-center gap-1">
         <div className="text-sm font-medium text-foreground">{endpoint.node?.data.module.name ?? endpoint.node?.id ?? '알 수 없는 노드'}</div>
@@ -299,7 +299,7 @@ export function NodeInspectorPanel({
     : []
 
   return (
-    <Card className="bg-surface-container">
+    <Card>
       <CardContent className="space-y-4">
         {showHeader ? (
           <SectionHeading

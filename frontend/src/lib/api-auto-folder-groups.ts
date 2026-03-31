@@ -1,5 +1,5 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
-import type { ApiResponse } from '@/types/image'
+import type { ApiResponse, ImageRecord } from '@/types/image'
 import type { GroupBreadcrumbItem, GroupDownloadType, GroupFileCounts, GroupImagesPayload, GroupRecord, GroupWithHierarchy } from '@/types/group'
 
 interface AutoFolderGroupApiRecord {
@@ -169,6 +169,20 @@ export async function rebuildAutoFolderGroups() {
   return response.data
 }
 
+export async function getAutoFolderGroupPreviewImage(groupId: number, params?: { includeChildren?: boolean }) {
+  const searchParams = new URLSearchParams()
+  searchParams.set('count', '1')
+  searchParams.set('includeChildren', String(params?.includeChildren ?? true))
+
+  const response = await fetchJson<ApiResponse<ImageRecord[]>>(`/api/auto-folder-groups/${groupId}/preview-images?${searchParams.toString()}`)
+
+  if (!response.success) {
+    throw new Error(response.error || '감시폴더 그룹 미리보기를 불러오지 못했어.')
+  }
+
+  return response.data[0] ?? null
+}
+
 export async function downloadAutoFolderGroupArchive(
   groupId: number,
   options: {
@@ -208,6 +222,3 @@ export async function downloadAutoFolderGroupArchive(
   }
 }
 
-export function getAutoFolderGroupThumbnailUrl(groupId: number) {
-  return `/api/auto-folder-groups/${groupId}/thumbnail`
-}

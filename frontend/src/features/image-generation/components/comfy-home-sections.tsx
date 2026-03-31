@@ -56,7 +56,7 @@ export function ComfyWorkflowListSection({
                 return (
                   <div
                     key={workflow.id}
-                    className="rounded-sm border border-border bg-surface-container px-3 py-3 transition-colors hover:bg-surface-high"
+                    className="rounded-sm border border-border bg-surface-low px-3 py-3 transition-colors hover:border-primary/35"
                     style={isSelected ? { borderColor: workflow.color || 'var(--color-primary)' } : undefined}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -171,7 +171,7 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
                 const connectionStatus = testState?.status
 
                 return (
-                  <div key={server.id} className="rounded-sm border border-border bg-surface-container px-3 py-3 text-sm text-muted-foreground">
+                  <div key={server.id} className="rounded-sm border border-border bg-surface-low px-3 py-3 text-sm text-muted-foreground">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -235,7 +235,7 @@ export function ComfyDropdownListsSection({ dropdownLists }: DropdownListsSectio
           {dropdownLists.length > 0 ? (
             <div className="space-y-2">
               {dropdownLists.map((list) => (
-                <div key={list.id} className="rounded-sm border border-border bg-surface-container px-3 py-2.5 text-sm text-muted-foreground">
+                <div key={list.id} className="rounded-sm border border-border bg-surface-low px-3 py-2.5 text-sm text-muted-foreground">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="font-medium text-foreground">{list.name}</span>
                     <Badge variant={list.is_auto_collected ? 'secondary' : 'outline'}>{list.is_auto_collected ? 'auto' : 'manual'}</Badge>

@@ -1,6 +1,7 @@
 import { ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { getNavigationItemClassName } from './navigation-item'
 
 export type HierarchyNodeId = number | string
 
@@ -187,15 +188,12 @@ export function HierarchyNav<T>({
                           onSelect(item)
                         }
                       }}
-                      className={cn(
-                        'inline-flex max-w-full flex-1 items-center gap-2 rounded-sm px-2 py-2 text-left text-sm transition-colors',
-                        isSelected
-                          ? 'bg-surface-container text-primary'
-                          : selectable
-                            ? 'text-muted-foreground hover:bg-surface-low hover:text-foreground'
-                            : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
-                        itemClassName,
-                      )}
+                      className={getNavigationItemClassName({
+                        active: isSelected,
+                        density: 'sm',
+                        fullWidth: false,
+                        className: cn('inline-flex max-w-full flex-1 items-center gap-2', itemClassName),
+                      })}
                     >
                       {content}
                     </button>
@@ -209,13 +207,10 @@ export function HierarchyNav<T>({
                 <button
                   type="button"
                   onClick={() => onSelect(item)}
-                  className={cn(
-                    'flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm transition-colors',
-                    isSelected
-                      ? 'bg-surface-container text-primary'
-                      : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
-                    itemClassName,
-                  )}
+                  className={getNavigationItemClassName({
+                    active: isSelected,
+                    className: cn('flex items-center gap-2', itemClassName),
+                  })}
                   style={{ paddingLeft: `${12 + depth * 14}px` }}
                 >
                   {content}

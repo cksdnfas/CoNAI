@@ -1055,14 +1055,14 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               type="button"
               size="icon-sm"
               variant="outline"
-              className="bg-surface-container"
+              className="bg-surface-low"
               onClick={() => void handleRefreshWorkspace()}
               aria-label="새로고침"
               title="새로고침"
             >
               <RefreshCw className="h-4 w-4" />
             </Button>
-            <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={handleCreateWorkflow} aria-label="새 워크플로우" title="새 워크플로우">
+            <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={handleCreateWorkflow} aria-label="새 워크플로우" title="새 워크플로우">
               <Plus className="h-4 w-4" />
             </Button>
           </div>
@@ -1075,7 +1075,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               type="button"
               size="icon-sm"
               variant="outline"
-              className="bg-surface-container"
+              className="bg-surface-low"
               onClick={() => setWorkflowView('browse')}
               aria-label="목록으로"
               title="목록으로"
@@ -1086,7 +1086,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               type="button"
               size="icon-sm"
               variant="outline"
-              className="bg-surface-container"
+              className="bg-surface-low"
               onClick={() => void handleRefreshWorkspace()}
               aria-label="새로고침"
               title="새로고침"
@@ -1157,7 +1157,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           {workflowListSidebar}
 
           <div className="space-y-6">
-            <Card className="bg-surface-container">
+            <Card>
               <CardContent className="space-y-4">
                 <SectionHeading
                   variant="inside"
@@ -1289,7 +1289,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               </CardContent>
             </Card>
 
-            <Card className="bg-surface-container">
+            <Card>
               <CardContent className="space-y-4">
                 <SectionHeading
                   variant="inside"

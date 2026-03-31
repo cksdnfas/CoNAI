@@ -159,7 +159,7 @@ export function SearchScopeTabs({ searchScope, onChange, className }: SearchScop
           finishDrag()
         }}
       >
-        <div className="inline-flex min-w-full items-center gap-2 pr-8">
+        <div className="inline-flex min-w-full items-center gap-1 rounded-sm border border-border bg-surface-low p-1 pr-9">
           {SEARCH_SCOPE_TABS.map((tab) => (
             <button
               key={tab.value}
@@ -173,7 +173,7 @@ export function SearchScopeTabs({ searchScope, onChange, className }: SearchScop
               }}
               className={cn(
                 'shrink-0 rounded-sm px-3 py-1.5 text-xs font-semibold transition-colors select-none',
-                searchScope === tab.value ? '' : 'text-muted-foreground hover:bg-surface-high hover:text-foreground',
+                searchScope === tab.value ? 'shadow-sm' : 'text-muted-foreground hover:bg-surface-high hover:text-foreground',
               )}
               style={searchScope === tab.value ? getSearchScopeStyle(tab.value) : undefined}
             >

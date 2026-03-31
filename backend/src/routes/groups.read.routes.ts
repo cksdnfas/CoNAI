@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import path from 'path';
 import fs from 'fs';
 import { routeParam } from './routeParam';
 import { GroupModel, ImageGroupModel } from '../models/Group';
@@ -8,7 +7,6 @@ import { GroupDownloadService, DownloadType, CaptionMode } from '../services/gro
 import { PAGINATION, errorResponse, successResponse, validateId } from '@conai/shared';
 import { asyncHandler } from '../middleware/errorHandler';
 import { enrichImageRecord, enrichImageWithFileView } from './images/utils';
-import { runtimePaths } from '../config/runtimePaths';
 
 const router = Router();
 
@@ -31,39 +29,11 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
       return res.status(404).json(errorResponse('No images found in group'));
     }
 
-    if (!randomImage.thumbnail_path) {
+    if (!randomImage.composite_hash) {
       return res.status(404).json(errorResponse('Thumbnail not found for image'));
     }
 
-    const fullPath = path.join(runtimePaths.tempDir, randomImage.thumbnail_path);
-    if (!fs.existsSync(fullPath)) {
-      return res.status(404).json(errorResponse('Image file not found'));
-    }
-
-    const ext = path.extname(fullPath).toLowerCase();
-    let contentType = 'image/jpeg';
-
-    switch (ext) {
-      case '.png':
-        contentType = 'image/png';
-        break;
-      case '.gif':
-        contentType = 'image/gif';
-        break;
-      case '.webp':
-        contentType = 'image/webp';
-        break;
-      case '.jpg':
-      case '.jpeg':
-      default:
-        contentType = 'image/jpeg';
-        break;
-    }
-
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-
-    return res.sendFile(fullPath);
+    return res.redirect(`/api/images/${encodeURIComponent(randomImage.composite_hash)}/thumbnail`);
   } catch (error) {
     console.error('Error getting group thumbnail:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to get group thumbnail';

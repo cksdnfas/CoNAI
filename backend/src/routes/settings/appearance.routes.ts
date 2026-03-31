@@ -18,6 +18,7 @@ const validDensityPresets = ['compact', 'comfortable', 'spacious']
 const validFontPresets = ['manrope', 'system', 'custom']
 const validBodyFontWeightPresets = ['regular', 'medium']
 const validEmphasisFontWeightPresets = ['standard', 'bold']
+const validGroupExplorerCardStyles = ['compact-row', 'media-tile']
 const validAppearancePresetSlotIds = ['slot-1', 'slot-2', 'slot-3']
 const appearanceFontDir = path.join(runtimePaths.uploadsDir, 'theme-fonts')
 const allowedFontExtensions = new Set(['.ttf', '.otf', '.woff', '.woff2'])
@@ -139,6 +140,13 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
     !['original', 'square', 'portrait', 'landscape'].includes(appearanceSettings.detailRelatedImageAspectRatio)
   ) {
     return 'detailRelatedImageAspectRatio must be one of: original, square, portrait, landscape'
+  }
+
+  if (
+    appearanceSettings.groupExplorerCardStyle !== undefined &&
+    !validGroupExplorerCardStyles.includes(appearanceSettings.groupExplorerCardStyle)
+  ) {
+    return `groupExplorerCardStyle must be one of: ${validGroupExplorerCardStyles.join(', ')}`
   }
 
   const hexColorFields: Array<keyof Pick<AppearanceThemeSettings,

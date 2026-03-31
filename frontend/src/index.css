@@ -243,6 +243,27 @@
     box-shadow: var(--theme-card-shadow);
   }
 
+  /* Shared semantic surface roles for consistent theming across the site. */
+  .theme-surface-card {
+    background: var(--surface-container);
+  }
+
+  .theme-surface-nested {
+    background: var(--surface-low);
+  }
+
+  .theme-surface-recessed {
+    background: var(--surface-lowest);
+  }
+
+  .theme-surface-active {
+    background: var(--surface-high);
+  }
+
+  .theme-surface-active-strong {
+    background: var(--surface-highest);
+  }
+
   .theme-list-shadow {
     box-shadow: var(--theme-list-shadow);
   }

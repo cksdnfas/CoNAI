@@ -4,6 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
+import { getNavigationItemClassName } from '@/components/common/navigation-item'
 import type { GraphWorkflowRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -57,7 +58,7 @@ export function SavedGraphList({
           {topToolbar ? <div className="flex flex-wrap gap-2">{topToolbar}</div> : null}
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="검색" className="h-8 bg-surface-container pl-9 text-sm" />
+            <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="검색" className="h-8 pl-9 text-sm" />
           </div>
         </div>
       }
@@ -65,12 +66,10 @@ export function SavedGraphList({
       {filteredGraphs.map((graph) => (
         <div
           key={graph.id}
-          className={cn(
-            'flex items-start gap-2 rounded-sm px-3 py-3 transition-colors',
-            selectedGraphId === graph.id
-              ? 'bg-surface-container text-primary'
-              : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
-          )}
+          className={getNavigationItemClassName({
+            active: selectedGraphId === graph.id,
+            className: 'flex items-start gap-2 py-3',
+          })}
         >
           <button
             type="button"

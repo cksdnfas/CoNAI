@@ -92,6 +92,7 @@ export type FontPreset = 'manrope' | 'system' | 'custom';
 export type BodyFontWeightPreset = 'regular' | 'medium';
 export type EmphasisFontWeightPreset = 'standard' | 'bold';
 export type RelatedImageCardAspectRatio = 'original' | 'square' | 'portrait' | 'landscape';
+export type GroupExplorerCardStyle = 'compact-row' | 'media-tile';
 export type AppearancePresetSlotId = 'slot-1' | 'slot-2' | 'slot-3';
 
 export interface AppearanceThemeSettings {
@@ -128,6 +129,7 @@ export interface AppearanceThemeSettings {
   detailRelatedImageMobileColumns: number;
   detailRelatedImageColumns: number;
   detailRelatedImageAspectRatio: RelatedImageCardAspectRatio;
+  groupExplorerCardStyle: GroupExplorerCardStyle;
   selectionOutlineWidth: number;
   positiveBadgeColor: string;
   negativeBadgeColor: string;

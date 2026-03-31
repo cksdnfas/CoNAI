@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { PageHeader } from '@/components/common/page-header'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { SectionHeading } from '@/components/common/section-heading'
 import {
   addImagesToGroup,
@@ -17,28 +18,31 @@ import {
   deleteGroup,
   downloadAutoFolderGroupArchive,
   downloadGroupArchive,
+  getAppSettings,
   getAutoFolderGroup,
   getAutoFolderGroupBreadcrumb,
   getAutoFolderGroupFileCounts,
   getAutoFolderGroupImages,
+  getAutoFolderGroupPreviewImage,
   getAutoFolderGroupsHierarchyAll,
-  getAutoFolderGroupThumbnailUrl,
   getGroup,
   getGroupBreadcrumb,
   getGroupFileCounts,
   getGroupImages,
+  getGroupPreviewImage,
   getGroupsHierarchyAll,
-  getGroupThumbnailUrl,
   rebuildAutoFolderGroups,
   removeImagesFromGroup,
   runAllGroupsAutoCollect,
   runGroupAutoCollect,
   updateGroup,
 } from '@/lib/api'
+import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import type { GroupDownloadType, GroupFileCounts, GroupMutationInput, GroupRecord } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
+import type { GroupExplorerCardStyle } from '@/types/settings'
 import { GroupBreadcrumbs } from './components/group-breadcrumbs'
 import { GroupChildCard } from './components/group-child-card'
 import { GroupEditorModal } from './components/group-editor-modal'
@@ -58,7 +62,7 @@ const groupSources = {
     getGroup,
     getBreadcrumb: getGroupBreadcrumb,
     getImages: getGroupImages,
-    getThumbnailUrl: getGroupThumbnailUrl,
+    getPreviewImage: getGroupPreviewImage,
   },
   folders: {
     key: 'folders',
@@ -69,7 +73,7 @@ const groupSources = {
     getGroup: getAutoFolderGroup,
     getBreadcrumb: getAutoFolderGroupBreadcrumb,
     getImages: getAutoFolderGroupImages,
-    getThumbnailUrl: getAutoFolderGroupThumbnailUrl,
+    getPreviewImage: getAutoFolderGroupPreviewImage,
   },
 } as const
 
@@ -116,6 +120,13 @@ function createEmptyGroupFileCounts(): GroupFileCounts {
   }
 }
 
+/** Resolve the group-navigation grid layout for the selected card style. */
+function getGroupCardGridClassName(cardStyle: GroupExplorerCardStyle) {
+  return cardStyle === 'media-tile'
+    ? 'grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
+    : 'grid gap-4 md:grid-cols-2 xl:grid-cols-3'
+}
+
 function getDownloadCountsFromImages(images: ImageRecord[]): GroupFileCounts {
   const counts = createEmptyGroupFileCounts()
 
@@ -156,6 +167,12 @@ export function GroupPage() {
   const selectedSource = groupSources[selectedSourceKey]
   const selectedGroupId = groupId ? Number(groupId) : undefined
   const isCustomSource = selectedSource.key === 'custom'
+
+  const settingsQuery = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: getAppSettings,
+  })
+  const groupExplorerCardStyle = settingsQuery.data?.appearance.groupExplorerCardStyle ?? DEFAULT_APPEARANCE_SETTINGS.groupExplorerCardStyle
 
   const groupsQuery = useQuery({
     queryKey: ['groups-hierarchy-all', selectedSource.key],
@@ -573,7 +590,7 @@ export function GroupPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={isWideLayout ? 'Groups' : undefined}
+        eyebrow={isWideLayout ? 'Image' : undefined}
         title="Groups"
         actions={
           <>
@@ -599,20 +616,11 @@ export function GroupPage() {
       />
 
       <div className="border-b border-border/70 pb-2">
-        <div className="flex flex-wrap gap-2">
-          {Object.values(groupSources).map((source) => (
-            <button
-              key={source.key}
-              type="button"
-              onClick={() => handleSelectSource(source.key)}
-              className={selectedSource.key === source.key
-                ? 'rounded-sm bg-surface-container px-4 py-2 text-sm font-semibold text-primary transition-colors'
-                : 'rounded-sm px-4 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-surface-low hover:text-foreground'}
-            >
-              {source.tabLabel}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          value={selectedSource.key}
+          items={Object.values(groupSources).map((source) => ({ value: source.key, label: source.tabLabel }))}
+          onChange={(nextSourceKey) => handleSelectSource(nextSourceKey as GroupSourceKey)}
+        />
       </div>
 
       <div className={cn('grid gap-8', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
@@ -662,12 +670,14 @@ export function GroupPage() {
                 actions={<Badge variant="secondary">{rootGroups.length.toLocaleString('ko-KR')}개</Badge>}
               />
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className={getGroupCardGridClassName(groupExplorerCardStyle)}>
                 {rootGroups.map((group) => (
                   <GroupChildCard
                     key={group.id}
                     group={group}
-                    thumbnailUrl={selectedSource.getThumbnailUrl(group.id)}
+                    previewSourceKey={selectedSource.key}
+                    loadPreviewImage={selectedSource.getPreviewImage}
+                    cardStyle={groupExplorerCardStyle}
                     onOpen={handleOpenGroup}
                   />
                 ))}
@@ -689,7 +699,7 @@ export function GroupPage() {
           {selectedGroupId && selectedGroupQuery.data ? (
             <div className="space-y-8">
               <section>
-                <Card className="overflow-hidden bg-surface-container">
+                <Card className="overflow-hidden">
                   <CardContent className="p-0">
                     <SectionHeading
                       variant="inside"
@@ -772,12 +782,13 @@ export function GroupPage() {
 
               {backNavigationGroup ? (
                 <section className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div className={getGroupCardGridClassName(groupExplorerCardStyle)}>
                     <GroupChildCard
                       group={backNavigationGroup}
                       variant="back"
                       titleOverride={parentGroupHierarchy?.name ?? selectedSource.rootTitle}
                       subtitleOverride={parentGroupHierarchy ? '상위 그룹으로 이동' : '루트 목록으로 이동'}
+                      cardStyle={groupExplorerCardStyle}
                       onOpen={(groupId) => {
                         if (parentGroupHierarchy) {
                           handleOpenGroup(groupId)
@@ -791,7 +802,9 @@ export function GroupPage() {
                       <GroupChildCard
                         key={group.id}
                         group={group}
-                        thumbnailUrl={selectedSource.getThumbnailUrl(group.id)}
+                        previewSourceKey={selectedSource.key}
+                        loadPreviewImage={selectedSource.getPreviewImage}
+                        cardStyle={groupExplorerCardStyle}
                         onOpen={handleOpenGroup}
                       />
                     ))}

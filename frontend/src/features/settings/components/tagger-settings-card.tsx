@@ -23,7 +23,7 @@ export function TaggerSettingsCard({
   onPatchTagger,
 }: TaggerSettingsCardProps) {
   return (
-    <Card className="bg-surface-container">
+    <Card>
       <CardContent className="space-y-4">
         <SectionHeading variant="inside" heading={heading} actions={actions} />
         <div className="grid gap-4 md:grid-cols-2">

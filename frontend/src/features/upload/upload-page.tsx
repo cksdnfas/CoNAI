@@ -426,7 +426,7 @@ export function UploadPage() {
 
       <div className="space-y-6">
         <section>
-          <Card className="overflow-hidden bg-surface-container">
+          <Card className="overflow-hidden">
             <CardContent className="p-0">
               <SectionHeading
                 variant="inside"
@@ -541,7 +541,7 @@ export function UploadPage() {
         </section>
 
         <section>
-          <Card className="overflow-hidden bg-surface-container">
+          <Card className="overflow-hidden">
             <CardContent className="p-0">
               <SectionHeading
                 variant="inside"
@@ -582,7 +582,7 @@ export function UploadPage() {
               <div className="space-y-4 px-4 pt-4">
                 <input ref={extractInputRef} type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={handleExtractFileChange} />
 
-                <div className="rounded-sm bg-surface-low p-4">
+                <div className="rounded-sm bg-surface-low">
                   <DropSurface
                     ariaLabel="미리보기할 이미지 선택"
                     active={extractDropZone.isDragActive}

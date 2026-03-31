@@ -142,7 +142,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
   }
 
   return (
-    <Card className="bg-surface-container">
+    <Card>
       <CardContent className={isCollapsed ? undefined : 'space-y-3'}>{content}</CardContent>
     </Card>
   )

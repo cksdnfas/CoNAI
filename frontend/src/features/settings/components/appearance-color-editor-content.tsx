@@ -168,17 +168,7 @@ export function AppearanceColorEditorContent({
               />
             </SettingsField>
 
-            <SettingsField label="호버 바탕">
-              <AppearanceColorControl
-                colorValue={colorValues.customSurfaceLowColorValue}
-                textValue={appearanceDraft.customSurfaceLowColor ?? ''}
-                onChangeColor={(value) => onPatchAppearance({ customSurfaceLowColor: value })}
-                onChangeText={(value) => onPatchAppearance({ customSurfaceLowColor: value || undefined })}
-                placeholder={defaultSurfaceToneColors.surfaceLow}
-              />
-            </SettingsField>
-
-            <SettingsField label="컨테이너">
+            <SettingsField label="컨테이너 1">
               <AppearanceColorControl
                 colorValue={colorValues.customSurfaceContainerColorValue}
                 textValue={appearanceDraft.customSurfaceContainerColor}
@@ -188,7 +178,17 @@ export function AppearanceColorEditorContent({
               />
             </SettingsField>
 
-            <SettingsField label="강조 표면">
+            <SettingsField label="컨테이너 2">
+              <AppearanceColorControl
+                colorValue={colorValues.customSurfaceLowColorValue}
+                textValue={appearanceDraft.customSurfaceLowColor ?? ''}
+                onChangeColor={(value) => onPatchAppearance({ customSurfaceLowColor: value })}
+                onChangeText={(value) => onPatchAppearance({ customSurfaceLowColor: value || undefined })}
+                placeholder={defaultSurfaceToneColors.surfaceLow}
+              />
+            </SettingsField>
+
+            <SettingsField label="호버 / 활성">
               <AppearanceColorControl
                 colorValue={colorValues.customSurfaceHighColorValue}
                 textValue={appearanceDraft.customSurfaceHighColor}

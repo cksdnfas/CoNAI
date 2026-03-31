@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Textarea } from '@/components/ui/textarea'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
@@ -144,22 +145,15 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm font-medium text-foreground">자동수집 조건</p>
 
-        <div className="inline-flex rounded-sm border border-border bg-background p-1">
-          <button
-            type="button"
-            className={mode === 'chip' ? 'rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground' : 'rounded-sm px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-surface-high hover:text-foreground'}
-            onClick={() => setMode('chip')}
-          >
-            검색칩 편집
-          </button>
-          <button
-            type="button"
-            className={mode === 'json' ? 'rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground' : 'rounded-sm px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-surface-high hover:text-foreground'}
-            onClick={() => setMode('json')}
-          >
-            JSON 직접 편집
-          </button>
-        </div>
+        <SegmentedControl
+          value={mode}
+          items={[
+            { value: 'chip', label: '검색칩 편집' },
+            { value: 'json', label: 'JSON 직접 편집' },
+          ]}
+          onChange={(nextMode) => setMode(nextMode as AutoCollectEditorState['mode'])}
+          size="xs"
+        />
       </div>
 
       {warningMessage ? (

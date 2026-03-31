@@ -77,6 +77,7 @@ function getDefaultAppearanceTheme(): AppearanceThemeSettings {
     detailRelatedImageMobileColumns: 1,
     detailRelatedImageColumns: 3,
     detailRelatedImageAspectRatio: 'square',
+    groupExplorerCardStyle: 'compact-row',
     selectionOutlineWidth: 3,
     positiveBadgeColor: '#34d399',
     negativeBadgeColor: '#fb7185',

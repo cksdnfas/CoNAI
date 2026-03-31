@@ -68,8 +68,6 @@ export async function executeNaiModule(context: ExecutionContext, node: GraphWor
     height: metadata.height,
     sampler: metadata.sampler,
     scheduler: metadata.noise_schedule,
-    rating: metadata.rating,
-    quality_tags_enabled: metadata.quality_tags_enabled,
   }
 
   const nodeArtifacts = {

@@ -124,7 +124,7 @@ export function RelatedImageGallerySection({
       ) : null}
 
       {!isLoading && !errorMessage && items.length === 0 ? (
-        <Card className="bg-surface-container">
+        <Card >
           <CardContent className="text-sm text-muted-foreground">{emptyMessage}</CardContent>
         </Card>
       ) : null}

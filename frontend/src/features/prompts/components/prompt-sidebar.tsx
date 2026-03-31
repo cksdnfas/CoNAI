@@ -14,7 +14,6 @@ interface PromptSidebarProps {
   totalCount?: number
   groupsLoading: boolean
   groupsError: string | null
-  isDesktopPageLayout?: boolean
   canCollect?: boolean
   onSelectGroup: (groupId?: number | null) => void
   onCreateGroup?: () => void
@@ -36,7 +35,6 @@ export function PromptSidebar({
   totalCount = 0,
   groupsLoading,
   groupsError,
-  isDesktopPageLayout = false,
   canCollect = true,
   onSelectGroup,
   onCreateGroup,
@@ -56,23 +54,23 @@ export function PromptSidebar({
       title="Groups"
       badge={<Badge variant="outline">{groups.length}</Badge>}
       floatingFrame
-      className={cn('sticky top-24 z-30 isolate self-start', isDesktopPageLayout && 'flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
-      bodyClassName={cn('space-y-4', isDesktopPageLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}
+      className={cn('sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col')}
+      bodyClassName="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
       headerExtra={
         <div className="flex flex-wrap gap-2 border-b border-white/5 pb-3">
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onOpenSummary?.()} disabled={!onOpenSummary} aria-label="상태" title="상태">
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onOpenSummary?.()} disabled={!onOpenSummary} aria-label="상태" title="상태">
             <BarChart3 className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onOpenCollect?.()} disabled={!onOpenCollect || !canCollect} aria-label="수동 수집" title={canCollect ? '수동 수집' : 'Auto에서는 수동 수집 불가'}>
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onOpenCollect?.()} disabled={!onOpenCollect || !canCollect} aria-label="수동 수집" title={canCollect ? '수동 수집' : 'Auto에서는 수동 수집 불가'}>
             <Wrench className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onCreateGroup?.()} disabled={!onCreateGroup} aria-label="그룹 추가" title="그룹 추가">
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onCreateGroup?.()} disabled={!onCreateGroup} aria-label="그룹 추가" title="그룹 추가">
             <FolderPlus className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onExportGroups?.()} disabled={!onExportGroups} aria-label="내보내기" title="내보내기">
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onExportGroups?.()} disabled={!onExportGroups} aria-label="내보내기" title="내보내기">
             <Download className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onImportGroups?.()} disabled={!onImportGroups} aria-label="가져오기" title="가져오기">
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onImportGroups?.()} disabled={!onImportGroups} aria-label="가져오기" title="가져오기">
             <Upload className="h-4 w-4" />
           </Button>
         </div>
@@ -99,16 +97,16 @@ export function PromptSidebar({
 
           <div className="border-t border-white/5 pt-3">
             <div className="flex flex-wrap gap-2">
-              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onMoveGroupUp?.()} disabled={!onMoveGroupUp || !canMoveGroupUp} aria-label="위로 이동" title="위로 이동">
+              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onMoveGroupUp?.()} disabled={!onMoveGroupUp || !canMoveGroupUp} aria-label="위로 이동" title="위로 이동">
                 <ChevronUp className="h-4 w-4" />
               </Button>
-              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onMoveGroupDown?.()} disabled={!onMoveGroupDown || !canMoveGroupDown} aria-label="아래로 이동" title="아래로 이동">
+              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onMoveGroupDown?.()} disabled={!onMoveGroupDown || !canMoveGroupDown} aria-label="아래로 이동" title="아래로 이동">
                 <ChevronDown className="h-4 w-4" />
               </Button>
-              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onEditGroup?.()} disabled={!onEditGroup || selectedGroupId == null || selectedGroupId === 0} aria-label="편집" title="편집">
+              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onEditGroup?.()} disabled={!onEditGroup || selectedGroupId == null || selectedGroupId === 0} aria-label="편집" title="편집">
                 <Pencil className="h-4 w-4" />
               </Button>
-              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-container" onClick={() => onDeleteGroup?.()} disabled={!onDeleteGroup || selectedGroupId == null || selectedGroupId === 0} aria-label="삭제" title="삭제">
+              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onDeleteGroup?.()} disabled={!onDeleteGroup || selectedGroupId == null || selectedGroupId === 0} aria-label="삭제" title="삭제">
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>

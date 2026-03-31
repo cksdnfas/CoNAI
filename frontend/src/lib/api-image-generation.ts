@@ -136,8 +136,7 @@ export interface NAIImageGenerationPayload {
   noise_schedule?: string
   n_samples?: number
   seed?: number
-  rating?: 'general' | 'sensitive' | 'questionable' | 'explicit'
-  quality_tags_enabled?: boolean
+  use_coords?: boolean
   variety_plus?: boolean
   image?: string
   mask?: string

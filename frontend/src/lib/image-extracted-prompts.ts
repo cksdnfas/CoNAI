@@ -282,13 +282,22 @@ export function getImageExtractedPromptCards(image: ImageRecord) {
 
   const cards: ExtractedPromptCardItem[] = []
 
+  if (loraModels.length > 0) {
+    cards.push({
+      id: 'lora-prompt',
+      title: 'LoRA',
+      text: loraModels.join(', '),
+      tone: 'neutral',
+    })
+  }
+
   if (positiveText) {
     cards.push({
       id: 'positive-prompt',
       title: '긍정 프롬프트',
       text: positiveText,
       tone: 'positive',
-      badges: ['그룹', ...(isProcessedPrompt(positiveText, getRawPositivePrompt(rawNaiParameters)) ? ['가공됨'] : [])],
+      badges: isProcessedPrompt(positiveText, getRawPositivePrompt(rawNaiParameters)) ? ['가공됨'] : undefined,
     })
   }
 
@@ -307,16 +316,7 @@ export function getImageExtractedPromptCards(image: ImageRecord) {
       title: '부정 프롬프트',
       text: negativeText,
       tone: 'negative',
-      badges: ['그룹', ...(isProcessedPrompt(negativeText, getRawNegativePrompt(rawNaiParameters)) ? ['가공됨'] : [])],
-    })
-  }
-
-  if (loraModels.length > 0) {
-    cards.push({
-      id: 'lora-prompt',
-      title: 'LoRA',
-      text: loraModels.join(', '),
-      tone: 'neutral',
+      badges: isProcessedPrompt(negativeText, getRawNegativePrompt(rawNaiParameters)) ? ['가공됨'] : undefined,
     })
   }
 

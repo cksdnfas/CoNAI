@@ -1,5 +1,5 @@
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
-import { cn } from '@/lib/utils'
+import { getNavigationItemClassName } from '@/components/common/navigation-item'
 import { SETTINGS_TAB_ITEMS, type SettingsTab } from '../settings-tabs'
 
 interface SettingsTabNavProps {
@@ -16,12 +16,10 @@ export function SettingsTabNav({ activeTab, onChange }: SettingsTabNavProps) {
             key={item.value}
             type="button"
             onClick={() => onChange(item.value)}
-            className={cn(
-              'w-full rounded-sm px-3 py-3 text-left text-sm font-semibold transition-colors',
-              activeTab === item.value
-                ? 'bg-surface-container text-primary'
-                : 'text-muted-foreground hover:bg-surface-low hover:text-foreground',
-            )}
+            className={getNavigationItemClassName({
+              active: activeTab === item.value,
+              className: 'py-3 font-semibold',
+            })}
           >
             {item.label}
           </button>

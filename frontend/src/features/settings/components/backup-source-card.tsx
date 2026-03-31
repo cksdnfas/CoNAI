@@ -67,7 +67,7 @@ export function BackupSourceCard({
   }
 
   return (
-    <Card className="bg-surface-container">
+    <Card>
       <CardHeader>
         <SettingsResourceCardHeader
           title={source.display_name || '이름 없는 백업 소스'}

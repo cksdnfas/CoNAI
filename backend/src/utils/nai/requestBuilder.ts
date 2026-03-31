@@ -96,8 +96,9 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
     baseParams.negative_prompt = metadata.negative_prompt || ''
 
     const characterPrompts = buildCharacterPromptPayload(metadata.characters || [])
+    const useCoords = typeof metadata.use_coords === 'boolean' ? metadata.use_coords : characterPrompts.length > 0
     baseParams.characterPrompts = characterPrompts
-    baseParams.use_coords = characterPrompts.length > 0
+    baseParams.use_coords = useCoords
     baseParams.v4_prompt = {
       caption: {
         base_caption: metadata.prompt,
@@ -106,7 +107,7 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
           centers: [entry.center],
         })),
       },
-      use_coords: characterPrompts.length > 0,
+      use_coords: useCoords,
       use_order: true,
     }
     baseParams.v4_negative_prompt = {
