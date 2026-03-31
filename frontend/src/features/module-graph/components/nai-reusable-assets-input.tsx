@@ -35,7 +35,7 @@ type NaiCharacterReferenceDraft = {
   fidelity: string
 }
 
-type SavedAssetSortOption = 'latest' | 'oldest' | 'name'
+type SavedAssetSortOption = 'recent' | 'latest' | 'oldest' | 'name'
 
 /** Detect whether one JSON input should render the reusable vibe picker/editor. */
 export function isNaiVibePort(portKey: string, dataType: string) {
@@ -171,9 +171,54 @@ function buildNaiCharacterReferenceValue(drafts: NaiCharacterReferenceDraft[]) {
   return nextValue.length > 0 ? nextValue : undefined
 }
 
-/** Sort saved asset cards so users can switch between recency and name ordering. */
-function sortSavedAssets<T extends { label: string; created_date: string }>(items: T[], sort: SavedAssetSortOption) {
+/** Load recently used asset ids from localStorage so pickers can prioritize repeat selections. */
+function loadRecentAssetIds(storageKey: string) {
+  if (typeof window === 'undefined') {
+    return [] as string[]
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(storageKey)
+    if (!rawValue) {
+      return [] as string[]
+    }
+
+    const parsedValue = JSON.parse(rawValue)
+    return Array.isArray(parsedValue) ? parsedValue.filter((entry): entry is string => typeof entry === 'string') : []
+  } catch {
+    return [] as string[]
+  }
+}
+
+/** Persist one recently used asset id and keep the newest picks near the top. */
+function saveRecentAssetIds(storageKey: string, assetId: string, currentIds: string[]) {
+  const nextIds = [assetId, ...currentIds.filter((entry) => entry !== assetId)].slice(0, 20)
+
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(storageKey, JSON.stringify(nextIds))
+  }
+
+  return nextIds
+}
+
+/** Sort saved asset cards so users can switch between recent use, recency, and name ordering. */
+function sortSavedAssets<T extends { id: string; label: string; created_date: string }>(items: T[], sort: SavedAssetSortOption, recentIds: string[]) {
   const nextItems = [...items]
+
+  if (sort === 'recent') {
+    return nextItems.sort((left, right) => {
+      const leftIndex = recentIds.indexOf(left.id)
+      const rightIndex = recentIds.indexOf(right.id)
+      const normalizedLeft = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex
+      const normalizedRight = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex
+
+      if (normalizedLeft !== normalizedRight) {
+        return normalizedLeft - normalizedRight
+      }
+
+      return new Date(right.created_date).getTime() - new Date(left.created_date).getTime()
+    })
+  }
 
   if (sort === 'name') {
     return nextItems.sort((left, right) => left.label.localeCompare(right.label, 'ko-KR'))
@@ -189,9 +234,11 @@ function sortSavedAssets<T extends { label: string; created_date: string }>(item
 /** Render the reusable editor and saved-asset picker for NAI vibe and reference JSON inputs. */
 export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAssetInputProps) {
   const [savedVibeSearch, setSavedVibeSearch] = useState('')
-  const [savedVibeSort, setSavedVibeSort] = useState<SavedAssetSortOption>('latest')
+  const [savedVibeSort, setSavedVibeSort] = useState<SavedAssetSortOption>('recent')
+  const [recentVibeIds, setRecentVibeIds] = useState<string[]>(() => loadRecentAssetIds('conai.nai.vibes.recent'))
   const [savedCharacterReferenceSearch, setSavedCharacterReferenceSearch] = useState('')
-  const [savedCharacterReferenceSort, setSavedCharacterReferenceSort] = useState<SavedAssetSortOption>('latest')
+  const [savedCharacterReferenceSort, setSavedCharacterReferenceSort] = useState<SavedAssetSortOption>('recent')
+  const [recentCharacterReferenceIds, setRecentCharacterReferenceIds] = useState<string[]>(() => loadRecentAssetIds('conai.nai.character_refs.recent'))
   const vibeDrafts = useMemo(() => (kind === 'vibes' ? parseNaiVibeDrafts(value) : []), [kind, value])
   const characterReferenceDrafts = useMemo(() => (kind === 'character_refs' ? parseNaiCharacterReferenceDrafts(value) : []), [kind, value])
 
@@ -214,8 +261,8 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
       ? items.filter((item) => `${item.label} ${item.model}`.toLowerCase().includes(keyword))
       : items
 
-    return sortSavedAssets(filteredItems, savedVibeSort)
-  }, [savedVibeSearch, savedVibeSort, savedVibesQuery.data])
+    return sortSavedAssets(filteredItems, savedVibeSort, recentVibeIds)
+  }, [recentVibeIds, savedVibeSearch, savedVibeSort, savedVibesQuery.data])
 
   const filteredSavedCharacterReferences = useMemo(() => {
     const items = savedCharacterReferencesQuery.data || []
@@ -224,8 +271,8 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
       ? items.filter((item) => `${item.label} ${item.type}`.toLowerCase().includes(keyword))
       : items
 
-    return sortSavedAssets(filteredItems, savedCharacterReferenceSort)
-  }, [savedCharacterReferenceSearch, savedCharacterReferenceSort, savedCharacterReferencesQuery.data])
+    return sortSavedAssets(filteredItems, savedCharacterReferenceSort, recentCharacterReferenceIds)
+  }, [recentCharacterReferenceIds, savedCharacterReferenceSearch, savedCharacterReferenceSort, savedCharacterReferencesQuery.data])
 
   const updateVibes = (nextDrafts: NaiVibeDraft[]) => {
     onChange(buildNaiVibeValue(nextDrafts))
@@ -272,6 +319,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
   }
 
   const appendSavedVibe = (asset: StoredNaiVibeAsset) => {
+    setRecentVibeIds((current) => saveRecentAssetIds('conai.nai.vibes.recent', asset.id, current))
     updateVibes([
       ...vibeDrafts,
       {
@@ -284,6 +332,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
   }
 
   const appendSavedCharacterReference = (asset: StoredNaiCharacterReferenceAsset) => {
+    setRecentCharacterReferenceIds((current) => saveRecentAssetIds('conai.nai.character_refs.recent', asset.id, current))
     updateCharacterReferences([
       ...characterReferenceDrafts,
       {
@@ -356,6 +405,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[280px] sm:flex-row">
               <Input value={savedVibeSearch} onChange={(event) => setSavedVibeSearch(event.target.value)} placeholder="이름 / 모델 검색" />
               <Select value={savedVibeSort} onChange={(event) => setSavedVibeSort(event.target.value as SavedAssetSortOption)}>
+                <option value="recent">최근 사용순</option>
                 <option value="latest">최신순</option>
                 <option value="oldest">오래된순</option>
                 <option value="name">이름순</option>
@@ -466,6 +516,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[280px] sm:flex-row">
             <Input value={savedCharacterReferenceSearch} onChange={(event) => setSavedCharacterReferenceSearch(event.target.value)} placeholder="이름 / 타입 검색" />
             <Select value={savedCharacterReferenceSort} onChange={(event) => setSavedCharacterReferenceSort(event.target.value as SavedAssetSortOption)}>
+              <option value="recent">최근 사용순</option>
               <option value="latest">최신순</option>
               <option value="oldest">오래된순</option>
               <option value="name">이름순</option>
