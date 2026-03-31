@@ -14,6 +14,9 @@ const PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], string> = {
   json: 'json',
 }
 
+const TEXT_PORT_COLOR = getPortTypeColor('text')
+const PROMPT_PORT_COLOR = getPortTypeColor('prompt')
+
 type PortCellProps = {
   port?: ModulePortDefinition
   side: 'input' | 'output'
@@ -28,6 +31,11 @@ function hasMeaningfulValue(value: unknown) {
   return value !== undefined && value !== null && value !== ''
 }
 
+/** Flag prompt/text ports that can bridge within the string family. */
+function isStringBridgePort(dataType: ModulePortDefinition['data_type']) {
+  return dataType === 'text' || dataType === 'prompt'
+}
+
 /** Build one compact hover tooltip so node cards stay visually clean. */
 function buildPortTooltip(port: ModulePortDefinition, statusLabel: string) {
   return [
@@ -35,6 +43,7 @@ function buildPortTooltip(port: ModulePortDefinition, statusLabel: string) {
     `key: ${port.key}`,
     `type: ${PORT_TYPE_LABELS[port.data_type]}`,
     `status: ${statusLabel}`,
+    isStringBridgePort(port.data_type) ? 'bridge: text ↔ prompt' : null,
     port.required ? 'required' : null,
     port.multiple ? 'multi' : null,
     port.description || null,
@@ -56,6 +65,7 @@ function PortCell({ port, side, accentColor, connected, satisfied, requiredMissi
   const alignmentClass = side === 'input' ? 'pl-4 pr-2' : 'pl-2 pr-4'
   const labelAlignmentClass = side === 'input' ? 'text-left' : 'text-right'
   const rowJustifyClass = side === 'input' ? 'justify-start' : 'justify-end'
+  const usesStringBridgeBadge = isStringBridgePort(port.data_type)
 
   return (
     <div
@@ -69,13 +79,26 @@ function PortCell({ port, side, accentColor, connected, satisfied, requiredMissi
           {port.label}
           {port.required ? <span className="ml-1 text-[11px] text-amber-300">*</span> : null}
         </span>
-        <Badge
-          variant="outline"
-          className="shrink-0 px-1.5 py-0 text-[9px] font-semibold uppercase tracking-[0.08em]"
-          style={{ borderColor: `${portTypeColor}88`, color: portTypeColor } as CSSProperties}
-        >
-          {PORT_TYPE_LABELS[port.data_type]}
-        </Badge>
+        {usesStringBridgeBadge ? (
+          <span
+            className="shrink-0 rounded-sm border px-1.5 py-0 text-[9px] font-semibold uppercase tracking-[0.08em]"
+            style={{
+              borderColor: `${portTypeColor}88`,
+              color: portTypeColor,
+              background: `linear-gradient(90deg, ${TEXT_PORT_COLOR}22 0 50%, ${PROMPT_PORT_COLOR}22 50% 100%)`,
+            } as CSSProperties}
+          >
+            {PORT_TYPE_LABELS[port.data_type]}
+          </span>
+        ) : (
+          <Badge
+            variant="outline"
+            className="shrink-0 px-1.5 py-0 text-[9px] font-semibold uppercase tracking-[0.08em]"
+            style={{ borderColor: `${portTypeColor}88`, color: portTypeColor } as CSSProperties}
+          >
+            {PORT_TYPE_LABELS[port.data_type]}
+          </Badge>
+        )}
         {side === 'output' ? <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: portTypeColor }} aria-hidden="true" /> : null}
       </div>
     </div>
