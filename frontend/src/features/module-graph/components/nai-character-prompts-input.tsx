@@ -1,7 +1,12 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  NAI_CHARACTER_GRID_X_OPTIONS,
+  NAI_CHARACTER_GRID_Y_OPTIONS,
+  normalizeNaiCharacterPromptDrafts,
+} from '@/features/image-generation/image-generation-shared'
 
 type NaiCharacterPromptDraft = {
   prompt: string
@@ -89,7 +94,7 @@ function parseNaiCharacterPromptDrafts(value: unknown): NaiCharacterPromptDraft[
 
 /** Convert editable rows back into the runtime JSON shape expected by NAI metadata preprocessing. */
 function buildNaiCharacterPromptValue(drafts: NaiCharacterPromptDraft[]) {
-  const nextValue = drafts
+  const nextValue = normalizeNaiCharacterPromptDrafts(drafts)
     .map((draft) => ({
       prompt: draft.prompt.trim(),
       uc: draft.uc.trim(),
@@ -106,7 +111,7 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
   const drafts = parseNaiCharacterPromptDrafts(value)
 
   const updateDrafts = (nextDrafts: NaiCharacterPromptDraft[]) => {
-    onChange(buildNaiCharacterPromptValue(nextDrafts))
+    onChange(buildNaiCharacterPromptValue(normalizeNaiCharacterPromptDrafts(nextDrafts)))
   }
 
   const handleAdd = () => {
@@ -133,13 +138,17 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-container px-3 py-2.5">
         <div>
           <div className="text-sm font-medium text-foreground">Character Prompt</div>
-          <div className="text-xs text-muted-foreground">각 캐릭터의 positive / negative / center 좌표를 따로 넣어줘.</div>
+          <div className="text-xs text-muted-foreground">테스트 API 기준 5x5 grid를 쓰고, 캐릭터가 1명이면 좌표는 중앙(C3)으로 고정돼.</div>
         </div>
         <Button type="button" size="sm" variant="outline" onClick={handleAdd}>
           <Plus className="h-4 w-4" />
           추가
         </Button>
       </div>
+
+      {drafts.length === 1 ? (
+        <div className="text-xs text-muted-foreground">캐릭터 1명일 때는 center_x / center_y가 자동으로 0.5(C3)로 고정돼.</div>
+      ) : null}
 
       {drafts.length === 0 ? (
         <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
@@ -179,11 +188,19 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-2">
                 <span className="text-sm font-medium text-foreground">Center X</span>
-                <Input type="number" min={0} max={1} step={0.01} value={draft.centerX} onChange={(event) => handleChange(index, 'centerX', event.target.value)} />
+                <Select value={draft.centerX} onChange={(event) => handleChange(index, 'centerX', event.target.value)} disabled={drafts.length === 1}>
+                  {NAI_CHARACTER_GRID_X_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </Select>
               </label>
               <label className="space-y-2">
                 <span className="text-sm font-medium text-foreground">Center Y</span>
-                <Input type="number" min={0} max={1} step={0.01} value={draft.centerY} onChange={(event) => handleChange(index, 'centerY', event.target.value)} />
+                <Select value={draft.centerY} onChange={(event) => handleChange(index, 'centerY', event.target.value)} disabled={drafts.length === 1}>
+                  {NAI_CHARACTER_GRID_Y_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </Select>
               </label>
             </div>
           </div>

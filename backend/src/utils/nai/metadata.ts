@@ -88,6 +88,8 @@ const RATING_NEGATIVE_TAGS: Partial<Record<NAIRatingMode, string>> = {
   sensitive: 'nsfw',
 }
 
+const CHARACTER_GRID_VALUES = [0.1, 0.3, 0.5, 0.7, 0.9] as const
+
 /** Parse JSON-or-array payloads into a safe array shape. */
 function normalizeListInput(value: unknown): unknown[] {
   if (!value) {
@@ -111,6 +113,13 @@ function normalizeListInput(value: unknown): unknown[] {
   return Array.isArray(source) ? source : []
 }
 
+/** Snap one character coordinate onto the documented 5x5 grid. */
+function snapCharacterGridValue(value: number) {
+  return CHARACTER_GRID_VALUES.reduce((best, candidate) => (
+    Math.abs(candidate - value) < Math.abs(best - value) ? candidate : best
+  ), 0.5)
+}
+
 /** Normalize character prompt rows into a typed payload. */
 function normalizeCharacters(value: NAIMetadataInputParams['characters']): NAICharacterPrompt[] {
   const normalized: NAICharacterPrompt[] = []
@@ -132,9 +141,17 @@ function normalizeCharacters(value: NAIMetadataInputParams['characters']): NAICh
     normalized.push({
       prompt,
       uc: typeof rawEntry.uc === 'string' ? rawEntry.uc.trim() : undefined,
-      center_x: Number.isFinite(centerX) ? centerX : 0.5,
-      center_y: Number.isFinite(centerY) ? centerY : 0.5,
+      center_x: snapCharacterGridValue(Number.isFinite(centerX) ? centerX : 0.5),
+      center_y: snapCharacterGridValue(Number.isFinite(centerY) ? centerY : 0.5),
     })
+  }
+
+  if (normalized.length === 1) {
+    return normalized.map((character) => ({
+      ...character,
+      center_x: 0.5,
+      center_y: 0.5,
+    }))
   }
 
   return normalized

@@ -21,6 +21,24 @@ export type NAICharacterPromptDraft = {
   centerY: string
 }
 
+export const NAI_CHARACTER_GRID_X_OPTIONS = [
+  { value: '0.1', label: 'A · Left' },
+  { value: '0.3', label: 'B · Mid-left' },
+  { value: '0.5', label: 'C · Center' },
+  { value: '0.7', label: 'D · Mid-right' },
+  { value: '0.9', label: 'E · Right' },
+] as const
+
+export const NAI_CHARACTER_GRID_Y_OPTIONS = [
+  { value: '0.1', label: '1 · Top' },
+  { value: '0.3', label: '2 · Upper-mid' },
+  { value: '0.5', label: '3 · Center' },
+  { value: '0.7', label: '4 · Lower-mid' },
+  { value: '0.9', label: '5 · Bottom' },
+] as const
+
+const NAI_CHARACTER_GRID_VALUES = [0.1, 0.3, 0.5, 0.7, 0.9] as const
+
 export type NAIVibeDraft = {
   image?: SelectedImageDraft
   encoded: string
@@ -285,6 +303,39 @@ export function toggleSelectionItem(items: string[], value: string) {
   return items.includes(value) ? items.filter((item) => item !== value) : [...items, value]
 }
 
+/** Snap one character position input to the 5x5 grid used by the test API docs. */
+export function snapNaiCharacterGridValue(value: string | number) {
+  const numericValue = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numericValue)) {
+    return '0.5'
+  }
+
+  const nearestValue = NAI_CHARACTER_GRID_VALUES.reduce((best, candidate) => (
+    Math.abs(candidate - numericValue) < Math.abs(best - numericValue) ? candidate : best
+  ), 0.5)
+
+  return nearestValue.toFixed(1)
+}
+
+/** Apply the test-folder character-position rule: single character => forced center. */
+export function normalizeNaiCharacterPromptDrafts(characters: NAICharacterPromptDraft[]) {
+  const normalizedCharacters = characters.map((character) => ({
+    ...character,
+    centerX: snapNaiCharacterGridValue(character.centerX),
+    centerY: snapNaiCharacterGridValue(character.centerY),
+  }))
+
+  if (normalizedCharacters.length === 1) {
+    return normalizedCharacters.map((character) => ({
+      ...character,
+      centerX: '0.5',
+      centerY: '0.5',
+    }))
+  }
+
+  return normalizedCharacters
+}
+
 /** Check whether the selected NAI model supports v4 character prompts. */
 export function supportsNaiCharacterPrompts(model: string) {
   return model.includes('nai-diffusion-4')
@@ -305,7 +356,7 @@ export function resolveNaiResolutionPreset(width: string, height: string) {
 
 /** Convert the editable character-prompt rows into the backend payload shape. */
 export function buildNaiCharacterPromptPayload(characters: NAICharacterPromptDraft[]) {
-  return characters
+  return normalizeNaiCharacterPromptDrafts(characters)
     .map((character) => ({
       prompt: character.prompt.trim(),
       uc: character.uc.trim(),
