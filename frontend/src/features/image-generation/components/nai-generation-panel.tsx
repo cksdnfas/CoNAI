@@ -640,7 +640,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
         seed: naiForm.seed.trim().length > 0 ? Number(naiForm.seed) : undefined,
         rating: naiForm.rating,
         quality_tags_enabled: naiForm.applyQualityTags,
-        characters: buildNaiCharacterPromptPayload(naiForm.characters),
+        characters: supportsCharacterPrompts ? buildNaiCharacterPromptPayload(naiForm.characters) : undefined,
         vibes: buildNaiVibePayload(naiForm.vibes),
         character_refs: buildNaiCharacterReferencePayload(naiForm.characterReferences),
         variety_plus: naiForm.varietyPlus,
@@ -885,7 +885,11 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                       </div>
 
                       {!supportsCharacterPrompts ? (
-                        <div className="text-xs text-[#ffb4ab]">Character Prompt는 NAI Diffusion 4 / 4.5 모델에서만 적용돼.</div>
+                        <div className="text-xs text-[#ffb4ab]">
+                          {naiForm.characters.length > 0
+                            ? '현재 모델에서는 Character Prompt가 적용되지 않아. 입력값은 보존되지만 이번 생성 요청에는 포함되지 않아.'
+                            : 'Character Prompt는 NAI Diffusion 4 / 4.5 모델에서만 적용돼.'}
+                        </div>
                       ) : null}
 
                       {naiForm.characters.length > 0 ? (
