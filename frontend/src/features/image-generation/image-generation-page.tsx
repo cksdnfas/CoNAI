@@ -11,17 +11,19 @@ import { cn } from '@/lib/utils'
 import { ComfyGenerationPanel } from './components/comfy-generation-panel'
 import { GenerationHistoryPanel } from './components/generation-history-panel'
 import { NaiGenerationPanel } from './components/nai-generation-panel'
+import { WildcardGenerationPanel } from './components/wildcard-generation-panel'
 
-type ImageGenerationTab = 'nai' | 'comfyui' | 'workflows'
+type ImageGenerationTab = 'nai' | 'comfyui' | 'wildcards' | 'workflows'
 
 const IMAGE_GENERATION_TABS: Array<{ value: ImageGenerationTab; label: string }> = [
   { value: 'nai', label: 'NAI' },
   { value: 'comfyui', label: 'ComfyUI' },
+  { value: 'wildcards', label: 'Wildcard' },
   { value: 'workflows', label: 'Workflow' },
 ]
 
 function parseImageGenerationTab(value?: string | null): ImageGenerationTab {
-  if (value === 'nai' || value === 'comfyui' || value === 'workflows' || value === 'workflow') {
+  if (value === 'nai' || value === 'comfyui' || value === 'wildcards' || value === 'workflows' || value === 'workflow') {
     return value === 'workflow' ? 'workflows' : value
   }
 
@@ -56,9 +58,11 @@ export function ImageGenerationPage() {
     ? <NaiGenerationPanel refreshNonce={globalRefreshNonce} onHistoryRefresh={handleHistoryRefresh} />
     : activeTab === 'comfyui'
       ? <ComfyGenerationPanel refreshNonce={globalRefreshNonce} onHistoryRefresh={handleHistoryRefresh} onSelectedWorkflowChange={setSelectedComfyWorkflowId} />
-      : null
+      : activeTab === 'wildcards'
+        ? <WildcardGenerationPanel refreshNonce={globalRefreshNonce} />
+        : null
 
-  const controllerLabel = activeTab === 'nai' ? 'NAI' : 'ComfyUI'
+  const controllerLabel = activeTab === 'nai' ? 'NAI' : activeTab === 'wildcards' ? 'Wildcard' : 'ComfyUI'
   const shouldShowHistory = activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null)
   const shouldUseControllerDrawer = !isWideLayout && (activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null))
 
