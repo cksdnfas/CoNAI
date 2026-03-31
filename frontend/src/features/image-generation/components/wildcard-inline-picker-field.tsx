@@ -34,6 +34,53 @@ type ActiveWildcardQuery = {
 
 type WildcardFilterMode = 'available-only' | 'all'
 
+const RECENT_WILDCARD_KEY_PREFIX = 'conai.wildcards.recent.'
+const FILTER_MODE_KEY_PREFIX = 'conai.wildcards.filter-mode.'
+const MAX_RECENT_WILDCARDS = 8
+
+function readStoredWildcardFilterMode(tool: WildcardTool): WildcardFilterMode {
+  if (typeof window === 'undefined') {
+    return 'available-only'
+  }
+
+  const value = window.localStorage.getItem(`${FILTER_MODE_KEY_PREFIX}${tool}`)
+  return value === 'all' ? 'all' : 'available-only'
+}
+
+function writeStoredWildcardFilterMode(tool: WildcardTool, mode: WildcardFilterMode) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(`${FILTER_MODE_KEY_PREFIX}${tool}`, mode)
+}
+
+function readStoredRecentWildcards(tool: WildcardTool): string[] {
+  if (typeof window === 'undefined') {
+    return []
+  }
+
+  try {
+    const raw = window.localStorage.getItem(`${RECENT_WILDCARD_KEY_PREFIX}${tool}`)
+    if (!raw) {
+      return []
+    }
+
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function writeStoredRecentWildcards(tool: WildcardTool, names: string[]) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(`${RECENT_WILDCARD_KEY_PREFIX}${tool}`, JSON.stringify(names.slice(0, MAX_RECENT_WILDCARDS)))
+}
+
 function flattenWildcards(nodes: WildcardRecord[], parentPath: string[] = []): FlattenedWildcardRecord[] {
   const entries: FlattenedWildcardRecord[] = []
 
@@ -134,7 +181,8 @@ export function WildcardInlinePickerField({
   const [caretPosition, setCaretPosition] = useState(0)
   const [activeIndex, setActiveIndex] = useState(0)
   const [isFocused, setIsFocused] = useState(false)
-  const [filterMode, setFilterMode] = useState<WildcardFilterMode>('available-only')
+  const [filterMode, setFilterMode] = useState<WildcardFilterMode>(() => readStoredWildcardFilterMode(tool))
+  const [recentWildcardNames, setRecentWildcardNames] = useState<string[]>(() => readStoredRecentWildcards(tool))
 
   const wildcardsQuery = useQuery({
     queryKey: ['wildcards', 'inline-picker'],
@@ -151,6 +199,7 @@ export function WildcardInlinePickerField({
     }
 
     const normalizedQuery = activeQuery.query.trim().toLowerCase()
+    const recentIndexMap = new Map(recentWildcardNames.map((name, index) => [name, index]))
     const records = flattenedWildcards
       .map((record) => ({
         record,
@@ -158,6 +207,7 @@ export function WildcardInlinePickerField({
         toolItemCount: countItemsForTool(record.items, tool),
         naiItemCount: countItemsForTool(record.items, 'nai'),
         comfyuiItemCount: countItemsForTool(record.items, 'comfyui'),
+        recentIndex: recentIndexMap.get(record.name) ?? Number.POSITIVE_INFINITY,
       }))
       .filter(({ score, toolItemCount }) => {
         if (normalizedQuery.length > 0 && score < 0) {
@@ -171,8 +221,16 @@ export function WildcardInlinePickerField({
         return true
       })
       .sort((left, right) => {
+        if (normalizedQuery.length === 0 && left.recentIndex !== right.recentIndex) {
+          return left.recentIndex - right.recentIndex
+        }
+
         if (right.score !== left.score) {
           return right.score - left.score
+        }
+
+        if (left.recentIndex !== right.recentIndex) {
+          return left.recentIndex - right.recentIndex
         }
 
         if (right.toolItemCount !== left.toolItemCount) {
@@ -184,13 +242,18 @@ export function WildcardInlinePickerField({
       .slice(0, 8)
 
     return records
-  }, [activeQuery, filterMode, flattenedWildcards, tool])
+  }, [activeQuery, filterMode, flattenedWildcards, recentWildcardNames, tool])
 
   const isPopupOpen = isFocused && activeQuery !== null && !disabled
 
   useEffect(() => {
     setActiveIndex(0)
   }, [activeQuery?.query, filterMode, tool])
+
+  useEffect(() => {
+    setFilterMode(readStoredWildcardFilterMode(tool))
+    setRecentWildcardNames(readStoredRecentWildcards(tool))
+  }, [tool])
 
   useEffect(() => () => {
     if (closeTimerRef.current !== null) {
@@ -215,10 +278,13 @@ export function WildcardInlinePickerField({
     const token = `++${wildcardName}++`
     const nextValue = `${value.slice(0, activeQuery.start)}${token}${value.slice(activeQuery.end)}`
     const nextCaretPosition = activeQuery.start + token.length
+    const nextRecentWildcardNames = [wildcardName, ...recentWildcardNames.filter((name) => name !== wildcardName)].slice(0, MAX_RECENT_WILDCARDS)
 
     onChange(nextValue)
     setCaretPosition(nextCaretPosition)
     setActiveIndex(0)
+    setRecentWildcardNames(nextRecentWildcardNames)
+    writeStoredRecentWildcards(tool, nextRecentWildcardNames)
 
     window.requestAnimationFrame(() => {
       fieldRef.current?.focus()
@@ -316,6 +382,7 @@ export function WildcardInlinePickerField({
                 onMouseDown={(event) => {
                   event.preventDefault()
                   setFilterMode('available-only')
+                  writeStoredWildcardFilterMode(tool, 'available-only')
                 }}
                 className={cn(
                   'rounded-sm border px-2 py-1 transition-colors',
@@ -329,6 +396,7 @@ export function WildcardInlinePickerField({
                 onMouseDown={(event) => {
                   event.preventDefault()
                   setFilterMode('all')
+                  writeStoredWildcardFilterMode(tool, 'all')
                 }}
                 className={cn(
                   'rounded-sm border px-2 py-1 transition-colors',
@@ -344,7 +412,7 @@ export function WildcardInlinePickerField({
             <div className="px-3 py-3 text-sm text-muted-foreground">와일드카드 불러오는 중…</div>
           ) : suggestions.length > 0 ? (
             <div className="max-h-72 overflow-y-auto p-2">
-              {suggestions.map(({ record, toolItemCount, naiItemCount, comfyuiItemCount }, index) => {
+              {suggestions.map(({ record, toolItemCount, naiItemCount, comfyuiItemCount, recentIndex }, index) => {
                 const isActive = index === activeIndex
                 return (
                   <button
@@ -364,6 +432,7 @@ export function WildcardInlinePickerField({
                         <span className="truncate text-sm font-medium text-foreground">{record.name}</span>
                         <Badge variant={record.type === 'chain' ? 'secondary' : 'outline'}>{record.type === 'chain' ? 'Chain' : 'Wildcard'}</Badge>
                         {record.isAutoCollected ? <Badge variant="outline">Auto LoRA</Badge> : null}
+                        {Number.isFinite(recentIndex) ? <Badge variant="secondary">최근 사용</Badge> : null}
                         {toolItemCount === 0 ? <Badge variant="outline">현재 툴 비어있음</Badge> : null}
                       </div>
                       <div className="mt-1 truncate text-xs text-muted-foreground">{record.path.join(' / ')}</div>
