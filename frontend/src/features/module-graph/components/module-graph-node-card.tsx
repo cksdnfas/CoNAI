@@ -88,7 +88,7 @@ function PortCell({ port, side, accentColor, connected, satisfied, requiredMissi
               background: `linear-gradient(90deg, ${TEXT_PORT_COLOR}22 0 50%, ${PROMPT_PORT_COLOR}22 50% 100%)`,
             } as CSSProperties}
           >
-            {PORT_TYPE_LABELS[port.data_type]}
+            T↔P
           </span>
         ) : (
           <Badge
