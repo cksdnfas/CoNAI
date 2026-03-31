@@ -903,7 +903,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
                       {naiForm.characters.length === 0 ? (
                         <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
-                          아직 캐릭터 프롬프트가 없어.
+                          캐릭터 없음
                         </div>
                       ) : (
                         <div className="space-y-3">
@@ -931,37 +931,37 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                                 </Button>
                               </div>
 
-                              <FormField label="Character Prompt">
+                              <FormField label="Prompt">
                                 <WildcardInlinePickerField
                                   tool="nai"
                                   multiline
                                   rows={4}
                                   value={character.prompt}
                                   onChange={(value) => handleCharacterPromptChange(index, 'prompt', value)}
-                                  placeholder="girl, ibuki (blue archive), halo"
+                                  placeholder=""
                                 />
                               </FormField>
 
-                              <FormField label="Character Negative Prompt">
+                              <FormField label="Negative Prompt">
                                 <WildcardInlinePickerField
                                   tool="nai"
                                   multiline
                                   rows={3}
                                   value={character.uc}
                                   onChange={(value) => handleCharacterPromptChange(index, 'uc', value)}
-                                  placeholder="bad anatomy, glowing eyes"
+                                  placeholder=""
                                 />
                               </FormField>
 
                               <div className="grid gap-4 sm:grid-cols-2">
-                                <FormField label="Center X">
+                                <FormField label="X">
                                   <Select value={character.centerX} onChange={(event) => handleCharacterPromptChange(index, 'centerX', event.target.value)}>
                                     {NAI_CHARACTER_GRID_X_OPTIONS.map((option) => (
                                       <option key={option.value} value={option.value}>{option.label}</option>
                                     ))}
                                   </Select>
                                 </FormField>
-                                <FormField label="Center Y">
+                                <FormField label="Y">
                                   <Select value={character.centerY} onChange={(event) => handleCharacterPromptChange(index, 'centerY', event.target.value)}>
                                     {NAI_CHARACTER_GRID_Y_OPTIONS.map((option) => (
                                       <option key={option.value} value={option.value}>{option.label}</option>

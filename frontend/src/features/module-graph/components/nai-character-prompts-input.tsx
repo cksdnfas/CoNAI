@@ -174,7 +174,7 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
 
       {drafts.length === 0 ? (
         <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
-          아직 캐릭터 프롬프트가 없어.
+          캐릭터 없음
         </div>
       ) : (
         drafts.map((draft, index) => (
@@ -202,28 +202,28 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
             </div>
 
             <label className="space-y-2">
-              <span className="text-sm font-medium text-foreground">Character Prompt</span>
+              <span className="text-sm font-medium text-foreground">Prompt</span>
               <Textarea
                 rows={4}
                 value={draft.prompt}
                 onChange={(event) => handleChange(index, 'prompt', event.target.value)}
-                placeholder="girl, ibuki (blue archive), halo"
+                placeholder=""
               />
             </label>
 
             <label className="space-y-2">
-              <span className="text-sm font-medium text-foreground">Character Negative Prompt</span>
+              <span className="text-sm font-medium text-foreground">Negative Prompt</span>
               <Textarea
                 rows={3}
                 value={draft.uc}
                 onChange={(event) => handleChange(index, 'uc', event.target.value)}
-                placeholder="narrow waist, wide hips"
+                placeholder=""
               />
             </label>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-2">
-                <span className="text-sm font-medium text-foreground">Center X</span>
+                <span className="text-sm font-medium text-foreground">X</span>
                 <Select value={draft.centerX} onChange={(event) => handleChange(index, 'centerX', event.target.value)}>
                   {NAI_CHARACTER_GRID_X_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -231,7 +231,7 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
                 </Select>
               </label>
               <label className="space-y-2">
-                <span className="text-sm font-medium text-foreground">Center Y</span>
+                <span className="text-sm font-medium text-foreground">Y</span>
                 <Select value={draft.centerY} onChange={(event) => handleChange(index, 'centerY', event.target.value)}>
                   {NAI_CHARACTER_GRID_Y_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
