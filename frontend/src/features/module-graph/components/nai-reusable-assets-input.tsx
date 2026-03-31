@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Plus, Save, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -171,6 +171,8 @@ function buildNaiCharacterReferenceValue(drafts: NaiCharacterReferenceDraft[]) {
 
 /** Render the reusable editor and saved-asset picker for NAI vibe and reference JSON inputs. */
 export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAssetInputProps) {
+  const [savedVibeSearch, setSavedVibeSearch] = useState('')
+  const [savedCharacterReferenceSearch, setSavedCharacterReferenceSearch] = useState('')
   const vibeDrafts = useMemo(() => (kind === 'vibes' ? parseNaiVibeDrafts(value) : []), [kind, value])
   const characterReferenceDrafts = useMemo(() => (kind === 'character_refs' ? parseNaiCharacterReferenceDrafts(value) : []), [kind, value])
 
@@ -185,6 +187,26 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
     queryFn: listNaiCharacterReferenceAssets,
     enabled: kind === 'character_refs',
   })
+
+  const filteredSavedVibes = useMemo(() => {
+    const items = savedVibesQuery.data || []
+    const keyword = savedVibeSearch.trim().toLowerCase()
+    if (!keyword) {
+      return items
+    }
+
+    return items.filter((item) => `${item.label} ${item.model}`.toLowerCase().includes(keyword))
+  }, [savedVibeSearch, savedVibesQuery.data])
+
+  const filteredSavedCharacterReferences = useMemo(() => {
+    const items = savedCharacterReferencesQuery.data || []
+    const keyword = savedCharacterReferenceSearch.trim().toLowerCase()
+    if (!keyword) {
+      return items
+    }
+
+    return items.filter((item) => `${item.label} ${item.type}`.toLowerCase().includes(keyword))
+  }, [savedCharacterReferenceSearch, savedCharacterReferencesQuery.data])
 
   const updateVibes = (nextDrafts: NaiVibeDraft[]) => {
     onChange(buildNaiVibeValue(nextDrafts))
@@ -307,15 +329,20 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
         )}
 
         <div className="space-y-2 rounded-sm border border-border bg-surface-container p-3">
-          <div className="flex items-center gap-2">
-            <div className="text-sm font-medium text-foreground">Saved Vibes</div>
-            <Badge variant="outline">{savedVibesQuery.data?.length ?? 0}</Badge>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium text-foreground">Saved Vibes</div>
+              <Badge variant="outline">{savedVibesQuery.data?.length ?? 0}</Badge>
+            </div>
+            <div className="w-full sm:w-64">
+              <Input value={savedVibeSearch} onChange={(event) => setSavedVibeSearch(event.target.value)} placeholder="이름 / 모델 검색" />
+            </div>
           </div>
           {savedVibesQuery.isLoading ? (
             <div className="text-sm text-muted-foreground">불러오는 중…</div>
-          ) : savedVibesQuery.data && savedVibesQuery.data.length > 0 ? (
+          ) : filteredSavedVibes.length > 0 ? (
             <div className="grid gap-2">
-              {savedVibesQuery.data.map((asset) => (
+              {filteredSavedVibes.map((asset) => (
                 <div key={asset.id} className="flex items-center justify-between gap-3 rounded-sm border border-border bg-surface-low px-3 py-2">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
@@ -329,7 +356,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
               ))}
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">저장된 vibe가 없어.</div>
+            <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 vibe가 없어.</div>
           )}
         </div>
       </div>
@@ -391,15 +418,20 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
       )}
 
       <div className="space-y-2 rounded-sm border border-border bg-surface-container p-3">
-        <div className="flex items-center gap-2">
-          <div className="text-sm font-medium text-foreground">Saved Character References</div>
-          <Badge variant="outline">{savedCharacterReferencesQuery.data?.length ?? 0}</Badge>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-medium text-foreground">Saved Character References</div>
+            <Badge variant="outline">{savedCharacterReferencesQuery.data?.length ?? 0}</Badge>
+          </div>
+          <div className="w-full sm:w-64">
+            <Input value={savedCharacterReferenceSearch} onChange={(event) => setSavedCharacterReferenceSearch(event.target.value)} placeholder="이름 / 타입 검색" />
+          </div>
         </div>
         {savedCharacterReferencesQuery.isLoading ? (
           <div className="text-sm text-muted-foreground">불러오는 중…</div>
-        ) : savedCharacterReferencesQuery.data && savedCharacterReferencesQuery.data.length > 0 ? (
+        ) : filteredSavedCharacterReferences.length > 0 ? (
           <div className="grid gap-2">
-            {savedCharacterReferencesQuery.data.map((asset) => (
+            {filteredSavedCharacterReferences.map((asset) => (
               <div key={asset.id} className="flex items-center justify-between gap-3 rounded-sm border border-border bg-surface-low px-3 py-2">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
@@ -413,7 +445,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
             ))}
           </div>
         ) : (
-          <div className="text-sm text-muted-foreground">저장된 reference가 없어.</div>
+          <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 reference가 없어.</div>
         )}
       </div>
     </div>
