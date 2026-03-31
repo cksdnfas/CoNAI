@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { inputVariants } from '@/components/ui/input'
@@ -165,6 +165,33 @@ function scoreWildcardMatch(record: FlattenedWildcardRecord, normalizedQuery: st
   return -1
 }
 
+function renderHighlightedText(text: string, query: string) {
+  const normalizedQuery = query.trim()
+  if (!normalizedQuery) {
+    return text
+  }
+
+  const lowerText = text.toLowerCase()
+  const lowerQuery = normalizedQuery.toLowerCase()
+  const matchIndex = lowerText.indexOf(lowerQuery)
+
+  if (matchIndex < 0) {
+    return text
+  }
+
+  const before = text.slice(0, matchIndex)
+  const matched = text.slice(matchIndex, matchIndex + normalizedQuery.length)
+  const after = text.slice(matchIndex + normalizedQuery.length)
+
+  return (
+    <>
+      {before}
+      <mark className="rounded-sm bg-primary/20 px-0.5 text-foreground">{matched}</mark>
+      {after}
+    </>
+  )
+}
+
 /** Shared prompt-like text field with ++ wildcard autocomplete for NAI and ComfyUI. */
 export function WildcardInlinePickerField({
   value,
@@ -245,6 +272,14 @@ export function WildcardInlinePickerField({
   }, [activeQuery, filterMode, flattenedWildcards, recentWildcardNames, tool])
 
   const isPopupOpen = isFocused && activeQuery !== null && !disabled
+  const normalizedActiveQuery = activeQuery?.query.trim() ?? ''
+  const indexedSuggestions = suggestions.map((suggestion, index) => ({ ...suggestion, index }))
+  const recentSuggestions = normalizedActiveQuery.length === 0
+    ? indexedSuggestions.filter((suggestion) => Number.isFinite(suggestion.recentIndex))
+    : []
+  const remainingSuggestions = normalizedActiveQuery.length === 0
+    ? indexedSuggestions.filter((suggestion) => !Number.isFinite(suggestion.recentIndex))
+    : indexedSuggestions
 
   useEffect(() => {
     setActiveIndex(0)
@@ -344,6 +379,54 @@ export function WildcardInlinePickerField({
     },
   }
 
+  const renderSuggestionButton = ({
+    record,
+    toolItemCount,
+    naiItemCount,
+    comfyuiItemCount,
+    recentIndex,
+    index,
+  }: {
+    record: FlattenedWildcardRecord
+    toolItemCount: number
+    naiItemCount: number
+    comfyuiItemCount: number
+    recentIndex: number
+    index: number
+  }) => {
+    const isActive = index === activeIndex
+    return (
+      <button
+        key={record.id}
+        type="button"
+        onMouseDown={(event) => {
+          event.preventDefault()
+          handleInsertWildcard(record.name)
+        }}
+        className={cn(
+          'flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left transition-colors',
+          isActive ? 'bg-surface-high' : 'hover:bg-surface-lowest',
+        )}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="truncate text-sm font-medium text-foreground">{renderHighlightedText(record.name, normalizedActiveQuery) as ReactNode}</span>
+            <Badge variant={record.type === 'chain' ? 'secondary' : 'outline'}>{record.type === 'chain' ? 'Chain' : 'Wildcard'}</Badge>
+            {record.isAutoCollected ? <Badge variant="outline">Auto LoRA</Badge> : null}
+            {Number.isFinite(recentIndex) ? <Badge variant="secondary">최근 사용</Badge> : null}
+            {toolItemCount === 0 ? <Badge variant="outline">현재 툴 비어있음</Badge> : null}
+          </div>
+          <div className="mt-1 truncate text-xs text-muted-foreground">{renderHighlightedText(record.path.join(' / '), normalizedActiveQuery) as ReactNode}</div>
+        </div>
+
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+          <Badge variant={tool === 'nai' ? 'secondary' : 'outline'}>NAI {naiItemCount}</Badge>
+          <Badge variant={tool === 'comfyui' ? 'secondary' : 'outline'}>Comfy {comfyuiItemCount}</Badge>
+        </div>
+      </button>
+    )
+  }
+
   return (
     <div className="relative">
       {multiline ? (
@@ -411,40 +494,24 @@ export function WildcardInlinePickerField({
           {wildcardsQuery.isLoading ? (
             <div className="px-3 py-3 text-sm text-muted-foreground">와일드카드 불러오는 중…</div>
           ) : suggestions.length > 0 ? (
-            <div className="max-h-72 overflow-y-auto p-2">
-              {suggestions.map(({ record, toolItemCount, naiItemCount, comfyuiItemCount, recentIndex }, index) => {
-                const isActive = index === activeIndex
-                return (
-                  <button
-                    key={record.id}
-                    type="button"
-                    onMouseDown={(event) => {
-                      event.preventDefault()
-                      handleInsertWildcard(record.name)
-                    }}
-                    className={cn(
-                      'flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left transition-colors',
-                      isActive ? 'bg-surface-high' : 'hover:bg-surface-lowest',
-                    )}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate text-sm font-medium text-foreground">{record.name}</span>
-                        <Badge variant={record.type === 'chain' ? 'secondary' : 'outline'}>{record.type === 'chain' ? 'Chain' : 'Wildcard'}</Badge>
-                        {record.isAutoCollected ? <Badge variant="outline">Auto LoRA</Badge> : null}
-                        {Number.isFinite(recentIndex) ? <Badge variant="secondary">최근 사용</Badge> : null}
-                        {toolItemCount === 0 ? <Badge variant="outline">현재 툴 비어있음</Badge> : null}
-                      </div>
-                      <div className="mt-1 truncate text-xs text-muted-foreground">{record.path.join(' / ')}</div>
-                    </div>
+            <div className="max-h-72 space-y-3 overflow-y-auto p-2">
+              {recentSuggestions.length > 0 ? (
+                <div className="space-y-1">
+                  <div className="px-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">최근 사용</div>
+                  <div className="space-y-1">
+                    {recentSuggestions.map(renderSuggestionButton)}
+                  </div>
+                </div>
+              ) : null}
 
-                    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                      <Badge variant={tool === 'nai' ? 'secondary' : 'outline'}>NAI {naiItemCount}</Badge>
-                      <Badge variant={tool === 'comfyui' ? 'secondary' : 'outline'}>Comfy {comfyuiItemCount}</Badge>
-                    </div>
-                  </button>
-                )
-              })}
+              {remainingSuggestions.length > 0 ? (
+                <div className="space-y-1">
+                  {recentSuggestions.length > 0 ? <div className="px-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">전체 결과</div> : null}
+                  <div className="space-y-1">
+                    {remainingSuggestions.map(renderSuggestionButton)}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="space-y-2 px-3 py-3 text-sm text-muted-foreground">
