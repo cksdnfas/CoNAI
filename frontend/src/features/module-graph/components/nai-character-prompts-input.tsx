@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { NaiCharacterPositionBoard } from '@/features/image-generation/components/nai-character-position-board'
 import {
   NAI_CHARACTER_GRID_X_OPTIONS,
   NAI_CHARACTER_GRID_Y_OPTIONS,
@@ -108,6 +110,7 @@ function buildNaiCharacterPromptValue(drafts: NaiCharacterPromptDraft[]) {
 
 /** Render a compact reusable editor for NAI character prompt arrays inside module graph forms. */
 export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPromptsInputProps) {
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const drafts = parseNaiCharacterPromptDrafts(value)
 
   const updateDrafts = (nextDrafts: NaiCharacterPromptDraft[]) => {
@@ -145,6 +148,22 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
           추가
         </Button>
       </div>
+
+      {drafts.length > 0 ? (
+        <NaiCharacterPositionBoard
+          characters={drafts.map((draft, index) => ({
+            label: `Character ${index + 1}`,
+            centerX: draft.centerX,
+            centerY: draft.centerY,
+          }))}
+          selectedIndex={selectedIndex}
+          onSelectIndex={setSelectedIndex}
+          onPositionChange={(index, centerX, centerY) => {
+            handleChange(index, 'centerX', centerX)
+            handleChange(index, 'centerY', centerY)
+          }}
+        />
+      ) : null}
 
       {drafts.length === 0 ? (
         <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
@@ -205,3 +224,6 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
     </div>
   )
 }
+
+
+

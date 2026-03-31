@@ -55,6 +55,7 @@ import {
   type NAIVibeDraft,
   type SelectedImageDraft,
 } from '../image-generation-shared'
+import { NaiCharacterPositionBoard } from './nai-character-position-board'
 import { NaiModuleSaveModal } from './nai-module-save-modal'
 import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
 
@@ -104,6 +105,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
   const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
   const [isUpscaling, setIsUpscaling] = useState(false)
   const [encodingVibeIndex, setEncodingVibeIndex] = useState<number | null>(null)
+  const [selectedCharacterIndex, setSelectedCharacterIndex] = useState<number | null>(null)
   const [savedVibeSearch, setSavedVibeSearch] = useState('')
   const [savedCharacterReferenceSearch, setSavedCharacterReferenceSearch] = useState('')
   const [naiForm, setNaiForm] = useState<NAIFormDraft>(DEFAULT_NAI_FORM)
@@ -251,10 +253,14 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
   }
 
   const handleAddCharacterPrompt = () => {
-    setNaiForm((current) => ({
-      ...current,
-      characters: normalizeNaiCharacterPromptDrafts([...current.characters, { ...EMPTY_NAI_CHARACTER_PROMPT }]),
-    }))
+    setNaiForm((current) => {
+      const nextCharacters = normalizeNaiCharacterPromptDrafts([...current.characters, { ...EMPTY_NAI_CHARACTER_PROMPT }])
+      setSelectedCharacterIndex(nextCharacters.length - 1)
+      return {
+        ...current,
+        characters: nextCharacters,
+      }
+    })
   }
 
   const handleCharacterPromptChange = (index: number, field: keyof NAICharacterPromptDraft, value: string) => {
@@ -276,6 +282,15 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
       ...current,
       characters: normalizeNaiCharacterPromptDrafts(current.characters.filter((_, characterIndex) => characterIndex !== index)),
     }))
+    setSelectedCharacterIndex((current) => {
+      if (current === null) {
+        return null
+      }
+      if (current === index) {
+        return null
+      }
+      return current > index ? current - 1 : current
+    })
   }
 
   const handleAddVibe = () => {
@@ -873,6 +888,22 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                         <div className="text-xs text-[#ffb4ab]">Character Prompt는 NAI Diffusion 4 / 4.5 모델에서만 적용돼.</div>
                       ) : null}
 
+                      {naiForm.characters.length > 0 ? (
+                        <NaiCharacterPositionBoard
+                          characters={naiForm.characters.map((character, index) => ({
+                            label: `Character ${index + 1}`,
+                            centerX: character.centerX,
+                            centerY: character.centerY,
+                          }))}
+                          selectedIndex={selectedCharacterIndex}
+                          onSelectIndex={setSelectedCharacterIndex}
+                          onPositionChange={(index, centerX, centerY) => {
+                            handleCharacterPromptChange(index, 'centerX', centerX)
+                            handleCharacterPromptChange(index, 'centerY', centerY)
+                          }}
+                        />
+                      ) : null}
+
                       {naiForm.characters.length === 0 ? (
                         <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
                           아직 캐릭터 프롬프트가 없어.
@@ -1371,3 +1402,5 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     </>
   )
 }
+
+
