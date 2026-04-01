@@ -476,43 +476,43 @@ export function buildNaiModuleSnapshot(form: NAIFormDraft) {
 /** Build candidate module inputs from the current NAI form mode. */
 export function buildNaiModuleFieldOptions(form: NAIFormDraft): ModuleFieldOption[] {
   const options: ModuleFieldOption[] = [
-    { key: 'prompt', label: 'Prompt', dataType: 'prompt' },
-    { key: 'negative_prompt', label: 'Negative Prompt', dataType: 'prompt' },
-    { key: 'model', label: 'Model', dataType: 'text', options: NAI_MODEL_OPTIONS.map((option) => option.value) },
-    { key: 'action', label: 'Action', dataType: 'text', options: NAI_ACTION_OPTIONS.map((option) => option.value) },
-    { key: 'sampler', label: 'Sampler', dataType: 'text', options: NAI_SAMPLER_OPTIONS.map((option) => option.value) },
-    { key: 'noise_schedule', label: 'Scheduler', dataType: 'text', options: NAI_SCHEDULER_OPTIONS.map((option) => option.value) },
-    { key: 'width', label: 'Width', dataType: 'number' },
-    { key: 'height', label: 'Height', dataType: 'number' },
-    { key: 'steps', label: 'Steps', dataType: 'number' },
-    { key: 'scale', label: 'CFG Scale', dataType: 'number' },
-    { key: 'n_samples', label: 'Samples', dataType: 'number' },
-    { key: 'seed', label: 'Seed', dataType: 'number' },
-    { key: 'variety_plus', label: 'Variety+', dataType: 'boolean' },
+    { key: 'prompt', label: '프롬프트', dataType: 'prompt' },
+    { key: 'negative_prompt', label: '네거티브 프롬프트', dataType: 'prompt' },
+    { key: 'model', label: '모델', dataType: 'text', options: NAI_MODEL_OPTIONS.map((option) => option.value) },
+    { key: 'action', label: '동작', dataType: 'text', options: NAI_ACTION_OPTIONS.map((option) => option.value) },
+    { key: 'sampler', label: '샘플러', dataType: 'text', options: NAI_SAMPLER_OPTIONS.map((option) => option.value) },
+    { key: 'noise_schedule', label: '스케줄러', dataType: 'text', options: NAI_SCHEDULER_OPTIONS.map((option) => option.value) },
+    { key: 'width', label: '너비', dataType: 'number' },
+    { key: 'height', label: '높이', dataType: 'number' },
+    { key: 'steps', label: '스텝', dataType: 'number' },
+    { key: 'scale', label: 'CFG 스케일', dataType: 'number' },
+    { key: 'n_samples', label: '샘플 수', dataType: 'number' },
+    { key: 'seed', label: '시드', dataType: 'number' },
+    { key: 'variety_plus', label: '버라이어티+', dataType: 'boolean' },
   ]
 
   if (supportsNaiCharacterPrompts(form.model)) {
-    options.push({ key: 'characters', label: 'Character Prompts', dataType: 'json' })
+    options.push({ key: 'characters', label: '캐릭터 프롬프트', dataType: 'json' })
   }
 
-  options.push({ key: 'vibes', label: 'Vibe Transfer', dataType: 'json' })
+  options.push({ key: 'vibes', label: '바이브 전송', dataType: 'json' })
 
   if (supportsNaiCharacterReferences(form.model)) {
-    options.push({ key: 'character_refs', label: 'Character References', dataType: 'json' })
+    options.push({ key: 'character_refs', label: '캐릭터 레퍼런스', dataType: 'json' })
   }
 
   if (form.action !== 'generate') {
     options.push(
-      { key: 'image', label: 'Source Image', dataType: 'image' },
-      { key: 'strength', label: 'Strength', dataType: 'number' },
-      { key: 'noise', label: 'Noise', dataType: 'number' },
+      { key: 'image', label: '원본 이미지', dataType: 'image' },
+      { key: 'strength', label: '강도', dataType: 'number' },
+      { key: 'noise', label: '노이즈', dataType: 'number' },
     )
   }
 
   if (form.action === 'infill') {
     options.push(
-      { key: 'mask', label: 'Mask Image', dataType: 'mask' },
-      { key: 'add_original_image', label: 'Add Original Image', dataType: 'boolean' },
+      { key: 'mask', label: '마스크 이미지', dataType: 'mask' },
+      { key: 'add_original_image', label: '원본 이미지 추가', dataType: 'boolean' },
     )
   }
 

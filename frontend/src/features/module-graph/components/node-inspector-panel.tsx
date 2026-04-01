@@ -36,6 +36,16 @@ type ResolvedEdgeEndpoint = {
   portKey: string | null
 }
 
+const PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], string> = {
+  image: '이미지',
+  mask: '마스크',
+  prompt: '프롬프트',
+  text: '텍스트',
+  number: '숫자',
+  boolean: '불리언',
+  json: 'JSON',
+}
+
 /** Check whether a node input has any explicit or default value. */
 function hasMeaningfulValue(value: unknown) {
   return value !== undefined && value !== null && value !== ''
@@ -65,11 +75,11 @@ function findNodeUiField(node: ModuleGraphNode, portKey: string) {
 function PortBadges({ port, missingRequired = false }: { port: ModulePortDefinition; missingRequired?: boolean }) {
   return (
     <div className="mt-1 flex flex-wrap gap-1">
-      <Badge variant="outline">{port.data_type}</Badge>
+      <Badge variant="outline">{PORT_TYPE_LABELS[port.data_type]}</Badge>
       <Badge variant="secondary">{port.key}</Badge>
-      {port.required ? <Badge variant="outline">required</Badge> : null}
-      {missingRequired ? <Badge variant="secondary">needs input</Badge> : null}
-      {port.multiple ? <Badge variant="outline">multi</Badge> : null}
+      {port.required ? <Badge variant="outline">필수</Badge> : null}
+      {missingRequired ? <Badge variant="secondary">입력 필요</Badge> : null}
+      {port.multiple ? <Badge variant="outline">다중</Badge> : null}
     </div>
   )
 }
@@ -341,7 +351,7 @@ export function NodeInspectorPanel({
         {showHeader ? (
           <SectionHeading
             variant="inside"
-            heading="Node Inspector"
+            heading="노드 인스펙터"
           />
         ) : null}
         {!selectedNode && !selectedEdge ? (
@@ -351,13 +361,13 @@ export function NodeInspectorPanel({
         {!selectedNode && selectedEdge && sourceEndpoint && targetEndpoint ? (
           <div className="space-y-3 rounded-sm bg-surface-low p-4">
             <div className="flex items-center gap-2">
-              <div className="font-medium text-foreground">Selected Edge</div>
+              <div className="font-medium text-foreground">선택한 엣지</div>
               {selectedEdgeType ? <Badge variant="outline">{selectedEdgeType}</Badge> : null}
               <TechnicalReferenceHint title={`edge ${selectedEdge.id}`} label="엣지 내부 식별자 보기" />
             </div>
             <div className="grid gap-3 md:grid-cols-2">
-              <EdgeEndpointCard heading="Source" endpoint={sourceEndpoint} role="출력" />
-              <EdgeEndpointCard heading="Target" endpoint={targetEndpoint} role="입력" />
+              <EdgeEndpointCard heading="출발" endpoint={sourceEndpoint} role="출력" />
+              <EdgeEndpointCard heading="도착" endpoint={targetEndpoint} role="입력" />
             </div>
           </div>
         ) : null}

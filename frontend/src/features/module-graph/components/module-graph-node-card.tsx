@@ -7,14 +7,20 @@ import type { ModulePortDefinition } from '@/lib/api'
 import { buildHandleId, getModuleColor, getPortTypeColor, type ModuleGraphNode } from '../module-graph-shared'
 
 const PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], string> = {
-  image: 'image',
-  mask: 'mask',
-  prompt: 'prompt',
-  text: 'text',
-  number: 'number',
-  boolean: 'boolean',
-  json: 'json',
+  image: '이미지',
+  mask: '마스크',
+  prompt: '프롬프트',
+  text: '텍스트',
+  number: '숫자',
+  boolean: '불리언',
+  json: 'JSON',
 }
+
+const ENGINE_TYPE_LABELS = {
+  nai: 'NAI',
+  comfyui: 'ComfyUI',
+  system: '시스템',
+} as const
 
 const TEXT_PORT_COLOR = getPortTypeColor('text')
 const PROMPT_PORT_COLOR = getPortTypeColor('prompt')
@@ -42,12 +48,12 @@ function isStringBridgePort(dataType: ModulePortDefinition['data_type']) {
 function buildPortTooltip(port: ModulePortDefinition, statusLabel: string) {
   return [
     port.label,
-    `key: ${port.key}`,
-    `type: ${PORT_TYPE_LABELS[port.data_type]}`,
-    `status: ${statusLabel}`,
-    isStringBridgePort(port.data_type) ? 'bridge: text ↔ prompt' : null,
-    port.required ? 'required' : null,
-    port.multiple ? 'multi' : null,
+    `키: ${port.key}`,
+    `타입: ${PORT_TYPE_LABELS[port.data_type]}`,
+    `상태: ${statusLabel}`,
+    isStringBridgePort(port.data_type) ? '브리지: 텍스트 ↔ 프롬프트' : null,
+    port.required ? '필수' : null,
+    port.multiple ? '다중' : null,
     port.description || null,
   ]
     .filter(Boolean)
@@ -61,7 +67,7 @@ function PortCell({ port, side, accentColor, connected, satisfied, requiredMissi
   }
 
   const portTypeColor = getPortTypeColor(port.data_type)
-  const statusLabel = requiredMissing ? 'needs input' : connected ? 'linked' : satisfied ? 'set' : 'open'
+  const statusLabel = requiredMissing ? '입력 필요' : connected ? '연결됨' : satisfied ? '설정됨' : '대기'
   const borderColor = requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}99` : `${accentColor}30`
   const backgroundColor = requiredMissing ? 'rgba(245, 158, 11, 0.10)' : connected ? `${portTypeColor}10` : 'rgba(148, 163, 184, 0.06)'
   const alignmentClass = side === 'input' ? 'pl-4 pr-2' : 'pl-2 pr-4'
@@ -156,13 +162,13 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
 
   const statusLabel =
     executionStatus === 'completed'
-      ? 'done'
+      ? '완료'
       : executionStatus === 'failed'
-        ? 'failed'
+        ? '실패'
         : executionStatus === 'blocked'
-          ? 'blocked'
+          ? '차단됨'
           : missingRequiredInputCount > 0
-            ? 'needs input'
+            ? '입력 필요'
             : null
 
   const statusBorderColor =
@@ -181,18 +187,18 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
     <div
       className="min-w-[280px] rounded-sm border bg-surface-container px-3 py-2.5 text-foreground shadow-lg"
       style={{ borderColor: statusBorderColor, boxShadow: `0 0 0 1px ${accentColor}22` } as CSSProperties}
-      title={`${module.name}\nmodule id: ${module.id}${module.description ? `\n${module.description}` : ''}`}
+      title={`${module.name}\n모듈 ID: ${module.id}${module.description ? `\n${module.description}` : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-foreground">{module.name}</div>
           <div className="mt-0.5 text-[11px] text-muted-foreground">
-            {module.engine_type} · in {connectedInputCount}/{inputPorts.length} · out {connectedOutputCount}/{outputPorts.length}
-            {missingRequiredInputCount > 0 ? ` · missing ${missingRequiredInputCount}` : ''}
+            {(ENGINE_TYPE_LABELS[module.engine_type] ?? module.engine_type)} · 입력 {connectedInputCount}/{inputPorts.length} · 출력 {connectedOutputCount}/{outputPorts.length}
+            {missingRequiredInputCount > 0 ? ` · 미입력 ${missingRequiredInputCount}` : ''}
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-1">
-          {data.executionReuseState === 'reused' ? <Badge variant="outline">cache</Badge> : null}
+          {data.executionReuseState === 'reused' ? <Badge variant="outline">캐시</Badge> : null}
           {data.executionArtifactCount ? <Badge variant="outline">A {data.executionArtifactCount}</Badge> : null}
           {statusLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
         </div>

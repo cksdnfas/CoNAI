@@ -532,6 +532,90 @@ async function executeLoadImageFromReference(
   })
 }
 
+/** Load one random library image into a graph image artifact. */
+async function executeRandomImageFromLibrary(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+) {
+  const metadata = MediaMetadataModel.getRandomImage()
+  if (!metadata || typeof metadata.composite_hash !== 'string' || !metadata.composite_hash.trim()) {
+    throw new Error('Random Image From Library requires at least one indexed image in the library')
+  }
+
+  const activeFiles = ImageFileModel.findActiveByHash(metadata.composite_hash)
+  const activeFile = activeFiles[0]
+  if (!activeFile) {
+    throw new Error(`Random library image file not found: ${metadata.composite_hash}`)
+  }
+
+  const imageBuffer = await fs.promises.readFile(activeFile.original_file_path)
+  const mimeType = activeFile.mime_type || 'image/png'
+  const imageDataUrl = bufferToDataUrl(imageBuffer, mimeType)
+  const storagePath = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer)
+
+  const referenceValue = {
+    composite_hash: metadata.composite_hash,
+    original_file_path: activeFile.original_file_path,
+    mime_type: activeFile.mime_type,
+    file_size: activeFile.file_size,
+    thumbnail_path: metadata.thumbnail_path,
+    prompt: metadata.prompt,
+    negative_prompt: metadata.negative_prompt,
+    auto_tags: metadata.auto_tags,
+    width: metadata.width,
+    height: metadata.height,
+  }
+
+  const metadataValue = {
+    composite_hash: metadata.composite_hash,
+    ai_tool: metadata.ai_tool,
+    model_name: metadata.model_name,
+    width: metadata.width,
+    height: metadata.height,
+    prompt: metadata.prompt,
+    negative_prompt: metadata.negative_prompt,
+    auto_tags: metadata.auto_tags,
+    first_seen_date: metadata.first_seen_date,
+    metadata_updated_date: metadata.metadata_updated_date,
+  }
+
+  const nodeArtifacts = {
+    image: {
+      type: 'image' as const,
+      value: imageDataUrl,
+      storagePath,
+      metadata: {
+        kind: 'system-random-image-from-library',
+        composite_hash: metadata.composite_hash,
+      },
+    },
+    image_ref: buildRuntimeArtifact(context.executionId, node.id, 'image_ref', 'json', referenceValue, {
+      kind: 'system-random-image-reference',
+      composite_hash: metadata.composite_hash,
+    }),
+    metadata: buildRuntimeArtifact(context.executionId, node.id, 'metadata', 'json', metadataValue, {
+      kind: 'system-random-image-metadata',
+      composite_hash: metadata.composite_hash,
+    }),
+  }
+
+  context.artifactsByNode.set(node.id, nodeArtifacts)
+
+  writeExecutionLog({
+    executionId: context.executionId,
+    nodeId: node.id,
+    eventType: 'node_engine_complete',
+    message: `System module completed: ${moduleDefinition.name}`,
+    details: {
+      engine: 'system',
+      operationKey: 'system.random_image_from_library',
+      compositeHash: metadata.composite_hash,
+      storagePath,
+    },
+  })
+}
+
 /** Extract prompt-friendly tags from one input image using the configured WD tagger. */
 async function executeExtractTagsFromImage(
   context: ExecutionContext,
@@ -726,6 +810,11 @@ export async function executeSystemModule(
 
   if (operationKey === 'system.load_image_from_reference') {
     await executeLoadImageFromReference(context, node, moduleDefinition, resolvedInputs)
+    return
+  }
+
+  if (operationKey === 'system.random_image_from_library') {
+    await executeRandomImageFromLibrary(context, node, moduleDefinition)
     return
   }
 

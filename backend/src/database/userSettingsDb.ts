@@ -919,6 +919,42 @@ function ensureBuiltinSystemModules(): void {
   );
 
   insertIfMissing(
+    'Random Image From Library',
+    'Pick one random image from the active library and expose it as a reusable graph image.',
+    'retrieval',
+    [],
+    [
+      {
+        key: 'image',
+        label: 'Image',
+        direction: 'output',
+        data_type: 'image',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'image_ref',
+        label: 'Image Reference',
+        direction: 'output',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+      },
+      {
+        key: 'metadata',
+        label: 'Metadata',
+        direction: 'output',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.random_image_from_library' },
+    [],
+    '#7e57c2',
+  );
+
+  insertIfMissing(
     'Extract Tags From Image',
     'Run the configured image tagger on one image input and expose prompt-friendly tags.',
     'analysis',
