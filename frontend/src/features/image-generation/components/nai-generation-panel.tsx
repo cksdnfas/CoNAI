@@ -773,6 +773,11 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
       return
     }
 
+    if (!connected) {
+      showSnackbar({ message: 'NAI 생성 전에 먼저 로그인해줘. 상단 로그인 버튼을 눌러줘.', tone: 'error' })
+      return
+    }
+
     if (naiForm.prompt.trim().length === 0) {
       showSnackbar({ message: 'NAI 프롬프트를 먼저 넣어줘.', tone: 'error' })
       return
@@ -900,13 +905,15 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     : 'NovelAI 인증이 필요합니다. access token을 입력해 연결하세요.'
   const naiGenerateButtonLabel = isNaiGenerating
     ? '생성 요청 중…'
-    : naiCostQuery.isSuccess
-      ? naiCostQuery.data.isOpusFree
-        ? '생성 (무료)'
-        : `생성 (${naiCostQuery.data.estimatedCost} Anlas)`
-      : naiCostQuery.isPending
-        ? '생성 (계산 중…)'
-        : '생성'
+    : !connected
+      ? '로그인 후 생성'
+      : naiCostQuery.isSuccess
+        ? naiCostQuery.data.isOpusFree
+          ? '생성 (무료)'
+          : `생성 (${naiCostQuery.data.estimatedCost} Anlas)`
+        : naiCostQuery.isPending
+          ? '생성 (계산 중…)'
+          : '생성'
   const canUseCharacterPositions = canUseNaiCharacterPositions(naiForm.characters.length)
   const useCharacterPositions = shouldUseNaiCharacterPositions(naiForm)
 
@@ -936,26 +943,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
           </div>
         </section>
 
-        {!connected ? (
-          <section className="space-y-3">
-            <Card>
-              <CardContent className="space-y-4 py-8">
-                <div className="space-y-2 text-center">
-                  <div className="text-base font-semibold text-foreground">NovelAI 연결이 필요해</div>
-                  <div className="text-sm text-muted-foreground">상단의 로그인 버튼을 눌러 계정 로그인 또는 토큰 저장을 진행해줘.</div>
-                </div>
-                <div className="flex justify-center">
-                  <Button type="button" onClick={() => setIsNaiAuthModalOpen(true)}>
-                    로그인 열기
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </section>
-        ) : (
-          <>
-
-            <section className="space-y-3">
+        <section className="space-y-3">
               <Card>
                 <CardContent className="space-y-4">
                   <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Prompt" />
@@ -1487,40 +1475,38 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
               </Card>
             </section>
 
-            <section className="space-y-3">
-              <Card>
-                <CardContent className="space-y-4">
-                  <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Actions" />
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="button" variant="outline" onClick={() => setIsModuleSaveModalOpen(true)}>
-                        <Save className="h-4 w-4" />
-                        모듈 저장
-                      </Button>
-                      {naiForm.action !== 'generate' ? (
-                        <Button type="button" variant="outline" onClick={handleUpscale} disabled={!naiForm.sourceImage || isUpscaling}>
-                          <Download className="h-4 w-4" />
-                          {isUpscaling ? '업스케일 중…' : '소스 2x 업스케일'}
-                        </Button>
-                      ) : null}
-                    </div>
+        <section className="space-y-3">
+          <Card>
+            <CardContent className="space-y-4">
+              <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Actions" />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={() => setIsModuleSaveModalOpen(true)}>
+                    <Save className="h-4 w-4" />
+                    모듈 저장
+                  </Button>
+                  {naiForm.action !== 'generate' ? (
+                    <Button type="button" variant="outline" onClick={handleUpscale} disabled={!naiForm.sourceImage || isUpscaling}>
+                      <Download className="h-4 w-4" />
+                      {isUpscaling ? '업스케일 중…' : '소스 2x 업스케일'}
+                    </Button>
+                  ) : null}
+                </div>
 
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <Button type="button" variant="ghost" onClick={() => setNaiForm(DEFAULT_NAI_FORM)} disabled={isNaiGenerating || isUpscaling}>
-                        초기화
-                      </Button>
-                      <Button type="button" onClick={handleNaiGenerate} disabled={isNaiGenerating || naiForm.prompt.trim().length === 0}>
-                        <Sparkles className="h-4 w-4" />
-                        {naiGenerateButtonLabel}
-                      </Button>
-                    </div>
-                  </div>
-                  {naiCostQuery.isError ? <div className="text-xs text-[#ffb4ab]">{getErrorMessage(naiCostQuery.error, '예상 비용 계산에 실패했어.')}</div> : null}
-                </CardContent>
-              </Card>
-            </section>
-          </>
-        )}
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button type="button" variant="ghost" onClick={() => setNaiForm(DEFAULT_NAI_FORM)} disabled={isNaiGenerating || isUpscaling}>
+                    초기화
+                  </Button>
+                  <Button type="button" onClick={handleNaiGenerate} disabled={isNaiGenerating || naiForm.prompt.trim().length === 0}>
+                    <Sparkles className="h-4 w-4" />
+                    {naiGenerateButtonLabel}
+                  </Button>
+                </div>
+              </div>
+              {naiCostQuery.isError ? <div className="text-xs text-[#ffb4ab]">{getErrorMessage(naiCostQuery.error, '예상 비용 계산에 실패했어.')}</div> : null}
+            </CardContent>
+          </Card>
+        </section>
       </div>
 
       <NaiAuthModal
