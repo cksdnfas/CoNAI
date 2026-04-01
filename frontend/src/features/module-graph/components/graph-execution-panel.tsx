@@ -353,7 +353,7 @@ export function GraphExecutionPanel({
   onRerunGraph,
   onRetryExecution,
   onCancelExecution,
-  description = '최근 실행 상태와 주요 결과를 여기서 확인해.',
+  description,
   showHeader = true,
 }: GraphExecutionPanelProps) {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
@@ -470,22 +470,12 @@ export function GraphExecutionPanel({
             </Alert>
           ) : null}
 
-          {selectedGraphId ? (
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-1.5">
-                <Badge variant="outline">Q {queuedCount}</Badge>
-                <Badge variant="outline">R {runningCount}</Badge>
-              </div>
-
-              {queuedCount > 0 || runningCount > 0 ? (
-                <Alert>
-                  <AlertTitle>큐/실행 상태</AlertTitle>
-                  <AlertDescription>
-                    {activeRunningExecution ? <div>실행 중 #{activeRunningExecution.id}</div> : null}
-                    {nextQueuedExecution ? <div>다음 #{nextQueuedExecution.id} · 순번 {nextQueuedExecution.queue_position ?? '?'}</div> : null}
-                  </AlertDescription>
-                </Alert>
-              ) : null}
+          {selectedGraphId && (queuedCount > 0 || runningCount > 0) ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
+              <Badge variant="outline">Q {queuedCount}</Badge>
+              <Badge variant="outline">R {runningCount}</Badge>
+              {activeRunningExecution ? <span>실행 #{activeRunningExecution.id}</span> : null}
+              {nextQueuedExecution ? <span>다음 #{nextQueuedExecution.id} · {nextQueuedExecution.queue_position ?? '?'}</span> : null}
             </div>
           ) : null}
 
@@ -532,28 +522,27 @@ export function GraphExecutionPanel({
 
           {selectedExecutionId && executionDetail ? (
             <div className="space-y-4 rounded-sm border border-border bg-surface-low p-3">
-              <Alert>
-                <AlertTitle className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span>#{executionDetail.execution.id}</span>
-                    <Badge variant={executionDetail.execution.status === 'completed' ? 'secondary' : 'outline'}>{executionDetail.execution.status}</Badge>
-                    <Badge variant="outline">{getExecutionModeLabel(selectedExecutionPlan)}</Badge>
-                    <span className="text-[11px] text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
-                  </div>
-                  <Button type="button" size="sm" variant="outline" onClick={() => setIsDetailModalOpen(true)}>
-                    <Eye className="h-4 w-4" />
-                    상세보기
-                  </Button>
-                </AlertTitle>
-                <AlertDescription>
-                  {executionDetail.execution.started_at ? <div>시작 {formatDateTime(executionDetail.execution.started_at)}</div> : null}
-                  {executionDetail.execution.completed_at ? <div>완료 {formatDateTime(executionDetail.execution.completed_at)}</div> : null}
-                  {selectedExecutionPlan?.targetNodeId ? <div>대상 {getNodeDisplayLabel(selectedGraph, selectedExecutionPlan.targetNodeId)}</div> : null}
-                  {selectedExecutionPlan?.forceRerun ? <div>캐시 무시 후 다시 실행</div> : null}
-                  {selectedExecutionPlan?.reusedFromExecutionId ? <div>이전 실행 #{selectedExecutionPlan.reusedFromExecutionId} 결과 일부 재사용</div> : null}
-                  {executionDetail.execution.error_message ? <div>{executionDetail.execution.error_message}</div> : null}
-                </AlertDescription>
-              </Alert>
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-background/50 px-3 py-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-foreground">#{executionDetail.execution.id}</span>
+                  <Badge variant={executionDetail.execution.status === 'completed' ? 'secondary' : 'outline'}>{executionDetail.execution.status}</Badge>
+                  <Badge variant="outline">{getExecutionModeLabel(selectedExecutionPlan)}</Badge>
+                  {selectedExecutionPlan?.targetNodeId ? <Badge variant="outline">{getNodeDisplayLabel(selectedGraph, selectedExecutionPlan.targetNodeId)}</Badge> : null}
+                  {selectedExecutionPlan?.forceRerun ? <Badge variant="outline">강제</Badge> : null}
+                  {selectedExecutionPlan?.reusedFromExecutionId ? <Badge variant="outline">재사용 #{selectedExecutionPlan.reusedFromExecutionId}</Badge> : null}
+                  <span className="text-[11px] text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
+                </div>
+                <Button type="button" size="sm" variant="outline" onClick={() => setIsDetailModalOpen(true)}>
+                  <Eye className="h-4 w-4" />
+                  상세
+                </Button>
+              </div>
+
+              {executionDetail.execution.error_message ? (
+                <div className="rounded-sm border border-[#7f1d1d] bg-[#3a1010]/60 px-3 py-2 text-sm text-[#ffb4ab]">
+                  {executionDetail.execution.error_message}
+                </div>
+              ) : null}
 
               {executionInputEntries.length > 0 ? (
                 <div className="space-y-2.5">
@@ -580,10 +569,9 @@ export function GraphExecutionPanel({
                 </div>
 
                 {finalArtifacts.length === 0 ? (
-                  <Alert>
-                    <AlertTitle>표시할 최종 결과가 아직 없어</AlertTitle>
-                    <AlertDescription>이 실행에서는 저장된 출력 아티팩트를 찾지 못했어.</AlertDescription>
-                  </Alert>
+                  <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+                    최종 결과 없음
+                  </div>
                 ) : (
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {finalArtifacts.map((artifact) => (
@@ -600,10 +588,9 @@ export function GraphExecutionPanel({
                 </div>
 
                 {groupedArtifacts.length === 0 ? (
-                  <Alert>
-                    <AlertTitle>노드 출력이 없어</AlertTitle>
-                    <AlertDescription>실행 결과로 저장된 노드 아티팩트를 아직 찾지 못했어.</AlertDescription>
-                  </Alert>
+                  <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+                    노드 출력 없음
+                  </div>
                 ) : (
                   <div className="space-y-3">
                     {groupedArtifacts.map((group) => (
@@ -632,7 +619,7 @@ export function GraphExecutionPanel({
         <SettingsModal
           open={isDetailModalOpen}
           title={`실행 상세 #${executionDetail.execution.id}`}
-          description="기술 정보, 원본 아티팩트 메타데이터, 로그를 여기서 확인해."
+          description={undefined}
           onClose={() => setIsDetailModalOpen(false)}
           widthClassName="max-w-6xl"
         >
@@ -644,10 +631,7 @@ export function GraphExecutionPanel({
               <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('logs')}>로그</Button>
             </div>
 
-            <div ref={(node) => { detailSectionRefs.current.summary = node }} className="space-y-2.5 scroll-mt-4">
-              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                <span>Execution Meta</span>
-              </div>
+            <div ref={(node) => { detailSectionRefs.current.summary = node }} className="space-y-2 scroll-mt-4">
               <Alert>
                 <AlertTitle className="flex flex-wrap items-center gap-2">
                   <span>#{executionDetail.execution.id}</span>
@@ -678,9 +662,9 @@ export function GraphExecutionPanel({
             </div>
 
             {executionInputEntries.length > 0 ? (
-              <div ref={(node) => { detailSectionRefs.current.inputs = node }} className="space-y-2.5 scroll-mt-4">
+              <div ref={(node) => { detailSectionRefs.current.inputs = node }} className="space-y-2 scroll-mt-4">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  <span>Run Inputs</span>
+                  <span>입력</span>
                   <Badge variant="outline">{executionInputEntries.length}</Badge>
                 </div>
                 <div className="grid gap-2 md:grid-cols-2">
@@ -695,9 +679,9 @@ export function GraphExecutionPanel({
               </div>
             ) : null}
 
-            <div ref={(node) => { detailSectionRefs.current.artifacts = node }} className="space-y-2.5 scroll-mt-4">
+            <div ref={(node) => { detailSectionRefs.current.artifacts = node }} className="space-y-2 scroll-mt-4">
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                <span>Artifacts</span>
+                <span>아티팩트</span>
                 <Badge variant="outline">{executionDetail.artifacts.length}</Badge>
               </div>
               {executionDetail.artifacts.map((artifact) => {
@@ -731,16 +715,15 @@ export function GraphExecutionPanel({
               })}
             </div>
 
-            <div ref={(node) => { detailSectionRefs.current.logs = node }} className="space-y-2.5 scroll-mt-4">
+            <div ref={(node) => { detailSectionRefs.current.logs = node }} className="space-y-2 scroll-mt-4">
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                <span>Logs</span>
+                <span>로그</span>
                 <Badge variant="outline">{executionDetail.logs.length}</Badge>
               </div>
               {executionDetail.logs.length === 0 ? (
-                <Alert>
-                  <AlertTitle>저장된 로그가 없어</AlertTitle>
-                  <AlertDescription>이번 실행은 별도 로그 이벤트 없이 끝났어.</AlertDescription>
-                </Alert>
+                <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+                  로그 없음
+                </div>
               ) : (
                 executionDetail.logs.map((log) => {
                   const parsedDetails = parseMetadataValue(log.details)

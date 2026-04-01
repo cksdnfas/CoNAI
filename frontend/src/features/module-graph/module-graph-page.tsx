@@ -1414,15 +1414,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const workflowEditorSupportPanels = (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        <Badge variant="outline">노드 {nodes.length}</Badge>
-        <Badge variant="outline">엣지 {edges.length}</Badge>
-        <Badge variant="outline">노출 입력 {workflowExposedInputs.length}</Badge>
-        {selectedNode ? <Badge variant="secondary">선택 노드 {selectedNode.data.module.name}</Badge> : null}
-        {selectedExecutionId ? <Badge variant="secondary">선택 실행 #{selectedExecutionId}</Badge> : null}
-        {isDirty ? <Badge variant="outline">미저장</Badge> : <Badge variant="secondary">저장됨</Badge>}
-      </div>
-
-      <div className="flex flex-wrap gap-2">
         {([
           ['setup', '설정'],
           ['inspector', '검사'],
@@ -1461,16 +1452,13 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
             {!isSetupCollapsed ? (
               <>
-                <Alert>
-                  <AlertTitle className="flex flex-wrap items-center gap-2">
-                    <span>{selectedGraphRecord?.name || workflowName || 'Untitled workflow'}</span>
-                    {selectedGraphRecord ? <Badge variant="outline">v{selectedGraphRecord.version}</Badge> : <Badge variant="outline">draft</Badge>}
-                    {isDirty ? <Badge variant="outline">미저장</Badge> : <Badge variant="secondary">저장됨</Badge>}
-                  </AlertTitle>
-                  <AlertDescription>
-                    <div>노드 {nodes.length} · 엣지 {edges.length} · 노출 입력 {workflowExposedInputs.length}</div>
-                  </AlertDescription>
-                </Alert>
+                <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border bg-background/50 px-3 py-2 text-sm">
+                  <span className="font-medium text-foreground">{selectedGraphRecord?.name || workflowName || 'Untitled workflow'}</span>
+                  {selectedGraphRecord ? <Badge variant="outline">v{selectedGraphRecord.version}</Badge> : <Badge variant="outline">draft</Badge>}
+                  {isDirty ? <Badge variant="outline">미저장</Badge> : <Badge variant="secondary">저장됨</Badge>}
+                  {selectedNode ? <Badge variant="secondary">노드 {selectedNode.data.module.name}</Badge> : null}
+                  {selectedExecutionId ? <Badge variant="secondary">실행 #{selectedExecutionId}</Badge> : null}
+                </div>
 
                 <div className="grid gap-3">
                   <Input value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} placeholder="Workflow name" />
