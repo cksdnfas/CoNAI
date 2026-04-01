@@ -19,6 +19,9 @@ export type ModuleGraphNodeData = {
   latestArtifactLabel?: string | null
   latestArtifactPreviewUrl?: string | null
   latestArtifactTextPreview?: string | null
+  executeNodeDisabled?: boolean
+  onExecuteNode?: () => void
+  onForceExecuteNode?: () => void
   connectedInputKeys?: string[]
   connectedOutputKeys?: string[]
 }

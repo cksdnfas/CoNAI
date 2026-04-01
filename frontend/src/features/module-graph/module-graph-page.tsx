@@ -934,14 +934,15 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     }
   }
 
-  const handleExecuteSelectedNode = async (forceRerun = false) => {
+  const handleExecuteNodeById = useCallback(async (nodeId: string, forceRerun = false) => {
     if (selectedGraphRecord === null || selectedGraphId === null) {
       showSnackbar({ message: '먼저 저장된 워크플로우를 불러와줘.', tone: 'error' })
       return
     }
 
-    if (!selectedNode) {
-      showSnackbar({ message: '먼저 실행할 노드를 하나 선택해줘.', tone: 'error' })
+    const node = nodes.find((candidate) => candidate.id === nodeId)
+    if (!node) {
+      showSnackbar({ message: '실행할 노드를 찾지 못했어.', tone: 'error' })
       return
     }
 
@@ -955,6 +956,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     }
 
     try {
+      setSelectedNodeId(nodeId)
+      setSelectedEdgeId(null)
       setExecutingGraphId(selectedGraphId)
       const payload = Object.keys(workflowRunInputValues).length > 0 || forceRerun
         ? {
@@ -962,13 +965,13 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             ...(forceRerun ? { force_rerun: true } : {}),
           }
         : undefined
-      const result = await executeGraphNode(selectedGraphId, selectedNode.id, payload)
+      const result = await executeGraphNode(selectedGraphId, nodeId, payload)
       setSelectedExecutionId(result.executionId)
       await graphExecutionsQuery.refetch()
       showSnackbar({
         message: forceRerun
-          ? `강제 재실행 요청을 등록했어. 실행 #${result.executionId}는 ${selectedNode.data.module.name}까지 캐시 없이 다시 처리해.`
-          : `선택 노드 실행 요청을 등록했어. 실행 #${result.executionId}가 ${selectedNode.data.module.name}까지 필요한 upstream만 처리해.`,
+          ? `강제 재실행 요청을 등록했어. 실행 #${result.executionId}는 ${node.data.module.name}까지 캐시 없이 다시 처리해.`
+          : `선택 노드 실행 요청을 등록했어. 실행 #${result.executionId}가 ${node.data.module.name}까지 필요한 upstream만 처리해.`,
         tone: 'info',
       })
     } catch (error) {
@@ -976,6 +979,15 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     } finally {
       setExecutingGraphId(null)
     }
+  }, [executingGraphId, graphExecutionsQuery, isDirty, nodes, selectedGraphId, selectedGraphRecord, showSnackbar, workflowRunInputValues])
+
+  const handleExecuteSelectedNode = async (forceRerun = false) => {
+    if (!selectedNode) {
+      showSnackbar({ message: '먼저 실행할 노드를 하나 선택해줘.', tone: 'error' })
+      return
+    }
+
+    await handleExecuteNodeById(selectedNode.id, forceRerun)
   }
 
   const handleRunSelectedWorkflow = async () => {
@@ -1092,6 +1104,19 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   }
 
   const nodeTypes = useMemo(() => ({ module: ModuleGraphNodeCard }), [])
+  const graphCanvasNodes = useMemo(
+    () =>
+      nodes.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          executeNodeDisabled: selectedGraphId === null || isDirty || executingGraphId !== null,
+          onExecuteNode: () => void handleExecuteNodeById(node.id, false),
+          onForceExecuteNode: () => void handleExecuteNodeById(node.id, true),
+        },
+      })),
+    [executingGraphId, handleExecuteNodeById, isDirty, nodes, selectedGraphId],
+  )
 
   const workflowListSidebar = (
     <SavedGraphList
@@ -1303,7 +1328,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                 <div className="h-[760px] overflow-hidden rounded-sm border border-border bg-surface-lowest">
                   <ReactFlow
                     className="theme-graph-flow"
-                    nodes={nodes}
+                    nodes={graphCanvasNodes}
                     edges={edges}
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}

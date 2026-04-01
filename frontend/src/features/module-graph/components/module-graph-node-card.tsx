@@ -1,6 +1,8 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, MouseEvent } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { Play, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import type { ModulePortDefinition } from '@/lib/api'
 import { buildHandleId, getModuleColor, getPortTypeColor, type ModuleGraphNode } from '../module-graph-shared'
 
@@ -127,6 +129,12 @@ function buildHandleStyle(params: { side: 'input' | 'output'; color: string }): 
   }
 }
 
+/** Prevent node-card action buttons from also triggering canvas drag/selection side effects. */
+function stopNodeActionEvent(event: MouseEvent<HTMLButtonElement>) {
+  event.preventDefault()
+  event.stopPropagation()
+}
+
 /** Render a cleaner module graph node card with compact ports and hover-only details. */
 export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
   const { module } = data
@@ -189,6 +197,44 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
           {statusLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
         </div>
       </div>
+
+      {(data.onExecuteNode || data.onForceExecuteNode) ? (
+        <div className="nodrag nowheel mt-2 flex flex-wrap gap-1.5">
+          {data.onExecuteNode ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 px-2 text-[11px]"
+              disabled={data.executeNodeDisabled}
+              onMouseDown={stopNodeActionEvent}
+              onClick={(event) => {
+                stopNodeActionEvent(event)
+                data.onExecuteNode?.()
+              }}
+            >
+              <Play className="h-3.5 w-3.5" />
+              실행
+            </Button>
+          ) : null}
+          {data.onForceExecuteNode ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-[11px]"
+              disabled={data.executeNodeDisabled}
+              onMouseDown={stopNodeActionEvent}
+              onClick={(event) => {
+                stopNodeActionEvent(event)
+                data.onForceExecuteNode?.()
+              }}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              재실행
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-2.5 grid gap-1">
         {Array.from({ length: portRowCount }, (_, index) => {
