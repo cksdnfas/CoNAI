@@ -129,7 +129,8 @@ router.post('/:id/nodes/:nodeId/execute', asyncHandler(async (req: Request, res:
     }
 
     const inputValues = req.body?.input_values && typeof req.body.input_values === 'object' ? req.body.input_values as Record<string, unknown> : undefined
-    const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues, nodeId)
+    const forceRerun = req.body?.force_rerun === true
+    const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues, nodeId, forceRerun)
     return res.status(201).json({ success: true, data: result } as ModuleGraphResponse)
   } catch (error) {
     console.error('Error executing graph node:', error)

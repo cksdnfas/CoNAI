@@ -8,6 +8,7 @@ type QueuedExecutionJob = {
   workflowId: number
   inputValues?: Record<string, unknown>
   targetNodeId?: string
+  forceRerun?: boolean
 }
 
 type CancelExecutionResult = {
@@ -23,7 +24,7 @@ export class GraphWorkflowExecutionQueue {
   private static cancelRequestedExecutionIds = new Set<number>()
 
   /** Enqueue a workflow execution and start the worker if idle. */
-  static enqueue(workflowId: number, inputValues?: Record<string, unknown>, targetNodeId?: string) {
+  static enqueue(workflowId: number, inputValues?: Record<string, unknown>, targetNodeId?: string, forceRerun = false) {
     const workflow = GraphWorkflowModel.findById(workflowId)
     if (!workflow) {
       throw new Error('Graph workflow not found')
@@ -45,11 +46,12 @@ export class GraphWorkflowExecutionQueue {
         workflowId: workflow.id,
         version: workflow.version,
         targetNodeId: targetNodeId ?? null,
+        forceRerun,
         inputKeys: Object.keys(inputValues ?? {}),
       },
     })
 
-    this.queue.push({ executionId, workflowId, inputValues, targetNodeId })
+    this.queue.push({ executionId, workflowId, inputValues, targetNodeId, forceRerun })
     void this.processNext()
 
     return {
@@ -148,6 +150,7 @@ export class GraphWorkflowExecutionQueue {
         executionId: nextJob.executionId,
         runtimeInputValues: nextJob.inputValues,
         targetNodeId: nextJob.targetNodeId,
+        forceRerun: nextJob.forceRerun,
         shouldCancel: () => this.cancelRequestedExecutionIds.has(nextJob.executionId),
       })
     } catch (error) {

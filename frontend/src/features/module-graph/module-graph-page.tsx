@@ -934,7 +934,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     }
   }
 
-  const handleExecuteSelectedNode = async () => {
+  const handleExecuteSelectedNode = async (forceRerun = false) => {
     if (selectedGraphRecord === null || selectedGraphId === null) {
       showSnackbar({ message: '먼저 저장된 워크플로우를 불러와줘.', tone: 'error' })
       return
@@ -956,11 +956,19 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
     try {
       setExecutingGraphId(selectedGraphId)
-      const result = await executeGraphNode(selectedGraphId, selectedNode.id, Object.keys(workflowRunInputValues).length > 0 ? { input_values: workflowRunInputValues } : undefined)
+      const payload = Object.keys(workflowRunInputValues).length > 0 || forceRerun
+        ? {
+            ...(Object.keys(workflowRunInputValues).length > 0 ? { input_values: workflowRunInputValues } : {}),
+            ...(forceRerun ? { force_rerun: true } : {}),
+          }
+        : undefined
+      const result = await executeGraphNode(selectedGraphId, selectedNode.id, payload)
       setSelectedExecutionId(result.executionId)
       await graphExecutionsQuery.refetch()
       showSnackbar({
-        message: `선택 노드 실행 요청을 등록했어. 실행 #${result.executionId}가 ${selectedNode.data.module.name}까지 필요한 upstream만 처리해.`,
+        message: forceRerun
+          ? `강제 재실행 요청을 등록했어. 실행 #${result.executionId}는 ${selectedNode.data.module.name}까지 캐시 없이 다시 처리해.`
+          : `선택 노드 실행 요청을 등록했어. 실행 #${result.executionId}가 ${selectedNode.data.module.name}까지 필요한 upstream만 처리해.`,
         tone: 'info',
       })
     } catch (error) {
@@ -1389,9 +1397,11 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               onNodeValueChange={handleNodeValueChange}
               onNodeValueClear={handleNodeValueClear}
               onNodeImageChange={handleNodeImageChange}
-              onExecuteSelectedNode={() => void handleExecuteSelectedNode()}
+              onExecuteSelectedNode={() => void handleExecuteSelectedNode(false)}
+              onForceExecuteSelectedNode={() => void handleExecuteSelectedNode(true)}
               executeSelectedNodeDisabled={!selectedNode || selectedGraphId === null || isDirty || executingGraphId !== null}
               executeSelectedNodeLabel={executingGraphId !== null ? '실행 요청 중…' : '선택 노드 실행'}
+              forceExecuteSelectedNodeLabel={executingGraphId !== null ? '실행 요청 중…' : '강제 재실행'}
               highlightedPortKey={selectedValidationPortKey}
             />
 

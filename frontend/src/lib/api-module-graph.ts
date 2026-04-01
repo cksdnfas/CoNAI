@@ -323,7 +323,7 @@ export async function executeGraphWorkflow(workflowId: number, payload?: { input
 }
 
 /** Enqueue one selected graph node and its required upstream closure for execution. */
-export async function executeGraphNode(workflowId: number, nodeId: string, payload?: { input_values?: Record<string, unknown> }) {
+export async function executeGraphNode(workflowId: number, nodeId: string, payload?: { input_values?: Record<string, unknown>; force_rerun?: boolean }) {
   const response = await requestJson<ApiEnvelope<{
     executionId: number
     status: GraphExecutionStatus

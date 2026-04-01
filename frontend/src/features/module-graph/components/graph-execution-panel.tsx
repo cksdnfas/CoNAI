@@ -207,9 +207,10 @@ export function GraphExecutionPanel({
           <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
             {(() => {
               const executionPlan = executionDetail.execution.execution_plan
-                ? JSON.parse(executionDetail.execution.execution_plan) as { orderedNodeIds?: string[]; targetNodeId?: string | null; reusedFromExecutionId?: number | null; reusedNodeIds?: string[] }
+                ? JSON.parse(executionDetail.execution.execution_plan) as { orderedNodeIds?: string[]; targetNodeId?: string | null; forceRerun?: boolean; reusedFromExecutionId?: number | null; reusedNodeIds?: string[] }
                 : null
               const targetNodeId = executionPlan?.targetNodeId ?? null
+              const forceRerun = executionPlan?.forceRerun === true
               const reusedFromExecutionId = executionPlan?.reusedFromExecutionId ?? null
               const reusedNodeIds = executionPlan?.reusedNodeIds ?? []
 
@@ -223,10 +224,11 @@ export function GraphExecutionPanel({
                   <AlertDescription>
                     {targetNodeId ? (
                       <div className="flex items-center gap-1">
-                        <span>선택 노드 실행</span>
+                        <span>{forceRerun ? '선택 노드 강제 재실행' : '선택 노드 실행'}</span>
                         <TechnicalReferenceHint title={`node ${targetNodeId}`} label="실행 대상 노드 내부 식별자 보기" />
                       </div>
                     ) : null}
+                    {forceRerun ? <div>캐시 무시: upstream도 새로 실행</div> : null}
                     {reusedFromExecutionId ? <div>캐시 재사용: #{reusedFromExecutionId} · 노드 {reusedNodeIds.length}</div> : null}
                     {executionDetail.execution.status === 'queued' && executionDetail.execution.queue_position ? <div>큐 순번 {executionDetail.execution.queue_position}</div> : null}
                     {executionDetail.execution.cancel_requested ? <div>취소 요청 접수됨</div> : null}

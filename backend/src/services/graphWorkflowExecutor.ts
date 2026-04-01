@@ -26,6 +26,7 @@ type GraphExecutionPlan = {
   orderedNodeIds: string[]
   targetNodeId?: string | null
   runtimeInputSignature?: string | null
+  forceRerun?: boolean
   reusedFromExecutionId?: number | null
   reusedNodeIds?: string[]
 }
@@ -37,8 +38,9 @@ async function findReusableExecution(params: {
   runtimeInputSignature: string
   targetNodeId?: string
   reusableNodeIds: string[]
+  forceRerun?: boolean
 }) {
-  if (!params.targetNodeId || params.reusableNodeIds.length === 0) {
+  if (params.forceRerun || !params.targetNodeId || params.reusableNodeIds.length === 0) {
     return { reusedFromExecutionId: null, reusedNodeIds: [] as string[], artifactsByNode: new Map<string, Record<string, RuntimeArtifact>>() }
   }
 
@@ -98,6 +100,7 @@ export class GraphWorkflowExecutor {
     executionId?: number
     runtimeInputValues?: Record<string, unknown>
     targetNodeId?: string
+    forceRerun?: boolean
     shouldCancel?: () => boolean
   }) {
     const workflowRecord = GraphWorkflowModel.findById(workflowId)
@@ -121,6 +124,7 @@ export class GraphWorkflowExecutor {
     const modulesById = new Map(modules.map((module) => [module.id, module]))
     validateGraphTypes(workflow.graph, modulesById)
     const targetNodeId = options?.targetNodeId
+    const forceRerun = options?.forceRerun === true
     const orderedNodeIds = buildExecutionOrder(workflow.graph, targetNodeId)
     const runtimeInputSignature = buildRuntimeInputSignature(runtimeInputValues)
     const reusableNodeIds = targetNodeId ? orderedNodeIds.filter((nodeId) => nodeId !== targetNodeId) : []
@@ -130,11 +134,13 @@ export class GraphWorkflowExecutor {
       runtimeInputSignature,
       targetNodeId,
       reusableNodeIds,
+      forceRerun,
     })
     const executionPlan: GraphExecutionPlan = {
       orderedNodeIds,
       targetNodeId: targetNodeId ?? null,
       runtimeInputSignature,
+      forceRerun,
       reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
       reusedNodeIds: reusedArtifacts.reusedNodeIds,
     }
@@ -163,6 +169,7 @@ export class GraphWorkflowExecutor {
         targetNodeId: targetNodeId ?? null,
         runtimeInputKeys: Object.keys(runtimeInputValues),
         runtimeInputSignature,
+        forceRerun,
         reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
         reusedNodeIds: reusedArtifacts.reusedNodeIds,
       },

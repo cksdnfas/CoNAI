@@ -22,8 +22,10 @@ type NodeInspectorPanelProps = {
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => Promise<void> | void
   onExecuteSelectedNode?: () => void
+  onForceExecuteSelectedNode?: () => void
   executeSelectedNodeDisabled?: boolean
   executeSelectedNodeLabel?: string
+  forceExecuteSelectedNodeLabel?: string
   highlightedPortKey?: string | null
   showHeader?: boolean
 }
@@ -169,8 +171,10 @@ export function NodeInspectorPanel({
   onNodeValueClear,
   onNodeImageChange,
   onExecuteSelectedNode,
+  onForceExecuteSelectedNode,
   executeSelectedNodeDisabled = false,
   executeSelectedNodeLabel = '선택 노드 실행',
+  forceExecuteSelectedNodeLabel = '강제 재실행',
   highlightedPortKey = null,
   showHeader = true,
 }: NodeInspectorPanelProps) {
@@ -377,9 +381,16 @@ export function NodeInspectorPanel({
                   </div>
                 </div>
                 {onExecuteSelectedNode ? (
-                  <Button type="button" size="sm" onClick={onExecuteSelectedNode} disabled={executeSelectedNodeDisabled}>
-                    {executeSelectedNodeLabel}
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" onClick={onExecuteSelectedNode} disabled={executeSelectedNodeDisabled}>
+                      {executeSelectedNodeLabel}
+                    </Button>
+                    {onForceExecuteSelectedNode ? (
+                      <Button type="button" size="sm" variant="outline" onClick={onForceExecuteSelectedNode} disabled={executeSelectedNodeDisabled}>
+                        {forceExecuteSelectedNodeLabel}
+                      </Button>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             </div>

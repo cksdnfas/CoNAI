@@ -180,6 +180,7 @@ In this initial step:
 
 - only upstream nodes may be reused during selected-node execution
 - the selected target node still executes freshly
+- users may explicitly force a clean re-run that disables upstream reuse
 - reused nodes must be visible in the execution UI
 
 ### Success criteria
