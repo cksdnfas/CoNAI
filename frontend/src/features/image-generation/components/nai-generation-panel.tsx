@@ -1049,79 +1049,95 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
               <Card>
                 <CardContent className="space-y-4">
                   <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Settings" />
-                  <div className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-4">
-                      <FormField label="Model">
-                        <Select value={naiForm.model} onChange={(event) => handleNaiFieldChange('model', event.target.value)}>
-                          {NAI_MODEL_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </Select>
-                      </FormField>
+                  <div className="space-y-5">
+                    <div className="space-y-3">
+                      <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Core</div>
+                      <div className="grid gap-4 md:grid-cols-4">
+                        <div className="md:col-span-3">
+                          <FormField label="Model">
+                            <Select value={naiForm.model} onChange={(event) => handleNaiFieldChange('model', event.target.value)}>
+                              {NAI_MODEL_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                              ))}
+                            </Select>
+                          </FormField>
+                        </div>
 
-                      <FormField label="Action">
-                        <Select value={naiForm.action} onChange={(event) => handleNaiFieldChange('action', event.target.value)}>
-                          {NAI_ACTION_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </Select>
-                      </FormField>
-
-                      <FormField label="Sampler">
-                        <Select value={naiForm.sampler} onChange={(event) => handleNaiFieldChange('sampler', event.target.value)}>
-                          {NAI_SAMPLER_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </Select>
-                      </FormField>
-
-                      <FormField label="Scheduler">
-                        <Select value={naiForm.scheduler} onChange={(event) => handleNaiFieldChange('scheduler', event.target.value)}>
-                          {NAI_SCHEDULER_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </Select>
-                      </FormField>
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <FormField label="Preset">
-                        <Select value={naiForm.resolutionPreset} onChange={(event) => handleResolutionPresetChange(event.target.value)}>
-                          {NAI_RESOLUTION_PRESETS.map((preset) => (
-                            <option key={preset.key} value={preset.key}>{preset.label}</option>
-                          ))}
-                          <option value="custom">Custom</option>
-                        </Select>
-                      </FormField>
-
-                      <div className="space-y-2 md:col-span-2">
-                        <div className="text-sm font-medium text-foreground">Variety+</div>
-                        <ToggleRow variant="detail" className="justify-between rounded-sm border border-border bg-surface-low px-3 py-2.5">
-                          <div className="text-sm text-foreground">사용</div>
-                          <input type="checkbox" checked={naiForm.varietyPlus} onChange={(event) => setNaiForm((current) => ({ ...current, varietyPlus: event.target.checked }))} />
-                        </ToggleRow>
+                        <FormField label="Action">
+                          <Select value={naiForm.action} onChange={(event) => handleNaiFieldChange('action', event.target.value)}>
+                            {NAI_ACTION_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </Select>
+                        </FormField>
                       </div>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      <FormField label="Width">
-                        <Input type="number" min={64} step={64} value={naiForm.width} onChange={(event) => handleNaiFieldChange('width', event.target.value)} />
-                      </FormField>
-                      <FormField label="Height">
-                        <Input type="number" min={64} step={64} value={naiForm.height} onChange={(event) => handleNaiFieldChange('height', event.target.value)} />
-                      </FormField>
-                      <FormField label="Steps">
-                        <Input type="number" min={1} max={100} value={naiForm.steps} onChange={(event) => handleNaiFieldChange('steps', event.target.value)} />
-                      </FormField>
-                      <FormField label="CFG Scale">
-                        <Input type="number" min={1} max={20} step={0.1} value={naiForm.scale} onChange={(event) => handleNaiFieldChange('scale', event.target.value)} />
-                      </FormField>
-                      <FormField label="Samples">
-                        <Input type="number" min={NAI_SAMPLE_COUNT_MIN} max={NAI_SAMPLE_COUNT_MAX} step={1} value={naiForm.samples} onChange={(event) => handleNaiFieldChange('samples', event.target.value)} />
-                      </FormField>
-                      <FormField label="Seed">
-                        <Input type="number" value={naiForm.seed} onChange={(event) => handleNaiFieldChange('seed', event.target.value)} />
-                      </FormField>
+                    <div className="space-y-3">
+                      <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Sampling</div>
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <FormField label="Sampler">
+                          <Select value={naiForm.sampler} onChange={(event) => handleNaiFieldChange('sampler', event.target.value)}>
+                            {NAI_SAMPLER_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </Select>
+                        </FormField>
+
+                        <FormField label="Scheduler">
+                          <Select value={naiForm.scheduler} onChange={(event) => handleNaiFieldChange('scheduler', event.target.value)}>
+                            {NAI_SCHEDULER_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </Select>
+                        </FormField>
+
+                        <FormField label="Steps">
+                          <Input type="number" min={1} max={100} value={naiForm.steps} onChange={(event) => handleNaiFieldChange('steps', event.target.value)} />
+                        </FormField>
+
+                        <FormField label="CFG Scale">
+                          <Input type="number" min={1} max={20} step={0.1} value={naiForm.scale} onChange={(event) => handleNaiFieldChange('scale', event.target.value)} />
+                        </FormField>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Output</div>
+                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                        <FormField label="Preset">
+                          <Select value={naiForm.resolutionPreset} onChange={(event) => handleResolutionPresetChange(event.target.value)}>
+                            {NAI_RESOLUTION_PRESETS.map((preset) => (
+                              <option key={preset.key} value={preset.key}>{preset.label}</option>
+                            ))}
+                            <option value="custom">Custom</option>
+                          </Select>
+                        </FormField>
+
+                        <FormField label="Width">
+                          <Input type="number" min={64} step={64} value={naiForm.width} onChange={(event) => handleNaiFieldChange('width', event.target.value)} />
+                        </FormField>
+
+                        <FormField label="Height">
+                          <Input type="number" min={64} step={64} value={naiForm.height} onChange={(event) => handleNaiFieldChange('height', event.target.value)} />
+                        </FormField>
+
+                        <FormField label="Samples">
+                          <Input type="number" min={NAI_SAMPLE_COUNT_MIN} max={NAI_SAMPLE_COUNT_MAX} step={1} value={naiForm.samples} onChange={(event) => handleNaiFieldChange('samples', event.target.value)} />
+                        </FormField>
+
+                        <FormField label="Seed">
+                          <Input type="number" value={naiForm.seed} onChange={(event) => handleNaiFieldChange('seed', event.target.value)} />
+                        </FormField>
+
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium text-foreground">Variety+</div>
+                          <ToggleRow variant="detail" className="justify-between rounded-sm border border-border bg-surface-low px-3 py-2.5">
+                            <div className="text-sm text-foreground">사용</div>
+                            <input type="checkbox" checked={naiForm.varietyPlus} onChange={(event) => setNaiForm((current) => ({ ...current, varietyPlus: event.target.checked }))} />
+                          </ToggleRow>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
