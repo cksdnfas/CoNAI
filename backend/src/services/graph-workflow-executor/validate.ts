@@ -55,6 +55,45 @@ export function topologicalSort(graph: GraphWorkflowDocument) {
   return ordered
 }
 
+/** Collect one target node and every recursive upstream dependency node id. */
+export function collectUpstreamClosure(graph: GraphWorkflowDocument, targetNodeId: string) {
+  const targetNode = graph.nodes.find((node) => node.id === targetNodeId)
+  if (!targetNode) {
+    throw new Error(`Node ${targetNodeId} not found in graph workflow`)
+  }
+
+  const requiredNodeIds = new Set<string>()
+  const pendingNodeIds = [targetNodeId]
+
+  while (pendingNodeIds.length > 0) {
+    const nodeId = pendingNodeIds.pop() as string
+    if (requiredNodeIds.has(nodeId)) {
+      continue
+    }
+
+    requiredNodeIds.add(nodeId)
+
+    const upstreamNodeIds = graph.edges
+      .filter((edge) => edge.target_node_id === nodeId)
+      .map((edge) => edge.source_node_id)
+
+    pendingNodeIds.push(...upstreamNodeIds)
+  }
+
+  return requiredNodeIds
+}
+
+/** Resolve the node execution order for a whole run or one selected-node partial run. */
+export function buildExecutionOrder(graph: GraphWorkflowDocument, targetNodeId?: string | null) {
+  const orderedNodeIds = topologicalSort(graph)
+  if (!targetNodeId) {
+    return orderedNodeIds
+  }
+
+  const requiredNodeIds = collectUpstreamClosure(graph, targetNodeId)
+  return orderedNodeIds.filter((nodeId) => requiredNodeIds.has(nodeId))
+}
+
 /** Validate graph edge references and port data-type compatibility. */
 export function validateGraphTypes(graph: GraphWorkflowDocument, modulesById: Map<number, ParsedModuleDefinition>) {
   for (const edge of graph.edges) {

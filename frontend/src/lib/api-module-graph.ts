@@ -322,6 +322,22 @@ export async function executeGraphWorkflow(workflowId: number, payload?: { input
   return response.data
 }
 
+/** Enqueue one selected graph node and its required upstream closure for execution. */
+export async function executeGraphNode(workflowId: number, nodeId: string, payload?: { input_values?: Record<string, unknown> }) {
+  const response = await requestJson<ApiEnvelope<{
+    executionId: number
+    status: GraphExecutionStatus
+  }>>(`/api/graph-workflows/${workflowId}/nodes/${encodeURIComponent(nodeId)}/execute`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload ?? {}),
+  })
+
+  return response.data
+}
+
 /** Request cancellation for a queued or running graph execution. */
 export async function cancelGraphExecution(executionId: number) {
   const response = await requestJson<ApiEnvelope<{

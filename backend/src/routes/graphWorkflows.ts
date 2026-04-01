@@ -109,6 +109,37 @@ router.post('/:id/execute', asyncHandler(async (req: Request, res: Response) => 
   }
 }))
 
+router.post('/:id/nodes/:nodeId/execute', asyncHandler(async (req: Request, res: Response) => {
+  const id = parseInt(routeParam(routeParam(req.params.id)))
+  const nodeId = routeParam(req.params.nodeId)
+  if (isNaN(id) || !nodeId) {
+    return res.status(400).json({ success: false, error: 'Invalid graph workflow or node ID' } as ModuleGraphResponse)
+  }
+
+  try {
+    const workflow = GraphWorkflowModel.findById(id)
+    if (!workflow) {
+      return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
+    }
+
+    const graph = workflow.graph_json ? JSON.parse(workflow.graph_json) : { nodes: [], edges: [] }
+    const nodeExists = Array.isArray(graph.nodes) && graph.nodes.some((node: { id?: string }) => node.id === nodeId)
+    if (!nodeExists) {
+      return res.status(404).json({ success: false, error: 'Graph node not found' } as ModuleGraphResponse)
+    }
+
+    const inputValues = req.body?.input_values && typeof req.body.input_values === 'object' ? req.body.input_values as Record<string, unknown> : undefined
+    const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues, nodeId)
+    return res.status(201).json({ success: true, data: result } as ModuleGraphResponse)
+  } catch (error) {
+    console.error('Error executing graph node:', error)
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to execute graph node',
+    } as ModuleGraphResponse)
+  }
+}))
+
 router.post('/executions/:executionId/cancel', asyncHandler(async (req: Request, res: Response) => {
   const executionId = parseInt(routeParam(routeParam(req.params.executionId)))
   if (isNaN(executionId)) {

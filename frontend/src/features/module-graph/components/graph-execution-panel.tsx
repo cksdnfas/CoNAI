@@ -205,24 +205,39 @@ export function GraphExecutionPanel({
 
         {selectedExecutionId && executionDetail ? (
           <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
-            <Alert>
-              <AlertTitle className="flex flex-wrap items-center gap-2">
-                <span>#{executionDetail.execution.id}</span>
-                <Badge variant={executionDetail.execution.status === 'completed' ? 'secondary' : 'outline'}>{executionDetail.execution.status}</Badge>
-                <span className="text-[11px] text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
-              </AlertTitle>
-              <AlertDescription>
-                {executionDetail.execution.status === 'queued' && executionDetail.execution.queue_position ? <div>큐 순번 {executionDetail.execution.queue_position}</div> : null}
-                {executionDetail.execution.cancel_requested ? <div>취소 요청 접수됨</div> : null}
-                {executionDetail.execution.error_message ? <div>{executionDetail.execution.error_message}</div> : null}
-                {executionDetail.execution.failed_node_id ? (
-                  <div className="flex items-center gap-1">
-                    <span>실패 노드 있음</span>
-                    <TechnicalReferenceHint title={`node ${executionDetail.execution.failed_node_id}`} label="실패 노드 내부 식별자 보기" />
-                  </div>
-                ) : null}
-              </AlertDescription>
-            </Alert>
+            {(() => {
+              const executionPlan = executionDetail.execution.execution_plan
+                ? JSON.parse(executionDetail.execution.execution_plan) as { orderedNodeIds?: string[]; targetNodeId?: string | null }
+                : null
+              const targetNodeId = executionPlan?.targetNodeId ?? null
+
+              return (
+                <Alert>
+                  <AlertTitle className="flex flex-wrap items-center gap-2">
+                    <span>#{executionDetail.execution.id}</span>
+                    <Badge variant={executionDetail.execution.status === 'completed' ? 'secondary' : 'outline'}>{executionDetail.execution.status}</Badge>
+                    <span className="text-[11px] text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
+                  </AlertTitle>
+                  <AlertDescription>
+                    {targetNodeId ? (
+                      <div className="flex items-center gap-1">
+                        <span>선택 노드 실행</span>
+                        <TechnicalReferenceHint title={`node ${targetNodeId}`} label="실행 대상 노드 내부 식별자 보기" />
+                      </div>
+                    ) : null}
+                    {executionDetail.execution.status === 'queued' && executionDetail.execution.queue_position ? <div>큐 순번 {executionDetail.execution.queue_position}</div> : null}
+                    {executionDetail.execution.cancel_requested ? <div>취소 요청 접수됨</div> : null}
+                    {executionDetail.execution.error_message ? <div>{executionDetail.execution.error_message}</div> : null}
+                    {executionDetail.execution.failed_node_id ? (
+                      <div className="flex items-center gap-1">
+                        <span>실패 노드 있음</span>
+                        <TechnicalReferenceHint title={`node ${executionDetail.execution.failed_node_id}`} label="실패 노드 내부 식별자 보기" />
+                      </div>
+                    ) : null}
+                  </AlertDescription>
+                </Alert>
+              )
+            })()}
 
             <div className="space-y-2.5">
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">

@@ -21,6 +21,9 @@ type NodeInspectorPanelProps = {
   onNodeValueChange: (nodeId: string, portKey: string, value: unknown) => void
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => Promise<void> | void
+  onExecuteSelectedNode?: () => void
+  executeSelectedNodeDisabled?: boolean
+  executeSelectedNodeLabel?: string
   highlightedPortKey?: string | null
   showHeader?: boolean
 }
@@ -165,6 +168,9 @@ export function NodeInspectorPanel({
   onNodeValueChange,
   onNodeValueClear,
   onNodeImageChange,
+  onExecuteSelectedNode,
+  executeSelectedNodeDisabled = false,
+  executeSelectedNodeLabel = '선택 노드 실행',
   highlightedPortKey = null,
   showHeader = true,
 }: NodeInspectorPanelProps) {
@@ -355,17 +361,26 @@ export function NodeInspectorPanel({
         {selectedNode ? (
           <>
             <div className="rounded-sm bg-surface-low p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium text-foreground">{selectedNode.data.module.name}</span>
-                <Badge variant="outline">{selectedNode.data.module.engine_type}</Badge>
-                <TechnicalReferenceHint title={`node ${selectedNode.id}`} label="노드 내부 식별자 보기" />
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-                <Badge variant="outline">입력 {(selectedNode.data.module.exposed_inputs ?? []).length}</Badge>
-                <Badge variant="outline">출력 {(selectedNode.data.module.output_ports ?? []).length}</Badge>
-                {missingRequiredInputs.length > 0 ? <Badge variant="outline">필수 부족 {missingRequiredInputs.length}</Badge> : <Badge variant="secondary">필수 입력 충족</Badge>}
-                {highlightedPortKey ? <Badge variant="secondary">선택 포트 강조</Badge> : null}
-                {highlightedPortKey ? <TechnicalReferenceHint title={`focus port ${highlightedPortKey}`} label="강조 중인 포트 내부 키 보기" /> : null}
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-foreground">{selectedNode.data.module.name}</span>
+                    <Badge variant="outline">{selectedNode.data.module.engine_type}</Badge>
+                    <TechnicalReferenceHint title={`node ${selectedNode.id}`} label="노드 내부 식별자 보기" />
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                    <Badge variant="outline">입력 {(selectedNode.data.module.exposed_inputs ?? []).length}</Badge>
+                    <Badge variant="outline">출력 {(selectedNode.data.module.output_ports ?? []).length}</Badge>
+                    {missingRequiredInputs.length > 0 ? <Badge variant="outline">필수 부족 {missingRequiredInputs.length}</Badge> : <Badge variant="secondary">필수 입력 충족</Badge>}
+                    {highlightedPortKey ? <Badge variant="secondary">선택 포트 강조</Badge> : null}
+                    {highlightedPortKey ? <TechnicalReferenceHint title={`focus port ${highlightedPortKey}`} label="강조 중인 포트 내부 키 보기" /> : null}
+                  </div>
+                </div>
+                {onExecuteSelectedNode ? (
+                  <Button type="button" size="sm" onClick={onExecuteSelectedNode} disabled={executeSelectedNodeDisabled}>
+                    {executeSelectedNodeLabel}
+                  </Button>
+                ) : null}
               </div>
             </div>
 

@@ -14,7 +14,7 @@ import {
   writeExecutionLog,
   type ExecutionContext,
 } from './graph-workflow-executor/shared'
-import { topologicalSort, validateGraphTypes, validateRequiredInputs } from './graph-workflow-executor/validate'
+import { buildExecutionOrder, validateGraphTypes, validateRequiredInputs } from './graph-workflow-executor/validate'
 
 /** Execute a saved module graph workflow from validation through node engines. */
 const GRAPH_EXECUTION_CANCELLED_MESSAGE = '__GRAPH_EXECUTION_CANCELLED__'
@@ -23,6 +23,7 @@ export class GraphWorkflowExecutor {
   static async execute(workflowId: number, options?: {
     executionId?: number
     runtimeInputValues?: Record<string, unknown>
+    targetNodeId?: string
     shouldCancel?: () => boolean
   }) {
     const workflowRecord = GraphWorkflowModel.findById(workflowId)
@@ -45,29 +46,31 @@ export class GraphWorkflowExecutor {
 
     const modulesById = new Map(modules.map((module) => [module.id, module]))
     validateGraphTypes(workflow.graph, modulesById)
-    const orderedNodeIds = topologicalSort(workflow.graph)
+    const targetNodeId = options?.targetNodeId
+    const orderedNodeIds = buildExecutionOrder(workflow.graph, targetNodeId)
 
     const executionId = options?.executionId ?? GraphExecutionModel.create({
       graph_workflow_id: workflow.id,
       graph_version: workflow.version,
       status: 'running',
-      execution_plan: JSON.stringify({ orderedNodeIds }),
+      execution_plan: JSON.stringify({ orderedNodeIds, targetNodeId: targetNodeId ?? null }),
     })
 
     if (options?.executionId) {
       GraphExecutionModel.update(executionId, {
-        execution_plan: JSON.stringify({ orderedNodeIds }),
+        execution_plan: JSON.stringify({ orderedNodeIds, targetNodeId: targetNodeId ?? null }),
       })
     }
 
     writeExecutionLog({
       executionId,
       eventType: 'execution_start',
-      message: `Graph execution started: ${workflow.name}`,
+      message: targetNodeId ? `Node execution started: ${workflow.name} -> ${targetNodeId}` : `Graph execution started: ${workflow.name}`,
       details: {
         workflowId: workflow.id,
         version: workflow.version,
         orderedNodeIds,
+        targetNodeId: targetNodeId ?? null,
         runtimeInputKeys: Object.keys(runtimeInputValues),
       },
     })
@@ -148,9 +151,10 @@ export class GraphWorkflowExecutor {
       writeExecutionLog({
         executionId,
         eventType: 'execution_complete',
-        message: `Graph execution completed: ${workflow.name}`,
+        message: targetNodeId ? `Node execution completed: ${workflow.name} -> ${targetNodeId}` : `Graph execution completed: ${workflow.name}`,
         details: {
           orderedNodeIds,
+          targetNodeId: targetNodeId ?? null,
         },
       })
 
@@ -158,6 +162,7 @@ export class GraphWorkflowExecutor {
         executionId,
         status: 'completed' as const,
         orderedNodeIds,
+        targetNodeId: targetNodeId ?? null,
         artifacts: GraphExecutionArtifactModel.findByExecution(executionId),
         logs: GraphExecutionLogModel.findByExecution(executionId),
       }
@@ -180,6 +185,7 @@ export class GraphWorkflowExecutor {
           executionId,
           status: 'cancelled' as const,
           orderedNodeIds,
+          targetNodeId: targetNodeId ?? null,
           artifacts: GraphExecutionArtifactModel.findByExecution(executionId),
           logs: GraphExecutionLogModel.findByExecution(executionId),
         }

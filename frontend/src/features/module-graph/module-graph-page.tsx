@@ -27,6 +27,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   cancelGraphExecution,
   createGraphWorkflow,
+  executeGraphNode,
   executeGraphWorkflow,
   getAppSettings,
   getGraphExecution,
@@ -930,6 +931,42 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     }
   }
 
+  const handleExecuteSelectedNode = async () => {
+    if (selectedGraphRecord === null || selectedGraphId === null) {
+      showSnackbar({ message: '먼저 저장된 워크플로우를 불러와줘.', tone: 'error' })
+      return
+    }
+
+    if (!selectedNode) {
+      showSnackbar({ message: '먼저 실행할 노드를 하나 선택해줘.', tone: 'error' })
+      return
+    }
+
+    if (isDirty) {
+      showSnackbar({ message: '선택 노드 실행 전에 현재 그래프 변경사항부터 저장해줘.', tone: 'error' })
+      return
+    }
+
+    if (executingGraphId !== null) {
+      return
+    }
+
+    try {
+      setExecutingGraphId(selectedGraphId)
+      const result = await executeGraphNode(selectedGraphId, selectedNode.id, Object.keys(workflowRunInputValues).length > 0 ? { input_values: workflowRunInputValues } : undefined)
+      setSelectedExecutionId(result.executionId)
+      await graphExecutionsQuery.refetch()
+      showSnackbar({
+        message: `선택 노드 실행 요청을 등록했어. 실행 #${result.executionId}가 ${selectedNode.data.module.name}까지 필요한 upstream만 처리해.`,
+        tone: 'info',
+      })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '선택 노드 실행에 실패했어.', tone: 'error' })
+    } finally {
+      setExecutingGraphId(null)
+    }
+  }
+
   const handleRunSelectedWorkflow = async () => {
     if (selectedGraphRecord === null) {
       showSnackbar({ message: '먼저 워크플로우를 하나 선택해줘.', tone: 'error' })
@@ -1349,6 +1386,9 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               onNodeValueChange={handleNodeValueChange}
               onNodeValueClear={handleNodeValueClear}
               onNodeImageChange={handleNodeImageChange}
+              onExecuteSelectedNode={() => void handleExecuteSelectedNode()}
+              executeSelectedNodeDisabled={!selectedNode || selectedGraphId === null || isDirty || executingGraphId !== null}
+              executeSelectedNodeLabel={executingGraphId !== null ? '실행 요청 중…' : '선택 노드 실행'}
               highlightedPortKey={selectedValidationPortKey}
             />
 
