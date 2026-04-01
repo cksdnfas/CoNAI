@@ -1,11 +1,13 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { PenSquare, Play, Search } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { getNavigationItemClassName } from '@/components/common/navigation-item'
 import type { GraphWorkflowRecord } from '@/lib/api'
+import { formatDateTime } from '../module-graph-shared'
 import { cn } from '@/lib/utils'
 
 type SavedGraphListProps = {
@@ -36,15 +38,32 @@ export function SavedGraphList({
 
   const filteredGraphs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
-    if (query.length === 0) {
-      return graphs
-    }
+    const matchedGraphs = query.length === 0
+      ? graphs
+      : graphs.filter((graph) => {
+          const haystack = [graph.name, graph.description ?? '', graph.id].join(' ').toLowerCase()
+          return haystack.includes(query)
+        })
 
-    return graphs.filter((graph) => {
-      const haystack = [graph.name, graph.description ?? ''].join(' ').toLowerCase()
-      return haystack.includes(query)
+    return [...matchedGraphs].sort((left, right) => {
+      const leftTime = new Date(left.updated_date).getTime()
+      const rightTime = new Date(right.updated_date).getTime()
+      if (leftTime !== rightTime) {
+        return rightTime - leftTime
+      }
+
+      return right.id - left.id
     })
   }, [graphs, searchQuery])
+
+  const duplicateNameCounts = useMemo(
+    () =>
+      graphs.reduce<Record<string, number>>((acc, graph) => {
+        acc[graph.name] = (acc[graph.name] ?? 0) + 1
+        return acc
+      }, {}),
+    [graphs],
+  )
 
   return (
     <ExplorerSidebar
@@ -63,7 +82,10 @@ export function SavedGraphList({
         </div>
       }
     >
-      {filteredGraphs.map((graph) => (
+      {filteredGraphs.map((graph) => {
+        const duplicateCount = duplicateNameCounts[graph.name] ?? 0
+
+        return (
         <div
           key={graph.id}
           className={getNavigationItemClassName({
@@ -75,13 +97,16 @@ export function SavedGraphList({
             type="button"
             onClick={() => onLoadGraph(graph)}
             className="min-w-0 flex-1 text-left"
-            title={`${graph.name} · #${graph.id}${graph.description?.trim() ? `\n${graph.description}` : ''}`}
+            title={`${graph.name} · #${graph.id} · ${formatDateTime(graph.updated_date)}${graph.description?.trim() ? `\n${graph.description}` : ''}`}
           >
-            <div className={cn('truncate text-sm font-semibold', selectedGraphId === graph.id ? 'text-primary' : 'text-foreground')}>
-              {graph.name}
+            <div className="flex min-w-0 items-center gap-2">
+              <div className={cn('min-w-0 truncate text-sm font-semibold', selectedGraphId === graph.id ? 'text-primary' : 'text-foreground')}>
+                {graph.name}
+              </div>
+              {duplicateCount > 1 ? <Badge variant="outline">동명 {duplicateCount}</Badge> : null}
             </div>
             <div className="mt-1 text-[11px] text-muted-foreground">
-              #{graph.id} · v{graph.version}
+              #{graph.id} · v{graph.version} · 수정 {formatDateTime(graph.updated_date)}
             </div>
             {graph.description ? (
               <div className="mt-1 line-clamp-1 text-xs text-muted-foreground" title={graph.description}>
@@ -111,7 +136,8 @@ export function SavedGraphList({
             ) : null}
           </div>
         </div>
-      ))}
+        )
+      })}
 
       {graphs.length === 0 ? (
         <Alert>

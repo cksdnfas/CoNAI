@@ -42,7 +42,7 @@ export class GraphWorkflowModel {
     if (activeOnly) {
       query += ' WHERE is_active = 1'
     }
-    query += ' ORDER BY created_date DESC'
+    query += ' ORDER BY updated_date DESC, id DESC'
 
     return db.prepare(query).all() as GraphWorkflowRecord[]
   }
