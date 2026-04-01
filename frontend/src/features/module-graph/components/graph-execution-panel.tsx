@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { CircleHelp, Eye, Play, RotateCcw, Square } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -49,6 +49,8 @@ type ExecutionInputEntry = {
   label: string
   value: unknown
 }
+
+type ExecutionDetailSectionKey = 'summary' | 'inputs' | 'artifacts' | 'logs'
 
 function TechnicalReferenceHint({ title, label }: { title: string; label: string }) {
   return (
@@ -355,6 +357,12 @@ export function GraphExecutionPanel({
   showHeader = true,
 }: GraphExecutionPanelProps) {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
+  const detailSectionRefs = useRef<Record<ExecutionDetailSectionKey, HTMLDivElement | null>>({
+    summary: null,
+    inputs: null,
+    artifacts: null,
+    logs: null,
+  })
 
   const queuedExecutions = executionList
     .filter((execution) => execution.status === 'queued')
@@ -383,6 +391,10 @@ export function GraphExecutionPanel({
     () => pickFinalArtifacts({ artifacts: executionDetail?.artifacts ?? [], executionPlan: selectedExecutionPlan, selectedGraph }),
     [executionDetail?.artifacts, selectedExecutionPlan, selectedGraph],
   )
+
+  const scrollToDetailSection = (section: ExecutionDetailSectionKey) => {
+    detailSectionRefs.current[section]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   const actionButtons = (
     <div className="flex items-center gap-1">
@@ -625,35 +637,65 @@ export function GraphExecutionPanel({
           widthClassName="max-w-6xl"
         >
           <div className="space-y-4">
-            <Alert>
-              <AlertTitle className="flex flex-wrap items-center gap-2">
-                <span>#{executionDetail.execution.id}</span>
-                <Badge variant={executionDetail.execution.status === 'completed' ? 'secondary' : 'outline'}>{executionDetail.execution.status}</Badge>
-                <Badge variant="outline">{getExecutionModeLabel(selectedExecutionPlan)}</Badge>
-                <span className="text-[11px] text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
-              </AlertTitle>
-              <AlertDescription>
-                {selectedExecutionPlan?.targetNodeId ? (
-                  <div className="flex items-center gap-1">
-                    <span>{selectedExecutionPlan.forceRerun ? '선택 노드 강제 재실행' : '선택 노드 실행'}</span>
-                    <TechnicalReferenceHint title={`node ${selectedExecutionPlan.targetNodeId}`} label="실행 대상 노드 내부 식별자 보기" />
-                  </div>
-                ) : null}
-                {selectedExecutionPlan?.forceRerun ? <div>캐시 무시: upstream도 새로 실행</div> : null}
-                {selectedExecutionPlan?.reusedFromExecutionId ? <div>캐시 재사용: #{selectedExecutionPlan.reusedFromExecutionId} · 노드 {(selectedExecutionPlan.reusedNodeIds ?? []).length}</div> : null}
-                {executionDetail.execution.status === 'queued' && executionDetail.execution.queue_position ? <div>큐 순번 {executionDetail.execution.queue_position}</div> : null}
-                {executionDetail.execution.cancel_requested ? <div>취소 요청 접수됨</div> : null}
-                {executionDetail.execution.error_message ? <div>{executionDetail.execution.error_message}</div> : null}
-                {executionDetail.execution.failed_node_id ? (
-                  <div className="flex items-center gap-1">
-                    <span>실패 노드 있음</span>
-                    <TechnicalReferenceHint title={`node ${executionDetail.execution.failed_node_id}`} label="실패 노드 내부 식별자 보기" />
-                  </div>
-                ) : null}
-              </AlertDescription>
-            </Alert>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('summary')}>요약</Button>
+              {executionInputEntries.length > 0 ? <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('inputs')}>입력</Button> : null}
+              <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('artifacts')}>아티팩트</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('logs')}>로그</Button>
+            </div>
 
-            <div className="space-y-2.5">
+            <div ref={(node) => { detailSectionRefs.current.summary = node }} className="space-y-2.5 scroll-mt-4">
+              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <span>Execution Meta</span>
+              </div>
+              <Alert>
+                <AlertTitle className="flex flex-wrap items-center gap-2">
+                  <span>#{executionDetail.execution.id}</span>
+                  <Badge variant={executionDetail.execution.status === 'completed' ? 'secondary' : 'outline'}>{executionDetail.execution.status}</Badge>
+                  <Badge variant="outline">{getExecutionModeLabel(selectedExecutionPlan)}</Badge>
+                  <span className="text-[11px] text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
+                </AlertTitle>
+                <AlertDescription>
+                  {selectedExecutionPlan?.targetNodeId ? (
+                    <div className="flex items-center gap-1">
+                      <span>{selectedExecutionPlan.forceRerun ? '선택 노드 강제 재실행' : '선택 노드 실행'}</span>
+                      <TechnicalReferenceHint title={`node ${selectedExecutionPlan.targetNodeId}`} label="실행 대상 노드 내부 식별자 보기" />
+                    </div>
+                  ) : null}
+                  {selectedExecutionPlan?.forceRerun ? <div>캐시 무시: upstream도 새로 실행</div> : null}
+                  {selectedExecutionPlan?.reusedFromExecutionId ? <div>캐시 재사용: #{selectedExecutionPlan.reusedFromExecutionId} · 노드 {(selectedExecutionPlan.reusedNodeIds ?? []).length}</div> : null}
+                  {executionDetail.execution.status === 'queued' && executionDetail.execution.queue_position ? <div>큐 순번 {executionDetail.execution.queue_position}</div> : null}
+                  {executionDetail.execution.cancel_requested ? <div>취소 요청 접수됨</div> : null}
+                  {executionDetail.execution.error_message ? <div>{executionDetail.execution.error_message}</div> : null}
+                  {executionDetail.execution.failed_node_id ? (
+                    <div className="flex items-center gap-1">
+                      <span>실패 노드 있음</span>
+                      <TechnicalReferenceHint title={`node ${executionDetail.execution.failed_node_id}`} label="실패 노드 내부 식별자 보기" />
+                    </div>
+                  ) : null}
+                </AlertDescription>
+              </Alert>
+            </div>
+
+            {executionInputEntries.length > 0 ? (
+              <div ref={(node) => { detailSectionRefs.current.inputs = node }} className="space-y-2.5 scroll-mt-4">
+                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  <span>Run Inputs</span>
+                  <Badge variant="outline">{executionInputEntries.length}</Badge>
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {executionInputEntries.map((entry) => (
+                    <div key={entry.key} className="rounded-sm border border-border bg-surface-low p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{entry.label}</div>
+                      {entry.label !== entry.key ? <div className="mt-0.5 text-[11px] text-muted-foreground">{entry.key}</div> : null}
+                      <div className="mt-1 text-sm text-foreground whitespace-pre-wrap break-all">{formatPrimitiveValue(entry.value)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div ref={(node) => { detailSectionRefs.current.artifacts = node }} className="space-y-2.5 scroll-mt-4">
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 <span>Artifacts</span>
                 <Badge variant="outline">{executionDetail.artifacts.length}</Badge>
@@ -689,7 +731,7 @@ export function GraphExecutionPanel({
               })}
             </div>
 
-            <div className="space-y-2.5">
+            <div ref={(node) => { detailSectionRefs.current.logs = node }} className="space-y-2.5 scroll-mt-4">
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 <span>Logs</span>
                 <Badge variant="outline">{executionDetail.logs.length}</Badge>

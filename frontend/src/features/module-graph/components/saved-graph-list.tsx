@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PenSquare, Pin, PinOff, Play, Search } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,8 @@ import { getNavigationItemClassName } from '@/components/common/navigation-item'
 import type { GraphWorkflowRecord } from '@/lib/api'
 import { formatDateTime } from '../module-graph-shared'
 import { cn } from '@/lib/utils'
+
+const WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY = 'conai:module-graph:workflow-sidebar-locked'
 
 type SavedGraphListProps = {
   graphs: GraphWorkflowRecord[]
@@ -41,6 +43,23 @@ export function SavedGraphList({
   const [searchQuery, setSearchQuery] = useState('')
   const [isSidebarFloating, setIsSidebarFloating] = useState(false)
   const [isSidebarFloatingLocked, setIsSidebarFloatingLocked] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const storedValue = window.localStorage.getItem(WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY)
+    setIsSidebarFloatingLocked(storedValue === 'true')
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    window.localStorage.setItem(WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY, isSidebarFloatingLocked ? 'true' : 'false')
+  }, [isSidebarFloatingLocked])
 
   const filteredGraphs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
