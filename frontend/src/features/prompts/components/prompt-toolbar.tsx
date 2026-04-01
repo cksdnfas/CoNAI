@@ -26,7 +26,7 @@ export function PromptToolbar({
 
   return (
     <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
-      <div className="flex w-full min-w-0 items-center gap-1 rounded-sm bg-surface-lowest px-2 py-1.5 sm:min-w-[300px] sm:flex-1 lg:min-w-[360px]">
+      <div className="flex w-full min-w-0 items-center gap-1 rounded-sm bg-surface-container px-2 py-1.5 sm:min-w-[300px] sm:flex-1 lg:min-w-[360px]">
         <input
           value={searchInput}
           onChange={(event) => onSearchInputChange(event.target.value)}
@@ -46,7 +46,7 @@ export function PromptToolbar({
       <Select
         value={sortBy}
         onChange={(event) => onChangeSortBy(event.target.value as PromptSortBy)}
-        className="h-8 w-[86px] border-0 bg-surface-lowest px-1.5 text-xs"
+        className="h-8 w-[86px] border-0 bg-surface-container px-1.5 text-xs"
         aria-label="정렬 기준"
         title="정렬 기준"
       >

@@ -56,7 +56,7 @@ export function WorkflowFieldInput({ field, value, onChange, onImageChange }: Wo
         <div className="space-y-3">
           <Input type="file" accept="image/*" onChange={(event) => void onImageChange(event.target.files?.[0])} />
           {imageValue ? (
-            <div className="space-y-2 rounded-sm bg-surface-high p-3">
+            <div className="space-y-2 rounded-sm bg-surface-low p-3">
               <div className="text-xs text-muted-foreground">{imageValue.fileName}</div>
               <img src={imageValue.dataUrl} alt={field.label} className="max-h-40 rounded-sm border border-border object-contain" />
               <div className="flex justify-end">

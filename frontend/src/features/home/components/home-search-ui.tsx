@@ -39,7 +39,7 @@ interface HomeSearchSuggestionPanelProps {
 function HomeSearchInputBox({ searchInput, setSearchInput, submitSearchFromInput, placeholder, ariaLabel, onFocus, style }: HomeSearchInputBoxProps) {
   return (
     <div
-      className="theme-settings-control flex items-center rounded-sm border border-border bg-surface-lowest text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]"
+      className="theme-settings-control flex items-center rounded-sm border border-border bg-surface-container text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]"
       style={style}
     >
       <Search className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -310,14 +310,14 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
               </button>
             </div>
 
-            {historyLoading ? <div className="rounded-sm border border-white/5 bg-surface-lowest px-4 py-4 text-sm text-muted-foreground">Loading…</div> : null}
+            {historyLoading ? <div className="rounded-sm border border-white/5 bg-surface-low px-4 py-4 text-sm text-muted-foreground">Loading…</div> : null}
             {!historyLoading && historyEntries.length === 0 ? (
-              <div className="rounded-sm border border-white/5 bg-surface-lowest px-4 py-4 text-sm text-muted-foreground">No history</div>
+              <div className="rounded-sm border border-white/5 bg-surface-low px-4 py-4 text-sm text-muted-foreground">No history</div>
             ) : null}
             {!historyLoading && historyEntries.length > 0 ? (
               <div className="space-y-3">
                 {historyEntries.map((entry) => (
-                  <div key={entry.id} className="flex items-start gap-3 rounded-sm border border-border bg-surface-lowest px-4 py-3">
+                  <div key={entry.id} className="flex items-start gap-3 rounded-sm border border-border bg-surface-low px-4 py-3">
                     <button type="button" onClick={() => selectHistoryEntry(entry)} className="min-w-0 flex-1 text-left">
                       <div className="flex flex-wrap gap-2">
                         {entry.chips.map((chip) => (

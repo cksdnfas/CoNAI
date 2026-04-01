@@ -22,7 +22,7 @@ export function PromptListItem({ item, selected = false, canAssign = true, canDe
 
   return (
     <div
-      className="prompt-list-selectable group relative grid cursor-pointer grid-cols-[32px_minmax(0,1fr)_120px_116px] items-center rounded-sm bg-surface-lowest px-3 py-2 transition-colors hover:bg-surface-high"
+      className="prompt-list-selectable group relative grid cursor-pointer grid-cols-[32px_minmax(0,1fr)_120px_116px] items-center rounded-sm bg-surface-container px-3 py-2 transition-colors hover:bg-surface-high"
       data-prompt-id={item.id}
       data-selected={selected ? 'true' : 'false'}
       onClick={() => onActivate?.()}

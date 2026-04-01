@@ -54,7 +54,7 @@ export function PromptListPanel({
       ) : null}
 
       {!isLoading && items.length === 0 ? (
-        <div className="rounded-sm bg-surface-lowest text-sm text-muted-foreground">항목 없음</div>
+        <div className="rounded-sm bg-surface-container px-4 py-3 text-sm text-muted-foreground">항목 없음</div>
       ) : null}
 
       <div ref={promptListRef} className={isDraggingSelection ? 'select-none' : undefined}>

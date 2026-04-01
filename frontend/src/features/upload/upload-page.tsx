@@ -47,7 +47,7 @@ function formatDimensions(width?: number | null, height?: number | null) {
 
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-sm bg-surface-high p-4">
+    <div className="min-w-0 rounded-sm bg-surface-container p-4">
       <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
       <div className="mt-2 min-w-0 whitespace-pre-wrap break-all text-sm text-foreground">{value}</div>
     </div>
@@ -56,7 +56,7 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
 
 function ProgressBar({ percent }: { percent: number }) {
   return (
-    <div className="h-2 overflow-hidden rounded-full bg-surface-high">
+    <div className="h-2 overflow-hidden rounded-full bg-surface-container">
       <div className="h-full rounded-full bg-primary transition-all duration-200" style={{ width: `${percent}%` }} />
     </div>
   )
@@ -473,7 +473,7 @@ export function UploadPage() {
                     </div>
                     <div className="space-y-2 text-sm text-muted-foreground">
                       {uploadFiles.slice(0, MAX_VISIBLE_FILES).map((file) => (
-                        <div key={`${file.name}:${file.size}:${file.lastModified}`} className="flex items-center justify-between gap-3 rounded-sm bg-surface-high px-3 py-2">
+                        <div key={`${file.name}:${file.size}:${file.lastModified}`} className="flex items-center justify-between gap-3 rounded-sm bg-surface-container px-3 py-2">
                           <span className="min-w-0 truncate text-foreground">{file.name}</span>
                           <span className="shrink-0 text-xs">{formatBytes(file.size)}</span>
                         </div>
@@ -515,7 +515,7 @@ export function UploadPage() {
                     {uploadResult.uploaded.length > 0 ? (
                       <div className="space-y-2 text-sm text-muted-foreground">
                         {uploadResult.uploaded.slice(0, MAX_VISIBLE_FILES).map((file) => (
-                          <div key={`${file.filename}:${file.upload_date}`} className="rounded-sm bg-surface-high px-3 py-3">
+                          <div key={`${file.filename}:${file.upload_date}`} className="rounded-sm bg-surface-container px-3 py-3">
                             <div className="break-all text-foreground">{file.original_name}</div>
                             <div className="mt-1 text-xs">{formatDimensions(file.width, file.height)} · {formatBytes(file.file_size)}</div>
                           </div>
@@ -526,7 +526,7 @@ export function UploadPage() {
                     {uploadResult.failed.length > 0 ? (
                       <div className="space-y-2 text-sm text-muted-foreground">
                         {uploadResult.failed.map((file) => (
-                          <div key={`${file.filename}:${file.error}`} className="rounded-sm bg-surface-high px-3 py-3">
+                          <div key={`${file.filename}:${file.error}`} className="rounded-sm bg-surface-container px-3 py-3">
                             <div className="break-all text-foreground">{file.filename}</div>
                             <div className="mt-1 text-xs" style={getThemeToneTextStyle('negative')}>{file.error}</div>
                           </div>
@@ -599,7 +599,7 @@ export function UploadPage() {
                     <div className="space-y-4">
                       <div className="space-y-4 rounded-sm bg-surface-low p-4">
                         {extractPreviewUrl ? (
-                          <div className="overflow-hidden rounded-sm bg-surface-high p-4">
+                          <div className="overflow-hidden rounded-sm bg-surface-container p-4">
                             <img src={extractPreviewUrl} alt={extractFile.name} className="max-h-[420px] w-full object-contain" />
                           </div>
                         ) : null}
@@ -614,7 +614,7 @@ export function UploadPage() {
 
                     <div className="space-y-4">
                       <div className="rounded-sm bg-surface-low p-4">
-                        <div className="rounded-sm bg-surface-high p-4">
+                        <div className="rounded-sm bg-surface-container p-4">
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div className="text-sm font-medium text-foreground">메타 수정</div>
                             <Button type="button" variant="ghost" size="sm" onClick={() => setIsRewritePanelOpen((current) => !current)}>
@@ -643,7 +643,7 @@ export function UploadPage() {
                           </div>
 
                           {extractResult.ai_metadata?.lora_models?.length ? (
-                            <div className="rounded-sm bg-surface-high p-4">
+                            <div className="rounded-sm bg-surface-container p-4">
                               <div className="flex flex-wrap gap-2">
                                 {extractResult.ai_metadata.lora_models.map((item) => (
                                   <Badge key={item} variant="outline">
@@ -655,11 +655,11 @@ export function UploadPage() {
                           ) : null}
 
                           {extractedPromptCards.length > 0 ? (
-                            <div className="rounded-sm bg-surface-high p-4">
+                            <div className="rounded-sm bg-surface-container p-4">
                               <ExtractedPromptSections items={extractedPromptCards} />
                             </div>
                           ) : (
-                            <div className="rounded-sm bg-surface-high px-4 py-3 text-sm text-muted-foreground">표시할 프롬프트가 없어.</div>
+                            <div className="rounded-sm bg-surface-container px-4 py-3 text-sm text-muted-foreground">표시할 프롬프트가 없어.</div>
                           )}
                         </div>
                       ) : null}
