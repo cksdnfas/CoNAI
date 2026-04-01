@@ -165,6 +165,23 @@ Artifact reuse should eventually consider at least:
 - execution option to force re-run
 - UI hint that shows whether a node result was reused or freshly executed
 
+### Phase 3 initial implementation rule
+
+The first artifact-reuse step should stay conservative.
+
+Reuse is allowed only when all of the following match:
+
+- same workflow id
+- same workflow version
+- same runtime input signature
+- latest completed execution with reusable upstream artifacts available
+
+In this initial step:
+
+- only upstream nodes may be reused during selected-node execution
+- the selected target node still executes freshly
+- reused nodes must be visible in the execution UI
+
 ### Success criteria
 
 - Partial execution reuses valid upstream artifacts safely.

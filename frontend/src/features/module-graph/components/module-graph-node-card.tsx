@@ -184,6 +184,7 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-1">
+          {data.executionReuseState === 'reused' ? <Badge variant="outline">cache</Badge> : null}
           {data.executionArtifactCount ? <Badge variant="outline">A {data.executionArtifactCount}</Badge> : null}
           {statusLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
         </div>
@@ -224,7 +225,7 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
       {hasArtifactPreview ? (
         <div className="mt-2.5 rounded-sm border border-border/70 bg-surface-low p-2">
           <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            {data.latestArtifactLabel || 'latest artifact'}
+            {data.executionReuseState === 'reused' ? 'cached artifact' : data.latestArtifactLabel || 'latest artifact'}
           </div>
           {data.latestArtifactPreviewUrl ? (
             <img src={data.latestArtifactPreviewUrl} alt={data.latestArtifactLabel || `${module.name} output`} className="max-h-40 w-full rounded-sm border border-border object-contain" />

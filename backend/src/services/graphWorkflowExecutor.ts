@@ -3,21 +3,95 @@ import { GraphExecutionLogModel } from '../models/GraphExecutionLog'
 import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
 import { ModuleDefinitionModel } from '../models/ModuleDefinition'
-import { getIncomingArtifacts, resolveNodeInputs } from './graph-workflow-executor/artifacts'
+import { getIncomingArtifacts, loadRuntimeArtifactsByNode, resolveNodeInputs } from './graph-workflow-executor/artifacts'
 import { executeComfyModule } from './graph-workflow-executor/execute-comfy'
 import { executeNaiModule } from './graph-workflow-executor/execute-nai'
 import { executeSystemModule } from './graph-workflow-executor/execute-system'
 import {
   applyWorkflowRuntimeInputs,
+  buildRuntimeInputSignature,
   parseGraphWorkflowRecord,
   parseModuleDefinition,
+  parseJson,
   writeExecutionLog,
   type ExecutionContext,
+  type RuntimeArtifact,
 } from './graph-workflow-executor/shared'
 import { buildExecutionOrder, validateGraphTypes, validateRequiredInputs } from './graph-workflow-executor/validate'
 
 /** Execute a saved module graph workflow from validation through node engines. */
 const GRAPH_EXECUTION_CANCELLED_MESSAGE = '__GRAPH_EXECUTION_CANCELLED__'
+
+type GraphExecutionPlan = {
+  orderedNodeIds: string[]
+  targetNodeId?: string | null
+  runtimeInputSignature?: string | null
+  reusedFromExecutionId?: number | null
+  reusedNodeIds?: string[]
+}
+
+/** Find the latest completed execution whose plan matches the current partial-run reuse requirements. */
+async function findReusableExecution(params: {
+  workflowId: number
+  graphVersion: number
+  runtimeInputSignature: string
+  targetNodeId?: string
+  reusableNodeIds: string[]
+}) {
+  if (!params.targetNodeId || params.reusableNodeIds.length === 0) {
+    return { reusedFromExecutionId: null, reusedNodeIds: [] as string[], artifactsByNode: new Map<string, Record<string, RuntimeArtifact>>() }
+  }
+
+  const candidateExecutions = GraphExecutionModel.findByWorkflow(params.workflowId, 20)
+    .filter((execution) => execution.status === 'completed' && execution.graph_version === params.graphVersion)
+
+  for (const execution of candidateExecutions) {
+    const executionPlan = execution.execution_plan
+      ? parseJson<GraphExecutionPlan>(execution.execution_plan, { orderedNodeIds: [] })
+      : { orderedNodeIds: [] }
+
+    if ((executionPlan.runtimeInputSignature ?? null) !== params.runtimeInputSignature) {
+      continue
+    }
+
+    const artifacts = GraphExecutionArtifactModel.findByExecution(execution.id)
+    const artifactGroups = artifacts.reduce<Record<string, typeof artifacts>>((acc, artifact) => {
+      if (!acc[artifact.node_id]) {
+        acc[artifact.node_id] = []
+      }
+      acc[artifact.node_id].push(artifact)
+      return acc
+    }, {})
+
+    const artifactsByNode = new Map<string, Record<string, RuntimeArtifact>>()
+    const reusedNodeIds: string[] = []
+
+    for (const nodeId of params.reusableNodeIds) {
+      const nodeArtifacts = artifactGroups[nodeId]
+      if (!nodeArtifacts || nodeArtifacts.length === 0) {
+        continue
+      }
+
+      const hydratedArtifacts = await loadRuntimeArtifactsByNode(nodeArtifacts)
+      if (!hydratedArtifacts) {
+        continue
+      }
+
+      artifactsByNode.set(nodeId, hydratedArtifacts)
+      reusedNodeIds.push(nodeId)
+    }
+
+    if (reusedNodeIds.length > 0) {
+      return {
+        reusedFromExecutionId: execution.id,
+        reusedNodeIds,
+        artifactsByNode,
+      }
+    }
+  }
+
+  return { reusedFromExecutionId: null, reusedNodeIds: [] as string[], artifactsByNode: new Map<string, Record<string, RuntimeArtifact>>() }
+}
 
 export class GraphWorkflowExecutor {
   static async execute(workflowId: number, options?: {
@@ -48,17 +122,33 @@ export class GraphWorkflowExecutor {
     validateGraphTypes(workflow.graph, modulesById)
     const targetNodeId = options?.targetNodeId
     const orderedNodeIds = buildExecutionOrder(workflow.graph, targetNodeId)
+    const runtimeInputSignature = buildRuntimeInputSignature(runtimeInputValues)
+    const reusableNodeIds = targetNodeId ? orderedNodeIds.filter((nodeId) => nodeId !== targetNodeId) : []
+    const reusedArtifacts = await findReusableExecution({
+      workflowId: workflow.id,
+      graphVersion: workflow.version,
+      runtimeInputSignature,
+      targetNodeId,
+      reusableNodeIds,
+    })
+    const executionPlan: GraphExecutionPlan = {
+      orderedNodeIds,
+      targetNodeId: targetNodeId ?? null,
+      runtimeInputSignature,
+      reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
+      reusedNodeIds: reusedArtifacts.reusedNodeIds,
+    }
 
     const executionId = options?.executionId ?? GraphExecutionModel.create({
       graph_workflow_id: workflow.id,
       graph_version: workflow.version,
       status: 'running',
-      execution_plan: JSON.stringify({ orderedNodeIds, targetNodeId: targetNodeId ?? null }),
+      execution_plan: JSON.stringify(executionPlan),
     })
 
     if (options?.executionId) {
       GraphExecutionModel.update(executionId, {
-        execution_plan: JSON.stringify({ orderedNodeIds, targetNodeId: targetNodeId ?? null }),
+        execution_plan: JSON.stringify(executionPlan),
       })
     }
 
@@ -72,6 +162,9 @@ export class GraphWorkflowExecutor {
         orderedNodeIds,
         targetNodeId: targetNodeId ?? null,
         runtimeInputKeys: Object.keys(runtimeInputValues),
+        runtimeInputSignature,
+        reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
+        reusedNodeIds: reusedArtifacts.reusedNodeIds,
       },
     })
 
@@ -79,7 +172,7 @@ export class GraphWorkflowExecutor {
       executionId,
       workflow,
       modulesById,
-      artifactsByNode: new Map(),
+      artifactsByNode: reusedArtifacts.artifactsByNode,
     }
 
     try {
@@ -96,6 +189,20 @@ export class GraphWorkflowExecutor {
         const moduleDefinition = modulesById.get(node.module_id)
         if (!moduleDefinition) {
           throw new Error(`Module ${node.module_id} not found during execution`)
+        }
+
+        if (reusedArtifacts.artifactsByNode.has(node.id)) {
+          writeExecutionLog({
+            executionId,
+            nodeId: node.id,
+            eventType: 'node_reused',
+            message: `Node reused cached artifacts: ${node.id}`,
+            details: {
+              reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
+              artifactPorts: Object.keys(reusedArtifacts.artifactsByNode.get(node.id) || {}),
+            },
+          })
+          continue
         }
 
         writeExecutionLog({
@@ -155,6 +262,8 @@ export class GraphWorkflowExecutor {
         details: {
           orderedNodeIds,
           targetNodeId: targetNodeId ?? null,
+          reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
+          reusedNodeIds: reusedArtifacts.reusedNodeIds,
         },
       })
 

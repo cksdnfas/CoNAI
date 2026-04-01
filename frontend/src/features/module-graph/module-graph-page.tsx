@@ -489,6 +489,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             latestArtifactLabel: null,
             latestArtifactPreviewUrl: null,
             latestArtifactTextPreview: null,
+            executionReuseState: null,
             connectedInputKeys: Array.from(connectedInputMap.get(node.id) ?? []),
             connectedOutputKeys: Array.from(connectedOutputMap.get(node.id) ?? []),
           },
@@ -498,10 +499,11 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     }
 
     const executionPlan = executionDetailQuery.data.execution.execution_plan
-      ? JSON.parse(executionDetailQuery.data.execution.execution_plan) as { orderedNodeIds?: string[] }
+      ? JSON.parse(executionDetailQuery.data.execution.execution_plan) as { orderedNodeIds?: string[]; reusedNodeIds?: string[] }
       : { orderedNodeIds: [] }
 
     const orderedNodeIds = executionPlan.orderedNodeIds ?? []
+    const reusedNodeIds = new Set(executionPlan.reusedNodeIds ?? [])
     const artifactsByNode = executionDetailQuery.data.artifacts.reduce<Record<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
       if (!acc[artifact.node_id]) {
         acc[artifact.node_id] = []
@@ -532,6 +534,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             latestArtifactLabel: artifactPreview.latestArtifactLabel,
             latestArtifactPreviewUrl: artifactPreview.latestArtifactPreviewUrl,
             latestArtifactTextPreview: artifactPreview.latestArtifactTextPreview,
+            executionReuseState: reusedNodeIds.has(node.id) ? 'reused' : null,
             connectedInputKeys: Array.from(connectedInputMap.get(node.id) ?? []),
             connectedOutputKeys: Array.from(connectedOutputMap.get(node.id) ?? []),
           },

@@ -3,11 +3,13 @@ import path from 'path'
 import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact'
 import { runtimePaths } from '../../config/runtimePaths'
 import {
+  type GraphExecutionArtifactRecord,
   type GraphWorkflowEdge,
   type GraphWorkflowNode,
   type ModulePortDataType,
 } from '../../types/moduleGraph'
 import {
+  bufferToDataUrl,
   parseJson,
   sanitizeFileSegment,
   type ExecutionContext,
@@ -98,4 +100,53 @@ export function getOrderedNodeIdsFromExecutionPlan(executionPlan?: string | null
     : { orderedNodeIds: [] as string[] }
 
   return parsedPlan.orderedNodeIds ?? []
+}
+
+/** Hydrate one stored artifact row back into a runtime artifact usable by downstream nodes. */
+async function loadRuntimeArtifactFromRecord(artifact: GraphExecutionArtifactRecord): Promise<RuntimeArtifact | null> {
+  const parsedMetadata = artifact.metadata ? parseJson<Record<string, unknown> | string>(artifact.metadata, {}) : {}
+
+  if (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask' || artifact.artifact_type === 'file') {
+    if (!artifact.storage_path) {
+      return null
+    }
+
+    try {
+      const buffer = await fs.promises.readFile(artifact.storage_path)
+      return {
+        type: artifact.artifact_type,
+        value: bufferToDataUrl(buffer),
+        storagePath: artifact.storage_path,
+        metadata: parsedMetadata && typeof parsedMetadata === 'object' && !Array.isArray(parsedMetadata) ? parsedMetadata : undefined,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  const value = parsedMetadata && typeof parsedMetadata === 'object' && !Array.isArray(parsedMetadata) && 'value' in parsedMetadata
+    ? parsedMetadata.value
+    : parsedMetadata
+
+  return {
+    type: artifact.artifact_type,
+    value,
+    metadata: parsedMetadata && typeof parsedMetadata === 'object' && !Array.isArray(parsedMetadata) ? parsedMetadata : undefined,
+  }
+}
+
+/** Hydrate every artifact for one reused node; return null when any required artifact is unavailable. */
+export async function loadRuntimeArtifactsByNode(artifacts: GraphExecutionArtifactRecord[]) {
+  const nodeArtifacts: Record<string, RuntimeArtifact> = {}
+
+  for (const artifact of artifacts) {
+    const runtimeArtifact = await loadRuntimeArtifactFromRecord(artifact)
+    if (!runtimeArtifact) {
+      return null
+    }
+
+    nodeArtifacts[artifact.port_key] = runtimeArtifact
+  }
+
+  return nodeArtifacts
 }

@@ -15,6 +15,7 @@ export type ModuleGraphNodeData = {
   inputValues: Record<string, unknown>
   executionStatus?: 'idle' | 'completed' | 'failed' | 'blocked'
   executionArtifactCount?: number
+  executionReuseState?: 'reused' | null
   latestArtifactLabel?: string | null
   latestArtifactPreviewUrl?: string | null
   latestArtifactTextPreview?: string | null

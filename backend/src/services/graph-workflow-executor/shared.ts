@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import { GraphExecutionLogModel } from '../../models/GraphExecutionLog'
 import {
   type GraphWorkflowDocument,
@@ -132,6 +133,29 @@ export function applyWorkflowRuntimeInputs(
       },
     })),
   }
+}
+
+/** Build a deterministic JSON string so execution signatures stay stable across key order. */
+export function buildStableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => buildStableJson(item)).join(',')}]`
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+      .map(([key, entryValue]) => `${JSON.stringify(key)}:${buildStableJson(entryValue)}`)
+
+    return `{${entries.join(',')}}`
+  }
+
+  return JSON.stringify(value)
+}
+
+/** Build one hash signature for workflow runtime inputs. */
+export function buildRuntimeInputSignature(runtimeInputValues?: Record<string, unknown>) {
+  const stableJson = buildStableJson(runtimeInputValues ?? {})
+  return crypto.createHash('sha256').update(stableJson).digest('hex')
 }
 
 /** Strip a data URL prefix so image APIs receive raw base64. */
