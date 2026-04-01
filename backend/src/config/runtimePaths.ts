@@ -64,6 +64,8 @@ const uploadsDir = resolvePath(process.env.RUNTIME_UPLOADS_DIR, path.join(basePa
 const databaseDir = resolvePath(process.env.RUNTIME_DATABASE_DIR, path.join(basePath, 'database'));
 const logsDir = resolvePath(process.env.RUNTIME_LOGS_DIR, path.join(basePath, 'logs'));
 const tempDir = resolvePath(process.env.RUNTIME_TEMP_DIR, path.join(basePath, 'temp'));
+const saveDir = resolvePath(process.env.RUNTIME_SAVE_DIR, path.join(basePath, 'save'));
+const canvasDir = resolvePath(process.env.RUNTIME_CANVAS_DIR, path.join(saveDir, 'canvas'));
 const modelsDir = resolvePath(process.env.RUNTIME_MODELS_DIR, path.join(basePath, 'models'));
 const recycleBinDir = resolvePath(process.env.RUNTIME_RECYCLE_BIN_DIR, path.join(basePath, 'RecycleBin'));
 
@@ -95,6 +97,8 @@ const publicBaseUrl = (() => {
 
 const uploadsPublicBase = `${publicBaseUrl}/uploads`;
 const tempPublicBase = `${publicBaseUrl}/temp`;
+const savePublicBase = `${publicBaseUrl}/save`;
+const canvasPublicBase = `${savePublicBase}/canvas`;
 
 export const runtimePaths = {
   basePath,
@@ -103,6 +107,8 @@ export const runtimePaths = {
   databaseFile,
   logsDir,
   tempDir,
+  saveDir,
+  canvasDir,
   modelsDir,
   recycleBinDir
 };
@@ -110,7 +116,9 @@ export const runtimePaths = {
 export const publicUrls = {
   baseUrl: publicBaseUrl,
   uploadsBaseUrl: uploadsPublicBase,
-  tempBaseUrl: tempPublicBase
+  tempBaseUrl: tempPublicBase,
+  saveBaseUrl: savePublicBase,
+  canvasBaseUrl: canvasPublicBase,
 };
 
 export function ensureRuntimeDirectories(): void {
@@ -121,8 +129,10 @@ export function ensureRuntimeDirectories(): void {
   console.log(`   - Logs:        ${logsDir}`);
   console.log(`   - Models:      ${modelsDir}`);
   console.log(`   - Temp:        ${tempDir}`);
+  console.log(`   - Save:        ${saveDir}`);
+  console.log(`   - Canvas:      ${canvasDir}`);
 
-  [uploadsDir, databaseDir, logsDir, tempDir, modelsDir, recycleBinDir].forEach(dir => {
+  [uploadsDir, databaseDir, logsDir, tempDir, saveDir, canvasDir, modelsDir, recycleBinDir].forEach(dir => {
     if (!fs.existsSync(dir)) {
       try {
         fs.mkdirSync(dir, { recursive: true });

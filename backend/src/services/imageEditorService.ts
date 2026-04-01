@@ -273,8 +273,8 @@ export class ImageEditorService {
     const tempId = `edited_${imageId}_${timestamp}`;
     const newFileName = `${originalName}_edited_${timestamp}.webp`;
 
-    // Save to temp/canvas directory instead of original directory
-    const canvasDir = path.join(runtimePaths.tempDir, 'canvas');
+    // Save to the managed canvas directory instead of the original directory
+    const canvasDir = runtimePaths.canvasDir;
 
     // Ensure canvas directory exists
     await fs.promises.mkdir(canvasDir, { recursive: true });

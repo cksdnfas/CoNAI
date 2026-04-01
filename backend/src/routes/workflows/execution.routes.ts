@@ -450,7 +450,7 @@ router.get('/:id/test-connection', asyncHandler(async (req: Request, res: Respon
  */
 router.get('/canvas-images', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const canvasPath = path.join(runtimePaths.tempDir, 'canvas');
+    const canvasPath = runtimePaths.canvasDir;
 
     // Ensure canvas directory exists
     if (!fs.existsSync(canvasPath)) {
@@ -475,7 +475,7 @@ router.get('/canvas-images', asyncHandler(async (req: Request, res: Response) =>
       const stats = fs.statSync(filePath);
       return {
         filename: file,
-        path: `${publicUrls.tempBaseUrl}/canvas/${file}`,
+        path: `${publicUrls.canvasBaseUrl}/${file}`,
         size: stats.size,
         created: stats.birthtime,
         modified: stats.mtime

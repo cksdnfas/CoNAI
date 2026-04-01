@@ -35,8 +35,8 @@ export interface EditOptions {
  * - Never modifies original images
  */
 export class TempImageService {
-  private static tempDir = path.join(runtimePaths.tempDir, 'canvas');
-  private static canvasDir = path.join(runtimePaths.tempDir, 'canvas');
+  private static tempDir = runtimePaths.tempDir;
+  private static canvasDir = runtimePaths.canvasDir;
   private static DEFAULT_EXPIRATION_MINUTES = 30;
 
   // In-memory storage for temp file metadata

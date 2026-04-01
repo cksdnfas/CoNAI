@@ -362,7 +362,7 @@ router.get('/canvas/:filename/webp', asyncHandler(async (req: Request, res: Resp
   const filename = routeParam(req.params.filename);
 
   try {
-    const canvasDir = path.join(runtimePaths.tempDir, 'canvas');
+    const canvasDir = runtimePaths.canvasDir;
     const filePath = path.join(canvasDir, filename);
 
     // Security check: ensure the file is within canvas directory
@@ -420,7 +420,7 @@ router.post('/canvas/:filename/save-webp', asyncHandler(async (req: Request, res
   }
 
   try {
-    const canvasDir = path.join(runtimePaths.tempDir, 'canvas');
+    const canvasDir = runtimePaths.canvasDir;
 
     // Ensure canvas directory exists
     await fs.promises.mkdir(canvasDir, { recursive: true });
@@ -470,7 +470,7 @@ router.post('/canvas/:filename/save-webp', asyncHandler(async (req: Request, res
       data: {
         filename: newFileName,
         filePath,
-        url: `/temp/canvas/${newFileName}`,
+        url: `/save/canvas/${newFileName}`,
         width: conversion.info.width || 0,
         height: conversion.info.height || 0,
         fileSize: conversion.buffer.length
@@ -492,7 +492,7 @@ router.post('/canvas/:filename/save-webp', asyncHandler(async (req: Request, res
  */
 router.get('/canvas', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const canvasDir = path.join(runtimePaths.tempDir, 'canvas');
+    const canvasDir = runtimePaths.canvasDir;
 
     // Ensure canvas directory exists
     if (!fs.existsSync(canvasDir)) {
@@ -530,7 +530,7 @@ router.get('/canvas', asyncHandler(async (req: Request, res: Response) => {
           return {
             filename: file,
             path: filePath,
-            url: `/temp/canvas/${file}`,
+            url: `/save/canvas/${file}`,
             size: stats.size,
             width,
             height,
@@ -569,7 +569,7 @@ router.delete('/canvas/:filename', asyncHandler(async (req: Request, res: Respon
   const filename = routeParam(req.params.filename);
 
   try {
-    const canvasDir = path.join(runtimePaths.tempDir, 'canvas');
+    const canvasDir = runtimePaths.canvasDir;
     const filePath = path.join(canvasDir, filename);
 
     // Security check: ensure the file is within canvas directory

@@ -201,6 +201,7 @@ const createEnvFileIfNotExists = () => {
 
 const uploadsDir = runtimePaths.uploadsDir;
 const tempDir = runtimePaths.tempDir;
+const saveDir = runtimePaths.saveDir;
 
 // Initialize session middleware early (will be configured in initializeSessionMiddleware)
 async function initializeSessionMiddleware() {
@@ -286,6 +287,23 @@ app.use('/temp', optionalAuth, express.static(tempDir, {
   maxAge: '1y'
 }));
 
+// save 폴더 정적 파일 서빙 (canvas, reusable assets 등)
+app.use('/save', optionalAuth, express.static(saveDir, {
+  setHeaders: (res, filePath) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+    if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  },
+  etag: true,
+  lastModified: true,
+  maxAge: '1y'
+}));
+
 // Routes configuration (must be called after session middleware is initialized)
 async function registerRoutes() {
   console.log('📋 Registering API routes...');
@@ -343,7 +361,7 @@ async function registerRoutes() {
 
     // SPA fallback - serve index.html for all non-API routes
     app.get('/{*path}', (req, res, next) => {
-      if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/temp')) {
+      if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/temp') || req.path.startsWith('/save')) {
         next();
         return;
       }
