@@ -4,13 +4,93 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { ImageEditorService } from '../services/imageEditorService';
 import { TempImageService, EditOptions } from '../services/tempImageService';
 import { ImageFileModel } from '../models/Image/ImageFileModel';
-import { runtimePaths } from '../config/runtimePaths';
+import { publicUrls, runtimePaths } from '../config/runtimePaths';
 import path from 'path';
 import fs from 'fs';
 import sharp from 'sharp';
 import { WebPConversionService } from '../services/webpConversionService';
 
 const router = Router();
+const SAVE_BROWSER_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+
+/** Normalize one relative save-path segment for browser-safe URL generation. */
+function toSaveBrowserRelativePath(filePath: string) {
+  return path.relative(runtimePaths.saveDir, filePath).replace(/\\/g, '/');
+}
+
+/** Walk the save directory recursively and collect image files for picker UIs. */
+async function collectSaveBrowserImages(directoryPath: string): Promise<string[]> {
+  const entries = await fs.promises.readdir(directoryPath, { withFileTypes: true });
+  const collected: string[] = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(directoryPath, entry.name);
+
+    if (entry.isDirectory()) {
+      collected.push(...await collectSaveBrowserImages(fullPath));
+      continue;
+    }
+
+    const extension = path.extname(entry.name).toLowerCase();
+    if (SAVE_BROWSER_IMAGE_EXTENSIONS.has(extension)) {
+      collected.push(fullPath);
+    }
+  }
+
+  return collected;
+}
+
+/**
+ * List save-folder images for attachment picker UIs.
+ * GET /api/image-editor/save-images
+ */
+router.get('/save-images', asyncHandler(async (_req: Request, res: Response) => {
+  try {
+    if (!fs.existsSync(runtimePaths.saveDir)) {
+      return res.json({
+        success: true,
+        data: {
+          items: [],
+          total: 0,
+        },
+      });
+    }
+
+    const filePaths = await collectSaveBrowserImages(runtimePaths.saveDir);
+    const items = await Promise.all(
+      filePaths.map(async (filePath) => {
+        const stats = await fs.promises.stat(filePath);
+        const relativePath = toSaveBrowserRelativePath(filePath);
+
+        return {
+          id: relativePath,
+          relative_path: relativePath,
+          file_name: path.basename(filePath),
+          url: `${publicUrls.saveBaseUrl}/${relativePath.split('/').map(encodeURIComponent).join('/')}`,
+          mime_type: `image/${path.extname(filePath).replace('.', '').toLowerCase() || 'png'}`,
+          file_size: stats.size,
+          modified_at: stats.mtime.toISOString(),
+        };
+      }),
+    );
+
+    items.sort((left, right) => new Date(right.modified_at).getTime() - new Date(left.modified_at).getTime());
+
+    return res.json({
+      success: true,
+      data: {
+        items,
+        total: items.length,
+      },
+    });
+  } catch (error) {
+    console.error('Error listing save-browser images:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to list save images',
+    });
+  }
+}));
 
 /**
  * Get image as WebP for editing (original size, quality 100%)

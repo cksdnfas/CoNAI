@@ -22,9 +22,9 @@ import {
   DEFAULT_COMFYUI_SERVER_FORM,
   getErrorMessage,
   hasWorkflowFieldValue,
-  readFileAsDataUrl,
   type ComfyUIServerFormDraft,
   type ComfyUIServerTestState,
+  type SelectedImageDraft,
   type WorkflowFieldDraftValue,
 } from '../image-generation-shared'
 import { ComfyDropdownListsSection, ComfyServerListSection, ComfyWorkflowListSection } from './comfy-home-sections'
@@ -181,21 +181,8 @@ export function ComfyGenerationPanel({ refreshNonce, onHistoryRefresh, onSelecte
     }))
   }
 
-  const handleWorkflowImageChange = async (fieldId: string, file?: File) => {
-    if (!file) {
-      handleWorkflowFieldChange(fieldId, '')
-      return
-    }
-
-    try {
-      const dataUrl = await readFileAsDataUrl(file)
-      handleWorkflowFieldChange(fieldId, {
-        fileName: file.name,
-        dataUrl,
-      })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '이미지 파일을 읽지 못했어.'), tone: 'error' })
-    }
+  const handleWorkflowImageChange = async (fieldId: string, image?: SelectedImageDraft) => {
+    handleWorkflowFieldChange(fieldId, image ?? '')
   }
 
   const handleComfyServerFieldChange = (field: keyof ComfyUIServerFormDraft, value: string) => {

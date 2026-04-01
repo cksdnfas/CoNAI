@@ -224,13 +224,37 @@ export function buildWorkflowDraft(fields: WorkflowMarkedField[]) {
 }
 
 /** Read a local file into a data URL for API transport. */
-export function readFileAsDataUrl(file: File) {
+export function readFileAsDataUrl(file: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
     reader.onerror = () => reject(reader.error ?? new Error('Failed to read file as data URL'))
     reader.readAsDataURL(file)
   })
+}
+
+/** Build one selected-image draft from a local File object. */
+export async function buildSelectedImageDraftFromFile(file: File): Promise<SelectedImageDraft> {
+  return {
+    fileName: file.name,
+    dataUrl: await readFileAsDataUrl(file),
+  }
+}
+
+/** Build one selected-image draft by fetching an existing image URL. */
+export async function buildSelectedImageDraftFromUrl(url: string, fileName?: string): Promise<SelectedImageDraft> {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image: ${response.status}`)
+  }
+
+  const blob = await response.blob()
+  const resolvedFileName = fileName || url.split('/').pop() || 'selected-image'
+
+  return {
+    fileName: resolvedFileName,
+    dataUrl: await readFileAsDataUrl(blob),
+  }
 }
 
 /** Check whether a workflow field draft has a usable value. */

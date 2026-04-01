@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
+import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import {
   listNaiCharacterReferenceAssets,
   listNaiVibeAssets,
@@ -45,16 +47,6 @@ export function isNaiVibePort(portKey: string, dataType: string) {
 /** Detect whether one JSON input should render the reusable character-reference picker/editor. */
 export function isNaiCharacterReferencePort(portKey: string, dataType: string) {
   return dataType === 'json' && portKey === 'character_refs'
-}
-
-/** Read a local file into a data URL so module inputs can keep using plain JSON payloads. */
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file as data URL'))
-    reader.readAsDataURL(file)
-  })
 }
 
 /** Parse unknown runtime values into editable vibe rows. */
@@ -325,38 +317,18 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
     onChange(buildNaiCharacterReferenceValue(nextDrafts))
   }
 
-  const handleVibeImageChange = async (index: number, file?: File) => {
-    if (!file) {
-      updateVibes(vibeDrafts.map((draft, draftIndex) => (
-        draftIndex === index
-          ? { ...draft, image: undefined }
-          : draft
-      )))
-      return
-    }
-
-    const dataUrl = await readFileAsDataUrl(file)
+  const handleVibeImageChange = async (index: number, image?: SelectedImageDraft) => {
     updateVibes(vibeDrafts.map((draft, draftIndex) => (
       draftIndex === index
-        ? { ...draft, image: dataUrl }
+        ? { ...draft, image: image?.dataUrl }
         : draft
     )))
   }
 
-  const handleCharacterReferenceImageChange = async (index: number, file?: File) => {
-    if (!file) {
-      updateCharacterReferences(characterReferenceDrafts.map((draft, draftIndex) => (
-        draftIndex === index
-          ? { ...draft, image: undefined }
-          : draft
-      )))
-      return
-    }
-
-    const dataUrl = await readFileAsDataUrl(file)
+  const handleCharacterReferenceImageChange = async (index: number, image?: SelectedImageDraft) => {
     updateCharacterReferences(characterReferenceDrafts.map((draft, draftIndex) => (
       draftIndex === index
-        ? { ...draft, image: dataUrl }
+        ? { ...draft, image: image?.dataUrl }
         : draft
     )))
   }
@@ -424,7 +396,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
 
               <label className="space-y-2">
                 <span className="text-sm font-medium text-foreground">Reference Image</span>
-                <Input type="file" accept="image/*" onChange={(event) => void handleVibeImageChange(index, event.target.files?.[0])} />
+                <ImageAttachmentPickerButton label={draft.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Vibe ${index + 1} 이미지 선택`} onSelect={(image) => void handleVibeImageChange(index, image)} />
                 {draft.image ? <img src={draft.image} alt={`Vibe ${index + 1}`} className="max-h-40 rounded-sm border border-border object-contain" /> : null}
               </label>
 
@@ -538,7 +510,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
 
             <label className="space-y-2">
               <span className="text-sm font-medium text-foreground">Reference Image</span>
-              <Input type="file" accept="image/*" onChange={(event) => void handleCharacterReferenceImageChange(index, event.target.files?.[0])} />
+              <ImageAttachmentPickerButton label={draft.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} onSelect={(image) => void handleCharacterReferenceImageChange(index, image)} />
               {draft.image ? <img src={draft.image} alt={`Reference ${index + 1}`} className="max-h-40 rounded-sm border border-border object-contain" /> : null}
             </label>
 

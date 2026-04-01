@@ -58,11 +58,11 @@ import {
   getModulePortCompatibility,
   getNodeExecutionStatus,
   parseHandleId,
-  readFileAsDataUrl,
   type ModuleGraphEdge,
   type ModuleGraphNode,
 } from './module-graph-shared'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
+import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import type { AppSettings } from '@/types/settings'
@@ -765,18 +765,13 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     )
   }
 
-  const handleNodeImageChange = async (nodeId: string, portKey: string, file?: File) => {
-    if (!file) {
+  const handleNodeImageChange = async (nodeId: string, portKey: string, image?: SelectedImageDraft) => {
+    if (!image) {
       handleNodeValueClear(nodeId, portKey)
       return
     }
 
-    try {
-      const dataUrl = await readFileAsDataUrl(file)
-      handleNodeValueChange(nodeId, portKey, dataUrl)
-    } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '이미지 파일을 읽지 못했어.', tone: 'error' })
-    }
+    handleNodeValueChange(nodeId, portKey, image.dataUrl)
   }
 
   const handleWorkflowRunInputChange = (inputId: string, value: unknown) => {
@@ -794,18 +789,13 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     })
   }
 
-  const handleWorkflowRunInputImageChange = async (inputId: string, file?: File) => {
-    if (!file) {
+  const handleWorkflowRunInputImageChange = async (inputId: string, image?: SelectedImageDraft) => {
+    if (!image) {
       handleWorkflowRunInputClear(inputId)
       return
     }
 
-    try {
-      const dataUrl = await readFileAsDataUrl(file)
-      handleWorkflowRunInputChange(inputId, dataUrl)
-    } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '이미지 파일을 읽지 못했어.', tone: 'error' })
-    }
+    handleWorkflowRunInputChange(inputId, image.dataUrl)
   }
 
   const handleToggleWorkflowExposedInput = (inputDefinition: GraphWorkflowExposedInput) => {
@@ -851,18 +841,13 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     })
   }
 
-  const handleWorkflowExposedInputDefaultImageChange = async (inputId: string, file?: File) => {
-    if (!file) {
+  const handleWorkflowExposedInputDefaultImageChange = async (inputId: string, image?: SelectedImageDraft) => {
+    if (!image) {
       handleUpdateWorkflowExposedInput(inputId, { default_value: undefined })
       return
     }
 
-    try {
-      const dataUrl = await readFileAsDataUrl(file)
-      handleUpdateWorkflowExposedInput(inputId, { default_value: dataUrl })
-    } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '이미지 파일을 읽지 못했어.', tone: 'error' })
-    }
+    handleUpdateWorkflowExposedInput(inputId, { default_value: image.dataUrl })
   }
 
   const handleSaveGraph = async () => {

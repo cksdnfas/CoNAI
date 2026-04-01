@@ -2,14 +2,15 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { WorkflowMarkedField } from '@/lib/api'
-import { FormField, type WorkflowFieldDraftValue } from '../image-generation-shared'
+import { FormField, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
+import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
 
 type WorkflowFieldInputProps = {
   field: WorkflowMarkedField
   value: WorkflowFieldDraftValue
   onChange: (value: WorkflowFieldDraftValue) => void
-  onImageChange: (file?: File) => Promise<void>
+  onImageChange: (image?: SelectedImageDraft) => Promise<void> | void
 }
 
 /** Render a single marked-field editor for a ComfyUI workflow. */
@@ -54,7 +55,7 @@ export function WorkflowFieldInput({ field, value, onChange, onImageChange }: Wo
     return (
       <FormField label={field.label} hint={hint}>
         <div className="space-y-3">
-          <Input type="file" accept="image/*" onChange={(event) => void onImageChange(event.target.files?.[0])} />
+          <ImageAttachmentPickerButton label={imageValue ? '이미지 변경' : '이미지 선택'} modalTitle={field.label} onSelect={(image) => void onImageChange(image)} />
           {imageValue ? (
             <div className="space-y-2 rounded-sm bg-surface-low p-3">
               <div className="text-xs text-muted-foreground">{imageValue.fileName}</div>

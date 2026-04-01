@@ -54,7 +54,6 @@ import {
   NAI_SCHEDULER_OPTIONS,
   normalizeNaiCharacterPromptDrafts,
   parseNumberInput,
-  readFileAsDataUrl,
   resolveNaiResolutionPreset,
   shouldUseNaiCharacterPositions,
   supportsNaiCharacterPrompts,
@@ -65,6 +64,7 @@ import {
   type NAIVibeDraft,
   type SelectedImageDraft,
 } from '../image-generation-shared'
+import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { NaiCharacterPositionBoard } from './nai-character-position-board'
 import { NaiModuleSaveModal } from './nai-module-save-modal'
 import { PromptToggleField } from './prompt-toggle-field'
@@ -99,32 +99,6 @@ function SelectedImageCard({ image, alt, onRemove }: { image: SelectedImageDraft
         </Button>
       </div>
     </div>
-  )
-}
-
-type FilePickerButtonProps = {
-  label: string
-  accept?: string
-  onSelect: (file?: File) => void
-}
-
-/** Render a shared file-picker trigger that keeps the native input hidden. */
-function FilePickerButton({ label, accept = 'image/*', onSelect }: FilePickerButtonProps) {
-  return (
-    <Button type="button" variant="outline" asChild>
-      <label>
-        <input
-          type="file"
-          accept={accept}
-          hidden
-          onChange={(event) => {
-            onSelect(event.target.files?.[0])
-            event.currentTarget.value = ''
-          }}
-        />
-        {label}
-      </label>
-    </Button>
   )
 }
 
@@ -393,27 +367,11 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     })
   }
 
-  const handleNaiImageChange = async (field: 'sourceImage' | 'maskImage', file?: File) => {
-    if (!file) {
-      setNaiForm((current) => ({
-        ...current,
-        [field]: undefined,
-      }))
-      return
-    }
-
-    try {
-      const dataUrl = await readFileAsDataUrl(file)
-      setNaiForm((current) => ({
-        ...current,
-        [field]: {
-          fileName: file.name,
-          dataUrl,
-        },
-      }))
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '이미지 파일을 읽지 못했어.'), tone: 'error' })
-    }
+  const handleNaiImageChange = (field: 'sourceImage' | 'maskImage', image?: SelectedImageDraft) => {
+    setNaiForm((current) => ({
+      ...current,
+      [field]: image,
+    }))
   }
 
   const handleAddCharacterPrompt = () => {
@@ -479,43 +437,19 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     }))
   }
 
-  const handleVibeImageChange = async (index: number, file?: File) => {
-    if (!file) {
-      setNaiForm((current) => ({
-        ...current,
-        vibes: current.vibes.map((vibe, vibeIndex) => (
-          vibeIndex === index
-            ? {
-              ...vibe,
-              image: undefined,
-              encoded: '',
-            }
-            : vibe
-        )),
-      }))
-      return
-    }
-
-    try {
-      const dataUrl = await readFileAsDataUrl(file)
-      setNaiForm((current) => ({
-        ...current,
-        vibes: current.vibes.map((vibe, vibeIndex) => (
-          vibeIndex === index
-            ? {
-              ...vibe,
-              image: {
-                fileName: file.name,
-                dataUrl,
-              },
-              encoded: '',
-            }
-            : vibe
-        )),
-      }))
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'Vibe 이미지를 읽지 못했어.'), tone: 'error' })
-    }
+  const handleVibeImageChange = (index: number, image?: SelectedImageDraft) => {
+    setNaiForm((current) => ({
+      ...current,
+      vibes: current.vibes.map((vibe, vibeIndex) => (
+        vibeIndex === index
+          ? {
+            ...vibe,
+            image,
+            encoded: '',
+          }
+          : vibe
+      )),
+    }))
   }
 
   const handleEncodeVibe = async (index: number) => {
@@ -632,41 +566,18 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     }))
   }
 
-  const handleCharacterReferenceImageChange = async (index: number, file?: File) => {
-    if (!file) {
-      setNaiForm((current) => ({
-        ...current,
-        characterReferences: current.characterReferences.map((reference, referenceIndex) => (
-          referenceIndex === index
-            ? {
-              ...reference,
-              image: undefined,
-            }
-            : reference
-        )),
-      }))
-      return
-    }
-
-    try {
-      const dataUrl = await readFileAsDataUrl(file)
-      setNaiForm((current) => ({
-        ...current,
-        characterReferences: current.characterReferences.map((reference, referenceIndex) => (
-          referenceIndex === index
-            ? {
-              ...reference,
-              image: {
-                fileName: file.name,
-                dataUrl,
-              },
-            }
-            : reference
-        )),
-      }))
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'Character Reference 이미지를 읽지 못했어.'), tone: 'error' })
-    }
+  const handleCharacterReferenceImageChange = (index: number, image?: SelectedImageDraft) => {
+    setNaiForm((current) => ({
+      ...current,
+      characterReferences: current.characterReferences.map((reference, referenceIndex) => (
+        referenceIndex === index
+          ? {
+            ...reference,
+            image,
+          }
+          : reference
+      )),
+    }))
   }
 
   const handleRemoveCharacterReference = (index: number) => {
@@ -1177,7 +1088,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     <div className="space-y-4">
                       <FormField label="Source Image">
                         <div className="space-y-3">
-                          <FilePickerButton label={naiForm.sourceImage ? '소스 이미지 변경' : '소스 이미지 선택'} onSelect={(file) => void handleNaiImageChange('sourceImage', file)} />
+                          <ImageAttachmentPickerButton label={naiForm.sourceImage ? '소스 이미지 변경' : '소스 이미지 선택'} modalTitle="소스 이미지 선택" onSelect={(image) => handleNaiImageChange('sourceImage', image)} />
                           {naiForm.sourceImage ? <SelectedImageCard image={naiForm.sourceImage} alt="NAI source" onRemove={() => void handleNaiImageChange('sourceImage')} /> : null}
                         </div>
                       </FormField>
@@ -1185,7 +1096,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                       {naiForm.action === 'infill' ? (
                         <FormField label="Mask Image">
                           <div className="space-y-3">
-                            <FilePickerButton label={naiForm.maskImage ? '마스크 이미지 변경' : '마스크 이미지 선택'} onSelect={(file) => void handleNaiImageChange('maskImage', file)} />
+                            <ImageAttachmentPickerButton label={naiForm.maskImage ? '마스크 이미지 변경' : '마스크 이미지 선택'} modalTitle="마스크 이미지 선택" onSelect={(image) => handleNaiImageChange('maskImage', image)} />
                             {naiForm.maskImage ? <SelectedImageCard image={naiForm.maskImage} alt="NAI mask" onRemove={() => void handleNaiImageChange('maskImage')} /> : null}
                           </div>
                         </FormField>
@@ -1265,7 +1176,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
                               <FormField label="Reference Image">
                                 <div className="space-y-3">
-                                  <FilePickerButton label={vibe.image ? '참조 이미지 변경' : '참조 이미지 선택'} onSelect={(file) => void handleVibeImageChange(index, file)} />
+                                  <ImageAttachmentPickerButton label={vibe.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Vibe ${index + 1} 이미지 선택`} onSelect={(image) => handleVibeImageChange(index, image)} />
                                   {vibe.image ? <SelectedImageCard image={vibe.image} alt={`NAI vibe ${index + 1}`} onRemove={() => void handleVibeImageChange(index)} /> : null}
                                 </div>
                               </FormField>
@@ -1398,7 +1309,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
                               <FormField label="Reference Image">
                                 <div className="space-y-3">
-                                  <FilePickerButton label={reference.image ? '참조 이미지 변경' : '참조 이미지 선택'} onSelect={(file) => void handleCharacterReferenceImageChange(index, file)} />
+                                  <ImageAttachmentPickerButton label={reference.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} onSelect={(image) => handleCharacterReferenceImageChange(index, image)} />
                                   {reference.image ? <SelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} onRemove={() => void handleCharacterReferenceImageChange(index)} /> : null}
                                 </div>
                               </FormField>

@@ -221,6 +221,16 @@ export interface StoredNaiCharacterReferenceAsset {
   has_letterbox: boolean
 }
 
+export interface SaveBrowserImageRecord {
+  id: string
+  relative_path: string
+  file_name: string
+  url: string
+  mime_type: string
+  file_size: number
+  modified_at: string
+}
+
 export interface ComfyUIImageFieldValue {
   fileName: string
   dataUrl: string
@@ -653,6 +663,12 @@ export async function deleteNaiCharacterReferenceAsset(assetId: string) {
   return requestJson<{ success: boolean }>(`/api/nai/store/character-references/${assetId}`, {
     method: 'DELETE',
   })
+}
+
+/** Load browser-ready image entries from the runtime save directory. */
+export async function listGenerationSaveImages() {
+  const response = await requestJson<{ items: SaveBrowserImageRecord[]; total: number }>('/api/image-editor/save-images')
+  return response.items
 }
 
 /** Start a ComfyUI workflow generation request. */

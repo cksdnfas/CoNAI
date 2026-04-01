@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleRow } from '@/components/ui/toggle-row'
+import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
+import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { cn } from '@/lib/utils'
 import type { GraphWorkflowExposedInput } from '@/lib/api'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
@@ -20,7 +22,7 @@ type WorkflowExposedInputEditorProps = {
   onToggleInput: (inputDefinition: GraphWorkflowExposedInput) => void
   onUpdateInput: (inputId: string, patch: Partial<GraphWorkflowExposedInput>) => void
   onMoveInput: (inputId: string, direction: 'up' | 'down') => void
-  onChangeDefaultImage: (inputId: string, file?: File) => Promise<void>
+  onChangeDefaultImage: (inputId: string, image?: SelectedImageDraft) => Promise<void> | void
   showHeader?: boolean
 }
 
@@ -150,7 +152,7 @@ export function WorkflowExposedInputEditor({
     if (inputDefinition.data_type === 'image' || inputDefinition.data_type === 'mask') {
       return (
         <div className="space-y-2">
-          <Input type="file" accept="image/*" onChange={(event) => void onChangeDefaultImage(inputDefinition.id, event.target.files?.[0])} />
+          <ImageAttachmentPickerButton label={hasExplicitValue(rawValue) ? '기본 이미지 변경' : '기본 이미지 선택'} modalTitle={inputDefinition.label} onSelect={(image) => void onChangeDefaultImage(inputDefinition.id, image)} />
           {typeof rawValue === 'string' && rawValue.startsWith('data:image/') ? (
             <img src={rawValue} alt={inputDefinition.label} className="max-h-36 rounded-sm border border-border object-contain" />
           ) : null}

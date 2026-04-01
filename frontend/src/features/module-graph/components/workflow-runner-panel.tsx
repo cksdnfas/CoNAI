@@ -6,6 +6,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
+import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import type { GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowRecord } from '@/lib/api'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
@@ -21,7 +23,7 @@ type WorkflowRunnerPanelProps = {
   latestPreviewLabel?: string | null
   onInputValueChange: (inputId: string, value: unknown) => void
   onInputValueClear: (inputId: string) => void
-  onInputImageChange: (inputId: string, file?: File) => Promise<void>
+  onInputImageChange: (inputId: string, image?: SelectedImageDraft) => Promise<void> | void
   onExecute: () => void
   onEdit: () => void
   canExecute?: boolean
@@ -245,7 +247,7 @@ export function WorkflowRunnerPanel({
             </Button>
           </div>
           {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
-          <Input type="file" accept="image/*" onChange={(event) => void onInputImageChange(inputDefinition.id, event.target.files?.[0])} />
+          <ImageAttachmentPickerButton label={explicitValue ? '이미지 변경' : '이미지 선택'} modalTitle={inputDefinition.label} onSelect={(image) => void onInputImageChange(inputDefinition.id, image)} />
           {typeof rawValue === 'string' && rawValue.startsWith('data:image/') ? (
             <img src={rawValue} alt={inputDefinition.label} className="max-h-40 rounded-sm border border-border object-contain" />
           ) : null}

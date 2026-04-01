@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api'
-import type { ComfyUIServerTestState, WorkflowFieldDraftValue } from '../image-generation-shared'
+import type { ComfyUIServerTestState, SelectedImageDraft, WorkflowFieldDraftValue } from '../image-generation-shared'
 import { WorkflowFieldInput } from './workflow-field-input'
 
 type ComfyWorkflowControllerPanelProps = {
@@ -20,7 +20,7 @@ type ComfyWorkflowControllerPanelProps = {
   onBack: () => void
   onSelectServer: (serverId: string) => void
   onFieldChange: (fieldId: string, value: WorkflowFieldDraftValue) => void
-  onImageChange: (fieldId: string, file?: File) => Promise<void>
+  onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
   onResetDraft: () => void
   onGenerateSelected: () => void
   onGenerateAll: () => void
@@ -87,7 +87,7 @@ export function ComfyWorkflowControllerPanel({
                     field={field}
                     value={workflowDraft[field.id] ?? ''}
                     onChange={(value) => onFieldChange(field.id, value)}
-                    onImageChange={(file) => onImageChange(field.id, file)}
+                    onImageChange={(image) => onImageChange(field.id, image)}
                   />
                 ))}
               </div>
