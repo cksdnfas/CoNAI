@@ -8,21 +8,35 @@ interface ExplorerSidebarProps extends PropsWithChildren {
   className?: string
   bodyClassName?: string
   floatingFrame?: boolean
+  floatingLocked?: boolean
+  onFloatingChange?: (isFloating: boolean) => void
 }
 
 /** Render a reusable sidebar shell for explorer-style navigation panels. */
-export function ExplorerSidebar({ title, badge, headerExtra, className, bodyClassName, floatingFrame = false, children }: ExplorerSidebarProps) {
+export function ExplorerSidebar({
+  title,
+  badge,
+  headerExtra,
+  className,
+  bodyClassName,
+  floatingFrame = false,
+  floatingLocked = false,
+  onFloatingChange,
+  children,
+}: ExplorerSidebarProps) {
   const asideRef = useRef<HTMLElement | null>(null)
   const [isFloating, setIsFloating] = useState(false)
 
   useEffect(() => {
     if (!floatingFrame) {
       setIsFloating(false)
+      onFloatingChange?.(false)
       return
     }
 
     const node = asideRef.current
     if (!node || typeof window === 'undefined') {
+      onFloatingChange?.(false)
       return
     }
 
@@ -34,7 +48,9 @@ export function ExplorerSidebar({ title, badge, headerExtra, className, bodyClas
       const isSticky = computedStyle.position === 'sticky' || computedStyle.position === '-webkit-sticky'
       const topOffset = Number.parseFloat(computedStyle.top || '0') || 0
       const rect = node.getBoundingClientRect()
-      setIsFloating(isSticky && rect.top <= topOffset + 1)
+      const nextIsFloating = isSticky && rect.top <= topOffset + 1
+      setIsFloating(nextIsFloating)
+      onFloatingChange?.(nextIsFloating)
     }
 
     const scheduleUpdate = () => {
@@ -55,10 +71,10 @@ export function ExplorerSidebar({ title, badge, headerExtra, className, bodyClas
       window.removeEventListener('scroll', scheduleUpdate)
       window.removeEventListener('resize', scheduleUpdate)
     }
-  }, [floatingFrame])
+  }, [floatingFrame, onFloatingChange])
 
   return (
-    <aside ref={asideRef} className={cn('explorer-sidebar relative rounded-sm bg-surface-lowest p-4', className)} data-floating={isFloating ? 'true' : 'false'}>
+    <aside ref={asideRef} className={cn('explorer-sidebar relative rounded-sm bg-surface-lowest p-4', className)} data-floating={!floatingLocked && isFloating ? 'true' : 'false'}>
       {floatingFrame ? <div className="explorer-sidebar-floating-frame pointer-events-none absolute inset-0 z-10 rounded-sm" /> : null}
 
       <div className="mb-4 flex items-center justify-between gap-3">

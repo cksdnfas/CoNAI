@@ -1,10 +1,11 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { PenSquare, Play, Search } from 'lucide-react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { PenSquare, Pin, PinOff, Play, Search } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
+import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
 import { getNavigationItemClassName } from '@/components/common/navigation-item'
 import type { GraphWorkflowRecord } from '@/lib/api'
 import { formatDateTime } from '../module-graph-shared'
@@ -20,6 +21,7 @@ type SavedGraphListProps = {
   showExecuteButton?: boolean
   headerActions?: ReactNode
   topToolbar?: ReactNode
+  floatingActionContainerClassName?: string
 }
 
 /** Render saved workflows with quick run and edit actions. */
@@ -33,8 +35,12 @@ export function SavedGraphList({
   showExecuteButton = true,
   headerActions,
   topToolbar,
+  floatingActionContainerClassName,
 }: SavedGraphListProps) {
+  const sidebarAnchorRef = useRef<HTMLDivElement | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [isSidebarFloating, setIsSidebarFloating] = useState(false)
+  const [isSidebarFloatingLocked, setIsSidebarFloatingLocked] = useState(false)
 
   const filteredGraphs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -65,34 +71,79 @@ export function SavedGraphList({
     [graphs],
   )
 
-  return (
-    <ExplorerSidebar
-      title="워크플로우"
-      badge={headerActions}
-      floatingFrame
-      className="sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col"
-      bodyClassName="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1"
-      headerExtra={
-        <div className="space-y-3">
-          {topToolbar ? <div className="flex flex-wrap gap-2">{topToolbar}</div> : null}
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="검색" className="h-8 pl-9 text-sm" />
-          </div>
-        </div>
-      }
-    >
-      {filteredGraphs.map((graph) => {
-        const duplicateCount = duplicateNameCounts[graph.name] ?? 0
+  const handleLockSidebar = () => {
+    setIsSidebarFloatingLocked(true)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const sidebarTop = sidebarAnchorRef.current?.getBoundingClientRect().top
+        if (sidebarTop === undefined || typeof window === 'undefined') {
+          return
+        }
 
-        return (
-        <div
-          key={graph.id}
-          className={getNavigationItemClassName({
-            active: selectedGraphId === graph.id,
-            className: 'flex items-start gap-2 py-3',
-          })}
+        const nextOffset = sidebarTop - 96
+        if (Math.abs(nextOffset) < 4) {
+          return
+        }
+
+        window.scrollBy({ top: nextOffset, behavior: 'smooth' })
+      })
+    })
+  }
+
+  return (
+    <>
+      <div ref={sidebarAnchorRef}>
+        <ExplorerSidebar
+          title="워크플로우"
+          badge={(
+            <div className="flex items-center gap-2">
+              {headerActions}
+              {isSidebarFloatingLocked ? (
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="outline"
+                  className="bg-surface-low"
+                  onClick={() => setIsSidebarFloatingLocked(false)}
+                  aria-label="사이드바 고정 해제"
+                  title="사이드바 고정 해제"
+                >
+                  <PinOff className="h-4 w-4" />
+                </Button>
+              ) : null}
+            </div>
+          )}
+          floatingFrame
+          floatingLocked={isSidebarFloatingLocked}
+          onFloatingChange={setIsSidebarFloating}
+          className={cn(
+            'isolate flex self-start flex-col',
+            isSidebarFloatingLocked
+              ? 'z-20'
+              : 'sticky top-24 z-30 max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]',
+          )}
+          bodyClassName="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1"
+          headerExtra={
+            <div className="space-y-3">
+              {topToolbar ? <div className="flex flex-wrap gap-2">{topToolbar}</div> : null}
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="검색" className="h-8 pl-9 text-sm" />
+              </div>
+            </div>
+          }
         >
+          {filteredGraphs.map((graph) => {
+            const duplicateCount = duplicateNameCounts[graph.name] ?? 0
+
+            return (
+              <div
+                key={graph.id}
+                className={getNavigationItemClassName({
+                  active: selectedGraphId === graph.id,
+                  className: 'flex items-start gap-2 py-3',
+                })}
+              >
           <button
             type="button"
             onClick={() => onLoadGraph(graph)}
@@ -135,22 +186,31 @@ export function SavedGraphList({
               </Button>
             ) : null}
           </div>
-        </div>
-        )
-      })}
+              </div>
+            )
+          })}
 
-      {graphs.length === 0 ? (
-        <Alert>
-          <AlertTitle>저장된 워크플로우가 없어</AlertTitle>
-          <AlertDescription>새 워크플로우를 만들면 여기서 바로 불러올 수 있어.</AlertDescription>
-        </Alert>
+          {graphs.length === 0 ? (
+            <Alert>
+              <AlertTitle>저장된 워크플로우가 없어</AlertTitle>
+              <AlertDescription>새 워크플로우를 만들면 여기서 바로 불러올 수 있어.</AlertDescription>
+            </Alert>
+          ) : null}
+          {graphs.length > 0 && filteredGraphs.length === 0 ? (
+            <Alert>
+              <AlertTitle>검색 결과가 없어</AlertTitle>
+              <AlertDescription>다른 키워드로 찾아봐.</AlertDescription>
+            </Alert>
+          ) : null}
+        </ExplorerSidebar>
+      </div>
+
+      {isSidebarFloating && !isSidebarFloatingLocked ? (
+        <FloatingBottomAction type="button" onClick={handleLockSidebar} containerClassName={floatingActionContainerClassName}>
+          <Pin className="h-4 w-4" />
+          사이드바 고정
+        </FloatingBottomAction>
       ) : null}
-      {graphs.length > 0 && filteredGraphs.length === 0 ? (
-        <Alert>
-          <AlertTitle>검색 결과가 없어</AlertTitle>
-          <AlertDescription>다른 키워드로 찾아봐.</AlertDescription>
-        </Alert>
-      ) : null}
-    </ExplorerSidebar>
+    </>
   )
 }
