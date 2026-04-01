@@ -19,11 +19,11 @@ import { PageHeader } from '@/components/common/page-header'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { SettingsModal } from '@/features/settings/components/settings-modal'
 import {
   cancelGraphExecution,
   createGraphWorkflow,
@@ -1442,15 +1442,12 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
         </div>
       )}
 
-      <BottomDrawerSheet
+      <SettingsModal
         open={isModuleLibraryOpen}
         title="모듈 추가"
-        subtitle="그래프에 넣을 모듈을 골라서 바로 추가해."
+        description="그래프에 넣을 모듈을 골라서 바로 추가해."
         onClose={() => setIsModuleLibraryOpen(false)}
-        ariaLabel="모듈 추가 패널"
-        className="max-w-5xl mx-auto"
-        bodyClassName="p-4"
-        closeLabel="닫기"
+        widthClassName="max-w-5xl"
       >
         <ModuleLibraryPanel
           modules={modules}
@@ -1459,7 +1456,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           onAddModule={handleAddModuleFromLibrary}
           surface="plain"
         />
-      </BottomDrawerSheet>
+      </SettingsModal>
     </div>
   )
 }
