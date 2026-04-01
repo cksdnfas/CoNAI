@@ -30,6 +30,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
   const customModules = useMemo(() => modules.filter((module) => module.engine_type !== 'system'), [modules])
   const systemModules = useMemo(() => modules.filter((module) => module.engine_type === 'system'), [modules])
   const visibleModules = activeTab === 'system' ? systemModules : customModules
+  const activeTabLabel = activeTab === 'system' ? '시스템 모듈' : '사용자 모듈'
 
   useEffect(() => {
     if (activeTab === 'custom' && customModules.length === 0 && systemModules.length > 0) {
@@ -72,9 +73,10 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
       {showHeader ? (
         <SectionHeading
           variant="inside"
-          heading="Modules"
+          heading="모듈 라이브러리"
           actions={
             <>
+              <Badge variant="outline">{activeTabLabel}</Badge>
               <Badge variant="outline">{filteredModules.length}</Badge>
               {collapseButton}
             </>
@@ -82,7 +84,10 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
         />
       ) : (
         <div className="flex items-center justify-between gap-3">
-          <Badge variant="outline">{filteredModules.length}</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">{activeTabLabel}</Badge>
+            <Badge variant="outline">{filteredModules.length}</Badge>
+          </div>
           {collapseButton}
         </div>
       )}
@@ -149,13 +154,13 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
         </Alert>
       ) : null}
 
-      <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
-        {filteredModules.map((module) => {
-          const isSystemModule = module.engine_type === 'system'
+      <div className="max-h-[min(62vh,720px)] overflow-y-auto pr-1">
+        <div className="grid gap-3 md:grid-cols-2">
+          {filteredModules.map((module) => {
+            const isSystemModule = module.engine_type === 'system'
 
-          return (
-            <div key={module.id} className={cn('rounded-sm border p-3', isSystemModule ? 'border-primary/40 bg-surface-high' : 'border-border bg-surface-low')}>
-              <div className="flex items-start justify-between gap-3">
+            return (
+              <div key={module.id} className={cn('flex h-full flex-col gap-3 rounded-sm border p-3', isSystemModule ? 'border-primary/40 bg-surface-high' : 'border-border bg-surface-low')}>
                 <div className="min-w-0 space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-foreground">{module.name}</span>
@@ -164,15 +169,17 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
                     {module.category ? <Badge variant="secondary">{module.category}</Badge> : null}
                   </div>
                   <div className="text-xs text-muted-foreground">입력 {module.exposed_inputs.length} · 출력 {module.output_ports.length}</div>
-                  {module.description ? <div className="line-clamp-2 text-xs text-muted-foreground">{module.description}</div> : null}
+                  {module.description ? <div className="line-clamp-3 text-xs text-muted-foreground">{module.description}</div> : null}
                 </div>
-                <Button type="button" size="sm" variant="outline" onClick={() => onAddModule(module)}>
-                  추가
-                </Button>
+                <div className="mt-auto flex justify-end">
+                  <Button type="button" size="sm" variant="outline" onClick={() => onAddModule(module)}>
+                    추가
+                  </Button>
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
     </div>
   ) : (
@@ -180,9 +187,10 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
       {showHeader ? (
         <SectionHeading
           variant="inside"
-          heading="Modules"
+          heading="모듈 라이브러리"
           actions={
             <>
+              <Badge variant="outline">{activeTabLabel}</Badge>
               <Badge variant="outline">{filteredModules.length}</Badge>
               {collapseButton}
             </>
@@ -190,7 +198,10 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
         />
       ) : (
         <div className="flex justify-between gap-3">
-          <Badge variant="outline">{filteredModules.length}</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">{activeTabLabel}</Badge>
+            <Badge variant="outline">{filteredModules.length}</Badge>
+          </div>
           {collapseButton}
         </div>
       )}

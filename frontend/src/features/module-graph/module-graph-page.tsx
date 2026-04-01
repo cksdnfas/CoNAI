@@ -1470,9 +1470,9 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       <SettingsModal
         open={isModuleLibraryOpen}
         title="모듈 추가"
-        description="그래프에 넣을 모듈을 골라서 바로 추가해."
+        description="사용자 모듈과 시스템 모듈을 나눠 보고, 필요한 항목을 바로 그래프에 추가해."
         onClose={() => setIsModuleLibraryOpen(false)}
-        widthClassName="max-w-5xl"
+        widthClassName="max-w-6xl"
       >
         <ModuleLibraryPanel
           modules={modules}
