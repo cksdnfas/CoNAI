@@ -77,10 +77,12 @@ export interface GraphWorkflowExposedInput {
   port_key: string
   label: string
   data_type: ModulePortDataType
+  ui_data_type?: ModulePortDataType | 'select'
   description?: string
   required?: boolean
   placeholder?: string
   default_value?: unknown
+  options?: string[]
   module_id?: number
   module_name?: string
 }

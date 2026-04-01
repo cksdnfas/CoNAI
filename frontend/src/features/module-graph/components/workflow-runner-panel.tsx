@@ -120,6 +120,35 @@ export function WorkflowRunnerPanel({
       )
     }
 
+    if (inputDefinition.ui_data_type === 'select' && Array.isArray(inputDefinition.options) && inputDefinition.options.length > 0) {
+      return (
+        <div key={inputDefinition.id} className="space-y-2 rounded-sm bg-surface-low p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-sm font-medium text-foreground">{inputDefinition.label}</div>
+                {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
+              </div>
+              <div className="text-xs text-muted-foreground">{inputDefinition.module_name || inputDefinition.node_id} · select</div>
+            </div>
+            <Button type="button" size="sm" variant="ghost" onClick={() => onInputValueClear(inputDefinition.id)} disabled={!explicitValue}>
+              값 지우기
+            </Button>
+          </div>
+          {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
+          <Select
+            value={typeof rawValue === 'string' ? rawValue : rawValue == null ? '' : String(rawValue)}
+            onChange={(event) => onInputValueChange(inputDefinition.id, event.target.value)}
+          >
+            <option value="">기본값 사용</option>
+            {inputDefinition.options.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </Select>
+        </div>
+      )
+    }
+
     if (inputDefinition.data_type === 'prompt' || inputDefinition.data_type === 'json') {
       return (
         <div key={inputDefinition.id} className="space-y-2 rounded-sm bg-surface-low p-4">

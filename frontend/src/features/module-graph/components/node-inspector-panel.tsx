@@ -49,6 +49,11 @@ function isNodeInputSatisfied(node: ModuleGraphNode, port: ModulePortDefinition)
   return connectedInputKeys.has(port.key) || hasMeaningfulValue(node.data.inputValues?.[port.key]) || hasMeaningfulValue(port.default_value)
 }
 
+/** Find optional UI-schema metadata for one node input port. */
+function findNodeUiField(node: ModuleGraphNode, portKey: string) {
+  return node.data.module.ui_schema?.find((field) => field.key === portKey)
+}
+
 /** Render compact badges for one module port so graph and inspector use the same nouns. */
 function PortBadges({ port, missingRequired = false }: { port: ModulePortDefinition; missingRequired?: boolean }) {
   return (
@@ -163,6 +168,7 @@ export function NodeInspectorPanel({
 }: NodeInspectorPanelProps) {
   const renderPortInput = (node: ModuleGraphNode, port: ModulePortDefinition) => {
     const rawValue = node.data.inputValues?.[port.key]
+    const uiField = findNodeUiField(node, port.key)
     const hasExplicitValue = hasMeaningfulValue(rawValue)
     const missingRequired = Boolean(port.required && !isNodeInputSatisfied(node, port))
     const isHighlightedPort = highlightedPortKey === port.key
@@ -200,6 +206,23 @@ export function NodeInspectorPanel({
       )
     }
 
+    if (uiField?.data_type === 'select' && Array.isArray(uiField.options) && uiField.options.length > 0) {
+      return (
+        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
+          <Select
+            value={typeof rawValue === 'string' ? rawValue : rawValue == null ? '' : String(rawValue)}
+            onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value)}
+          >
+            <option value="">{hasMeaningfulValue(port.default_value) || hasMeaningfulValue(uiField.default_value) ? '기본값 사용' : '선택'}</option>
+            {uiField.options.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </Select>
+        </div>
+      )
+    }
+
     if (port.data_type === 'prompt' || port.data_type === 'json') {
       return (
         <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
@@ -220,9 +243,11 @@ export function NodeInspectorPanel({
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <Input
             type="number"
+            min={uiField?.min}
+            max={uiField?.max}
             value={typeof rawValue === 'number' ? String(rawValue) : typeof rawValue === 'string' ? rawValue : ''}
             onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value === '' ? '' : Number(event.target.value))}
-            placeholder={port.label}
+            placeholder={uiField?.placeholder || port.label}
           />
         </div>
       )
@@ -262,7 +287,7 @@ export function NodeInspectorPanel({
         <Input
           value={typeof rawValue === 'string' ? rawValue : rawValue ? String(rawValue) : ''}
           onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value)}
-          placeholder={port.description || port.label}
+          placeholder={uiField?.placeholder || port.description || port.label}
         />
       </div>
     )

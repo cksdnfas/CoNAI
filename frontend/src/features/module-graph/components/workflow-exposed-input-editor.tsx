@@ -98,6 +98,20 @@ export function WorkflowExposedInputEditor({
       )
     }
 
+    if (inputDefinition.ui_data_type === 'select' && Array.isArray(inputDefinition.options) && inputDefinition.options.length > 0) {
+      return (
+        <Select
+          value={typeof rawValue === 'string' ? rawValue : rawValue == null ? '' : String(rawValue)}
+          onChange={(event) => onUpdateInput(inputDefinition.id, { default_value: event.target.value || undefined })}
+        >
+          <option value="">기본값 없음</option>
+          {inputDefinition.options.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </Select>
+      )
+    }
+
     if (inputDefinition.data_type === 'prompt' || inputDefinition.data_type === 'json') {
       return (
         <Textarea

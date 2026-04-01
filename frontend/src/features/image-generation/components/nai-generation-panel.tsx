@@ -33,6 +33,7 @@ import {
   buildNaiCharacterReferencePayload,
   buildNaiModuleFieldOptions,
   buildNaiModuleSnapshot,
+  buildNaiModuleUiSchema,
   buildNaiVibePayload,
   canUseNaiCharacterPositions,
   clampNaiSampleCount,
@@ -44,9 +45,13 @@ import {
   getErrorMessage,
   NAI_SAMPLE_COUNT_MAX,
   NAI_SAMPLE_COUNT_MIN,
+  NAI_ACTION_OPTIONS,
   NAI_CHARACTER_GRID_X_OPTIONS,
   NAI_CHARACTER_GRID_Y_OPTIONS,
+  NAI_MODEL_OPTIONS,
   NAI_RESOLUTION_PRESETS,
+  NAI_SAMPLER_OPTIONS,
+  NAI_SCHEDULER_OPTIONS,
   normalizeNaiCharacterPromptDrafts,
   parseNumberInput,
   readFileAsDataUrl,
@@ -870,12 +875,14 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
           label: field.label,
           data_type: field.dataType,
         }))
+      const uiSchema = buildNaiModuleUiSchema(naiModuleFieldOptions, snapshot, naiExposedFieldKeys)
 
       await createNaiModuleFromSnapshot({
         name: moduleName,
         description: naiModuleDescription.trim() || undefined,
         snapshot,
         exposed_fields: exposedFields,
+        ui_schema: uiSchema,
       })
 
       setIsModuleSaveModalOpen(false)
@@ -1099,36 +1106,33 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     <div className="grid gap-4 md:grid-cols-4">
                       <FormField label="Model">
                         <Select value={naiForm.model} onChange={(event) => handleNaiFieldChange('model', event.target.value)}>
-                          <option value="nai-diffusion-4-5-curated">NAI Diffusion 4.5 Curated</option>
-                          <option value="nai-diffusion-4-5-full">NAI Diffusion 4.5 Full</option>
-                          <option value="nai-diffusion-4-curated-preview">NAI Diffusion 4 Curated</option>
-                          <option value="nai-diffusion-3">NAI Diffusion 3</option>
+                          {NAI_MODEL_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
                         </Select>
                       </FormField>
 
                       <FormField label="Action">
                         <Select value={naiForm.action} onChange={(event) => handleNaiFieldChange('action', event.target.value)}>
-                          <option value="generate">generate</option>
-                          <option value="img2img">img2img</option>
-                          <option value="infill">infill</option>
+                          {NAI_ACTION_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
                         </Select>
                       </FormField>
 
                       <FormField label="Sampler">
                         <Select value={naiForm.sampler} onChange={(event) => handleNaiFieldChange('sampler', event.target.value)}>
-                          <option value="k_euler">k_euler</option>
-                          <option value="k_euler_ancestral">k_euler_ancestral</option>
-                          <option value="k_dpmpp_2s_ancestral">k_dpmpp_2s_ancestral</option>
-                          <option value="k_dpmpp_2m">k_dpmpp_2m</option>
+                          {NAI_SAMPLER_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
                         </Select>
                       </FormField>
 
                       <FormField label="Scheduler">
                         <Select value={naiForm.scheduler} onChange={(event) => handleNaiFieldChange('scheduler', event.target.value)}>
-                          <option value="karras">karras</option>
-                          <option value="native">native</option>
-                          <option value="exponential">exponential</option>
-                          <option value="polyexponential">polyexponential</option>
+                          {NAI_SCHEDULER_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
                         </Select>
                       </FormField>
                     </div>

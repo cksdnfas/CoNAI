@@ -4,6 +4,7 @@ import type {
   GenerationHistoryRecord,
   GenerationServiceType,
   ModulePortDataType,
+  ModuleUiFieldDefinition,
   WorkflowMarkedField,
 } from '@/lib/api'
 
@@ -112,7 +113,35 @@ export type ModuleFieldOption = {
   key: string
   label: string
   dataType: ModulePortDataType
+  options?: string[]
 }
+
+export const NAI_MODEL_OPTIONS = [
+  { value: 'nai-diffusion-4-5-curated', label: 'NAI Diffusion 4.5 Curated' },
+  { value: 'nai-diffusion-4-5-full', label: 'NAI Diffusion 4.5 Full' },
+  { value: 'nai-diffusion-4-curated-preview', label: 'NAI Diffusion 4 Curated' },
+  { value: 'nai-diffusion-3', label: 'NAI Diffusion 3' },
+] as const
+
+export const NAI_ACTION_OPTIONS = [
+  { value: 'generate', label: 'generate' },
+  { value: 'img2img', label: 'img2img' },
+  { value: 'infill', label: 'infill' },
+] as const
+
+export const NAI_SAMPLER_OPTIONS = [
+  { value: 'k_euler', label: 'k_euler' },
+  { value: 'k_euler_ancestral', label: 'k_euler_ancestral' },
+  { value: 'k_dpmpp_2s_ancestral', label: 'k_dpmpp_2s_ancestral' },
+  { value: 'k_dpmpp_2m', label: 'k_dpmpp_2m' },
+] as const
+
+export const NAI_SCHEDULER_OPTIONS = [
+  { value: 'karras', label: 'karras' },
+  { value: 'native', label: 'native' },
+  { value: 'exponential', label: 'exponential' },
+  { value: 'polyexponential', label: 'polyexponential' },
+] as const
 
 export const EMPTY_NAI_CHARACTER_PROMPT: NAICharacterPromptDraft = {
   prompt: '',
@@ -425,10 +454,10 @@ export function buildNaiModuleFieldOptions(form: NAIFormDraft): ModuleFieldOptio
   const options: ModuleFieldOption[] = [
     { key: 'prompt', label: 'Prompt', dataType: 'prompt' },
     { key: 'negative_prompt', label: 'Negative Prompt', dataType: 'prompt' },
-    { key: 'model', label: 'Model', dataType: 'text' },
-    { key: 'action', label: 'Action', dataType: 'text' },
-    { key: 'sampler', label: 'Sampler', dataType: 'text' },
-    { key: 'noise_schedule', label: 'Scheduler', dataType: 'text' },
+    { key: 'model', label: 'Model', dataType: 'text', options: NAI_MODEL_OPTIONS.map((option) => option.value) },
+    { key: 'action', label: 'Action', dataType: 'text', options: NAI_ACTION_OPTIONS.map((option) => option.value) },
+    { key: 'sampler', label: 'Sampler', dataType: 'text', options: NAI_SAMPLER_OPTIONS.map((option) => option.value) },
+    { key: 'noise_schedule', label: 'Scheduler', dataType: 'text', options: NAI_SCHEDULER_OPTIONS.map((option) => option.value) },
     { key: 'width', label: 'Width', dataType: 'number' },
     { key: 'height', label: 'Height', dataType: 'number' },
     { key: 'steps', label: 'Steps', dataType: 'number' },
@@ -464,4 +493,19 @@ export function buildNaiModuleFieldOptions(form: NAIFormDraft): ModuleFieldOptio
   }
 
   return options
+}
+
+/** Build module UI schema entries so saved NAI modules keep select inputs as dropdowns. */
+export function buildNaiModuleUiSchema(fieldOptions: ModuleFieldOption[], snapshot: Record<string, unknown>, exposedFieldKeys: string[]): ModuleUiFieldDefinition[] {
+  const exposedFieldKeySet = new Set(exposedFieldKeys)
+
+  return fieldOptions
+    .filter((field) => exposedFieldKeySet.has(field.key))
+    .map((field) => ({
+      key: field.key,
+      label: field.label,
+      data_type: field.options && field.options.length > 0 ? 'select' : field.dataType,
+      default_value: snapshot[field.key],
+      options: field.options,
+    }))
 }

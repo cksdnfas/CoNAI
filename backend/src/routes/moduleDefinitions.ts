@@ -42,6 +42,12 @@ function mapComfyFieldTypeToPortType(type: unknown): ModulePortDataType {
   return 'text'
 }
 
+/** Map one saved ComfyUI field type into the editor UI schema type. */
+function mapComfyFieldTypeToUiType(type: unknown): ModuleUiFieldDefinition['data_type'] {
+  if (type === 'select') return 'select'
+  return mapComfyFieldTypeToPortType(type)
+}
+
 function inferPortLabel(key: string): string {
   return key
     .split(/[_\-.]/g)
@@ -162,6 +168,26 @@ function convertMarkedFieldsToPorts(markedFields: any[], exposedFieldIds?: strin
     }))
 }
 
+/** Preserve ComfyUI select fields in module UI schema so graph nodes can render dropdowns. */
+function buildUiSchemaFromMarkedFields(markedFields: any[], exposedFieldIds?: string[]): ModuleUiFieldDefinition[] {
+  const allowedIds = exposedFieldIds && exposedFieldIds.length > 0 ? new Set(exposedFieldIds) : null
+
+  return markedFields
+    .filter((field) => !allowedIds || allowedIds.has(field.id))
+    .map((field): ModuleUiFieldDefinition => ({
+      key: field.id,
+      label: field.label || inferPortLabel(field.id),
+      data_type: mapComfyFieldTypeToUiType(field.type),
+      description: field.description,
+      default_value: field.default_value ?? null,
+      options: Array.isArray(field.options) ? field.options : undefined,
+      min: typeof field.min === 'number' ? field.min : undefined,
+      max: typeof field.max === 'number' ? field.max : undefined,
+      placeholder: field.placeholder,
+      ui_hint: field.dropdown_list_name,
+    }))
+}
+
 router.post('/from-nai-snapshot', asyncHandler(async (req: Request, res: Response) => {
   const {
     name,
@@ -269,7 +295,7 @@ router.post('/from-comfy-workflow/:workflowId', asyncHandler(async (req: Request
       exposed_inputs: exposedInputs,
       output_ports: Array.isArray(output_ports) && output_ports.length > 0 ? output_ports : createDefaultOutputPorts('comfyui'),
       internal_fixed_values: splitFixedValues(defaultInputValues, exposedInputs),
-      ui_schema: Array.isArray(ui_schema) && ui_schema.length > 0 ? ui_schema : buildUiSchemaFromPorts(exposedInputs),
+      ui_schema: Array.isArray(ui_schema) && ui_schema.length > 0 ? ui_schema : buildUiSchemaFromMarkedFields(markedFields, exposed_field_ids),
       is_active,
       color: color || workflow.color,
     }

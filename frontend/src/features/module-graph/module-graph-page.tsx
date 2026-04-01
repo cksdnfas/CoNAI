@@ -281,19 +281,25 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const workflowInputCandidates = useMemo(
     () =>
       nodes.flatMap((node) =>
-        node.data.module.exposed_inputs.map((port) => ({
-          id: buildWorkflowExposedInputId(node.id, port.key),
-          node_id: node.id,
-          port_key: port.key,
-          label: `${node.data.module.name} · ${port.label}`,
-          data_type: port.data_type,
-          description: port.description,
-          required: port.required,
-          placeholder: port.description || port.label,
-          default_value: port.default_value,
-          module_id: node.data.module.id,
-          module_name: node.data.module.name,
-        })),
+        node.data.module.exposed_inputs.map((port) => {
+          const uiField = node.data.module.ui_schema?.find((field) => field.key === port.key)
+
+          return {
+            id: buildWorkflowExposedInputId(node.id, port.key),
+            node_id: node.id,
+            port_key: port.key,
+            label: `${node.data.module.name} · ${port.label}`,
+            data_type: port.data_type,
+            ui_data_type: uiField?.data_type,
+            description: port.description,
+            required: port.required,
+            placeholder: uiField?.placeholder || port.description || port.label,
+            default_value: port.default_value,
+            options: uiField?.options,
+            module_id: node.data.module.id,
+            module_name: node.data.module.name,
+          }
+        }),
       ),
     [nodes],
   )
@@ -413,6 +419,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             node_id: candidate.node_id,
             port_key: candidate.port_key,
             data_type: candidate.data_type,
+            ui_data_type: candidate.ui_data_type,
+            options: candidate.options,
             module_id: candidate.module_id,
             module_name: candidate.module_name,
           }
