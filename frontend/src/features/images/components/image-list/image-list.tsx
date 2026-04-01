@@ -80,17 +80,21 @@ export function ImageList({
       }
 
       if ((activationMode === 'modal' || activationMode === 'modal-single') && imageViewModal) {
-        imageViewModal.openImageView(
-          activationMode === 'modal'
-            ? {
-                compositeHash: imageId,
-                compositeHashes: itemCompositeHashes,
-              }
-            : {
-                compositeHash: imageId,
-              },
-        )
-        return
+        const modalCompositeHash = itemCompositeHashes.includes(imageId) ? imageId : null
+
+        if (modalCompositeHash) {
+          imageViewModal.openImageView(
+            activationMode === 'modal'
+              ? {
+                  compositeHash: modalCompositeHash,
+                  compositeHashes: itemCompositeHashes,
+                }
+              : {
+                  compositeHash: modalCompositeHash,
+                },
+          )
+          return
+        }
       }
 
       if (href) {

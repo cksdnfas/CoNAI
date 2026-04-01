@@ -31,6 +31,7 @@ function mapHistoryRecordToImageRecord(record: Awaited<ReturnType<typeof getGene
     image_url: compositeHash ? `/api/images/${compositeHash}/file` : fallbackPreviewUrl,
     width: record.actual_width ?? record.width,
     height: record.actual_height ?? record.height,
+    is_processing: record.generation_status === 'pending' || record.generation_status === 'processing',
   }
 }
 
@@ -91,7 +92,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }
         <ImageList
           items={historyImages}
           layout="masonry"
-          activationMode="navigate"
+          activationMode="modal"
           getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
           minColumnWidth={220}
           columnGap={16}

@@ -1,4 +1,5 @@
-import { memo, type DragEvent, type ReactNode } from 'react'
+import { ImageOff } from 'lucide-react'
+import { memo, type DragEvent, type ReactNode, useEffect, useState } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
@@ -38,6 +39,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   const previewUrl = getImageListPreviewUrl(image)
   const imageId = getImageListItemId(image)
   const displayName = getImageListDisplayName(image)
+  const [hasPreviewError, setHasPreviewError] = useState(false)
   const aspectRatio = image.width && image.height ? `${image.width} / ${image.height}` : undefined
   const mediaFrameStyle = gridItemHeight
     ? { height: gridItemHeight }
@@ -47,7 +49,17 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
         ? { aspectRatio }
         : { aspectRatio: '4 / 5', minHeight: 240 }
 
-  const content = previewUrl ? (
+  useEffect(() => {
+    setHasPreviewError(false)
+  }, [previewUrl])
+
+  const placeholderLabel = image.is_processing
+    ? '이미지 준비 중'
+    : previewUrl && hasPreviewError
+      ? '파일을 표시할 수 없어'
+      : '미리보기 없음'
+
+  const content = previewUrl && !hasPreviewError ? (
     <ImagePreviewMedia
       image={image}
       alt={displayName}
@@ -56,13 +68,15 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       loading="lazy"
       draggable={false}
       onDragStart={preventNativeDrag}
+      onError={() => setHasPreviewError(true)}
     />
   ) : (
     <div
-      className="flex items-center justify-center text-sm text-muted-foreground"
+      className="flex flex-col items-center justify-center gap-2 bg-surface-lowest px-4 text-center text-sm text-muted-foreground"
       style={mediaFrameStyle}
     >
-      미리보기 없음
+      <ImageOff className="h-10 w-10 opacity-70" />
+      <span>{placeholderLabel}</span>
     </div>
   )
 
