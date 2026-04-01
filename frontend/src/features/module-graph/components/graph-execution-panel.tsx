@@ -10,6 +10,8 @@ import type {
   GraphExecutionArtifactRecord,
   GraphExecutionLogRecord,
   GraphExecutionRecord,
+  GraphWorkflowExposedInput,
+  GraphWorkflowRecord,
 } from '@/lib/api'
 import {
   buildArtifactTextPreview,
@@ -29,6 +31,8 @@ type GraphExecutionDetail = {
 type ParsedExecutionPlan = {
   orderedNodeIds?: string[]
   targetNodeId?: string | null
+  runtimeInputSignature?: string | null
+  runtimeInputValues?: Record<string, unknown>
   forceRerun?: boolean
   reusedFromExecutionId?: number | null
   reusedNodeIds?: string[]
@@ -36,9 +40,14 @@ type ParsedExecutionPlan = {
   input_values?: Record<string, unknown>
   runtimeInputs?: Record<string, unknown>
   runtime_inputs?: Record<string, unknown>
-  runtimeInputValues?: Record<string, unknown>
   resolvedInputs?: Record<string, unknown>
   resolved_inputs?: Record<string, unknown>
+}
+
+type ExecutionInputEntry = {
+  key: string
+  label: string
+  value: unknown
 }
 
 function TechnicalReferenceHint({ title, label }: { title: string; label: string }) {
@@ -69,21 +78,17 @@ function getExecutionModeLabel(plan: ParsedExecutionPlan | null) {
   return '워크플로우 실행'
 }
 
-function getExecutionInputEntries(plan: ParsedExecutionPlan | null) {
-  const candidate =
-    plan?.inputValues
+function getExecutionInputCandidate(plan: ParsedExecutionPlan | null) {
+  return (
+    plan?.runtimeInputValues
+    ?? plan?.inputValues
     ?? plan?.input_values
     ?? plan?.runtimeInputs
     ?? plan?.runtime_inputs
-    ?? plan?.runtimeInputValues
     ?? plan?.resolvedInputs
     ?? plan?.resolved_inputs
-
-  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
-    return [] as Array<[string, unknown]>
-  }
-
-  return Object.entries(candidate)
+    ?? null
+  )
 }
 
 function formatPrimitiveValue(value: unknown) {
@@ -95,8 +100,16 @@ function formatPrimitiveValue(value: unknown) {
     return value ? '예' : '아니오'
   }
 
-  if (typeof value === 'number' || typeof value === 'string') {
+  if (typeof value === 'number') {
     return String(value)
+  }
+
+  if (typeof value === 'string') {
+    if (value.startsWith('data:image/')) {
+      return '이미지 데이터'
+    }
+
+    return value
   }
 
   return JSON.stringify(value)
@@ -145,7 +158,35 @@ function buildArtifactDetailLines(artifact: GraphExecutionArtifactRecord) {
   return summaryText ? [summaryText] : []
 }
 
-function groupArtifactsByNode(artifacts: GraphExecutionArtifactRecord[]) {
+function buildInputLabelMap(inputDefinitions: GraphWorkflowExposedInput[]) {
+  return new Map(inputDefinitions.map((inputDefinition) => [inputDefinition.id, inputDefinition.label]))
+}
+
+function getExecutionInputEntries(plan: ParsedExecutionPlan | null, inputDefinitions: GraphWorkflowExposedInput[]) {
+  const candidate = getExecutionInputCandidate(plan)
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return [] as ExecutionInputEntry[]
+  }
+
+  const labelMap = buildInputLabelMap(inputDefinitions)
+  return Object.entries(candidate).map(([key, value]) => ({
+    key,
+    label: labelMap.get(key) ?? key,
+    value,
+  }))
+}
+
+function getNodeDisplayLabel(selectedGraph: GraphWorkflowRecord | null | undefined, nodeId: string) {
+  const nodeRecord = selectedGraph?.graph.nodes.find((node) => node.id === nodeId)
+  const explicitLabel = nodeRecord?.label?.trim()
+  if (explicitLabel) {
+    return explicitLabel
+  }
+
+  return `노드 ${nodeId}`
+}
+
+function groupArtifactsByNode(artifacts: GraphExecutionArtifactRecord[], selectedGraph?: GraphWorkflowRecord | null) {
   const groupMap = new Map<string, GraphExecutionArtifactRecord[]>()
 
   for (const artifact of artifacts) {
@@ -157,6 +198,7 @@ function groupArtifactsByNode(artifacts: GraphExecutionArtifactRecord[]) {
   return Array.from(groupMap.entries())
     .map(([nodeId, nodeArtifacts]) => ({
       nodeId,
+      nodeLabel: getNodeDisplayLabel(selectedGraph, nodeId),
       artifacts: [...nodeArtifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime()),
     }))
     .sort((left, right) => {
@@ -175,6 +217,61 @@ function pickHighlightedArtifacts(artifacts: GraphExecutionArtifactRecord[]) {
   }
 
   return sortedArtifacts.slice(0, 4)
+}
+
+function getTerminalNodeIds(selectedGraph?: GraphWorkflowRecord | null) {
+  if (!selectedGraph) {
+    return [] as string[]
+  }
+
+  const sourceNodeIds = new Set(selectedGraph.graph.edges.map((edge) => edge.source_node_id))
+  return selectedGraph.graph.nodes
+    .filter((node) => !sourceNodeIds.has(node.id))
+    .map((node) => node.id)
+}
+
+function pickFinalArtifacts(params: {
+  artifacts: GraphExecutionArtifactRecord[]
+  executionPlan: ParsedExecutionPlan | null
+  selectedGraph?: GraphWorkflowRecord | null
+}) {
+  const { artifacts, executionPlan, selectedGraph } = params
+  const sortedArtifacts = [...artifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
+  if (sortedArtifacts.length === 0) {
+    return [] as GraphExecutionArtifactRecord[]
+  }
+
+  const artifactNodeIds = new Set(sortedArtifacts.map((artifact) => artifact.node_id))
+  const preferredNodeIds: string[] = []
+
+  if (executionPlan?.targetNodeId) {
+    preferredNodeIds.push(executionPlan.targetNodeId)
+  }
+
+  const terminalNodeIds = getTerminalNodeIds(selectedGraph)
+  for (const nodeId of terminalNodeIds) {
+    if (artifactNodeIds.has(nodeId)) {
+      preferredNodeIds.push(nodeId)
+    }
+  }
+
+  const orderedNodeIds = [...(executionPlan?.orderedNodeIds ?? [])].reverse()
+  for (const nodeId of orderedNodeIds) {
+    if (artifactNodeIds.has(nodeId)) {
+      preferredNodeIds.push(nodeId)
+      break
+    }
+  }
+
+  const uniquePreferredNodeIds = preferredNodeIds.filter((nodeId, index) => preferredNodeIds.indexOf(nodeId) === index)
+  if (uniquePreferredNodeIds.length > 0) {
+    const finalArtifacts = sortedArtifacts.filter((artifact) => uniquePreferredNodeIds.includes(artifact.node_id))
+    if (finalArtifacts.length > 0) {
+      return pickHighlightedArtifacts(finalArtifacts)
+    }
+  }
+
+  return pickHighlightedArtifacts(sortedArtifacts)
 }
 
 function ExecutionArtifactCard({ artifact, compact = false }: { artifact: GraphExecutionArtifactRecord; compact?: boolean }) {
@@ -202,7 +299,7 @@ function ExecutionArtifactCard({ artifact, compact = false }: { artifact: GraphE
         />
       ) : null}
 
-      {!previewUrl && summaryText ? <div className="text-sm leading-6 text-foreground whitespace-pre-wrap">{summaryText}</div> : null}
+      {!previewUrl && summaryText ? <div className="text-sm leading-6 text-foreground whitespace-pre-wrap break-all">{summaryText}</div> : null}
 
       {previewUrl && detailLines.length > 0 ? (
         <div className="space-y-1 text-xs text-muted-foreground">
@@ -217,6 +314,7 @@ function ExecutionArtifactCard({ artifact, compact = false }: { artifact: GraphE
 
 type GraphExecutionPanelProps = {
   selectedGraphId: number | null
+  selectedGraph?: GraphWorkflowRecord | null
   selectedExecutionId: number | null
   selectedExecutionStatus?: GraphExecutionRecord['status'] | null
   executionList: GraphExecutionRecord[]
@@ -238,6 +336,7 @@ type GraphExecutionPanelProps = {
 /** Render execution history with a summary-first result surface and opt-in technical detail modal. */
 export function GraphExecutionPanel({
   selectedGraphId,
+  selectedGraph,
   selectedExecutionId,
   selectedExecutionStatus,
   executionList,
@@ -271,17 +370,18 @@ export function GraphExecutionPanel({
     () => parseExecutionPlan(executionDetail?.execution.execution_plan),
     [executionDetail?.execution.execution_plan],
   )
+  const inputDefinitions = selectedGraph?.graph.metadata?.exposed_inputs ?? []
   const executionInputEntries = useMemo(
-    () => getExecutionInputEntries(selectedExecutionPlan),
-    [selectedExecutionPlan],
+    () => getExecutionInputEntries(selectedExecutionPlan, inputDefinitions),
+    [inputDefinitions, selectedExecutionPlan],
   )
   const groupedArtifacts = useMemo(
-    () => groupArtifactsByNode(executionDetail?.artifacts ?? []),
-    [executionDetail?.artifacts],
+    () => groupArtifactsByNode(executionDetail?.artifacts ?? [], selectedGraph),
+    [executionDetail?.artifacts, selectedGraph],
   )
-  const highlightedArtifacts = useMemo(
-    () => pickHighlightedArtifacts(executionDetail?.artifacts ?? []),
-    [executionDetail?.artifacts],
+  const finalArtifacts = useMemo(
+    () => pickFinalArtifacts({ artifacts: executionDetail?.artifacts ?? [], executionPlan: selectedExecutionPlan, selectedGraph }),
+    [executionDetail?.artifacts, selectedExecutionPlan, selectedGraph],
   )
 
   const actionButtons = (
@@ -436,7 +536,7 @@ export function GraphExecutionPanel({
                 <AlertDescription>
                   {executionDetail.execution.started_at ? <div>시작 {formatDateTime(executionDetail.execution.started_at)}</div> : null}
                   {executionDetail.execution.completed_at ? <div>완료 {formatDateTime(executionDetail.execution.completed_at)}</div> : null}
-                  {selectedExecutionPlan?.targetNodeId ? <div>대상 노드 {selectedExecutionPlan.targetNodeId}</div> : null}
+                  {selectedExecutionPlan?.targetNodeId ? <div>대상 {getNodeDisplayLabel(selectedGraph, selectedExecutionPlan.targetNodeId)}</div> : null}
                   {selectedExecutionPlan?.forceRerun ? <div>캐시 무시 후 다시 실행</div> : null}
                   {selectedExecutionPlan?.reusedFromExecutionId ? <div>이전 실행 #{selectedExecutionPlan.reusedFromExecutionId} 결과 일부 재사용</div> : null}
                   {executionDetail.execution.error_message ? <div>{executionDetail.execution.error_message}</div> : null}
@@ -450,10 +550,11 @@ export function GraphExecutionPanel({
                     <Badge variant="outline">{executionInputEntries.length}</Badge>
                   </div>
                   <div className="grid gap-2 md:grid-cols-2">
-                    {executionInputEntries.map(([key, value]) => (
-                      <div key={key} className="rounded-sm border border-border bg-background/50 px-3 py-2">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{key}</div>
-                        <div className="mt-1 text-sm text-foreground whitespace-pre-wrap break-all">{formatPrimitiveValue(value)}</div>
+                    {executionInputEntries.map((entry) => (
+                      <div key={entry.key} className="rounded-sm border border-border bg-background/50 px-3 py-2">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{entry.label}</div>
+                        {entry.label !== entry.key ? <div className="mt-0.5 text-[11px] text-muted-foreground">{entry.key}</div> : null}
+                        <div className="mt-1 text-sm text-foreground whitespace-pre-wrap break-all">{formatPrimitiveValue(entry.value)}</div>
                       </div>
                     ))}
                   </div>
@@ -462,18 +563,18 @@ export function GraphExecutionPanel({
 
               <div className="space-y-2.5">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  <span>대표 결과</span>
-                  <Badge variant="outline">{highlightedArtifacts.length}</Badge>
+                  <span>최종 결과</span>
+                  <Badge variant="outline">{finalArtifacts.length}</Badge>
                 </div>
 
-                {highlightedArtifacts.length === 0 ? (
+                {finalArtifacts.length === 0 ? (
                   <Alert>
-                    <AlertTitle>표시할 결과가 아직 없어</AlertTitle>
+                    <AlertTitle>표시할 최종 결과가 아직 없어</AlertTitle>
                     <AlertDescription>이 실행에서는 저장된 출력 아티팩트를 찾지 못했어.</AlertDescription>
                   </Alert>
                 ) : (
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {highlightedArtifacts.map((artifact) => (
+                    {finalArtifacts.map((artifact) => (
                       <ExecutionArtifactCard key={artifact.id} artifact={artifact} compact />
                     ))}
                   </div>
@@ -496,7 +597,7 @@ export function GraphExecutionPanel({
                     {groupedArtifacts.map((group) => (
                       <div key={group.nodeId} className="rounded-sm border border-border bg-background/40 p-3">
                         <div className="mb-3 flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold text-foreground">노드 {group.nodeId}</span>
+                          <span className="text-sm font-semibold text-foreground">{group.nodeLabel}</span>
                           <Badge variant="outline">출력 {group.artifacts.length}</Badge>
                         </div>
 

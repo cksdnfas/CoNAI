@@ -1527,6 +1527,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       <div ref={(node) => { editorSupportSectionRefs.current.results = node }} className="scroll-mt-4">
         <GraphExecutionPanel
           selectedGraphId={selectedGraphId}
+          selectedGraph={selectedGraphRecord}
           selectedExecutionId={selectedExecutionId}
           selectedExecutionStatus={selectedExecution?.status ?? null}
           executionList={executionList}
@@ -1588,6 +1589,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
             <GraphExecutionPanel
               selectedGraphId={selectedGraphId}
+              selectedGraph={selectedGraphRecord}
               selectedExecutionId={selectedExecutionId}
               selectedExecutionStatus={selectedExecution?.status ?? null}
               executionList={executionList}

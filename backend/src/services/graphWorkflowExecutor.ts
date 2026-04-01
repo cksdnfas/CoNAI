@@ -26,6 +26,7 @@ type GraphExecutionPlan = {
   orderedNodeIds: string[]
   targetNodeId?: string | null
   runtimeInputSignature?: string | null
+  runtimeInputValues?: Record<string, unknown>
   forceRerun?: boolean
   reusedFromExecutionId?: number | null
   reusedNodeIds?: string[]
@@ -140,6 +141,7 @@ export class GraphWorkflowExecutor {
       orderedNodeIds,
       targetNodeId: targetNodeId ?? null,
       runtimeInputSignature,
+      runtimeInputValues,
       forceRerun,
       reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
       reusedNodeIds: reusedArtifacts.reusedNodeIds,
