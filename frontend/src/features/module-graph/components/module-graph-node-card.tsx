@@ -167,6 +167,7 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
           : missingRequiredInputCount > 0
             ? '#f59e0b'
             : `${accentColor}66`
+  const hasArtifactPreview = Boolean(data.latestArtifactPreviewUrl || data.latestArtifactTextPreview)
 
   return (
     <div
@@ -182,7 +183,10 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
             {missingRequiredInputCount > 0 ? ` · missing ${missingRequiredInputCount}` : ''}
           </div>
         </div>
-        {statusLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
+        <div className="flex shrink-0 flex-wrap justify-end gap-1">
+          {data.executionArtifactCount ? <Badge variant="outline">A {data.executionArtifactCount}</Badge> : null}
+          {statusLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
+        </div>
       </div>
 
       <div className="mt-2.5 grid gap-1">
@@ -216,6 +220,21 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
           )
         })}
       </div>
+
+      {hasArtifactPreview ? (
+        <div className="mt-2.5 rounded-sm border border-border/70 bg-surface-low p-2">
+          <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            {data.latestArtifactLabel || 'latest artifact'}
+          </div>
+          {data.latestArtifactPreviewUrl ? (
+            <img src={data.latestArtifactPreviewUrl} alt={data.latestArtifactLabel || `${module.name} output`} className="max-h-40 w-full rounded-sm border border-border object-contain" />
+          ) : data.latestArtifactTextPreview ? (
+            <div className="rounded-sm bg-surface-high px-2 py-1.5 text-[11px] leading-4 text-foreground break-words">
+              {data.latestArtifactTextPreview}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }

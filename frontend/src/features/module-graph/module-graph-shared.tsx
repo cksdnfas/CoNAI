@@ -15,6 +15,9 @@ export type ModuleGraphNodeData = {
   inputValues: Record<string, unknown>
   executionStatus?: 'idle' | 'completed' | 'failed' | 'blocked'
   executionArtifactCount?: number
+  latestArtifactLabel?: string | null
+  latestArtifactPreviewUrl?: string | null
+  latestArtifactTextPreview?: string | null
   connectedInputKeys?: string[]
   connectedOutputKeys?: string[]
 }
@@ -125,6 +128,73 @@ export function parseMetadataValue(value?: string | null) {
     return JSON.parse(value) as Record<string, unknown>
   } catch {
     return value
+  }
+}
+
+/** Recover the structured value payload stored inside one execution artifact metadata blob. */
+export function getArtifactStoredValue(artifact: GraphExecutionArtifactRecord) {
+  const parsedMetadata = parseMetadataValue(artifact.metadata)
+  if (!parsedMetadata || typeof parsedMetadata !== 'object' || Array.isArray(parsedMetadata)) {
+    return parsedMetadata
+  }
+
+  return 'value' in parsedMetadata ? parsedMetadata.value : parsedMetadata
+}
+
+/** Build a compact one-line text preview for prompt/text/json artifacts. */
+export function buildArtifactTextPreview(artifact: GraphExecutionArtifactRecord, maxLength = 140) {
+  const storedValue = getArtifactStoredValue(artifact)
+  if (storedValue === null || storedValue === undefined) {
+    return null
+  }
+
+  const rawText =
+    typeof storedValue === 'string'
+      ? storedValue
+      : typeof storedValue === 'number' || typeof storedValue === 'boolean'
+        ? String(storedValue)
+        : JSON.stringify(storedValue)
+
+  const normalizedText = rawText.replace(/\s+/g, ' ').trim()
+  if (!normalizedText) {
+    return null
+  }
+
+  return normalizedText.length > maxLength
+    ? `${normalizedText.slice(0, maxLength - 1)}…`
+    : normalizedText
+}
+
+/** Pick the most useful inline preview payload for one node artifact list. */
+export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord[]) {
+  const latestVisualArtifact = [...artifacts]
+    .reverse()
+    .find((artifact) => (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') && getArtifactPreviewUrl(artifact))
+
+  if (latestVisualArtifact) {
+    return {
+      latestArtifactLabel: `${latestVisualArtifact.port_key} · ${latestVisualArtifact.artifact_type}`,
+      latestArtifactPreviewUrl: getArtifactPreviewUrl(latestVisualArtifact),
+      latestArtifactTextPreview: null,
+    }
+  }
+
+  const latestTextArtifact = [...artifacts]
+    .reverse()
+    .find((artifact) => artifact.artifact_type === 'prompt' || artifact.artifact_type === 'text' || artifact.artifact_type === 'json')
+
+  if (latestTextArtifact) {
+    return {
+      latestArtifactLabel: `${latestTextArtifact.port_key} · ${latestTextArtifact.artifact_type}`,
+      latestArtifactPreviewUrl: null,
+      latestArtifactTextPreview: buildArtifactTextPreview(latestTextArtifact),
+    }
+  }
+
+  return {
+    latestArtifactLabel: null,
+    latestArtifactPreviewUrl: null,
+    latestArtifactTextPreview: null,
   }
 }
 

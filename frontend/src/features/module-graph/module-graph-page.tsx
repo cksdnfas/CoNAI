@@ -34,6 +34,7 @@ import {
   getGraphWorkflows,
   getModuleDefinitions,
   updateGraphWorkflow,
+  type GraphExecutionArtifactRecord,
   type GraphExecutionRecord,
   type GraphWorkflowExposedInput,
   type GraphWorkflowRecord,
@@ -53,6 +54,7 @@ import {
   buildGraphEditorSnapshot,
   buildGraphPayload,
   buildModuleEdgePresentation,
+  buildNodeArtifactPreview,
   findNodePort,
   getArtifactPreviewUrl,
   getModulePortCompatibility,
@@ -483,6 +485,9 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             ...node.data,
             executionStatus: 'idle',
             executionArtifactCount: 0,
+            latestArtifactLabel: null,
+            latestArtifactPreviewUrl: null,
+            latestArtifactTextPreview: null,
             connectedInputKeys: Array.from(connectedInputMap.get(node.id) ?? []),
             connectedOutputKeys: Array.from(connectedOutputMap.get(node.id) ?? []),
           },
@@ -496,29 +501,41 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       : { orderedNodeIds: [] }
 
     const orderedNodeIds = executionPlan.orderedNodeIds ?? []
-    const artifactCounts = executionDetailQuery.data.artifacts.reduce<Record<string, number>>((acc, artifact) => {
-      acc[artifact.node_id] = (acc[artifact.node_id] ?? 0) + 1
+    const artifactsByNode = executionDetailQuery.data.artifacts.reduce<Record<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
+      if (!acc[artifact.node_id]) {
+        acc[artifact.node_id] = []
+      }
+
+      acc[artifact.node_id].push(artifact)
       return acc
     }, {})
-    const artifactNodeIds = new Set(Object.keys(artifactCounts))
+    const artifactNodeIds = new Set(Object.keys(artifactsByNode))
 
     setNodes((currentNodes) =>
-      currentNodes.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          executionStatus: getNodeExecutionStatus({
-            nodeId: node.id,
-            orderedNodeIds,
-            artifactNodeIds,
-            executionStatus: executionDetailQuery.data.execution.status,
-            failedNodeId: executionDetailQuery.data.execution.failed_node_id,
-          }),
-          executionArtifactCount: artifactCounts[node.id] ?? 0,
-          connectedInputKeys: Array.from(connectedInputMap.get(node.id) ?? []),
-          connectedOutputKeys: Array.from(connectedOutputMap.get(node.id) ?? []),
-        },
-      })),
+      currentNodes.map((node) => {
+        const nodeArtifacts = artifactsByNode[node.id] ?? []
+        const artifactPreview = buildNodeArtifactPreview(nodeArtifacts)
+
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            executionStatus: getNodeExecutionStatus({
+              nodeId: node.id,
+              orderedNodeIds,
+              artifactNodeIds,
+              executionStatus: executionDetailQuery.data.execution.status,
+              failedNodeId: executionDetailQuery.data.execution.failed_node_id,
+            }),
+            executionArtifactCount: nodeArtifacts.length,
+            latestArtifactLabel: artifactPreview.latestArtifactLabel,
+            latestArtifactPreviewUrl: artifactPreview.latestArtifactPreviewUrl,
+            latestArtifactTextPreview: artifactPreview.latestArtifactTextPreview,
+            connectedInputKeys: Array.from(connectedInputMap.get(node.id) ?? []),
+            connectedOutputKeys: Array.from(connectedOutputMap.get(node.id) ?? []),
+          },
+        }
+      }),
     )
   }, [edges, executionDetailQuery.data, setNodes])
 
