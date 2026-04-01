@@ -173,7 +173,7 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
       ) : null}
 
       {drafts.length === 0 ? (
-        <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
+        <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">
           캐릭터 없음
         </div>
       ) : (

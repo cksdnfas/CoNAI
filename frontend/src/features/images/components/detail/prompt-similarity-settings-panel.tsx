@@ -60,7 +60,7 @@ export function PromptSimilaritySettingsPanel({
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-3 rounded-sm border border-border bg-surface-high p-3">
+              <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
                 <h3 className="text-sm font-semibold text-foreground">가중치</h3>
 
                 <div className="space-y-2">
@@ -79,7 +79,7 @@ export function PromptSimilaritySettingsPanel({
                 </div>
               </div>
 
-              <div className="space-y-3 rounded-sm border border-border bg-surface-high p-3">
+              <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
                 <h3 className="text-sm font-semibold text-foreground">필드 임계값</h3>
 
                 <div className="space-y-2">

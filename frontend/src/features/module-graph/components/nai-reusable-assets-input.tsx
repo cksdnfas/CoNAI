@@ -410,7 +410,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
         </div>
 
         {vibeDrafts.length === 0 ? (
-          <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">아직 vibe 입력이 없어.</div>
+          <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">아직 vibe 입력이 없어.</div>
         ) : (
           vibeDrafts.map((draft, index) => (
             <div key={`nai-vibe-input-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
@@ -524,7 +524,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
       </div>
 
       {characterReferenceDrafts.length === 0 ? (
-        <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">아직 reference 입력이 없어.</div>
+        <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">아직 reference 입력이 없어.</div>
       ) : (
         characterReferenceDrafts.map((draft, index) => (
           <div key={`nai-character-reference-input-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
