@@ -120,7 +120,7 @@ export function GraphExecutionPanel({
         {showHeader ? (
           <SectionHeading
             variant="inside"
-            heading="Execution Results"
+            heading="실행 결과"
             description={description}
             actions={actionButtons}
           />

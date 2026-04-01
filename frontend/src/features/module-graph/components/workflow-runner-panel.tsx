@@ -342,7 +342,7 @@ export function WorkflowRunnerPanel({
 
             <WorkflowValidationPanel
               issues={validationIssues}
-              title="Run Validation"
+              title="실행 검증"
               description="실행 전 확인"
               showHeader={false}
               onIssueSelect={onValidationIssueSelect}

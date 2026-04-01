@@ -55,7 +55,9 @@ export class GraphWorkflowModel {
     }
 
     const cleanData: Record<string, unknown> = {
-      ...workflowData,
+      name: workflowData.name,
+      description: workflowData.description,
+      version: workflowData.version,
       graph_json: workflowData.graph !== undefined ? stringifyGraph(workflowData.graph) : undefined,
       is_active: workflowData.is_active !== undefined ? (workflowData.is_active ? 1 : 0) : undefined,
     }

@@ -67,7 +67,7 @@ export function SavedGraphList({
 
   return (
     <ExplorerSidebar
-      title="Workflows"
+      title="워크플로우"
       badge={headerActions}
       floatingFrame
       className="sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col"

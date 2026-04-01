@@ -1479,7 +1479,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                       <AlertTitle className="flex flex-wrap items-center gap-2">
                         <span>{selectedGraphRecord?.name || workflowName || 'Untitled workflow'}</span>
                         {selectedGraphRecord ? <Badge variant="outline">v{selectedGraphRecord.version}</Badge> : <Badge variant="outline">draft</Badge>}
-                        {isDirty ? <Badge variant="outline">unsaved</Badge> : <Badge variant="secondary">saved</Badge>}
+                        {isDirty ? <Badge variant="outline">미저장</Badge> : <Badge variant="secondary">저장됨</Badge>}
                       </AlertTitle>
                       <AlertDescription>
                         <div>노드 {nodes.length} · 엣지 {edges.length} · 노출 입력 {workflowExposedInputs.length}</div>
@@ -1526,7 +1526,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
             <WorkflowValidationPanel
               issues={editorValidationIssues}
-              title="Editor Validation"
+              title="편집기 검증"
               description="실행 전 확인"
               onIssueSelect={focusValidationIssue}
             />
