@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, Download, ExternalLink, Plus, Save, Sparkles, Trash2, WandSparkles } from 'lucide-react'
+import { Download, ExternalLink, Plus, Save, Sparkles, Trash2, WandSparkles } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -207,8 +207,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
   const [selectedCharacterIndex, setSelectedCharacterIndex] = useState<number | null>(null)
   const [savedVibeSearch, setSavedVibeSearch] = useState('')
   const [savedCharacterReferenceSearch, setSavedCharacterReferenceSearch] = useState('')
-  const [isVibesCollapsed, setIsVibesCollapsed] = useState(true)
-  const [isReferencesCollapsed, setIsReferencesCollapsed] = useState(true)
   const [naiForm, setNaiForm] = useState<NAIFormDraft>(DEFAULT_NAI_FORM)
   const [naiModuleName, setNaiModuleName] = useState('NAI Module')
   const [naiModuleDescription, setNaiModuleDescription] = useState('')
@@ -416,7 +414,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
   }
 
   const handleAddVibe = () => {
-    setIsVibesCollapsed(false)
     setNaiForm((current) => ({
       ...current,
       vibes: [...current.vibes, { ...EMPTY_NAI_VIBE }],
@@ -521,7 +518,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
       return
     }
 
-    setIsVibesCollapsed(false)
     setNaiForm((current) => ({
       ...current,
       vibes: [...current.vibes, {
@@ -545,7 +541,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
   }
 
   const handleAddCharacterReference = () => {
-    setIsReferencesCollapsed(false)
     setNaiForm((current) => ({
       ...current,
       characterReferences: [...current.characterReferences, { ...EMPTY_NAI_CHARACTER_REFERENCE }],
@@ -615,7 +610,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
       return
     }
 
-    setIsReferencesCollapsed(false)
     setNaiForm((current) => ({
       ...current,
       characterReferences: [...current.characterReferences, {
@@ -874,16 +868,28 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             <section className="space-y-3">
               <Card>
                 <CardContent className="space-y-4">
-                  <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Character Prompt" />
+                  <SectionHeading
+                    variant="inside"
+                    className="border-b border-border/70 pb-4"
+                    heading="Character Prompt"
+                    actions={(
+                      <>
+                        <Badge variant="outline">{naiForm.characters.length}</Badge>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="outline"
+                          onClick={handleAddCharacterPrompt}
+                          disabled={!supportsCharacterPrompts}
+                          aria-label="캐릭터 추가"
+                          title="캐릭터 추가"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
+                  />
                   <div className="space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low p-3">
-                      <div className="text-sm font-medium text-foreground">Character Prompt</div>
-                      <Button type="button" variant="outline" size="sm" onClick={handleAddCharacterPrompt} disabled={!supportsCharacterPrompts}>
-                        <Plus className="h-4 w-4" />
-                        캐릭터 추가
-                      </Button>
-                    </div>
-
                     {!supportsCharacterPrompts ? (
                       <div className="text-xs text-[#ffb4ab]">현재 모델에서는 Character Prompt를 사용할 수 없어.</div>
                     ) : (
@@ -891,11 +897,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                         <ToggleRow variant="detail" className="justify-between rounded-sm border border-border bg-surface-low px-3 py-2.5">
                           <div className="space-y-1">
                             <div className="text-sm font-medium text-foreground">AI's Choice</div>
-                            <div className="text-xs text-muted-foreground">
-                              {canUseCharacterPositions
-                                ? "켜두면 위치는 NovelAI가 알아서 정해. 끄면 5x5 위치를 직접 고를 수 있어."
-                                : "수동 위치 지정은 캐릭터 2명 이상일 때만 가능해."}
-                            </div>
+                            <div className="text-xs text-muted-foreground">켜두면 위치는 NovelAI가 알아서 정해. 끄면 5x5 위치를 직접 고를 수 있어.</div>
                           </div>
                           <input
                             type="checkbox"
@@ -924,71 +926,65 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                           />
                         ) : null}
 
-                        {naiForm.characters.length === 0 ? (
-                          <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">
-                            캐릭터 없음
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            {naiForm.characters.map((character, index) => (
-                              <div
-                                key={`nai-character-${index}`}
-                                className={index === selectedCharacterIndex
-                                  ? 'space-y-3 rounded-sm border border-accent bg-surface-low p-3 ring-1 ring-accent/50'
-                                  : 'space-y-3 rounded-sm border border-border bg-surface-low p-3'}
-                                onClick={() => setSelectedCharacterIndex(index)}
-                              >
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <div className="text-sm font-medium text-foreground">Character {index + 1}</div>
-                                    <Badge variant="outline">{useCharacterPositions ? `${character.centerX} · ${character.centerY}` : "AI's Choice"}</Badge>
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      handleRemoveCharacterPrompt(index)
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                    제거
-                                  </Button>
+                        <div className="space-y-3">
+                          {naiForm.characters.map((character, index) => (
+                            <div
+                              key={`nai-character-${index}`}
+                              className={index === selectedCharacterIndex
+                                ? 'space-y-3 rounded-sm border border-accent bg-surface-low p-3 ring-1 ring-accent/50'
+                                : 'space-y-3 rounded-sm border border-border bg-surface-low p-3'}
+                              onClick={() => setSelectedCharacterIndex(index)}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <div className="text-sm font-medium text-foreground">Character {index + 1}</div>
+                                  <Badge variant="outline">{useCharacterPositions ? `${character.centerX} · ${character.centerY}` : "AI's Choice"}</Badge>
                                 </div>
-
-                                <PromptToggleField
-                                  tool="nai"
-                                  positiveValue={character.prompt}
-                                  negativeValue={character.uc}
-                                  onPositiveChange={(value) => handleCharacterPromptChange(index, 'prompt', value)}
-                                  onNegativeChange={(value) => handleCharacterPromptChange(index, 'uc', value)}
-                                  positiveRows={4}
-                                  negativeRows={3}
-                                />
-
-                                {useCharacterPositions ? (
-                                  <div className="grid gap-4 sm:grid-cols-2">
-                                    <FormField label="X">
-                                      <Select value={character.centerX} onChange={(event) => handleCharacterPromptChange(index, 'centerX', event.target.value)}>
-                                        {NAI_CHARACTER_GRID_X_OPTIONS.map((option) => (
-                                          <option key={option.value} value={option.value}>{option.label}</option>
-                                        ))}
-                                      </Select>
-                                    </FormField>
-                                    <FormField label="Y">
-                                      <Select value={character.centerY} onChange={(event) => handleCharacterPromptChange(index, 'centerY', event.target.value)}>
-                                        {NAI_CHARACTER_GRID_Y_OPTIONS.map((option) => (
-                                          <option key={option.value} value={option.value}>{option.label}</option>
-                                        ))}
-                                      </Select>
-                                    </FormField>
-                                  </div>
-                                ) : null}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    handleRemoveCharacterPrompt(index)
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  제거
+                                </Button>
                               </div>
-                            ))}
-                          </div>
-                        )}
+
+                              <PromptToggleField
+                                tool="nai"
+                                positiveValue={character.prompt}
+                                negativeValue={character.uc}
+                                onPositiveChange={(value) => handleCharacterPromptChange(index, 'prompt', value)}
+                                onNegativeChange={(value) => handleCharacterPromptChange(index, 'uc', value)}
+                                positiveRows={4}
+                                negativeRows={3}
+                              />
+
+                              {useCharacterPositions ? (
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                  <FormField label="X">
+                                    <Select value={character.centerX} onChange={(event) => handleCharacterPromptChange(index, 'centerX', event.target.value)}>
+                                      {NAI_CHARACTER_GRID_X_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                      ))}
+                                    </Select>
+                                  </FormField>
+                                  <FormField label="Y">
+                                    <Select value={character.centerY} onChange={(event) => handleCharacterPromptChange(index, 'centerY', event.target.value)}>
+                                      {NAI_CHARACTER_GRID_Y_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                      ))}
+                                    </Select>
+                                  </FormField>
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
                       </>
                     )}
                   </div>
@@ -1137,125 +1133,112 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     actions={(
                       <>
                         <Badge variant="outline">{naiForm.vibes.length}</Badge>
-                        <Button type="button" size="sm" variant="ghost" onClick={() => setIsVibesCollapsed((current) => !current)}>
-                          <ChevronDown className={`h-4 w-4 transition-transform ${isVibesCollapsed ? '-rotate-90' : 'rotate-0'}`} />
-                          {isVibesCollapsed ? '펼치기' : '접기'}
+                        <Button type="button" size="icon-sm" variant="outline" onClick={handleAddVibe} aria-label="Vibe 추가" title="Vibe 추가">
+                          <Plus className="h-4 w-4" />
                         </Button>
                       </>
                     )}
                   />
-                  {!isVibesCollapsed ? (
-                    <div className="space-y-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low p-3">
-                        <div>
-                          <div className="text-sm font-medium text-foreground">Vibe Transfer</div>
-                          <div className="text-xs text-muted-foreground">reference 이미지를 넣고 encoded vibe를 저장하거나 바로 재사용해.</div>
+                  <div className="space-y-4">
+                    <div className="rounded-sm border border-border bg-surface-low p-3">
+                      <div className="text-sm font-medium text-foreground">Vibe Transfer</div>
+                      <div className="text-xs text-muted-foreground">reference 이미지를 넣고 encoded vibe를 저장하거나 바로 재사용해.</div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {naiForm.vibes.map((vibe, index) => (
+                        <div key={`nai-vibe-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="text-sm font-medium text-foreground">Vibe {index + 1}</div>
+                              {vibe.encoded ? <Badge variant="secondary">encoded</Badge> : <Badge variant="outline">not encoded</Badge>}
+                            </div>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveVibe(index)}>
+                              <Trash2 className="h-4 w-4" />
+                              제거
+                            </Button>
+                          </div>
+
+                          <FormField label="Reference Image">
+                            <div className="space-y-3">
+                              <ImageAttachmentPickerButton label={vibe.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Vibe ${index + 1} 이미지 선택`} onSelect={(image) => handleVibeImageChange(index, image)} />
+                              {vibe.image ? <SelectedImageCard image={vibe.image} alt={`NAI vibe ${index + 1}`} onRemove={() => void handleVibeImageChange(index)} /> : null}
+                            </div>
+                          </FormField>
+
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <FormField label="Strength">
+                              <Input type="number" min={0.01} max={1} step={0.01} value={vibe.strength} onChange={(event) => handleVibeFieldChange(index, 'strength', event.target.value)} />
+                            </FormField>
+                            <FormField label="Information Extracted">
+                              <Input type="number" min={0.01} max={1} step={0.01} value={vibe.informationExtracted} onChange={(event) => handleVibeFieldChange(index, 'informationExtracted', event.target.value)} />
+                            </FormField>
+                          </div>
+
+                          <div className="rounded-sm border border-border bg-surface-low px-3 py-2 text-xs text-muted-foreground break-all">
+                            {vibe.encoded ? `encoded: ${vibe.encoded.slice(0, 64)}…` : '아직 인코딩 안 됨'}
+                          </div>
+
+                          <div className="flex justify-end gap-2">
+                            <Button type="button" variant="outline" onClick={() => void handleSaveVibeToStore(index)} disabled={!vibe.encoded}>
+                              <Save className="h-4 w-4" />
+                              저장
+                            </Button>
+                            <Button type="button" variant="outline" onClick={() => void handleEncodeVibe(index)} disabled={!vibe.image || encodingVibeIndex !== null}>
+                              <WandSparkles className="h-4 w-4" />
+                              {encodingVibeIndex === index ? '인코딩 중…' : '인코딩'}
+                            </Button>
+                          </div>
                         </div>
-                        <Button type="button" variant="outline" size="sm" onClick={handleAddVibe}>
-                          <Plus className="h-4 w-4" />
-                          Vibe 추가
-                        </Button>
+                      ))}
+                    </div>
+
+                    <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm font-medium text-foreground">Saved Vibes</div>
+                          <Badge variant="outline">{savedVibesQuery.data?.length ?? 0}</Badge>
+                        </div>
+                        <div className="w-full sm:w-72">
+                          <Input value={savedVibeSearch} onChange={(event) => setSavedVibeSearch(event.target.value)} placeholder="이름 / 모델 검색" />
+                        </div>
                       </div>
-
-                      {naiForm.vibes.length === 0 ? (
-                        <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">Vibe 없음</div>
-                      ) : (
-                        <div className="space-y-3">
-                          {naiForm.vibes.map((vibe, index) => (
-                            <div key={`nai-vibe-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <div className="text-sm font-medium text-foreground">Vibe {index + 1}</div>
-                                  {vibe.encoded ? <Badge variant="secondary">encoded</Badge> : <Badge variant="outline">not encoded</Badge>}
+                      {savedVibesQuery.isLoading ? (
+                        <div className="text-sm text-muted-foreground">불러오는 중…</div>
+                      ) : filteredSavedVibes.length > 0 ? (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {filteredSavedVibes.map((asset) => (
+                            <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+                              <div className="flex gap-3">
+                                {asset.image_data_url ? (
+                                  <img src={asset.image_data_url} alt={asset.label} className="h-20 w-20 shrink-0 rounded-sm border border-border object-contain" />
+                                ) : (
+                                  <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-sm border border-dashed border-border text-[11px] text-muted-foreground">
+                                    no preview
+                                  </div>
+                                )}
+                                <div className="min-w-0 space-y-2">
+                                  <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
+                                  <div className="truncate text-xs text-muted-foreground">{asset.model}</div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    <Badge variant="outline">strength {asset.strength}</Badge>
+                                    <Badge variant="outline">IE {asset.information_extracted}</Badge>
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground">{new Date(asset.created_date).toLocaleString('ko-KR')}</div>
                                 </div>
-                                <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveVibe(index)}>
-                                  <Trash2 className="h-4 w-4" />
-                                  제거
-                                </Button>
                               </div>
-
-                              <FormField label="Reference Image">
-                                <div className="space-y-3">
-                                  <ImageAttachmentPickerButton label={vibe.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Vibe ${index + 1} 이미지 선택`} onSelect={(image) => handleVibeImageChange(index, image)} />
-                                  {vibe.image ? <SelectedImageCard image={vibe.image} alt={`NAI vibe ${index + 1}`} onRemove={() => void handleVibeImageChange(index)} /> : null}
-                                </div>
-                              </FormField>
-
-                              <div className="grid gap-4 sm:grid-cols-2">
-                                <FormField label="Strength">
-                                  <Input type="number" min={0.01} max={1} step={0.01} value={vibe.strength} onChange={(event) => handleVibeFieldChange(index, 'strength', event.target.value)} />
-                                </FormField>
-                                <FormField label="Information Extracted">
-                                  <Input type="number" min={0.01} max={1} step={0.01} value={vibe.informationExtracted} onChange={(event) => handleVibeFieldChange(index, 'informationExtracted', event.target.value)} />
-                                </FormField>
-                              </div>
-
-                              <div className="rounded-sm border border-border bg-surface-low px-3 py-2 text-xs text-muted-foreground break-all">
-                                {vibe.encoded ? `encoded: ${vibe.encoded.slice(0, 64)}…` : '아직 인코딩 안 됨'}
-                              </div>
-
                               <div className="flex justify-end gap-2">
-                                <Button type="button" variant="outline" onClick={() => void handleSaveVibeToStore(index)} disabled={!vibe.encoded}>
-                                  <Save className="h-4 w-4" />
-                                  저장
-                                </Button>
-                                <Button type="button" variant="outline" onClick={() => void handleEncodeVibe(index)} disabled={!vibe.image || encodingVibeIndex !== null}>
-                                  <WandSparkles className="h-4 w-4" />
-                                  {encodingVibeIndex === index ? '인코딩 중…' : '인코딩'}
-                                </Button>
+                                <Button type="button" size="sm" variant="outline" onClick={() => handleLoadVibeFromStore(asset.id)}>불러오기</Button>
+                                <Button type="button" size="sm" variant="ghost" onClick={() => void handleDeleteVibeFromStore(asset.id)}>삭제</Button>
                               </div>
                             </div>
                           ))}
                         </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 vibe가 없어.</div>
                       )}
-
-                      <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <div className="text-sm font-medium text-foreground">Saved Vibes</div>
-                            <Badge variant="outline">{savedVibesQuery.data?.length ?? 0}</Badge>
-                          </div>
-                          <div className="w-full sm:w-72">
-                            <Input value={savedVibeSearch} onChange={(event) => setSavedVibeSearch(event.target.value)} placeholder="이름 / 모델 검색" />
-                          </div>
-                        </div>
-                        {savedVibesQuery.isLoading ? (
-                          <div className="text-sm text-muted-foreground">불러오는 중…</div>
-                        ) : filteredSavedVibes.length > 0 ? (
-                          <div className="grid gap-3 md:grid-cols-2">
-                            {filteredSavedVibes.map((asset) => (
-                              <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
-                                <div className="flex gap-3">
-                                  {asset.image_data_url ? (
-                                    <img src={asset.image_data_url} alt={asset.label} className="h-20 w-20 shrink-0 rounded-sm border border-border object-contain" />
-                                  ) : (
-                                    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-sm border border-dashed border-border text-[11px] text-muted-foreground">
-                                      no preview
-                                    </div>
-                                  )}
-                                  <div className="min-w-0 space-y-2">
-                                    <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
-                                    <div className="truncate text-xs text-muted-foreground">{asset.model}</div>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      <Badge variant="outline">strength {asset.strength}</Badge>
-                                      <Badge variant="outline">IE {asset.information_extracted}</Badge>
-                                    </div>
-                                    <div className="text-[11px] text-muted-foreground">{new Date(asset.created_date).toLocaleString('ko-KR')}</div>
-                                  </div>
-                                </div>
-                                <div className="flex justify-end gap-2">
-                                  <Button type="button" size="sm" variant="outline" onClick={() => handleLoadVibeFromStore(asset.id)}>불러오기</Button>
-                                  <Button type="button" size="sm" variant="ghost" onClick={() => void handleDeleteVibeFromStore(asset.id)}>삭제</Button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 vibe가 없어.</div>
-                        )}
-                      </div>
                     </div>
-                  ) : null}
+                  </div>
                 </CardContent>
               </Card>
             </section>
@@ -1271,117 +1254,112 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     actions={(
                       <>
                         <Badge variant="outline">{naiForm.characterReferences.length}</Badge>
-                        <Button type="button" size="sm" variant="ghost" onClick={() => setIsReferencesCollapsed((current) => !current)}>
-                          <ChevronDown className={`h-4 w-4 transition-transform ${isReferencesCollapsed ? '-rotate-90' : 'rotate-0'}`} />
-                          {isReferencesCollapsed ? '펼치기' : '접기'}
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="outline"
+                          onClick={handleAddCharacterReference}
+                          disabled={!supportsCharacterReference}
+                          aria-label="Reference 추가"
+                          title="Reference 추가"
+                        >
+                          <Plus className="h-4 w-4" />
                         </Button>
                       </>
                     )}
                   />
-                  {!isReferencesCollapsed ? (
-                    <div className="space-y-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low p-3">
-                        <div>
-                          <div className="text-sm font-medium text-foreground">Character Reference</div>
-                          <div className="text-xs text-muted-foreground">reference 이미지를 직접 넣거나 저장된 reference를 재사용해.</div>
+                  <div className="space-y-4">
+                    <div className="rounded-sm border border-border bg-surface-low p-3">
+                      <div className="text-sm font-medium text-foreground">Character Reference</div>
+                      <div className="text-xs text-muted-foreground">reference 이미지를 직접 넣거나 저장된 reference를 재사용해.</div>
+                    </div>
+
+                    {!supportsCharacterReference ? <div className="text-xs text-[#ffb4ab]">현재 모델에서는 Character Reference를 사용할 수 없어.</div> : null}
+
+                    <div className="space-y-3">
+                      {naiForm.characterReferences.map((reference, index) => (
+                        <div key={`nai-character-reference-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-sm font-medium text-foreground">Reference {index + 1}</div>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveCharacterReference(index)}>
+                              <Trash2 className="h-4 w-4" />
+                              제거
+                            </Button>
+                          </div>
+
+                          <FormField label="Reference Image">
+                            <div className="space-y-3">
+                              <ImageAttachmentPickerButton label={reference.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} onSelect={(image) => handleCharacterReferenceImageChange(index, image)} />
+                              {reference.image ? <SelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} onRemove={() => void handleCharacterReferenceImageChange(index)} /> : null}
+                            </div>
+                          </FormField>
+
+                          <div className="grid gap-4 md:grid-cols-3">
+                            <FormField label="Type">
+                              <Select value={reference.type} onChange={(event) => handleCharacterReferenceFieldChange(index, 'type', event.target.value)}>
+                                <option value="character">character</option>
+                                <option value="style">style</option>
+                                <option value="character&style">character&style</option>
+                              </Select>
+                            </FormField>
+                            <FormField label="Strength">
+                              <Input type="number" min={0} max={1} step={0.01} value={reference.strength} onChange={(event) => handleCharacterReferenceFieldChange(index, 'strength', event.target.value)} />
+                            </FormField>
+                            <FormField label="Fidelity">
+                              <Input type="number" min={0} max={1} step={0.01} value={reference.fidelity} onChange={(event) => handleCharacterReferenceFieldChange(index, 'fidelity', event.target.value)} />
+                            </FormField>
+                          </div>
+
+                          <div className="flex justify-end">
+                            <Button type="button" variant="outline" onClick={() => void handleSaveCharacterReferenceToStore(index)} disabled={!reference.image}>
+                              <Save className="h-4 w-4" />
+                              저장
+                            </Button>
+                          </div>
                         </div>
-                        <Button type="button" variant="outline" size="sm" onClick={handleAddCharacterReference} disabled={!supportsCharacterReference}>
-                          <Plus className="h-4 w-4" />
-                          Reference 추가
-                        </Button>
+                      ))}
+                    </div>
+
+                    <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm font-medium text-foreground">Saved Character References</div>
+                          <Badge variant="outline">{savedCharacterReferencesQuery.data?.length ?? 0}</Badge>
+                        </div>
+                        <div className="w-full sm:w-72">
+                          <Input value={savedCharacterReferenceSearch} onChange={(event) => setSavedCharacterReferenceSearch(event.target.value)} placeholder="이름 / 타입 검색" />
+                        </div>
                       </div>
-
-                      {!supportsCharacterReference ? <div className="text-xs text-[#ffb4ab]">현재 모델에서는 Character Reference를 사용할 수 없어.</div> : null}
-
-                      {naiForm.characterReferences.length === 0 ? (
-                        <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">Reference 없음</div>
-                      ) : (
-                        <div className="space-y-3">
-                          {naiForm.characterReferences.map((reference, index) => (
-                            <div key={`nai-character-reference-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="text-sm font-medium text-foreground">Reference {index + 1}</div>
-                                <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveCharacterReference(index)}>
-                                  <Trash2 className="h-4 w-4" />
-                                  제거
-                                </Button>
-                              </div>
-
-                              <FormField label="Reference Image">
-                                <div className="space-y-3">
-                                  <ImageAttachmentPickerButton label={reference.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} onSelect={(image) => handleCharacterReferenceImageChange(index, image)} />
-                                  {reference.image ? <SelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} onRemove={() => void handleCharacterReferenceImageChange(index)} /> : null}
+                      {savedCharacterReferencesQuery.isLoading ? (
+                        <div className="text-sm text-muted-foreground">불러오는 중…</div>
+                      ) : filteredSavedCharacterReferences.length > 0 ? (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {filteredSavedCharacterReferences.map((asset) => (
+                            <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+                              <div className="flex gap-3">
+                                <img src={asset.image_data_url} alt={asset.label} className="h-20 w-20 shrink-0 rounded-sm border border-border object-contain" />
+                                <div className="min-w-0 space-y-2">
+                                  <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    <Badge variant="outline">{asset.type}</Badge>
+                                    <Badge variant="outline">strength {asset.strength}</Badge>
+                                    <Badge variant="outline">fidelity {asset.fidelity}</Badge>
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground">{new Date(asset.created_date).toLocaleString('ko-KR')}</div>
                                 </div>
-                              </FormField>
-
-                              <div className="grid gap-4 md:grid-cols-3">
-                                <FormField label="Type">
-                                  <Select value={reference.type} onChange={(event) => handleCharacterReferenceFieldChange(index, 'type', event.target.value)}>
-                                    <option value="character">character</option>
-                                    <option value="style">style</option>
-                                    <option value="character&style">character&style</option>
-                                  </Select>
-                                </FormField>
-                                <FormField label="Strength">
-                                  <Input type="number" min={0} max={1} step={0.01} value={reference.strength} onChange={(event) => handleCharacterReferenceFieldChange(index, 'strength', event.target.value)} />
-                                </FormField>
-                                <FormField label="Fidelity">
-                                  <Input type="number" min={0} max={1} step={0.01} value={reference.fidelity} onChange={(event) => handleCharacterReferenceFieldChange(index, 'fidelity', event.target.value)} />
-                                </FormField>
                               </div>
-
-                              <div className="flex justify-end">
-                                <Button type="button" variant="outline" onClick={() => void handleSaveCharacterReferenceToStore(index)} disabled={!reference.image}>
-                                  <Save className="h-4 w-4" />
-                                  저장
-                                </Button>
+                              <div className="flex justify-end gap-2">
+                                <Button type="button" size="sm" variant="outline" onClick={() => handleLoadCharacterReferenceFromStore(asset.id)}>불러오기</Button>
+                                <Button type="button" size="sm" variant="ghost" onClick={() => void handleDeleteCharacterReferenceFromStore(asset.id)}>삭제</Button>
                               </div>
                             </div>
                           ))}
                         </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 reference가 없어.</div>
                       )}
-
-                      <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <div className="text-sm font-medium text-foreground">Saved Character References</div>
-                            <Badge variant="outline">{savedCharacterReferencesQuery.data?.length ?? 0}</Badge>
-                          </div>
-                          <div className="w-full sm:w-72">
-                            <Input value={savedCharacterReferenceSearch} onChange={(event) => setSavedCharacterReferenceSearch(event.target.value)} placeholder="이름 / 타입 검색" />
-                          </div>
-                        </div>
-                        {savedCharacterReferencesQuery.isLoading ? (
-                          <div className="text-sm text-muted-foreground">불러오는 중…</div>
-                        ) : filteredSavedCharacterReferences.length > 0 ? (
-                          <div className="grid gap-3 md:grid-cols-2">
-                            {filteredSavedCharacterReferences.map((asset) => (
-                              <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
-                                <div className="flex gap-3">
-                                  <img src={asset.image_data_url} alt={asset.label} className="h-20 w-20 shrink-0 rounded-sm border border-border object-contain" />
-                                  <div className="min-w-0 space-y-2">
-                                    <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      <Badge variant="outline">{asset.type}</Badge>
-                                      <Badge variant="outline">strength {asset.strength}</Badge>
-                                      <Badge variant="outline">fidelity {asset.fidelity}</Badge>
-                                    </div>
-                                    <div className="text-[11px] text-muted-foreground">{new Date(asset.created_date).toLocaleString('ko-KR')}</div>
-                                  </div>
-                                </div>
-                                <div className="flex justify-end gap-2">
-                                  <Button type="button" size="sm" variant="outline" onClick={() => handleLoadCharacterReferenceFromStore(asset.id)}>불러오기</Button>
-                                  <Button type="button" size="sm" variant="ghost" onClick={() => void handleDeleteCharacterReferenceFromStore(asset.id)}>삭제</Button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 reference가 없어.</div>
-                        )}
-                      </div>
                     </div>
-                  ) : null}
+                  </div>
                 </CardContent>
               </Card>
             </section>

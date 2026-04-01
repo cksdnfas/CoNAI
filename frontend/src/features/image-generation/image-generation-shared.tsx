@@ -384,7 +384,7 @@ export function normalizeNaiCharacterPromptDrafts(characters: NAICharacterPrompt
 
 /** Check whether a character prompt list can use manual 5x5 placement. */
 export function canUseNaiCharacterPositions(characterCount: number) {
-  return characterCount >= 2
+  return characterCount >= 1
 }
 
 /** Resolve whether the current NAI form should send manual character positions. */
