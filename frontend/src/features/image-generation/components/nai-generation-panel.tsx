@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Download, ExternalLink, Plus, Save, Sparkles, Trash2, WandSparkles } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Input } from '@/components/ui/input'
+import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -101,11 +102,6 @@ function SelectedImageCard({ image, alt, onRemove }: { image: SelectedImageDraft
   )
 }
 
-function formatScrubbedNumber(value: number, step: number) {
-  const precision = Math.max(0, ((`${step}`.split('.')[1] || '').length))
-  return Number(value.toFixed(precision)).toString()
-}
-
 function deriveAssetLabel(fileName: string | undefined, fallback: string) {
   const trimmed = fileName?.trim()
   if (!trimmed) {
@@ -118,86 +114,6 @@ function deriveAssetLabel(fileName: string | undefined, fallback: string) {
 type AssetSaveTarget =
   | { kind: 'vibe'; index: number }
   | { kind: 'reference'; index: number }
-
-type ScrubbableNumberInputProps = {
-  value: string
-  onChange: (value: string) => void
-  min?: number
-  max?: number
-  step?: number
-}
-
-function ScrubbableNumberInput({ value, onChange, min, max, step = 0.01 }: ScrubbableNumberInputProps) {
-  const dragStateRef = useRef<{ pointerId: number; startX: number; startValue: number; dragging: boolean } | null>(null)
-
-  const clampValue = (nextValue: number) => {
-    let result = nextValue
-    if (typeof min === 'number') {
-      result = Math.max(min, result)
-    }
-    if (typeof max === 'number') {
-      result = Math.min(max, result)
-    }
-    return result
-  }
-
-  return (
-    <Input
-      type="number"
-      min={min}
-      max={max}
-      step={step}
-      value={value}
-      className="cursor-ew-resize"
-      title="좌우로 드래그해서 값 조절"
-      onChange={(event) => onChange(event.target.value)}
-      onPointerDown={(event) => {
-        if (event.button !== 0) {
-          return
-        }
-
-        dragStateRef.current = {
-          pointerId: event.pointerId,
-          startX: event.clientX,
-          startValue: Number.parseFloat(value || '0') || 0,
-          dragging: false,
-        }
-        event.currentTarget.setPointerCapture(event.pointerId)
-      }}
-      onPointerMove={(event) => {
-        const dragState = dragStateRef.current
-        if (!dragState || dragState.pointerId !== event.pointerId) {
-          return
-        }
-
-        const deltaX = event.clientX - dragState.startX
-        if (!dragState.dragging && Math.abs(deltaX) < 6) {
-          return
-        }
-
-        dragState.dragging = true
-        const nextValue = clampValue(dragState.startValue + deltaX * step * 0.3)
-        onChange(formatScrubbedNumber(nextValue, step))
-      }}
-      onPointerUp={(event) => {
-        const dragState = dragStateRef.current
-        if (!dragState || dragState.pointerId !== event.pointerId) {
-          return
-        }
-        dragStateRef.current = null
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-          event.currentTarget.releasePointerCapture(event.pointerId)
-        }
-      }}
-      onPointerCancel={(event) => {
-        dragStateRef.current = null
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-          event.currentTarget.releasePointerCapture(event.pointerId)
-        }
-      }}
-    />
-  )
-}
 
 type NaiAuthModalProps = {
   open: boolean
@@ -1302,7 +1218,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                               <ScrubbableNumberInput min={0.01} max={1} step={0.01} value={vibe.strength} onChange={(value) => handleVibeFieldChange(index, 'strength', value)} />
                             </FormField>
                             <FormField label="Information Extracted">
-                              <Input type="number" min={0.01} max={1} step={0.01} value={vibe.informationExtracted} onChange={(event) => handleVibeFieldChange(index, 'informationExtracted', event.target.value)} />
+                              <ScrubbableNumberInput min={0.01} max={1} step={0.01} value={vibe.informationExtracted} onChange={(value) => handleVibeFieldChange(index, 'informationExtracted', value)} />
                             </FormField>
                           </div>
 
@@ -1421,7 +1337,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                               <ScrubbableNumberInput min={0} max={1} step={0.01} value={reference.strength} onChange={(value) => handleCharacterReferenceFieldChange(index, 'strength', value)} />
                             </FormField>
                             <FormField label="Fidelity">
-                              <Input type="number" min={0} max={1} step={0.01} value={reference.fidelity} onChange={(event) => handleCharacterReferenceFieldChange(index, 'fidelity', event.target.value)} />
+                              <ScrubbableNumberInput min={0} max={1} step={0.01} value={reference.fidelity} onChange={(value) => handleCharacterReferenceFieldChange(index, 'fidelity', value)} />
                             </FormField>
                           </div>
 

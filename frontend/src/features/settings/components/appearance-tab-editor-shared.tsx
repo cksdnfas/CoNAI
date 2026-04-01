@@ -1,6 +1,7 @@
 import { Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { cn } from '@/lib/utils'
 import type { AppearanceSettings } from '@/types/settings'
 import type { AppearanceTabColorValues } from './appearance-tab.types'
@@ -197,7 +198,7 @@ export function getGroupExplorerCardStyleLabel(style: AppearanceSettings['groupE
   }
 }
 
-/** Render a compact slider for related-image column counts. */
+/** Render a compact drag-enabled number input for related-image column counts. */
 export function RelatedImageColumnSlider({
   label,
   value,
@@ -210,18 +211,14 @@ export function RelatedImageColumnSlider({
   return (
     <SettingsField label={label}>
       <div className="space-y-2">
-        <div className="flex items-center gap-3">
-          <input
-            type="range"
-            min={1}
-            max={6}
-            step={1}
-            value={value}
-            onChange={(event) => onChange(Number(event.target.value))}
-            className="w-full"
-          />
-          <span className="w-8 text-right text-sm font-semibold text-foreground">{value}</span>
-        </div>
+        <ScrubbableNumberInput
+          min={1}
+          max={6}
+          step={1}
+          value={value}
+          variant="settings"
+          onChange={(nextValue) => onChange(Number.parseInt(nextValue || '1', 10))}
+        />
         <div className="flex justify-between text-[11px] text-muted-foreground">
           <span>1</span>
           <span>6</span>
