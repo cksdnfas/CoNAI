@@ -70,8 +70,9 @@ export function NaiCharacterPositionBoard({
   const draggingIndexRef = useRef<number | null>(null)
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
 
-  const gridLines = useMemo(() => GRID_VALUES.map((value) => `${Number(value) * 100}%`), [])
   const markerOffsets = useMemo(() => buildMarkerOffsets(characters), [characters])
+  const selectedCharacter = selectedIndex !== null && selectedIndex !== undefined ? characters[selectedIndex] : null
+  const selectedCellKey = selectedCharacter ? `${selectedCharacter.centerX}:${selectedCharacter.centerY}` : null
 
   const commitPointerPosition = (characterIndex: number, clientX: number, clientY: number) => {
     const boardRect = boardRef.current?.getBoundingClientRect()
@@ -87,7 +88,7 @@ export function NaiCharacterPositionBoard({
     <div className={cn('space-y-3', className)}>
       <div
         ref={boardRef}
-        className="relative aspect-square rounded-sm border border-border bg-surface-low select-none touch-none"
+        className="relative aspect-square overflow-hidden rounded-sm border border-border bg-surface-low select-none touch-none"
         onPointerMove={(event) => {
           if (draggingIndexRef.current === null) {
             return
@@ -109,19 +110,26 @@ export function NaiCharacterPositionBoard({
           setDraggingIndex(null)
         }}
       >
-        <div className="pointer-events-none absolute inset-0">
-          {gridLines.map((position) => (
-            <div key={`vertical-${position}`} className="absolute top-0 bottom-0 w-px bg-border/70" style={{ left: position }} />
-          ))}
-          {gridLines.map((position) => (
-            <div key={`horizontal-${position}`} className="absolute left-0 right-0 h-px bg-border/70" style={{ top: position }} />
-          ))}
+        <div className="pointer-events-none absolute inset-0 grid grid-cols-5 grid-rows-5">
+          {GRID_VALUES.flatMap((centerY, rowIndex) => GRID_VALUES.map((centerX, columnIndex) => {
+            const cellKey = `${centerX}:${centerY}`
+            return (
+              <div
+                key={cellKey}
+                className={cn(
+                  'border border-border/50 bg-background/20',
+                  (rowIndex + columnIndex) % 2 === 0 ? 'bg-background/25' : 'bg-surface-high/40',
+                  selectedCellKey === cellKey && 'border-accent/70 bg-accent/10 shadow-[inset_0_0_0_1px] shadow-accent/50',
+                )}
+              />
+            )
+          }))}
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-around px-[10%] text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        <div className="pointer-events-none absolute inset-x-0 top-2 grid grid-cols-5 text-center text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
           {['A', 'B', 'C', 'D', 'E'].map((label) => <span key={label}>{label}</span>)}
         </div>
-        <div className="pointer-events-none absolute inset-y-0 left-2 flex flex-col justify-around py-[10%] text-[10px] font-medium tracking-[0.18em] text-muted-foreground">
+        <div className="pointer-events-none absolute inset-y-0 left-2 grid grid-rows-5 items-center text-[10px] font-medium tracking-[0.18em] text-muted-foreground">
           {['1', '2', '3', '4', '5'].map((label) => <span key={label}>{label}</span>)}
         </div>
 

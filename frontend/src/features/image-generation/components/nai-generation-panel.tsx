@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Download, ExternalLink, Plus, Save, Sparkles, Trash2, WandSparkles } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
@@ -46,8 +46,6 @@ import {
   NAI_SAMPLE_COUNT_MAX,
   NAI_SAMPLE_COUNT_MIN,
   NAI_ACTION_OPTIONS,
-  NAI_CHARACTER_GRID_X_OPTIONS,
-  NAI_CHARACTER_GRID_Y_OPTIONS,
   NAI_MODEL_OPTIONS,
   NAI_RESOLUTION_PRESETS,
   NAI_SAMPLER_OPTIONS,
@@ -99,6 +97,91 @@ function SelectedImageCard({ image, alt, onRemove }: { image: SelectedImageDraft
         </Button>
       </div>
     </div>
+  )
+}
+
+function formatScrubbedNumber(value: number, step: number) {
+  const precision = Math.max(0, ((`${step}`.split('.')[1] || '').length))
+  return Number(value.toFixed(precision)).toString()
+}
+
+type ScrubbableNumberInputProps = {
+  value: string
+  onChange: (value: string) => void
+  min?: number
+  max?: number
+  step?: number
+}
+
+function ScrubbableNumberInput({ value, onChange, min, max, step = 0.01 }: ScrubbableNumberInputProps) {
+  const dragStateRef = useRef<{ pointerId: number; startX: number; startValue: number; dragging: boolean } | null>(null)
+
+  const clampValue = (nextValue: number) => {
+    let result = nextValue
+    if (typeof min === 'number') {
+      result = Math.max(min, result)
+    }
+    if (typeof max === 'number') {
+      result = Math.min(max, result)
+    }
+    return result
+  }
+
+  return (
+    <Input
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      className="cursor-ew-resize"
+      title="좌우로 드래그해서 값 조절"
+      onChange={(event) => onChange(event.target.value)}
+      onPointerDown={(event) => {
+        if (event.button !== 0) {
+          return
+        }
+
+        dragStateRef.current = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startValue: Number.parseFloat(value || '0') || 0,
+          dragging: false,
+        }
+        event.currentTarget.setPointerCapture(event.pointerId)
+      }}
+      onPointerMove={(event) => {
+        const dragState = dragStateRef.current
+        if (!dragState || dragState.pointerId !== event.pointerId) {
+          return
+        }
+
+        const deltaX = event.clientX - dragState.startX
+        if (!dragState.dragging && Math.abs(deltaX) < 6) {
+          return
+        }
+
+        dragState.dragging = true
+        const nextValue = clampValue(dragState.startValue + deltaX * step)
+        onChange(formatScrubbedNumber(nextValue, step))
+      }}
+      onPointerUp={(event) => {
+        const dragState = dragStateRef.current
+        if (!dragState || dragState.pointerId !== event.pointerId) {
+          return
+        }
+        dragStateRef.current = null
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId)
+        }
+      }}
+      onPointerCancel={(event) => {
+        dragStateRef.current = null
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId)
+        }
+      }}
+    />
   )
 }
 
@@ -895,10 +978,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     ) : (
                       <>
                         <ToggleRow variant="detail" className="justify-between rounded-sm border border-border bg-surface-low px-3 py-2.5">
-                          <div className="space-y-1">
-                            <div className="text-sm font-medium text-foreground">AI's Choice</div>
-                            <div className="text-xs text-muted-foreground">켜두면 위치는 NovelAI가 알아서 정해. 끄면 5x5 위치를 직접 고를 수 있어.</div>
-                          </div>
+                          <div className="text-sm font-medium text-foreground">AI's Choice</div>
                           <input
                             type="checkbox"
                             checked={naiForm.characterPositionAiChoice}
@@ -964,24 +1044,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                                 negativeRows={3}
                               />
 
-                              {useCharacterPositions ? (
-                                <div className="grid gap-4 sm:grid-cols-2">
-                                  <FormField label="X">
-                                    <Select value={character.centerX} onChange={(event) => handleCharacterPromptChange(index, 'centerX', event.target.value)}>
-                                      {NAI_CHARACTER_GRID_X_OPTIONS.map((option) => (
-                                        <option key={option.value} value={option.value}>{option.label}</option>
-                                      ))}
-                                    </Select>
-                                  </FormField>
-                                  <FormField label="Y">
-                                    <Select value={character.centerY} onChange={(event) => handleCharacterPromptChange(index, 'centerY', event.target.value)}>
-                                      {NAI_CHARACTER_GRID_Y_OPTIONS.map((option) => (
-                                        <option key={option.value} value={option.value}>{option.label}</option>
-                                      ))}
-                                    </Select>
-                                  </FormField>
-                                </div>
-                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -1102,7 +1164,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                         <div className="text-sm font-medium text-foreground">Image Options</div>
                         <div className="grid gap-4 md:grid-cols-2">
                           <FormField label="Strength">
-                            <Input type="number" min={0} max={1} step={0.01} value={naiForm.strength} onChange={(event) => handleNaiFieldChange('strength', event.target.value)} />
+                            <ScrubbableNumberInput min={0} max={1} step={0.01} value={naiForm.strength} onChange={(value) => handleNaiFieldChange('strength', value)} />
                           </FormField>
                           <FormField label="Noise">
                             <Input type="number" min={0} max={1} step={0.01} value={naiForm.noise} onChange={(event) => handleNaiFieldChange('noise', event.target.value)} />
@@ -1140,11 +1202,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     )}
                   />
                   <div className="space-y-4">
-                    <div className="rounded-sm border border-border bg-surface-low p-3">
-                      <div className="text-sm font-medium text-foreground">Vibe Transfer</div>
-                      <div className="text-xs text-muted-foreground">reference 이미지를 넣고 encoded vibe를 저장하거나 바로 재사용해.</div>
-                    </div>
-
                     <div className="space-y-3">
                       {naiForm.vibes.map((vibe, index) => (
                         <div key={`nai-vibe-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
@@ -1168,7 +1225,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
                           <div className="grid gap-4 sm:grid-cols-2">
                             <FormField label="Strength">
-                              <Input type="number" min={0.01} max={1} step={0.01} value={vibe.strength} onChange={(event) => handleVibeFieldChange(index, 'strength', event.target.value)} />
+                              <ScrubbableNumberInput min={0.01} max={1} step={0.01} value={vibe.strength} onChange={(value) => handleVibeFieldChange(index, 'strength', value)} />
                             </FormField>
                             <FormField label="Information Extracted">
                               <Input type="number" min={0.01} max={1} step={0.01} value={vibe.informationExtracted} onChange={(event) => handleVibeFieldChange(index, 'informationExtracted', event.target.value)} />
@@ -1269,11 +1326,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     )}
                   />
                   <div className="space-y-4">
-                    <div className="rounded-sm border border-border bg-surface-low p-3">
-                      <div className="text-sm font-medium text-foreground">Character Reference</div>
-                      <div className="text-xs text-muted-foreground">reference 이미지를 직접 넣거나 저장된 reference를 재사용해.</div>
-                    </div>
-
                     {!supportsCharacterReference ? <div className="text-xs text-[#ffb4ab]">현재 모델에서는 Character Reference를 사용할 수 없어.</div> : null}
 
                     <div className="space-y-3">
@@ -1303,7 +1355,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                               </Select>
                             </FormField>
                             <FormField label="Strength">
-                              <Input type="number" min={0} max={1} step={0.01} value={reference.strength} onChange={(event) => handleCharacterReferenceFieldChange(index, 'strength', event.target.value)} />
+                              <ScrubbableNumberInput min={0} max={1} step={0.01} value={reference.strength} onChange={(value) => handleCharacterReferenceFieldChange(index, 'strength', value)} />
                             </FormField>
                             <FormField label="Fidelity">
                               <Input type="number" min={0} max={1} step={0.01} value={reference.fidelity} onChange={(event) => handleCharacterReferenceFieldChange(index, 'fidelity', event.target.value)} />
