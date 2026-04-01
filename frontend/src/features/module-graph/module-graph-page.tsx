@@ -76,6 +76,8 @@ type ModuleWorkflowWorkspaceProps = {
   embedded?: boolean
 }
 
+type EditorSupportSectionKey = 'setup' | 'inspector' | 'inputs' | 'validation' | 'results'
+
 function buildWorkflowExposedInputId(nodeId: string, portKey: string) {
   return `${nodeId}:${portKey}`
 }
@@ -231,11 +233,19 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const [workflowView, setWorkflowView] = useState<'browse' | 'edit'>('browse')
   const [isModuleLibraryOpen, setIsModuleLibraryOpen] = useState(false)
   const [isEditorSupportOpen, setIsEditorSupportOpen] = useState(false)
+  const [activeEditorSupportSection, setActiveEditorSupportSection] = useState<EditorSupportSectionKey>('setup')
   const [isSetupCollapsed, setIsSetupCollapsed] = useState(false)
   const [workflowExposedInputs, setWorkflowExposedInputs] = useState<GraphWorkflowExposedInput[]>([])
   const [workflowRunInputValues, setWorkflowRunInputValues] = useState<Record<string, unknown>>({})
   const previousExecutionStatusesRef = useRef<Record<number, GraphExecutionRecord['status']>>({})
   const lastNodePreviewSyncSignatureRef = useRef('')
+  const editorSupportSectionRefs = useRef<Record<EditorSupportSectionKey, HTMLDivElement | null>>({
+    setup: null,
+    inspector: null,
+    inputs: null,
+    validation: null,
+    results: null,
+  })
   const [nodes, setNodes, onNodesChange] = useNodesState<ModuleGraphNode>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<ModuleGraphEdge>([])
 
@@ -428,6 +438,26 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   }, [moduleDefinitionById, selectedGraphRecord, settingsQuery.data, workflowRunInputValues])
   const selectedWorkflowCanExecute = selectedWorkflowValidationIssues.every((issue) => issue.severity !== 'error')
 
+  const scrollToEditorSupportSection = useCallback((section: EditorSupportSectionKey, behavior: ScrollBehavior = 'smooth') => {
+    setActiveEditorSupportSection(section)
+    const target = editorSupportSectionRefs.current[section]
+    if (!target) {
+      return
+    }
+
+    target.scrollIntoView({ behavior, block: 'start' })
+  }, [])
+
+  const openEditorSupport = useCallback((section: EditorSupportSectionKey = 'setup') => {
+    setIsEditorSupportOpen(true)
+    setActiveEditorSupportSection(section)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollToEditorSupportSection(section)
+      })
+    })
+  }, [scrollToEditorSupportSection])
+
   const focusValidationIssue = useCallback((issue: WorkflowValidationIssue) => {
     if (!issue.nodeId) {
       return
@@ -442,18 +472,18 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       setSelectedNodeId(targetNode.id)
       setSelectedEdgeId(null)
       setSelectedValidationPortKey(issue.portKey ?? null)
+      openEditorSupport('validation')
       void reactFlow.setCenter(targetNode.position.x + 180, targetNode.position.y + 80, { zoom: 1.1, duration: 220 })
     }
 
     if (workflowView !== 'edit') {
       setWorkflowView('edit')
-      setIsEditorSupportOpen(true)
       requestAnimationFrame(() => requestAnimationFrame(focusNode))
       return
     }
 
     focusNode()
-  }, [nodes, reactFlow, workflowView])
+  }, [nodes, openEditorSupport, reactFlow, workflowView])
 
   useEffect(() => {
     if (workflowView !== 'edit') {
@@ -818,7 +848,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     )
     if (options?.openEditor) {
       setWorkflowView('edit')
-      setIsEditorSupportOpen(true)
+      openEditorSupport('setup')
     }
     if (!options?.silent) {
       showSnackbar({ message: '저장된 워크플로우를 불러왔어.', tone: 'info' })
@@ -834,7 +864,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
     resetWorkflowDraft()
     setWorkflowView('edit')
-    setIsEditorSupportOpen(true)
+    openEditorSupport('setup')
     showSnackbar({ message: '새 워크플로우 초안을 열었어.', tone: 'info' })
   }
 
@@ -1392,97 +1422,130 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
         {isDirty ? <Badge variant="outline">미저장</Badge> : <Badge variant="secondary">저장됨</Badge>}
       </div>
 
-      <Card>
-        <CardContent className="space-y-4">
-          <SectionHeading
-            variant="inside"
-            heading="Workflow Setup"
-            actions={
+      <div className="flex flex-wrap gap-2">
+        {([
+          ['setup', '설정'],
+          ['inspector', '검사'],
+          ['inputs', '입력'],
+          ['validation', '검증'],
+          ['results', '결과'],
+        ] as const).map(([sectionKey, label]) => (
+          <Button
+            key={sectionKey}
+            type="button"
+            size="sm"
+            variant={activeEditorSupportSection === sectionKey ? 'default' : 'outline'}
+            onClick={() => scrollToEditorSupportSection(sectionKey)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+
+      <div ref={(node) => { editorSupportSectionRefs.current.setup = node }} className="scroll-mt-4">
+        <Card>
+          <CardContent className="space-y-4">
+            <SectionHeading
+              variant="inside"
+              heading="Workflow Setup"
+              actions={
+                <>
+                  <Badge variant="outline">N {nodes.length}</Badge>
+                  <Badge variant="outline">E {edges.length}</Badge>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setIsSetupCollapsed((current) => !current)}>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${isSetupCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+                  </Button>
+                </>
+              }
+            />
+
+            {!isSetupCollapsed ? (
               <>
-                <Badge variant="outline">N {nodes.length}</Badge>
-                <Badge variant="outline">E {edges.length}</Badge>
-                <Button type="button" size="sm" variant="ghost" onClick={() => setIsSetupCollapsed((current) => !current)}>
-                  <ChevronDown className={`h-4 w-4 transition-transform ${isSetupCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+                <Alert>
+                  <AlertTitle className="flex flex-wrap items-center gap-2">
+                    <span>{selectedGraphRecord?.name || workflowName || 'Untitled workflow'}</span>
+                    {selectedGraphRecord ? <Badge variant="outline">v{selectedGraphRecord.version}</Badge> : <Badge variant="outline">draft</Badge>}
+                    {isDirty ? <Badge variant="outline">미저장</Badge> : <Badge variant="secondary">저장됨</Badge>}
+                  </AlertTitle>
+                  <AlertDescription>
+                    <div>노드 {nodes.length} · 엣지 {edges.length} · 노출 입력 {workflowExposedInputs.length}</div>
+                  </AlertDescription>
+                </Alert>
+
+                <div className="grid gap-3">
+                  <Input value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} placeholder="Workflow name" />
+                  <Input value={workflowDescription} onChange={(event) => setWorkflowDescription(event.target.value)} placeholder="설명 (선택)" />
+                </div>
+
+                <Button type="button" onClick={() => void handleSaveGraph()} disabled={isSavingGraph || nodes.length === 0}>
+                  <Save className="h-4 w-4" />
+                  {isSavingGraph ? '저장 중…' : selectedGraphId !== null ? '워크플로우 업데이트' : '워크플로우 저장'}
                 </Button>
               </>
-            }
-          />
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
 
-          {!isSetupCollapsed ? (
-            <>
-              <Alert>
-                <AlertTitle className="flex flex-wrap items-center gap-2">
-                  <span>{selectedGraphRecord?.name || workflowName || 'Untitled workflow'}</span>
-                  {selectedGraphRecord ? <Badge variant="outline">v{selectedGraphRecord.version}</Badge> : <Badge variant="outline">draft</Badge>}
-                  {isDirty ? <Badge variant="outline">미저장</Badge> : <Badge variant="secondary">저장됨</Badge>}
-                </AlertTitle>
-                <AlertDescription>
-                  <div>노드 {nodes.length} · 엣지 {edges.length} · 노출 입력 {workflowExposedInputs.length}</div>
-                </AlertDescription>
-              </Alert>
+      <div ref={(node) => { editorSupportSectionRefs.current.inspector = node }} className="scroll-mt-4">
+        <NodeInspectorPanel
+          nodes={nodes}
+          selectedNode={selectedNode}
+          selectedEdge={selectedEdge}
+          onNodeValueChange={handleNodeValueChange}
+          onNodeValueClear={handleNodeValueClear}
+          onNodeImageChange={handleNodeImageChange}
+          onExecuteSelectedNode={() => void handleExecuteSelectedNode(false)}
+          onForceExecuteSelectedNode={() => void handleExecuteSelectedNode(true)}
+          executeSelectedNodeDisabled={!selectedNode || executingGraphId !== null}
+          executeSelectedNodeLabel={executingGraphId !== null ? '실행 요청 중…' : '선택 노드 실행'}
+          forceExecuteSelectedNodeLabel={executingGraphId !== null ? '실행 요청 중…' : '강제 재실행'}
+          highlightedPortKey={selectedValidationPortKey}
+        />
+      </div>
 
-              <div className="grid gap-3">
-                <Input value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} placeholder="Workflow name" />
-                <Input value={workflowDescription} onChange={(event) => setWorkflowDescription(event.target.value)} placeholder="설명 (선택)" />
-              </div>
+      <div ref={(node) => { editorSupportSectionRefs.current.inputs = node }} className="scroll-mt-4">
+        <WorkflowExposedInputEditor
+          candidates={workflowInputCandidates}
+          selectedInputs={workflowExposedInputs}
+          onToggleInput={handleToggleWorkflowExposedInput}
+          onUpdateInput={handleUpdateWorkflowExposedInput}
+          onMoveInput={handleMoveWorkflowExposedInput}
+          onChangeDefaultImage={handleWorkflowExposedInputDefaultImageChange}
+        />
+      </div>
 
-              <Button type="button" onClick={() => void handleSaveGraph()} disabled={isSavingGraph || nodes.length === 0}>
-                <Save className="h-4 w-4" />
-                {isSavingGraph ? '저장 중…' : selectedGraphId !== null ? '워크플로우 업데이트' : '워크플로우 저장'}
-              </Button>
-            </>
-          ) : null}
-        </CardContent>
-      </Card>
+      <div ref={(node) => { editorSupportSectionRefs.current.validation = node }} className="scroll-mt-4">
+        <WorkflowValidationPanel
+          issues={editorValidationIssues}
+          title="편집기 검증"
+          description="실행 전 확인"
+          onIssueSelect={focusValidationIssue}
+        />
+      </div>
 
-      <NodeInspectorPanel
-        nodes={nodes}
-        selectedNode={selectedNode}
-        selectedEdge={selectedEdge}
-        onNodeValueChange={handleNodeValueChange}
-        onNodeValueClear={handleNodeValueClear}
-        onNodeImageChange={handleNodeImageChange}
-        onExecuteSelectedNode={() => void handleExecuteSelectedNode(false)}
-        onForceExecuteSelectedNode={() => void handleExecuteSelectedNode(true)}
-        executeSelectedNodeDisabled={!selectedNode || executingGraphId !== null}
-        executeSelectedNodeLabel={executingGraphId !== null ? '실행 요청 중…' : '선택 노드 실행'}
-        forceExecuteSelectedNodeLabel={executingGraphId !== null ? '실행 요청 중…' : '강제 재실행'}
-        highlightedPortKey={selectedValidationPortKey}
-      />
-
-      <WorkflowExposedInputEditor
-        candidates={workflowInputCandidates}
-        selectedInputs={workflowExposedInputs}
-        onToggleInput={handleToggleWorkflowExposedInput}
-        onUpdateInput={handleUpdateWorkflowExposedInput}
-        onMoveInput={handleMoveWorkflowExposedInput}
-        onChangeDefaultImage={handleWorkflowExposedInputDefaultImageChange}
-      />
-
-      <WorkflowValidationPanel
-        issues={editorValidationIssues}
-        title="편집기 검증"
-        description="실행 전 확인"
-        onIssueSelect={focusValidationIssue}
-      />
-
-      <GraphExecutionPanel
-        selectedGraphId={selectedGraphId}
-        selectedExecutionId={selectedExecutionId}
-        selectedExecutionStatus={selectedExecution?.status ?? null}
-        executionList={executionList}
-        executionListError={graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : '실행 목록을 불러오지 못했어.'}
-        executionListIsError={graphExecutionsQuery.isError}
-        executionDetail={executionDetailQuery.data}
-        executionDetailError={executionDetailQuery.error instanceof Error ? executionDetailQuery.error.message : '실행 상세를 불러오지 못했어.'}
-        executionDetailIsError={executionDetailQuery.isError}
-        isExecutingGraph={executingGraphId !== null}
-        isCancellingExecution={cancellingExecutionId === selectedExecutionId}
-        onSelectExecution={setSelectedExecutionId}
-        onRerunGraph={() => void handleRerunSelectedGraph()}
-        onRetryExecution={() => void handleRetrySelectedExecution()}
-        onCancelExecution={() => void handleCancelSelectedExecution()}
-      />
+      <div ref={(node) => { editorSupportSectionRefs.current.results = node }} className="scroll-mt-4">
+        <GraphExecutionPanel
+          selectedGraphId={selectedGraphId}
+          selectedExecutionId={selectedExecutionId}
+          selectedExecutionStatus={selectedExecution?.status ?? null}
+          executionList={executionList}
+          executionListError={graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : '실행 목록을 불러오지 못했어.'}
+          executionListIsError={graphExecutionsQuery.isError}
+          executionDetail={executionDetailQuery.data}
+          executionDetailError={executionDetailQuery.error instanceof Error ? executionDetailQuery.error.message : '실행 상세를 불러오지 못했어.'}
+          executionDetailIsError={executionDetailQuery.isError}
+          isExecutingGraph={executingGraphId !== null}
+          isCancellingExecution={cancellingExecutionId === selectedExecutionId}
+          onSelectExecution={(executionId) => {
+            setSelectedExecutionId(executionId)
+            openEditorSupport('results')
+          }}
+          onRerunGraph={() => void handleRerunSelectedGraph()}
+          onRetryExecution={() => void handleRetrySelectedExecution()}
+          onCancelExecution={() => void handleCancelSelectedExecution()}
+        />
+      </div>
     </div>
   )
 
@@ -1515,7 +1578,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                 onExecute={() => void handleRunSelectedWorkflow()}
                 onEdit={() => {
                   setWorkflowView('edit')
-                  setIsEditorSupportOpen(true)
+                  openEditorSupport('setup')
                 }}
                 canExecute={selectedWorkflowCanExecute}
                 validationIssues={selectedWorkflowValidationIssues}
@@ -1679,7 +1742,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               </CardContent>
             </Card>
 
-            <FloatingBottomAction type="button" onClick={() => setIsEditorSupportOpen(true)}>
+            <FloatingBottomAction
+              type="button"
+              onClick={() => openEditorSupport(selectedNode ? 'inspector' : selectedExecutionId ? 'results' : 'setup')}
+            >
               <SlidersHorizontal className="h-4 w-4" />
               편집 도구
             </FloatingBottomAction>
