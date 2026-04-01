@@ -10,6 +10,7 @@ export interface ImageListProps {
   activationMode?: 'navigate' | 'modal' | 'modal-single'
   getItemHref?: (image: ImageRecord) => string | undefined
   selectable?: boolean
+  forceSelectionMode?: boolean
   selectedIds?: string[]
   onSelectedIdsChange?: (selectedIds: string[]) => void
   hasMore?: boolean

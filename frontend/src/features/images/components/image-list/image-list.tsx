@@ -16,6 +16,7 @@ export function ImageList({
   activationMode = 'navigate',
   getItemHref,
   selectable = false,
+  forceSelectionMode = false,
   selectedIds = [],
   onSelectedIdsChange,
   hasMore = false,
@@ -36,7 +37,7 @@ export function ImageList({
   const imageViewModal = useImageViewModal()
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null)
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
-  const selectionMode = selectable && selectedIds.length > 0
+  const selectionMode = selectable && (forceSelectionMode || selectedIds.length > 0)
   const itemCompositeHashes = useMemo(
     () => items.map((item) => item.composite_hash).filter((value): value is string => typeof value === 'string' && value.length > 0),
     [items],

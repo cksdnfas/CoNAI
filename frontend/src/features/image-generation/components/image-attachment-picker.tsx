@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Check, FolderSearch, ImagePlus, Loader2, Upload } from 'lucide-react'
+import { Check, ImagePlus, Loader2, Upload } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -32,7 +32,6 @@ type ImageAttachmentPickerButtonProps = {
 
 type ImageAttachmentBrowserSectionProps = {
   title: string
-  description: string
   searchValue: string
   searchPlaceholder: string
   searchHint: string
@@ -128,7 +127,6 @@ function ImageAttachmentEmptyState({ title, description }: { title: string; desc
 /** Render one browser-style image list section for system/save sources. */
 function ImageAttachmentBrowserSection({
   title,
-  description,
   searchValue,
   searchPlaceholder,
   searchHint,
@@ -150,7 +148,6 @@ function ImageAttachmentBrowserSection({
           variant="inside"
           className="border-b border-border/70 pb-4"
           heading={title}
-          description={description}
           actions={
             <div className="flex flex-wrap gap-1.5">
               <Badge variant="outline">전체 {totalCount}</Badge>
@@ -178,6 +175,7 @@ function ImageAttachmentBrowserSection({
             items={items}
             layout="grid"
             selectable
+            forceSelectionMode
             selectedIds={selectedIds}
             onSelectedIdsChange={(nextIds) => onSelectedIdsChange(nextIds.slice(-1))}
             hasMore={hasMore}
@@ -228,7 +226,7 @@ function ImageAttachmentSelectionCard({
           variant="inside"
           className="border-b border-border/70 pb-4"
           heading="선택 요약"
-          description={`${sourceLabel}에서 고른 이미지를 현재 첨부 필드에 가져와.`}
+          description="선택한 이미지를 확인해."
           actions={image ? <Badge variant="secondary">1 selected</Badge> : <Badge variant="outline">0 selected</Badge>}
         />
 
@@ -405,7 +403,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
           }
         }}
         title={modalTitle}
-        description="로컬 업로드, 시스템 이미지, save 폴더 이미지를 바로 골라서 현재 필드에 붙일 수 있어."
+        description="이미지 소스를 고르고 하나 선택해."
         widthClassName="max-w-7xl"
       >
         <div className="space-y-5">
@@ -417,7 +415,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
                 variant="inside"
                 className="border-b border-border/70 pb-4"
                 heading="이미지 소스"
-                description="첨부할 이미지를 어떤 경로에서 가져올지 먼저 골라."
+                description="소스를 골라."
                 actions={<Badge variant="outline">3 sources</Badge>}
               />
               <SegmentedControl value={source} items={IMAGE_ATTACHMENT_SOURCE_ITEMS} onChange={(nextSource) => setSource(nextSource as ImageAttachmentSource)} />
@@ -431,7 +429,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
                   variant="inside"
                   className="border-b border-border/70 pb-4"
                   heading="로컬 파일 업로드"
-                  description="현재 장치에서 이미지를 선택해서 바로 첨부해."
+                  description="로컬 파일에서 바로 첨부해."
                   actions={<Badge variant="outline">Upload</Badge>}
                 />
 
@@ -442,7 +440,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
                     </div>
                     <div className="space-y-1">
                       <div className="text-base font-semibold text-foreground">업로드해서 바로 붙이기</div>
-                      <div className="text-sm text-muted-foreground">파일을 선택하면 현재 입력 필드에 즉시 연결돼. 저장소 등록은 별도 흐름이야.</div>
+                      <div className="text-sm text-muted-foreground">선택 즉시 현재 입력 필드에 연결돼.</div>
                     </div>
                     <div className="flex flex-wrap justify-center gap-2">
                       <Button type="button" onClick={() => inputRef.current?.click()} disabled={isImporting}>
@@ -464,7 +462,6 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
               <div className="min-w-0">
                 <ImageAttachmentBrowserSection
                   title="시스템 이미지"
-                  description="현재 CoNAI가 관리하는 이미지 자산에서 골라서 첨부해."
                   searchValue={systemSearch}
                   searchPlaceholder="불러온 시스템 이미지에서 이름 검색"
                   searchHint="최신 이미지부터 불러오고 있어."
@@ -503,7 +500,6 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
               <div className="min-w-0">
                 <ImageAttachmentBrowserSection
                   title="Save 폴더 이미지"
-                  description="save 루트 아래에 보관된 재사용/편집 이미지를 탐색해서 첨부해."
                   searchValue={saveSearch}
                   searchPlaceholder="save 이미지 이름 검색"
                   searchHint="save 폴더 아래 이미지를 재귀적으로 보여줘."
@@ -528,14 +524,6 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
             </div>
           ) : null}
 
-          {source !== 'upload' ? (
-            <div className="rounded-sm border border-border/70 bg-surface-low px-4 py-3 text-xs text-muted-foreground">
-              <div className="flex flex-wrap items-center gap-2">
-                <FolderSearch className="h-4 w-4" />
-                선택한 이미지는 현재 필드용 inline payload로 변환돼서 들어가. 원본 저장 구조를 직접 바꾸는 건 아니야.
-              </div>
-            </div>
-          ) : null}
         </div>
       </SettingsModal>
     </>
