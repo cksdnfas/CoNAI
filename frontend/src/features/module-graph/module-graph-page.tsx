@@ -890,14 +890,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const persistCurrentGraph = useCallback(async (options?: { allowAutoRename?: boolean; silent?: boolean }) => {
     const allowAutoRename = options?.allowAutoRename === true
     const silent = options?.silent === true
-    const trimmedName = workflowName.trim()
-
-    if (trimmedName.length === 0) {
-      if (!silent) {
-        showSnackbar({ message: '워크플로우 이름을 먼저 넣어줘.', tone: 'error' })
-      }
-      return null
-    }
 
     if (nodes.length === 0) {
       if (!silent) {
@@ -916,8 +908,13 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
         .map((graphRecord) => graphRecord.name),
     )
 
-    let resolvedName = trimmedName
-    let autoRenamed = false
+    const trimmedName = workflowName.trim()
+    const fallbackBaseName = selectedGraphRecord?.name?.trim() || 'Workflow Draft'
+
+    let resolvedName = trimmedName.length > 0
+      ? trimmedName
+      : buildNextWorkflowName(fallbackBaseName, existingNames)
+    let autoRenamed = resolvedName !== trimmedName
 
     const saveWithName = async (name: string) => {
       const payload = {
@@ -976,7 +973,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       autoRenamed,
       name: resolvedName,
     }
-  }, [edges, graphWorkflowsQuery, nodes, selectedGraphId, showSnackbar, workflowDescription, workflowExposedInputs, workflowName])
+  }, [edges, graphWorkflowsQuery, nodes, selectedGraphId, selectedGraphRecord, showSnackbar, workflowDescription, workflowExposedInputs, workflowName])
 
   const handleSaveGraph = async () => {
     if (isSavingGraph) {
@@ -1125,12 +1122,33 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   }
 
   const handleRerunSelectedGraph = async () => {
-    if (selectedGraphId === null) {
+    if (executingGraphId !== null) {
+      return
+    }
+
+    let graphId = selectedGraphId
+
+    if (selectedGraphId === null || isDirty) {
+      try {
+        const saveResult = await persistCurrentGraph({ allowAutoRename: true, silent: true })
+        if (!saveResult) {
+          showSnackbar({ message: '재실행하려면 현재 그래프를 먼저 저장할 수 있어야 해.', tone: 'error' })
+          return
+        }
+
+        graphId = saveResult.graphId
+      } catch (error) {
+        showSnackbar({ message: error instanceof Error ? error.message : '재실행 전에 그래프 저장에 실패했어.', tone: 'error' })
+        return
+      }
+    }
+
+    if (graphId === null) {
       showSnackbar({ message: '먼저 그래프를 하나 불러와줘.', tone: 'error' })
       return
     }
 
-    await handleExecuteGraph(selectedGraphId)
+    await handleExecuteGraph(graphId)
   }
 
   const handleCancelSelectedExecution = async () => {
@@ -1510,7 +1528,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                       <Input value={workflowDescription} onChange={(event) => setWorkflowDescription(event.target.value)} placeholder="설명 (선택)" />
                     </div>
 
-                    <Button type="button" onClick={() => void handleSaveGraph()} disabled={isSavingGraph || workflowName.trim().length === 0}>
+                    <Button type="button" onClick={() => void handleSaveGraph()} disabled={isSavingGraph || nodes.length === 0}>
                       <Save className="h-4 w-4" />
                       {isSavingGraph ? '저장 중…' : selectedGraphId !== null ? '워크플로우 업데이트' : '워크플로우 저장'}
                     </Button>
