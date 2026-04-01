@@ -232,6 +232,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const [workflowExposedInputs, setWorkflowExposedInputs] = useState<GraphWorkflowExposedInput[]>([])
   const [workflowRunInputValues, setWorkflowRunInputValues] = useState<Record<string, unknown>>({})
   const previousExecutionStatusesRef = useRef<Record<number, GraphExecutionRecord['status']>>({})
+  const lastNodePreviewSyncSignatureRef = useRef('')
   const [nodes, setNodes, onNodesChange] = useNodesState<ModuleGraphNode>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<ModuleGraphEdge>([])
 
@@ -544,7 +545,21 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       }
     }
 
+    const fallbackPreviewSignature = Array.from(latestArtifactPreviewByNode.entries())
+      .sort(([leftNodeId], [rightNodeId]) => leftNodeId.localeCompare(rightNodeId))
+      .map(([nodeId, preview]) => `${nodeId}:${preview.executionArtifactCount}:${preview.latestArtifactLabel ?? ''}:${preview.latestArtifactPreviewUrl ?? ''}:${preview.latestArtifactTextPreview ?? ''}`)
+      .join('|')
+    const edgeSignature = edges
+      .map((edge) => `${edge.id}:${edge.source}:${edge.sourceHandle ?? ''}:${edge.target}:${edge.targetHandle ?? ''}`)
+      .join('|')
+
     if (!executionDetailQuery.data) {
+      const syncSignature = `no-execution|${edgeSignature}|${fallbackPreviewSignature}`
+      if (lastNodePreviewSyncSignatureRef.current === syncSignature) {
+        return
+      }
+
+      lastNodePreviewSyncSignatureRef.current = syncSignature
       setNodes((currentNodes) =>
         currentNodes.map((node) => {
           const fallbackPreview = latestArtifactPreviewByNode.get(node.id)
@@ -583,7 +598,16 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       return acc
     }, {})
     const artifactNodeIds = new Set(Object.keys(artifactsByNode))
+    const executionArtifactSignature = executionDetailQuery.data.artifacts
+      .map((artifact) => `${artifact.id}:${artifact.node_id}:${artifact.port_key}:${artifact.artifact_type}:${artifact.storage_path ?? ''}:${artifact.created_date}`)
+      .join('|')
+    const executionPlanSignature = `${executionDetailQuery.data.execution.id}:${executionDetailQuery.data.execution.status}:${executionDetailQuery.data.execution.failed_node_id ?? ''}:${executionDetailQuery.data.execution.updated_date}:${orderedNodeIds.join(',')}:${Array.from(reusedNodeIds).join(',')}`
+    const syncSignature = `${executionPlanSignature}|${executionArtifactSignature}|${edgeSignature}|${fallbackPreviewSignature}`
+    if (lastNodePreviewSyncSignatureRef.current === syncSignature) {
+      return
+    }
 
+    lastNodePreviewSyncSignatureRef.current = syncSignature
     setNodes((currentNodes) =>
       currentNodes.map((node) => {
         const nodeArtifacts = artifactsByNode[node.id] ?? []
