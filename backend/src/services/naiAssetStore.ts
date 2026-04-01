@@ -8,6 +8,7 @@ import { normalizeBase64ImageData } from '../utils/nai/requestBuilder';
 export interface StoredNaiVibeAsset {
   id: string;
   label: string;
+  description?: string | null;
   model: string;
   image_data_url?: string;
   encoded: string;
@@ -19,6 +20,7 @@ export interface StoredNaiVibeAsset {
 export interface StoredNaiCharacterReferenceAsset {
   id: string;
   label: string;
+  description?: string | null;
   image_data_url: string;
   type: 'character' | 'style' | 'character&style';
   strength: number;
@@ -90,6 +92,7 @@ function readJsonFile<T>(filePath: string): T | null {
 /** Persist one encoded vibe payload so the user can reuse it without re-encoding. */
 export async function saveNaiVibeAsset(input: {
   label?: string;
+  description?: string;
   model: string;
   image?: string;
   encoded: string;
@@ -111,6 +114,7 @@ export async function saveNaiVibeAsset(input: {
   const record: StoredNaiVibeAsset = {
     id: assetId,
     label: input.label?.trim() || `vibe-${assetId.slice(0, 8)}`,
+    description: input.description?.trim() || undefined,
     model: input.model,
     image_data_url: imageDataUrl,
     encoded: normalizedEncoded,
@@ -168,6 +172,7 @@ export function deleteNaiVibeAsset(assetId: string) {
 /** Persist one character-reference image and its prepared letterboxed derivative. */
 export async function saveNaiCharacterReferenceAsset(input: {
   label?: string;
+  description?: string;
   image: string;
   type?: 'character' | 'style' | 'character&style';
   strength?: number;
@@ -183,6 +188,7 @@ export async function saveNaiCharacterReferenceAsset(input: {
   const metadata: StoredNaiCharacterReferenceAsset = {
     id: assetId,
     label: input.label?.trim() || `reference-${assetId.slice(0, 8)}`,
+    description: input.description?.trim() || undefined,
     image_data_url: `data:image/png;base64,${originalPng.toString('base64')}`,
     type: input.type || 'character&style',
     strength: typeof input.strength === 'number' ? input.strength : 0.6,

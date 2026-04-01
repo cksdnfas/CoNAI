@@ -202,6 +202,7 @@ export interface NAIUpscaleResponse {
 export interface StoredNaiVibeAsset {
   id: string
   label: string
+  description?: string | null
   model: string
   image_data_url?: string
   encoded: string
@@ -213,6 +214,7 @@ export interface StoredNaiVibeAsset {
 export interface StoredNaiCharacterReferenceAsset {
   id: string
   label: string
+  description?: string | null
   image_data_url: string
   type: 'character' | 'style' | 'character&style'
   strength: number
@@ -613,6 +615,7 @@ export async function listNaiVibeAssets(model?: string) {
 /** Save one reusable vibe-transfer asset for later use. */
 export async function saveNaiVibeAsset(payload: {
   label?: string
+  description?: string
   model: string
   image?: string
   encoded: string
@@ -644,6 +647,7 @@ export async function listNaiCharacterReferenceAssets() {
 /** Save one reusable character-reference asset. */
 export async function saveNaiCharacterReferenceAsset(payload: {
   label?: string
+  description?: string
   image: string
   type?: 'character' | 'style' | 'character&style'
   strength?: number

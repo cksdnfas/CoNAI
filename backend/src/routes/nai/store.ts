@@ -16,6 +16,7 @@ router.get('/vibes', (req: Request<{}, {}, {}, { model?: string }>, res: Respons
 
 router.post('/vibes', async (req: Request<{}, {}, {
   label?: string;
+  description?: string;
   model?: string;
   image?: string;
   encoded?: string;
@@ -37,6 +38,7 @@ router.post('/vibes', async (req: Request<{}, {}, {
 
   const item = await saveNaiVibeAsset({
     label: req.body.label,
+    description: req.body.description,
     model,
     image: req.body.image,
     encoded,
@@ -63,6 +65,7 @@ router.get('/character-references', (_req: Request, res: Response) => {
 
 router.post('/character-references', async (req: Request<{}, {}, {
   label?: string;
+  description?: string;
   image?: string;
   type?: 'character' | 'style' | 'character&style';
   strength?: number;
@@ -76,6 +79,7 @@ router.post('/character-references', async (req: Request<{}, {}, {
 
   const item = await saveNaiCharacterReferenceAsset({
     label: req.body.label,
+    description: req.body.description,
     image,
     type: req.body.type,
     strength: req.body.strength,
