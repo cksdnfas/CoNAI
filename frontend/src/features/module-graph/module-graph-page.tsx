@@ -15,6 +15,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { ArrowLeft, Boxes, ChevronDown, Copy, Plus, RefreshCw, RotateCcw, Save, SlidersHorizontal, Trash2, Unplug, Workflow } from 'lucide-react'
 import { useQueries, useQuery } from '@tanstack/react-query'
+import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -77,6 +78,8 @@ type ModuleWorkflowWorkspaceProps = {
 }
 
 type EditorSupportSectionKey = 'setup' | 'inspector' | 'inputs' | 'validation' | 'results'
+
+const UNSAVED_CHANGES_CONFIRM_MESSAGE = '저장하지 않은 변경사항이 있어. 이 작업을 진행하면 현재 편집 내용이 사라질 수 있어. 계속할까?'
 
 function buildWorkflowExposedInputId(nodeId: string, portKey: string) {
   return `${nodeId}:${portKey}`
@@ -234,7 +237,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const [isModuleLibraryOpen, setIsModuleLibraryOpen] = useState(false)
   const [isEditorSupportOpen, setIsEditorSupportOpen] = useState(false)
   const [activeEditorSupportSection, setActiveEditorSupportSection] = useState<EditorSupportSectionKey>('setup')
-  const [isSetupCollapsed, setIsSetupCollapsed] = useState(false)
+  const [isSetupCollapsed, setIsSetupCollapsed] = useState(true)
   const [workflowExposedInputs, setWorkflowExposedInputs] = useState<GraphWorkflowExposedInput[]>([])
   const [workflowRunInputValues, setWorkflowRunInputValues] = useState<Record<string, unknown>>({})
   const previousExecutionStatusesRef = useRef<Record<number, GraphExecutionRecord['status']>>({})
@@ -303,6 +306,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     [edges, nodes, workflowDescription, workflowExposedInputs, workflowName],
   )
   const isDirty = currentSnapshot !== lastSavedSnapshot
+  const shouldBlockGraphExit = workflowView === 'edit' && isDirty
   const selectedGraphRecord = useMemo(() => (graphWorkflowsQuery.data ?? []).find((graph) => graph.id === selectedGraphId) ?? null, [graphWorkflowsQuery.data, selectedGraphId])
   const moduleDefinitionById = useMemo(() => new Map(modules.map((module) => [module.id, module])), [modules])
   const workflowInputCandidates = useMemo(
@@ -458,6 +462,12 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     })
   }, [scrollToEditorSupportSection])
 
+  const enterWorkflowEditor = useCallback((section: EditorSupportSectionKey = 'setup') => {
+    setWorkflowView('edit')
+    setActiveEditorSupportSection(section)
+    setIsEditorSupportOpen(false)
+  }, [])
+
   const focusValidationIssue = useCallback((issue: WorkflowValidationIssue) => {
     if (!issue.nodeId) {
       return
@@ -490,6 +500,32 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       setIsEditorSupportOpen(false)
     }
   }, [workflowView])
+
+  useBeforeUnload(
+    useCallback((event) => {
+      if (!shouldBlockGraphExit) {
+        return
+      }
+
+      event.preventDefault()
+      event.returnValue = ''
+    }, [shouldBlockGraphExit]),
+  )
+
+  const graphExitBlocker = useBlocker(useCallback(() => shouldBlockGraphExit, [shouldBlockGraphExit]))
+
+  useEffect(() => {
+    if (graphExitBlocker.state !== 'blocked') {
+      return
+    }
+
+    if (window.confirm(UNSAVED_CHANGES_CONFIRM_MESSAGE)) {
+      graphExitBlocker.proceed()
+      return
+    }
+
+    graphExitBlocker.reset()
+  }, [graphExitBlocker])
 
   useEffect(() => {
     if (selectedGraphId === null || executionList.length === 0) {
@@ -793,7 +829,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       return true
     }
 
-    return window.confirm('저장하지 않은 변경사항이 있어. 이 작업을 진행하면 현재 편집 내용이 사라질 수 있어. 계속할까?')
+    return window.confirm(UNSAVED_CHANGES_CONFIRM_MESSAGE)
   }
 
   const resetWorkflowDraft = () => {
@@ -847,8 +883,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       }),
     )
     if (options?.openEditor) {
-      setWorkflowView('edit')
-      openEditorSupport('setup')
+      enterWorkflowEditor('setup')
     }
     if (!options?.silent) {
       showSnackbar({ message: '저장된 워크플로우를 불러왔어.', tone: 'info' })
@@ -863,9 +898,57 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     }
 
     resetWorkflowDraft()
-    setWorkflowView('edit')
-    openEditorSupport('setup')
+    enterWorkflowEditor('setup')
     showSnackbar({ message: '새 워크플로우 초안을 열었어.', tone: 'info' })
+  }
+
+  const handleLeaveWorkflowEditor = () => {
+    if (workflowView !== 'edit') {
+      setWorkflowView('browse')
+      setIsEditorSupportOpen(false)
+      return
+    }
+
+    if (!confirmDiscardUnsavedChanges()) {
+      return
+    }
+
+    if (selectedGraphRecord) {
+      const { nodes: nextNodes, edges: nextEdges } = buildFlowFromGraphRecord(selectedGraphRecord, modules)
+      setNodes(nextNodes)
+      setEdges(nextEdges)
+      setSelectedExecutionId(null)
+      setSelectedEdgeId(null)
+      setSelectedNodeId(nextNodes[0]?.id ?? null)
+      setWorkflowName(selectedGraphRecord.name)
+      setWorkflowDescription(selectedGraphRecord.description || '')
+      setWorkflowExposedInputs(selectedGraphRecord.graph.metadata?.exposed_inputs ?? [])
+      setWorkflowRunInputValues(
+        (selectedGraphRecord.graph.metadata?.exposed_inputs ?? []).reduce<Record<string, unknown>>((acc, inputDefinition) => {
+          if (inputDefinition.default_value !== undefined) {
+            acc[inputDefinition.id] = inputDefinition.default_value
+          }
+          return acc
+        }, {}),
+      )
+      setLastSavedSnapshot(
+        buildGraphEditorSnapshot({
+          name: selectedGraphRecord.name,
+          description: selectedGraphRecord.description || '',
+          nodes: nextNodes,
+          edges: nextEdges,
+          workflowMetadata: {
+            exposed_inputs: selectedGraphRecord.graph.metadata?.exposed_inputs ?? [],
+          },
+        }),
+      )
+    } else {
+      resetWorkflowDraft()
+    }
+
+    setWorkflowView('browse')
+    setIsEditorSupportOpen(false)
+    setActiveEditorSupportSection('setup')
   }
 
   const handleDuplicateSelectedNode = () => {
@@ -1386,8 +1469,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               variant="outline"
               className="bg-surface-low"
               onClick={() => {
-                setWorkflowView('browse')
-                setIsEditorSupportOpen(false)
+                handleLeaveWorkflowEditor()
               }}
               aria-label="목록으로"
               title="목록으로"
@@ -1566,8 +1648,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
                 onInputImageChange={handleWorkflowRunInputImageChange}
                 onExecute={() => void handleRunSelectedWorkflow()}
                 onEdit={() => {
-                  setWorkflowView('edit')
-                  openEditorSupport('setup')
+                  enterWorkflowEditor('setup')
                 }}
                 canExecute={selectedWorkflowCanExecute}
                 validationIssues={selectedWorkflowValidationIssues}
@@ -1746,6 +1827,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               subtitle="설정 · 노드 검사 · 입력 · 검증 · 실행 결과"
               ariaLabel="워크플로우 편집 도구"
               onClose={() => setIsEditorSupportOpen(false)}
+              className={isDesktopPageLayout ? 'inset-x-auto left-1/2 w-[min(80vw,1400px)] -translate-x-1/2' : undefined}
               bodyClassName="space-y-4 px-4 py-4 sm:px-6"
             >
               {workflowEditorSupportPanels}

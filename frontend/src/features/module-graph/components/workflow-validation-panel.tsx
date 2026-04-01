@@ -52,15 +52,20 @@ export function WorkflowValidationPanel({
           />
         ) : null}
 
-        <div className={`rounded-sm border px-4 py-3 ${isReady ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-amber-500/40 bg-amber-500/10'}`}>
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-sm border border-border/70 bg-surface-low px-4 py-3">
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              {isReady ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <AlertTriangle className="h-4 w-4 text-amber-300" />}
+              <div className="text-sm font-medium text-foreground">{isReady ? '지금 바로 실행 가능' : '수정이 필요한 실행 문제 있음'}</div>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {isReady ? '필수 입력 확인 완료.' : '아래 이슈를 확인해.'}
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
-            {isReady ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <AlertTriangle className="h-4 w-4 text-amber-300" />}
-            <div className="text-sm font-medium text-foreground">{isReady ? '지금 바로 실행 가능' : '수정이 필요한 실행 문제 있음'}</div>
             <Badge variant={isReady ? 'secondary' : 'outline'}>{isReady ? 'ready' : `errors ${errorCount}`}</Badge>
             {warningCount > 0 ? <Badge variant="outline">warnings {warningCount}</Badge> : null}
-          </div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {isReady ? '필수 입력 확인 완료.' : '아래 이슈를 확인해.'}
           </div>
         </div>
 

@@ -348,14 +348,7 @@ export function WorkflowRunnerPanel({
               onIssueSelect={onValidationIssueSelect}
             />
 
-            {inputDefinitions.length > 0 ? (
-              <div className="space-y-2.5">{inputDefinitions.map((inputDefinition) => renderInputField(inputDefinition))}</div>
-            ) : (
-              <Alert>
-                <AlertTitle>추가 입력 없이 실행 가능</AlertTitle>
-                <AlertDescription>기본값으로 실행돼.</AlertDescription>
-              </Alert>
-            )}
+            {inputDefinitions.length > 0 ? <div className="space-y-2.5">{inputDefinitions.map((inputDefinition) => renderInputField(inputDefinition))}</div> : null}
 
             <div className="flex flex-wrap gap-2 pt-1">
               <Button type="button" onClick={onExecute} disabled={isExecuting || !canExecute}>
