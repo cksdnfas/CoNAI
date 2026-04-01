@@ -167,11 +167,6 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    const exists = GraphWorkflowModel.existsByName(name)
-    if (exists) {
-      return res.status(409).json({ success: false, error: 'Graph workflow name already exists' } as ModuleGraphResponse)
-    }
-
     const createData: GraphWorkflowCreateData = {
       name,
       description,
@@ -198,10 +193,6 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     const existing = GraphWorkflowModel.findById(id)
     if (!existing) {
       return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
-    }
-
-    if (req.body.name && GraphWorkflowModel.existsByName(req.body.name, id)) {
-      return res.status(409).json({ success: false, error: 'Graph workflow name already exists' } as ModuleGraphResponse)
     }
 
     const updateData: GraphWorkflowUpdateData = {

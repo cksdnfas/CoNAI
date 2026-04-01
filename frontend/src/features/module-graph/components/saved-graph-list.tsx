@@ -75,10 +75,13 @@ export function SavedGraphList({
             type="button"
             onClick={() => onLoadGraph(graph)}
             className="min-w-0 flex-1 text-left"
-            title={graph.description?.trim() || graph.name}
+            title={`${graph.name} · #${graph.id}${graph.description?.trim() ? `\n${graph.description}` : ''}`}
           >
             <div className={cn('truncate text-sm font-semibold', selectedGraphId === graph.id ? 'text-primary' : 'text-foreground')}>
               {graph.name}
+            </div>
+            <div className="mt-1 text-[11px] text-muted-foreground">
+              #{graph.id} · v{graph.version}
             </div>
             {graph.description ? (
               <div className="mt-1 line-clamp-1 text-xs text-muted-foreground" title={graph.description}>

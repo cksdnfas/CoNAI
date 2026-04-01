@@ -78,20 +78,14 @@ function buildWorkflowExposedInputId(nodeId: string, portKey: string) {
   return `${nodeId}:${portKey}`
 }
 
-function buildNextWorkflowName(baseName: string, existingNames: Set<string>) {
-  const trimmedBaseName = baseName.trim() || 'Workflow Draft'
-  if (!existingNames.has(trimmedBaseName)) {
-    return trimmedBaseName
+function resolveWorkflowDisplayName(name: string, fallbackName?: string | null) {
+  const trimmedName = name.trim()
+  if (trimmedName.length > 0) {
+    return trimmedName
   }
 
-  let suffix = 2
-  let nextName = `${trimmedBaseName} ${suffix}`
-  while (existingNames.has(nextName)) {
-    suffix += 1
-    nextName = `${trimmedBaseName} ${suffix}`
-  }
-
-  return nextName
+  const trimmedFallbackName = fallbackName?.trim()
+  return trimmedFallbackName && trimmedFallbackName.length > 0 ? trimmedFallbackName : 'Workflow Draft'
 }
 
 type ValidationNodeRecord = {
@@ -887,8 +881,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     handleUpdateWorkflowExposedInput(inputId, { default_value: image.dataUrl })
   }
 
-  const persistCurrentGraph = useCallback(async (options?: { allowAutoRename?: boolean; silent?: boolean }) => {
-    const allowAutoRename = options?.allowAutoRename === true
+  const persistCurrentGraph = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent === true
 
     if (nodes.length === 0) {
@@ -898,53 +891,28 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       return null
     }
 
+    const resolvedName = resolveWorkflowDisplayName(workflowName, selectedGraphRecord?.name)
     const graph = buildGraphPayload(nodes, edges, {
       exposed_inputs: workflowExposedInputs,
     })
     const description = workflowDescription.trim() || undefined
-    const existingNames = new Set(
-      (graphWorkflowsQuery.data ?? [])
-        .filter((graphRecord) => graphRecord.id !== selectedGraphId)
-        .map((graphRecord) => graphRecord.name),
-    )
-
-    const trimmedName = workflowName.trim()
-    const fallbackBaseName = selectedGraphRecord?.name?.trim() || 'Workflow Draft'
-
-    let resolvedName = trimmedName.length > 0
-      ? trimmedName
-      : buildNextWorkflowName(fallbackBaseName, existingNames)
-    let autoRenamed = resolvedName !== trimmedName
-
-    const saveWithName = async (name: string) => {
-      const payload = {
-        name,
-        description,
-        graph,
-      }
-
-      if (selectedGraphId !== null) {
-        await updateGraphWorkflow(selectedGraphId, payload)
-        return { graphId: selectedGraphId, created: false }
-      }
-
-      const saved = await createGraphWorkflow(payload)
-      return { graphId: saved.id, created: true }
+    const payload = {
+      name: resolvedName,
+      description,
+      graph,
     }
 
-    let saveResult
+    let graphId: number
+    let created: boolean
 
-    try {
-      saveResult = await saveWithName(resolvedName)
-    } catch (error) {
-      const isNameConflict = error instanceof Error && error.message === 'Graph workflow name already exists'
-      if (!allowAutoRename || !isNameConflict) {
-        throw error
-      }
-
-      resolvedName = buildNextWorkflowName(resolvedName, existingNames)
-      autoRenamed = resolvedName !== trimmedName
-      saveResult = await saveWithName(resolvedName)
+    if (selectedGraphId !== null) {
+      await updateGraphWorkflow(selectedGraphId, payload)
+      graphId = selectedGraphId
+      created = false
+    } else {
+      const createdResult = await createGraphWorkflow(payload)
+      graphId = createdResult.id
+      created = true
     }
 
     const savedSnapshot = buildGraphEditorSnapshot({
@@ -960,17 +928,16 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     if (resolvedName !== workflowName) {
       setWorkflowName(resolvedName)
     }
-    if (selectedGraphId !== saveResult.graphId) {
-      setSelectedGraphId(saveResult.graphId)
+    if (selectedGraphId !== graphId) {
+      setSelectedGraphId(graphId)
     }
     setSelectedExecutionId(null)
     setLastSavedSnapshot(savedSnapshot)
     await graphWorkflowsQuery.refetch()
 
     return {
-      graphId: saveResult.graphId,
-      created: saveResult.created,
-      autoRenamed,
+      graphId,
+      created,
       name: resolvedName,
     }
   }, [edges, graphWorkflowsQuery, nodes, selectedGraphId, selectedGraphRecord, showSnackbar, workflowDescription, workflowExposedInputs, workflowName])
@@ -982,19 +949,15 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
     try {
       setIsSavingGraph(true)
-      const saveResult = await persistCurrentGraph({ allowAutoRename: true })
+      const saveResult = await persistCurrentGraph()
       if (!saveResult) {
         return
       }
 
       showSnackbar({
         message: saveResult.created
-          ? saveResult.autoRenamed
-            ? `이름이 겹쳐서 '${saveResult.name}'으로 새 그래프 워크플로우를 저장했어.`
-            : '새 그래프 워크플로우를 저장했어.'
-          : saveResult.autoRenamed
-            ? `이름이 겹쳐서 '${saveResult.name}'으로 그래프를 업데이트 저장했어.`
-            : '현재 그래프를 업데이트 저장했어.',
+          ? `새 그래프 워크플로우를 저장했어. (${saveResult.name})`
+          : `현재 그래프를 업데이트 저장했어. (${saveResult.name})`,
         tone: 'info',
       })
     } catch (error) {
@@ -1042,7 +1005,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       let autoSaved = false
 
       if (selectedGraphId === null || isDirty) {
-        const saveResult = await persistCurrentGraph({ allowAutoRename: true, silent: true })
+        const saveResult = await persistCurrentGraph({ silent: true })
         if (!saveResult) {
           showSnackbar({ message: '선택 노드를 실행하려면 현재 그래프를 먼저 저장할 수 있어야 해.', tone: 'error' })
           return
@@ -1130,7 +1093,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
     if (selectedGraphId === null || isDirty) {
       try {
-        const saveResult = await persistCurrentGraph({ allowAutoRename: true, silent: true })
+        const saveResult = await persistCurrentGraph({ silent: true })
         if (!saveResult) {
           showSnackbar({ message: '재실행하려면 현재 그래프를 먼저 저장할 수 있어야 해.', tone: 'error' })
           return

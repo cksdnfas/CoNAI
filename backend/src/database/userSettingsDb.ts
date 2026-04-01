@@ -235,7 +235,7 @@ function createTables(): void {
   userSettingsDb.exec(`
     CREATE TABLE IF NOT EXISTS graph_workflows (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
       description TEXT,
       graph_json TEXT NOT NULL,
       version INTEGER NOT NULL DEFAULT 1,
@@ -547,6 +547,57 @@ function ensureModuleDefinitionsSupportsSystemEngine(): void {
   } catch (error) {
     userSettingsDb.exec('ROLLBACK;');
     throw error;
+  }
+}
+
+/**
+ * Recreate graph_workflows when an older database still enforces unique workflow names.
+ */
+function ensureGraphWorkflowsAllowDuplicateNames(): void {
+  const schemaRow = userSettingsDb
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='graph_workflows'")
+    .get() as { sql?: string } | undefined;
+
+  if (!schemaRow?.sql || !schemaRow.sql.toUpperCase().includes('NAME TEXT NOT NULL UNIQUE')) {
+    return;
+  }
+
+  console.log('🔧 Updating graph_workflows schema to allow duplicate workflow names...');
+
+  userSettingsDb.exec('PRAGMA foreign_keys = OFF;');
+
+  try {
+    userSettingsDb.exec(`
+      BEGIN TRANSACTION;
+      CREATE TABLE graph_workflows__new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        graph_json TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        is_active INTEGER DEFAULT 1,
+        created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      INSERT INTO graph_workflows__new (
+        id, name, description, graph_json, version, is_active, created_date, updated_date
+      )
+      SELECT
+        id, name, description, graph_json, version, is_active, created_date, updated_date
+      FROM graph_workflows;
+
+      DROP TABLE graph_workflows;
+      ALTER TABLE graph_workflows__new RENAME TO graph_workflows;
+      CREATE INDEX IF NOT EXISTS idx_graph_workflows_name ON graph_workflows(name);
+      CREATE INDEX IF NOT EXISTS idx_graph_workflows_active ON graph_workflows(is_active);
+      COMMIT;
+    `);
+  } catch (error) {
+    userSettingsDb.exec('ROLLBACK;');
+    throw error;
+  } finally {
+    userSettingsDb.exec('PRAGMA foreign_keys = ON;');
   }
 }
 
@@ -1059,6 +1110,7 @@ function runMigrations(): void {
     console.log('📊 No migrations folder found, creating tables directly...');
     createTables();
     ensureModuleDefinitionsSupportsSystemEngine();
+    ensureGraphWorkflowsAllowDuplicateNames();
     ensureBuiltinSystemModules();
     return;
   }
@@ -1078,6 +1130,7 @@ function runMigrations(): void {
   if (pendingMigrations.length === 0) {
     console.log('  ✓ All migrations already applied');
     ensureModuleDefinitionsSupportsSystemEngine();
+    ensureGraphWorkflowsAllowDuplicateNames();
     ensureBuiltinSystemModules();
     return;
   }
@@ -1097,6 +1150,7 @@ function runMigrations(): void {
   }
 
   ensureModuleDefinitionsSupportsSystemEngine();
+  ensureGraphWorkflowsAllowDuplicateNames();
   ensureBuiltinSystemModules();
 }
 

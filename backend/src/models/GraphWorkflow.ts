@@ -88,20 +88,6 @@ export class GraphWorkflowModel {
     return info.changes > 0
   }
 
-  static existsByName(name: string, excludeId?: number): boolean {
-    const db = getUserSettingsDb()
-    let query = 'SELECT 1 FROM graph_workflows WHERE name = ?'
-    const params: Array<string | number> = [name]
-
-    if (excludeId !== undefined) {
-      query += ' AND id != ?'
-      params.push(excludeId)
-    }
-
-    const row = db.prepare(query).get(...params)
-    return !!row
-  }
-
   static createVersionSnapshot(workflowId: number, version: number, graph: unknown, changelog?: string) {
     const db = getUserSettingsDb()
     db.prepare(`
