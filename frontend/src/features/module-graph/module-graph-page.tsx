@@ -14,7 +14,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { ArrowLeft, Boxes, ChevronDown, Copy, Plus, RefreshCw, RotateCcw, Save, Trash2, Unplug, Workflow } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import { PageHeader } from '@/components/common/page-header'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -317,13 +317,69 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     [nodes],
   )
   const latestExecution = executionList[0] ?? null
+  const previewExecutionCandidates = useMemo(
+    () => executionList.filter((execution) => execution.status === 'completed').slice(0, 8),
+    [executionList],
+  )
+  const previewExecutionDetailQueries = useQueries({
+    queries: previewExecutionCandidates.map((execution) => ({
+      queryKey: ['module-graph-preview-execution-detail', execution.id],
+      queryFn: () => getGraphExecution(execution.id),
+      staleTime: 30_000,
+    })),
+  })
+  const latestArtifactPreviewByNode = useMemo(() => {
+    const previewByNode = new Map<string, {
+      executionArtifactCount: number
+      latestArtifactLabel: string | null
+      latestArtifactPreviewUrl: string | null
+      latestArtifactTextPreview: string | null
+    }>()
+
+    previewExecutionCandidates.forEach((execution, index) => {
+      const detail = previewExecutionDetailQueries[index]?.data
+      if (!detail || detail.execution.id !== execution.id) {
+        return
+      }
+
+      const artifactsByNode = detail.artifacts.reduce<Record<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
+        if (!acc[artifact.node_id]) {
+          acc[artifact.node_id] = []
+        }
+
+        acc[artifact.node_id].push(artifact)
+        return acc
+      }, {})
+
+      Object.entries(artifactsByNode).forEach(([nodeId, nodeArtifacts]) => {
+        if (previewByNode.has(nodeId)) {
+          return
+        }
+
+        const artifactPreview = buildNodeArtifactPreview(nodeArtifacts)
+        if (!artifactPreview.latestArtifactLabel && !artifactPreview.latestArtifactPreviewUrl && !artifactPreview.latestArtifactTextPreview) {
+          return
+        }
+
+        previewByNode.set(nodeId, {
+          executionArtifactCount: nodeArtifacts.length,
+          latestArtifactLabel: artifactPreview.latestArtifactLabel,
+          latestArtifactPreviewUrl: artifactPreview.latestArtifactPreviewUrl,
+          latestArtifactTextPreview: artifactPreview.latestArtifactTextPreview,
+        })
+      })
+    })
+
+    return previewByNode
+  }, [previewExecutionCandidates, previewExecutionDetailQueries])
   const latestExecutionPreviewArtifact = useMemo(() => {
-    if (!latestExecution || executionDetailQuery.data?.execution.id !== latestExecution.id) {
+    const latestPreviewDetail = previewExecutionDetailQueries[0]?.data
+    if (!latestExecution || !latestPreviewDetail || latestPreviewDetail.execution.id !== latestExecution.id) {
       return null
     }
 
-    return executionDetailQuery.data.artifacts.find((artifact) => artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') ?? null
-  }, [executionDetailQuery.data, latestExecution])
+    return latestPreviewDetail.artifacts.find((artifact) => artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') ?? null
+  }, [latestExecution, previewExecutionDetailQueries])
   const selectedExecution = useMemo(() => executionList.find((execution) => execution.id === selectedExecutionId) ?? executionDetailQuery.data?.execution ?? null, [executionDetailQuery.data?.execution, executionList, selectedExecutionId])
   const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedNodeId) ?? null, [nodes, selectedNodeId])
   const selectedEdge = useMemo(() => edges.find((edge) => edge.id === selectedEdgeId) ?? null, [edges, selectedEdgeId])
@@ -490,20 +546,24 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
     if (!executionDetailQuery.data) {
       setNodes((currentNodes) =>
-        currentNodes.map((node) => ({
-          ...node,
-          data: {
-            ...node.data,
-            executionStatus: 'idle',
-            executionArtifactCount: 0,
-            latestArtifactLabel: null,
-            latestArtifactPreviewUrl: null,
-            latestArtifactTextPreview: null,
-            executionReuseState: null,
-            connectedInputKeys: Array.from(connectedInputMap.get(node.id) ?? []),
-            connectedOutputKeys: Array.from(connectedOutputMap.get(node.id) ?? []),
-          },
-        })),
+        currentNodes.map((node) => {
+          const fallbackPreview = latestArtifactPreviewByNode.get(node.id)
+
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              executionStatus: fallbackPreview ? 'completed' : 'idle',
+              executionArtifactCount: fallbackPreview?.executionArtifactCount ?? 0,
+              latestArtifactLabel: fallbackPreview?.latestArtifactLabel ?? null,
+              latestArtifactPreviewUrl: fallbackPreview?.latestArtifactPreviewUrl ?? null,
+              latestArtifactTextPreview: fallbackPreview?.latestArtifactTextPreview ?? null,
+              executionReuseState: null,
+              connectedInputKeys: Array.from(connectedInputMap.get(node.id) ?? []),
+              connectedOutputKeys: Array.from(connectedOutputMap.get(node.id) ?? []),
+            },
+          }
+        }),
       )
       return
     }
@@ -527,20 +587,34 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     setNodes((currentNodes) =>
       currentNodes.map((node) => {
         const nodeArtifacts = artifactsByNode[node.id] ?? []
-        const artifactPreview = buildNodeArtifactPreview(nodeArtifacts)
+        const selectedArtifactPreview = buildNodeArtifactPreview(nodeArtifacts)
+        const fallbackPreview = latestArtifactPreviewByNode.get(node.id)
+        const artifactPreview = nodeArtifacts.length > 0
+          ? selectedArtifactPreview
+          : {
+              latestArtifactLabel: fallbackPreview?.latestArtifactLabel ?? null,
+              latestArtifactPreviewUrl: fallbackPreview?.latestArtifactPreviewUrl ?? null,
+              latestArtifactTextPreview: fallbackPreview?.latestArtifactTextPreview ?? null,
+            }
+        const selectedExecutionStatus = getNodeExecutionStatus({
+          nodeId: node.id,
+          orderedNodeIds,
+          artifactNodeIds,
+          executionStatus: executionDetailQuery.data.execution.status,
+          failedNodeId: executionDetailQuery.data.execution.failed_node_id,
+        })
+        const executionStatus = nodeArtifacts.length > 0 || orderedNodeIds.includes(node.id)
+          ? selectedExecutionStatus
+          : fallbackPreview
+            ? 'completed'
+            : 'idle'
 
         return {
           ...node,
           data: {
             ...node.data,
-            executionStatus: getNodeExecutionStatus({
-              nodeId: node.id,
-              orderedNodeIds,
-              artifactNodeIds,
-              executionStatus: executionDetailQuery.data.execution.status,
-              failedNodeId: executionDetailQuery.data.execution.failed_node_id,
-            }),
-            executionArtifactCount: nodeArtifacts.length,
+            executionStatus,
+            executionArtifactCount: nodeArtifacts.length > 0 ? nodeArtifacts.length : (fallbackPreview?.executionArtifactCount ?? 0),
             latestArtifactLabel: artifactPreview.latestArtifactLabel,
             latestArtifactPreviewUrl: artifactPreview.latestArtifactPreviewUrl,
             latestArtifactTextPreview: artifactPreview.latestArtifactTextPreview,
@@ -551,7 +625,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
         }
       }),
     )
-  }, [edges, executionDetailQuery.data, setNodes])
+  }, [edges, executionDetailQuery.data, latestArtifactPreviewByNode, setNodes])
 
   const isValidConnection = useCallback(
     (edgeOrConnection: Connection | ModuleGraphEdge) => {
