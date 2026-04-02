@@ -248,7 +248,7 @@ function ImageViewModal({
       {canViewPrevious ? (
         <button
           type="button"
-          className="absolute inset-y-0 left-0 z-[91] hidden w-20 items-center justify-start bg-gradient-to-r from-black/34 via-black/12 to-transparent pl-3 text-white/72 transition hover:text-white xl:flex"
+          className="absolute left-0 top-1/2 z-[91] hidden h-40 w-16 -translate-y-1/2 items-center justify-start bg-gradient-to-r from-black/34 via-black/12 to-transparent pl-3 text-white/72 transition hover:text-white xl:flex"
           onMouseDown={(event) => event.stopPropagation()}
           onClick={onViewPrevious}
           aria-label="이전 이미지"
@@ -262,7 +262,7 @@ function ImageViewModal({
       {canViewNext ? (
         <button
           type="button"
-          className="absolute inset-y-0 right-0 z-[91] hidden w-20 items-center justify-end bg-gradient-to-l from-black/34 via-black/12 to-transparent pr-3 text-white/72 transition hover:text-white xl:flex"
+          className="absolute right-0 top-1/2 z-[91] hidden h-40 w-16 -translate-y-1/2 items-center justify-end bg-gradient-to-l from-black/34 via-black/12 to-transparent pr-3 text-white/72 transition hover:text-white xl:flex"
           onMouseDown={(event) => event.stopPropagation()}
           onClick={onViewNext}
           aria-label="다음 이미지"
