@@ -65,6 +65,8 @@ import {
   type SelectedImageDraft,
 } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
+import { NaiSelectedImageCard } from './nai-selected-image-card'
+import { NaiVibesSection } from './nai-vibes-section'
 import { NaiAssetSaveModal } from './nai-asset-save-modal'
 import { NaiCharacterPositionBoard } from './nai-character-position-board'
 import { NaiModuleSaveModal } from './nai-module-save-modal'
@@ -80,21 +82,6 @@ type NaiGenerationPanelProps = {
 }
 
 type NaiLoginMode = 'account' | 'token'
-
-/** Render a compact selected-image preview card. */
-function SelectedImageCard({ image, alt, onRemove }: { image: SelectedImageDraft; alt: string; onRemove: () => void }) {
-  return (
-    <div className="theme-surface-nested space-y-2 rounded-sm border border-border p-3">
-      <div className="text-xs text-muted-foreground">{image.fileName}</div>
-      <img src={image.dataUrl} alt={alt} className="max-h-48 rounded-sm border border-border object-contain" />
-      <div className="flex justify-end">
-        <Button type="button" size="sm" variant="ghost" onClick={onRemove}>
-          제거
-        </Button>
-      </div>
-    </div>
-  )
-}
 
 type AssetSaveTarget =
   | { kind: 'vibe'; index: number }
@@ -1192,7 +1179,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                               {naiForm.action === 'infill' ? '소스/마스크 편집' : '소스 편집'}
                             </Button>
                           </div>
-                          {naiForm.sourceImage ? <SelectedImageCard image={naiForm.sourceImage} alt="NAI source" onRemove={() => void handleNaiImageChange('sourceImage')} /> : null}
+                          {naiForm.sourceImage ? <NaiSelectedImageCard image={naiForm.sourceImage} alt="NAI source" onRemove={() => void handleNaiImageChange('sourceImage')} /> : null}
                         </div>
                       </FormField>
 
@@ -1201,7 +1188,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                           <div className="space-y-3">
                             <div className="text-xs text-muted-foreground">소스 편집기에서 마스크를 같이 만들 수 있어. 필요하면 외부 마스크를 따로 붙여도 돼.</div>
                             <ImageAttachmentPickerButton label={naiForm.maskImage ? '마스크 이미지 변경' : '마스크 이미지 선택'} modalTitle="마스크 이미지 선택" onSelect={(image) => handleNaiImageChange('maskImage', image)} />
-                            {naiForm.maskImage ? <SelectedImageCard image={naiForm.maskImage} alt="NAI mask" onRemove={() => void handleNaiImageChange('maskImage')} /> : null}
+                            {naiForm.maskImage ? <NaiSelectedImageCard image={naiForm.maskImage} alt="NAI mask" onRemove={() => void handleNaiImageChange('maskImage')} /> : null}
                           </div>
                         </FormField>
                       ) : null}
@@ -1231,111 +1218,21 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             ) : null}
 
 
-            <section className="space-y-3">
-              <Card>
-                <CardContent className="space-y-4">
-                  <SectionHeading
-                    variant="inside"
-                    className="border-b border-border/70 pb-4"
-                    heading="Vibes"
-                    actions={(
-                      <>
-                        <Badge variant="outline">{naiForm.vibes.length}</Badge>
-                        <Button type="button" size="icon-sm" variant="outline" onClick={handleAddVibe} aria-label="Vibe 추가" title="Vibe 추가">
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </>
-                    )}
-                  />
-                  <div className="space-y-4">
-                    <div className="space-y-3">
-                      {naiForm.vibes.map((vibe, index) => (
-                        <div key={`nai-vibe-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <div className="text-sm font-medium text-foreground">Vibe {index + 1}</div>
-                              {vibe.encoded ? (
-                                <Badge variant="secondary">준비됨</Badge>
-                              ) : vibe.image ? (
-                                <Badge variant="outline">자동 인코딩</Badge>
-                              ) : (
-                                <Badge variant="outline">이미지 필요</Badge>
-                              )}
-                            </div>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveVibe(index)}>
-                              <Trash2 className="h-4 w-4" />
-                              제거
-                            </Button>
-                          </div>
-
-                          <FormField label="Reference Image">
-                            <div className="space-y-3">
-                              <ImageAttachmentPickerButton label={vibe.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Vibe ${index + 1} 이미지 선택`} onSelect={(image) => handleVibeImageChange(index, image)} />
-                              {vibe.image ? <SelectedImageCard image={vibe.image} alt={`NAI vibe ${index + 1}`} onRemove={() => void handleVibeImageChange(index)} /> : null}
-                            </div>
-                          </FormField>
-
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <FormField label="Strength">
-                              <ScrubbableNumberInput min={0.01} max={1} step={0.01} value={vibe.strength} onChange={(value) => handleVibeFieldChange(index, 'strength', value)} />
-                            </FormField>
-                            <FormField label="Information Extracted">
-                              <ScrubbableNumberInput min={0.01} max={1} step={0.01} value={vibe.informationExtracted} onChange={(value) => handleVibeFieldChange(index, 'informationExtracted', value)} />
-                            </FormField>
-                          </div>
-
-                          <div className="flex justify-end gap-2">
-                            <Button type="button" variant="outline" onClick={() => handleOpenVibeSaveModal(index)} disabled={!vibe.image || encodingVibeIndex === index}>
-                              <Save className="h-4 w-4" />
-                              {encodingVibeIndex === index ? '인코딩 중…' : '저장'}
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <div className="text-sm font-medium text-foreground">Saved Vibes</div>
-                          <Badge variant="outline">{savedVibesQuery.data?.length ?? 0}</Badge>
-                        </div>
-                        <div className="w-full sm:w-72">
-                          <Input value={savedVibeSearch} onChange={(event) => setSavedVibeSearch(event.target.value)} placeholder="이름 / 설명 검색" />
-                        </div>
-                      </div>
-                      {savedVibesQuery.isLoading ? (
-                        <div className="text-sm text-muted-foreground">불러오는 중…</div>
-                      ) : filteredSavedVibes.length > 0 ? (
-                        <div className="space-y-2">
-                          {filteredSavedVibes.map((asset) => (
-                            <div key={asset.id} className="flex items-center gap-3 rounded-sm border border-border bg-surface-low p-3">
-                              {asset.image_data_url ? (
-                                <img src={asset.image_data_url} alt={asset.label} className="h-16 w-16 shrink-0 rounded-sm object-contain" />
-                              ) : (
-                                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-sm bg-surface-high text-[11px] text-muted-foreground">
-                                  no preview
-                                </div>
-                              )}
-                              <div className="min-w-0 flex-1 space-y-1">
-                                <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
-                                {asset.description ? <div className="line-clamp-2 text-xs text-muted-foreground">{asset.description}</div> : null}
-                              </div>
-                              <div className="flex shrink-0 gap-2 self-center">
-                                <Button type="button" size="sm" variant="outline" onClick={() => handleLoadVibeFromStore(asset.id)}>불러오기</Button>
-                                <Button type="button" size="sm" variant="ghost" onClick={() => void handleDeleteVibeFromStore(asset.id)}>삭제</Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 vibe가 없어.</div>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </section>
+            <NaiVibesSection
+              vibes={naiForm.vibes}
+              encodingVibeIndex={encodingVibeIndex}
+              savedVibes={filteredSavedVibes}
+              savedVibeSearch={savedVibeSearch}
+              savedVibesLoading={savedVibesQuery.isLoading}
+              onSavedVibeSearchChange={setSavedVibeSearch}
+              onAddVibe={handleAddVibe}
+              onRemoveVibe={handleRemoveVibe}
+              onVibeImageChange={handleVibeImageChange}
+              onVibeFieldChange={handleVibeFieldChange}
+              onOpenVibeSaveModal={handleOpenVibeSaveModal}
+              onLoadVibeFromStore={handleLoadVibeFromStore}
+              onDeleteVibeFromStore={(assetId) => void handleDeleteVibeFromStore(assetId)}
+            />
 
 
             <section className="space-y-3">
@@ -1379,7 +1276,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                           <FormField label="Reference Image">
                             <div className="space-y-3">
                               <ImageAttachmentPickerButton label={reference.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} onSelect={(image) => handleCharacterReferenceImageChange(index, image)} />
-                              {reference.image ? <SelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} onRemove={() => void handleCharacterReferenceImageChange(index)} /> : null}
+                              {reference.image ? <NaiSelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} onRemove={() => void handleCharacterReferenceImageChange(index)} /> : null}
                             </div>
                           </FormField>
 
