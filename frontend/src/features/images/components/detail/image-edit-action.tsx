@@ -4,7 +4,6 @@ import { FilePenLine } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { getExistingImageEditorSourceUrl, saveEditedImageToCanvas } from '@/lib/api'
-import { triggerBrowserDownload } from '@/lib/api-client'
 import type { ImageRecord } from '@/types/image'
 
 const ImageEditorModal = lazy(() => import('@/features/image-editor/image-editor-modal'))
@@ -26,9 +25,8 @@ export function ImageEditAction({ image }: ImageEditActionProps) {
     mutationFn: async (payload: { sourceImageDataUrl: string }) => saveEditedImageToCanvas(fileId as number, payload.sourceImageDataUrl, 90),
     onSuccess: async (result) => {
       setIsEditorOpen(false)
-      showSnackbar({ message: `편집본 저장 완료: ${result.fileName}`, tone: 'info' })
+      showSnackbar({ message: `편집본을 save/canvas에 저장했어: ${result.fileName}`, tone: 'info' })
       await queryClient.invalidateQueries({ queryKey: ['image-attachment-save-images'] })
-      triggerBrowserDownload(result.savedUrl, result.fileName)
     },
     onError: (error) => {
       showSnackbar({ message: error instanceof Error ? error.message : '편집 이미지를 저장하지 못했어.', tone: 'error' })
