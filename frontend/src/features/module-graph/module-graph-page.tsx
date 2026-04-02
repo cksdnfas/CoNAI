@@ -13,18 +13,11 @@ import {
   type Connection,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Boxes, Copy, Plus, RefreshCw, RotateCcw, SlidersHorizontal, Trash2, Unplug, Workflow } from 'lucide-react'
+import { ArrowLeft, Plus, RefreshCw } from 'lucide-react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
-import { SectionHeading } from '@/components/common/section-heading'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
-import { Input } from '@/components/ui/input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import {
@@ -47,7 +40,9 @@ import {
 import { GraphExecutionPanel } from './components/graph-execution-panel'
 import { ModuleGraphNodeCard } from './components/module-graph-node-card'
 import { ModuleLibraryPanel } from './components/module-library-panel'
+import { ModuleWorkflowBrowseView } from './components/module-workflow-browse-view'
 import { ModuleWorkflowEditorSupportPanel, type EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
+import { ModuleWorkflowEditorView } from './components/module-workflow-editor-view'
 import { NodeInspectorPanel } from './components/node-inspector-panel'
 import { SavedGraphList } from './components/saved-graph-list'
 import { WorkflowExposedInputEditor } from './components/workflow-exposed-input-editor'
@@ -71,7 +66,6 @@ import {
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
-import { cn } from '@/lib/utils'
 import { buildWorkflowExposedInputId, buildWorkflowValidationIssues } from './module-graph-validation'
 
 type ModuleWorkflowWorkspaceProps = {
@@ -1469,32 +1463,31 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       ) : null}
 
       {workflowView === 'browse' ? (
-        <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[320px_minmax(0,1fr)]' : 'grid-cols-1')}>
-          {workflowListSidebar}
-
-          <div className="space-y-6">
-            {selectedGraphRecord ? (
-              <WorkflowRunnerPanel
-                selectedGraph={selectedGraphRecord}
-                inputDefinitions={selectedGraphRecord.graph.metadata?.exposed_inputs ?? []}
-                inputValues={workflowRunInputValues}
-                isExecuting={executingGraphId !== null}
-                latestExecution={latestExecution}
-                latestPreviewUrl={latestExecutionPreviewArtifact ? getArtifactPreviewUrl(latestExecutionPreviewArtifact) : null}
-                latestPreviewLabel={latestExecutionPreviewArtifact ? `${latestExecutionPreviewArtifact.node_id} · ${latestExecutionPreviewArtifact.port_key}` : null}
-                onInputValueChange={handleWorkflowRunInputChange}
-                onInputValueClear={handleWorkflowRunInputClear}
-                onInputImageChange={handleWorkflowRunInputImageChange}
-                onExecute={() => void handleRunSelectedWorkflow()}
-                onEdit={() => {
-                  enterWorkflowEditor('setup')
-                }}
-                canExecute={selectedWorkflowCanExecute}
-                validationIssues={selectedWorkflowValidationIssues}
-                onValidationIssueSelect={focusValidationIssue}
-              />
-            ) : null}
-
+        <ModuleWorkflowBrowseView
+          isDesktopPageLayout={isDesktopPageLayout}
+          workflowListSidebar={workflowListSidebar}
+          workflowRunnerPanel={selectedGraphRecord ? (
+            <WorkflowRunnerPanel
+              selectedGraph={selectedGraphRecord}
+              inputDefinitions={selectedGraphRecord.graph.metadata?.exposed_inputs ?? []}
+              inputValues={workflowRunInputValues}
+              isExecuting={executingGraphId !== null}
+              latestExecution={latestExecution}
+              latestPreviewUrl={latestExecutionPreviewArtifact ? getArtifactPreviewUrl(latestExecutionPreviewArtifact) : null}
+              latestPreviewLabel={latestExecutionPreviewArtifact ? `${latestExecutionPreviewArtifact.node_id} · ${latestExecutionPreviewArtifact.port_key}` : null}
+              onInputValueChange={handleWorkflowRunInputChange}
+              onInputValueClear={handleWorkflowRunInputClear}
+              onInputImageChange={handleWorkflowRunInputImageChange}
+              onExecute={() => void handleRunSelectedWorkflow()}
+              onEdit={() => {
+                enterWorkflowEditor('setup')
+              }}
+              canExecute={selectedWorkflowCanExecute}
+              validationIssues={selectedWorkflowValidationIssues}
+              onValidationIssueSelect={focusValidationIssue}
+            />
+          ) : null}
+          graphExecutionPanel={
             <GraphExecutionPanel
               selectedGraphId={selectedGraphId}
               selectedGraph={selectedGraphRecord}
@@ -1513,166 +1506,74 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               onRetryExecution={() => void handleRetrySelectedExecution()}
               onCancelExecution={() => void handleCancelSelectedExecution()}
             />
-          </div>
-        </div>
+          }
+        />
       ) : (
-        <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[320px_minmax(0,1fr)]' : 'grid-cols-1')}>
-          {workflowListSidebar}
-
-          <div className="space-y-6">
-            <Card>
-              <CardContent className="space-y-4">
-                <SectionHeading
-                  variant="inside"
-                  heading={
-                    <span className="flex items-center gap-2 text-sm font-semibold">
-                      <Boxes className="h-4 w-4 text-primary" />
-                      Workflow Graph
-                    </span>
-                  }
-                  actions={
-                    <>
-                      <Badge variant="outline">노드 {nodes.length}</Badge>
-                      <Badge variant="outline">엣지 {edges.length}</Badge>
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="outline"
-                        onClick={() => setIsModuleLibraryOpen(true)}
-                        aria-label="모듈 추가"
-                        title="모듈 추가"
-                      >
-                        <Boxes className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="outline"
-                        onClick={handleAutoLayout}
-                        disabled={nodes.length === 0}
-                        aria-label="자동 정렬"
-                        title="자동 정렬"
-                      >
-                        <Workflow className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="outline"
-                        onClick={handleDuplicateSelectedNode}
-                        disabled={!selectedNode}
-                        aria-label="노드 복제"
-                        title="노드 복제"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="outline"
-                        className="ml-1 border-rose-500/30 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
-                        onClick={handleRemoveSelectedNode}
-                        disabled={!selectedNode}
-                        aria-label="노드 삭제"
-                        title="노드 삭제"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="outline"
-                        className="border-rose-500/30 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
-                        onClick={handleRemoveSelectedEdge}
-                        disabled={!selectedEdge}
-                        aria-label="엣지 삭제"
-                        title="엣지 삭제"
-                      >
-                        <Unplug className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="outline"
-                        className="ml-2 border-amber-500/30 text-amber-200 hover:bg-amber-500/10 hover:text-amber-100"
-                        onClick={handleResetCanvas}
-                        aria-label="초기화"
-                        title="초기화"
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                      </Button>
-                    </>
-                  }
+        <ModuleWorkflowEditorView
+          isDesktopPageLayout={isDesktopPageLayout}
+          workflowListSidebar={workflowListSidebar}
+          nodesCount={nodes.length}
+          edgesCount={edges.length}
+          hasSelectedNode={Boolean(selectedNode)}
+          hasSelectedEdge={Boolean(selectedEdge)}
+          onOpenModuleLibrary={() => setIsModuleLibraryOpen(true)}
+          onAutoLayout={handleAutoLayout}
+          onDuplicateSelectedNode={handleDuplicateSelectedNode}
+          onRemoveSelectedNode={handleRemoveSelectedNode}
+          onRemoveSelectedEdge={handleRemoveSelectedEdge}
+          onResetCanvas={handleResetCanvas}
+          onOpenEditorSupport={() => openEditorSupport(selectedNode ? 'inspector' : selectedExecutionId ? 'results' : 'setup')}
+          onCloseEditorSupport={() => setIsEditorSupportOpen(false)}
+          isEditorSupportOpen={isEditorSupportOpen}
+          editorSupportTitle={selectedGraphRecord?.name || workflowName || 'Workflow Draft'}
+          workflowEditorSupportPanels={workflowEditorSupportPanels}
+          graphCanvas={
+            <div className="h-[760px] overflow-hidden rounded-sm border border-border bg-surface-lowest">
+              <ReactFlow
+                className="theme-graph-flow"
+                nodes={graphCanvasNodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onNodeClick={(_, node) => {
+                  setSelectedNodeId(node.id)
+                  setSelectedEdgeId(null)
+                  setSelectedValidationPortKey(null)
+                }}
+                onEdgeClick={(_, edge) => {
+                  setSelectedEdgeId(edge.id)
+                  setSelectedNodeId(null)
+                  setSelectedValidationPortKey(null)
+                }}
+                onPaneClick={() => {
+                  setSelectedNodeId(null)
+                  setSelectedEdgeId(null)
+                  setSelectedValidationPortKey(null)
+                }}
+                onConnect={handleConnect}
+                isValidConnection={isValidConnection}
+                nodeTypes={nodeTypes}
+                fitView
+                colorMode={reactFlowColorMode}
+                snapToGrid
+                connectionRadius={32}
+                deleteKeyCode={['Backspace', 'Delete']}
+                defaultMarkerColor="var(--foreground)"
+                defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed } }}
+              >
+                <MiniMap
+                  pannable
+                  zoomable
+                  nodeColor="var(--primary)"
+                  maskColor="color-mix(in srgb, var(--background) 72%, transparent)"
+                  className="!bg-surface-lowest"
                 />
-
-                <div className="h-[760px] overflow-hidden rounded-sm border border-border bg-surface-lowest">
-                  <ReactFlow
-                    className="theme-graph-flow"
-                    nodes={graphCanvasNodes}
-                    edges={edges}
-                    onNodesChange={onNodesChange}
-                    onEdgesChange={onEdgesChange}
-                    onNodeClick={(_, node) => {
-                      setSelectedNodeId(node.id)
-                      setSelectedEdgeId(null)
-                      setSelectedValidationPortKey(null)
-                    }}
-                    onEdgeClick={(_, edge) => {
-                      setSelectedEdgeId(edge.id)
-                      setSelectedNodeId(null)
-                      setSelectedValidationPortKey(null)
-                    }}
-                    onPaneClick={() => {
-                      setSelectedNodeId(null)
-                      setSelectedEdgeId(null)
-                      setSelectedValidationPortKey(null)
-                    }}
-                    onConnect={handleConnect}
-                    isValidConnection={isValidConnection}
-                    nodeTypes={nodeTypes}
-                    fitView
-                    colorMode={reactFlowColorMode}
-                    snapToGrid
-                    connectionRadius={32}
-                    deleteKeyCode={['Backspace', 'Delete']}
-                    defaultMarkerColor="var(--foreground)"
-                    defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed } }}
-                  >
-                    <MiniMap
-                      pannable
-                      zoomable
-                      nodeColor="var(--primary)"
-                      maskColor="color-mix(in srgb, var(--background) 72%, transparent)"
-                      className="!bg-surface-lowest"
-                    />
-                    <Controls />
-                    <Background gap={20} size={1} color="color-mix(in srgb, var(--foreground) 10%, transparent)" />
-                  </ReactFlow>
-                </div>
-              </CardContent>
-            </Card>
-
-            <FloatingBottomAction
-              type="button"
-              onClick={() => openEditorSupport(selectedNode ? 'inspector' : selectedExecutionId ? 'results' : 'setup')}
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              편집 도구
-            </FloatingBottomAction>
-
-            <BottomDrawerSheet
-              open={isEditorSupportOpen}
-              title={selectedGraphRecord?.name || workflowName || 'Workflow Draft'}
-              subtitle="설정 · 노드 검사 · 입력 · 검증 · 실행 결과"
-              ariaLabel="워크플로우 편집 도구"
-              onClose={() => setIsEditorSupportOpen(false)}
-              className={isDesktopPageLayout ? 'inset-x-auto left-1/2 w-[min(80vw,1400px)] -translate-x-1/2' : undefined}
-              bodyClassName="space-y-4 px-4 py-4 sm:px-6"
-            >
-              {workflowEditorSupportPanels}
-            </BottomDrawerSheet>
-          </div>
-        </div>
+                <Controls />
+                <Background gap={20} size={1} color="color-mix(in srgb, var(--foreground) 10%, transparent)" />
+              </ReactFlow>
+            </div>
+          }
+        />
       )}
 
       <SettingsModal
