@@ -9,13 +9,25 @@
  */
 
 import chokidar, { FSWatcher } from 'chokidar';
-import { db } from '../database/init';
 import path from 'path';
 import fs from 'fs';
 import { FolderScanService } from './folderScanService';
-import { WatchedFolderService } from './watchedFolderService';
-import { resolveFolderPath } from '../utils/pathResolver';
 import { shouldProcessFileExtension } from '../constants/supportedExtensions';
+import {
+  disableWatcherInDatabase,
+  findWatchedFolderForWatcher,
+  listAutoScanWatcherFolders,
+  markWatchedFileMissing,
+  updateWatcherLastEventInDatabase,
+  updateWatcherStatusInDatabase,
+  watchedFolderExists,
+} from './fileWatcher/fileWatcherStore';
+import {
+  parseWatcherJsonArray,
+  prepareWatcherStartPath,
+  resolveWatcherPollingOptions,
+  validateInitialWatcherPath,
+} from './fileWatcher/fileWatcherPathUtils';
 
 /**
  * 워처 상태
@@ -77,13 +89,7 @@ export class FileWatcherService {
     console.log('👀 FileWatcherService 초기화 중...');
 
     try {
-      // 활성화된 auto_scan 폴더 목록 가져오기
-      const folders = db.prepare(`
-        SELECT id, folder_path, folder_name, recursive,
-               exclude_extensions, exclude_patterns, watcher_enabled
-        FROM watched_folders
-        WHERE is_active = 1 AND auto_scan = 1
-      `).all() as any[];
+      const folders = listAutoScanWatcherFolders();
 
       console.log(`  📁 활성 폴더 ${folders.length}개 발견`);
 
@@ -91,46 +97,13 @@ export class FileWatcherService {
       let errorCount = 0;
 
       for (const folder of folders) {
-        // watcher_enabled가 명시적으로 1인 폴더만 워처 시작
         if (folder.watcher_enabled === 1) {
           try {
-            // 경로 사전 검증 (접근 불가능한 경로는 워처 시작하지 않음)
-            const resolvedPath = resolveFolderPath(folder.folder_path);
-
-            // 경로 존재 여부 확인
-            if (!fs.existsSync(resolvedPath)) {
-              console.warn(`  ⏭️  워처 건너뜀 (경로 없음): ${folder.folder_name}`);
-              console.warn(`     경로: ${resolvedPath}`);
-
-              // DB에서 워처 비활성화
-              db.prepare(`
-                UPDATE watched_folders
-                SET watcher_enabled = 0,
-                    watcher_status = 'error',
-                    watcher_error = ?
-                WHERE id = ?
-              `).run('초기화 시 경로 접근 실패 - 경로가 존재하지 않음', folder.id);
-
-              errorCount++;
-              continue;
-            }
-
-            // 경로 읽기 권한 확인
-            try {
-              fs.accessSync(resolvedPath, fs.constants.R_OK);
-            } catch (accessError) {
-              console.warn(`  ⏭️  워처 건너뜀 (읽기 권한 없음): ${folder.folder_name}`);
-              console.warn(`     경로: ${resolvedPath}`);
-
-              // DB에서 워처 비활성화
-              db.prepare(`
-                UPDATE watched_folders
-                SET watcher_enabled = 0,
-                    watcher_status = 'error',
-                    watcher_error = ?
-                WHERE id = ?
-              `).run('초기화 시 경로 접근 실패 - 읽기 권한 없음', folder.id);
-
+            const validation = validateInitialWatcherPath(folder.folder_path);
+            if (!validation.isValid) {
+              console.warn(`  ⏭️  워처 건너뜀 (${validation.errorMessage}): ${folder.folder_name}`);
+              console.warn(`     경로: ${validation.resolvedPath}`);
+              disableWatcherInDatabase(folder.id, validation.errorMessage || '초기화 시 경로 접근 실패');
               errorCount++;
               continue;
             }
@@ -142,16 +115,9 @@ export class FileWatcherService {
             errorCount++;
             console.error(`  ❌ 워처 시작 실패: ${folder.folder_name}`, error);
 
-            // 워처 시작 실패 시에도 DB에서 비활성화
             try {
               const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
-              db.prepare(`
-                UPDATE watched_folders
-                SET watcher_enabled = 0,
-                    watcher_status = 'error',
-                    watcher_error = ?
-                WHERE id = ?
-              `).run(`초기화 실패: ${errorMessage}`, folder.id);
+              disableWatcherInDatabase(folder.id, `초기화 실패: ${errorMessage}`);
             } catch (dbError) {
               console.error(`  ❌ DB 업데이트 실패:`, dbError);
             }
@@ -169,7 +135,6 @@ export class FileWatcherService {
 
     } catch (error) {
       console.error('❌ FileWatcherService 초기화 실패:', error);
-      // 개별 워처 실패는 이미 처리되었으므로, 전체 초기화는 실패로 처리하지 않음
       console.warn('⚠️  일부 워처 초기화 실패. 서버는 계속 실행됩니다.');
     }
   }
@@ -195,73 +160,37 @@ export class FileWatcherService {
       await this.stopWatcher(folderId);
     }
 
-    // 폴더 정보 조회
-    const folder = db.prepare(`
-      SELECT id, folder_path, folder_name, recursive,
-             exclude_extensions, exclude_patterns
-      FROM watched_folders
-      WHERE id = ? AND is_active = 1
-    `).get(folderId) as any;
+    const folder = findWatchedFolderForWatcher(folderId);
 
     if (!folder) {
       throw new Error(`폴더를 찾을 수 없거나 비활성화됨: folderId=${folderId}`);
     }
 
-    // 폴더 경로 확인
-    const resolvedPath = resolveFolderPath(folder.folder_path);
+    const preparedPath = prepareWatcherStartPath(folder.folder_path);
+    const resolvedPath = preparedPath.resolvedPath;
     console.log(`👀 [Watcher Debug] 경로 해석: ${folder.folder_path} → ${resolvedPath}`);
 
-    // 폴더가 존재하지 않는 경우 처리
-    if (!fs.existsSync(resolvedPath)) {
-      // 상대 경로인 경우 자동으로 생성 시도
-      if (!path.isAbsolute(folder.folder_path)) {
-        try {
-          fs.mkdirSync(resolvedPath, { recursive: true });
-          console.log(`  ✅ 폴더 자동 생성: ${resolvedPath}`);
-        } catch (error) {
-          console.warn(`  ⚠️  워처 건너뜀 (폴더 생성 실패): ${folder.folder_name}`);
-          console.warn(`     경로: ${resolvedPath}`);
-          return; // 에러를 던지지 않고 건너뜀
-        }
-      } else {
-        // 절대 경로인 경우 생성하지 않고 경고만 출력
-        console.warn(`  ⚠️  워처 건너뜀 (폴더 없음): ${folder.folder_name}`);
-        console.warn(`     경로: ${resolvedPath}`);
-        return; // 에러를 던지지 않고 건너뜀
-      }
-    }
-
-    // 접근 권한 확인
-    try {
-      fs.accessSync(resolvedPath, fs.constants.R_OK);
-      console.log(`👀 [Watcher Debug] 경로 접근 권한 확인 완료`);
-    } catch (error) {
-      console.warn(`  ⚠️  워처 건너뜀 (읽기 권한 없음): ${folder.folder_name}`);
+    if (!preparedPath.isReady) {
+      console.warn(`  ⚠️  워처 건너뜀 (${preparedPath.skipReason}): ${folder.folder_name}`);
       console.warn(`     경로: ${resolvedPath}`);
-      return; // 에러를 던지지 않고 건너뜀
+      return;
     }
 
-    // 워처 옵션 구성
-    const excludeExtensions = folder.exclude_extensions ? JSON.parse(folder.exclude_extensions) : [];
-    const excludePatterns = folder.exclude_patterns ? JSON.parse(folder.exclude_patterns) : [];
+    if (preparedPath.wasCreated) {
+      console.log(`  ✅ 폴더 자동 생성: ${resolvedPath}`);
+    }
 
-    const isNetworkDrive = this.isNetworkDrive(resolvedPath);
+    console.log(`👀 [Watcher Debug] 경로 접근 권한 확인 완료`);
 
-    // 폴링 간격 결정: 사용자 설정 > 네트워크 드라이브 기본값 (1000ms) > undefined
-    let pollingInterval: number | undefined = undefined;
-    let usePolling = false;
+    const excludeExtensions = parseWatcherJsonArray(folder.exclude_extensions);
+    const excludePatterns = parseWatcherJsonArray(folder.exclude_patterns);
+    const pollingOptions = resolveWatcherPollingOptions(folder, resolvedPath);
 
-    if (folder.watcher_polling_interval !== null && folder.watcher_polling_interval !== undefined) {
-      // 사용자가 명시적으로 폴링 간격을 설정한 경우
-      pollingInterval = folder.watcher_polling_interval;
-      usePolling = true;
-      console.log(`  ⚙️  사용자 설정 폴링 간격: ${pollingInterval}ms`);
-    } else if (isNetworkDrive) {
-      // 네트워크 드라이브 자동 감지 (5초 간격으로 변경하여 부하 감소)
-      pollingInterval = 5000;
-      usePolling = true;
+    if (pollingOptions.pollingReason === 'user-configured') {
+      console.log(`  ⚙️  사용자 설정 폴링 간격: ${pollingOptions.pollingInterval}ms`);
+    } else if (pollingOptions.pollingReason === 'network-drive') {
       console.warn(`  ⚠️  네트워크 드라이브 감지: ${folder.folder_name}`);
-      console.warn(`     폴링 모드 활성화 (간격: ${pollingInterval}ms)`);
+      console.warn(`     폴링 모드 활성화 (간격: ${pollingOptions.pollingInterval}ms)`);
     }
 
     const chokidarOptions = {
@@ -273,8 +202,8 @@ export class FileWatcherService {
         pollInterval: 100
       },
       depth: folder.recursive === 1 ? undefined : 0,
-      usePolling,
-      interval: pollingInterval,
+      usePolling: pollingOptions.usePolling,
+      interval: pollingOptions.pollingInterval,
       alwaysStat: true
     };
 
@@ -420,9 +349,7 @@ export class FileWatcherService {
    */
   private static async executeBatchScan(folderId: number): Promise<void> {
     // Safety check: verify folder still exists in database
-    const folderExists = db.prepare('SELECT id FROM watched_folders WHERE id = ?').get(folderId);
-
-    if (!folderExists) {
+    if (!watchedFolderExists(folderId)) {
       console.warn(`  ⚠️  배치 스캔 취소: 폴더 삭제됨 folderId=${folderId}`);
       this.cleanupFolderState(folderId);
       return;
@@ -497,15 +424,9 @@ export class FileWatcherService {
    */
   private static handleUnlinkEvent(filePath: string, folderId: number): void {
     try {
-      // 파일 상태를 'missing'으로 변경
-      const result = db.prepare(`
-        UPDATE image_files
-        SET file_status = 'missing',
-            last_verified_date = ?
-        WHERE original_file_path = ?
-      `).run(new Date().toISOString(), filePath);
+      const changes = markWatchedFileMissing(filePath, new Date().toISOString());
 
-      if (result.changes > 0) {
+      if (changes > 0) {
         console.log(`  ✅ 파일 상태 변경: ${path.basename(filePath)} → missing`);
       } else {
         console.log(`  ℹ️  파일이 데이터베이스에 없음: ${path.basename(filePath)}`);
@@ -594,13 +515,7 @@ export class FileWatcherService {
 
       // DB에서 워처 비활성화 및 에러 상태 저장
       try {
-        db.prepare(`
-          UPDATE watched_folders
-          SET watcher_enabled = 0,
-              watcher_status = 'error',
-              watcher_error = ?
-          WHERE id = ?
-        `).run('최대 재시도 횟수 초과 - 자동 비활성화됨', folderId);
+        disableWatcherInDatabase(folderId, '최대 재시도 횟수 초과 - 자동 비활성화됨');
         console.error(`  🔒 워처 자동 비활성화됨: ${entry.folderName} (DB 업데이트 완료)`);
       } catch (dbError) {
         console.error(`  ❌ DB 업데이트 실패:`, dbError);
@@ -634,13 +549,7 @@ export class FileWatcherService {
 
           // DB에서 워처 비활성화
           try {
-            db.prepare(`
-              UPDATE watched_folders
-              SET watcher_enabled = 0,
-                  watcher_status = 'error',
-                  watcher_error = ?
-              WHERE id = ?
-            `).run('재시작 실패 - 자동 비활성화됨', folderId);
+            disableWatcherInDatabase(folderId, '재시작 실패 - 자동 비활성화됨');
             console.error(`  🔒 워처 자동 비활성화됨: ${entry.folderName}`);
           } catch (dbError) {
             console.error(`  ❌ DB 업데이트 실패:`, dbError);
@@ -730,12 +639,7 @@ export class FileWatcherService {
    */
   private static updateWatcherStatus(folderId: number, status: string, error: string | null): void {
     try {
-      db.prepare(`
-        UPDATE watched_folders
-        SET watcher_status = ?,
-            watcher_error = ?
-        WHERE id = ?
-      `).run(status, error, folderId);
+      updateWatcherStatusInDatabase(folderId, status, error);
     } catch (err) {
       console.error(`  ❌ 워처 상태 업데이트 실패: folderId=${folderId}`, err);
     }
@@ -746,26 +650,9 @@ export class FileWatcherService {
    */
   private static updateLastEventTime(folderId: number): void {
     try {
-      db.prepare(`
-        UPDATE watched_folders
-        SET watcher_last_event = ?
-        WHERE id = ?
-      `).run(new Date().toISOString(), folderId);
+      updateWatcherLastEventInDatabase(folderId, new Date().toISOString());
     } catch (err) {
       console.error(`  ❌ 마지막 이벤트 시간 업데이트 실패: folderId=${folderId}`, err);
     }
-  }
-
-  /**
-   * 네트워크 드라이브 감지
-   */
-  private static isNetworkDrive(folderPath: string): boolean {
-    // Windows UNC 경로 (\\server\share 또는 //server/share 형식)
-    if (folderPath.startsWith('\\\\') || folderPath.startsWith('//')) return true;
-
-    // Unix 네트워크 마운트
-    if (folderPath.includes('/mnt/') || folderPath.includes('/net/')) return true;
-
-    return false;
   }
 }
