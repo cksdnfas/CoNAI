@@ -1,6 +1,7 @@
 import { ArrowLeft, Download, RefreshCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { ImageRecord } from '@/types/image'
+import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
 
 interface ImageDetailActionsProps {
@@ -21,6 +22,7 @@ export function ImageDetailActions({ downloadUrl, downloadName, image, isRefresh
       <Button size="icon-sm" variant="outline" onClick={onRefresh} disabled={isRefreshing} aria-label="새로고침" title="새로고침">
         <RefreshCcw className={isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
       </Button>
+      <ImageEditAction image={image} />
       <ImageGroupAssignAction image={image} />
       {downloadUrl ? (
         <Button size="icon-sm" asChild aria-label="다운로드" title="다운로드">

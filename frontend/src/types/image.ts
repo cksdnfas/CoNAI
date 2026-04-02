@@ -81,6 +81,7 @@ export interface ImageGroupMembership {
 
 export interface ImageRecord {
   id: number | string
+  file_id?: number | null
   composite_hash?: string | null
   original_file_path?: string | null
   thumbnail_url?: string | null

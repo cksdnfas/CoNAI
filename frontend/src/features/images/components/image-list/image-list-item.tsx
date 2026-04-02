@@ -1,6 +1,7 @@
 import { ImageOff } from 'lucide-react'
-import { memo, type DragEvent, type ReactNode, useEffect, useState } from 'react'
+import { memo, type DragEvent, type KeyboardEvent, type ReactNode, useEffect, useState } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
+import { ImageEditAction } from '@/features/images/components/detail/image-edit-action'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import {
@@ -80,11 +81,30 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
     </div>
   )
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onActivate?.(imageId, href)
+    }
+  }
+
+  const quickActions = !selectionMode ? (
+    <div
+      className="absolute right-2 top-2 z-30 flex items-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100"
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <ImageEditAction image={image} />
+      {renderOverlay}
+    </div>
+  ) : renderOverlay ? <div className="absolute right-2 top-2 z-30">{renderOverlay}</div> : null
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       className={cn(
-        'theme-list-shadow image-list-selectable group relative isolate block w-full overflow-hidden rounded-sm bg-surface-low text-left transition-transform duration-300',
+        'theme-list-shadow image-list-selectable group relative isolate block w-full overflow-hidden rounded-sm bg-surface-low text-left transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-primary/60',
         selected && 'is-selected',
         selectionMode ? 'cursor-default' : 'cursor-pointer',
       )}
@@ -95,13 +115,14 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       draggable={false}
       onDragStart={preventNativeDrag}
       onClick={() => onActivate?.(imageId, href)}
+      onKeyDown={handleKeyDown}
     >
       <div className="relative bg-surface-lowest select-none">
         {content}
-        {renderOverlay ? <div className="absolute right-2 top-2 z-30">{renderOverlay}</div> : null}
+        {quickActions}
         <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-sm" />
       </div>
-    </button>
+    </div>
   )
 })
 

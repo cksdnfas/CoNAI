@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Download, ExternalLink, Plus, Save, Sparkles, Trash2, WandSparkles } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
@@ -36,6 +36,7 @@ import {
   buildNaiModuleSnapshot,
   buildNaiModuleUiSchema,
   buildNaiVibePayload,
+  buildSelectedImageDraftFromDataUrl,
   canUseNaiCharacterPositions,
   clampNaiSampleCount,
   DEFAULT_NAI_FORM,
@@ -68,6 +69,8 @@ import { NaiAssetSaveModal } from './nai-asset-save-modal'
 import { NaiCharacterPositionBoard } from './nai-character-position-board'
 import { NaiModuleSaveModal } from './nai-module-save-modal'
 import { PromptToggleField } from './prompt-toggle-field'
+
+const ImageEditorModal = lazy(() => import('@/features/image-editor/image-editor-modal'))
 
 type NaiGenerationPanelProps = {
   refreshNonce: number
@@ -109,6 +112,11 @@ function deriveAssetLabel(fileName: string | undefined, fallback: string) {
   }
 
   return trimmed.replace(/\.[^/.]+$/, '') || fallback
+}
+
+/** Build one edited image file name while preserving the source label when possible. */
+function buildEditedImageFileName(fileName: string | undefined, fallback: string) {
+  return `${deriveAssetLabel(fileName, fallback)}-edited.png`
 }
 
 type AssetSaveTarget =
@@ -220,6 +228,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
   const [assetSaveName, setAssetSaveName] = useState('')
   const [assetSaveDescription, setAssetSaveDescription] = useState('')
   const [isUpscaling, setIsUpscaling] = useState(false)
+  const [isImageEditorOpen, setIsImageEditorOpen] = useState(false)
   const [encodingVibeIndex, setEncodingVibeIndex] = useState<number | null>(null)
   const [selectedCharacterIndex, setSelectedCharacterIndex] = useState<number | null>(null)
   const [savedVibeSearch, setSavedVibeSearch] = useState('')
@@ -386,6 +395,27 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     setNaiForm((current) => ({
       ...current,
       [field]: image,
+    }))
+  }
+
+  const handleOpenImageEditor = () => {
+    if (!naiForm.sourceImage) {
+      showSnackbar({ message: '먼저 소스 이미지를 선택해.', tone: 'error' })
+      return
+    }
+
+    setIsImageEditorOpen(true)
+  }
+
+  const handleSaveImageEditor = async (payload: { sourceImageDataUrl: string; maskImageDataUrl?: string }) => {
+    setNaiForm((current) => ({
+      ...current,
+      sourceImage: buildSelectedImageDraftFromDataUrl(payload.sourceImageDataUrl, buildEditedImageFileName(current.sourceImage?.fileName, 'source-image')),
+      maskImage: current.action === 'infill'
+        ? payload.maskImageDataUrl
+          ? buildSelectedImageDraftFromDataUrl(payload.maskImageDataUrl, buildEditedImageFileName(current.maskImage?.fileName, 'mask-image'))
+          : undefined
+        : current.maskImage,
     }))
   }
 
@@ -1152,7 +1182,12 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                     <div className="space-y-4">
                       <FormField label="Source Image">
                         <div className="space-y-3">
-                          <ImageAttachmentPickerButton label={naiForm.sourceImage ? '소스 이미지 변경' : '소스 이미지 선택'} modalTitle="소스 이미지 선택" onSelect={(image) => handleNaiImageChange('sourceImage', image)} />
+                          <div className="flex flex-wrap gap-2">
+                            <ImageAttachmentPickerButton label={naiForm.sourceImage ? '소스 이미지 변경' : '소스 이미지 선택'} modalTitle="소스 이미지 선택" onSelect={(image) => handleNaiImageChange('sourceImage', image)} />
+                            <Button type="button" variant="secondary" onClick={handleOpenImageEditor} disabled={!naiForm.sourceImage}>
+                              {naiForm.action === 'infill' ? '소스/마스크 편집' : '소스 편집'}
+                            </Button>
+                          </div>
                           {naiForm.sourceImage ? <SelectedImageCard image={naiForm.sourceImage} alt="NAI source" onRemove={() => void handleNaiImageChange('sourceImage')} /> : null}
                         </div>
                       </FormField>
@@ -1160,6 +1195,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                       {naiForm.action === 'infill' ? (
                         <FormField label="Mask Image">
                           <div className="space-y-3">
+                            <div className="text-xs text-muted-foreground">소스 편집기에서 마스크를 같이 만들 수 있어. 필요하면 외부 마스크를 따로 붙여도 돼.</div>
                             <ImageAttachmentPickerButton label={naiForm.maskImage ? '마스크 이미지 변경' : '마스크 이미지 선택'} modalTitle="마스크 이미지 선택" onSelect={(image) => handleNaiImageChange('maskImage', image)} />
                             {naiForm.maskImage ? <SelectedImageCard image={naiForm.maskImage} alt="NAI mask" onRemove={() => void handleNaiImageChange('maskImage')} /> : null}
                           </div>
@@ -1480,6 +1516,21 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
         onExposedFieldKeysChange={setNaiExposedFieldKeys}
         onSave={() => void handleCreateNaiModule()}
       />
+
+      {isImageEditorOpen ? (
+        <Suspense fallback={null}>
+          <ImageEditorModal
+            open={isImageEditorOpen}
+            title={naiForm.action === 'infill' ? 'Source and Mask Editor' : 'Source Image Editor'}
+            sourceImageDataUrl={naiForm.sourceImage?.dataUrl}
+            sourceFileName={naiForm.sourceImage?.fileName}
+            maskImageDataUrl={naiForm.maskImage?.dataUrl}
+            enableMaskEditing={naiForm.action === 'infill'}
+            onClose={() => setIsImageEditorOpen(false)}
+            onSave={handleSaveImageEditor}
+          />
+        </Suspense>
+      ) : null}
     </>
   )
 }

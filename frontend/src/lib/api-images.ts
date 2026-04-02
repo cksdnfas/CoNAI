@@ -116,6 +116,57 @@ export async function getPromptSimilarImages(compositeHash: string) {
   return response.data
 }
 
+export interface SaveEditedImageResult {
+  success: boolean
+  filePath: string
+  tempId: string
+  width: number
+  height: number
+  fileSize: number
+  fileName: string
+  savedUrl: string
+}
+
+/** Save one edited image into the managed save/canvas workspace as a reusable asset. */
+export async function saveEditedImageToCanvas(imageId: number, imageData: string, quality = 90): Promise<SaveEditedImageResult> {
+  const response = await fetchJson<ApiResponse<Omit<SaveEditedImageResult, 'fileName' | 'savedUrl'>>>(`/api/image-editor/${imageId}/save-webp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      imageData,
+      quality,
+    }),
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '편집 이미지를 저장하지 못했어.')
+  }
+
+  const normalizedPath = response.data.filePath.replace(/\\/g, '/')
+  const fileName = normalizedPath.split('/').at(-1) || `${response.data.tempId}.webp`
+
+  return {
+    ...response.data,
+    fileName,
+    savedUrl: buildApiUrl(`/save/canvas/${encodeURIComponent(fileName)}`),
+  }
+}
+
+/** Build the best available source URL for opening one existing image in the editor. */
+export function getExistingImageEditorSourceUrl(image?: ImageRecord | null) {
+  if (!image) {
+    return null
+  }
+
+  if (image.composite_hash) {
+    return `/api/images/${image.composite_hash}/file`
+  }
+
+  return image.image_url || image.thumbnail_url || null
+}
+
 export async function downloadImageSelection(compositeHashes: string[]) {
   if (compositeHashes.length === 0) {
     return

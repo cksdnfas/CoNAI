@@ -257,6 +257,14 @@ export async function buildSelectedImageDraftFromUrl(url: string, fileName?: str
   }
 }
 
+/** Build one selected-image draft directly from a prepared data URL payload. */
+export function buildSelectedImageDraftFromDataUrl(dataUrl: string, fileName = 'edited-image.png'): SelectedImageDraft {
+  return {
+    fileName,
+    dataUrl,
+  }
+}
+
 /** Check whether a workflow field draft has a usable value. */
 export function hasWorkflowFieldValue(value: WorkflowFieldDraftValue | undefined) {
   if (!value) {

@@ -9,6 +9,7 @@ import { useMinWidth } from '@/lib/use-min-width'
 import { ImageDetailView, type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
 import { ImageViewThumbnailStrip } from './image-view-thumbnail-strip'
 import { ImageViewModalContext, type ImageViewModalOpenInput } from './image-view-modal-context'
+import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
 
 interface ImageViewModalState {
@@ -396,6 +397,7 @@ function ImageViewModalActions({
       <div className="hidden xl:flex xl:flex-wrap xl:items-center xl:justify-between xl:gap-3">
         <div className="flex flex-wrap items-center gap-2">{navigationButtons}</div>
         <div className="flex flex-wrap items-center gap-2">
+          <ImageEditAction image={controls.image} />
           {groupAssignButton}
           {downloadButton}
         </div>
@@ -409,6 +411,7 @@ function ImageViewModalActions({
         <div className="rounded-sm border border-border bg-background/96 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.35)] backdrop-blur-md">
           <div className="flex flex-wrap items-center gap-2">
             {navigationButtons}
+            <ImageEditAction image={controls.image} />
             {groupAssignButton}
             {downloadButton}
           </div>
