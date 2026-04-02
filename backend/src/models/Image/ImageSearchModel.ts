@@ -2,6 +2,12 @@ import { db } from '../../database/init';
 import { AutoTagSearchParams } from '../../types/autoTag';
 import { AutoTagSearchService } from '../../services/autoTagSearchService';
 import { ImageWithFileView } from '../../types/image';
+import {
+  appendPositivePromptSearchCondition,
+  buildImageSearchFilterParts,
+  mapGroupedImageRows,
+  type ImageSearchParamsInput,
+} from './ImageSearchHelpers';
 
 /**
  * 이미지 검색 모델 (새 구조 기반)
@@ -15,35 +21,6 @@ import { ImageWithFileView } from '../../types/image';
  * - 모든 기존 기능 유지
  */
 export class ImageSearchModel {
-  /**
-   * Positive prompt 검색 조건 추가
-   * - base prompt(im.prompt)
-   * - 정규화 컬럼(im.character_prompt_text)
-   * - raw_nai_parameters.v4_prompt.caption.char_captions[].char_caption (fallback)
-   */
-  private static appendPositivePromptSearchCondition(
-    conditions: string[],
-    params: any[],
-    searchText: string,
-    tableAlias: string = 'im'
-  ): void {
-    const pattern = `%${searchText}%`;
-
-    conditions.push(`(
-      ${tableAlias}.prompt LIKE ?
-      OR ${tableAlias}.character_prompt_text LIKE ?
-      OR (
-        json_valid(${tableAlias}.raw_nai_parameters) = 1
-        AND EXISTS (
-          SELECT 1
-          FROM json_each(${tableAlias}.raw_nai_parameters, '$.v4_prompt.caption.char_captions') AS char_item
-          WHERE COALESCE(json_extract(char_item.value, '$.char_caption'), '') LIKE ?
-        )
-      )
-    )`);
-
-    params.push(pattern, pattern, pattern);
-  }
 
   /**
    * 고급 검색 (필터, 정렬, 그룹 포함)
@@ -55,105 +32,16 @@ export class ImageSearchModel {
    * @returns 이미지 목록 및 총 개수
    */
   static async advancedSearch(
-    searchParams: {
-      search_text?: string;
-      negative_text?: string;
-      ai_tool?: string;
-      model_name?: string;
-      min_width?: number;
-      max_width?: number;
-      min_height?: number;
-      max_height?: number;
-      min_file_size?: number;
-      max_file_size?: number;
-      start_date?: string;
-      end_date?: string;
-      group_id?: number;
-    },
+    searchParams: ImageSearchParamsInput,
     page: number = 1,
     limit: number = 20,
     sortBy: 'upload_date' | 'filename' | 'file_size' | 'width' | 'height' = 'upload_date',
     sortOrder: 'ASC' | 'DESC' = 'DESC'
   ): Promise<{ images: any[], total: number }> {
-    const conditions: string[] = [];
-    const params: any[] = [];
-
-    // composite_hash 필수 조건 (해시 생성 완료된 이미지만)
-    conditions.push('im.composite_hash IS NOT NULL');
-    conditions.push('if.file_status = ?');
-    params.push('active');
-
-    // 프롬프트 검색
-    if (searchParams.search_text) {
-      this.appendPositivePromptSearchCondition(conditions, params, searchParams.search_text, 'im');
-    }
-    if (searchParams.negative_text) {
-      conditions.push('im.negative_prompt LIKE ?');
-      params.push(`%${searchParams.negative_text}%`);
-    }
-
-    // AI 도구 및 모델
-    if (searchParams.ai_tool) {
-      conditions.push('im.ai_tool = ?');
-      params.push(searchParams.ai_tool);
-    }
-    if (searchParams.model_name) {
-      conditions.push('im.model_name LIKE ?');
-      params.push(`%${searchParams.model_name}%`);
-    }
-
-    // 이미지 크기 필터
-    if (searchParams.min_width) {
-      conditions.push('im.width >= ?');
-      params.push(searchParams.min_width);
-    }
-    if (searchParams.max_width) {
-      conditions.push('im.width <= ?');
-      params.push(searchParams.max_width);
-    }
-    if (searchParams.min_height) {
-      conditions.push('im.height >= ?');
-      params.push(searchParams.min_height);
-    }
-    if (searchParams.max_height) {
-      conditions.push('im.height <= ?');
-      params.push(searchParams.max_height);
-    }
-
-    // 파일 크기 필터 (image_files 테이블)
-    if (searchParams.min_file_size) {
-      conditions.push('if.file_size >= ?');
-      params.push(searchParams.min_file_size);
-    }
-    if (searchParams.max_file_size) {
-      conditions.push('if.file_size <= ?');
-      params.push(searchParams.max_file_size);
-    }
-
-    // 날짜 범위 필터
-    if (searchParams.start_date) {
-      conditions.push('DATE(im.first_seen_date) >= DATE(?)');
-      params.push(searchParams.start_date);
-    }
-    if (searchParams.end_date) {
-      conditions.push('DATE(im.first_seen_date) <= DATE(?)');
-      params.push(searchParams.end_date);
-    }
-
-    // 그룹 필터 (composite_hash 기반)
-    let groupJoinClause = '';
-    if (searchParams.group_id !== undefined) {
-      if (searchParams.group_id === 0) {
-        // 그룹 없는 이미지
-        groupJoinClause = 'LEFT JOIN image_groups ig_filter ON im.composite_hash = ig_filter.composite_hash';
-        conditions.push('ig_filter.composite_hash IS NULL');
-      } else {
-        // 특정 그룹의 이미지
-        groupJoinClause = 'INNER JOIN image_groups ig_filter ON im.composite_hash = ig_filter.composite_hash';
-        conditions.push('ig_filter.group_id = ?');
-        params.push(searchParams.group_id);
-      }
-    }
+    const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams, {
+      requireCompositeHash: true,
+      requireActiveFile: true,
+    });
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const offset = (page - 1) * limit;
@@ -211,23 +99,7 @@ export class ImageSearchModel {
 
     const rows = db.prepare(dataQuery).all(...params, limit, offset) as any[];
 
-    // 그룹 정보 변환
-    const enrichedImages = rows.map(row => ({
-      ...row,
-      // 레거시 호환: composite_hash를 id로도 제공
-      id: row.composite_hash,
-      // 레거시 호환: first_seen_date를 upload_date로도 제공
-      upload_date: row.first_seen_date,
-      // 그룹 배열로 변환
-      groups: row.group_names ? row.group_names.split(',').map((name: string, index: number) => ({
-        id: parseInt(row.group_ids.split(',')[index]),
-        name,
-        color: row.group_colors.split(',')[index] || null,
-        collection_type: row.collection_types.split(',')[index]
-      })) : []
-    }));
-
-    return { images: enrichedImages, total };
+    return { images: mapGroupedImageRows(rows), total };
   }
 
   /**
@@ -285,19 +157,7 @@ export class ImageSearchModel {
 
     const rows = db.prepare(query).all(limit, offset) as any[];
 
-    const enrichedImages = rows.map(row => ({
-      ...row,
-      id: row.composite_hash,
-      upload_date: row.first_seen_date,
-      groups: row.group_names ? row.group_names.split(',').map((name: string, index: number) => ({
-        id: parseInt(row.group_ids.split(',')[index]),
-        name,
-        color: row.group_colors.split(',')[index] || null,
-        collection_type: row.collection_types.split(',')[index]
-      })) : []
-    }));
-
-    return { images: enrichedImages, total };
+    return { images: mapGroupedImageRows(rows), total };
   }
 
   /**
@@ -380,19 +240,7 @@ export class ImageSearchModel {
 
     const rows = db.prepare(dataQuery).all(...queryBuilder.params, limit, offset) as any[];
 
-    const enrichedImages = rows.map(row => ({
-      ...row,
-      id: row.composite_hash,
-      upload_date: row.first_seen_date,
-      groups: row.group_names ? row.group_names.split(',').map((name: string, index: number) => ({
-        id: parseInt(row.group_ids.split(',')[index]),
-        name,
-        color: row.group_colors.split(',')[index] || null,
-        collection_type: row.collection_types.split(',')[index]
-      })) : []
-    }));
-
-    return { images: enrichedImages, total };
+    return { images: mapGroupedImageRows(rows), total };
   }
 
   /**
@@ -400,21 +248,7 @@ export class ImageSearchModel {
    * ✅ 완전히 composite_hash 기반으로 전환됨 (string[] 반환)
    */
   static async searchImageIds(
-    searchParams: {
-      search_text?: string;
-      negative_text?: string;
-      ai_tool?: string;
-      model_name?: string;
-      min_width?: number;
-      max_width?: number;
-      min_height?: number;
-      max_height?: number;
-      min_file_size?: number;
-      max_file_size?: number;
-      start_date?: string;
-      end_date?: string;
-      group_id?: number;
-    }
+    searchParams: ImageSearchParamsInput
   ): Promise<string[]> {
     // searchCompositeHashes() 메서드로 위임
     return this.searchCompositeHashes(searchParams);
@@ -425,89 +259,12 @@ export class ImageSearchModel {
    * @returns image_files.id 숫자 배열
    */
   static async searchImageFileIds(
-    searchParams: {
-      search_text?: string;
-      negative_text?: string;
-      ai_tool?: string;
-      model_name?: string;
-      min_width?: number;
-      max_width?: number;
-      min_height?: number;
-      max_height?: number;
-      min_file_size?: number;
-      max_file_size?: number;
-      start_date?: string;
-      end_date?: string;
-      group_id?: number;
-    }
+    searchParams: ImageSearchParamsInput
   ): Promise<number[]> {
-    const conditions: string[] = [];
-    const params: any[] = [];
-
-    // composite_hash 필수 조건 (해시 생성 완료된 이미지만)
-    conditions.push('im.composite_hash IS NOT NULL');
-    conditions.push('if.file_status = ?');
-    params.push('active');
-
-    if (searchParams.search_text) {
-      this.appendPositivePromptSearchCondition(conditions, params, searchParams.search_text, 'im');
-    }
-    if (searchParams.negative_text) {
-      conditions.push('im.negative_prompt LIKE ?');
-      params.push(`%${searchParams.negative_text}%`);
-    }
-    if (searchParams.ai_tool) {
-      conditions.push('im.ai_tool = ?');
-      params.push(searchParams.ai_tool);
-    }
-    if (searchParams.model_name) {
-      conditions.push('im.model_name LIKE ?');
-      params.push(`%${searchParams.model_name}%`);
-    }
-    if (searchParams.min_width) {
-      conditions.push('im.width >= ?');
-      params.push(searchParams.min_width);
-    }
-    if (searchParams.max_width) {
-      conditions.push('im.width <= ?');
-      params.push(searchParams.max_width);
-    }
-    if (searchParams.min_height) {
-      conditions.push('im.height >= ?');
-      params.push(searchParams.min_height);
-    }
-    if (searchParams.max_height) {
-      conditions.push('im.height <= ?');
-      params.push(searchParams.max_height);
-    }
-    if (searchParams.min_file_size) {
-      conditions.push('if.file_size >= ?');
-      params.push(searchParams.min_file_size);
-    }
-    if (searchParams.max_file_size) {
-      conditions.push('if.file_size <= ?');
-      params.push(searchParams.max_file_size);
-    }
-    if (searchParams.start_date) {
-      conditions.push('DATE(im.first_seen_date) >= DATE(?)');
-      params.push(searchParams.start_date);
-    }
-    if (searchParams.end_date) {
-      conditions.push('DATE(im.first_seen_date) <= DATE(?)');
-      params.push(searchParams.end_date);
-    }
-
-    let groupJoinClause = '';
-    if (searchParams.group_id !== undefined) {
-      if (searchParams.group_id === 0) {
-        groupJoinClause = 'LEFT JOIN image_groups ig_filter ON im.composite_hash = ig_filter.composite_hash';
-        conditions.push('ig_filter.composite_hash IS NULL');
-      } else {
-        groupJoinClause = 'INNER JOIN image_groups ig_filter ON im.composite_hash = ig_filter.composite_hash';
-        conditions.push('ig_filter.group_id = ?');
-        params.push(searchParams.group_id);
-      }
-    }
+    const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams, {
+      requireCompositeHash: true,
+      requireActiveFile: true,
+    });
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -529,84 +286,9 @@ export class ImageSearchModel {
    * @returns composite_hash 문자열 배열
    */
   static async searchCompositeHashes(
-    searchParams: {
-      search_text?: string;
-      negative_text?: string;
-      ai_tool?: string;
-      model_name?: string;
-      min_width?: number;
-      max_width?: number;
-      min_height?: number;
-      max_height?: number;
-      min_file_size?: number;
-      max_file_size?: number;
-      start_date?: string;
-      end_date?: string;
-      group_id?: number;
-    }
+    searchParams: ImageSearchParamsInput
   ): Promise<string[]> {
-    const conditions: string[] = [];
-    const params: any[] = [];
-
-    if (searchParams.search_text) {
-      this.appendPositivePromptSearchCondition(conditions, params, searchParams.search_text, 'im');
-    }
-    if (searchParams.negative_text) {
-      conditions.push('im.negative_prompt LIKE ?');
-      params.push(`%${searchParams.negative_text}%`);
-    }
-    if (searchParams.ai_tool) {
-      conditions.push('im.ai_tool = ?');
-      params.push(searchParams.ai_tool);
-    }
-    if (searchParams.model_name) {
-      conditions.push('im.model_name LIKE ?');
-      params.push(`%${searchParams.model_name}%`);
-    }
-    if (searchParams.min_width) {
-      conditions.push('im.width >= ?');
-      params.push(searchParams.min_width);
-    }
-    if (searchParams.max_width) {
-      conditions.push('im.width <= ?');
-      params.push(searchParams.max_width);
-    }
-    if (searchParams.min_height) {
-      conditions.push('im.height >= ?');
-      params.push(searchParams.min_height);
-    }
-    if (searchParams.max_height) {
-      conditions.push('im.height <= ?');
-      params.push(searchParams.max_height);
-    }
-    if (searchParams.min_file_size) {
-      conditions.push('if.file_size >= ?');
-      params.push(searchParams.min_file_size);
-    }
-    if (searchParams.max_file_size) {
-      conditions.push('if.file_size <= ?');
-      params.push(searchParams.max_file_size);
-    }
-    if (searchParams.start_date) {
-      conditions.push('DATE(im.first_seen_date) >= DATE(?)');
-      params.push(searchParams.start_date);
-    }
-    if (searchParams.end_date) {
-      conditions.push('DATE(im.first_seen_date) <= DATE(?)');
-      params.push(searchParams.end_date);
-    }
-
-    let groupJoinClause = '';
-    if (searchParams.group_id !== undefined) {
-      if (searchParams.group_id === 0) {
-        groupJoinClause = 'LEFT JOIN image_groups ig_filter ON im.composite_hash = ig_filter.composite_hash';
-        conditions.push('ig_filter.composite_hash IS NULL');
-      } else {
-        groupJoinClause = 'INNER JOIN image_groups ig_filter ON im.composite_hash = ig_filter.composite_hash';
-        conditions.push('ig_filter.group_id = ?');
-        params.push(searchParams.group_id);
-      }
-    }
+    const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams);
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -628,85 +310,9 @@ export class ImageSearchModel {
    * Using OFFSET with random index for true randomness
    */
   static async getRandomFromSearch(
-    searchParams: {
-      search_text?: string;
-      negative_text?: string;
-      ai_tool?: string;
-      model_name?: string;
-      min_width?: number;
-      max_width?: number;
-      min_height?: number;
-      max_height?: number;
-      min_file_size?: number;
-      max_file_size?: number;
-      start_date?: string;
-      end_date?: string;
-      group_id?: number;
-    }
+    searchParams: ImageSearchParamsInput
   ): Promise<any | null> {
-    const conditions: string[] = [];
-    const params: any[] = [];
-
-    if (searchParams.search_text) {
-      this.appendPositivePromptSearchCondition(conditions, params, searchParams.search_text, 'im');
-    }
-    if (searchParams.negative_text) {
-      conditions.push('im.negative_prompt LIKE ?');
-      params.push(`%${searchParams.negative_text}%`);
-    }
-    if (searchParams.ai_tool) {
-      conditions.push('im.ai_tool = ?');
-      params.push(searchParams.ai_tool);
-    }
-    if (searchParams.model_name) {
-      conditions.push('im.model_name LIKE ?');
-      params.push(`%${searchParams.model_name}%`);
-    }
-    if (searchParams.min_width) {
-      conditions.push('im.width >= ?');
-      params.push(searchParams.min_width);
-    }
-    if (searchParams.max_width) {
-      conditions.push('im.width <= ?');
-      params.push(searchParams.max_width);
-    }
-    if (searchParams.min_height) {
-      conditions.push('im.height >= ?');
-      params.push(searchParams.min_height);
-    }
-    if (searchParams.max_height) {
-      conditions.push('im.height <= ?');
-      params.push(searchParams.max_height);
-    }
-    if (searchParams.min_file_size) {
-      conditions.push('if.file_size >= ?');
-      params.push(searchParams.min_file_size);
-    }
-    if (searchParams.max_file_size) {
-      conditions.push('if.file_size <= ?');
-      params.push(searchParams.max_file_size);
-    }
-    if (searchParams.start_date) {
-      conditions.push('DATE(im.first_seen_date) >= DATE(?)');
-      params.push(searchParams.start_date);
-    }
-    if (searchParams.end_date) {
-      conditions.push('DATE(im.first_seen_date) <= DATE(?)');
-      params.push(searchParams.end_date);
-    }
-
-    // 그룹 필터
-    let groupJoinClause = '';
-    if (searchParams.group_id !== undefined) {
-      if (searchParams.group_id === 0) {
-        groupJoinClause = 'LEFT JOIN image_groups ig_filter ON im.composite_hash = ig_filter.composite_hash';
-        conditions.push('ig_filter.composite_hash IS NULL');
-      } else {
-        groupJoinClause = 'INNER JOIN image_groups ig_filter ON im.composite_hash = ig_filter.composite_hash';
-        conditions.push('ig_filter.group_id = ?');
-        params.push(searchParams.group_id);
-      }
-    }
+    const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams);
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
