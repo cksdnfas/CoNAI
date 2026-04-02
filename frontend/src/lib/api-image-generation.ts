@@ -523,6 +523,26 @@ export async function getGenerationWorkflowHistory(workflowId: number) {
   return response
 }
 
+/** Delete one generation history record. */
+export async function deleteGenerationHistoryRecord(historyId: number, deleteFiles = false) {
+  const searchParams = new URLSearchParams()
+  if (deleteFiles) {
+    searchParams.set('deleteFiles', 'true')
+  }
+
+  const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ''
+  return requestJson<{ success: boolean; message: string }>(`/api/generation-history/${historyId}${suffix}`, {
+    method: 'DELETE',
+  })
+}
+
+/** Delete failed generation history records in bulk. */
+export async function cleanupFailedGenerationHistory() {
+  return requestJson<{ success: boolean; message: string; deleted: number }>(`/api/generation-history/cleanup-failed`, {
+    method: 'POST',
+  })
+}
+
 /** Login to NovelAI with username/password and store the returned token on the backend. */
 export async function loginNai(username: string, password: string) {
   return requestJson<NAILoginResponse>('/api/nai/auth/login', {

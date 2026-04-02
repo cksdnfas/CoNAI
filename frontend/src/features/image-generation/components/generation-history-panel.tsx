@@ -1,13 +1,15 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
+import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { ImageRecord } from '@/types/image'
-import { getGenerationHistory, getGenerationWorkflowHistory } from '@/lib/api'
+import { cleanupFailedGenerationHistory, deleteGenerationHistoryRecord, getGenerationHistory, getGenerationWorkflowHistory } from '@/lib/api'
 import {
   getErrorMessage,
   getHistoryStatusLabel,
@@ -17,6 +19,10 @@ type GenerationHistoryPanelProps = {
   refreshNonce: number
   serviceType: 'novelai' | 'comfyui'
   workflowId?: number | null
+}
+
+function getGenerationHistorySelectionId(record: Awaited<ReturnType<typeof getGenerationHistory>>['records'][number]) {
+  return String(record.actual_composite_hash || record.composite_hash || `generation-history-${record.id}`)
 }
 
 function mapHistoryRecordToImageRecord(record: Awaited<ReturnType<typeof getGenerationHistory>>['records'][number]): ImageRecord {
@@ -37,6 +43,11 @@ function mapHistoryRecordToImageRecord(record: Awaited<ReturnType<typeof getGene
 
 /** Render generation history using the shared image-list surface instead of per-record cards. */
 export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }: GenerationHistoryPanelProps) {
+  const { showSnackbar } = useSnackbar()
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([])
+  const [isDeletingSelection, setIsDeletingSelection] = useState(false)
+  const [isCleaningFailed, setIsCleaningFailed] = useState(false)
+
   const historyQuery = useQuery({
     queryKey: ['image-generation-history', serviceType, workflowId ?? null],
     queryFn: () => (serviceType === 'comfyui' && workflowId ? getGenerationWorkflowHistory(workflowId) : getGenerationHistory(serviceType)),
@@ -54,10 +65,54 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }
   const historyRecords = historyQuery.data?.records ?? []
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
   const historyRecordMap = useMemo(
-    () => new Map(historyRecords.map((record) => [String(record.actual_composite_hash || record.composite_hash || `generation-history-${record.id}`), record])),
+    () => new Map(historyRecords.map((record) => [getGenerationHistorySelectionId(record), record])),
     [historyRecords],
   )
+  const selectedHistoryRecords = useMemo(
+    () => selectedHistoryIds.map((id) => historyRecordMap.get(id)).filter((record): record is NonNullable<typeof record> => Boolean(record)),
+    [historyRecordMap, selectedHistoryIds],
+  )
   const historyLabel = serviceType === 'novelai' ? 'NAI' : workflowId ? 'ComfyUI Workflow' : 'ComfyUI'
+
+  useEffect(() => {
+    setSelectedHistoryIds((current) => current.filter((id) => historyRecordMap.has(id)))
+  }, [historyRecordMap])
+
+  const handleDeleteSelected = async () => {
+    if (selectedHistoryRecords.length === 0 || isDeletingSelection) {
+      return
+    }
+
+    try {
+      setIsDeletingSelection(true)
+      await Promise.all(selectedHistoryRecords.map((record) => deleteGenerationHistoryRecord(record.id)))
+      setSelectedHistoryIds([])
+      await historyQuery.refetch()
+      showSnackbar({ message: `${selectedHistoryRecords.length.toLocaleString('ko-KR')}개 히스토리를 삭제했어.`, tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, '히스토리 삭제에 실패했어.'), tone: 'error' })
+    } finally {
+      setIsDeletingSelection(false)
+    }
+  }
+
+  const handleCleanupFailed = async () => {
+    if (isCleaningFailed) {
+      return
+    }
+
+    try {
+      setIsCleaningFailed(true)
+      const result = await cleanupFailedGenerationHistory()
+      setSelectedHistoryIds([])
+      await historyQuery.refetch()
+      showSnackbar({ message: result.message || '실패한 히스토리를 정리했어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, '실패 히스토리 정리에 실패했어.'), tone: 'error' })
+    } finally {
+      setIsCleaningFailed(false)
+    }
+  }
 
   return (
     <section className="space-y-4">
@@ -68,6 +123,10 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }
           <>
             <Badge variant="outline">{historyLabel}</Badge>
             <Badge variant="outline">{historyRecords.length}</Badge>
+            <Button type="button" size="sm" variant="outline" onClick={() => void handleCleanupFailed()} disabled={isCleaningFailed}>
+              <Trash2 className="h-4 w-4" />
+              {isCleaningFailed ? '실패 정리 중…' : '실패 항목 정리'}
+            </Button>
             <Button type="button" size="icon-sm" variant="outline" onClick={() => void historyQuery.refetch()} title="히스토리 새로고침" aria-label="히스토리 새로고침">
               <RefreshCw className="h-4 w-4" />
             </Button>
@@ -94,6 +153,9 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }
           layout="masonry"
           activationMode="modal"
           getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
+          selectable
+          selectedIds={selectedHistoryIds}
+          onSelectedIdsChange={setSelectedHistoryIds}
           minColumnWidth={220}
           columnGap={16}
           rowGap={16}
@@ -111,6 +173,18 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }
           }}
         />
       ) : null}
+
+      <SelectionActionBar
+        selectedCount={selectedHistoryRecords.length}
+        description="드래그로 고른 히스토리를 삭제할 수 있어"
+        onClear={() => setSelectedHistoryIds([])}
+        actions={(
+          <Button size="sm" onClick={() => void handleDeleteSelected()} disabled={selectedHistoryRecords.length === 0 || isDeletingSelection} data-no-select-drag="true">
+            <Trash2 className="h-4 w-4" />
+            {isDeletingSelection ? '삭제 중…' : '선택 삭제'}
+          </Button>
+        )}
+      />
     </section>
   )
 }
