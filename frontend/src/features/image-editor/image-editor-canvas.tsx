@@ -147,8 +147,8 @@ export function ImageEditorCanvas({
   return (
     <div
       ref={viewportRef}
-      className={`relative h-[70vh] min-h-[540px] overflow-hidden rounded-sm border ${isMaskTool ? 'border-red-400/70 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.35)]' : 'border-border'} bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%),linear-gradient(45deg,_rgba(255,255,255,0.03)_25%,_transparent_25%),linear-gradient(-45deg,_rgba(255,255,255,0.03)_25%,_transparent_25%),linear-gradient(45deg,_transparent_75%,_rgba(255,255,255,0.03)_75%),linear-gradient(-45deg,_transparent_75%,_rgba(255,255,255,0.03)_75%)] [background-position:0_0,0_0,0_12px,12px_-12px,-12px_0] [background-size:auto,24px_24px,24px_24px,24px_24px,24px_24px] ${canvasCursorClassName}`}
-      onWheel={onWheel}
+      className={`relative h-[70vh] min-h-[540px] overflow-hidden overscroll-contain rounded-sm border ${isMaskTool ? 'border-red-400/70 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.35)]' : 'border-border'} bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%),linear-gradient(45deg,_rgba(255,255,255,0.03)_25%,_transparent_25%),linear-gradient(-45deg,_rgba(255,255,255,0.03)_25%,_transparent_25%),linear-gradient(45deg,_transparent_75%,_rgba(255,255,255,0.03)_75%),linear-gradient(-45deg,_transparent_75%,_rgba(255,255,255,0.03)_75%)] [background-position:0_0,0_0,0_12px,12px_-12px,-12px_0] [background-size:auto,24px_24px,24px_24px,24px_24px,24px_24px] ${canvasCursorClassName}`}
+      onWheelCapture={onWheel}
     >
       <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-wrap gap-2 rounded-sm border border-white/10 bg-black/55 px-3 py-2 text-[11px] text-white shadow-lg backdrop-blur-sm">
         <span className="font-medium text-white/90">{getImageEditorToolLabel(tool)}</span>

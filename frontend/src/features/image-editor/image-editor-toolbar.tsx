@@ -48,6 +48,16 @@ function ToolButton({ active, children, onClick, title }: { active?: boolean; ch
   )
 }
 
+/** Render one labeled toolbar section so related actions stay grouped. */
+function ToolbarSection({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-end gap-2 rounded-sm border border-border/70 bg-surface-low px-3 py-2">
+      <div className="mr-2 min-w-[72px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="flex flex-wrap items-end gap-2">{children}</div>
+    </div>
+  )
+}
+
 function getImageEditorToolShortcut(tool: ImageEditorTool) {
   switch (tool) {
     case 'pan':
@@ -125,8 +135,8 @@ export function ImageEditorToolbar({
   onApplyCrop,
 }: ImageEditorToolbarProps) {
   return (
-    <>
-      <div className="flex flex-wrap gap-2">
+    <div className="space-y-3">
+      <ToolbarSection label="Tools">
         <ToolButton active={tool === 'pan'} onClick={() => onToolChange('pan')} title="Pan">
           <Hand className="h-4 w-4" /> Pan
         </ToolButton>
@@ -152,72 +162,87 @@ export function ImageEditorToolbar({
         <ToolButton active={tool === 'crop'} onClick={() => onToolChange('crop')} title="Crop">
           <Crop className="h-4 w-4" /> Crop
         </ToolButton>
+      </ToolbarSection>
+
+      <div className="flex flex-wrap gap-3">
+        <ToolbarSection label="Brush">
+          <label className="space-y-1 text-xs text-muted-foreground">
+            Brush color
+            <Input type="color" value={brushColor} onChange={(event) => onBrushColorChange(event.target.value)} className="h-10 w-16 p-1" />
+          </label>
+          <label className="space-y-1 text-xs text-muted-foreground">
+            Brush size
+            <Input type="number" min={1} max={256} value={brushSize} onChange={(event) => onBrushSizeChange(Math.max(1, Number(event.target.value) || 1))} className="w-24" />
+          </label>
+          <label className="space-y-1 text-xs text-muted-foreground">
+            Opacity
+            <Input type="number" min={0} max={100} value={brushOpacity} onChange={(event) => onBrushOpacityChange(Math.max(0, Math.min(100, Number(event.target.value) || 0)))} className="w-24" />
+          </label>
+        </ToolbarSection>
+
+        <ToolbarSection label="View">
+          <Button type="button" variant="secondary" size="sm" onClick={onUndo} disabled={historyLength <= 1 || loading}>
+            Undo
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onRedo} disabled={redoLength === 0 || loading}>
+            Redo
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onZoomOut}>
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onZoomIn}>
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onFitToScreen}>
+            Fit
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onRotate}>
+            <RotateCw className="h-4 w-4" /> Rotate
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onFlip}>
+            <FlipHorizontal className="h-4 w-4" /> Flip
+          </Button>
+        </ToolbarSection>
+
+        <ToolbarSection label="Selection">
+          <Button type="button" variant="secondary" size="sm" onClick={onPasteFromClipboard}>
+            <ClipboardPaste className="h-4 w-4" /> Paste
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onPasteStoredSelection} disabled={!hasStoredSelection || loading}>
+            Paste Sel
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onSelectionCopy} disabled={!canApplySelectionOperation || loading}>
+            Copy Sel
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onSelectionCut} disabled={!canApplySelectionOperation || loading}>
+            Cut Sel
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onSelectionDuplicate} disabled={!canApplySelectionOperation || loading}>
+            Duplicate Sel
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onSelectionPromote} disabled={!canApplySelectionOperation || loading}>
+            Promote Sel
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onSelectionDelete} disabled={!canApplySelectionOperation || loading}>
+            Delete Sel
+          </Button>
+        </ToolbarSection>
       </div>
 
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="space-y-1 text-xs text-muted-foreground">
-          Brush color
-          <Input type="color" value={brushColor} onChange={(event) => onBrushColorChange(event.target.value)} className="h-10 w-16 p-1" />
-        </label>
-        <label className="space-y-1 text-xs text-muted-foreground">
-          Brush size
-          <Input type="number" min={1} max={256} value={brushSize} onChange={(event) => onBrushSizeChange(Math.max(1, Number(event.target.value) || 1))} className="w-24" />
-        </label>
-        <label className="space-y-1 text-xs text-muted-foreground">
-          Opacity
-          <Input type="number" min={0} max={100} value={brushOpacity} onChange={(event) => onBrushOpacityChange(Math.max(0, Math.min(100, Number(event.target.value) || 0)))} className="w-24" />
-        </label>
-        <Button type="button" variant="secondary" size="sm" onClick={onUndo} disabled={historyLength <= 1 || loading}>
-          Undo
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onRedo} disabled={redoLength === 0 || loading}>
-          Redo
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onZoomOut}>
-          <ZoomOut className="h-4 w-4" />
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onZoomIn}>
-          <ZoomIn className="h-4 w-4" />
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onFitToScreen}>
-          Fit
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onRotate}>
-          <RotateCw className="h-4 w-4" /> Rotate
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onFlip}>
-          <FlipHorizontal className="h-4 w-4" /> Flip
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onPasteFromClipboard}>
-          <ClipboardPaste className="h-4 w-4" /> Paste
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onPasteStoredSelection} disabled={!hasStoredSelection || loading}>
-          Paste Sel
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onSelectionCopy} disabled={!canApplySelectionOperation || loading}>
-          Copy Sel
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onSelectionPromote} disabled={!canApplySelectionOperation || loading}>
-          Promote Sel
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onSelectionDuplicate} disabled={!canApplySelectionOperation || loading}>
-          Duplicate Sel
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onSelectionDelete} disabled={!canApplySelectionOperation || loading}>
-          Delete Sel
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onSelectionCut} disabled={!canApplySelectionOperation || loading}>
-          Cut Sel
-        </Button>
-        {enableMaskEditing && onClearMask ? (
-          <Button type="button" variant="secondary" size="sm" onClick={onClearMask}>
-            Clear Mask
-          </Button>
-        ) : null}
-        <Button type="button" variant="secondary" size="sm" onClick={onApplyCrop} disabled={!canApplyCrop || loading}>
-          Apply Crop
-        </Button>
-      </div>
+      {(enableMaskEditing && onClearMask) || canApplyCrop ? (
+        <ToolbarSection label="Context">
+          {enableMaskEditing && onClearMask ? (
+            <Button type="button" variant="secondary" size="sm" onClick={onClearMask}>
+              Clear Mask
+            </Button>
+          ) : null}
+          {canApplyCrop ? (
+            <Button type="button" variant="secondary" size="sm" onClick={onApplyCrop} disabled={loading}>
+              Apply Crop
+            </Button>
+          ) : null}
+        </ToolbarSection>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border/70 bg-surface-low px-3 py-2 text-xs text-muted-foreground">
         <Badge variant="outline">Tool {tool}</Badge>
@@ -237,6 +262,6 @@ export function ImageEditorToolbar({
         <span>•</span>
         <span>Esc clears selection/crop</span>
       </div>
-    </>
+    </div>
   )
 }

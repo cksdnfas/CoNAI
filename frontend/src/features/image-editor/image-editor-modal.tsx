@@ -1216,6 +1216,7 @@ export function ImageEditorModal({
   /** Update viewport zoom from wheel input while staying inside a small stable range. */
   const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
     event.preventDefault()
+    event.stopPropagation()
     setZoom((current) => Math.max(0.1, Math.min(8, current * (event.deltaY > 0 ? 0.92 : 1.08))))
   }, [])
 
@@ -1608,7 +1609,6 @@ export function ImageEditorModal({
               canSave={Boolean(baseImage)}
               onMergeVisible={() => void handleMergeVisible()}
               onFlattenVisible={() => void handleFlattenVisible()}
-              onFitToScreen={handleFitToScreen}
               onClearActiveDrawLayer={() => { setLayers((current) => current.map((layer) => layer.id === activeLayerId && layer.type === 'draw' ? { ...layer, lines: [] } : layer)); queueHistoryCommit() }}
               onClearAllDrawLayers={() => { setLayers((current) => current.map((layer) => layer.type === 'draw' ? { ...layer, lines: [] } : layer)); queueHistoryCommit() }}
               onClearSelection={() => setSelectionRect(null)}
