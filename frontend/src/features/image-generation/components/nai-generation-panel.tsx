@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Download, ExternalLink, Plus, Save, Sparkles, Trash2, WandSparkles } from 'lucide-react'
+import { Plus, Save, Trash2, WandSparkles } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -69,6 +69,8 @@ import { NaiAssetSaveModal } from './nai-asset-save-modal'
 import { NaiCharacterPositionBoard } from './nai-character-position-board'
 import { NaiModuleSaveModal } from './nai-module-save-modal'
 import { PromptToggleField } from './prompt-toggle-field'
+import { decodeNaiBase64Png, deriveNaiAssetLabel, buildNaiEditedImageFileName } from './nai-generation-panel-helpers'
+import { NaiActionSection, NaiConnectionHeader, NaiPromptSection } from './nai-generation-panel-sections'
 
 const ImageEditorModal = lazy(() => import('@/features/image-editor/image-editor-modal'))
 
@@ -78,17 +80,6 @@ type NaiGenerationPanelProps = {
 }
 
 type NaiLoginMode = 'account' | 'token'
-
-/** Convert a base64 PNG payload into a Blob download. */
-function decodeBase64Png(data: string) {
-  const binary = atob(data)
-  const bytes = new Uint8Array(binary.length)
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index)
-  }
-
-  return new Blob([bytes], { type: 'image/png' })
-}
 
 /** Render a compact selected-image preview card. */
 function SelectedImageCard({ image, alt, onRemove }: { image: SelectedImageDraft; alt: string; onRemove: () => void }) {
@@ -103,20 +94,6 @@ function SelectedImageCard({ image, alt, onRemove }: { image: SelectedImageDraft
       </div>
     </div>
   )
-}
-
-function deriveAssetLabel(fileName: string | undefined, fallback: string) {
-  const trimmed = fileName?.trim()
-  if (!trimmed) {
-    return fallback
-  }
-
-  return trimmed.replace(/\.[^/.]+$/, '') || fallback
-}
-
-/** Build one edited image file name while preserving the source label when possible. */
-function buildEditedImageFileName(fileName: string | undefined, fallback: string) {
-  return `${deriveAssetLabel(fileName, fallback)}-edited.png`
 }
 
 type AssetSaveTarget =
@@ -410,10 +387,10 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
   const handleSaveImageEditor = async (payload: { sourceImageDataUrl: string; maskImageDataUrl?: string }) => {
     setNaiForm((current) => ({
       ...current,
-      sourceImage: buildSelectedImageDraftFromDataUrl(payload.sourceImageDataUrl, buildEditedImageFileName(current.sourceImage?.fileName, 'source-image')),
+      sourceImage: buildSelectedImageDraftFromDataUrl(payload.sourceImageDataUrl, buildNaiEditedImageFileName(current.sourceImage?.fileName, 'source-image')),
       maskImage: current.action === 'infill'
         ? payload.maskImageDataUrl
-          ? buildSelectedImageDraftFromDataUrl(payload.maskImageDataUrl, buildEditedImageFileName(current.maskImage?.fileName, 'mask-image'))
+          ? buildSelectedImageDraftFromDataUrl(payload.maskImageDataUrl, buildNaiEditedImageFileName(current.maskImage?.fileName, 'mask-image'))
           : undefined
         : current.maskImage,
     }))
@@ -562,7 +539,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
       return
     }
 
-    openAssetSaveModal({ kind: 'vibe', index }, deriveAssetLabel(vibe.image.fileName, `Vibe ${index + 1}`))
+    openAssetSaveModal({ kind: 'vibe', index }, deriveNaiAssetLabel(vibe.image.fileName, `Vibe ${index + 1}`))
   }
 
   const handleLoadVibeFromStore = (assetId: string) => {
@@ -642,7 +619,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
       return
     }
 
-    openAssetSaveModal({ kind: 'reference', index }, deriveAssetLabel(reference.image.fileName, `Reference ${index + 1}`))
+    openAssetSaveModal({ kind: 'reference', index }, deriveNaiAssetLabel(reference.image.fileName, `Reference ${index + 1}`))
   }
 
   const handleLoadCharacterReferenceFromStore = (assetId: string) => {
@@ -856,7 +833,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
         image: naiForm.sourceImage.dataUrl,
         scale: 2,
       })
-      triggerBlobDownload(decodeBase64Png(response.image), response.filename)
+      triggerBlobDownload(decodeNaiBase64Png(response.image), response.filename)
       await naiUserQuery.refetch()
       showSnackbar({ message: 'NovelAI 업스케일 완료. PNG 다운로드를 시작할게.', tone: 'info' })
     } catch (error) {
@@ -928,45 +905,19 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
   return (
     <>
       <div className="space-y-6">
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <div className="truncate text-base font-semibold text-foreground">NovelAI</div>
-              {connected ? <Badge variant="secondary">연결됨</Badge> : <Badge variant="outline">미연결</Badge>}
-              {connected ? <Badge variant="outline">{naiUserQuery.data.subscription.tierName}</Badge> : null}
-              {connected ? <Badge variant="outline">Anlas {naiUserQuery.data.anlasBalance}</Badge> : null}
-            </div>
-            <div className="flex items-center gap-2">
-              {!connected ? (
-                <Button type="button" variant="outline" size="sm" onClick={() => setIsNaiAuthModalOpen(true)}>
-                  로그인
-                </Button>
-              ) : null}
-              <Button type="button" variant="outline" size="icon-sm" asChild>
-                <a href="https://novelai.net/" target="_blank" rel="noreferrer noopener" aria-label="NovelAI 홈페이지 열기" title="NovelAI 홈페이지 열기">
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              </Button>
-            </div>
-          </div>
-        </section>
+        <NaiConnectionHeader
+          connected={connected}
+          tierName={naiUserQuery.data?.subscription.tierName}
+          anlasBalance={naiUserQuery.data?.anlasBalance}
+          onOpenAuth={() => setIsNaiAuthModalOpen(true)}
+        />
 
-        <section className="space-y-3">
-              <Card>
-                <CardContent className="space-y-4">
-                  <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Prompt" />
-                  <PromptToggleField
-                    tool="nai"
-                    positiveValue={naiForm.prompt}
-                    negativeValue={naiForm.negativePrompt}
-                    onPositiveChange={(value) => handleNaiFieldChange('prompt', value)}
-                    onNegativeChange={(value) => handleNaiFieldChange('negativePrompt', value)}
-                    positiveRows={6}
-                    negativeRows={6}
-                  />
-                </CardContent>
-              </Card>
-            </section>
+        <NaiPromptSection
+          prompt={naiForm.prompt}
+          negativePrompt={naiForm.negativePrompt}
+          onPromptChange={(value) => handleNaiFieldChange('prompt', value)}
+          onNegativePromptChange={(value) => handleNaiFieldChange('negativePrompt', value)}
+        />
 
             <section className="space-y-3">
               <Card>
@@ -1440,38 +1391,18 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
               </Card>
             </section>
 
-        <section className="space-y-3">
-          <Card>
-            <CardContent className="space-y-4">
-              <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Actions" />
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" onClick={() => setIsModuleSaveModalOpen(true)}>
-                    <Save className="h-4 w-4" />
-                    모듈 저장
-                  </Button>
-                  {naiForm.action !== 'generate' ? (
-                    <Button type="button" variant="outline" onClick={handleUpscale} disabled={!naiForm.sourceImage || isUpscaling}>
-                      <Download className="h-4 w-4" />
-                      {isUpscaling ? '업스케일 중…' : '소스 2x 업스케일'}
-                    </Button>
-                  ) : null}
-                </div>
-
-                <div className="flex flex-wrap justify-end gap-2">
-                  <Button type="button" variant="ghost" onClick={() => setNaiForm(DEFAULT_NAI_FORM)} disabled={isNaiGenerating || isUpscaling}>
-                    초기화
-                  </Button>
-                  <Button type="button" onClick={handleNaiGenerate} disabled={isNaiGenerating || naiForm.prompt.trim().length === 0}>
-                    <Sparkles className="h-4 w-4" />
-                    {naiGenerateButtonLabel}
-                  </Button>
-                </div>
-              </div>
-              {naiCostQuery.isError ? <div className="text-xs text-[#ffb4ab]">{getErrorMessage(naiCostQuery.error, '예상 비용 계산에 실패했어.')}</div> : null}
-            </CardContent>
-          </Card>
-        </section>
+        <NaiActionSection
+          canUpscale={naiForm.action !== 'generate' && Boolean(naiForm.sourceImage)}
+          isUpscaling={isUpscaling}
+          isGenerating={isNaiGenerating}
+          canGenerate={naiForm.prompt.trim().length > 0}
+          generateButtonLabel={naiGenerateButtonLabel}
+          costErrorMessage={naiCostQuery.isError ? getErrorMessage(naiCostQuery.error, '예상 비용 계산에 실패했어.') : null}
+          onOpenModuleSave={() => setIsModuleSaveModalOpen(true)}
+          onUpscale={handleUpscale}
+          onReset={() => setNaiForm(DEFAULT_NAI_FORM)}
+          onGenerate={handleNaiGenerate}
+        />
       </div>
 
       <NaiAuthModal
