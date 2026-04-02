@@ -7,6 +7,7 @@ import { ImageEditorCanvas } from './image-editor-canvas'
 import { ImageEditorLayerPanel } from './image-editor-layer-panel'
 import { ImageEditorSessionActions } from './image-editor-session-actions'
 import { ImageEditorToolbar } from './image-editor-toolbar'
+import { useImageEditorHistory } from './use-image-editor-history'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorSavePayload, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 import {
   calculateImageEditorFitZoom,
@@ -40,19 +41,6 @@ type ImageEditorSelectionClipboard = {
   x: number
   y: number
   pasteCount: number
-}
-
-type ImageEditorHistorySnapshot = {
-  baseImageDataUrl: string
-  documentSize: { width: number; height: number }
-  layers: ImageEditorLayer[]
-  activeLayerId: string | null
-  initialMaskImageDataUrl: string | null
-  maskStrokes: ImageEditorStroke[]
-  selectionRect: ImageEditorCropRect | null
-  cropRect: ImageEditorCropRect | null
-  rotation: number
-  flippedX: boolean
 }
 
 /** Create one default editable draw layer for the current editor session. */
@@ -112,7 +100,6 @@ export function ImageEditorModal({
   const selectionResizeHandleRef = useRef<ImageEditorSelectionHandle | null>(null)
   const selectionResizeOriginRectRef = useRef<ImageEditorCropRect | null>(null)
   const selectionClipboardRef = useRef<ImageEditorSelectionClipboard | null>(null)
-  const isApplyingHistoryRef = useRef(false)
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null)
   const cropStartRef = useRef<{ x: number; y: number } | null>(null)
   const selectionStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -140,9 +127,6 @@ export function ImageEditorModal({
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
   const [hasStoredSelection, setHasStoredSelection] = useState(false)
-  const [historyStack, setHistoryStack] = useState<ImageEditorHistorySnapshot[]>([])
-  const [redoStack, setRedoStack] = useState<ImageEditorHistorySnapshot[]>([])
-  const [historyCommitToken, setHistoryCommitToken] = useState(0)
 
   const activeLayer = useMemo(() => {
     if (!activeLayerId) {
@@ -152,53 +136,32 @@ export function ImageEditorModal({
     return layers.find((layer) => layer.id === activeLayerId) ?? null
   }, [activeLayerId, layers])
 
-  /** Capture one serializable editor-document snapshot for undo and redo. */
-  const captureHistorySnapshot = useCallback((): ImageEditorHistorySnapshot | null => {
-    if (!baseImageDataUrl) {
-      return null
-    }
-
-    return {
-      baseImageDataUrl,
-      documentSize,
-      layers,
-      activeLayerId,
-      initialMaskImageDataUrl,
-      maskStrokes,
-      selectionRect,
-      cropRect,
-      rotation,
-      flippedX,
-    }
-  }, [activeLayerId, baseImageDataUrl, cropRect, documentSize, flippedX, initialMaskImageDataUrl, layers, maskStrokes, rotation, selectionRect])
-
-  /** Apply one stored editor-document snapshot back into live state. */
-  const applyHistorySnapshot = useCallback(async (snapshot: ImageEditorHistorySnapshot) => {
-    isApplyingHistoryRef.current = true
-    try {
-      const nextBaseImage = await loadEditorImage(snapshot.baseImageDataUrl)
-      const nextMaskImage = snapshot.initialMaskImageDataUrl ? await loadEditorImage(snapshot.initialMaskImageDataUrl) : null
-      setBaseImage(nextBaseImage)
-      setBaseImageDataUrl(snapshot.baseImageDataUrl)
-      setDocumentSize(snapshot.documentSize)
-      setLayers(snapshot.layers)
-      setActiveLayerId(snapshot.activeLayerId)
-      setInitialMaskImage(nextMaskImage)
-      setInitialMaskImageDataUrl(snapshot.initialMaskImageDataUrl)
-      setMaskStrokes(snapshot.maskStrokes)
-      setSelectionRect(snapshot.selectionRect)
-      setCropRect(snapshot.cropRect)
-      setRotation(snapshot.rotation)
-      setFlippedX(snapshot.flippedX)
-    } finally {
-      isApplyingHistoryRef.current = false
-    }
-  }, [])
-
-  /** Queue one history commit after the current render settles. */
-  const queueHistoryCommit = useCallback(() => {
-    setHistoryCommitToken((current) => current + 1)
-  }, [])
+  const { historyStack, redoStack, queueHistoryCommit, resetHistory, handleUndo, handleRedo } = useImageEditorHistory({
+    open,
+    baseImageDataUrl,
+    documentSize,
+    layers,
+    activeLayerId,
+    initialMaskImageDataUrl,
+    maskStrokes,
+    selectionRect,
+    cropRect,
+    rotation,
+    flippedX,
+    loadImage: loadEditorImage,
+    setBaseImage,
+    setBaseImageDataUrl,
+    setDocumentSize,
+    setLayers,
+    setActiveLayerId,
+    setInitialMaskImage,
+    setInitialMaskImageDataUrl,
+    setMaskStrokes,
+    setSelectionRect,
+    setCropRect,
+    setRotation,
+    setFlippedX,
+  })
 
   /** Update the measured viewport rectangle used by the stage and fit calculation. */
   const syncViewportSize = useCallback(() => {
@@ -220,30 +183,6 @@ export function ImageEditorModal({
 
     return () => observer.disconnect()
   }, [open, syncViewportSize])
-
-  /** Commit a new snapshot into history after one document-changing action completes. */
-  useEffect(() => {
-    if (!open || isApplyingHistoryRef.current) {
-      return
-    }
-
-    const snapshot = captureHistorySnapshot()
-    if (!snapshot) {
-      return
-    }
-
-    setHistoryStack((current) => {
-      const currentSignature = JSON.stringify(snapshot)
-      const previousSignature = current.length > 0 ? JSON.stringify(current[current.length - 1]) : null
-      if (currentSignature === previousSignature) {
-        return current
-      }
-
-      const nextHistory = [...current, snapshot]
-      return nextHistory.slice(-30)
-    })
-    setRedoStack([])
-  }, [captureHistorySnapshot, historyCommitToken, open])
 
   /** Reset the editor session from the provided source and optional mask inputs. */
   useEffect(() => {
@@ -294,21 +233,18 @@ export function ImageEditorModal({
           setMaskPreviewSurface(null)
         }
 
-        setHistoryStack([
-          {
-            baseImageDataUrl: sourceImageDataUrl,
-            documentSize: { width: loadedBaseImage.width, height: loadedBaseImage.height },
-            layers: [firstLayer],
-            activeLayerId: firstLayer.id,
-            initialMaskImageDataUrl: enableMaskEditing && maskImageDataUrl ? maskImageDataUrl : null,
-            maskStrokes: [],
-            selectionRect: null,
-            cropRect: null,
-            rotation: 0,
-            flippedX: false,
-          },
-        ])
-        setRedoStack([])
+        resetHistory({
+          baseImageDataUrl: sourceImageDataUrl,
+          documentSize: { width: loadedBaseImage.width, height: loadedBaseImage.height },
+          layers: [firstLayer],
+          activeLayerId: firstLayer.id,
+          initialMaskImageDataUrl: enableMaskEditing && maskImageDataUrl ? maskImageDataUrl : null,
+          maskStrokes: [],
+          selectionRect: null,
+          cropRect: null,
+          rotation: 0,
+          flippedX: false,
+        })
       } catch (error) {
         if (!cancelled) {
           showSnackbar({ message: error instanceof Error ? error.message : '에디터 이미지를 불러오지 못했어.', tone: 'error' })
@@ -325,7 +261,7 @@ export function ImageEditorModal({
     return () => {
       cancelled = true
     }
-  }, [enableMaskEditing, maskImageDataUrl, open, showSnackbar, sourceImageDataUrl, viewportSize.height, viewportSize.width])
+  }, [enableMaskEditing, maskImageDataUrl, open, resetHistory, showSnackbar, sourceImageDataUrl, viewportSize.height, viewportSize.width])
 
   /** Rebuild the live red mask preview whenever the effective mask changes. */
   useEffect(() => {
@@ -890,35 +826,6 @@ export function ImageEditorModal({
       setLoading(false)
     }
   }, [activeLayerId, documentSize.height, documentSize.width, layers, queueHistoryCommit, showSnackbar])
-
-  /** Restore the previous committed document snapshot. */
-  const handleUndo = useCallback(async () => {
-    if (historyStack.length <= 1) {
-      return
-    }
-
-    const currentSnapshot = historyStack[historyStack.length - 1]
-    const previousSnapshot = historyStack[historyStack.length - 2]
-    if (!currentSnapshot || !previousSnapshot) {
-      return
-    }
-
-    setRedoStack((current) => [...current, currentSnapshot])
-    setHistoryStack((current) => current.slice(0, -1))
-    await applyHistorySnapshot(previousSnapshot)
-  }, [applyHistorySnapshot, historyStack])
-
-  /** Restore one snapshot from the redo stack when available. */
-  const handleRedo = useCallback(async () => {
-    const nextSnapshot = redoStack[redoStack.length - 1]
-    if (!nextSnapshot) {
-      return
-    }
-
-    setRedoStack((current) => current.slice(0, -1))
-    setHistoryStack((current) => [...current, nextSnapshot])
-    await applyHistorySnapshot(nextSnapshot)
-  }, [applyHistorySnapshot, redoStack])
 
   /** Handle keyboard shortcuts for selection actions while avoiding text-input conflicts. */
   useEffect(() => {
