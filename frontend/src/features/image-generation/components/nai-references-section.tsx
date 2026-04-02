@@ -51,7 +51,6 @@ export function NaiReferencesSection({
             variant="inside"
             className="border-b border-border/70 pb-4"
             heading="References"
-            description="캐릭터/스타일 참조 이미지를 구성하고 저장된 reference를 다시 불러올 수 있어."
             actions={(
               <>
                 <Badge variant="outline">{references.length}</Badge>
@@ -77,18 +76,15 @@ export function NaiReferencesSection({
               {references.map((reference, index) => (
                 <div key={`nai-character-reference-${index}`} className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="text-sm font-medium text-foreground">Reference {index + 1}</div>
-                      <div className="text-xs text-muted-foreground">참조 이미지와 타입, 강도, fidelity를 함께 관리하는 NAI reference 카드야.</div>
-                    </div>
+                    <div className="text-sm font-medium text-foreground">Reference {index + 1}</div>
                     <Button type="button" variant="ghost" size="sm" onClick={() => onRemoveReference(index)}>
                       <Trash2 className="h-4 w-4" />
                       제거
                     </Button>
                   </div>
 
-                  <FormField label="Reference Image" hint="이미지 첨부 또는 교체">
-                    <div className="space-y-3">
+                  <FormField label="Reference Image">
+                    <div className="space-y-3 rounded-sm border border-dashed border-border/80 bg-surface-lowest p-3">
                       <ImageAttachmentPickerButton label={reference.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} onSelect={(image) => onReferenceImageChange(index, image)} />
                       {reference.image ? <NaiSelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} onRemove={() => onReferenceImageChange(index)} /> : null}
                     </div>
@@ -121,18 +117,15 @@ export function NaiReferencesSection({
             </div>
           ) : (
             <div className="rounded-sm border border-dashed border-border bg-surface-low px-4 py-5 text-sm text-muted-foreground">
-              아직 추가한 reference가 없어. 위의 + 버튼으로 새 reference를 만들 수 있어.
+              아직 추가한 reference가 없어.
             </div>
           )}
 
           <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <div className="text-sm font-medium text-foreground">Saved Character References</div>
-                  <Badge variant="outline">{savedReferences.length}</Badge>
-                </div>
-                <div className="text-xs text-muted-foreground">저장한 reference를 검색해서 바로 불러와.</div>
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-medium text-foreground">Saved Character References</div>
+                <Badge variant="outline">{savedReferences.length}</Badge>
               </div>
               <div className="w-full sm:w-72 md:w-80">
                 <Input value={savedReferenceSearch} onChange={(event) => onSavedReferenceSearchChange(event.target.value)} placeholder="이름 / 설명 검색" />

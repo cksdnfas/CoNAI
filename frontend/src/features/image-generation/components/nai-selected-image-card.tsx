@@ -10,13 +10,15 @@ export interface NaiSelectedImageCardProps {
 /** Render a compact selected-image preview card for NAI image inputs and assets. */
 export function NaiSelectedImageCard({ image, alt, onRemove }: NaiSelectedImageCardProps) {
   return (
-    <div className="theme-surface-nested space-y-2 rounded-sm border border-border p-3">
-      <div className="text-xs text-muted-foreground">{image.fileName}</div>
-      <img src={image.dataUrl} alt={alt} className="max-h-48 rounded-sm border border-border object-contain" />
-      <div className="flex justify-end">
+    <div className="space-y-3 rounded-sm border border-border bg-surface-lowest p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{image.fileName}</div>
         <Button type="button" size="sm" variant="ghost" onClick={onRemove}>
           제거
         </Button>
+      </div>
+      <div className="flex justify-center rounded-sm border border-border bg-surface-low p-3">
+        <img src={image.dataUrl} alt={alt} className="max-h-56 w-full rounded-sm object-contain" />
       </div>
     </div>
   )

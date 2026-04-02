@@ -50,7 +50,6 @@ export function NaiVibesSection({
             variant="inside"
             className="border-b border-border/70 pb-4"
             heading="Vibes"
-            description="참조 이미지를 넣고 vibe 강도를 조절하거나, 저장한 vibe를 다시 불러올 수 있어."
             actions={(
               <>
                 <Badge variant="outline">{vibes.length}</Badge>
@@ -66,18 +65,15 @@ export function NaiVibesSection({
               {vibes.map((vibe, index) => (
                 <div key={`nai-vibe-${index}`} className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="text-sm font-medium text-foreground">Vibe {index + 1}</div>
-                        {vibe.encoded ? (
-                          <Badge variant="secondary">준비됨</Badge>
-                        ) : vibe.image ? (
-                          <Badge variant="outline">자동 인코딩</Badge>
-                        ) : (
-                          <Badge variant="outline">이미지 필요</Badge>
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground">참조 이미지와 강도를 함께 관리하는 NAI vibe 카드야.</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-medium text-foreground">Vibe {index + 1}</div>
+                      {vibe.encoded ? (
+                        <Badge variant="secondary">준비됨</Badge>
+                      ) : vibe.image ? (
+                        <Badge variant="outline">자동 인코딩</Badge>
+                      ) : (
+                        <Badge variant="outline">이미지 필요</Badge>
+                      )}
                     </div>
                     <Button type="button" variant="ghost" size="sm" onClick={() => onRemoveVibe(index)}>
                       <Trash2 className="h-4 w-4" />
@@ -85,8 +81,8 @@ export function NaiVibesSection({
                     </Button>
                   </div>
 
-                  <FormField label="Reference Image" hint="이미지 첨부 또는 교체">
-                    <div className="space-y-3">
+                  <FormField label="Reference Image">
+                    <div className="space-y-3 rounded-sm border border-dashed border-border/80 bg-surface-lowest p-3">
                       <ImageAttachmentPickerButton label={vibe.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Vibe ${index + 1} 이미지 선택`} onSelect={(image) => onVibeImageChange(index, image)} />
                       {vibe.image ? <NaiSelectedImageCard image={vibe.image} alt={`NAI vibe ${index + 1}`} onRemove={() => onVibeImageChange(index)} /> : null}
                     </div>
@@ -112,18 +108,15 @@ export function NaiVibesSection({
             </div>
           ) : (
             <div className="rounded-sm border border-dashed border-border bg-surface-low px-4 py-5 text-sm text-muted-foreground">
-              아직 추가한 vibe가 없어. 위의 + 버튼으로 새 vibe를 만들 수 있어.
+              아직 추가한 vibe가 없어.
             </div>
           )}
 
           <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <div className="text-sm font-medium text-foreground">Saved Vibes</div>
-                  <Badge variant="outline">{savedVibes.length}</Badge>
-                </div>
-                <div className="text-xs text-muted-foreground">저장한 vibe를 검색해서 바로 불러와.</div>
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-medium text-foreground">Saved Vibes</div>
+                <Badge variant="outline">{savedVibes.length}</Badge>
               </div>
               <div className="w-full sm:w-72 md:w-80">
                 <Input value={savedVibeSearch} onChange={(event) => onSavedVibeSearchChange(event.target.value)} placeholder="이름 / 설명 검색" />

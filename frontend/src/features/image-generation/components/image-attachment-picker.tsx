@@ -390,7 +390,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
 
   return (
     <>
-      <Button type="button" variant="outline" disabled={disabled} onClick={() => setIsOpen(true)}>
+      <Button type="button" variant="outline" className="w-full justify-start" disabled={disabled} onClick={() => setIsOpen(true)}>
         <ImagePlus className="h-4 w-4" />
         {label}
       </Button>
@@ -403,7 +403,6 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
           }
         }}
         title={modalTitle}
-        description="이미지 소스를 고르고 하나 선택해."
         widthClassName="max-w-7xl"
       >
         <div className="space-y-5">
@@ -415,7 +414,6 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
                 variant="inside"
                 className="border-b border-border/70 pb-4"
                 heading="이미지 소스"
-                description="소스를 골라."
                 actions={<Badge variant="outline">3 sources</Badge>}
               />
               <SegmentedControl value={source} items={IMAGE_ATTACHMENT_SOURCE_ITEMS} onChange={(nextSource) => setSource(nextSource as ImageAttachmentSource)} />
@@ -429,7 +427,6 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
                   variant="inside"
                   className="border-b border-border/70 pb-4"
                   heading="로컬 파일 업로드"
-                  description="로컬 파일에서 바로 첨부해."
                   actions={<Badge variant="outline">Upload</Badge>}
                 />
 
@@ -437,10 +434,6 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
                   <div className="mx-auto flex max-w-xl flex-col items-center gap-4 text-center">
                     <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border bg-surface-lowest text-primary">
                       <Upload className="h-6 w-6" />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="text-base font-semibold text-foreground">업로드해서 바로 붙이기</div>
-                      <div className="text-sm text-muted-foreground">선택 즉시 현재 입력 필드에 연결돼.</div>
                     </div>
                     <div className="flex flex-wrap justify-center gap-2">
                       <Button type="button" onClick={() => inputRef.current?.click()} disabled={isImporting}>
