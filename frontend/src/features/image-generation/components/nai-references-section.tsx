@@ -77,25 +77,16 @@ export function NaiReferencesSection({
                 <div key={`nai-character-reference-${index}`} className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="text-sm font-medium text-foreground">Reference {index + 1}</div>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => onRemoveReference(index)}>
-                      <Trash2 className="h-4 w-4" />
-                      제거
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ImageAttachmentPickerButton label={reference.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} onSelect={(image) => onReferenceImageChange(index, image)} />
+                      <Button type="button" variant="ghost" size="sm" onClick={() => onRemoveReference(index)}>
+                        <Trash2 className="h-4 w-4" />
+                        제거
+                      </Button>
+                    </div>
                   </div>
 
-                  <div className="space-y-3 rounded-sm border border-border/80 bg-surface-lowest p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-foreground">Reference Image</div>
-                      <ImageAttachmentPickerButton label={reference.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} onSelect={(image) => onReferenceImageChange(index, image)} />
-                    </div>
-                    {reference.image ? (
-                      <NaiSelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} onRemove={() => onReferenceImageChange(index)} />
-                    ) : (
-                      <div className="flex min-h-32 items-center justify-center rounded-sm border border-dashed border-border bg-surface-low px-4 py-6 text-sm text-muted-foreground">
-                        선택된 이미지 없음
-                      </div>
-                    )}
-                  </div>
+                  {reference.image ? <NaiSelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} /> : null}
 
                   <div className="grid gap-4 md:grid-cols-3">
                     <FormField label="Type">

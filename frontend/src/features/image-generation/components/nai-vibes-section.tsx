@@ -75,25 +75,16 @@ export function NaiVibesSection({
                         <Badge variant="outline">이미지 필요</Badge>
                       )}
                     </div>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => onRemoveVibe(index)}>
-                      <Trash2 className="h-4 w-4" />
-                      제거
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ImageAttachmentPickerButton label={vibe.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Vibe ${index + 1} 이미지 선택`} onSelect={(image) => onVibeImageChange(index, image)} />
+                      <Button type="button" variant="ghost" size="sm" onClick={() => onRemoveVibe(index)}>
+                        <Trash2 className="h-4 w-4" />
+                        제거
+                      </Button>
+                    </div>
                   </div>
 
-                  <div className="space-y-3 rounded-sm border border-border/80 bg-surface-lowest p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-foreground">Reference Image</div>
-                      <ImageAttachmentPickerButton label={vibe.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Vibe ${index + 1} 이미지 선택`} onSelect={(image) => onVibeImageChange(index, image)} />
-                    </div>
-                    {vibe.image ? (
-                      <NaiSelectedImageCard image={vibe.image} alt={`NAI vibe ${index + 1}`} onRemove={() => onVibeImageChange(index)} />
-                    ) : (
-                      <div className="flex min-h-32 items-center justify-center rounded-sm border border-dashed border-border bg-surface-low px-4 py-6 text-sm text-muted-foreground">
-                        선택된 이미지 없음
-                      </div>
-                    )}
-                  </div>
+                  {vibe.image ? <NaiSelectedImageCard image={vibe.image} alt={`NAI vibe ${index + 1}`} /> : null}
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <FormField label="Strength">

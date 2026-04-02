@@ -1179,8 +1179,13 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                             <Button type="button" variant="secondary" onClick={handleOpenImageEditor} disabled={!naiForm.sourceImage}>
                               {naiForm.action === 'infill' ? '소스/마스크 편집' : '소스 편집'}
                             </Button>
+                            {naiForm.sourceImage ? (
+                              <Button type="button" variant="ghost" onClick={() => void handleNaiImageChange('sourceImage')}>
+                                제거
+                              </Button>
+                            ) : null}
                           </div>
-                          {naiForm.sourceImage ? <NaiSelectedImageCard image={naiForm.sourceImage} alt="NAI source" onRemove={() => void handleNaiImageChange('sourceImage')} /> : null}
+                          {naiForm.sourceImage ? <NaiSelectedImageCard image={naiForm.sourceImage} alt="NAI source" /> : null}
                         </div>
                       </FormField>
 
@@ -1188,8 +1193,15 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                         <FormField label="Mask Image">
                           <div className="space-y-3">
                             <div className="text-xs text-muted-foreground">소스 편집기에서 마스크를 같이 만들 수 있어. 필요하면 외부 마스크를 따로 붙여도 돼.</div>
-                            <ImageAttachmentPickerButton label={naiForm.maskImage ? '마스크 이미지 변경' : '마스크 이미지 선택'} modalTitle="마스크 이미지 선택" onSelect={(image) => handleNaiImageChange('maskImage', image)} />
-                            {naiForm.maskImage ? <NaiSelectedImageCard image={naiForm.maskImage} alt="NAI mask" onRemove={() => void handleNaiImageChange('maskImage')} /> : null}
+                            <div className="flex flex-wrap gap-2">
+                              <ImageAttachmentPickerButton label={naiForm.maskImage ? '마스크 이미지 변경' : '마스크 이미지 선택'} modalTitle="마스크 이미지 선택" onSelect={(image) => handleNaiImageChange('maskImage', image)} />
+                              {naiForm.maskImage ? (
+                                <Button type="button" variant="ghost" onClick={() => void handleNaiImageChange('maskImage')}>
+                                  제거
+                                </Button>
+                              ) : null}
+                            </div>
+                            {naiForm.maskImage ? <NaiSelectedImageCard image={naiForm.maskImage} alt="NAI mask" /> : null}
                           </div>
                         </FormField>
                       ) : null}
