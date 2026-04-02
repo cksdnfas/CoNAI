@@ -13,7 +13,7 @@ import {
   type Connection,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Boxes, ChevronDown, Copy, Plus, RefreshCw, RotateCcw, Save, SlidersHorizontal, Trash2, Unplug, Workflow } from 'lucide-react'
+import { ArrowLeft, Boxes, Copy, Plus, RefreshCw, RotateCcw, SlidersHorizontal, Trash2, Unplug, Workflow } from 'lucide-react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
@@ -47,6 +47,7 @@ import {
 import { GraphExecutionPanel } from './components/graph-execution-panel'
 import { ModuleGraphNodeCard } from './components/module-graph-node-card'
 import { ModuleLibraryPanel } from './components/module-library-panel'
+import { ModuleWorkflowEditorSupportPanel, type EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
 import { NodeInspectorPanel } from './components/node-inspector-panel'
 import { SavedGraphList } from './components/saved-graph-list'
 import { WorkflowExposedInputEditor } from './components/workflow-exposed-input-editor'
@@ -71,19 +72,13 @@ import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
-import type { AppSettings } from '@/types/settings'
+import { buildWorkflowExposedInputId, buildWorkflowValidationIssues } from './module-graph-validation'
 
 type ModuleWorkflowWorkspaceProps = {
   embedded?: boolean
 }
 
-type EditorSupportSectionKey = 'setup' | 'inspector' | 'inputs' | 'validation' | 'results'
-
 const UNSAVED_CHANGES_CONFIRM_MESSAGE = '저장하지 않은 변경사항이 있어. 이 작업을 진행하면 현재 편집 내용이 사라질 수 있어. 계속할까?'
-
-function buildWorkflowExposedInputId(nodeId: string, portKey: string) {
-  return `${nodeId}:${portKey}`
-}
 
 function resolveWorkflowDisplayName(name: string, fallbackName?: string | null) {
   const trimmedName = name.trim()
@@ -95,118 +90,6 @@ function resolveWorkflowDisplayName(name: string, fallbackName?: string | null) 
   return trimmedFallbackName && trimmedFallbackName.length > 0 ? trimmedFallbackName : 'Workflow Draft'
 }
 
-type ValidationNodeRecord = {
-  id: string
-  module: ModuleDefinitionRecord | null
-  inputValues: Record<string, unknown>
-}
-
-type ValidationEdgeRecord = {
-  targetNodeId: string
-  targetPortKey: string
-}
-
-function hasMeaningfulValue(value: unknown) {
-  return value !== undefined && value !== null && value !== ''
-}
-
-function resolveSystemCapabilityIssue(module: ModuleDefinitionRecord, settings?: AppSettings | null) {
-  if (module.engine_type !== 'system' || !settings) {
-    return null
-  }
-
-  const operationKey = typeof module.internal_fixed_values?.operation_key === 'string'
-    ? module.internal_fixed_values.operation_key
-    : typeof module.template_defaults?.operation_key === 'string'
-      ? module.template_defaults.operation_key
-      : null
-
-  if (operationKey === 'system.extract_tags_from_image' && !settings.tagger.enabled) {
-    return 'WD Tagger 기능이 비활성화돼 있어.'
-  }
-
-  if (operationKey === 'system.extract_artist_from_image' && !settings.kaloscope.enabled) {
-    return 'Kaloscope 기능이 비활성화돼 있어.'
-  }
-
-  return null
-}
-
-function buildWorkflowValidationIssues(params: {
-  nodes: ValidationNodeRecord[]
-  edges: ValidationEdgeRecord[]
-  exposedInputs: GraphWorkflowExposedInput[]
-  runtimeInputValues?: Record<string, unknown>
-  settings?: AppSettings | null
-}) {
-  const { nodes, edges, exposedInputs, runtimeInputValues = {}, settings } = params
-  const issues: WorkflowValidationIssue[] = []
-  const connectedInputMap = new Map<string, Set<string>>()
-  const exposedInputMap = new Map(exposedInputs.map((inputDefinition) => [buildWorkflowExposedInputId(inputDefinition.node_id, inputDefinition.port_key), inputDefinition]))
-
-  for (const edge of edges) {
-    const current = connectedInputMap.get(edge.targetNodeId) ?? new Set<string>()
-    current.add(edge.targetPortKey)
-    connectedInputMap.set(edge.targetNodeId, current)
-  }
-
-  for (const node of nodes) {
-    const nodeLabel = node.module?.name ?? '알 수 없는 모듈'
-
-    if (!node.module) {
-      issues.push({
-        id: `missing-module:${node.id}`,
-        nodeId: node.id,
-        nodeLabel,
-        severity: 'error',
-        title: '모듈 정의를 찾지 못했어',
-        detail: '이 노드가 참조하는 모듈이 현재 목록에 없어. 저장된 워크플로우와 모듈 카탈로그를 확인해봐.',
-      })
-      continue
-    }
-
-    const capabilityIssue = resolveSystemCapabilityIssue(node.module, settings)
-    if (capabilityIssue) {
-      issues.push({
-        id: `capability:${node.id}`,
-        nodeId: node.id,
-        nodeLabel,
-        severity: 'error',
-        title: '시스템 기능이 비활성화돼 있어',
-        detail: capabilityIssue,
-      })
-    }
-
-    const connectedInputKeys = connectedInputMap.get(node.id) ?? new Set<string>()
-    for (const port of node.module.exposed_inputs ?? []) {
-      if (!port.required) {
-        continue
-      }
-
-      const exposedInput = exposedInputMap.get(buildWorkflowExposedInputId(node.id, port.key))
-      const runtimeValue = exposedInput ? runtimeInputValues[exposedInput.id] : undefined
-      const satisfied = connectedInputKeys.has(port.key)
-        || hasMeaningfulValue(node.inputValues?.[port.key])
-        || hasMeaningfulValue(port.default_value)
-        || hasMeaningfulValue(exposedInput?.default_value)
-        || hasMeaningfulValue(runtimeValue)
-
-      if (!satisfied) {
-        issues.push({
-          id: `missing-input:${node.id}:${port.key}`,
-          nodeId: node.id,
-          portKey: port.key,
-          nodeLabel,
-          severity: 'error',
-          title: `필수 입력 누락 · ${port.label}`,
-          detail: `${port.label} (${port.key}) 입력이 연결되지 않았고 값도 비어 있어.`,
-        })
-      }
-    }
-  }
-
-  return issues
-}
 
 function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorkspaceProps) {
   const { showSnackbar } = useSnackbar()
@@ -1494,70 +1377,29 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   )
 
   const workflowEditorSupportPanels = (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {([
-          ['setup', '설정'],
-          ['inspector', '검사'],
-          ['inputs', '입력'],
-          ['validation', '검증'],
-          ['results', '결과'],
-        ] as const).map(([sectionKey, label]) => (
-          <Button
-            key={sectionKey}
-            type="button"
-            size="sm"
-            variant={activeEditorSupportSection === sectionKey ? 'default' : 'outline'}
-            onClick={() => scrollToEditorSupportSection(sectionKey)}
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
-
-      <div ref={(node) => { editorSupportSectionRefs.current.setup = node }} className="scroll-mt-4">
-        <Card>
-          <CardContent className="space-y-4">
-            <SectionHeading
-              variant="inside"
-              heading="Workflow Setup"
-              actions={
-                <>
-                  <Badge variant="outline">N {nodes.length}</Badge>
-                  <Badge variant="outline">E {edges.length}</Badge>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => setIsSetupCollapsed((current) => !current)}>
-                    <ChevronDown className={`h-4 w-4 transition-transform ${isSetupCollapsed ? '-rotate-90' : 'rotate-0'}`} />
-                  </Button>
-                </>
-              }
-            />
-
-            {!isSetupCollapsed ? (
-              <>
-                <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border bg-background/50 px-3 py-2 text-sm">
-                  <span className="font-medium text-foreground">{selectedGraphRecord?.name || workflowName || 'Untitled workflow'}</span>
-                  {selectedGraphRecord ? <Badge variant="outline">v{selectedGraphRecord.version}</Badge> : <Badge variant="outline">draft</Badge>}
-                  {isDirty ? <Badge variant="outline">미저장</Badge> : <Badge variant="secondary">저장됨</Badge>}
-                  {selectedNode ? <Badge variant="secondary">노드 {selectedNode.data.module.name}</Badge> : null}
-                  {selectedExecutionId ? <Badge variant="secondary">실행 #{selectedExecutionId}</Badge> : null}
-                </div>
-
-                <div className="grid gap-3">
-                  <Input value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} placeholder="Workflow name" />
-                  <Input value={workflowDescription} onChange={(event) => setWorkflowDescription(event.target.value)} placeholder="설명 (선택)" />
-                </div>
-
-                <Button type="button" onClick={() => void handleSaveGraph()} disabled={isSavingGraph || nodes.length === 0}>
-                  <Save className="h-4 w-4" />
-                  {isSavingGraph ? '저장 중…' : selectedGraphId !== null ? '워크플로우 업데이트' : '워크플로우 저장'}
-                </Button>
-              </>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div ref={(node) => { editorSupportSectionRefs.current.inspector = node }} className="scroll-mt-4">
+    <ModuleWorkflowEditorSupportPanel
+      activeSection={activeEditorSupportSection}
+      nodesCount={nodes.length}
+      edgesCount={edges.length}
+      selectedGraphName={selectedGraphRecord?.name ?? null}
+      selectedGraphVersion={selectedGraphRecord?.version ?? null}
+      workflowName={workflowName}
+      workflowDescription={workflowDescription}
+      isDirty={isDirty}
+      isSetupCollapsed={isSetupCollapsed}
+      selectedNodeLabel={selectedNode?.data.module.name ?? null}
+      selectedExecutionId={selectedExecutionId}
+      isSavingGraph={isSavingGraph}
+      hasNodes={nodes.length > 0}
+      onSelectSection={scrollToEditorSupportSection}
+      onToggleSetup={() => setIsSetupCollapsed((current) => !current)}
+      onWorkflowNameChange={setWorkflowName}
+      onWorkflowDescriptionChange={setWorkflowDescription}
+      onSaveGraph={() => void handleSaveGraph()}
+      setSectionRef={(section, node) => {
+        editorSupportSectionRefs.current[section] = node
+      }}
+      inspectorPanel={
         <NodeInspectorPanel
           nodes={nodes}
           selectedNode={selectedNode}
@@ -1572,9 +1414,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           forceExecuteSelectedNodeLabel={executingGraphId !== null ? '실행 요청 중…' : '강제 재실행'}
           highlightedPortKey={selectedValidationPortKey}
         />
-      </div>
-
-      <div ref={(node) => { editorSupportSectionRefs.current.inputs = node }} className="scroll-mt-4">
+      }
+      inputsPanel={
         <WorkflowExposedInputEditor
           candidates={workflowInputCandidates}
           selectedInputs={workflowExposedInputs}
@@ -1583,18 +1424,16 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           onMoveInput={handleMoveWorkflowExposedInput}
           onChangeDefaultImage={handleWorkflowExposedInputDefaultImageChange}
         />
-      </div>
-
-      <div ref={(node) => { editorSupportSectionRefs.current.validation = node }} className="scroll-mt-4">
+      }
+      validationPanel={
         <WorkflowValidationPanel
           issues={editorValidationIssues}
           title="편집기 검증"
           description="실행 전 확인"
           onIssueSelect={focusValidationIssue}
         />
-      </div>
-
-      <div ref={(node) => { editorSupportSectionRefs.current.results = node }} className="scroll-mt-4">
+      }
+      resultsPanel={
         <GraphExecutionPanel
           selectedGraphId={selectedGraphId}
           selectedGraph={selectedGraphRecord}
@@ -1616,8 +1455,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           onRetryExecution={() => void handleRetrySelectedExecution()}
           onCancelExecution={() => void handleCancelSelectedExecution()}
         />
-      </div>
-    </div>
+      }
+    />
   )
 
   return (
