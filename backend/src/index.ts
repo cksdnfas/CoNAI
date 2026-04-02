@@ -54,40 +54,10 @@ import { prepareHttpsOptions } from './utils/httpsOptions';
 import { getNetworkInfo, formatNetworkInfo } from './utils/networkInfo';
 import { StartupCheck } from './utils/startupCheck';
 
-import { imageRoutes } from './routes/images/index';
-import promptCollectionRoutes from './routes/promptCollection';
-import promptGroupRoutes from './routes/promptGroups';
-import negativePromptGroupRoutes from './routes/negativePromptGroups';
-import { groupRoutes } from './routes/groups';
-import autoFolderGroupRoutes from './routes/autoFolderGroups';
-import { settingsRoutes } from './routes/settings';
-import { workflowRoutes } from './routes/workflows';
-import { comfyuiServerRoutes } from './routes/comfyuiServers';
-import { customDropdownListRoutes } from './routes/customDropdownLists';
-import { moduleDefinitionRoutes } from './routes/moduleDefinitions';
-import { graphWorkflowRoutes } from './routes/graphWorkflows';
-import naiRoutes from './routes/nai';
-import generationHistoryRoutes from './routes/generation-history.routes';
-import wildcardRoutes from './routes/wildcards';
-import { watchedFoldersRoutes } from './routes/watchedFolders';
-import { backupSourcesRoutes } from './routes/backupSources';
-import { backgroundQueueRoutes } from './routes/backgroundQueue';
-import { systemRoutes } from './routes/system.routes';
-import imageEditorRoutes from './routes/image-editor.routes';
-import { authRoutes } from './routes/auth.routes';
-import fileVerificationRoutes from './routes/fileVerification';
-import { thumbnailRoutes } from './routes/thumbnails';
-import externalApiRoutes from './routes/externalApi.routes';
-import civitaiRoutes from './routes/civitai.routes';
-import searchHistoryRoutes from './routes/search-history.routes';
-import searchOptionsRoutes from './routes/search-options.routes';
-import { mcpRoutes } from './mcp';
 import { initializeDatabase } from './database/init';
 import { initializeUserSettingsDb } from './database/userSettingsDb';
 import { initializeAuthDb, getAuthDb } from './database/authDb';
 import { initializeApiGenerationDb } from './database/apiGenerationDb';
-import { errorHandler } from './middleware/errorHandler';
-import { optionalAuth } from './middleware/authMiddleware';
 import { imageTaggerService } from './services/imageTaggerService';
 import { APIImageProcessor } from './services/APIImageProcessor';
 import { PORTS, IMAGE_PROCESSING } from '@conai/shared';
@@ -95,6 +65,7 @@ import { AutoScanScheduler } from './services/autoScanScheduler';
 import { autoTagScheduler } from './services/autoTagScheduler';
 import { QueryCacheService } from './services/QueryCacheService';
 import { WatchedFolderService } from './services/watchedFolderService';
+import { registerAppRoutes } from './startup/registerAppRoutes';
 import { startRuntimeSideEffectServices } from './startup/startRuntimeSideEffectServices';
 
 const app = express();
@@ -209,9 +180,9 @@ async function initializeSessionMiddleware() {
   initializeAuthDb(); // Synchronous call (better-sqlite3)
   console.log('✅ Auth DB initialized successfully');
 
-  console.log('🗄️  User Settings DB 초기화 중...');
+  console.log('🗄️  Unified User DB 초기화 중...');
   initializeUserSettingsDb(); // Synchronous call (better-sqlite3)
-  console.log('✅ User Settings DB initialized successfully');
+  console.log('✅ Unified User DB initialized successfully');
 
   console.log('🔐 Configuring session management...');
   const SqliteStore = BetterSqlite3Store(session);
@@ -248,154 +219,6 @@ async function initializeSessionMiddleware() {
   console.log('✅ Session management configured successfully');
 }
 
-// 정적 파일 서빙 (썸네일 및 원본 이미지) - CORS 및 캐시 헤더 추가
-// 인증이 설정된 경우 로그인 필요
-app.use('/uploads', optionalAuth, express.static(uploadsDir, {
-  // 외부 네트워크에서도 접근 가능하도록 CORS 헤더 추가
-  setHeaders: (res, filePath) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-
-    // 이미지 파일에 대한 캐시 설정
-    if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filePath)) {
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    }
-  },
-  // 성능 최적화
-  etag: true,
-  lastModified: true,
-  maxAge: '1y'
-}));
-
-// temp 폴더 정적 파일 서빙 (썸네일, 임시 편집 이미지 등)
-app.use('/temp', optionalAuth, express.static(tempDir, {
-  setHeaders: (res, filePath) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-
-    // 이미지 파일에 대한 캐시 설정 (썸네일은 immutable)
-    if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filePath)) {
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    }
-  },
-  etag: true,
-  lastModified: true,
-  maxAge: '1y'
-}));
-
-// save 폴더 정적 파일 서빙 (canvas, reusable assets 등)
-app.use('/save', optionalAuth, express.static(saveDir, {
-  setHeaders: (res, filePath) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-
-    if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filePath)) {
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    }
-  },
-  etag: true,
-  lastModified: true,
-  maxAge: '1y'
-}));
-
-// Routes configuration (must be called after session middleware is initialized)
-async function registerRoutes() {
-  console.log('📋 Registering API routes...');
-
-  // Routes (auth routes don't need authentication)
-  app.use('/api/auth', authRoutes);
-
-  // Protected routes (require authentication if configured)
-  // Apply lenient rate limiting to read-heavy endpoints
-  app.use('/api/external-api', optionalAuth, externalApiRoutes);
-  app.use('/api/civitai', readOnlyLimiter, optionalAuth, civitaiRoutes);
-  app.use('/api/images', readOnlyLimiter, optionalAuth, imageRoutes);
-  app.use('/api/prompt-collection', readOnlyLimiter, optionalAuth, promptCollectionRoutes);
-  app.use('/api/prompt-groups', readOnlyLimiter, optionalAuth, promptGroupRoutes);
-  app.use('/api/negative-prompt-groups', readOnlyLimiter, optionalAuth, negativePromptGroupRoutes);
-  app.use('/api/groups', readOnlyLimiter, optionalAuth, groupRoutes);
-  app.use('/api/auto-folder-groups', readOnlyLimiter, optionalAuth, autoFolderGroupRoutes);
-  app.use('/api/settings', optionalAuth, settingsRoutes);
-  app.use('/api/workflows', readOnlyLimiter, optionalAuth, workflowRoutes);
-  app.use('/api/comfyui-servers', optionalAuth, comfyuiServerRoutes);
-  app.use('/api/custom-dropdown-lists', optionalAuth, customDropdownListRoutes);
-  app.use('/api/module-definitions', optionalAuth, moduleDefinitionRoutes);
-  app.use('/api/graph-workflows', optionalAuth, graphWorkflowRoutes);
-  app.use('/api/nai', uploadLimiter, optionalAuth, naiRoutes); // Upload endpoint
-  app.use('/api/generation-history', readOnlyLimiter, optionalAuth, generationHistoryRoutes);
-  app.use('/api/wildcards', optionalAuth, wildcardRoutes);
-  app.use('/api/folders', optionalAuth, watchedFoldersRoutes);
-  app.use('/api/backup-sources', optionalAuth, backupSourcesRoutes);
-  app.use('/api/search-history', optionalAuth, searchHistoryRoutes);
-  app.use('/api/search-options', readOnlyLimiter, optionalAuth, searchOptionsRoutes);
-  app.use('/api/background-queue', optionalAuth, backgroundQueueRoutes);
-  app.use('/api/system', optionalAuth, systemRoutes);
-  app.use('/api/image-editor', uploadLimiter, optionalAuth, imageEditorRoutes); // Upload endpoint
-  app.use('/api/file-verification', optionalAuth, fileVerificationRoutes);
-  app.use('/api/thumbnails', optionalAuth, thumbnailRoutes);
-
-  // MCP (Model Context Protocol) endpoint - no auth required for MCP clients
-  app.use('/', mcpRoutes);
-  console.log('🔌 MCP endpoint registered at /mcp');
-
-  console.log('✅ All API routes registered successfully');
-
-  // Frontend static file serving (must come AFTER API routes but BEFORE error handlers)
-  const frontendDistCandidates = process.env.FRONTEND_DIST_PATH
-    ? [path.resolve(process.env.FRONTEND_DIST_PATH)]
-    : [
-        path.join(__dirname, 'frontend'),
-        path.join(__dirname, '..', '..', 'frontend'),
-      ];
-  const frontendDistPath = frontendDistCandidates.find(candidate => fs.existsSync(candidate));
-
-  if (frontendDistPath) {
-    console.log(`🎨 Serving frontend from: ${frontendDistPath}`);
-    app.use(express.static(frontendDistPath));
-
-    // SPA fallback - serve index.html for all non-API routes
-    app.get('/{*path}', (req, res, next) => {
-      if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/temp') || req.path.startsWith('/save')) {
-        next();
-        return;
-      }
-
-      const indexPath = path.join(frontendDistPath, 'index.html');
-      if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-      } else {
-        next();
-      }
-    });
-  } else {
-    console.warn('⚠️  Frontend dist not found. API-only mode.');
-    console.warn(`   Tried locations: ${frontendDistCandidates.join(', ')}`);
-    console.warn('   Run "npm run build:integrated" to build with frontend.\n');
-  }
-
-  // Error handling (must be registered AFTER all routes)
-  app.use(errorHandler);
-
-  // 404 handler (must be the LAST middleware)
-  app.use((req, res) => {
-    res.status(404).json({ error: 'Not Found' });
-  });
-}
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
 
 // 데이터베이스 초기화 및 서버 시작
 async function startServer() {
@@ -441,12 +264,18 @@ async function startServer() {
     await initializeSessionMiddleware();
 
     // 4-1. Register all routes (after session middleware is configured)
-    await registerRoutes();
+    registerAppRoutes(app, {
+      uploadsDir,
+      tempDir,
+      saveDir,
+      readOnlyLimiter,
+      uploadLimiter,
+    });
 
-    // 5. API Generation History DB 초기화
-    console.log('🗄️  API Generation History DB 초기화 중...');
+    // 5. Bind API generation history to the unified user DB
+    console.log('🗄️  API generation history binding to unified user DB...');
     initializeApiGenerationDb(); // Synchronous call (better-sqlite3)
-    console.log('✅ API Generation History DB initialized successfully');
+    console.log('✅ API generation history is using the unified user DB');
 
     // 5-1. Generation History Cleanup (startup)
     console.log('🧹 Running generation history startup cleanup...');
