@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Plus, Save, Trash2, WandSparkles } from 'lucide-react'
+import { Plus, Save, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -444,7 +444,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     }))
   }
 
-  const handleVibeFieldChange = (index: number, field: 'encoded' | 'strength' | 'informationExtracted', value: string) => {
+  const handleVibeFieldChange = (index: number, field: 'strength' | 'informationExtracted', value: string) => {
     setNaiForm((current) => ({
       ...current,
       vibes: current.vibes.map((vibe, vibeIndex) => (
@@ -473,7 +473,13 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     }))
   }
 
-  const handleEncodeVibe = async (index: number) => {
+  const handleEncodeVibe = async (
+    index: number,
+    options?: {
+      silentSuccess?: boolean
+      refetchUserData?: boolean
+    },
+  ) => {
     const vibe = naiForm.vibes[index]
     if (!vibe?.image || encodingVibeIndex !== null) {
       return null
@@ -497,8 +503,12 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             : entry
         )),
       }))
-      await naiUserQuery.refetch()
-      showSnackbar({ message: `Vibe ${index + 1} 인코딩 완료. 이 결과를 재사용하면 돼.`, tone: 'info' })
+      if (options?.refetchUserData !== false) {
+        await naiUserQuery.refetch()
+      }
+      if (!options?.silentSuccess) {
+        showSnackbar({ message: `Vibe ${index + 1} 인코딩 완료. 이 결과를 재사용하면 돼.`, tone: 'info' })
+      }
       return response.encoded
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, 'Vibe 인코딩에 실패했어.'), tone: 'error' })
@@ -506,6 +516,39 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     } finally {
       setEncodingVibeIndex(null)
     }
+  }
+
+  const ensureEncodedVibes = async () => {
+    const nextVibes = [...naiForm.vibes]
+    let encodedCount = 0
+
+    for (const [index, vibe] of nextVibes.entries()) {
+      if (!vibe?.image || vibe.encoded.trim().length > 0) {
+        continue
+      }
+
+      const encoded = await handleEncodeVibe(index, {
+        silentSuccess: true,
+        refetchUserData: false,
+      })
+
+      if (!encoded) {
+        return null
+      }
+
+      nextVibes[index] = {
+        ...vibe,
+        encoded,
+      }
+      encodedCount += 1
+    }
+
+    if (encodedCount > 0) {
+      await naiUserQuery.refetch()
+      showSnackbar({ message: `Vibe ${encodedCount}개 자동 인코딩 완료.`, tone: 'info' })
+    }
+
+    return nextVibes
   }
 
   const handleRemoveVibe = (index: number) => {
@@ -527,15 +570,10 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     setAssetSaveDescription('')
   }
 
-  const handleOpenVibeSaveModal = async (index: number) => {
+  const handleOpenVibeSaveModal = (index: number) => {
     const vibe = naiForm.vibes[index]
     if (!vibe?.image) {
       showSnackbar({ message: '저장하려면 먼저 Vibe 이미지를 넣어줘.', tone: 'error' })
-      return
-    }
-
-    const encoded = vibe.encoded || await handleEncodeVibe(index)
-    if (!encoded) {
       return
     }
 
@@ -670,7 +708,9 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
           throw new Error('저장할 Vibe 이미지를 찾지 못했어.')
         }
 
-        const encoded = vibe.encoded || await handleEncodeVibe(assetSaveTarget.index)
+        const encoded = vibe.encoded || await handleEncodeVibe(assetSaveTarget.index, {
+          silentSuccess: true,
+        })
         if (!encoded) {
           return
         }
@@ -786,6 +826,11 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     try {
       const sampleCount = clampNaiSampleCount(naiForm.samples)
       const useCharacterPositions = shouldUseNaiCharacterPositions(naiForm)
+      const encodedVibes = await ensureEncodedVibes()
+      if (!encodedVibes) {
+        return
+      }
+
       setIsNaiGenerating(true)
       const response = await generateNaiImage({
         prompt: naiForm.prompt.trim(),
@@ -802,7 +847,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
         seed: naiForm.seed.trim().length > 0 ? Number(naiForm.seed) : undefined,
         use_coords: useCharacterPositions,
         characters: supportsCharacterPrompts ? buildNaiCharacterPromptPayload(naiForm.characters) : undefined,
-        vibes: buildNaiVibePayload(naiForm.vibes),
+        vibes: buildNaiVibePayload(encodedVibes),
         character_refs: buildNaiCharacterReferencePayload(naiForm.characterReferences),
         variety_plus: naiForm.varietyPlus,
         image: naiForm.action !== 'generate' ? naiForm.sourceImage?.dataUrl : undefined,
@@ -856,8 +901,16 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     }
 
     try {
+      const encodedVibes = await ensureEncodedVibes()
+      if (!encodedVibes) {
+        return
+      }
+
       setIsSavingNaiModule(true)
-      const snapshot = buildNaiModuleSnapshot(naiForm)
+      const snapshot = buildNaiModuleSnapshot({
+        ...naiForm,
+        vibes: encodedVibes,
+      })
       const exposedFields = naiModuleFieldOptions
         .filter((field) => naiExposedFieldKeys.includes(field.key))
         .map((field) => ({
@@ -1201,7 +1254,13 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex flex-wrap items-center gap-2">
                               <div className="text-sm font-medium text-foreground">Vibe {index + 1}</div>
-                              {vibe.encoded ? <Badge variant="secondary">encoded</Badge> : <Badge variant="outline">not encoded</Badge>}
+                              {vibe.encoded ? (
+                                <Badge variant="secondary">준비됨</Badge>
+                              ) : vibe.image ? (
+                                <Badge variant="outline">자동 인코딩</Badge>
+                              ) : (
+                                <Badge variant="outline">이미지 필요</Badge>
+                              )}
                             </div>
                             <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveVibe(index)}>
                               <Trash2 className="h-4 w-4" />
@@ -1226,13 +1285,9 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
                           </div>
 
                           <div className="flex justify-end gap-2">
-                            <Button type="button" variant="outline" onClick={() => void handleOpenVibeSaveModal(index)} disabled={!vibe.image || encodingVibeIndex === index}>
+                            <Button type="button" variant="outline" onClick={() => handleOpenVibeSaveModal(index)} disabled={!vibe.image || encodingVibeIndex === index}>
                               <Save className="h-4 w-4" />
-                              저장
-                            </Button>
-                            <Button type="button" variant="outline" onClick={() => void handleEncodeVibe(index)} disabled={!vibe.image || encodingVibeIndex !== null}>
-                              <WandSparkles className="h-4 w-4" />
-                              {encodingVibeIndex === index ? '인코딩 중…' : '인코딩'}
+                              {encodingVibeIndex === index ? '인코딩 중…' : '저장'}
                             </Button>
                           </div>
                         </div>
