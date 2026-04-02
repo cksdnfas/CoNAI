@@ -1,16 +1,14 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Download, FolderMinus, FolderPlus, Pencil, Play, RotateCcw, Trash2 } from 'lucide-react'
+import { FolderMinus, FolderPlus, Play, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/common/page-header'
 import { SegmentedControl } from '@/components/common/segmented-control'
-import { SectionHeading } from '@/components/common/section-heading'
 import {
   addImagesToGroup,
   createGroup,
@@ -51,6 +49,7 @@ import { GroupEditorModal } from './components/group-editor-modal'
 import { GroupAssignModal } from './components/group-assign-modal'
 import { GroupImageSection } from './components/group-image-section'
 import { GroupDownloadModal } from './components/group-download-modal'
+import { GroupDetailHeaderCard } from './components/group-detail-header-card'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 
 const groupSources = {
@@ -670,87 +669,24 @@ export function GroupPage() {
 
           {selectedGroupId && selectedGroupQuery.data ? (
             <div className="space-y-8">
-              <section>
-                <Card className="overflow-hidden">
-                  <CardContent className="p-0">
-                    <SectionHeading
-                      variant="inside"
-                      className="border-b border-border/70 px-4 pb-4"
-                      heading={selectedGroupQuery.data.name}
-                      actions={
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button type="button" size="sm" variant="secondary" onClick={handleOpenGroupDownloadModal} disabled={groupFileCountsQuery.isLoading || downloadGroupArchiveMutation.isPending}>
-                            <Download className="h-4 w-4" />
-                            {downloadGroupArchiveMutation.isPending && downloadScope === 'group' ? '준비 중…' : '다운로드'}
-                          </Button>
-                          {isCustomSource ? (
-                            <>
-                              <Button type="button" size="sm" variant="secondary" onClick={handleOpenCreateModal}>
-                                <FolderPlus className="h-4 w-4" />
-                                하위 그룹 추가
-                              </Button>
-                              <Button type="button" size="icon-sm" variant="secondary" onClick={handleOpenEditModal} aria-label="그룹 편집" title="편집">
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button type="button" size="sm" variant="secondary" onClick={() => void handleRunAutoCollect()} disabled={autoCollectMutation.isPending}>
-                                <Play className="h-4 w-4" />
-                                {autoCollectMutation.isPending ? '실행 중…' : '자동수집 실행'}
-                              </Button>
-                              <Button type="button" size="icon-sm" variant="destructive" onClick={() => void handleDeleteSelectedGroup()} disabled={deleteGroupMutation.isPending} aria-label="그룹 삭제" title="삭제">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </>
-                          ) : null}
-                        </div>
-                      }
-                    />
-
-                    <div className="space-y-4 px-4 pt-4">
-                      <div className="flex flex-wrap gap-2">
-                        <Badge variant="secondary">이미지 {selectedGroupQuery.data.image_count.toLocaleString('ko-KR')}개</Badge>
-                        <Badge variant="outline">manual {selectedGroupQuery.data.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
-                        <Badge variant="outline">auto {selectedGroupQuery.data.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
-                        {isCustomSource ? (
-                          <Badge variant={selectedGroupQuery.data.auto_collect_enabled ? 'default' : 'outline'}>
-                            {selectedGroupQuery.data.auto_collect_enabled ? '자동수집 켜짐' : '자동수집 꺼짐'}
-                          </Badge>
-                        ) : null}
-                        {selectedGroupHierarchy?.has_children ? (
-                          <Badge variant="outline">하위 그룹 {selectedGroupHierarchy.child_count.toLocaleString('ko-KR')}개</Badge>
-                        ) : null}
-                      </div>
-
-                      {isCustomSource ? (
-                        <div className="space-y-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Image filter</span>
-                            {(['all', 'manual', 'auto'] as const).map((filterValue) => (
-                              <Button
-                                key={filterValue}
-                                type="button"
-                                size="sm"
-                                variant={groupImageCollectionFilter === filterValue ? 'default' : 'secondary'}
-                                onClick={() => setGroupImageCollectionFilter(filterValue)}
-                              >
-                                {filterValue === 'all' ? '전체' : filterValue === 'manual' ? 'manual만' : 'auto만'}
-                              </Button>
-                            ))}
-                          </div>
-
-                          <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
-                            <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-2">
-                              마지막 자동수집: {formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run)}
-                            </div>
-                            <div className="rounded-sm border border-border/70 bg-background/50 px-3 py-2">
-                              부모 그룹: {selectedGroupHierarchy?.parent_id == null ? '루트 그룹' : '하위 그룹으로 연결됨'}
-                            </div>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </CardContent>
-                </Card>
-              </section>
+              <GroupDetailHeaderCard
+                group={selectedGroupQuery.data}
+                selectedGroupHierarchy={selectedGroupHierarchy}
+                isCustomSource={isCustomSource}
+                groupImageCollectionFilter={groupImageCollectionFilter}
+                isGroupFileCountsLoading={groupFileCountsQuery.isLoading}
+                isDownloadingGroup={downloadGroupArchiveMutation.isPending && downloadScope === 'group'}
+                isAutoCollectPending={autoCollectMutation.isPending}
+                isDeletePending={deleteGroupMutation.isPending}
+                lastAutoCollectLabel={formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run)}
+                parentGroupLabel={selectedGroupHierarchy?.parent_id == null ? '루트 그룹' : '하위 그룹으로 연결됨'}
+                onOpenDownload={handleOpenGroupDownloadModal}
+                onOpenCreateModal={handleOpenCreateModal}
+                onOpenEditModal={handleOpenEditModal}
+                onRunAutoCollect={() => void handleRunAutoCollect()}
+                onDeleteGroup={() => void handleDeleteSelectedGroup()}
+                onFilterChange={setGroupImageCollectionFilter}
+              />
 
               {backNavigationGroup ? (
                 <GroupNavigationGridSection
