@@ -46,11 +46,12 @@ export function NaiReferencesSection({
   return (
     <section className="space-y-3">
       <Card>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           <SectionHeading
             variant="inside"
             className="border-b border-border/70 pb-4"
             heading="References"
+            description="캐릭터/스타일 참조 이미지를 구성하고 저장된 reference를 다시 불러올 수 있어."
             actions={(
               <>
                 <Badge variant="outline">{references.length}</Badge>
@@ -68,21 +69,25 @@ export function NaiReferencesSection({
               </>
             )}
           />
-          <div className="space-y-4">
-            {!supportsCharacterReference ? <div className="text-xs text-[#ffb4ab]">현재 모델에서는 Character Reference를 사용할 수 없어.</div> : null}
 
-            <div className="space-y-3">
+          {!supportsCharacterReference ? <div className="text-xs text-[#ffb4ab]">현재 모델에서는 Character Reference를 사용할 수 없어.</div> : null}
+
+          {references.length > 0 ? (
+            <div className="space-y-4">
               {references.map((reference, index) => (
-                <div key={`nai-character-reference-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-medium text-foreground">Reference {index + 1}</div>
+                <div key={`nai-character-reference-${index}`} className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-foreground">Reference {index + 1}</div>
+                      <div className="text-xs text-muted-foreground">참조 이미지와 타입, 강도, fidelity를 함께 관리하는 NAI reference 카드야.</div>
+                    </div>
                     <Button type="button" variant="ghost" size="sm" onClick={() => onRemoveReference(index)}>
                       <Trash2 className="h-4 w-4" />
                       제거
                     </Button>
                   </div>
 
-                  <FormField label="Reference Image">
+                  <FormField label="Reference Image" hint="이미지 첨부 또는 교체">
                     <div className="space-y-3">
                       <ImageAttachmentPickerButton label={reference.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} onSelect={(image) => onReferenceImageChange(index, image)} />
                       {reference.image ? <NaiSelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} onRemove={() => onReferenceImageChange(index)} /> : null}
@@ -105,7 +110,7 @@ export function NaiReferencesSection({
                     </FormField>
                   </div>
 
-                  <div className="flex justify-end">
+                  <div className="flex justify-end border-t border-border/70 pt-4">
                     <Button type="button" variant="outline" onClick={() => onOpenReferenceSaveModal(index)} disabled={!reference.image}>
                       <Save className="h-4 w-4" />
                       저장
@@ -114,39 +119,53 @@ export function NaiReferencesSection({
                 </div>
               ))}
             </div>
+          ) : (
+            <div className="rounded-sm border border-dashed border-border bg-surface-low px-4 py-5 text-sm text-muted-foreground">
+              아직 추가한 reference가 없어. 위의 + 버튼으로 새 reference를 만들 수 있어.
+            </div>
+          )}
 
-            <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <div className="text-sm font-medium text-foreground">Saved Character References</div>
                   <Badge variant="outline">{savedReferences.length}</Badge>
                 </div>
-                <div className="w-full sm:w-72">
-                  <Input value={savedReferenceSearch} onChange={(event) => onSavedReferenceSearchChange(event.target.value)} placeholder="이름 / 설명 검색" />
-                </div>
+                <div className="text-xs text-muted-foreground">저장한 reference를 검색해서 바로 불러와.</div>
               </div>
-              {savedReferencesLoading ? (
-                <div className="text-sm text-muted-foreground">불러오는 중…</div>
-              ) : savedReferences.length > 0 ? (
-                <div className="space-y-2">
-                  {savedReferences.map((asset) => (
-                    <div key={asset.id} className="flex items-center gap-3 rounded-sm border border-border bg-surface-low p-3">
-                      <img src={asset.image_data_url} alt={asset.label} className="h-16 w-16 shrink-0 rounded-sm object-contain" />
-                      <div className="min-w-0 flex-1 space-y-1">
+              <div className="w-full sm:w-72 md:w-80">
+                <Input value={savedReferenceSearch} onChange={(event) => onSavedReferenceSearchChange(event.target.value)} placeholder="이름 / 설명 검색" />
+              </div>
+            </div>
+            {savedReferencesLoading ? (
+              <div className="text-sm text-muted-foreground">불러오는 중…</div>
+            ) : savedReferences.length > 0 ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                {savedReferences.map((asset) => (
+                  <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+                    <div className="flex gap-3">
+                      <img src={asset.image_data_url} alt={asset.label} className="h-20 w-20 shrink-0 rounded-sm border border-border object-contain" />
+                      <div className="min-w-0 flex-1 space-y-2">
                         <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
                         {asset.description ? <div className="line-clamp-2 text-xs text-muted-foreground">{asset.description}</div> : null}
-                      </div>
-                      <div className="flex shrink-0 gap-2 self-center">
-                        <Button type="button" size="sm" variant="outline" onClick={() => onLoadReferenceFromStore(asset.id)}>불러오기</Button>
-                        <Button type="button" size="sm" variant="ghost" onClick={() => onDeleteReferenceFromStore(asset.id)}>삭제</Button>
+                        <div className="flex flex-wrap gap-1.5">
+                          <Badge variant="outline">{asset.type}</Badge>
+                          <Badge variant="outline">strength {asset.strength}</Badge>
+                          <Badge variant="outline">fidelity {asset.fidelity}</Badge>
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 reference가 없어.</div>
-              )}
-            </div>
+                    <div className="flex justify-end gap-2 border-t border-border/70 pt-3">
+                      <Button type="button" size="sm" variant="outline" onClick={() => onLoadReferenceFromStore(asset.id)}>불러오기</Button>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => onDeleteReferenceFromStore(asset.id)}>삭제</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 reference가 없어.</div>
+            )}
           </div>
         </CardContent>
       </Card>
