@@ -65,6 +65,7 @@ import {
   type SelectedImageDraft,
 } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
+import { NaiReferencesSection } from './nai-references-section'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { NaiVibesSection } from './nai-vibes-section'
 import { NaiAssetSaveModal } from './nai-asset-save-modal'
@@ -1235,113 +1236,21 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
             />
 
 
-            <section className="space-y-3">
-              <Card>
-                <CardContent className="space-y-4">
-                  <SectionHeading
-                    variant="inside"
-                    className="border-b border-border/70 pb-4"
-                    heading="References"
-                    actions={(
-                      <>
-                        <Badge variant="outline">{naiForm.characterReferences.length}</Badge>
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant="outline"
-                          onClick={handleAddCharacterReference}
-                          disabled={!supportsCharacterReference}
-                          aria-label="Reference 추가"
-                          title="Reference 추가"
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </>
-                    )}
-                  />
-                  <div className="space-y-4">
-                    {!supportsCharacterReference ? <div className="text-xs text-[#ffb4ab]">현재 모델에서는 Character Reference를 사용할 수 없어.</div> : null}
-
-                    <div className="space-y-3">
-                      {naiForm.characterReferences.map((reference, index) => (
-                        <div key={`nai-character-reference-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-sm font-medium text-foreground">Reference {index + 1}</div>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveCharacterReference(index)}>
-                              <Trash2 className="h-4 w-4" />
-                              제거
-                            </Button>
-                          </div>
-
-                          <FormField label="Reference Image">
-                            <div className="space-y-3">
-                              <ImageAttachmentPickerButton label={reference.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} onSelect={(image) => handleCharacterReferenceImageChange(index, image)} />
-                              {reference.image ? <NaiSelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} onRemove={() => void handleCharacterReferenceImageChange(index)} /> : null}
-                            </div>
-                          </FormField>
-
-                          <div className="grid gap-4 md:grid-cols-3">
-                            <FormField label="Type">
-                              <Select value={reference.type} onChange={(event) => handleCharacterReferenceFieldChange(index, 'type', event.target.value)}>
-                                <option value="character">character</option>
-                                <option value="style">style</option>
-                                <option value="character&style">character&style</option>
-                              </Select>
-                            </FormField>
-                            <FormField label="Strength">
-                              <ScrubbableNumberInput min={0} max={1} step={0.01} value={reference.strength} onChange={(value) => handleCharacterReferenceFieldChange(index, 'strength', value)} />
-                            </FormField>
-                            <FormField label="Fidelity">
-                              <ScrubbableNumberInput min={0} max={1} step={0.01} value={reference.fidelity} onChange={(value) => handleCharacterReferenceFieldChange(index, 'fidelity', value)} />
-                            </FormField>
-                          </div>
-
-                          <div className="flex justify-end">
-                            <Button type="button" variant="outline" onClick={() => handleOpenCharacterReferenceSaveModal(index)} disabled={!reference.image}>
-                              <Save className="h-4 w-4" />
-                              저장
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <div className="text-sm font-medium text-foreground">Saved Character References</div>
-                          <Badge variant="outline">{savedCharacterReferencesQuery.data?.length ?? 0}</Badge>
-                        </div>
-                        <div className="w-full sm:w-72">
-                          <Input value={savedCharacterReferenceSearch} onChange={(event) => setSavedCharacterReferenceSearch(event.target.value)} placeholder="이름 / 설명 검색" />
-                        </div>
-                      </div>
-                      {savedCharacterReferencesQuery.isLoading ? (
-                        <div className="text-sm text-muted-foreground">불러오는 중…</div>
-                      ) : filteredSavedCharacterReferences.length > 0 ? (
-                        <div className="space-y-2">
-                          {filteredSavedCharacterReferences.map((asset) => (
-                            <div key={asset.id} className="flex items-center gap-3 rounded-sm border border-border bg-surface-low p-3">
-                              <img src={asset.image_data_url} alt={asset.label} className="h-16 w-16 shrink-0 rounded-sm object-contain" />
-                              <div className="min-w-0 flex-1 space-y-1">
-                                <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
-                                {asset.description ? <div className="line-clamp-2 text-xs text-muted-foreground">{asset.description}</div> : null}
-                              </div>
-                              <div className="flex shrink-0 gap-2 self-center">
-                                <Button type="button" size="sm" variant="outline" onClick={() => handleLoadCharacterReferenceFromStore(asset.id)}>불러오기</Button>
-                                <Button type="button" size="sm" variant="ghost" onClick={() => void handleDeleteCharacterReferenceFromStore(asset.id)}>삭제</Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 reference가 없어.</div>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </section>
+            <NaiReferencesSection
+              supportsCharacterReference={supportsCharacterReference}
+              references={naiForm.characterReferences}
+              savedReferences={filteredSavedCharacterReferences}
+              savedReferenceSearch={savedCharacterReferenceSearch}
+              savedReferencesLoading={savedCharacterReferencesQuery.isLoading}
+              onSavedReferenceSearchChange={setSavedCharacterReferenceSearch}
+              onAddReference={handleAddCharacterReference}
+              onRemoveReference={handleRemoveCharacterReference}
+              onReferenceImageChange={handleCharacterReferenceImageChange}
+              onReferenceFieldChange={handleCharacterReferenceFieldChange}
+              onOpenReferenceSaveModal={handleOpenCharacterReferenceSaveModal}
+              onLoadReferenceFromStore={handleLoadCharacterReferenceFromStore}
+              onDeleteReferenceFromStore={(assetId) => void handleDeleteCharacterReferenceFromStore(assetId)}
+            />
 
         <NaiActionSection
           canUpscale={naiForm.action !== 'generate' && Boolean(naiForm.sourceImage)}
