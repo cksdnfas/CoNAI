@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type WheelEvent } from 'react'
-import { ArrowDown, ArrowUp, Brush, ClipboardPaste, Crop, Eraser, Eye, EyeOff, FlipHorizontal, Hand, Layers, Lock, Minus, Plus, RotateCw, Save, Square, Trash2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
-import { Group, Image as KonvaImage, Layer, Line, Rect, Stage } from 'react-konva'
+import { useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { ImageEditorCanvas } from './image-editor-canvas'
+import { ImageEditorLayerPanel } from './image-editor-layer-panel'
+import { ImageEditorSessionActions } from './image-editor-session-actions'
+import { ImageEditorToolbar } from './image-editor-toolbar'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorSavePayload, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 import {
   calculateImageEditorFitZoom,
@@ -29,12 +29,6 @@ type ImageEditorModalProps = {
   enableMaskEditing?: boolean
   onClose: () => void
   onSave: (payload: ImageEditorSavePayload) => void | Promise<void>
-}
-
-type LoadedPasteImageProps = {
-  layer: Extract<ImageEditorLayer, { type: 'paste' }>
-  isActive: boolean
-  onMove: (layerId: string, nextX: number, nextY: number) => void
 }
 
 type ImageEditorSelectionHandle = 'nw' | 'ne' | 'sw' | 'se'
@@ -95,60 +89,6 @@ function getSelectionHandleAtPoint(point: { x: number; y: number }, rect: ImageE
 
   const matchedCorner = corners.find((corner) => Math.abs(point.x - corner.x) <= handleRadius && Math.abs(point.y - corner.y) <= handleRadius)
   return matchedCorner?.handle ?? null
-}
-
-/** Render one pasted bitmap node and keep its image loading local to the layer view. */
-function LoadedPasteImage({ layer, isActive, onMove }: LoadedPasteImageProps) {
-  const [image, setImage] = useState<HTMLImageElement | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-
-    const load = async () => {
-      try {
-        const loadedImage = await loadEditorImage(layer.imageDataUrl)
-        if (!cancelled) {
-          setImage(loadedImage)
-        }
-      } catch {
-        if (!cancelled) {
-          setImage(null)
-        }
-      }
-    }
-
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [layer.imageDataUrl])
-
-  if (!image) {
-    return null
-  }
-
-  return (
-    <KonvaImage
-      image={image}
-      x={layer.x}
-      y={layer.y}
-      width={layer.width}
-      height={layer.height}
-      draggable={isActive && !layer.locked}
-      onDragEnd={(event) => onMove(layer.id, event.target.x(), event.target.y())}
-      stroke={isActive ? '#38bdf8' : undefined}
-      strokeWidth={isActive ? 1.5 : 0}
-    />
-  )
-}
-
-/** Render one simple button row item for tool selection. */
-function ToolButton({ active, children, onClick, title }: { active?: boolean; children: ReactNode; onClick: () => void; title: string }) {
-  return (
-    <Button type="button" variant={active ? 'default' : 'secondary'} size="sm" onClick={onClick} title={title}>
-      {children}
-    </Button>
-  )
 }
 
 export function ImageEditorModal({
@@ -1467,326 +1407,109 @@ export function ImageEditorModal({
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  <ToolButton active={tool === 'pan'} onClick={() => setTool('pan')} title="Pan">
-                    <Hand className="h-4 w-4" /> Pan
-                  </ToolButton>
-                  <ToolButton active={tool === 'select'} onClick={() => setTool('select')} title="Select">
-                    <Square className="h-4 w-4" /> Select
-                  </ToolButton>
-                  <ToolButton active={tool === 'brush'} onClick={() => setTool('brush')} title="Brush">
-                    <Brush className="h-4 w-4" /> Brush
-                  </ToolButton>
-                  <ToolButton active={tool === 'eraser'} onClick={() => setTool('eraser')} title="Eraser">
-                    <Eraser className="h-4 w-4" /> Eraser
-                  </ToolButton>
-                  {enableMaskEditing ? (
-                    <>
-                      <ToolButton active={tool === 'mask-brush'} onClick={() => setTool('mask-brush')} title="Mask Brush">
-                        <Brush className="h-4 w-4" /> Mask
-                      </ToolButton>
-                      <ToolButton active={tool === 'mask-eraser'} onClick={() => setTool('mask-eraser')} title="Mask Eraser">
-                        <Eraser className="h-4 w-4" /> Mask Erase
-                      </ToolButton>
-                    </>
-                  ) : null}
-                  <ToolButton active={tool === 'crop'} onClick={() => setTool('crop')} title="Crop">
-                    <Crop className="h-4 w-4" /> Crop
-                  </ToolButton>
-                </div>
+                <ImageEditorToolbar
+                  tool={tool}
+                  enableMaskEditing={enableMaskEditing}
+                  brushColor={brushColor}
+                  brushSize={brushSize}
+                  historyLength={historyStack.length}
+                  redoLength={redoStack.length}
+                  loading={loading}
+                  hasStoredSelection={hasStoredSelection}
+                  canApplySelectionOperation={canApplySelectionOperation}
+                  canApplyCrop={canApplyCrop}
+                  onToolChange={setTool}
+                  onBrushColorChange={setBrushColor}
+                  onBrushSizeChange={setBrushSize}
+                  onUndo={() => void handleUndo()}
+                  onRedo={() => void handleRedo()}
+                  onZoomOut={() => setZoom((current) => Math.max(0.1, current * 0.9))}
+                  onZoomIn={() => setZoom((current) => Math.min(8, current * 1.1))}
+                  onFitToScreen={handleFitToScreen}
+                  onRotate={() => { setRotation((current) => (current + 90) % 360); queueHistoryCommit() }}
+                  onFlip={() => { setFlippedX((current) => !current); queueHistoryCommit() }}
+                  onPasteFromClipboard={() => void handlePasteFromClipboardButton()}
+                  onPasteStoredSelection={handlePasteStoredSelection}
+                  onSelectionCopy={() => void handleSelectionTransfer('copy')}
+                  onSelectionPromote={() => void handleSelectionTransfer('promote')}
+                  onSelectionDuplicate={() => void handleSelectionTransfer('duplicate')}
+                  onSelectionDelete={() => void handleDeleteSelection()}
+                  onSelectionCut={() => void handleSelectionTransfer('cut')}
+                  onClearMask={enableMaskEditing ? () => { setInitialMaskImage(null); setInitialMaskImageDataUrl(null); setMaskPreviewSurface(null); setMaskStrokes([]); queueHistoryCommit() } : undefined}
+                  onApplyCrop={handleApplyCrop}
+                />
 
-                <div className="flex flex-wrap items-end gap-2">
-                  <label className="space-y-1 text-xs text-muted-foreground">
-                    Brush color
-                    <Input type="color" value={brushColor} onChange={(event) => setBrushColor(event.target.value)} className="h-10 w-16 p-1" />
-                  </label>
-                  <label className="space-y-1 text-xs text-muted-foreground">
-                    Brush size
-                    <Input type="number" min={1} max={256} value={brushSize} onChange={(event) => setBrushSize(Math.max(1, Number(event.target.value) || 1))} className="w-24" />
-                  </label>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleUndo()} disabled={historyStack.length <= 1 || loading}>
-                    Undo
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleRedo()} disabled={redoStack.length === 0 || loading}>
-                    Redo
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => setZoom((current) => Math.max(0.1, current * 0.9))}>
-                    <ZoomOut className="h-4 w-4" />
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => setZoom((current) => Math.min(8, current * 1.1))}>
-                    <ZoomIn className="h-4 w-4" />
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={handleFitToScreen}>
-                    Fit
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => { setRotation((current) => (current + 90) % 360); queueHistoryCommit() }}>
-                    <RotateCw className="h-4 w-4" /> Rotate
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => { setFlippedX((current) => !current); queueHistoryCommit() }}>
-                    <FlipHorizontal className="h-4 w-4" /> Flip
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => void handlePasteFromClipboardButton()}>
-                    <ClipboardPaste className="h-4 w-4" /> Paste
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={handlePasteStoredSelection} disabled={!hasStoredSelection || loading}>
-                    Paste Sel
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleSelectionTransfer('copy')} disabled={!canApplySelectionOperation || loading}>
-                    Copy Sel
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleSelectionTransfer('promote')} disabled={!canApplySelectionOperation || loading}>
-                    Promote Sel
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleSelectionTransfer('duplicate')} disabled={!canApplySelectionOperation || loading}>
-                    Duplicate Sel
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleDeleteSelection()} disabled={!canApplySelectionOperation || loading}>
-                    Delete Sel
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleSelectionTransfer('cut')} disabled={!canApplySelectionOperation || loading}>
-                    Cut Sel
-                  </Button>
-                  {enableMaskEditing ? (
-                    <Button type="button" variant="secondary" size="sm" onClick={() => { setInitialMaskImage(null); setInitialMaskImageDataUrl(null); setMaskPreviewSurface(null); setMaskStrokes([]); queueHistoryCommit() }}>
-                      Clear Mask
-                    </Button>
-                  ) : null}
-                  <Button type="button" variant="secondary" size="sm" onClick={handleApplyCrop} disabled={!canApplyCrop || loading}>
-                    Apply Crop
-                  </Button>
-                </div>
-
-                <div ref={viewportRef} className="h-[70vh] min-h-[540px] overflow-hidden rounded-sm border border-border bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%),linear-gradient(45deg,_rgba(255,255,255,0.03)_25%,_transparent_25%),linear-gradient(-45deg,_rgba(255,255,255,0.03)_25%,_transparent_25%),linear-gradient(45deg,_transparent_75%,_rgba(255,255,255,0.03)_75%),linear-gradient(-45deg,_transparent_75%,_rgba(255,255,255,0.03)_75%)] [background-position:0_0,0_0,0_12px,12px_-12px,-12px_0] [background-size:auto,24px_24px,24px_24px,24px_24px,24px_24px]" onWheel={handleWheel}>
-                  {baseImage ? (
-                    <Stage width={viewportSize.width} height={viewportSize.height} onMouseDown={handleStagePointerDown} onMouseMove={handleStagePointerMove} onMouseUp={handleStagePointerUp} onMouseLeave={handleStagePointerUp}>
-                      <Layer>
-                        <Group x={viewportSize.width / 2 + pan.x} y={viewportSize.height / 2 + pan.y} scaleX={zoom} scaleY={zoom}>
-                          <Group rotation={rotation} scaleX={flippedX ? -1 : 1}>
-                            <Rect x={-documentSize.width / 2} y={-documentSize.height / 2} width={documentSize.width} height={documentSize.height} stroke="rgba(255,255,255,0.65)" strokeWidth={1.5 / zoom} listening={false} />
-                            <Group ref={documentGroupRef} x={-documentSize.width / 2} y={-documentSize.height / 2} clipX={0} clipY={0} clipWidth={documentSize.width} clipHeight={documentSize.height}>
-                              <KonvaImage image={baseImage} x={0} y={0} width={documentSize.width} height={documentSize.height} listening={false} />
-
-                              {layers.map((layer) => {
-                                if (!layer.visible) {
-                                  return null
-                                }
-
-                                if (layer.type === 'draw') {
-                                  return layer.lines.map((line) => (
-                                    <Line
-                                      key={line.id}
-                                      points={line.points}
-                                      stroke={line.color}
-                                      strokeWidth={line.strokeWidth}
-                                      lineCap="round"
-                                      lineJoin="round"
-                                      tension={0.5}
-                                      globalCompositeOperation={line.mode === 'erase' ? 'destination-out' : 'source-over'}
-                                      listening={false}
-                                    />
-                                  ))
-                                }
-
-                                return (
-                                  <LoadedPasteImage key={layer.id} layer={layer} isActive={layer.id === activeLayerId} onMove={handleMovePasteLayer} />
-                                )
-                              })}
-
-                              {enableMaskEditing ? (
-                                <Group opacity={0.8}>
-                                  {maskPreviewSurface ? <KonvaImage image={maskPreviewSurface} x={0} y={0} width={documentSize.width} height={documentSize.height} listening={false} /> : null}
-                                  {maskStrokes.map((line) => (
-                                    <Line
-                                      key={line.id}
-                                      points={line.points}
-                                      stroke="#ff4d4f"
-                                      strokeWidth={line.strokeWidth}
-                                      lineCap="round"
-                                      lineJoin="round"
-                                      tension={0.5}
-                                      globalCompositeOperation={line.mode === 'erase' ? 'destination-out' : 'source-over'}
-                                      listening={false}
-                                    />
-                                  ))}
-                                </Group>
-                              ) : null}
-
-                              {normalizedSelectionRect ? (
-                                <>
-                                  <Rect
-                                    x={normalizedSelectionRect.x}
-                                    y={normalizedSelectionRect.y}
-                                    width={normalizedSelectionRect.width}
-                                    height={normalizedSelectionRect.height}
-                                    stroke="#38bdf8"
-                                    strokeWidth={1.5 / zoom}
-                                    dash={[8 / zoom, 6 / zoom]}
-                                    listening={false}
-                                  />
-                                  {[
-                                    { x: normalizedSelectionRect.x, y: normalizedSelectionRect.y },
-                                    { x: normalizedSelectionRect.x + normalizedSelectionRect.width, y: normalizedSelectionRect.y },
-                                    { x: normalizedSelectionRect.x, y: normalizedSelectionRect.y + normalizedSelectionRect.height },
-                                    { x: normalizedSelectionRect.x + normalizedSelectionRect.width, y: normalizedSelectionRect.y + normalizedSelectionRect.height },
-                                  ].map((handlePoint, index) => (
-                                    <Rect
-                                      key={`selection-handle-${index}`}
-                                      x={handlePoint.x - selectionHandleSize / 2}
-                                      y={handlePoint.y - selectionHandleSize / 2}
-                                      width={selectionHandleSize}
-                                      height={selectionHandleSize}
-                                      fill="#ffffff"
-                                      stroke="#38bdf8"
-                                      strokeWidth={1.2 / zoom}
-                                      listening={false}
-                                    />
-                                  ))}
-                                </>
-                              ) : null}
-
-                              {normalizedCropRect ? (
-                                <>
-                                  <Rect x={0} y={0} width={documentSize.width} height={documentSize.height} fill="rgba(0,0,0,0.4)" listening={false} />
-                                  <Rect x={normalizedCropRect.x} y={normalizedCropRect.y} width={normalizedCropRect.width} height={normalizedCropRect.height} fill="rgba(0,0,0,0)" stroke="#ffffff" strokeWidth={1.5 / zoom} listening={false} globalCompositeOperation="destination-out" />
-                                  <Rect x={normalizedCropRect.x} y={normalizedCropRect.y} width={normalizedCropRect.width} height={normalizedCropRect.height} stroke="#ffffff" strokeWidth={1.5 / zoom} listening={false} />
-                                </>
-                              ) : null}
-                            </Group>
-                          </Group>
-                        </Group>
-                      </Layer>
-                    </Stage>
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{loading ? 'Loading editor image…' : 'Select a source image first.'}</div>
-                  )}
-                </div>
+                <ImageEditorCanvas
+                  viewportRef={viewportRef}
+                  documentGroupRef={documentGroupRef}
+                  baseImage={baseImage}
+                  loading={loading}
+                  viewportSize={viewportSize}
+                  documentSize={documentSize}
+                  pan={pan}
+                  zoom={zoom}
+                  rotation={rotation}
+                  flippedX={flippedX}
+                  layers={layers}
+                  activeLayerId={activeLayerId}
+                  enableMaskEditing={enableMaskEditing}
+                  maskPreviewSurface={maskPreviewSurface}
+                  maskStrokes={maskStrokes}
+                  normalizedSelectionRect={normalizedSelectionRect}
+                  normalizedCropRect={normalizedCropRect}
+                  selectionHandleSize={selectionHandleSize}
+                  onWheel={handleWheel}
+                  onStagePointerDown={handleStagePointerDown}
+                  onStagePointerMove={handleStagePointerMove}
+                  onStagePointerUp={handleStagePointerUp}
+                  onMovePasteLayer={handleMovePasteLayer}
+                />
               </CardContent>
             </Card>
           </div>
 
           <div className="min-w-0 space-y-4 xl:sticky xl:top-0 xl:self-start">
-            <Card>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between border-b border-border/70 pb-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <Layers className="h-4 w-4" /> Layers
-                  </div>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => {
-                    const nextLayer = createDefaultDrawLayer(layers.filter((layer) => layer.type === 'draw').length + 1)
-                    setLayers((current) => [...current, nextLayer])
-                    setActiveLayerId(nextLayer.id)
-                    queueHistoryCommit()
-                  }}>
-                    <Plus className="h-4 w-4" /> Add
-                  </Button>
-                </div>
+            <ImageEditorLayerPanel
+              layers={layers}
+              activeLayerId={activeLayerId}
+              loading={loading}
+              enableMaskEditing={enableMaskEditing}
+              hasVisibleMask={hasVisibleMask}
+              onAddLayer={() => {
+                const nextLayer = createDefaultDrawLayer(layers.filter((layer) => layer.type === 'draw').length + 1)
+                setLayers((current) => [...current, nextLayer])
+                setActiveLayerId(nextLayer.id)
+                queueHistoryCommit()
+              }}
+              onSetActiveLayerId={setActiveLayerId}
+              onRenameLayer={(layerId, name) => setLayers((current) => current.map((currentLayer) => currentLayer.id === layerId ? { ...currentLayer, name } : currentLayer))}
+              onCommitRename={queueHistoryCommit}
+              onToggleLayerVisible={(layerId) => { setLayers((current) => current.map((currentLayer) => currentLayer.id === layerId ? { ...currentLayer, visible: !currentLayer.visible } : currentLayer)); queueHistoryCommit() }}
+              onToggleLayerLocked={(layerId) => { setLayers((current) => current.map((currentLayer) => currentLayer.id === layerId ? { ...currentLayer, locked: !currentLayer.locked } : currentLayer)); queueHistoryCommit() }}
+              onMoveLayer={moveLayer}
+              onDuplicateLayer={handleDuplicateLayer}
+              onMergeLayerDown={() => void handleMergeActiveLayerDown()}
+              onDeleteLayer={(layerId) => { setLayers((current) => current.filter((currentLayer) => currentLayer.id !== layerId)); queueHistoryCommit() }}
+            />
 
-                <div className="space-y-2">
-                  {layers.length > 0 ? layers.map((layer, index) => {
-                    const isActive = layer.id === activeLayerId
-                    return (
-                      <div key={layer.id} className={`space-y-2 rounded-sm border p-3 ${isActive ? 'border-primary bg-primary/5' : 'border-border bg-surface-low'}`}>
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1 space-y-2">
-                            <button type="button" className="w-full min-w-0 text-left" onClick={() => setActiveLayerId(layer.id)}>
-                              <div className="text-xs text-muted-foreground">{layer.type === 'draw' ? `Draw · ${layer.lines.length} stroke${layer.lines.length === 1 ? '' : 's'}` : 'Paste bitmap'}</div>
-                            </button>
-                            <Input
-                              value={layer.name}
-                              onChange={(event) => setLayers((current) => current.map((currentLayer) => currentLayer.id === layer.id ? { ...currentLayer, name: event.target.value } : currentLayer))}
-                              onFocus={() => setActiveLayerId(layer.id)}
-                              onBlur={() => queueHistoryCommit()}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                  event.currentTarget.blur()
-                                }
-                              }}
-                              className="h-8"
-                              aria-label={`Layer name ${index + 1}`}
-                            />
-                          </div>
-                          <Badge variant={isActive ? 'secondary' : 'outline'}>{index + 1}</Badge>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button type="button" variant="secondary" size="sm" onClick={() => { setLayers((current) => current.map((currentLayer) => currentLayer.id === layer.id ? { ...currentLayer, visible: !currentLayer.visible } : currentLayer)); queueHistoryCommit() }}>
-                            {layer.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                          </Button>
-                          <Button type="button" variant="secondary" size="sm" onClick={() => { setLayers((current) => current.map((currentLayer) => currentLayer.id === layer.id ? { ...currentLayer, locked: !currentLayer.locked } : currentLayer)); queueHistoryCommit() }}>
-                            {layer.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
-                          </Button>
-                          <Button type="button" variant="secondary" size="sm" onClick={() => moveLayer(layer.id, -1)} disabled={index === 0}>
-                            <ArrowUp className="h-4 w-4" />
-                          </Button>
-                          <Button type="button" variant="secondary" size="sm" onClick={() => moveLayer(layer.id, 1)} disabled={index === layers.length - 1}>
-                            <ArrowDown className="h-4 w-4" />
-                          </Button>
-                          <Button type="button" variant="secondary" size="sm" onClick={() => handleDuplicateLayer(layer.id)} disabled={loading}>
-                            Duplicate
-                          </Button>
-                          <Button type="button" variant="secondary" size="sm" onClick={() => void handleMergeActiveLayerDown()} disabled={!isActive || index === 0 || loading}>
-                            Merge Down
-                          </Button>
-                          <Button type="button" variant="secondary" size="sm" onClick={() => { setLayers((current) => current.filter((currentLayer) => currentLayer.id !== layer.id)); queueHistoryCommit() }} disabled={layers.length === 1 && layer.type === 'draw'}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    )
-                  }) : <div className="text-sm text-muted-foreground">No layers yet.</div>}
-                </div>
-
-                {enableMaskEditing ? (
-                  <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium text-foreground">Mask layer</div>
-                      <Badge variant={hasVisibleMask ? 'secondary' : 'outline'}>{hasVisibleMask ? 'Visible' : 'Empty'}</Badge>
-                    </div>
-                    <div className="text-xs text-muted-foreground">The mask layer is exported separately for infill. Brush paints white. Eraser removes white.</div>
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="space-y-3">
-                <div className="border-b border-border/70 pb-4 text-sm font-semibold text-foreground">Session actions</div>
-                <Button type="button" variant="secondary" onClick={handleFitToScreen} className="w-full justify-start">
-                  <ZoomIn className="h-4 w-4" /> Fit to screen
-                </Button>
-                <Button type="button" variant="secondary" onClick={() => void handleMergeVisible()} className="w-full justify-start" disabled={!canMergeVisible}>
-                  Merge visible
-                </Button>
-                <Button type="button" variant="secondary" onClick={() => void handleFlattenVisible()} className="w-full justify-start" disabled={!canFlattenVisible}>
-                  Flatten visible
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => { setLayers((current) => current.map((layer) => layer.id === activeLayerId && layer.type === 'draw' ? { ...layer, lines: [] } : layer)); queueHistoryCommit() }}
-                  className="w-full justify-start"
-                  disabled={!canClearActiveDrawLayer}
-                >
-                  <Minus className="h-4 w-4" /> Clear active draw layer
-                </Button>
-                <Button type="button" variant="secondary" onClick={() => { setLayers((current) => current.map((layer) => layer.type === 'draw' ? { ...layer, lines: [] } : layer)); queueHistoryCommit() }} className="w-full justify-start">
-                  <Minus className="h-4 w-4" /> Clear all draw layers
-                </Button>
-                <Button type="button" variant="secondary" onClick={() => setSelectionRect(null)} className="w-full justify-start" disabled={!selectionRect}>
-                  <Square className="h-4 w-4" /> Clear selection
-                </Button>
-                <Button type="button" variant="secondary" onClick={() => { setCropRect(null); setTool('brush') }} className="w-full justify-start">
-                  <Crop className="h-4 w-4" /> Cancel crop
-                </Button>
-                <div className="flex gap-2 pt-2">
-                  <Button type="button" variant="secondary" className="flex-1" onClick={onClose} disabled={saving}>
-                    Cancel
-                  </Button>
-                  <Button type="button" className="flex-1" onClick={() => void handleSave()} disabled={!baseImage || saving || loading}>
-                    <Save className="h-4 w-4" /> {saving ? 'Saving…' : 'Save'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <ImageEditorSessionActions
+              canMergeVisible={canMergeVisible}
+              canFlattenVisible={canFlattenVisible}
+              canClearActiveDrawLayer={canClearActiveDrawLayer}
+              hasSelectionRect={Boolean(selectionRect)}
+              saving={saving}
+              loading={loading}
+              canSave={Boolean(baseImage)}
+              onMergeVisible={() => void handleMergeVisible()}
+              onFlattenVisible={() => void handleFlattenVisible()}
+              onFitToScreen={handleFitToScreen}
+              onClearActiveDrawLayer={() => { setLayers((current) => current.map((layer) => layer.id === activeLayerId && layer.type === 'draw' ? { ...layer, lines: [] } : layer)); queueHistoryCommit() }}
+              onClearAllDrawLayers={() => { setLayers((current) => current.map((layer) => layer.type === 'draw' ? { ...layer, lines: [] } : layer)); queueHistoryCommit() }}
+              onClearSelection={() => setSelectionRect(null)}
+              onCancelCrop={() => { setCropRect(null); setTool('brush') }}
+              onClose={onClose}
+              onSave={() => void handleSave()}
+            />
           </div>
         </div>
       </div>
