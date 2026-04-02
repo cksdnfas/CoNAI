@@ -32,7 +32,7 @@ export function NaiSavedAssetTile({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={handleKeyDown}
-      className="group relative isolate aspect-[5/6] overflow-hidden rounded-sm border border-border bg-surface-container text-left transition-transform duration-300 hover:-translate-y-0.5 hover:bg-surface-high"
+      className="group relative isolate h-80 overflow-hidden rounded-sm border border-border bg-surface-container text-left transition-transform duration-300 hover:-translate-y-0.5 hover:bg-surface-high"
     >
       {imageUrl ? (
         <img src={imageUrl} alt={title} className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />

@@ -122,18 +122,20 @@ export function NaiVibesSection({
             {savedVibesLoading ? (
               <div className="text-sm text-muted-foreground">불러오는 중…</div>
             ) : savedVibes.length > 0 ? (
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
-                {savedVibes.map((asset) => (
-                  <NaiSavedAssetTile
-                    key={asset.id}
-                    title={asset.label}
-                    subtitle={asset.description?.trim() || asset.model}
-                    imageUrl={asset.image_data_url}
-                    onSelect={() => onLoadVibeFromStore(asset.id)}
-                    onEdit={() => onEditVibeFromStore(asset.id)}
-                    onDelete={() => onDeleteVibeFromStore(asset.id)}
-                  />
-                ))}
+              <div className="max-h-[41rem] overflow-y-auto pr-1">
+                <div className="grid grid-cols-3 gap-4">
+                  {savedVibes.map((asset) => (
+                    <NaiSavedAssetTile
+                      key={asset.id}
+                      title={asset.label}
+                      subtitle={asset.description?.trim() || asset.model}
+                      imageUrl={asset.image_data_url}
+                      onSelect={() => onLoadVibeFromStore(asset.id)}
+                      onEdit={() => onEditVibeFromStore(asset.id)}
+                      onDelete={() => onDeleteVibeFromStore(asset.id)}
+                    />
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 vibe가 없어.</div>

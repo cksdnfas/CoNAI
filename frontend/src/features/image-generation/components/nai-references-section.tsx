@@ -131,18 +131,20 @@ export function NaiReferencesSection({
             {savedReferencesLoading ? (
               <div className="text-sm text-muted-foreground">불러오는 중…</div>
             ) : savedReferences.length > 0 ? (
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
-                {savedReferences.map((asset) => (
-                  <NaiSavedAssetTile
-                    key={asset.id}
-                    title={asset.label}
-                    subtitle={asset.description?.trim() || asset.type}
-                    imageUrl={asset.image_data_url}
-                    onSelect={() => onLoadReferenceFromStore(asset.id)}
-                    onEdit={() => onEditReferenceFromStore(asset.id)}
-                    onDelete={() => onDeleteReferenceFromStore(asset.id)}
-                  />
-                ))}
+              <div className="max-h-[41rem] overflow-y-auto pr-1">
+                <div className="grid grid-cols-3 gap-4">
+                  {savedReferences.map((asset) => (
+                    <NaiSavedAssetTile
+                      key={asset.id}
+                      title={asset.label}
+                      subtitle={asset.description?.trim() || asset.type}
+                      imageUrl={asset.image_data_url}
+                      onSelect={() => onLoadReferenceFromStore(asset.id)}
+                      onEdit={() => onEditReferenceFromStore(asset.id)}
+                      onDelete={() => onDeleteReferenceFromStore(asset.id)}
+                    />
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 reference가 없어.</div>
