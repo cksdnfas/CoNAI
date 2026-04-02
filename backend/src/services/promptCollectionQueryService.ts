@@ -1,4 +1,5 @@
 import { PromptCollectionModel } from '../models/PromptCollection';
+import { db } from '../database/init';
 import { SynonymService } from './synonymService';
 import { PromptGroupService } from './promptGroupService';
 import { normalizeSearchTerm, PromptSearchResult, PromptStatistics } from '@conai/shared';
@@ -80,24 +81,11 @@ export class PromptCollectionQueryService {
         PromptCollectionModel.getMostUsedPrompts(10)
       ]);
 
-      const totalStats = await new Promise<{ total_prompts: number, total_negative_prompts: number, total_auto_prompts: number }>((resolve, reject) => {
-        Promise.all([
-          new Promise<number>((res, rej) => {
-            const { db } = require('../database/init');
-            db.get('SELECT COUNT(*) as count FROM prompt_collection', (err: any, row: any) => err ? rej(err) : res(row.count));
-          }),
-          new Promise<number>((res, rej) => {
-            const { db } = require('../database/init');
-            db.get('SELECT COUNT(*) as count FROM negative_prompt_collection', (err: any, row: any) => err ? rej(err) : res(row.count));
-          }),
-          new Promise<number>((res, rej) => {
-            const { db } = require('../database/init');
-            db.get('SELECT COUNT(*) as count FROM auto_prompt_collection', (err: any, row: any) => err ? rej(err) : res(row.count));
-          }),
-        ]).then(([positive, negative, auto]) => {
-          resolve({ total_prompts: positive, total_negative_prompts: negative, total_auto_prompts: auto });
-        }).catch(reject);
-      });
+      const totalStats = {
+        total_prompts: (db.prepare('SELECT COUNT(*) as count FROM prompt_collection').get() as { count: number }).count,
+        total_negative_prompts: (db.prepare('SELECT COUNT(*) as count FROM negative_prompt_collection').get() as { count: number }).count,
+        total_auto_prompts: (db.prepare('SELECT COUNT(*) as count FROM auto_prompt_collection').get() as { count: number }).count,
+      };
 
       const recentPrompts = await this.searchPrompts('', 'both', 1, 10, 'created_at', 'DESC');
 
