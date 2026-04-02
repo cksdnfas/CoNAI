@@ -1,15 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Braces, Copy, Folder, FolderPlus, History, Pencil, RefreshCw, Sparkles, Trash2, Upload, WandSparkles } from 'lucide-react'
-import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
+import { Pencil, Trash2, WandSparkles } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   createWildcard,
@@ -25,10 +19,11 @@ import {
 } from '@/lib/api'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { LoraAutoCollectModal } from './lora-auto-collect-modal'
 import { WildcardEditorModal, type WildcardEditorModalInput } from './wildcard-editor-modal'
-import { LoraScanLogCard, WildcardDetailCard, WildcardTree } from './wildcard-browser-cards'
+import { LoraScanLogCard, WildcardDetailCard } from './wildcard-browser-cards'
+import { WildcardExplorerSidebarPanel } from './wildcard-explorer-sidebar-panel'
+import { WildcardPreviewModal } from './wildcard-preview-modal'
 import {
   canCreateWorkspaceTabItem,
   copyWildcardText,
@@ -325,155 +320,36 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
       </div>
 
       <div className={cn('grid gap-8', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
-        <ExplorerSidebar
-          title="Explorer"
-          badge={<Badge variant="outline">{browserEntries.length}</Badge>}
-          floatingFrame
-          className={cn(isWideLayout && 'sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col')}
-          bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 space-y-4 overflow-y-auto pr-1')}
-          headerExtra={(
-            <div className="space-y-3 border-b border-white/5 pb-3">
-              <div className="flex flex-wrap items-center gap-2">
-                {activeWorkspaceTab === 'lora' ? (
-                  <>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      className="bg-surface-low"
-                      onClick={() => setIsLoraCollectModalOpen(true)}
-                      aria-label="자동 수집"
-                      title="자동 수집"
-                    >
-                      <Upload className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      className="bg-surface-low"
-                      onClick={() => void loraScanLogQuery.refetch()}
-                      disabled={loraScanLogQuery.isFetching}
-                      aria-label="로그 새로고침"
-                      title="로그 새로고침"
-                    >
-                      <History className="h-4 w-4" />
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      className="bg-surface-low"
-                      onClick={() => handleOpenCreateModal(selectedWildcard?.id ?? null)}
-                      disabled={!canCreateInActiveTab}
-                      aria-label="항목 추가"
-                      title="항목 추가"
-                    >
-                      <FolderPlus className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      className="bg-surface-low"
-                      onClick={handleOpenEditModal}
-                      disabled={!selectedWildcard}
-                      aria-label="편집"
-                      title="편집"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      className="ml-2 bg-surface-low"
-                      onClick={() => void handleDeleteSelected()}
-                      disabled={!selectedWildcard || deleteMutation.isPending}
-                      aria-label="삭제"
-                      title="삭제"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="이름 또는 경로 검색" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon-sm"
-                  className="shrink-0 bg-surface-low"
-                  onClick={() => {
-                    void wildcardsQuery.refetch()
-                  }}
-                  aria-label="새로고침"
-                  title="새로고침"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-        >
-          {wildcardsQuery.isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 8 }).map((_, index) => (
-                <Skeleton key={index} className="h-9 w-full rounded-sm" />
-              ))}
-            </div>
-          ) : null}
-
-          {wildcardsQuery.isError ? (
-            <Alert variant="destructive">
-              <AlertTitle>목록을 불러오지 못했어</AlertTitle>
-              <AlertDescription>{getErrorMessage(wildcardsQuery.error, '목록을 불러오지 못했어.')}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          {!wildcardsQuery.isLoading && !wildcardsQuery.isError ? (
-            searchInput.trim().length > 0 ? (
-              filteredEntries.length > 0 ? (
-                <div className="space-y-2">
-                  {filteredEntries.map((entry) => {
-                    const wildcard = entry.wildcard
-                    const isSelected = wildcard.id === selectedWildcardId
-                    return (
-                      <button
-                        key={wildcard.id}
-                        type="button"
-                        onClick={() => setSelectedWildcardId(wildcard.id)}
-                        className={cn(
-                          'w-full rounded-sm border px-3 py-2 text-left transition-colors',
-                          isSelected
-                            ? 'border-primary bg-surface-high'
-                            : 'border-border bg-surface-lowest hover:border-primary/35',
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
-                          <span className="truncate text-sm font-medium text-foreground">{wildcard.name}</span>
-                        </div>
-                        <div className="mt-1 truncate text-xs text-muted-foreground">{entry.path.join(' / ')}</div>
-                      </button>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">검색 결과가 없어.</div>
-              )
-            ) : browserTreeNodes.length > 0 ? (
-              <WildcardTree entries={browserEntries} selectedId={selectedWildcardId} onSelect={setSelectedWildcardId} />
-            ) : (
-              <div className="text-sm text-muted-foreground">표시할 항목이 아직 없어.</div>
-            )
-          ) : null}
-        </ExplorerSidebar>
+        <WildcardExplorerSidebarPanel
+          isWideLayout={isWideLayout}
+          activeWorkspaceTab={activeWorkspaceTab}
+          browserEntries={browserEntries}
+          browserTreeNodes={browserTreeNodes}
+          filteredEntries={filteredEntries}
+          selectedWildcardId={selectedWildcardId}
+          selectedWildcard={selectedWildcard}
+          searchInput={searchInput}
+          canCreateInActiveTab={canCreateInActiveTab}
+          isLoading={wildcardsQuery.isLoading}
+          isError={wildcardsQuery.isError}
+          isDeleting={deleteMutation.isPending}
+          isRefreshingLog={loraScanLogQuery.isFetching}
+          errorMessage={getErrorMessage(wildcardsQuery.error, '목록을 불러오지 못했어.')}
+          onSearchChange={setSearchInput}
+          onRefresh={() => {
+            void wildcardsQuery.refetch()
+          }}
+          onOpenLoraCollect={() => setIsLoraCollectModalOpen(true)}
+          onRefreshLoraLog={() => {
+            void loraScanLogQuery.refetch()
+          }}
+          onOpenCreate={handleOpenCreateModal}
+          onOpenEdit={handleOpenEditModal}
+          onDeleteSelected={() => {
+            void handleDeleteSelected()
+          }}
+          onSelectWildcard={setSelectedWildcardId}
+        />
 
         <section className="space-y-6">
           <WildcardDetailCard
@@ -512,81 +388,27 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
         onSubmit={handleSubmitLoraCollect}
       />
 
-      <SettingsModal
+      <WildcardPreviewModal
         open={isPreviewModalOpen}
+        selectedWildcardSyntax={selectedWildcardSyntax}
+        previewTool={previewTool}
+        previewCount={previewCount}
+        previewText={previewText}
+        isParsing={parseMutation.isPending}
+        parseErrorMessage={parseMutation.isError ? getErrorMessage(parseMutation.error, '테스트 중 오류가 났어.') : null}
+        parseResult={parseMutation.data ?? null}
         onClose={() => setIsPreviewModalOpen(false)}
-        title={(
-          <span className="flex items-center gap-2">
-            <WandSparkles className="h-4 w-4 text-primary" />
-            파싱 테스트
-          </span>
-        )}
-        widthClassName="max-w-4xl"
-      >
-        <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px]">
-            <Input value={selectedWildcardSyntax} readOnly placeholder="선택한 와일드카드 문법" />
-            <Select value={previewTool} onChange={(event) => setPreviewTool(event.target.value as WildcardTool)}>
-              <option value="nai">NAI</option>
-              <option value="comfyui">ComfyUI</option>
-            </Select>
-            <Select value={previewCount} onChange={(event) => setPreviewCount(event.target.value)}>
-              <option value="3">3개</option>
-              <option value="5">5개</option>
-              <option value="10">10개</option>
-            </Select>
-          </div>
-
-          <Textarea
-            value={previewText}
-            onChange={(event) => setPreviewText(event.target.value)}
-            rows={5}
-            placeholder="예: masterpiece, ++character_pose++, cinematic lighting"
-          />
-
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => setPreviewText(selectedWildcardSyntax)} disabled={!selectedWildcardSyntax}>
-              <Braces className="h-4 w-4" />
-              선택 항목 넣기
-            </Button>
-            <Button type="button" onClick={() => void handleParsePreview()} disabled={parseMutation.isPending || previewText.trim().length === 0}>
-              <Sparkles className="h-4 w-4" />
-              {parseMutation.isPending ? '테스트 중…' : '테스트'}
-            </Button>
-          </div>
-
-          {parseMutation.isError ? (
-            <Alert variant="destructive">
-              <AlertTitle>테스트 실패</AlertTitle>
-              <AlertDescription>{getErrorMessage(parseMutation.error, '테스트 중 오류가 났어.')}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          {parseMutation.data ? (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <Badge variant="outline">used</Badge>
-                {parseMutation.data.usedWildcards.length > 0 ? parseMutation.data.usedWildcards.map((name) => <Badge key={name} variant="outline">{name}</Badge>) : <span>감지된 와일드카드가 없어.</span>}
-              </div>
-
-              <div className="space-y-2">
-                {parseMutation.data.results.map((result, index) => (
-                  <div key={`${index}:${result}`} className="rounded-sm border border-border bg-surface-low p-3 text-sm text-muted-foreground">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-xs uppercase tracking-[0.18em]">sample {index + 1}</div>
-                      <Button type="button" size="sm" variant="ghost" onClick={() => void handleCopy(result, `프리뷰 결과 ${index + 1}`)}>
-                        <Copy className="h-4 w-4" />
-                        복사
-                      </Button>
-                    </div>
-                    <div className="mt-2 break-words whitespace-pre-wrap text-foreground">{result}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </SettingsModal>
+        onPreviewToolChange={setPreviewTool}
+        onPreviewCountChange={setPreviewCount}
+        onPreviewTextChange={setPreviewText}
+        onFillSelectedSyntax={() => setPreviewText(selectedWildcardSyntax)}
+        onParsePreview={() => {
+          void handleParsePreview()
+        }}
+        onCopyResult={(text, label) => {
+          void handleCopy(text, label)
+        }}
+      />
 
       <WildcardEditorModal
         open={editorState !== null}
