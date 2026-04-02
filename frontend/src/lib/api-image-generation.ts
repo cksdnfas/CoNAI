@@ -638,6 +638,20 @@ export async function deleteNaiVibeAsset(assetId: string) {
   })
 }
 
+/** Update one saved vibe-transfer asset. */
+export async function updateNaiVibeAsset(assetId: string, payload: {
+  label: string
+  description?: string
+}) {
+  return requestJson<StoredNaiVibeAsset>(`/api/nai/store/vibes/${assetId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
 /** Load saved character-reference assets. */
 export async function listNaiCharacterReferenceAssets() {
   const response = await requestJson<{ items: StoredNaiCharacterReferenceAsset[] }>('/api/nai/store/character-references')
@@ -666,6 +680,20 @@ export async function saveNaiCharacterReferenceAsset(payload: {
 export async function deleteNaiCharacterReferenceAsset(assetId: string) {
   return requestJson<{ success: boolean }>(`/api/nai/store/character-references/${assetId}`, {
     method: 'DELETE',
+  })
+}
+
+/** Update one saved character-reference asset. */
+export async function updateNaiCharacterReferenceAsset(assetId: string, payload: {
+  label: string
+  description?: string
+}) {
+  return requestJson<StoredNaiCharacterReferenceAsset>(`/api/nai/store/character-references/${assetId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
   })
 }
 

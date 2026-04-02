@@ -6,6 +6,8 @@ import {
   listNaiVibeAssets,
   saveNaiCharacterReferenceAsset,
   saveNaiVibeAsset,
+  updateNaiCharacterReferenceAsset,
+  updateNaiVibeAsset,
 } from '../../services/naiAssetStore';
 
 const router = Router();
@@ -59,6 +61,29 @@ router.delete('/vibes/:assetId', (req: Request<{ assetId: string }>, res: Respon
   res.json({ success: true });
 });
 
+router.put('/vibes/:assetId', (req: Request<{ assetId: string }, {}, {
+  label?: string;
+  description?: string;
+}>, res: Response) => {
+  const label = req.body.label?.trim();
+  if (!label) {
+    res.status(400).json({ error: 'label is required' });
+    return;
+  }
+
+  const item = updateNaiVibeAsset(req.params.assetId, {
+    label,
+    description: req.body.description,
+  });
+
+  if (!item) {
+    res.status(404).json({ error: 'Stored vibe not found' });
+    return;
+  }
+
+  res.json(item);
+});
+
 router.get('/character-references', (_req: Request, res: Response) => {
   res.json({ items: listNaiCharacterReferenceAssets() });
 });
@@ -97,6 +122,29 @@ router.delete('/character-references/:assetId', (req: Request<{ assetId: string 
   }
 
   res.json({ success: true });
+});
+
+router.put('/character-references/:assetId', (req: Request<{ assetId: string }, {}, {
+  label?: string;
+  description?: string;
+}>, res: Response) => {
+  const label = req.body.label?.trim();
+  if (!label) {
+    res.status(400).json({ error: 'label is required' });
+    return;
+  }
+
+  const item = updateNaiCharacterReferenceAsset(req.params.assetId, {
+    label,
+    description: req.body.description,
+  });
+
+  if (!item) {
+    res.status(404).json({ error: 'Stored character reference not found' });
+    return;
+  }
+
+  res.json(item);
 });
 
 export default router;

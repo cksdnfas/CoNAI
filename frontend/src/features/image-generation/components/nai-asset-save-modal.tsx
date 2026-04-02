@@ -6,6 +6,7 @@ import { SettingsModal } from '@/features/settings/components/settings-modal'
 type NaiAssetSaveModalProps = {
   open: boolean
   title: string
+  submitLabel?: string
   name: string
   description: string
   isSaving: boolean
@@ -18,6 +19,7 @@ type NaiAssetSaveModalProps = {
 export function NaiAssetSaveModal({
   open,
   title,
+  submitLabel,
   name,
   description,
   isSaving,
@@ -49,7 +51,7 @@ export function NaiAssetSaveModal({
             취소
           </Button>
           <Button type="button" onClick={onSave} disabled={isSaving || name.trim().length === 0}>
-            {isSaving ? '저장 중…' : '저장'}
+            {isSaving ? `${submitLabel ?? '저장'} 중…` : (submitLabel ?? '저장')}
           </Button>
         </div>
       </div>

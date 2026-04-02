@@ -27,6 +27,8 @@ import {
   loginNaiWithToken,
   saveNaiCharacterReferenceAsset,
   saveNaiVibeAsset,
+  updateNaiCharacterReferenceAsset,
+  updateNaiVibeAsset,
   upscaleNaiImage,
 } from '@/lib/api'
 import {
@@ -85,8 +87,10 @@ type NaiGenerationPanelProps = {
 type NaiLoginMode = 'account' | 'token'
 
 type AssetSaveTarget =
-  | { kind: 'vibe'; index: number }
-  | { kind: 'reference'; index: number }
+  | { mode: 'create'; kind: 'vibe'; index: number }
+  | { mode: 'create'; kind: 'reference'; index: number }
+  | { mode: 'edit'; kind: 'vibe'; assetId: string }
+  | { mode: 'edit'; kind: 'reference'; assetId: string }
 
 type NaiAuthModalProps = {
   open: boolean
@@ -565,7 +569,16 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
       return
     }
 
-    openAssetSaveModal({ kind: 'vibe', index }, deriveNaiAssetLabel(vibe.image.fileName, `Vibe ${index + 1}`))
+    openAssetSaveModal({ mode: 'create', kind: 'vibe', index }, deriveNaiAssetLabel(vibe.image.fileName, `Vibe ${index + 1}`))
+  }
+
+  const handleOpenEditVibeFromStore = (assetId: string) => {
+    const asset = savedVibesQuery.data?.find((entry) => entry.id === assetId)
+    if (!asset) {
+      return
+    }
+
+    openAssetSaveModal({ mode: 'edit', kind: 'vibe', assetId }, asset.label, asset.description ?? '')
   }
 
   const handleLoadVibeFromStore = (assetId: string) => {
@@ -645,7 +658,16 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
       return
     }
 
-    openAssetSaveModal({ kind: 'reference', index }, deriveNaiAssetLabel(reference.image.fileName, `Reference ${index + 1}`))
+    openAssetSaveModal({ mode: 'create', kind: 'reference', index }, deriveNaiAssetLabel(reference.image.fileName, `Reference ${index + 1}`))
+  }
+
+  const handleOpenEditCharacterReferenceFromStore = (assetId: string) => {
+    const asset = savedCharacterReferencesQuery.data?.find((entry) => entry.id === assetId)
+    if (!asset) {
+      return
+    }
+
+    openAssetSaveModal({ mode: 'edit', kind: 'reference', assetId }, asset.label, asset.description ?? '')
   }
 
   const handleLoadCharacterReferenceFromStore = (assetId: string) => {
@@ -691,29 +713,45 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
       setIsSavingAsset(true)
 
       if (assetSaveTarget.kind === 'vibe') {
-        const vibe = naiForm.vibes[assetSaveTarget.index]
-        if (!vibe?.image) {
-          throw new Error('저장할 Vibe 이미지를 찾지 못했어.')
-        }
+        if (assetSaveTarget.mode === 'edit') {
+          await updateNaiVibeAsset(assetSaveTarget.assetId, {
+            label: trimmedName,
+            description: assetSaveDescription.trim() || undefined,
+          })
+          await savedVibesQuery.refetch()
+          showSnackbar({ message: '저장된 Vibe를 수정했어.', tone: 'info' })
+        } else {
+          const vibe = naiForm.vibes[assetSaveTarget.index]
+          if (!vibe?.image) {
+            throw new Error('저장할 Vibe 이미지를 찾지 못했어.')
+          }
 
-        const encoded = vibe.encoded || await handleEncodeVibe(assetSaveTarget.index, {
-          silentSuccess: true,
-        })
-        if (!encoded) {
-          return
-        }
+          const encoded = vibe.encoded || await handleEncodeVibe(assetSaveTarget.index, {
+            silentSuccess: true,
+          })
+          if (!encoded) {
+            return
+          }
 
-        await saveNaiVibeAsset({
+          await saveNaiVibeAsset({
+            label: trimmedName,
+            description: assetSaveDescription.trim() || undefined,
+            model: naiForm.model,
+            image: vibe.image.dataUrl,
+            encoded,
+            strength: parseNumberInput(vibe.strength, 0.6),
+            information_extracted: parseNumberInput(vibe.informationExtracted, 1),
+          })
+          await savedVibesQuery.refetch()
+          showSnackbar({ message: `Vibe ${assetSaveTarget.index + 1} 저장 완료.`, tone: 'info' })
+        }
+      } else if (assetSaveTarget.mode === 'edit') {
+        await updateNaiCharacterReferenceAsset(assetSaveTarget.assetId, {
           label: trimmedName,
           description: assetSaveDescription.trim() || undefined,
-          model: naiForm.model,
-          image: vibe.image.dataUrl,
-          encoded,
-          strength: parseNumberInput(vibe.strength, 0.6),
-          information_extracted: parseNumberInput(vibe.informationExtracted, 1),
         })
-        await savedVibesQuery.refetch()
-        showSnackbar({ message: `Vibe ${assetSaveTarget.index + 1} 저장 완료.`, tone: 'info' })
+        await savedCharacterReferencesQuery.refetch()
+        showSnackbar({ message: '저장된 Character Reference를 수정했어.', tone: 'info' })
       } else {
         const reference = naiForm.characterReferences[assetSaveTarget.index]
         if (!reference?.image) {
@@ -1244,6 +1282,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
               onVibeFieldChange={handleVibeFieldChange}
               onOpenVibeSaveModal={handleOpenVibeSaveModal}
               onLoadVibeFromStore={handleLoadVibeFromStore}
+              onEditVibeFromStore={handleOpenEditVibeFromStore}
               onDeleteVibeFromStore={(assetId) => void handleDeleteVibeFromStore(assetId)}
             />
 
@@ -1261,6 +1300,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
               onReferenceFieldChange={handleCharacterReferenceFieldChange}
               onOpenReferenceSaveModal={handleOpenCharacterReferenceSaveModal}
               onLoadReferenceFromStore={handleLoadCharacterReferenceFromStore}
+              onEditReferenceFromStore={handleOpenEditCharacterReferenceFromStore}
               onDeleteReferenceFromStore={(assetId) => void handleDeleteCharacterReferenceFromStore(assetId)}
             />
 
@@ -1297,7 +1337,14 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
       <NaiAssetSaveModal
         open={assetSaveTarget !== null}
-        title={assetSaveTarget?.kind === 'vibe' ? 'Vibe 저장' : 'Character Reference 저장'}
+        title={assetSaveTarget?.mode === 'edit'
+          ? assetSaveTarget.kind === 'vibe'
+            ? 'Vibe 수정'
+            : 'Character Reference 수정'
+          : assetSaveTarget?.kind === 'vibe'
+            ? 'Vibe 저장'
+            : 'Character Reference 저장'}
+        submitLabel={assetSaveTarget?.mode === 'edit' ? '수정' : '저장'}
         name={assetSaveName}
         description={assetSaveDescription}
         isSaving={isSavingAsset}

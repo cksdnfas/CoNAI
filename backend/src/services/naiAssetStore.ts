@@ -151,22 +151,56 @@ export function listNaiVibeAssets(model?: string) {
   return records.sort((left, right) => right.created_date.localeCompare(left.created_date));
 }
 
-/** Delete one stored vibe payload. */
-export function deleteNaiVibeAsset(assetId: string) {
+function findVibeAssetFilePath(assetId: string) {
   if (!fs.existsSync(VIBE_ROOT)) {
-    return false;
+    return null;
   }
 
   const directories = fs.readdirSync(VIBE_ROOT, { withFileTypes: true }).filter((entry) => entry.isDirectory());
   for (const directory of directories) {
     const filePath = path.join(VIBE_ROOT, directory.name, `${assetId}.json`);
     if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      return true;
+      return filePath;
     }
   }
 
-  return false;
+  return null;
+}
+
+/** Delete one stored vibe payload. */
+export function deleteNaiVibeAsset(assetId: string) {
+  const filePath = findVibeAssetFilePath(assetId);
+  if (!filePath) {
+    return false;
+  }
+
+  fs.unlinkSync(filePath);
+  return true;
+}
+
+/** Update one stored vibe payload's editable metadata. */
+export function updateNaiVibeAsset(assetId: string, input: {
+  label?: string;
+  description?: string;
+}) {
+  const filePath = findVibeAssetFilePath(assetId);
+  if (!filePath) {
+    return null;
+  }
+
+  const record = readJsonFile<StoredNaiVibeAsset>(filePath);
+  if (!record) {
+    return null;
+  }
+
+  const nextRecord: StoredNaiVibeAsset = {
+    ...record,
+    label: input.label?.trim() || record.label,
+    description: input.description?.trim() || undefined,
+  };
+
+  fs.writeFileSync(filePath, JSON.stringify(nextRecord, null, 2), 'utf8');
+  return nextRecord;
 }
 
 /** Persist one character-reference image and its prepared letterboxed derivative. */
@@ -235,4 +269,29 @@ export function deleteNaiCharacterReferenceAsset(assetId: string) {
   }
 
   return deleted;
+}
+
+/** Update one stored character-reference asset's editable metadata. */
+export function updateNaiCharacterReferenceAsset(assetId: string, input: {
+  label?: string;
+  description?: string;
+}) {
+  const metadataPath = path.join(CHARACTER_REFERENCE_ROOT, `${assetId}.json`);
+  if (!fs.existsSync(metadataPath)) {
+    return null;
+  }
+
+  const record = readJsonFile<StoredNaiCharacterReferenceAsset>(metadataPath);
+  if (!record) {
+    return null;
+  }
+
+  const nextRecord: StoredNaiCharacterReferenceAsset = {
+    ...record,
+    label: input.label?.trim() || record.label,
+    description: input.description?.trim() || undefined,
+  };
+
+  fs.writeFileSync(metadataPath, JSON.stringify(nextRecord, null, 2), 'utf8');
+  return nextRecord;
 }

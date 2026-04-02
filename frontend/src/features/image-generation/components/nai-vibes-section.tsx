@@ -9,6 +9,7 @@ import type { StoredNaiVibeAsset } from '@/lib/api'
 import { FormField, type NAIVibeDraft, type SelectedImageDraft } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
+import { NaiSavedAssetTile } from './nai-saved-asset-tile'
 
 export interface NaiVibesSectionProps {
   vibes: NAIVibeDraft[]
@@ -23,6 +24,7 @@ export interface NaiVibesSectionProps {
   onVibeFieldChange: (index: number, field: 'strength' | 'informationExtracted', value: string) => void
   onOpenVibeSaveModal: (index: number) => void
   onLoadVibeFromStore: (assetId: string) => void
+  onEditVibeFromStore: (assetId: string) => void
   onDeleteVibeFromStore: (assetId: string) => void
 }
 
@@ -40,6 +42,7 @@ export function NaiVibesSection({
   onVibeFieldChange,
   onOpenVibeSaveModal,
   onLoadVibeFromStore,
+  onEditVibeFromStore,
   onDeleteVibeFromStore,
 }: NaiVibesSectionProps) {
   return (
@@ -104,11 +107,7 @@ export function NaiVibesSection({
                 </div>
               ))}
             </div>
-          ) : (
-            <div className="rounded-sm border border-dashed border-border bg-surface-low px-4 py-5 text-sm text-muted-foreground">
-              아직 추가한 vibe가 없어.
-            </div>
-          )}
+          ) : null}
 
           <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -123,31 +122,17 @@ export function NaiVibesSection({
             {savedVibesLoading ? (
               <div className="text-sm text-muted-foreground">불러오는 중…</div>
             ) : savedVibes.length > 0 ? (
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
                 {savedVibes.map((asset) => (
-                  <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
-                    <div className="flex gap-3">
-                      {asset.image_data_url ? (
-                        <img src={asset.image_data_url} alt={asset.label} className="h-20 w-20 shrink-0 rounded-sm border border-border object-contain" />
-                      ) : (
-                        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-sm border border-dashed border-border text-[11px] text-muted-foreground">
-                          no preview
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
-                        {asset.description ? <div className="line-clamp-2 text-xs text-muted-foreground">{asset.description}</div> : null}
-                        <div className="flex flex-wrap gap-1.5">
-                          <Badge variant="outline">strength {asset.strength}</Badge>
-                          <Badge variant="outline">IE {asset.information_extracted}</Badge>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-2 border-t border-border/70 pt-3">
-                      <Button type="button" size="sm" variant="outline" onClick={() => onLoadVibeFromStore(asset.id)}>불러오기</Button>
-                      <Button type="button" size="sm" variant="ghost" onClick={() => onDeleteVibeFromStore(asset.id)}>삭제</Button>
-                    </div>
-                  </div>
+                  <NaiSavedAssetTile
+                    key={asset.id}
+                    title={asset.label}
+                    subtitle={asset.description?.trim() || asset.model}
+                    imageUrl={asset.image_data_url}
+                    onSelect={() => onLoadVibeFromStore(asset.id)}
+                    onEdit={() => onEditVibeFromStore(asset.id)}
+                    onDelete={() => onDeleteVibeFromStore(asset.id)}
+                  />
                 ))}
               </div>
             ) : (
