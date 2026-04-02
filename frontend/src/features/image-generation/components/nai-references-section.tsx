@@ -83,12 +83,19 @@ export function NaiReferencesSection({
                     </Button>
                   </div>
 
-                  <FormField label="Reference Image">
-                    <div className="space-y-3 rounded-sm border border-dashed border-border/80 bg-surface-lowest p-3">
+                  <div className="space-y-3 rounded-sm border border-border/80 bg-surface-lowest p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-sm font-medium text-foreground">Reference Image</div>
                       <ImageAttachmentPickerButton label={reference.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} onSelect={(image) => onReferenceImageChange(index, image)} />
-                      {reference.image ? <NaiSelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} onRemove={() => onReferenceImageChange(index)} /> : null}
                     </div>
-                  </FormField>
+                    {reference.image ? (
+                      <NaiSelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} onRemove={() => onReferenceImageChange(index)} />
+                    ) : (
+                      <div className="flex min-h-32 items-center justify-center rounded-sm border border-dashed border-border bg-surface-low px-4 py-6 text-sm text-muted-foreground">
+                        선택된 이미지 없음
+                      </div>
+                    )}
+                  </div>
 
                   <div className="grid gap-4 md:grid-cols-3">
                     <FormField label="Type">

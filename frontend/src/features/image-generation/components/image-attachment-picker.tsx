@@ -390,7 +390,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
 
   return (
     <>
-      <Button type="button" variant="outline" className="w-full justify-start" disabled={disabled} onClick={() => setIsOpen(true)}>
+      <Button type="button" variant="outline" disabled={disabled} onClick={() => setIsOpen(true)}>
         <ImagePlus className="h-4 w-4" />
         {label}
       </Button>

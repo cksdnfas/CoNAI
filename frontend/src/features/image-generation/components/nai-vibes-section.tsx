@@ -81,12 +81,19 @@ export function NaiVibesSection({
                     </Button>
                   </div>
 
-                  <FormField label="Reference Image">
-                    <div className="space-y-3 rounded-sm border border-dashed border-border/80 bg-surface-lowest p-3">
+                  <div className="space-y-3 rounded-sm border border-border/80 bg-surface-lowest p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-sm font-medium text-foreground">Reference Image</div>
                       <ImageAttachmentPickerButton label={vibe.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Vibe ${index + 1} 이미지 선택`} onSelect={(image) => onVibeImageChange(index, image)} />
-                      {vibe.image ? <NaiSelectedImageCard image={vibe.image} alt={`NAI vibe ${index + 1}`} onRemove={() => onVibeImageChange(index)} /> : null}
                     </div>
-                  </FormField>
+                    {vibe.image ? (
+                      <NaiSelectedImageCard image={vibe.image} alt={`NAI vibe ${index + 1}`} onRemove={() => onVibeImageChange(index)} />
+                    ) : (
+                      <div className="flex min-h-32 items-center justify-center rounded-sm border border-dashed border-border bg-surface-low px-4 py-6 text-sm text-muted-foreground">
+                        선택된 이미지 없음
+                      </div>
+                    )}
+                  </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <FormField label="Strength">
