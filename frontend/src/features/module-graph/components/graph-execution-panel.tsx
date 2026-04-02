@@ -10,44 +10,30 @@ import type {
   GraphExecutionArtifactRecord,
   GraphExecutionLogRecord,
   GraphExecutionRecord,
-  GraphWorkflowExposedInput,
   GraphWorkflowRecord,
 } from '@/lib/api'
 import {
-  buildArtifactTextPreview,
   formatDateTime,
   getArtifactPreviewUrl,
-  getArtifactStoredValue,
   parseMetadataValue,
 } from '../module-graph-shared'
 import { cn } from '@/lib/utils'
+import { ExecutionArtifactCard } from './execution-artifact-card'
+import {
+  getExecutionInputEntries,
+  getExecutionModeLabel,
+  getNodeDisplayLabel,
+  parseExecutionPlan,
+  pickFinalArtifacts,
+  type ParsedExecutionPlan,
+  groupArtifactsByNode,
+  formatPrimitiveValue,
+} from './graph-execution-panel-helpers'
 
 type GraphExecutionDetail = {
   execution: GraphExecutionRecord
   artifacts: GraphExecutionArtifactRecord[]
   logs: GraphExecutionLogRecord[]
-}
-
-type ParsedExecutionPlan = {
-  orderedNodeIds?: string[]
-  targetNodeId?: string | null
-  runtimeInputSignature?: string | null
-  runtimeInputValues?: Record<string, unknown>
-  forceRerun?: boolean
-  reusedFromExecutionId?: number | null
-  reusedNodeIds?: string[]
-  inputValues?: Record<string, unknown>
-  input_values?: Record<string, unknown>
-  runtimeInputs?: Record<string, unknown>
-  runtime_inputs?: Record<string, unknown>
-  resolvedInputs?: Record<string, unknown>
-  resolved_inputs?: Record<string, unknown>
-}
-
-type ExecutionInputEntry = {
-  key: string
-  label: string
-  value: unknown
 }
 
 type ExecutionDetailSectionKey = 'summary' | 'inputs' | 'artifacts' | 'logs'
@@ -60,259 +46,6 @@ function TechnicalReferenceHint({ title, label }: { title: string; label: string
   )
 }
 
-function parseExecutionPlan(value?: string | null): ParsedExecutionPlan | null {
-  if (!value) {
-    return null
-  }
-
-  try {
-    return JSON.parse(value) as ParsedExecutionPlan
-  } catch {
-    return null
-  }
-}
-
-function getExecutionModeLabel(plan: ParsedExecutionPlan | null) {
-  if (plan?.targetNodeId) {
-    return plan.forceRerun ? '강제 노드 재실행' : '선택 노드 실행'
-  }
-
-  return '워크플로우 실행'
-}
-
-function getExecutionInputCandidate(plan: ParsedExecutionPlan | null) {
-  return (
-    plan?.runtimeInputValues
-    ?? plan?.inputValues
-    ?? plan?.input_values
-    ?? plan?.runtimeInputs
-    ?? plan?.runtime_inputs
-    ?? plan?.resolvedInputs
-    ?? plan?.resolved_inputs
-    ?? null
-  )
-}
-
-function formatPrimitiveValue(value: unknown) {
-  if (value === null || value === undefined) {
-    return '없음'
-  }
-
-  if (typeof value === 'boolean') {
-    return value ? '예' : '아니오'
-  }
-
-  if (typeof value === 'number') {
-    return String(value)
-  }
-
-  if (typeof value === 'string') {
-    if (value.startsWith('data:image/')) {
-      return '이미지 데이터'
-    }
-
-    return value
-  }
-
-  return JSON.stringify(value)
-}
-
-function summarizeStructuredValue(value: unknown, maxEntries = 4) {
-  if (!value || typeof value !== 'object') {
-    return [] as string[]
-  }
-
-  if (Array.isArray(value)) {
-    return value.slice(0, maxEntries).map((entry, index) => `${index + 1}. ${formatPrimitiveValue(entry)}`)
-  }
-
-  return Object.entries(value)
-    .slice(0, maxEntries)
-    .map(([key, entryValue]) => `${key}: ${formatPrimitiveValue(entryValue)}`)
-}
-
-function buildArtifactSummaryText(artifact: GraphExecutionArtifactRecord) {
-  const storedValue = getArtifactStoredValue(artifact)
-  if (storedValue === null || storedValue === undefined) {
-    return null
-  }
-
-  if (typeof storedValue === 'string' || typeof storedValue === 'number' || typeof storedValue === 'boolean') {
-    return buildArtifactTextPreview(artifact, 220) ?? formatPrimitiveValue(storedValue)
-  }
-
-  const structuredLines = summarizeStructuredValue(storedValue)
-  if (structuredLines.length > 0) {
-    return structuredLines.join(' · ')
-  }
-
-  return buildArtifactTextPreview(artifact, 220)
-}
-
-function buildArtifactDetailLines(artifact: GraphExecutionArtifactRecord) {
-  const storedValue = getArtifactStoredValue(artifact)
-  const lines = summarizeStructuredValue(storedValue, 6)
-  if (lines.length > 0) {
-    return lines
-  }
-
-  const summaryText = buildArtifactSummaryText(artifact)
-  return summaryText ? [summaryText] : []
-}
-
-function buildInputLabelMap(inputDefinitions: GraphWorkflowExposedInput[]) {
-  return new Map(inputDefinitions.map((inputDefinition) => [inputDefinition.id, inputDefinition.label]))
-}
-
-function getExecutionInputEntries(plan: ParsedExecutionPlan | null, inputDefinitions: GraphWorkflowExposedInput[]) {
-  const candidate = getExecutionInputCandidate(plan)
-  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
-    return [] as ExecutionInputEntry[]
-  }
-
-  const labelMap = buildInputLabelMap(inputDefinitions)
-  return Object.entries(candidate).map(([key, value]) => ({
-    key,
-    label: labelMap.get(key) ?? key,
-    value,
-  }))
-}
-
-function getNodeDisplayLabel(selectedGraph: GraphWorkflowRecord | null | undefined, nodeId: string) {
-  const nodeRecord = selectedGraph?.graph.nodes.find((node) => node.id === nodeId)
-  const explicitLabel = nodeRecord?.label?.trim()
-  if (explicitLabel) {
-    return explicitLabel
-  }
-
-  return `노드 ${nodeId}`
-}
-
-function groupArtifactsByNode(artifacts: GraphExecutionArtifactRecord[], selectedGraph?: GraphWorkflowRecord | null) {
-  const groupMap = new Map<string, GraphExecutionArtifactRecord[]>()
-
-  for (const artifact of artifacts) {
-    const current = groupMap.get(artifact.node_id) ?? []
-    current.push(artifact)
-    groupMap.set(artifact.node_id, current)
-  }
-
-  return Array.from(groupMap.entries())
-    .map(([nodeId, nodeArtifacts]) => ({
-      nodeId,
-      nodeLabel: getNodeDisplayLabel(selectedGraph, nodeId),
-      artifacts: [...nodeArtifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime()),
-    }))
-    .sort((left, right) => {
-      const leftTime = new Date(left.artifacts[0]?.created_date ?? 0).getTime()
-      const rightTime = new Date(right.artifacts[0]?.created_date ?? 0).getTime()
-      return rightTime - leftTime
-    })
-}
-
-function pickHighlightedArtifacts(artifacts: GraphExecutionArtifactRecord[]) {
-  const sortedArtifacts = [...artifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
-  const visualArtifacts = sortedArtifacts.filter((artifact) => (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') && getArtifactPreviewUrl(artifact))
-
-  if (visualArtifacts.length > 0) {
-    return visualArtifacts.slice(0, 4)
-  }
-
-  return sortedArtifacts.slice(0, 4)
-}
-
-function getTerminalNodeIds(selectedGraph?: GraphWorkflowRecord | null) {
-  if (!selectedGraph) {
-    return [] as string[]
-  }
-
-  const sourceNodeIds = new Set(selectedGraph.graph.edges.map((edge) => edge.source_node_id))
-  return selectedGraph.graph.nodes
-    .filter((node) => !sourceNodeIds.has(node.id))
-    .map((node) => node.id)
-}
-
-function pickFinalArtifacts(params: {
-  artifacts: GraphExecutionArtifactRecord[]
-  executionPlan: ParsedExecutionPlan | null
-  selectedGraph?: GraphWorkflowRecord | null
-}) {
-  const { artifacts, executionPlan, selectedGraph } = params
-  const sortedArtifacts = [...artifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
-  if (sortedArtifacts.length === 0) {
-    return [] as GraphExecutionArtifactRecord[]
-  }
-
-  const artifactNodeIds = new Set(sortedArtifacts.map((artifact) => artifact.node_id))
-  const preferredNodeIds: string[] = []
-
-  if (executionPlan?.targetNodeId) {
-    preferredNodeIds.push(executionPlan.targetNodeId)
-  }
-
-  const terminalNodeIds = getTerminalNodeIds(selectedGraph)
-  for (const nodeId of terminalNodeIds) {
-    if (artifactNodeIds.has(nodeId)) {
-      preferredNodeIds.push(nodeId)
-    }
-  }
-
-  const orderedNodeIds = [...(executionPlan?.orderedNodeIds ?? [])].reverse()
-  for (const nodeId of orderedNodeIds) {
-    if (artifactNodeIds.has(nodeId)) {
-      preferredNodeIds.push(nodeId)
-      break
-    }
-  }
-
-  const uniquePreferredNodeIds = preferredNodeIds.filter((nodeId, index) => preferredNodeIds.indexOf(nodeId) === index)
-  if (uniquePreferredNodeIds.length > 0) {
-    const finalArtifacts = sortedArtifacts.filter((artifact) => uniquePreferredNodeIds.includes(artifact.node_id))
-    if (finalArtifacts.length > 0) {
-      return pickHighlightedArtifacts(finalArtifacts)
-    }
-  }
-
-  return pickHighlightedArtifacts(sortedArtifacts)
-}
-
-function ExecutionArtifactCard({ artifact, compact = false }: { artifact: GraphExecutionArtifactRecord; compact?: boolean }) {
-  const previewUrl = getArtifactPreviewUrl(artifact)
-  const summaryText = buildArtifactSummaryText(artifact)
-  const detailLines = buildArtifactDetailLines(artifact)
-
-  return (
-    <div className={cn('rounded-sm border border-border bg-surface-low p-3', compact ? 'space-y-2' : 'space-y-2.5')}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-sm font-medium text-foreground">{artifact.port_key}</span>
-            <Badge variant="outline">{artifact.artifact_type}</Badge>
-          </div>
-          <div className="text-[11px] text-muted-foreground">{formatDateTime(artifact.created_date)}</div>
-        </div>
-      </div>
-
-      {previewUrl && (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') ? (
-        <img
-          src={previewUrl}
-          alt={`${artifact.node_id}-${artifact.port_key}`}
-          className={cn('rounded-sm border border-border object-contain', compact ? 'max-h-40 w-full' : 'max-h-52 w-full')}
-        />
-      ) : null}
-
-      {!previewUrl && summaryText ? <div className="text-sm leading-6 text-foreground whitespace-pre-wrap break-all">{summaryText}</div> : null}
-
-      {previewUrl && detailLines.length > 0 ? (
-        <div className="space-y-1 text-xs text-muted-foreground">
-          {detailLines.map((line) => (
-            <div key={line}>{line}</div>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  )
-}
 
 type GraphExecutionPanelProps = {
   selectedGraphId: number | null
