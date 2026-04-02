@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { PageHeader } from '@/components/common/page-header'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SectionHeading } from '@/components/common/section-heading'
@@ -45,10 +44,12 @@ import type { ImageRecord } from '@/types/image'
 import type { GroupExplorerCardStyle } from '@/types/settings'
 import { GroupBreadcrumbs } from './components/group-breadcrumbs'
 import { GroupChildCard } from './components/group-child-card'
+import { GroupExplorerSidebarPanel } from './components/group-explorer-sidebar-panel'
+import { GroupNavigationGridSection } from './components/group-navigation-grid-section'
+import { GroupRootGridSection } from './components/group-root-grid-section'
 import { GroupEditorModal } from './components/group-editor-modal'
 import { GroupAssignModal } from './components/group-assign-modal'
 import { GroupImageSection } from './components/group-image-section'
-import { GroupTree } from './components/group-tree'
 import { GroupDownloadModal } from './components/group-download-modal'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 
@@ -624,34 +625,15 @@ export function GroupPage() {
       </div>
 
       <div className={cn('grid gap-8', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
-        <ExplorerSidebar
-          title="Explorer"
-          badge={<Badge variant="outline">{allGroups.length}</Badge>}
-          floatingFrame
-          className={cn(isWideLayout && 'sticky top-24 self-start flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
-          bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}
-        >
-          {groupsQuery.isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <Skeleton key={index} className="h-9 w-full rounded-sm" />
-              ))}
-            </div>
-          ) : null}
-
-          {groupsQuery.isError ? (
-            <Alert variant="destructive">
-              <AlertTitle>그룹 트리를 불러오지 못했어</AlertTitle>
-              <AlertDescription>
-                {groupsQuery.error instanceof Error ? groupsQuery.error.message : '알 수 없는 오류가 발생했어.'}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          {!groupsQuery.isLoading && !groupsQuery.isError ? (
-            <GroupTree groups={allGroups} selectedGroupId={selectedGroupId} onSelectGroup={handleOpenGroup} />
-          ) : null}
-        </ExplorerSidebar>
+        <GroupExplorerSidebarPanel
+          isWideLayout={isWideLayout}
+          groups={allGroups}
+          selectedGroupId={selectedGroupId}
+          isLoading={groupsQuery.isLoading}
+          isError={groupsQuery.isError}
+          errorMessage={groupsQuery.error instanceof Error ? groupsQuery.error.message : null}
+          onSelectGroup={handleOpenGroup}
+        />
 
         <section className="space-y-8">
           {isWideLayout && selectedGroupId ? (
@@ -664,25 +646,15 @@ export function GroupPage() {
           ) : null}
 
           {!selectedGroupId ? (
-            <section className="space-y-4">
-              <SectionHeading
-                heading={selectedSource.rootSectionTitle}
-                actions={<Badge variant="secondary">{rootGroups.length.toLocaleString('ko-KR')}개</Badge>}
-              />
-
-              <div className={getGroupCardGridClassName(groupExplorerCardStyle)}>
-                {rootGroups.map((group) => (
-                  <GroupChildCard
-                    key={group.id}
-                    group={group}
-                    previewSourceKey={selectedSource.key}
-                    loadPreviewImage={selectedSource.getPreviewImage}
-                    cardStyle={groupExplorerCardStyle}
-                    onOpen={handleOpenGroup}
-                  />
-                ))}
-              </div>
-            </section>
+            <GroupRootGridSection
+              title={selectedSource.rootSectionTitle}
+              groups={rootGroups}
+              cardStyle={groupExplorerCardStyle}
+              gridClassName={getGroupCardGridClassName(groupExplorerCardStyle)}
+              previewSourceKey={selectedSource.key}
+              loadPreviewImage={selectedSource.getPreviewImage}
+              onOpenGroup={handleOpenGroup}
+            />
           ) : null}
 
           {selectedGroupId && selectedGroupQuery.isLoading ? <Skeleton className="h-28 w-full rounded-sm" /> : null}
@@ -781,35 +753,18 @@ export function GroupPage() {
               </section>
 
               {backNavigationGroup ? (
-                <section className="space-y-4">
-                  <div className={getGroupCardGridClassName(groupExplorerCardStyle)}>
-                    <GroupChildCard
-                      group={backNavigationGroup}
-                      variant="back"
-                      titleOverride={parentGroupHierarchy?.name ?? selectedSource.rootTitle}
-                      subtitleOverride={parentGroupHierarchy ? '상위 그룹으로 이동' : '루트 목록으로 이동'}
-                      cardStyle={groupExplorerCardStyle}
-                      onOpen={(groupId) => {
-                        if (parentGroupHierarchy) {
-                          handleOpenGroup(groupId)
-                        } else {
-                          handleOpenRoot()
-                        }
-                      }}
-                    />
-
-                    {childGroups.map((group) => (
-                      <GroupChildCard
-                        key={group.id}
-                        group={group}
-                        previewSourceKey={selectedSource.key}
-                        loadPreviewImage={selectedSource.getPreviewImage}
-                        cardStyle={groupExplorerCardStyle}
-                        onOpen={handleOpenGroup}
-                      />
-                    ))}
-                  </div>
-                </section>
+                <GroupNavigationGridSection
+                  backNavigationGroup={backNavigationGroup}
+                  parentGroupHierarchy={parentGroupHierarchy}
+                  rootTitle={selectedSource.rootTitle}
+                  childGroups={childGroups}
+                  cardStyle={groupExplorerCardStyle}
+                  gridClassName={getGroupCardGridClassName(groupExplorerCardStyle)}
+                  previewSourceKey={selectedSource.key}
+                  loadPreviewImage={selectedSource.getPreviewImage}
+                  onOpenGroup={handleOpenGroup}
+                  onOpenRoot={handleOpenRoot}
+                />
               ) : null}
 
               <GroupImageSection
