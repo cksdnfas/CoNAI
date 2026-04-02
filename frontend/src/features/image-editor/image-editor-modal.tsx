@@ -112,8 +112,10 @@ export function ImageEditorModal({
   const [tool, setTool] = useState<ImageEditorTool>('brush')
   const [brushColor, setBrushColor] = useState('#ffffff')
   const [brushSize, setBrushSize] = useState(16)
+  const [brushOpacity, setBrushOpacity] = useState(100)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [brushPreviewPoint, setBrushPreviewPoint] = useState<{ x: number; y: number } | null>(null)
   const [rotation, setRotation] = useState(0)
   const [flippedX, setFlippedX] = useState(false)
   const [layers, setLayers] = useState<ImageEditorLayer[]>([])
@@ -311,6 +313,18 @@ export function ImageEditorModal({
     }
   }, [documentSize.height, documentSize.width, enableMaskEditing, initialMaskImage, maskStrokes])
 
+  useEffect(() => {
+    if (tool !== 'brush' && tool !== 'eraser' && tool !== 'mask-brush' && tool !== 'mask-eraser') {
+      setBrushPreviewPoint(null)
+    }
+  }, [tool])
+
+  useEffect(() => {
+    if (tool !== 'brush' && tool !== 'eraser' && tool !== 'mask-brush' && tool !== 'mask-eraser') {
+      setBrushPreviewPoint(null)
+    }
+  }, [tool])
+
   /** Keep one fit-to-screen action available after crop or image reset. */
   const handleFitToScreen = useCallback(() => {
     if (documentSize.width <= 0 || documentSize.height <= 0) {
@@ -356,6 +370,7 @@ export function ImageEditorModal({
       points: [point.x, point.y],
       strokeWidth: brushSize,
       color: isMaskTool ? '#ffffff' : brushColor,
+      opacity: brushOpacity / 100,
     }
 
     if (isMaskTool) {
@@ -569,6 +584,16 @@ export function ImageEditorModal({
         setTool('pan')
       }
       queueHistoryCommit()
+      showSnackbar({
+        message: mode === 'cut'
+          ? '선택을 잘라서 새 레이어로 옮겼어.'
+          : mode === 'duplicate'
+            ? '선택 복제 레이어를 만들었어.'
+            : mode === 'promote'
+              ? '선택을 새 레이어로 승격했어.'
+              : '선택을 새 레이어로 복사했어.',
+        tone: 'info',
+      })
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : '선택 영역을 처리하지 못했어.', tone: 'error' })
     } finally {
@@ -602,7 +627,8 @@ export function ImageEditorModal({
     setLayers((current) => [...current, nextLayer])
     setActiveLayerId(nextLayer.id)
     queueHistoryCommit()
-  }, [documentSize.height, documentSize.width, layers, queueHistoryCommit])
+    showSnackbar({ message: '저장된 선택을 붙여넣었어.', tone: 'info' })
+  }, [documentSize.height, documentSize.width, layers, queueHistoryCommit, showSnackbar])
 
   /** Delete the current selected rectangle from the flattened source composition. */
   const handleDeleteSelection = useCallback(async () => {
@@ -646,6 +672,7 @@ export function ImageEditorModal({
       setSelectionRect(null)
       setTool('pan')
       queueHistoryCommit()
+      showSnackbar({ message: '선택 영역을 삭제했어.', tone: 'info' })
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : '선택 영역을 삭제하지 못했어.', tone: 'error' })
     } finally {
@@ -677,6 +704,7 @@ export function ImageEditorModal({
       setSelectionRect(null)
       setCropRect(null)
       queueHistoryCommit()
+      showSnackbar({ message: '보이는 결과를 새 베이스로 평탄화했어.', tone: 'info' })
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : '보이는 레이어를 평탄화하지 못했어.', tone: 'error' })
     } finally {
@@ -718,7 +746,8 @@ export function ImageEditorModal({
     })
     setActiveLayerId(duplicatedLayer.id)
     queueHistoryCommit()
-  }, [documentSize.height, documentSize.width, layers, queueHistoryCommit])
+    showSnackbar({ message: `${sourceLayer.name} 레이어를 복제했어.`, tone: 'info' })
+  }, [documentSize.height, documentSize.width, layers, queueHistoryCommit, showSnackbar])
 
   /** Merge all currently visible layers into one new paste layer while preserving hidden layers. */
   const handleMergeVisible = useCallback(async () => {
@@ -763,6 +792,7 @@ export function ImageEditorModal({
       }))
       setActiveLayerId(mergedLayer.id)
       queueHistoryCommit()
+      showSnackbar({ message: '보이는 레이어를 하나로 병합했어.', tone: 'info' })
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : '보이는 레이어를 병합하지 못했어.', tone: 'error' })
     } finally {
@@ -820,6 +850,7 @@ export function ImageEditorModal({
       })
       setActiveLayerId(mergedLayer.id)
       queueHistoryCommit()
+      showSnackbar({ message: '활성 레이어를 아래 레이어와 병합했어.', tone: 'info' })
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : '레이어를 병합하지 못했어.', tone: 'error' })
     } finally {
@@ -827,7 +858,7 @@ export function ImageEditorModal({
     }
   }, [activeLayerId, documentSize.height, documentSize.width, layers, queueHistoryCommit, showSnackbar])
 
-  /** Handle keyboard shortcuts for selection actions while avoiding text-input conflicts. */
+  /** Handle editor keyboard shortcuts while avoiding text-input conflicts. */
   useEffect(() => {
     if (!open) {
       return
@@ -840,17 +871,119 @@ export function ImageEditorModal({
         return
       }
 
+      const lowerKey = event.key.toLowerCase()
       const isShortcutModifier = event.ctrlKey || event.metaKey
-      if (isShortcutModifier && event.key.toLowerCase() === 'z' && !event.shiftKey) {
+      if (isShortcutModifier && lowerKey === 'z' && !event.shiftKey) {
         event.preventDefault()
         void handleUndo()
         return
       }
 
-      if (isShortcutModifier && (event.key.toLowerCase() === 'y' || (event.shiftKey && event.key.toLowerCase() === 'z'))) {
+      if (isShortcutModifier && (lowerKey === 'y' || (event.shiftKey && lowerKey === 'z'))) {
         event.preventDefault()
         void handleRedo()
         return
+      }
+
+      if (event.key === 'Escape') {
+        if (cropRect) {
+          event.preventDefault()
+          setCropRect(null)
+          setTool('brush')
+          return
+        }
+
+        if (selectionRect) {
+          event.preventDefault()
+          setSelectionRect(null)
+          return
+        }
+      }
+
+      if (event.key === '[') {
+        event.preventDefault()
+        setBrushSize((current) => Math.max(1, current - 2))
+        return
+      }
+
+      if (event.key === ']') {
+        event.preventDefault()
+        setBrushSize((current) => Math.min(256, current + 2))
+        return
+      }
+
+      if (!isShortcutModifier) {
+        if (lowerKey === 'h') {
+          event.preventDefault()
+          setTool('pan')
+          return
+        }
+
+        if (lowerKey === 's') {
+          event.preventDefault()
+          setTool('select')
+          return
+        }
+
+        if (lowerKey === 'b') {
+          event.preventDefault()
+          setTool('brush')
+          return
+        }
+
+        if (lowerKey === 'e') {
+          event.preventDefault()
+          setTool('eraser')
+          return
+        }
+
+        if (lowerKey === 'c') {
+          event.preventDefault()
+          setTool('crop')
+          return
+        }
+
+        if (enableMaskEditing && lowerKey === 'm') {
+          event.preventDefault()
+          setTool(event.shiftKey ? 'mask-eraser' : 'mask-brush')
+          return
+        }
+      }
+
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        const step = event.shiftKey ? 10 : 1
+        const deltaX = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0
+        const deltaY = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0
+
+        if (event.altKey) {
+          if (cropRect) {
+            event.preventDefault()
+            setCropRect((current) => resizeRect(current, deltaX, deltaY))
+            queueHistoryCommit()
+            return
+          }
+
+          if (selectionRect) {
+            event.preventDefault()
+            setSelectionRect((current) => resizeRect(current, deltaX, deltaY))
+            queueHistoryCommit()
+            return
+          }
+        }
+
+        if (cropRect) {
+          event.preventDefault()
+          setCropRect((current) => nudgeRect(current, deltaX, deltaY))
+          queueHistoryCommit()
+          return
+        }
+
+        if (selectionRect) {
+          event.preventDefault()
+          setSelectionRect((current) => nudgeRect(current, deltaX, deltaY))
+          queueHistoryCommit()
+          return
+        }
       }
 
       if ((event.key === 'Delete' || event.key === 'Backspace') && selectionRect) {
@@ -859,25 +992,25 @@ export function ImageEditorModal({
         return
       }
 
-      if (isShortcutModifier && event.key.toLowerCase() === 'c' && selectionRect) {
+      if (isShortcutModifier && lowerKey === 'c' && selectionRect) {
         event.preventDefault()
         void handleSelectionTransfer('copy')
         return
       }
 
-      if (isShortcutModifier && event.key.toLowerCase() === 'x' && selectionRect) {
+      if (isShortcutModifier && lowerKey === 'x' && selectionRect) {
         event.preventDefault()
         void handleSelectionTransfer('cut')
         return
       }
 
-      if (isShortcutModifier && event.key.toLowerCase() === 'd' && selectionRect) {
+      if (isShortcutModifier && lowerKey === 'd' && selectionRect) {
         event.preventDefault()
         void handleSelectionTransfer('duplicate')
         return
       }
 
-      if (isShortcutModifier && event.shiftKey && event.key.toLowerCase() === 'v' && selectionClipboardRef.current) {
+      if (isShortcutModifier && event.shiftKey && lowerKey === 'v' && selectionClipboardRef.current) {
         event.preventDefault()
         handlePasteStoredSelection()
       }
@@ -885,7 +1018,7 @@ export function ImageEditorModal({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleDeleteSelection, handlePasteStoredSelection, handleRedo, handleSelectionTransfer, handleUndo, open, selectionRect])
+  }, [cropRect, enableMaskEditing, handleDeleteSelection, handlePasteStoredSelection, handleRedo, handleSelectionTransfer, handleUndo, open, queueHistoryCommit, selectionRect])
 
   /** Apply one crop rectangle by flattening current source and mask compositions into new bases. */
   const handleApplyCrop = useCallback(async () => {
@@ -986,12 +1119,22 @@ export function ImageEditorModal({
       setPan({ x: 0, y: 0 })
       setZoom(calculateImageEditorFitZoom(clampedRect.width, clampedRect.height, viewportSize.width, viewportSize.height))
       queueHistoryCommit()
+      showSnackbar({ message: '크롭을 적용했어.', tone: 'info' })
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : '크롭을 적용하지 못했어.', tone: 'error' })
     } finally {
       setLoading(false)
     }
   }, [baseImage, cropRect, documentSize.height, documentSize.width, enableMaskEditing, initialMaskImage, layers, maskStrokes, queueHistoryCommit, showSnackbar, viewportSize.height, viewportSize.width])
+
+  const handleClearMask = useCallback(() => {
+    setInitialMaskImage(null)
+    setInitialMaskImageDataUrl(null)
+    setMaskPreviewSurface(null)
+    setMaskStrokes([])
+    queueHistoryCommit()
+    showSnackbar({ message: '마스크를 비웠어.', tone: 'info' })
+  }, [queueHistoryCommit, showSnackbar])
 
   /** Save the current source and optional mask back into the caller draft state. */
   const handleSave = useCallback(async () => {
@@ -1116,6 +1259,10 @@ export function ImageEditorModal({
       return
     }
 
+    if (tool === 'brush' || tool === 'eraser' || tool === 'mask-brush' || tool === 'mask-eraser') {
+      setBrushPreviewPoint(point)
+    }
+
     if (tool === 'select') {
       const currentSelectionRect = selectionRect ? normalizeImageEditorRect(selectionRect) : null
       const selectionHandle = currentSelectionRect ? getSelectionHandleAtPoint(point, currentSelectionRect, zoom) : null
@@ -1174,7 +1321,12 @@ export function ImageEditorModal({
 
     const point = getDocumentPointerPosition()
     if (!point) {
+      setBrushPreviewPoint(null)
       return
+    }
+
+    if (tool === 'brush' || tool === 'eraser' || tool === 'mask-brush' || tool === 'mask-eraser') {
+      setBrushPreviewPoint(point)
     }
 
     const currentSelectionRect = selectionRect ? normalizeImageEditorRect(selectionRect) : null
@@ -1248,7 +1400,7 @@ export function ImageEditorModal({
     if (isDrawingRef.current) {
       extendStroke(point)
     }
-  }, [documentSize.height, documentSize.width, extendStroke, getDocumentPointerPosition, selectionRect])
+  }, [documentSize.height, documentSize.width, extendStroke, getDocumentPointerPosition, selectionRect, tool])
 
   /** Finish the current pointer interaction and commit history only for real document edits. */
   const handleStagePointerUp = useCallback(() => {
@@ -1260,6 +1412,7 @@ export function ImageEditorModal({
     isMovingSelectionRef.current = false
     selectionResizeHandleRef.current = null
     selectionResizeOriginRectRef.current = null
+    setBrushPreviewPoint(null)
     lastPointerRef.current = null
     cropStartRef.current = null
     selectionStartRef.current = null
@@ -1272,6 +1425,44 @@ export function ImageEditorModal({
 
   const normalizedSelectionRect = selectionRect ? normalizeImageEditorRect(selectionRect) : null
   const normalizedCropRect = cropRect ? normalizeImageEditorRect(cropRect) : null
+
+  const updateRectField = useCallback((rect: ImageEditorCropRect | null, field: 'x' | 'y' | 'width' | 'height', value: number) => {
+    if (!rect) {
+      return null
+    }
+
+    const nextRect = { ...normalizeImageEditorRect(rect), [field]: field === 'width' || field === 'height' ? Math.max(1, value) : Math.max(0, value) }
+    return clampImageEditorRect(nextRect, documentSize.width, documentSize.height)
+  }, [documentSize.height, documentSize.width])
+
+  function nudgeRect(rect: ImageEditorCropRect | null, deltaX: number, deltaY: number) {
+    if (!rect) {
+      return null
+    }
+
+    const normalizedRect = normalizeImageEditorRect(rect)
+    return clampImageEditorRect({
+      x: normalizedRect.x + deltaX,
+      y: normalizedRect.y + deltaY,
+      width: normalizedRect.width,
+      height: normalizedRect.height,
+    }, documentSize.width, documentSize.height)
+  }
+
+  function resizeRect(rect: ImageEditorCropRect | null, deltaWidth: number, deltaHeight: number) {
+    if (!rect) {
+      return null
+    }
+
+    const normalizedRect = normalizeImageEditorRect(rect)
+    return clampImageEditorRect({
+      x: normalizedRect.x,
+      y: normalizedRect.y,
+      width: Math.max(1, normalizedRect.width + deltaWidth),
+      height: Math.max(1, normalizedRect.height + deltaHeight),
+    }, documentSize.width, documentSize.height)
+  }
+
   const canApplySelectionOperation = Boolean(normalizedSelectionRect && normalizedSelectionRect.width >= 2 && normalizedSelectionRect.height >= 2)
   const canApplyCrop = Boolean(normalizedCropRect && normalizedCropRect.width >= 2 && normalizedCropRect.height >= 2)
   const hasVisibleMask = enableMaskEditing && (Boolean(initialMaskImage) || maskStrokes.length > 0)
@@ -1319,6 +1510,7 @@ export function ImageEditorModal({
                   enableMaskEditing={enableMaskEditing}
                   brushColor={brushColor}
                   brushSize={brushSize}
+                  brushOpacity={brushOpacity}
                   historyLength={historyStack.length}
                   redoLength={redoStack.length}
                   loading={loading}
@@ -1328,6 +1520,7 @@ export function ImageEditorModal({
                   onToolChange={setTool}
                   onBrushColorChange={setBrushColor}
                   onBrushSizeChange={setBrushSize}
+                  onBrushOpacityChange={setBrushOpacity}
                   onUndo={() => void handleUndo()}
                   onRedo={() => void handleRedo()}
                   onZoomOut={() => setZoom((current) => Math.max(0.1, current * 0.9))}
@@ -1342,7 +1535,7 @@ export function ImageEditorModal({
                   onSelectionDuplicate={() => void handleSelectionTransfer('duplicate')}
                   onSelectionDelete={() => void handleDeleteSelection()}
                   onSelectionCut={() => void handleSelectionTransfer('cut')}
-                  onClearMask={enableMaskEditing ? () => { setInitialMaskImage(null); setInitialMaskImageDataUrl(null); setMaskPreviewSurface(null); setMaskStrokes([]); queueHistoryCommit() } : undefined}
+                  onClearMask={enableMaskEditing ? handleClearMask : undefined}
                   onApplyCrop={handleApplyCrop}
                 />
 
@@ -1359,6 +1552,10 @@ export function ImageEditorModal({
                   flippedX={flippedX}
                   layers={layers}
                   activeLayerId={activeLayerId}
+                  tool={tool}
+                  brushPreviewPoint={brushPreviewPoint}
+                  brushSize={brushSize}
+                  brushOpacity={brushOpacity}
                   enableMaskEditing={enableMaskEditing}
                   maskPreviewSurface={maskPreviewSurface}
                   maskStrokes={maskStrokes}
@@ -1404,6 +1601,8 @@ export function ImageEditorModal({
               canFlattenVisible={canFlattenVisible}
               canClearActiveDrawLayer={canClearActiveDrawLayer}
               hasSelectionRect={Boolean(selectionRect)}
+              selectionRect={normalizedSelectionRect}
+              cropRect={normalizedCropRect}
               saving={saving}
               loading={loading}
               canSave={Boolean(baseImage)}
@@ -1413,6 +1612,12 @@ export function ImageEditorModal({
               onClearActiveDrawLayer={() => { setLayers((current) => current.map((layer) => layer.id === activeLayerId && layer.type === 'draw' ? { ...layer, lines: [] } : layer)); queueHistoryCommit() }}
               onClearAllDrawLayers={() => { setLayers((current) => current.map((layer) => layer.type === 'draw' ? { ...layer, lines: [] } : layer)); queueHistoryCommit() }}
               onClearSelection={() => setSelectionRect(null)}
+              onSelectionRectFieldChange={(field, value) => {
+                setSelectionRect((current) => updateRectField(current, field, value))
+              }}
+              onCropRectFieldChange={(field, value) => {
+                setCropRect((current) => updateRectField(current, field, value))
+              }}
               onCancelCrop={() => { setCropRect(null); setTool('brush') }}
               onClose={onClose}
               onSave={() => void handleSave()}

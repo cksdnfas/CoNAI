@@ -4,7 +4,7 @@ import fs from 'fs';
 import { runtimePaths } from '../config/runtimePaths';
 
 /**
- * Data migration from images.db to user-settings.db
+ * Data migration from images.db to user.db
  * Tables to migrate:
  * - workflows
  * - comfyui_servers
@@ -13,7 +13,7 @@ import { runtimePaths } from '../config/runtimePaths';
  */
 export function migrateToUserSettingsDb(): void {
   const imagesDbPath = runtimePaths.databaseFile;
-  const userSettingsDbPath = path.join(runtimePaths.databaseDir, 'user-settings.db');
+  const userSettingsDbPath = path.join(runtimePaths.databaseDir, 'user.db');
 
   if (!fs.existsSync(imagesDbPath)) {
     console.log('⚠️  images.db not found - skipping migration');
@@ -21,7 +21,7 @@ export function migrateToUserSettingsDb(): void {
   }
 
   if (!fs.existsSync(userSettingsDbPath)) {
-    console.log('⚠️  user-settings.db not found - run initialization first');
+    console.log('⚠️  user.db not found - run initialization first');
     return;
   }
 
@@ -29,7 +29,7 @@ export function migrateToUserSettingsDb(): void {
   const userSettingsDb = new Database(userSettingsDbPath);
 
   try {
-    console.log('🔄 Starting data migration to user-settings.db...');
+    console.log('🔄 Starting data migration to user.db...');
 
     // Check if tables exist in images.db
     const checkTable = (tableName: string): boolean => {

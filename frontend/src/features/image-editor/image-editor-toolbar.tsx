@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Brush, ClipboardPaste, Crop, Eraser, FlipHorizontal, Hand, RotateCw, Square, ZoomIn, ZoomOut } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { ImageEditorTool } from './image-editor-types'
@@ -9,6 +10,7 @@ interface ImageEditorToolbarProps {
   enableMaskEditing: boolean
   brushColor: string
   brushSize: number
+  brushOpacity: number
   historyLength: number
   redoLength: number
   loading: boolean
@@ -18,6 +20,7 @@ interface ImageEditorToolbarProps {
   onToolChange: (tool: ImageEditorTool) => void
   onBrushColorChange: (value: string) => void
   onBrushSizeChange: (value: number) => void
+  onBrushOpacityChange: (value: number) => void
   onUndo: () => void
   onRedo: () => void
   onZoomOut: () => void
@@ -45,12 +48,55 @@ function ToolButton({ active, children, onClick, title }: { active?: boolean; ch
   )
 }
 
+function getImageEditorToolShortcut(tool: ImageEditorTool) {
+  switch (tool) {
+    case 'pan':
+      return 'H'
+    case 'select':
+      return 'S'
+    case 'brush':
+      return 'B'
+    case 'eraser':
+      return 'E'
+    case 'mask-brush':
+      return 'M'
+    case 'mask-eraser':
+      return 'Shift+M'
+    case 'crop':
+      return 'C'
+    default:
+      return '-'
+  }
+}
+
+function getImageEditorToolHint(tool: ImageEditorTool) {
+  switch (tool) {
+    case 'pan':
+      return 'Drag the view to inspect details.'
+    case 'select':
+      return 'Create, move, or resize a selection rectangle.'
+    case 'brush':
+      return 'Paint on the active draw layer.'
+    case 'eraser':
+      return 'Erase content from the active draw layer.'
+    case 'mask-brush':
+      return 'Paint white editable infill regions into the mask.'
+    case 'mask-eraser':
+      return 'Remove white regions from the mask.'
+    case 'crop':
+      return 'Drag a crop area, then apply it.'
+    default:
+      return ''
+  }
+}
+
 /** Render the main editor toolbar with tools, history, transform, and selection actions. */
 export function ImageEditorToolbar({
   tool,
   enableMaskEditing,
   brushColor,
   brushSize,
+  brushOpacity,
   historyLength,
   redoLength,
   loading,
@@ -60,6 +106,7 @@ export function ImageEditorToolbar({
   onToolChange,
   onBrushColorChange,
   onBrushSizeChange,
+  onBrushOpacityChange,
   onUndo,
   onRedo,
   onZoomOut,
@@ -116,6 +163,10 @@ export function ImageEditorToolbar({
           Brush size
           <Input type="number" min={1} max={256} value={brushSize} onChange={(event) => onBrushSizeChange(Math.max(1, Number(event.target.value) || 1))} className="w-24" />
         </label>
+        <label className="space-y-1 text-xs text-muted-foreground">
+          Opacity
+          <Input type="number" min={0} max={100} value={brushOpacity} onChange={(event) => onBrushOpacityChange(Math.max(0, Math.min(100, Number(event.target.value) || 0)))} className="w-24" />
+        </label>
         <Button type="button" variant="secondary" size="sm" onClick={onUndo} disabled={historyLength <= 1 || loading}>
           Undo
         </Button>
@@ -166,6 +217,25 @@ export function ImageEditorToolbar({
         <Button type="button" variant="secondary" size="sm" onClick={onApplyCrop} disabled={!canApplyCrop || loading}>
           Apply Crop
         </Button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border/70 bg-surface-low px-3 py-2 text-xs text-muted-foreground">
+        <Badge variant="outline">Tool {tool}</Badge>
+        <span>Shortcut {getImageEditorToolShortcut(tool)}</span>
+        <span>•</span>
+        <span>{getImageEditorToolHint(tool)}</span>
+        <span>•</span>
+        <span>Brush [ ]</span>
+        <span>•</span>
+        <span>Opacity {brushOpacity}%</span>
+        {(tool === 'mask-brush' || tool === 'mask-eraser') ? (
+          <>
+            <span>•</span>
+            <span>White adds editable area</span>
+          </>
+        ) : null}
+        <span>•</span>
+        <span>Esc clears selection/crop</span>
       </div>
     </>
   )

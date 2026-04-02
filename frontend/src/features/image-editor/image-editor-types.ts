@@ -8,6 +8,7 @@ export type ImageEditorStroke = {
   points: number[]
   strokeWidth: number
   color: string
+  opacity: number
 }
 
 export type ImageEditorDrawLayer = {

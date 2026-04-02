@@ -95,7 +95,8 @@ export function showUpgradeNotice(check: LegacyCheckResult): void {
   console.log('║                                                                    ║');
   console.log('║  2. 🗑️  데이터베이스 파일 삭제                                      ║');
   console.log('║     - database/images.db                                          ║');
-  console.log('║     - database/api-generation-history.db                          ║');
+  console.log('║     - database/user.db                                            ║');
+  console.log('║     - database/auth.db                                            ║');
   console.log('║                                                                    ║');
   console.log('║  3. ▶️  서버 재시작                                                 ║');
   console.log('║     새로운 데이터베이스가 자동으로 생성됩니다                        ║');

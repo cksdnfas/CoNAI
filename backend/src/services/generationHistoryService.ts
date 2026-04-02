@@ -9,7 +9,7 @@ import { PORTS } from '@conai/shared';
 /**
  * GenerationHistoryService
  * Manages dual storage:
- * 1. api-generation-history.db - API generation history with workflow/parameters
+ * 1. user.db/api_generation_history - API generation history with workflow/parameters
  * 2. images.db - via existing image upload API (for search/management)
  * Uses media_metadata table for unified metadata storage
  */

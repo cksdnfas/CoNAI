@@ -66,6 +66,7 @@ function drawImageEditorStrokes(context: CanvasRenderingContext2D, strokes: Imag
     context.save()
     context.beginPath()
     context.strokeStyle = stroke.color
+    context.globalAlpha = stroke.opacity
     context.lineWidth = stroke.strokeWidth
     context.lineCap = 'round'
     context.lineJoin = 'round'

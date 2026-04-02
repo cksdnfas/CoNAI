@@ -1,12 +1,16 @@
 import { Crop, Minus, Square, ZoomIn } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import type { ImageEditorCropRect } from './image-editor-types'
 
 interface ImageEditorSessionActionsProps {
   canFlattenVisible: boolean
   canMergeVisible: boolean
   canClearActiveDrawLayer: boolean
   hasSelectionRect: boolean
+  selectionRect: ImageEditorCropRect | null
+  cropRect: ImageEditorCropRect | null
   saving: boolean
   loading: boolean
   canSave: boolean
@@ -16,6 +20,8 @@ interface ImageEditorSessionActionsProps {
   onClearActiveDrawLayer: () => void
   onClearAllDrawLayers: () => void
   onClearSelection: () => void
+  onSelectionRectFieldChange: (field: 'x' | 'y' | 'width' | 'height', value: number) => void
+  onCropRectFieldChange: (field: 'x' | 'y' | 'width' | 'height', value: number) => void
   onCancelCrop: () => void
   onClose: () => void
   onSave: () => void
@@ -27,6 +33,8 @@ export function ImageEditorSessionActions({
   canMergeVisible,
   canClearActiveDrawLayer,
   hasSelectionRect,
+  selectionRect,
+  cropRect,
   saving,
   loading,
   canSave,
@@ -36,6 +44,8 @@ export function ImageEditorSessionActions({
   onClearActiveDrawLayer,
   onClearAllDrawLayers,
   onClearSelection,
+  onSelectionRectFieldChange,
+  onCropRectFieldChange,
   onCancelCrop,
   onClose,
   onSave,
@@ -62,9 +72,34 @@ export function ImageEditorSessionActions({
         <Button type="button" variant="secondary" onClick={onClearSelection} className="w-full justify-start" disabled={!hasSelectionRect}>
           <Square className="h-4 w-4" /> Clear selection
         </Button>
+
+        {selectionRect ? (
+          <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+            <div className="text-xs font-medium text-foreground">Selection bounds</div>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="space-y-1 text-xs text-muted-foreground">X<Input type="number" value={Math.round(selectionRect.x)} onChange={(event) => onSelectionRectFieldChange('x', Number(event.target.value) || 0)} className="h-8" /></label>
+              <label className="space-y-1 text-xs text-muted-foreground">Y<Input type="number" value={Math.round(selectionRect.y)} onChange={(event) => onSelectionRectFieldChange('y', Number(event.target.value) || 0)} className="h-8" /></label>
+              <label className="space-y-1 text-xs text-muted-foreground">W<Input type="number" min={1} value={Math.round(selectionRect.width)} onChange={(event) => onSelectionRectFieldChange('width', Number(event.target.value) || 1)} className="h-8" /></label>
+              <label className="space-y-1 text-xs text-muted-foreground">H<Input type="number" min={1} value={Math.round(selectionRect.height)} onChange={(event) => onSelectionRectFieldChange('height', Number(event.target.value) || 1)} className="h-8" /></label>
+            </div>
+          </div>
+        ) : null}
+
         <Button type="button" variant="secondary" onClick={onCancelCrop} className="w-full justify-start">
           <Crop className="h-4 w-4" /> Cancel crop
         </Button>
+
+        {cropRect ? (
+          <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+            <div className="text-xs font-medium text-foreground">Crop bounds</div>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="space-y-1 text-xs text-muted-foreground">X<Input type="number" value={Math.round(cropRect.x)} onChange={(event) => onCropRectFieldChange('x', Number(event.target.value) || 0)} className="h-8" /></label>
+              <label className="space-y-1 text-xs text-muted-foreground">Y<Input type="number" value={Math.round(cropRect.y)} onChange={(event) => onCropRectFieldChange('y', Number(event.target.value) || 0)} className="h-8" /></label>
+              <label className="space-y-1 text-xs text-muted-foreground">W<Input type="number" min={1} value={Math.round(cropRect.width)} onChange={(event) => onCropRectFieldChange('width', Number(event.target.value) || 1)} className="h-8" /></label>
+              <label className="space-y-1 text-xs text-muted-foreground">H<Input type="number" min={1} value={Math.round(cropRect.height)} onChange={(event) => onCropRectFieldChange('height', Number(event.target.value) || 1)} className="h-8" /></label>
+            </div>
+          </div>
+        ) : null}
         <div className="flex gap-2 pt-2">
           <Button type="button" variant="secondary" className="flex-1" onClick={onClose} disabled={saving}>
             Cancel

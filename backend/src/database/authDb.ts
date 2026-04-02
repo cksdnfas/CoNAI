@@ -7,7 +7,7 @@ const AUTH_DB_PATH = path.join(runtimePaths.databaseDir, 'auth.db');
 
 /**
  * Authentication Database Instance
- * Separated from user-settings.db for easy account recovery
+ * Separated from the unified user database for easy account recovery
  * Contains only: auth_credentials, sessions
  *
  * Recovery: Simply delete auth.db and restart server
@@ -18,7 +18,7 @@ export let authDb: Database.Database;
  * Initialize Authentication Database
  * - Creates database file if not exists
  * - Creates auth tables automatically
- * - Handles migration from user-settings.db if needed
+ * - Handles migration from legacy user database files if needed
  */
 export function initializeAuthDb(): void {
   try {
@@ -43,8 +43,8 @@ export function initializeAuthDb(): void {
     // Create tables
     createAuthTables();
 
-    // Migrate from user-settings.db if needed
-    migrateFromUserSettingsDb();
+    // Migrate from legacy user database files if needed
+    migrateFromLegacyUserDbs();
   } catch (error) {
     console.error('Failed to initialize authentication database:', error);
     throw error;
@@ -82,77 +82,72 @@ function createAuthTables(): void {
 }
 
 /**
- * Migrate authentication data from user-settings.db to auth.db
- * This handles existing installations that have auth data in the old location
+ * Migrate authentication data from legacy user database files to auth.db.
+ * This checks both user.db and user-settings.db so upgrades stay safe and idempotent.
  */
-function migrateFromUserSettingsDb(): void {
+function migrateFromLegacyUserDbs(): void {
   try {
-    const userSettingsDbPath = path.join(runtimePaths.databaseDir, 'user-settings.db');
+    const candidatePaths = [
+      path.join(runtimePaths.databaseDir, 'user.db'),
+      path.join(runtimePaths.databaseDir, 'user-settings.db'),
+    ];
 
-    // Check if user-settings.db exists
-    if (!fs.existsSync(userSettingsDbPath)) {
-      return; // No migration needed
-    }
+    for (const candidatePath of candidatePaths) {
+      if (!fs.existsSync(candidatePath)) {
+        continue;
+      }
 
-    // Open user-settings.db temporarily
-    const userSettingsDb = new Database(userSettingsDbPath);
+      const userSettingsDb = new Database(candidatePath);
 
-    // Check if auth_credentials table exists in user-settings.db
-    const tables = userSettingsDb.prepare(`
-      SELECT name FROM sqlite_master
-      WHERE type='table' AND name='auth_credentials'
-    `).all();
+      try {
+        const tables = userSettingsDb.prepare(`
+          SELECT name FROM sqlite_master
+          WHERE type='table' AND name='auth_credentials'
+        `).all();
 
-    if (tables.length === 0) {
-      userSettingsDb.close();
-      return; // No migration needed
-    }
-
-    // Check if there's any auth data to migrate
-    const authData = userSettingsDb.prepare('SELECT * FROM auth_credentials WHERE id = 1').get() as any;
-
-    if (!authData) {
-      userSettingsDb.close();
-      return; // No data to migrate
-    }
-
-    // Check if already migrated
-    const existingAuth = authDb.prepare('SELECT * FROM auth_credentials WHERE id = 1').get();
-    if (existingAuth) {
-      console.log('  ℹ️  Authentication data already exists in auth.db, skipping migration');
-      userSettingsDb.close();
-      return;
-    }
-
-    // Migrate auth_credentials
-    console.log('🔄 Migrating authentication data from user-settings.db to auth.db...');
-    authDb.prepare(`
-      INSERT INTO auth_credentials (id, username, password_hash, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(authData.id, authData.username, authData.password_hash, authData.created_at, authData.updated_at);
-
-    // Migrate sessions (if any)
-    const sessions = userSettingsDb.prepare('SELECT * FROM sessions').all();
-    if (sessions.length > 0) {
-      const insertSession = authDb.prepare('INSERT OR REPLACE INTO sessions (sid, sess, expire) VALUES (?, ?, ?)');
-      const insertMany = authDb.transaction((sessionList: any[]) => {
-        for (const session of sessionList) {
-          insertSession.run(session.sid, session.sess, session.expire);
+        if (tables.length === 0) {
+          continue;
         }
-      });
-      insertMany(sessions);
-      console.log(`  ✅ Migrated ${sessions.length} session(s)`);
+
+        const authData = userSettingsDb.prepare('SELECT * FROM auth_credentials WHERE id = 1').get() as any;
+        if (!authData) {
+          continue;
+        }
+
+        const existingAuth = authDb.prepare('SELECT * FROM auth_credentials WHERE id = 1').get();
+        if (existingAuth) {
+          console.log(`  ℹ️  Authentication data already exists in auth.db, skipping migration from ${path.basename(candidatePath)}`);
+          continue;
+        }
+
+        console.log(`🔄 Migrating authentication data from ${path.basename(candidatePath)} to auth.db...`);
+        authDb.prepare(`
+          INSERT INTO auth_credentials (id, username, password_hash, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(authData.id, authData.username, authData.password_hash, authData.created_at, authData.updated_at);
+
+        const sessions = userSettingsDb.prepare('SELECT * FROM sessions').all();
+        if (sessions.length > 0) {
+          const insertSession = authDb.prepare('INSERT OR REPLACE INTO sessions (sid, sess, expire) VALUES (?, ?, ?)');
+          const insertMany = authDb.transaction((sessionList: any[]) => {
+            for (const session of sessionList) {
+              insertSession.run(session.sid, session.sess, session.expire);
+            }
+          });
+          insertMany(sessions);
+          console.log(`  ✅ Migrated ${sessions.length} session(s)`);
+        }
+
+        console.log('  ✅ Authentication data migrated successfully');
+        console.log(`  🧹 Removing old authentication tables from ${path.basename(candidatePath)}...`);
+        userSettingsDb.exec('DROP TABLE IF EXISTS auth_credentials');
+        userSettingsDb.exec('DROP TABLE IF EXISTS sessions');
+        console.log('  ✅ Old authentication tables removed');
+        return;
+      } finally {
+        userSettingsDb.close();
+      }
     }
-
-    console.log('  ✅ Authentication data migrated successfully');
-
-    // Clean up old tables from user-settings.db
-    console.log('  🧹 Removing old authentication tables from user-settings.db...');
-    userSettingsDb.exec('DROP TABLE IF EXISTS auth_credentials');
-    userSettingsDb.exec('DROP TABLE IF EXISTS sessions');
-    console.log('  ✅ Old authentication tables removed');
-
-    userSettingsDb.close();
   } catch (error) {
     console.error('  ⚠️  Error during authentication data migration:', error);
     // Don't throw - allow app to continue even if migration fails
