@@ -1,38 +1,18 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import { runtimePaths } from '../config/runtimePaths';
-
-const USER_SETTINGS_DB_PATH = path.join(runtimePaths.databaseDir, 'user-settings.db');
-
-// Migration path resolution with multiple fallback strategies
-const getMigrationsPath = (): string => {
-  const possiblePaths = [
-    // Development: source files
-    path.join(__dirname, '../../src/database/migrations/user-settings'),
-    // Production: compiled in dist
-    path.join(__dirname, 'migrations/user-settings'),
-    // Portable: app/migrations/user-settings
-    path.join(process.cwd(), 'app', 'migrations', 'user-settings'),
-    // Bundle: relative to bundle location
-    path.join(path.dirname(process.argv[1] || ''), 'migrations', 'user-settings'),
-    // Alternative: one level up from compiled file
-    path.join(__dirname, '../migrations/user-settings')
-  ];
-
-  for (const p of possiblePaths) {
-    if (fs.existsSync(p)) {
-      return p;
-    }
-  }
-
-  // Default to first path even if it doesn't exist (will be handled later)
-  return possiblePaths[0];
-};
-
-const MIGRATIONS_PATH = getMigrationsPath();
+import {
+  attachMainImagesDatabase,
+  bootstrapUnifiedUserDb,
+  cleanupLegacyUserSettingsDb,
+  ensureApiGenerationHistoryTable,
+  migrateLegacyApiGenerationHistory,
+  USER_DB_PATH,
+  USER_SETTINGS_MIGRATIONS_PATH,
+} from './userSettingsBootstrap';
 
 export let userSettingsDb: Database.Database;
+
 
 /**
  * Initialize User Settings database
@@ -40,24 +20,29 @@ export let userSettingsDb: Database.Database;
 export function initializeUserSettingsDb(): void {
   try {
     // Ensure database directory exists
-    const dbDir = path.dirname(USER_SETTINGS_DB_PATH);
+    const dbDir = path.dirname(USER_DB_PATH);
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true });
     }
 
-    const isNewDatabase = !fs.existsSync(USER_SETTINGS_DB_PATH);
+    const bootstrapResult = bootstrapUnifiedUserDb();
+    const isNewDatabase = !fs.existsSync(USER_DB_PATH);
 
-    userSettingsDb = new Database(USER_SETTINGS_DB_PATH);
+    userSettingsDb = new Database(USER_DB_PATH);
 
     if (isNewDatabase) {
-      console.log('✅ New user settings database created');
+      console.log('✅ New unified user database created');
     } else {
-      console.log('✅ Connected to existing user settings database');
+      console.log('✅ Connected to existing unified user database');
     }
 
     runMigrations();
+    attachMainImagesDatabase(userSettingsDb);
+    ensureApiGenerationHistoryTable(userSettingsDb);
+    migrateLegacyApiGenerationHistory(userSettingsDb);
+    cleanupLegacyUserSettingsDb(bootstrapResult.copiedLegacyUserSettingsDb);
   } catch (error) {
-    console.error('Failed to initialize user settings database:', error);
+    console.error('Failed to initialize unified user database:', error);
     throw error;
   }
 }
@@ -1106,7 +1091,7 @@ function runMigrations(): void {
   createMigrationsTable();
 
   // Check if migrations folder exists
-  if (!fs.existsSync(MIGRATIONS_PATH)) {
+  if (!fs.existsSync(USER_SETTINGS_MIGRATIONS_PATH)) {
     console.log('📊 No migrations folder found, creating tables directly...');
     createTables();
     ensureModuleDefinitionsSupportsSystemEngine();
@@ -1115,12 +1100,12 @@ function runMigrations(): void {
     return;
   }
 
-  console.log(`📂 Using user settings migrations from: ${MIGRATIONS_PATH}`);
+  console.log(`📂 Using user settings migrations from: ${USER_SETTINGS_MIGRATIONS_PATH}`);
 
   // Get already applied migrations
   const appliedMigrations = getAppliedMigrations();
 
-  const files = fs.readdirSync(MIGRATIONS_PATH)
+  const files = fs.readdirSync(USER_SETTINGS_MIGRATIONS_PATH)
     .filter(file => file.endsWith('.sql'))
     .sort();
 
@@ -1136,7 +1121,7 @@ function runMigrations(): void {
   }
 
   for (const file of pendingMigrations) {
-    const filePath = path.join(MIGRATIONS_PATH, file);
+    const filePath = path.join(USER_SETTINGS_MIGRATIONS_PATH, file);
     const sql = fs.readFileSync(filePath, 'utf8');
 
     try {
