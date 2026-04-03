@@ -240,6 +240,58 @@ router.post('/:id/save', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
+ * Save edited image with the requested output format (permanent save)
+ * POST /api/image-editor/:id/save-output
+ * Body: { imageData: base64 string, format?: 'png' | 'jpeg' | 'webp', quality?: number }
+ */
+router.post('/:id/save-output', asyncHandler(async (req: Request, res: Response) => {
+  const imageId = parseInt(routeParam(routeParam(req.params.id)));
+
+  if (isNaN(imageId)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid image ID'
+    });
+  }
+
+  const { imageData, format = 'webp', quality = 90 } = req.body;
+
+  if (!imageData) {
+    return res.status(400).json({
+      success: false,
+      error: 'Image data is required'
+    });
+  }
+
+  if (!['png', 'jpeg', 'webp'].includes(format)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid format'
+    });
+  }
+
+  try {
+    const result = await ImageEditorService.saveAsFormat(
+      imageData,
+      imageId,
+      format,
+      quality
+    );
+
+    return res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error saving edited image with output format:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to save edited image'
+    });
+  }
+}));
+
+/**
  * Save edited image as WebP (permanent save)
  * POST /api/image-editor/:id/save-webp
  * Body: { imageData: base64 string, quality?: number (default 90) }

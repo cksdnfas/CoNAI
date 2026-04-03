@@ -13,12 +13,14 @@ import { ToggleRow } from '@/components/ui/toggle-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { triggerBlobDownload } from '@/lib/api-client'
+import { DEFAULT_IMAGE_SAVE_SETTINGS, buildImageSaveOutput, buildImageSaveOutputFileName } from '@/lib/image-save-output'
 import {
   createNaiModuleFromSnapshot,
   deleteNaiCharacterReferenceAsset,
   deleteNaiVibeAsset,
   encodeNaiVibe,
   generateNaiImage,
+  getAppSettings,
   getNaiCostEstimate,
   getNaiUserData,
   listNaiCharacterReferenceAssets,
@@ -213,6 +215,11 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     retry: false,
   })
 
+  const appSettingsQuery = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: getAppSettings,
+  })
+
   const savedVibesQuery = useQuery({
     queryKey: ['image-generation-nai-vibe-assets', naiForm.model],
     queryFn: () => listNaiVibeAssets(naiForm.model),
@@ -377,12 +384,51 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
   }
 
   const handleSaveImageEditor = async (payload: { sourceImageDataUrl: string; maskImageDataUrl?: string }) => {
+    const imageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
+
+    if (!imageSaveSettings.applyToEditorSave) {
+      setNaiForm((current) => ({
+        ...current,
+        sourceImage: buildSelectedImageDraftFromDataUrl(payload.sourceImageDataUrl, buildNaiEditedImageFileName(current.sourceImage?.fileName, 'source-image')),
+        maskImage: current.action === 'infill'
+          ? payload.maskImageDataUrl
+            ? buildSelectedImageDraftFromDataUrl(payload.maskImageDataUrl, buildNaiEditedImageFileName(current.maskImage?.fileName, 'mask-image'))
+            : undefined
+          : current.maskImage,
+      }))
+      return
+    }
+
+    const sourceOutput = await buildImageSaveOutput(
+      {
+        source: payload.sourceImageDataUrl,
+        sourceMimeType: 'image/png',
+      },
+      imageSaveSettings,
+    )
+
+    const maskOutput = payload.maskImageDataUrl
+      ? await buildImageSaveOutput(
+        {
+          source: payload.maskImageDataUrl,
+          sourceMimeType: 'image/png',
+        },
+        imageSaveSettings,
+      )
+      : null
+
     setNaiForm((current) => ({
       ...current,
-      sourceImage: buildSelectedImageDraftFromDataUrl(payload.sourceImageDataUrl, buildNaiEditedImageFileName(current.sourceImage?.fileName, 'source-image')),
+      sourceImage: buildSelectedImageDraftFromDataUrl(
+        sourceOutput.dataUrl,
+        buildImageSaveOutputFileName(buildNaiEditedImageFileName(current.sourceImage?.fileName, 'source-image'), sourceOutput.format),
+      ),
       maskImage: current.action === 'infill'
-        ? payload.maskImageDataUrl
-          ? buildSelectedImageDraftFromDataUrl(payload.maskImageDataUrl, buildNaiEditedImageFileName(current.maskImage?.fileName, 'mask-image'))
+        ? maskOutput
+          ? buildSelectedImageDraftFromDataUrl(
+            maskOutput.dataUrl,
+            buildImageSaveOutputFileName(buildNaiEditedImageFileName(current.maskImage?.fileName, 'mask-image'), maskOutput.format),
+          )
           : undefined
         : current.maskImage,
     }))

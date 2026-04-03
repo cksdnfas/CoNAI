@@ -7,7 +7,7 @@ import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../models/Image/ImageFileModel';
 import { ImageUploadService } from './imageUploadService';
 import { WebPConversionService } from './webpConversionService';
-import { ImageMetadataWriteService } from './imageMetadataWriteService';
+import { ImageMetadataWriteService, type ImageOutputFormat } from './imageMetadataWriteService';
 import { db } from '../database/init';
 
 export interface EditResult {
@@ -239,12 +239,12 @@ export class ImageEditorService {
   }
 
   /**
-   * Save edited image as WebP file to temp/canvas directory
-   * Creates a new file with original name + _edited suffix
+   * Save edited image as a permanent canvas asset using the requested output format.
    */
-  static async saveAsWebP(
+  static async saveAsFormat(
     imageData: string,
     imageId: number,
+    format: ImageOutputFormat = 'webp',
     quality: number = 90
   ): Promise<{
     success: boolean;
@@ -254,59 +254,62 @@ export class ImageEditorService {
     height: number;
     fileSize: number;
   }> {
-    // Get original image info
     const imageFile = ImageFileModel.findById(imageId);
     if (!imageFile) {
       throw new Error(`Image file not found: ${imageId}`);
     }
 
-    // Convert base64 to Buffer
     const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '');
     const imageBuffer = Buffer.from(base64Data, 'base64');
 
-    // Get original file info for naming
     const originalPath = imageFile.original_file_path;
     const originalName = path.basename(originalPath, path.extname(originalPath));
-
-    // Generate unique filename with timestamp
     const timestamp = Date.now();
     const tempId = `edited_${imageId}_${timestamp}`;
-    const newFileName = `${originalName}_edited_${timestamp}.webp`;
-
-    // Save to the managed canvas directory instead of the original directory
+    const extension = format === 'jpeg' ? 'jpg' : format;
+    const newFileName = `${originalName}_edited_${timestamp}.${extension}`;
     const canvasDir = runtimePaths.canvasDir;
 
-    // Ensure canvas directory exists
     await fs.promises.mkdir(canvasDir, { recursive: true });
 
     const newFilePath = path.join(canvasDir, newFileName);
 
-    const conversion = await WebPConversionService.convertBufferToWebPBuffer(imageBuffer, {
+    const rewritten = await ImageMetadataWriteService.writeBufferAsFormatBuffer(imageBuffer, {
+      format,
       quality,
       sourcePathForMetadata: originalPath,
       originalFileName: path.basename(originalPath),
-      mimeType: imageFile.mime_type || 'image/webp',
+      mimeType: imageFile.mime_type || `image/${format}`,
     });
 
-    // Write to file
-    await fs.promises.writeFile(newFilePath, conversion.buffer);
+    await fs.promises.writeFile(newFilePath, rewritten.buffer);
 
-    // Register with TempImageService for cleanup tracking
     TempImageService.registerTempFile(
       tempId,
       imageId,
       newFilePath,
       undefined,
-      60 // 60 minutes expiration
+      60
     );
 
     return {
       success: true,
       filePath: newFilePath,
       tempId,
-      width: conversion.info.width || 0,
-      height: conversion.info.height || 0,
-      fileSize: conversion.buffer.length
+      width: rewritten.info.width || 0,
+      height: rewritten.info.height || 0,
+      fileSize: rewritten.buffer.length,
     };
+  }
+
+  /**
+   * Save edited image as WebP file to temp/canvas directory.
+   */
+  static async saveAsWebP(
+    imageData: string,
+    imageId: number,
+    quality: number = 90
+  ) {
+    return this.saveAsFormat(imageData, imageId, 'webp', quality);
   }
 }

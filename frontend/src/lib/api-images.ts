@@ -1,6 +1,6 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload, triggerBrowserDownload } from '@/lib/api-client'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
-import type { SimilaritySortBy, SimilaritySortOrder } from '@/types/settings'
+import type { ImageSaveFormat, SimilaritySortBy, SimilaritySortOrder } from '@/types/settings'
 import type { PromptSimilarityQueryResult, SimilarityQueryResult } from '@/types/similarity'
 import type { AutoTestKaloscopeResult, AutoTestTaggerResult } from './api-settings'
 
@@ -128,15 +128,23 @@ export interface SaveEditedImageResult {
 }
 
 /** Save one edited image into the managed save/canvas workspace as a reusable asset. */
-export async function saveEditedImageToCanvas(imageId: number, imageData: string, quality = 90): Promise<SaveEditedImageResult> {
-  const response = await fetchJson<ApiResponse<Omit<SaveEditedImageResult, 'fileName' | 'savedUrl'>>>(`/api/image-editor/${imageId}/save-webp`, {
+export async function saveEditedImageToCanvas(
+  imageId: number,
+  imageData: string,
+  options?: {
+    quality?: number
+    format?: Exclude<ImageSaveFormat, 'original'>
+  },
+): Promise<SaveEditedImageResult> {
+  const response = await fetchJson<ApiResponse<Omit<SaveEditedImageResult, 'fileName' | 'savedUrl'>>>(`/api/image-editor/${imageId}/save-output`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       imageData,
-      quality,
+      quality: options?.quality ?? 90,
+      format: options?.format ?? 'webp',
     }),
   })
 
