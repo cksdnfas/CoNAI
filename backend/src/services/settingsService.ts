@@ -220,6 +220,7 @@ export class SettingsService {
         applyToGenerationAttachments: true,
         applyToEditorSave: true,
         applyToCanvasSave: true,
+        applyToUpload: true,
       },
     };
   }

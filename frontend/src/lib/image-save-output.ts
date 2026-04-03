@@ -10,6 +10,7 @@ export const DEFAULT_IMAGE_SAVE_SETTINGS: ImageSaveSettings = {
   applyToGenerationAttachments: true,
   applyToEditorSave: true,
   applyToCanvasSave: true,
+  applyToUpload: true,
 }
 
 export type ImageSaveOutputInput = {
@@ -38,6 +39,22 @@ export type ImageSaveSourceInfo = {
   height: number
   mimeType: string | null
   fileSize: number | null
+}
+
+/** Return true when one file should bypass image-save processing and stay original. */
+export function shouldBypassImageSaveProcessing(file: Pick<File, 'type' | 'name'>) {
+  const mimeType = file.type.toLowerCase()
+  const lowerName = file.name.toLowerCase()
+
+  if (mimeType.startsWith('video/')) {
+    return true
+  }
+
+  if (mimeType === 'image/gif') {
+    return true
+  }
+
+  return lowerName.endsWith('.gif') || lowerName.endsWith('.apng')
 }
 
 /** Read one Blob into a data URL for downstream image draft state. */

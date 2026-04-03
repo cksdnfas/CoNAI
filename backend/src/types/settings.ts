@@ -166,6 +166,7 @@ export interface ImageSaveSettings {
   applyToGenerationAttachments: boolean;
   applyToEditorSave: boolean;
   applyToCanvasSave: boolean;
+  applyToUpload: boolean;
 }
 
 export interface AppSettings {

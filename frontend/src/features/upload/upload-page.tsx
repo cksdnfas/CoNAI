@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { Download, Image as ImageIcon } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
 import { PageHeader } from '@/components/common/page-header'
@@ -17,17 +19,26 @@ import {
   extractImageKaloscopePreview,
   extractImageMetadataPreview,
   extractImageTaggerPreview,
+  getAppSettings,
   uploadMultipleImages,
   type AutoTestKaloscopeResult,
   type AutoTestTaggerResult,
   type UploadBatchResult,
   type UploadTransferProgress,
 } from '@/lib/api'
+import {
+  DEFAULT_IMAGE_SAVE_SETTINGS,
+  buildImageSaveOutput,
+  loadImageSaveSourceInfo,
+  shouldBypassImageSaveProcessing,
+  type ImageSaveSourceInfo,
+} from '@/lib/image-save-output'
 import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
 import { getThemeToneTextStyle } from '@/lib/theme-tones'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
+import type { ImageSaveSettings } from '@/types/settings'
 import { MetadataRewriteForm } from '../metadata/components/metadata-rewrite-form'
 import { buildMetadataRewritePatch, useMetadataRewriteDraft } from '../metadata/use-metadata-rewrite-draft'
 import { formatBytes, getImageGenerationParamItems } from '../images/components/detail/image-detail-utils'
@@ -36,6 +47,12 @@ import { useDropZoneState } from './use-drop-zone-state'
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/tiff,image/bmp,image/gif'
 const UPLOAD_ACCEPT = `${IMAGE_ACCEPT},video/mp4,video/webm,video/quicktime,video/x-msvideo,video/x-matroska`
 const MAX_VISIBLE_FILES = 6
+
+type PendingUploadSaveState = {
+  files: File[]
+  processableFiles: File[]
+  bypassedFiles: File[]
+}
 
 type ExtractAction = 'prompt' | 'tagger' | 'kaloscope' | 'all'
 type ManualExtractAction = 'all' | 'tagger' | 'kaloscope'
@@ -102,6 +119,9 @@ export function UploadPage() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState<UploadTransferProgress | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadImageSaveOptions, setUploadImageSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
+  const [pendingUploadSave, setPendingUploadSave] = useState<PendingUploadSaveState | null>(null)
+  const [pendingUploadSaveInfo, setPendingUploadSaveInfo] = useState<ImageSaveSourceInfo | null>(null)
 
   const [extractFile, setExtractFile] = useState<File | null>(null)
   const [extractPreviewUrl, setExtractPreviewUrl] = useState<string | null>(null)
@@ -116,6 +136,13 @@ export function UploadPage() {
   const [isRewritePanelOpen, setIsRewritePanelOpen] = useState(false)
   const { draft: rewriteDraft, patchDraft: patchRewriteDraft } = useMetadataRewriteDraft(extractFile, extractResult)
   const isDesktopPageLayout = useDesktopPageLayout()
+
+  const appSettingsQuery = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: getAppSettings,
+  })
+
+  const effectiveImageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
 
   useEffect(() => {
     if (!extractFile) {
@@ -186,24 +213,45 @@ export function UploadPage() {
     event.target.value = ''
   }
 
-  const handleUpload = async () => {
-    if (uploadFiles.length === 0 || isUploading) {
-      return
-    }
+  const processUploadFilesWithImageSave = async (files: File[], options: ImageSaveSettings) => {
+    const convertedFiles = await Promise.all(files.map(async (file) => {
+      if (shouldBypassImageSaveProcessing(file)) {
+        return file
+      }
 
+      const output = await buildImageSaveOutput(
+        {
+          source: file,
+          sourceMimeType: file.type,
+        },
+        options,
+      )
+
+      const extension = output.format === 'jpeg' ? 'jpg' : output.format
+      const nextName = `${file.name.replace(/\.[^.]+$/, '')}.${extension}`
+      return new File([output.blob], nextName, {
+        type: output.mimeType,
+        lastModified: file.lastModified,
+      })
+    }))
+
+    return convertedFiles
+  }
+
+  const runUpload = async (files: File[]) => {
     setIsUploading(true)
     setUploadError(null)
     setUploadResult(null)
-    setUploadProgress({ loaded: 0, total: uploadTotalSize || null, percent: 0 })
+    setUploadProgress({ loaded: 0, total: files.reduce((sum, file) => sum + file.size, 0) || null, percent: 0 })
 
     try {
-      const result = await uploadMultipleImages(uploadFiles, (progress) => {
+      const result = await uploadMultipleImages(files, (progress) => {
         setUploadProgress(progress)
       })
       setUploadResult(result)
       setUploadProgress((current) => ({
-        loaded: current?.total ?? uploadTotalSize,
-        total: current?.total ?? uploadTotalSize,
+        loaded: current?.total ?? files.reduce((sum, file) => sum + file.size, 0),
+        total: current?.total ?? files.reduce((sum, file) => sum + file.size, 0),
         percent: 100,
       }))
       showSnackbar({
@@ -217,6 +265,54 @@ export function UploadPage() {
     } finally {
       setIsUploading(false)
     }
+  }
+
+  const handleConfirmUploadSave = async () => {
+    if (!pendingUploadSave) {
+      return
+    }
+
+    try {
+      const nextFiles = await processUploadFilesWithImageSave(pendingUploadSave.files, uploadImageSaveOptions)
+      setPendingUploadSave(null)
+      setPendingUploadSaveInfo(null)
+      await runUpload(nextFiles)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '업로드용 이미지 저장 옵션을 적용하지 못했어.'
+      setUploadError(message)
+      showSnackbar({ message, tone: 'error' })
+    }
+  }
+
+  const handleUpload = async () => {
+    if (uploadFiles.length === 0 || isUploading) {
+      return
+    }
+
+    const processableFiles = uploadFiles.filter((file) => !shouldBypassImageSaveProcessing(file))
+    const bypassedFiles = uploadFiles.filter((file) => shouldBypassImageSaveProcessing(file))
+
+    if (!effectiveImageSaveSettings.applyToUpload || processableFiles.length === 0) {
+      await runUpload(uploadFiles)
+      return
+    }
+
+    if (effectiveImageSaveSettings.alwaysShowDialog) {
+      setUploadImageSaveOptions(effectiveImageSaveSettings)
+      setPendingUploadSave({
+        files: uploadFiles,
+        processableFiles,
+        bypassedFiles,
+      })
+      setPendingUploadSaveInfo(await loadImageSaveSourceInfo({
+        source: processableFiles[0],
+        sourceMimeType: processableFiles[0].type,
+      }))
+      return
+    }
+
+    const nextFiles = await processUploadFilesWithImageSave(uploadFiles, effectiveImageSaveSettings)
+    await runUpload(nextFiles)
   }
 
   useEffect(() => {
@@ -681,6 +777,22 @@ export function UploadPage() {
           </Card>
         </section>
       </div>
+
+      <ImageSaveOptionsModal
+        open={pendingUploadSave !== null}
+        title="Image Save"
+        options={uploadImageSaveOptions}
+        sourceInfo={pendingUploadSaveInfo}
+        isSaving={isUploading}
+        onClose={() => {
+          if (!isUploading) {
+            setPendingUploadSave(null)
+            setPendingUploadSaveInfo(null)
+          }
+        }}
+        onOptionsChange={(patch) => setUploadImageSaveOptions((current) => ({ ...current, ...patch }))}
+        onConfirm={() => void handleConfirmUploadSave()}
+      />
     </div>
   )
 }

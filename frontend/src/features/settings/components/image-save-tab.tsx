@@ -126,6 +126,15 @@ export function ImageSaveTab({ imageSaveDraft, onPatchImageSave, onSave, isSavin
                     />
                     Apply to canvas save
                   </SettingsToggleRow>
+
+                  <SettingsToggleRow>
+                    <input
+                      type="checkbox"
+                      checked={imageSaveDraft.applyToUpload}
+                      onChange={(event) => onPatchImageSave({ applyToUpload: event.target.checked })}
+                    />
+                    Apply to upload
+                  </SettingsToggleRow>
                 </>
               ) : (
                 <Skeleton className="h-64 w-full rounded-sm md:col-span-2" />

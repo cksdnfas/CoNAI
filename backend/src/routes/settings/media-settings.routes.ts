@@ -274,7 +274,7 @@ router.put(
       }
     }
 
-    for (const field of ['resizeEnabled', 'alwaysShowDialog', 'applyToGenerationAttachments', 'applyToEditorSave', 'applyToCanvasSave'] as const) {
+    for (const field of ['resizeEnabled', 'alwaysShowDialog', 'applyToGenerationAttachments', 'applyToEditorSave', 'applyToCanvasSave', 'applyToUpload'] as const) {
       const value = imageSaveSettings[field];
       if (value !== undefined && typeof value !== 'boolean') {
         res.status(400).json({
