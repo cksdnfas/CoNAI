@@ -112,7 +112,7 @@ export function NaiVibesSection({
           <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-center gap-2">
-                <div className="text-sm font-medium text-foreground">Saved Vibes</div>
+                <div className="text-sm font-medium text-foreground">Save Image</div>
                 <Badge variant="outline">{savedVibes.length}</Badge>
               </div>
               <div className="w-full sm:w-72 md:w-80">
