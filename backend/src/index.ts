@@ -45,7 +45,7 @@ function ensureEnvFileExists(envPath: string): void {
 
 const rootEnvPath = getEnvPath();
 ensureEnvFileExists(rootEnvPath);
-dotenv.config({ path: rootEnvPath });
+dotenv.config({ path: rootEnvPath, quiet: true });
 console.log(`[Config] Initialized with .env from: ${rootEnvPath}`);
 
 

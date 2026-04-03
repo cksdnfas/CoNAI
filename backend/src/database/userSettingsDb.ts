@@ -1092,7 +1092,7 @@ function runMigrations(): void {
 
   // Check if migrations folder exists
   if (!fs.existsSync(USER_SETTINGS_MIGRATIONS_PATH)) {
-    console.log('📊 No migrations folder found, creating tables directly...');
+    console.log('ℹ️  User settings SQL migrations are not packaged here; using built-in schema bootstrap.');
     createTables();
     ensureModuleDefinitionsSupportsSystemEngine();
     ensureGraphWorkflowsAllowDuplicateNames();

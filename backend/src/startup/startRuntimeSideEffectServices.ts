@@ -49,8 +49,12 @@ export async function startRuntimeSideEffectServices(isSafeSmokeMode: boolean) {
   console.log('✅ Auto-scan scheduler started successfully')
 
   console.log('🤖 Starting auto-tag scheduler...')
-  autoTagScheduler.start()
-  console.log('✅ Auto-tag scheduler started successfully')
+  const autoTagSchedulerStarted = autoTagScheduler.start()
+  if (autoTagSchedulerStarted) {
+    console.log('✅ Auto-tag scheduler started successfully')
+  } else {
+    console.log('⏭️  Auto-tag scheduler skipped (all auto-tag processors disabled)')
+  }
 
   try {
     console.log('🧹 Starting temp image cleanup scheduler...')

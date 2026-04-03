@@ -24,7 +24,7 @@ const getEnvPath = () => {
   return path.resolve(__dirname, '../../../.env');
 };
 
-dotenv.config({ path: getEnvPath() });
+dotenv.config({ path: getEnvPath(), quiet: true });
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createMcpServer } from './server';

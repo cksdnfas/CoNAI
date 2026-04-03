@@ -70,8 +70,6 @@ export class TaggerDaemon {
   constructor() {
     this.scriptPath = this.findScriptPath();
     this.pythonPath = this.getPythonPath();
-    console.log('[TaggerDaemon] Initialized with script:', this.scriptPath);
-    console.log('[TaggerDaemon] Python path:', this.pythonPath);
   }
 
   /**

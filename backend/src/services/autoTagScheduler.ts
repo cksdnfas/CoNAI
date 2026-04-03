@@ -54,16 +54,15 @@ export class AutoTagScheduler {
     return capabilities.taggerAutoEnabled || capabilities.kaloscopeAutoEnabled;
   }
 
-  start(): void {
+  start(): boolean {
     if (this.isRunning) {
       console.log('[AutoTagScheduler] Already running');
-      return;
+      return true;
     }
 
     const capabilities = this.getCapabilities();
     if (!this.hasEnabledProcessor(capabilities)) {
-      console.log('[AutoTagScheduler] Auto-tagging is disabled in settings (tagger/kaloscope)');
-      return;
+      return false;
     }
 
     const pollingIntervalMs = this.getPollingIntervalMs();
@@ -83,6 +82,8 @@ export class AutoTagScheduler {
     this.pollingTimer = setInterval(() => {
       void this.processPendingMedia();
     }, pollingIntervalMs);
+
+    return true;
   }
 
   stop(): void {
