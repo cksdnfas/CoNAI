@@ -50,7 +50,6 @@ build({
     'canvas',
     'ffmpeg-static',
     'ffprobe-static',
-    'blake2',
     'argon2'
   ],
   minify: false,  // Disabled for better error messages

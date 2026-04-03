@@ -157,7 +157,6 @@ const safeRemove = async (dirPath) => {
         "sharp": "^0.33.0",
         "better-sqlite3": "^9.4.0",
         "argon2": "^0.44.0",
-        "blake2": "^5.0.0",
         "ffmpeg-static": "^5.2.0",
         "ffprobe-static": "^3.1.0"
       },
@@ -196,7 +195,7 @@ COPY package.json ./
 
 # Install Node dependencies
 RUN npm install --production --no-package-lock && \\
-    npm rebuild sharp better-sqlite3 argon2 blake2
+    npm rebuild sharp better-sqlite3 argon2
 
 # ============================================================================
 # Runtime Stage
@@ -263,7 +262,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
 COPY package.json ./
 
 RUN npm install --production --no-package-lock && \\
-    npm rebuild sharp better-sqlite3 argon2 blake2
+    npm rebuild sharp better-sqlite3 argon2
 
 # ============================================================================
 # Runtime Stage (CUDA)
