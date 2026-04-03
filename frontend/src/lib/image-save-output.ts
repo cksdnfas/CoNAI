@@ -11,6 +11,7 @@ export const DEFAULT_IMAGE_SAVE_SETTINGS: ImageSaveSettings = {
   applyToEditorSave: true,
   applyToCanvasSave: true,
   applyToUpload: true,
+  applyToWorkflowOutputs: true,
 }
 
 export type ImageSaveOutputInput = {

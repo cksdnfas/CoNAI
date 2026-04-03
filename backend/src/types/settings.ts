@@ -167,6 +167,7 @@ export interface ImageSaveSettings {
   applyToEditorSave: boolean;
   applyToCanvasSave: boolean;
   applyToUpload: boolean;
+  applyToWorkflowOutputs: boolean;
 }
 
 export interface AppSettings {

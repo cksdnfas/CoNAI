@@ -70,7 +70,11 @@ export async function executeComfyModule(context: ExecutionContext, node: GraphW
 
   const imageBuffer = await fs.promises.readFile(firstPath)
   const imageDataUrl = bufferToDataUrl(imageBuffer)
-  const storagePath = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer)
+  const storagePath = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
+    mimeType: 'image/png',
+    sourcePathForMetadata: firstPath,
+    originalFileName: firstPath.split(/[/\\]/).pop(),
+  })
 
   const metadataValue = {
     workflow_id: templateDefaults.workflow_id,

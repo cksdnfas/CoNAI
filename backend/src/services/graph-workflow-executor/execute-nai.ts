@@ -54,7 +54,10 @@ export async function executeNaiModule(context: ExecutionContext, node: GraphWor
 
   const imageBuffer = firstEntry.getData()
   const imageDataUrl = bufferToDataUrl(imageBuffer)
-  const storagePath = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer)
+  const storagePath = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
+    mimeType: 'image/png',
+    originalFileName: firstEntry.entryName,
+  })
 
   const metadataValue = {
     prompt: metadata.prompt,

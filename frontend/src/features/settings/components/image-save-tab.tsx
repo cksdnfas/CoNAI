@@ -160,6 +160,15 @@ export function ImageSaveTab({ imageSaveDraft, onPatchImageSave, onSave, isSavin
                     />
                     업로드에 적용
                   </SettingsToggleRow>
+
+                  <SettingsToggleRow>
+                    <input
+                      type="checkbox"
+                      checked={imageSaveDraft.applyToWorkflowOutputs}
+                      onChange={(event) => onPatchImageSave({ applyToWorkflowOutputs: event.target.checked })}
+                    />
+                    워크플로 출력에 적용
+                  </SettingsToggleRow>
                 </>
               ) : (
                 <Skeleton className="h-64 w-full rounded-sm md:col-span-2" />

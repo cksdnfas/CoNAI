@@ -2,6 +2,8 @@ import fs from 'fs'
 import path from 'path'
 import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact'
 import { runtimePaths } from '../../config/runtimePaths'
+import { ImageMetadataWriteService, type ImageOutputFormat } from '../imageMetadataWriteService'
+import { settingsService } from '../settingsService'
 import {
   type GraphExecutionArtifactRecord,
   type GraphWorkflowEdge,
@@ -17,13 +19,92 @@ import {
   type RuntimeArtifact,
 } from './shared'
 
+function resolveArtifactOutputFormat(requestedFormat: 'original' | ImageOutputFormat, mimeType?: string | null, sourcePathForMetadata?: string | null): ImageOutputFormat {
+  if (requestedFormat !== 'original') {
+    return requestedFormat
+  }
+
+  const normalizedMime = (mimeType || '').toLowerCase()
+  const extension = sourcePathForMetadata ? path.extname(sourcePathForMetadata).toLowerCase() : ''
+
+  if (normalizedMime === 'image/png' || extension === '.png') {
+    return 'png'
+  }
+
+  if (normalizedMime === 'image/jpeg' || extension === '.jpg' || extension === '.jpeg') {
+    return 'jpeg'
+  }
+
+  if (normalizedMime === 'image/webp' || extension === '.webp') {
+    return 'webp'
+  }
+
+  return 'png'
+}
+
+function buildArtifactMimeType(format: ImageOutputFormat) {
+  if (format === 'png') {
+    return 'image/png'
+  }
+  if (format === 'jpeg') {
+    return 'image/jpeg'
+  }
+  return 'image/webp'
+}
+
+function shouldBypassArtifactTransform(mimeType?: string | null, sourcePathForMetadata?: string | null) {
+  const normalizedMime = (mimeType || '').toLowerCase()
+  const extension = sourcePathForMetadata ? path.extname(sourcePathForMetadata).toLowerCase() : ''
+  return normalizedMime === 'image/gif' || extension === '.gif' || extension === '.apng'
+}
+
+type SaveArtifactBufferOptions = {
+  mimeType?: string
+  sourcePathForMetadata?: string
+  originalFileName?: string
+}
+
 /** Persist a binary graph artifact into temp storage and the artifact table. */
-export async function saveArtifactBuffer(executionId: number, nodeId: string, portKey: string, artifactType: ModulePortDataType | 'file', buffer: Buffer) {
+export async function saveArtifactBuffer(
+  executionId: number,
+  nodeId: string,
+  portKey: string,
+  artifactType: ModulePortDataType | 'file',
+  buffer: Buffer,
+  options?: SaveArtifactBufferOptions,
+) {
   const executionDir = path.join(runtimePaths.tempDir, 'graph-executions', String(executionId))
   await fs.promises.mkdir(executionDir, { recursive: true })
 
-  const filePath = path.join(executionDir, `${sanitizeFileSegment(nodeId)}_${sanitizeFileSegment(portKey)}_${Date.now()}.png`)
-  await fs.promises.writeFile(filePath, buffer)
+  const imageSaveSettings = settingsService.loadSettings().imageSave
+  const shouldTransform = (artifactType === 'image' || artifactType === 'mask')
+    && imageSaveSettings.applyToWorkflowOutputs
+    && !shouldBypassArtifactTransform(options?.mimeType, options?.sourcePathForMetadata)
+
+  const outputFormat = shouldTransform
+    ? resolveArtifactOutputFormat(imageSaveSettings.defaultFormat, options?.mimeType, options?.sourcePathForMetadata)
+    : null
+  const extension = outputFormat ? (outputFormat === 'jpeg' ? 'jpg' : outputFormat) : (path.extname(options?.sourcePathForMetadata || '') || 'png').replace(/^\./, '')
+  const filePath = path.join(executionDir, `${sanitizeFileSegment(nodeId)}_${sanitizeFileSegment(portKey)}_${Date.now()}.${extension}`)
+
+  let outputBuffer = buffer
+  let outputMimeType = options?.mimeType || (outputFormat ? buildArtifactMimeType(outputFormat) : 'image/png')
+
+  if (shouldTransform && outputFormat) {
+    const rewritten = await ImageMetadataWriteService.writeBufferAsFormatBuffer(buffer, {
+      format: outputFormat,
+      quality: imageSaveSettings.quality,
+      sourcePathForMetadata: options?.sourcePathForMetadata,
+      originalFileName: options?.originalFileName,
+      mimeType: options?.mimeType,
+      maxWidth: imageSaveSettings.resizeEnabled ? imageSaveSettings.maxWidth : undefined,
+      maxHeight: imageSaveSettings.resizeEnabled ? imageSaveSettings.maxHeight : undefined,
+    })
+    outputBuffer = rewritten.buffer
+    outputMimeType = buildArtifactMimeType(outputFormat)
+  }
+
+  await fs.promises.writeFile(filePath, outputBuffer)
 
   GraphExecutionArtifactModel.create({
     execution_id: executionId,
@@ -31,7 +112,7 @@ export async function saveArtifactBuffer(executionId: number, nodeId: string, po
     port_key: portKey,
     artifact_type: artifactType,
     storage_path: filePath,
-    metadata: JSON.stringify({ size: buffer.length }),
+    metadata: JSON.stringify({ size: outputBuffer.length, mimeType: outputMimeType }),
   })
 
   return filePath
@@ -115,7 +196,12 @@ async function loadRuntimeArtifactFromRecord(artifact: GraphExecutionArtifactRec
       const buffer = await fs.promises.readFile(artifact.storage_path)
       return {
         type: artifact.artifact_type,
-        value: bufferToDataUrl(buffer),
+        value: bufferToDataUrl(
+          buffer,
+          parsedMetadata && typeof parsedMetadata === 'object' && !Array.isArray(parsedMetadata) && typeof parsedMetadata.mimeType === 'string'
+            ? parsedMetadata.mimeType
+            : 'image/png',
+        ),
         storagePath: artifact.storage_path,
         metadata: parsedMetadata && typeof parsedMetadata === 'object' && !Array.isArray(parsedMetadata) ? parsedMetadata : undefined,
       }

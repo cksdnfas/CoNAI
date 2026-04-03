@@ -1,4 +1,5 @@
 import fs from 'fs'
+import path from 'path'
 import { ImageFileModel } from '../../models/Image/ImageFileModel'
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
@@ -159,7 +160,11 @@ export async function executeLoadImageFromReference(
   const imageBuffer = await fs.promises.readFile(activeFile.original_file_path)
   const mimeType = activeFile.mime_type || 'image/png'
   const imageDataUrl = bufferToDataUrl(imageBuffer, mimeType)
-  const storagePath = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer)
+  const storagePath = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
+    mimeType,
+    sourcePathForMetadata: activeFile.original_file_path,
+    originalFileName: path.basename(activeFile.original_file_path),
+  })
 
   const referenceValue = {
     composite_hash: metadata.composite_hash,
@@ -224,7 +229,11 @@ export async function executeRandomImageFromLibrary(
   const imageBuffer = await fs.promises.readFile(activeFile.original_file_path)
   const mimeType = activeFile.mime_type || 'image/png'
   const imageDataUrl = bufferToDataUrl(imageBuffer, mimeType)
-  const storagePath = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer)
+  const storagePath = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
+    mimeType,
+    sourcePathForMetadata: activeFile.original_file_path,
+    originalFileName: path.basename(activeFile.original_file_path),
+  })
 
   const referenceValue = {
     composite_hash: metadata.composite_hash,

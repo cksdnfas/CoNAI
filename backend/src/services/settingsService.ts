@@ -221,6 +221,7 @@ export class SettingsService {
         applyToEditorSave: true,
         applyToCanvasSave: true,
         applyToUpload: true,
+        applyToWorkflowOutputs: true,
       },
     };
   }
