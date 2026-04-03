@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Plus, Save, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
+import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -13,7 +14,7 @@ import { ToggleRow } from '@/components/ui/toggle-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { triggerBlobDownload } from '@/lib/api-client'
-import { DEFAULT_IMAGE_SAVE_SETTINGS, buildImageSaveOutput, buildImageSaveOutputFileName } from '@/lib/image-save-output'
+import { DEFAULT_IMAGE_SAVE_SETTINGS, buildImageSaveOutput, buildImageSaveOutputFileName, loadImageSaveSourceInfo, type ImageSaveSourceInfo } from '@/lib/image-save-output'
 import {
   createNaiModuleFromSnapshot,
   deleteNaiCharacterReferenceAsset,
@@ -78,6 +79,7 @@ import { NaiModuleSaveModal } from './nai-module-save-modal'
 import { PromptToggleField } from './prompt-toggle-field'
 import { decodeNaiBase64Png, deriveNaiAssetLabel, buildNaiEditedImageFileName } from './nai-generation-panel-helpers'
 import { NaiActionSection, NaiConnectionHeader, NaiPromptSection } from './nai-generation-panel-sections'
+import type { ImageSaveSettings } from '@/types/settings'
 
 const ImageEditorModal = lazy(() => import('@/features/image-editor/image-editor-modal'))
 
@@ -200,6 +202,9 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
   const [assetSaveDescription, setAssetSaveDescription] = useState('')
   const [isUpscaling, setIsUpscaling] = useState(false)
   const [isImageEditorOpen, setIsImageEditorOpen] = useState(false)
+  const [pendingImageEditorSave, setPendingImageEditorSave] = useState<{ sourceImageDataUrl: string; maskImageDataUrl?: string } | null>(null)
+  const [pendingImageEditorSaveInfo, setPendingImageEditorSaveInfo] = useState<ImageSaveSourceInfo | null>(null)
+  const [imageEditorSaveOptions, setImageEditorSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
   const [encodingVibeIndex, setEncodingVibeIndex] = useState<number | null>(null)
   const [selectedCharacterIndex, setSelectedCharacterIndex] = useState<number | null>(null)
   const [savedVibeSearch, setSavedVibeSearch] = useState('')
@@ -383,9 +388,10 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
     setIsImageEditorOpen(true)
   }
 
-  const handleSaveImageEditor = async (payload: { sourceImageDataUrl: string; maskImageDataUrl?: string }) => {
-    const imageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
-
+  const applyImageEditorSaveOutput = async (
+    payload: { sourceImageDataUrl: string; maskImageDataUrl?: string },
+    imageSaveSettings: ImageSaveSettings,
+  ) => {
     if (!imageSaveSettings.applyToEditorSave) {
       setNaiForm((current) => ({
         ...current,
@@ -432,6 +438,29 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
           : undefined
         : current.maskImage,
     }))
+  }
+
+  const handleSaveImageEditor = async (payload: { sourceImageDataUrl: string; maskImageDataUrl?: string }) => {
+    const imageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
+
+    if (imageSaveSettings.applyToEditorSave && imageSaveSettings.alwaysShowDialog) {
+      setImageEditorSaveOptions(imageSaveSettings)
+      setPendingImageEditorSaveInfo(await loadImageSaveSourceInfo({ source: payload.sourceImageDataUrl, sourceMimeType: 'image/png' }))
+      setPendingImageEditorSave(payload)
+      return
+    }
+
+    await applyImageEditorSaveOutput(payload, imageSaveSettings)
+  }
+
+  const handleConfirmImageEditorSave = async () => {
+    if (!pendingImageEditorSave) {
+      return
+    }
+
+    await applyImageEditorSaveOutput(pendingImageEditorSave, imageEditorSaveOptions)
+    setPendingImageEditorSave(null)
+    setPendingImageEditorSaveInfo(null)
   }
 
   const handleAddCharacterPrompt = () => {
@@ -1428,6 +1457,20 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
           />
         </Suspense>
       ) : null}
+
+      <ImageSaveOptionsModal
+        open={pendingImageEditorSave !== null}
+        title="Image Save"
+        options={imageEditorSaveOptions}
+        sourceInfo={pendingImageEditorSaveInfo}
+        isSaving={false}
+        onClose={() => {
+          setPendingImageEditorSave(null)
+          setPendingImageEditorSaveInfo(null)
+        }}
+        onOptionsChange={(patch) => setImageEditorSaveOptions((current) => ({ ...current, ...patch }))}
+        onConfirm={() => void handleConfirmImageEditorSave()}
+      />
     </>
   )
 }
