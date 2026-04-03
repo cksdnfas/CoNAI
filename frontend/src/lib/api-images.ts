@@ -284,9 +284,37 @@ function uploadFormDataWithProgress<T>(path: string, formData: FormData, onProgr
   })
 }
 
-export async function uploadMultipleImages(files: File[], onProgress?: (progress: UploadTransferProgress) => void) {
+export async function uploadMultipleImages(
+  files: File[],
+  onProgress?: (progress: UploadTransferProgress) => void,
+  imageSaveOptions?: {
+    enabled?: boolean
+    format?: 'original' | 'png' | 'jpeg' | 'webp'
+    quality?: number
+    resizeEnabled?: boolean
+    maxWidth?: number
+    maxHeight?: number
+  },
+) {
   const formData = new FormData()
   files.forEach((file) => formData.append('images', file))
+
+  if (imageSaveOptions) {
+    formData.append('enabled', String(Boolean(imageSaveOptions.enabled)))
+    if (imageSaveOptions.format) {
+      formData.append('format', imageSaveOptions.format)
+    }
+    if (typeof imageSaveOptions.quality === 'number') {
+      formData.append('quality', String(imageSaveOptions.quality))
+    }
+    formData.append('resizeEnabled', String(Boolean(imageSaveOptions.resizeEnabled)))
+    if (typeof imageSaveOptions.maxWidth === 'number') {
+      formData.append('maxWidth', String(imageSaveOptions.maxWidth))
+    }
+    if (typeof imageSaveOptions.maxHeight === 'number') {
+      formData.append('maxHeight', String(imageSaveOptions.maxHeight))
+    }
+  }
 
   return uploadFormDataWithProgress<UploadBatchResult>('/api/images/upload-multiple', formData, onProgress)
 }

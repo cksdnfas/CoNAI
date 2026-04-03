@@ -28,7 +28,6 @@ import {
 } from '@/lib/api'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
-  buildImageSaveOutput,
   loadImageSaveSourceInfo,
   shouldBypassImageSaveProcessing,
   type ImageSaveSourceInfo,
@@ -51,7 +50,6 @@ const MAX_VISIBLE_FILES = 6
 type PendingUploadSaveState = {
   files: File[]
   processableFiles: File[]
-  bypassedFiles: File[]
 }
 
 type ExtractAction = 'prompt' | 'tagger' | 'kaloscope' | 'all'
@@ -213,41 +211,29 @@ export function UploadPage() {
     event.target.value = ''
   }
 
-  const processUploadFilesWithImageSave = async (files: File[], options: ImageSaveSettings) => {
-    const convertedFiles = await Promise.all(files.map(async (file) => {
-      if (shouldBypassImageSaveProcessing(file)) {
-        return file
-      }
-
-      const output = await buildImageSaveOutput(
-        {
-          source: file,
-          sourceMimeType: file.type,
-        },
-        options,
-      )
-
-      const extension = output.format === 'jpeg' ? 'jpg' : output.format
-      const nextName = `${file.name.replace(/\.[^.]+$/, '')}.${extension}`
-      return new File([output.blob], nextName, {
-        type: output.mimeType,
-        lastModified: file.lastModified,
-      })
-    }))
-
-    return convertedFiles
-  }
-
-  const runUpload = async (files: File[]) => {
+  const runUpload = async (files: File[], options?: ImageSaveSettings) => {
     setIsUploading(true)
     setUploadError(null)
     setUploadResult(null)
     setUploadProgress({ loaded: 0, total: files.reduce((sum, file) => sum + file.size, 0) || null, percent: 0 })
 
     try {
-      const result = await uploadMultipleImages(files, (progress) => {
-        setUploadProgress(progress)
-      })
+      const result = await uploadMultipleImages(
+        files,
+        (progress) => {
+          setUploadProgress(progress)
+        },
+        options
+          ? {
+            enabled: options.applyToUpload,
+            format: options.defaultFormat,
+            quality: options.quality,
+            resizeEnabled: options.resizeEnabled,
+            maxWidth: options.maxWidth,
+            maxHeight: options.maxHeight,
+          }
+          : undefined,
+      )
       setUploadResult(result)
       setUploadProgress((current) => ({
         loaded: current?.total ?? files.reduce((sum, file) => sum + file.size, 0),
@@ -273,10 +259,9 @@ export function UploadPage() {
     }
 
     try {
-      const nextFiles = await processUploadFilesWithImageSave(pendingUploadSave.files, uploadImageSaveOptions)
       setPendingUploadSave(null)
       setPendingUploadSaveInfo(null)
-      await runUpload(nextFiles)
+      await runUpload(pendingUploadSave.files, uploadImageSaveOptions)
     } catch (error) {
       const message = error instanceof Error ? error.message : '업로드용 이미지 저장 옵션을 적용하지 못했어.'
       setUploadError(message)
@@ -290,7 +275,6 @@ export function UploadPage() {
     }
 
     const processableFiles = uploadFiles.filter((file) => !shouldBypassImageSaveProcessing(file))
-    const bypassedFiles = uploadFiles.filter((file) => shouldBypassImageSaveProcessing(file))
 
     if (!effectiveImageSaveSettings.applyToUpload || processableFiles.length === 0) {
       await runUpload(uploadFiles)
@@ -302,7 +286,6 @@ export function UploadPage() {
       setPendingUploadSave({
         files: uploadFiles,
         processableFiles,
-        bypassedFiles,
       })
       setPendingUploadSaveInfo(await loadImageSaveSourceInfo({
         source: processableFiles[0],
@@ -311,8 +294,7 @@ export function UploadPage() {
       return
     }
 
-    const nextFiles = await processUploadFilesWithImageSave(uploadFiles, effectiveImageSaveSettings)
-    await runUpload(nextFiles)
+    await runUpload(uploadFiles, effectiveImageSaveSettings)
   }
 
   useEffect(() => {

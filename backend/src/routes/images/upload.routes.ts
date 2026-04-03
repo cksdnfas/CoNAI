@@ -31,6 +31,140 @@ function isImageFile(mimeType: string): boolean {
   return mimeType.startsWith('image/');
 }
 
+function isAnimatedUploadBypass(file: Express.Multer.File): boolean {
+  const mimeType = (file.mimetype || '').toLowerCase();
+  const lowerName = (file.originalname || '').toLowerCase();
+  return mimeType.startsWith('video/') || mimeType === 'image/gif' || lowerName.endsWith('.gif') || lowerName.endsWith('.apng');
+}
+
+type UploadImageSaveRequestOptions = {
+  format?: 'original' | ImageOutputFormat;
+  quality?: number;
+  resizeEnabled?: boolean;
+  maxWidth?: number;
+  maxHeight?: number;
+  enabled?: boolean;
+}
+
+function parseMultipartBoolean(value: unknown, fallback = false) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+
+  return fallback;
+}
+
+function parseMultipartInteger(value: unknown, fallback: number) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.round(value);
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return Math.round(parsed);
+    }
+  }
+
+  return fallback;
+}
+
+function parseUploadImageSaveOptions(body: Request['body']): UploadImageSaveRequestOptions {
+  const rawFormat = typeof body.format === 'string' ? body.format.trim().toLowerCase() : undefined;
+  const format = rawFormat === 'original' || rawFormat === 'png' || rawFormat === 'jpeg' || rawFormat === 'jpg' || rawFormat === 'webp'
+    ? (rawFormat === 'jpg' ? 'jpeg' : rawFormat) as UploadImageSaveRequestOptions['format']
+    : undefined;
+
+  return {
+    enabled: parseMultipartBoolean(body.enabled, false),
+    format,
+    quality: parseMultipartInteger(body.quality, 85),
+    resizeEnabled: parseMultipartBoolean(body.resizeEnabled, false),
+    maxWidth: parseMultipartInteger(body.maxWidth, 1536),
+    maxHeight: parseMultipartInteger(body.maxHeight, 1536),
+  };
+}
+
+function resolveUploadOutputFormat(file: Express.Multer.File, requestedFormat?: 'original' | ImageOutputFormat): ImageOutputFormat | null {
+  if (requestedFormat && requestedFormat !== 'original') {
+    return requestedFormat;
+  }
+
+  const mimeType = (file.mimetype || '').toLowerCase();
+  const extension = path.extname(file.originalname).toLowerCase();
+  if (mimeType === 'image/png' || extension === '.png') {
+    return 'png';
+  }
+  if (mimeType === 'image/jpeg' || extension === '.jpg' || extension === '.jpeg') {
+    return 'jpeg';
+  }
+  if (mimeType === 'image/webp' || extension === '.webp') {
+    return 'webp';
+  }
+
+  return null;
+}
+
+async function processImageUploadWithSettings(
+  file: Express.Multer.File,
+  baseUploadPath: string,
+  options: UploadImageSaveRequestOptions,
+) {
+  if (!options.enabled || isAnimatedUploadBypass(file)) {
+    return ImageProcessor.processImage(file, baseUploadPath);
+  }
+
+  const targetFormat = resolveUploadOutputFormat(file, options.format);
+  if (!targetFormat) {
+    return ImageProcessor.processImage(file, baseUploadPath);
+  }
+
+  const folders = await ImageProcessor.createUploadFolders(baseUploadPath);
+  const requestedExtension = targetFormat === 'jpeg' ? 'jpg' : targetFormat;
+  const originalBaseName = path.basename(file.originalname, path.extname(file.originalname));
+  const filename = ImageProcessor.generateUniqueFilename(`${originalBaseName}.${requestedExtension}`);
+  const outputPath = path.join(folders.targetFolder, filename);
+
+  try {
+    const rewritten = await ImageMetadataWriteService.writeFileAsFormatBuffer(file.path, {
+      format: targetFormat,
+      quality: options.quality,
+      sourcePathForMetadata: file.path,
+      originalFileName: file.originalname,
+      mimeType: file.mimetype,
+      maxWidth: options.resizeEnabled ? options.maxWidth : undefined,
+      maxHeight: options.resizeEnabled ? options.maxHeight : undefined,
+    });
+
+    await fs.promises.writeFile(outputPath, rewritten.buffer);
+
+    return {
+      filename,
+      originalPath: path.relative(baseUploadPath, outputPath).replace(/\\/g, '/'),
+      thumbnailPath: '',
+      width: rewritten.info.width || 0,
+      height: rewritten.info.height || 0,
+      fileSize: rewritten.buffer.length,
+      metadata: { ai_info: {} } as any,
+      perceptualHash: undefined,
+      colorHistogram: undefined,
+      mimeType: buildOutputMimeType(targetFormat),
+    };
+  } finally {
+    await cleanupTemporaryUpload(file);
+  }
+}
+
 function parseMaybeJson(value: unknown) {
   if (typeof value !== 'string') {
     return value ?? null;
@@ -186,12 +320,14 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
   }
 
   try {
+    const imageSaveOptions = parseUploadImageSaveOptions(req.body);
     let processedData: {
       filename: string;
       originalPath: string;
       width: number;
       height: number;
       fileSize: number;
+      mimeType?: string;
     };
 
     // 파일 타입에 따라 분기 처리
@@ -209,7 +345,7 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
       };
     } else if (isImageFile(file.mimetype)) {
       console.log('🖼️  Uploading image (file save only)...');
-      const processedImage = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
+      const processedImage = await processImageUploadWithSettings(file, UPLOAD_BASE_PATH, imageSaveOptions);
       console.log('✅ Image saved successfully');
 
       processedData = {
@@ -217,7 +353,8 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
         originalPath: processedImage.originalPath,
         width: processedImage.width,
         height: processedImage.height,
-        fileSize: processedImage.fileSize
+        fileSize: processedImage.fileSize,
+        mimeType: 'mimeType' in processedImage ? processedImage.mimeType : undefined,
       };
     } else {
       throw new Error(`Unsupported file type: ${file.mimetype}`);
@@ -232,7 +369,7 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
         original_name: file.originalname,
         thumbnail_url: '', // 스캔 시 생성
         file_size: processedData.fileSize,
-        mime_type: file.mimetype,
+        mime_type: processedData.mimeType || file.mimetype,
         width: processedData.width,
         height: processedData.height,
         upload_date: new Date().toISOString()
@@ -267,6 +404,7 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
   console.log(`📤 Multiple upload request: ${files.length} files`);
 
   try {
+    const imageSaveOptions = parseUploadImageSaveOptions(req.body);
     const results = [];
     const errors = [];
 
@@ -278,6 +416,7 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
           width: number;
           height: number;
           fileSize: number;
+          mimeType?: string;
         };
 
         // 파일 타입에 따라 분기 처리
@@ -291,13 +430,14 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
             fileSize: processedVideo.fileSize
           };
         } else if (isImageFile(file.mimetype)) {
-          const processedImage = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
+          const processedImage = await processImageUploadWithSettings(file, UPLOAD_BASE_PATH, imageSaveOptions);
           processedData = {
             filename: processedImage.filename,
             originalPath: processedImage.originalPath,
             width: processedImage.width,
             height: processedImage.height,
-            fileSize: processedImage.fileSize
+            fileSize: processedImage.fileSize,
+            mimeType: 'mimeType' in processedImage ? processedImage.mimeType : undefined,
           };
         } else {
           throw new Error(`Unsupported file type: ${file.mimetype}`);
@@ -309,7 +449,7 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
           original_name: file.originalname,
           thumbnail_url: '', // 스캔 시 생성
           file_size: processedData.fileSize,
-          mime_type: file.mimetype,
+          mime_type: processedData.mimeType || file.mimetype,
           width: processedData.width,
           height: processedData.height,
           upload_date: new Date().toISOString()

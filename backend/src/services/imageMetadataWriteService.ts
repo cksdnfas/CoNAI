@@ -15,6 +15,8 @@ export interface ImageMetadataWriteOptions {
   originalFileName?: string;
   mimeType?: string;
   metadataPatch?: Partial<AIMetadata>;
+  maxWidth?: number;
+  maxHeight?: number;
 }
 
 interface ImageMetadataArtifacts {
@@ -140,9 +142,20 @@ async function buildMetadataArtifacts(options: Pick<ImageMetadataWriteOptions, '
 
 /** Build a format-specific Sharp pipeline for metadata-aware image output. */
 function buildFormatPipeline(input: string | Buffer, options: ImageMetadataWriteOptions): sharp.Sharp {
-  const pipeline = typeof input === 'string'
+  let pipeline = typeof input === 'string'
     ? sharp(toWindowsLongPathIfNeeded(input))
     : sharp(input);
+
+  const maxWidth = typeof options.maxWidth === 'number' && Number.isFinite(options.maxWidth) ? Math.max(1, Math.round(options.maxWidth)) : null;
+  const maxHeight = typeof options.maxHeight === 'number' && Number.isFinite(options.maxHeight) ? Math.max(1, Math.round(options.maxHeight)) : null;
+  if (maxWidth || maxHeight) {
+    pipeline = pipeline.resize({
+      width: maxWidth ?? undefined,
+      height: maxHeight ?? undefined,
+      fit: 'inside',
+      withoutEnlargement: true,
+    });
+  }
 
   if (options.format === 'png') {
     return pipeline.png();
