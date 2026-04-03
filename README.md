@@ -128,7 +128,7 @@ CoNAI/
 ├─ backend/        # API 서버, DB, MCP, 생성/검색 로직
 ├─ frontend/       # React UI
 ├─ shared/         # 공통 타입/상수
-├─ docs/           # 가이드, 계획서, 릴리즈 문서
+├─ docs/           # 가이드, 릴리즈 문서 (Work_Plan 제외)
 ├─ scripts/        # 빌드/배포 스크립트
 ├─ user/           # 런타임 데이터 루트 (database/uploads/logs/temp/models/RecycleBin)
 └─ build-output/   # 빌드 산출물
@@ -153,7 +153,7 @@ CoNAI/
 
 - MCP 가이드: [`docs/MCP_GUIDE.md`](docs/MCP_GUIDE.md)
 - 릴리즈 노트: [`docs/RELEASE-MD/`](docs/RELEASE-MD)
-- UI/기능 계획: [`docs/plan/`](docs/plan)
+- 참고: `docs/Work_Plan/`은 내부 작업 계획 폴더로, 사용자용 문서 링크 범위에서는 제외합니다.
 
 ---
 
