@@ -295,7 +295,7 @@ export function NodeInspectorPanel({
       return (
         <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <ImageAttachmentPickerButton label={hasExplicitValue ? '이미지 변경' : '이미지 선택'} modalTitle={port.label} onSelect={(image) => void onNodeImageChange(node.id, port.key, image)} />
+          <ImageAttachmentPickerButton label={hasExplicitValue ? '이미지 변경' : '이미지 선택'} modalTitle={port.label} allowSaveDialog={false} onSelect={(image) => void onNodeImageChange(node.id, port.key, image)} />
           {typeof rawValue === 'string' && rawValue.startsWith('data:image/') ? (
             <img src={rawValue} alt={port.label} className="max-h-40 rounded-sm border border-border object-contain" />
           ) : null}

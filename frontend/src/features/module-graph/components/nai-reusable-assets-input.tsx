@@ -396,7 +396,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
 
               <label className="space-y-2">
                 <span className="text-sm font-medium text-foreground">Reference Image</span>
-                <ImageAttachmentPickerButton label={draft.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Vibe ${index + 1} 이미지 선택`} onSelect={(image) => void handleVibeImageChange(index, image)} />
+                <ImageAttachmentPickerButton label={draft.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Vibe ${index + 1} 이미지 선택`} allowSaveDialog={false} onSelect={(image) => void handleVibeImageChange(index, image)} />
                 {draft.image ? <img src={draft.image} alt={`Vibe ${index + 1}`} className="max-h-40 rounded-sm border border-border object-contain" /> : null}
               </label>
 
@@ -510,7 +510,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
 
             <label className="space-y-2">
               <span className="text-sm font-medium text-foreground">Reference Image</span>
-              <ImageAttachmentPickerButton label={draft.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} onSelect={(image) => void handleCharacterReferenceImageChange(index, image)} />
+              <ImageAttachmentPickerButton label={draft.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} allowSaveDialog={false} onSelect={(image) => void handleCharacterReferenceImageChange(index, image)} />
               {draft.image ? <img src={draft.image} alt={`Reference ${index + 1}`} className="max-h-40 rounded-sm border border-border object-contain" /> : null}
             </label>
 

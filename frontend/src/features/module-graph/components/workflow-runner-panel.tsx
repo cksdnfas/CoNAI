@@ -247,7 +247,7 @@ export function WorkflowRunnerPanel({
             </Button>
           </div>
           {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
-          <ImageAttachmentPickerButton label={explicitValue ? '이미지 변경' : '이미지 선택'} modalTitle={inputDefinition.label} onSelect={(image) => void onInputImageChange(inputDefinition.id, image)} />
+          <ImageAttachmentPickerButton label={explicitValue ? '이미지 변경' : '이미지 선택'} modalTitle={inputDefinition.label} allowSaveDialog={false} onSelect={(image) => void onInputImageChange(inputDefinition.id, image)} />
           {typeof rawValue === 'string' && rawValue.startsWith('data:image/') ? (
             <img src={rawValue} alt={inputDefinition.label} className="max-h-40 rounded-sm border border-border object-contain" />
           ) : null}

@@ -152,7 +152,7 @@ export function WorkflowExposedInputEditor({
     if (inputDefinition.data_type === 'image' || inputDefinition.data_type === 'mask') {
       return (
         <div className="space-y-2">
-          <ImageAttachmentPickerButton label={hasExplicitValue(rawValue) ? '기본 이미지 변경' : '기본 이미지 선택'} modalTitle={inputDefinition.label} onSelect={(image) => void onChangeDefaultImage(inputDefinition.id, image)} />
+          <ImageAttachmentPickerButton label={hasExplicitValue(rawValue) ? '기본 이미지 변경' : '기본 이미지 선택'} modalTitle={inputDefinition.label} allowSaveDialog={false} onSelect={(image) => void onChangeDefaultImage(inputDefinition.id, image)} />
           {typeof rawValue === 'string' && rawValue.startsWith('data:image/') ? (
             <img src={rawValue} alt={inputDefinition.label} className="max-h-36 rounded-sm border border-border object-contain" />
           ) : null}

@@ -37,6 +37,7 @@ type ImageAttachmentPickerButtonProps = {
   label: string
   modalTitle?: string
   disabled?: boolean
+  allowSaveDialog?: boolean
   onSelect: (image?: SelectedImageDraft) => void
 }
 
@@ -281,7 +282,7 @@ function ImageAttachmentSelectionCard({
 }
 
 /** Render a shared image attachment button backed by upload/system/save picker sources. */
-export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선택', disabled = false, onSelect }: ImageAttachmentPickerButtonProps) {
+export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선택', disabled = false, allowSaveDialog = true, onSelect }: ImageAttachmentPickerButtonProps) {
   const { showSnackbar } = useSnackbar()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [isOpen, setIsOpen] = useState(false)
@@ -393,7 +394,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
       return
     }
 
-    if (effectiveImageSaveSettings.alwaysShowDialog) {
+    if (effectiveImageSaveSettings.alwaysShowDialog && allowSaveDialog) {
       const sourceInfo = await loadImageSaveSourceInfo(input)
       setIsOpen(false)
       setPendingImageSave({ fileName, input, sourceInfo })
