@@ -15,6 +15,10 @@ export type { ScanResult };
 /**
  * Phase 1: 빠른 등록 서비스
  */
+interface FastRegistrationOptions {
+  quietIfIdle?: boolean;
+}
+
 export class FastRegistrationService {
   private static readonly PROGRESS_LOG_INTERVAL = 50;
 
@@ -40,12 +44,17 @@ export class FastRegistrationService {
   static async processFastRegistration(
     files: string[],
     folderId: number,
-    result: ScanResult
+    result: ScanResult,
+    options: FastRegistrationOptions = {}
   ): Promise<void> {
     const batchStartTime = Date.now();
     const concurrency = Math.min(os.cpus().length * 4, 20);
     const limit = pLimit(concurrency);
-    console.log(`  Phase 1: 빠른 등록 모드 (동시성: ${concurrency})`);
+    const shouldStayQuiet = options.quietIfIdle === true && files.length === 0;
+
+    if (!shouldStayQuiet) {
+      console.log(`  Phase 1: 빠른 등록 모드 (동시성: ${concurrency})`);
+    }
 
     const tasks = files.map((filePath) =>
       limit(async () => {
@@ -146,6 +155,8 @@ export class FastRegistrationService {
     await Promise.all(tasks);
 
     const duration = ((Date.now() - batchStartTime) / 1000).toFixed(1);
-    console.log(`  Phase 1 완료: ${result.newImages}개 신규, ${result.existingImages}개 기존 (${duration}초)`);
+    if (!shouldStayQuiet) {
+      console.log(`  Phase 1 완료: ${result.newImages}개 신규, ${result.existingImages}개 기존 (${duration}초)`);
+    }
   }
 }

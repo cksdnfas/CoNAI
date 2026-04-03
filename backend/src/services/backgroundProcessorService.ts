@@ -28,6 +28,10 @@ interface ProcessingResult {
   unique: number;
 }
 
+interface BackgroundProcessorOptions {
+  quietIfIdle?: boolean;
+}
+
 /**
  * Background Processor Service
  *
@@ -48,9 +52,11 @@ export class BackgroundProcessorService {
    * Process all images that don't have composite_hash yet
    * Runs recursively in batches until all images are processed
    */
-  static async processUnhashedImages(): Promise<ProcessingResult> {
+  static async processUnhashedImages(options: BackgroundProcessorOptions = {}): Promise<ProcessingResult> {
     if (this.processing) {
-      console.log('⏭️  Background processor already running, skipping...');
+      if (!options.quietIfIdle) {
+        console.log('⏭️  Background processor already running, skipping...');
+      }
       return { processed: 0, duplicates: 0, errors: 0, unique: 0 };
     }
 
@@ -79,7 +85,9 @@ export class BackgroundProcessorService {
         .all(this.BATCH_SIZE) as (UnhashedFile & { file_type: string })[];
 
       if (unhashedFiles.length === 0) {
-        console.log('✅ No unhashed images to process');
+        if (!options.quietIfIdle) {
+          console.log('✅ No unhashed images to process');
+        }
         this.processing = false;
         return result;
       }
@@ -117,7 +125,7 @@ export class BackgroundProcessorService {
         console.log('📋 More images to process, scheduling next batch...');
         setTimeout(() => {
           this.processing = false;
-          this.processUnhashedImages();
+          this.processUnhashedImages(options);
         }, 1000);
       } else {
         this.processing = false;
@@ -381,11 +389,17 @@ export class BackgroundProcessorService {
    * Trigger background processing (debounced)
    * Call this after Phase 1 scan completes
    */
-  static triggerHashGeneration(): void {
+  static triggerHashGeneration(options: BackgroundProcessorOptions = {}): void {
     if (!this.processing) {
+      const pendingCount = this.getUnprocessedCount();
+
+      if (pendingCount === 0 && options.quietIfIdle) {
+        return;
+      }
+
       console.log('🚀 Triggering background hash generation...');
       setTimeout(() => {
-        this.processUnhashedImages();
+        this.processUnhashedImages(options);
       }, 2000); // 2 second delay to allow scan to complete
     }
   }

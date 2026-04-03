@@ -12,6 +12,11 @@ import { ScanProgressTracker } from './scanProgressTracker';
 import { DuplicateDetectionService } from './duplicateDetectionService';
 
 const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
+const isVerboseAutoScanLoggingEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
+
+interface ScanFolderOptions {
+  quietIfNoChanges?: boolean;
+}
 
 /**
  * 폴더 스캔 오케스트레이터
@@ -29,7 +34,11 @@ export class FolderScanService {
   /**
    * 폴더 스캔 실행 (병렬 처리 최적화)
    */
-  static async scanFolder(folderId: number, fullRescan: boolean = false): Promise<ScanResult> {
+  static async scanFolder(
+    folderId: number,
+    fullRescan: boolean = false,
+    options: ScanFolderOptions = {}
+  ): Promise<ScanResult> {
     const startTime = Date.now();
     const result: ScanResult = {
       folderId,
@@ -80,7 +89,11 @@ export class FolderScanService {
         excludePatterns: folder.exclude_patterns ? JSON.parse(folder.exclude_patterns) : null
       });
 
-      console.log(`📂 스캔 시작: ${resolvedPath} (${files.length}개 파일 발견)`);
+      const quietScan = options.quietIfNoChanges === true && files.length === 0 && !fullRescan;
+
+      if (!quietScan || isVerboseScanDebugEnabled) {
+        console.log(`📂 스캔 시작: ${resolvedPath} (${files.length}개 파일 발견)`);
+      }
       if (files.length === 0 && isVerboseScanDebugEnabled) {
         console.log(`ℹ️ [Scan Debug] 빈 스캔 결과: recursive=${folder.recursive === 1}, exclude_extensions=${folder.exclude_extensions}`);
       }
@@ -96,10 +109,14 @@ export class FolderScanService {
       }
 
       // 7. 배치별로 파일 처리 (Phase 1: 빠른 등록)
-      await FastRegistrationService.processFastRegistration(files, folderId, result);
+      await FastRegistrationService.processFastRegistration(files, folderId, result, {
+        quietIfIdle: options.quietIfNoChanges === true,
+      });
 
       // 7.5. Phase 2 백그라운드 처리 트리거
-      BackgroundProcessorService.triggerHashGeneration();
+      BackgroundProcessorService.triggerHashGeneration({
+        quietIfIdle: options.quietIfNoChanges === true,
+      });
 
       // 8. 스캔 완료 상태 업데이트
       await WatchedFolderService.updateScanStatus(
@@ -114,8 +131,17 @@ export class FolderScanService {
       // 9. 스캔 로그 저장
       this.saveScanLog(folderId, result);
 
-      console.log(`✅ 스캔 완료: ${result.duration}ms`);
-      console.log(`  📊 신규: ${result.newImages}, 기존: ${result.existingImages}, 업데이트: ${result.updatedPaths}, 오류: ${result.errors.length}`);
+      const hasMeaningfulChanges =
+        result.newImages > 0 ||
+        result.existingImages > 0 ||
+        result.updatedPaths > 0 ||
+        result.missingImages > 0 ||
+        result.errors.length > 0;
+
+      if (!options.quietIfNoChanges || hasMeaningfulChanges || isVerboseScanDebugEnabled) {
+        console.log(`✅ 스캔 완료: ${result.duration}ms`);
+        console.log(`  📊 신규: ${result.newImages}, 기존: ${result.existingImages}, 업데이트: ${result.updatedPaths}, 오류: ${result.errors.length}`);
+      }
 
       return result;
     } catch (error) {
@@ -169,18 +195,17 @@ export class FolderScanService {
    * 실시간 워처가 활성화된 폴더는 전체 스캔 건너뛰기 (백업 검증만 수행)
    */
   static async runAutoScan(): Promise<ScanResult[]> {
-    console.log('🤖 자동 스캔 시작...');
-
     const folders = await WatchedFolderService.getFoldersNeedingScan();
 
     if (folders.length === 0) {
-      console.log('  ℹ️  스캔이 필요한 폴더가 없습니다.');
+      if (isVerboseAutoScanLoggingEnabled) {
+        console.log('🤖 자동 스캔 건너뜀: 스캔이 필요한 폴더가 없습니다.');
+      }
       return [];
     }
 
-    console.log(`  📂 스캔 대상: ${folders.length}개 폴더`);
-
     const results: ScanResult[] = [];
+    let didLogAutoScanStart = false;
 
     for (const folder of folders) {
       try {
@@ -195,15 +220,25 @@ export class FolderScanService {
 
           // 마지막 이벤트가 1시간 이내면 전체 스캔 스킵
           if (timeSinceLastEvent < oneHourMs) {
-            console.log(`  ⏭️  워처 활성: ${folder.folder_name} (마지막 이벤트: ${Math.round(timeSinceLastEvent / 1000 / 60)}분 전)`);
+            if (isVerboseAutoScanLoggingEnabled) {
+              console.log(`  ⏭️  워처 활성: ${folder.folder_name} (마지막 이벤트: ${Math.round(timeSinceLastEvent / 1000 / 60)}분 전)`);
+            }
             continue;
-          } else {
+          } else if (isVerboseAutoScanLoggingEnabled) {
             console.log(`  🔄 백업 검증 스캔: ${folder.folder_name} (마지막 이벤트: ${Math.round(timeSinceLastEvent / 1000 / 60)}분 전)`);
           }
         }
 
-        console.log(`\n🔍 자동 스캔: ${folder.folder_name}`);
-        const result = await this.scanFolder(folder.id, false);
+        if (isVerboseAutoScanLoggingEnabled && !didLogAutoScanStart) {
+          console.log('🤖 자동 스캔 시작...');
+          console.log(`  📂 스캔 대상: ${folders.length}개 폴더`);
+          didLogAutoScanStart = true;
+        }
+
+        if (isVerboseAutoScanLoggingEnabled) {
+          console.log(`\n🔍 자동 스캔: ${folder.folder_name}`);
+        }
+        const result = await this.scanFolder(folder.id, false, { quietIfNoChanges: true });
         results.push(result);
       } catch (error) {
         console.error(`❌ 자동 스캔 실패: ${folder.folder_path}`, error);
@@ -225,7 +260,9 @@ export class FolderScanService {
       }
     }
 
-    console.log('\n✅ 자동 스캔 완료');
+    if (isVerboseAutoScanLoggingEnabled && didLogAutoScanStart) {
+      console.log('\n✅ 자동 스캔 완료');
+    }
     return results;
   }
 
