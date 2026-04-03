@@ -110,10 +110,10 @@ if (migrationsSource) {
       const apiGenFiles = fs.readdirSync(apiGenMigrationsTarget).filter(f => f.endsWith('.sql'));
       console.log(`   ✅ Copied ${apiGenFiles.length} API generation migration files`);
     } else {
-      console.log('   ℹ️  No API generation migration files found, skipping folder (will use fallback)');
+      console.log('   ℹ️  API generation migration folder is empty, skipping (runtime fallback enabled)');
     }
   } else {
-    console.warn('   ⚠️  API generation migrations not found');
+    console.log('   ℹ️  API generation migration folder not present, skipping (runtime fallback enabled)');
   }
 } else {
   console.warn('   ⚠️  Migration source not found, skipping');

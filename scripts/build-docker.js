@@ -97,14 +97,22 @@ const safeRemove = async (dirPath) => {
       const apiGenMigrationsTarget = path.join(migrationsTarget, 'api-generation');
 
       if (fs.existsSync(apiGenMigrationsSource)) {
-        fs.ensureDirSync(apiGenMigrationsTarget);
-        fs.copySync(apiGenMigrationsSource, apiGenMigrationsTarget, {
-          filter: (src) => {
-            return src.endsWith('.sql') || fs.statSync(src).isDirectory();
-          }
-        });
-        const apiGenFiles = fs.readdirSync(apiGenMigrationsTarget).filter(f => f.endsWith('.sql'));
-        console.log(`   ✅ Copied ${apiGenFiles.length} API generation migration files`);
+        const sqlFiles = fs.readdirSync(apiGenMigrationsSource).filter(f => f.endsWith('.sql'));
+
+        if (sqlFiles.length > 0) {
+          fs.ensureDirSync(apiGenMigrationsTarget);
+          fs.copySync(apiGenMigrationsSource, apiGenMigrationsTarget, {
+            filter: (src) => {
+              return src.endsWith('.sql') || fs.statSync(src).isDirectory();
+            }
+          });
+          const apiGenFiles = fs.readdirSync(apiGenMigrationsTarget).filter(f => f.endsWith('.sql'));
+          console.log(`   ✅ Copied ${apiGenFiles.length} API generation migration files`);
+        } else {
+          console.log('   ℹ️  API generation migration folder is empty, skipping (runtime fallback enabled)');
+        }
+      } else {
+        console.log('   ℹ️  API generation migration folder not present, skipping (runtime fallback enabled)');
       }
     } else {
       console.warn('   ⚠️  Migration source not found, skipping');
