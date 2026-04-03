@@ -1,5 +1,17 @@
 import type { ImageSaveFormat, ImageSaveSettings } from '@/types/settings'
 
+export const DEFAULT_IMAGE_SAVE_SETTINGS: ImageSaveSettings = {
+  defaultFormat: 'webp',
+  quality: 85,
+  resizeEnabled: true,
+  maxWidth: 1536,
+  maxHeight: 1536,
+  alwaysShowDialog: true,
+  applyToGenerationAttachments: true,
+  applyToEditorSave: true,
+  applyToCanvasSave: true,
+}
+
 export type ImageSaveOutputInput = {
   source: Blob | string
   sourceMimeType?: string | null
@@ -19,6 +31,13 @@ export type ImageSaveOutputResult = {
   height: number
   mimeType: string
   format: ResolvedImageSaveFormat
+}
+
+export type ImageSaveSourceInfo = {
+  width: number
+  height: number
+  mimeType: string | null
+  fileSize: number | null
 }
 
 /** Read one Blob into a data URL for downstream image draft state. */
@@ -90,6 +109,23 @@ export function calculateImageSaveOutputSize(
 }
 
 /** Convert one image source using the shared format, quality, and resize options. */
+/** Load the basic image metadata used by the save-options dialog. */
+export async function loadImageSaveSourceInfo(input: ImageSaveOutputInput): Promise<ImageSaveSourceInfo> {
+  const image = await loadImageElement(input)
+  return {
+    width: image.naturalWidth,
+    height: image.naturalHeight,
+    mimeType: input.sourceMimeType ?? (typeof input.source === 'string' ? null : input.source.type || null),
+    fileSize: typeof input.source === 'string' ? null : input.source.size,
+  }
+}
+
+/** Build one output file name that matches the resolved save format. */
+export function buildImageSaveOutputFileName(fileName: string, format: ResolvedImageSaveFormat) {
+  const nextBase = fileName.replace(/\.[^.]+$/, '')
+  return `${nextBase}.${format === 'jpeg' ? 'jpg' : format}`
+}
+
 export async function buildImageSaveOutput(
   input: ImageSaveOutputInput,
   options: ImageSaveOutputOptions,

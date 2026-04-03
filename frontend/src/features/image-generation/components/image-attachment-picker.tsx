@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Check, ImagePlus, Loader2, Upload } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
+import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -13,11 +14,20 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { getImageListDisplayName, getImageListItemId, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { getImages, listGenerationSaveImages, type SaveBrowserImageRecord } from '@/lib/api'
-import type { ImageRecord } from '@/types/image'
+import { getAppSettings, getImages, listGenerationSaveImages, type SaveBrowserImageRecord } from '@/lib/api'
 import {
-  buildSelectedImageDraftFromFile,
-  buildSelectedImageDraftFromUrl,
+  DEFAULT_IMAGE_SAVE_SETTINGS,
+  buildImageSaveOutput,
+  buildImageSaveOutputFileName,
+  loadImageSaveSourceInfo,
+  type ImageSaveOutputInput,
+  type ImageSaveSourceInfo,
+} from '@/lib/image-save-output'
+import type { ImageRecord } from '@/types/image'
+import type { ImageSaveSettings } from '@/types/settings'
+import {
+  buildSelectedImageDraftFromDataUrl,
+  readFileAsDataUrl,
   type SelectedImageDraft,
 } from '../image-generation-shared'
 
@@ -28,6 +38,12 @@ type ImageAttachmentPickerButtonProps = {
   modalTitle?: string
   disabled?: boolean
   onSelect: (image?: SelectedImageDraft) => void
+}
+
+type PendingImageSaveState = {
+  fileName: string
+  input: ImageSaveOutputInput
+  sourceInfo: ImageSaveSourceInfo
 }
 
 type ImageAttachmentBrowserSectionProps = {
@@ -277,6 +293,13 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
   const [selectedSaveIds, setSelectedSaveIds] = useState<string[]>([])
   const [systemSearch, setSystemSearch] = useState('')
   const [saveSearch, setSaveSearch] = useState('')
+  const [imageSaveOptions, setImageSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
+  const [pendingImageSave, setPendingImageSave] = useState<PendingImageSaveState | null>(null)
+
+  const appSettingsQuery = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: getAppSettings,
+  })
 
   const systemImagesQuery = useQuery({
     queryKey: ['image-attachment-system-images', systemPage],
@@ -344,6 +367,61 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
 
   const activeSelectedImage = source === 'system' ? selectedSystemImage : source === 'save' ? selectedSaveImage : null
   const systemHasMore = Boolean(systemImagesQuery.data?.hasMore)
+  const effectiveImageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
+
+  useEffect(() => {
+    if (!pendingImageSave) {
+      return
+    }
+
+    setImageSaveOptions(effectiveImageSaveSettings)
+  }, [effectiveImageSaveSettings, pendingImageSave])
+
+  /** Build one raw selected-image draft without applying save output conversion. */
+  const buildRawSelectedImageDraft = async (blob: Blob, fileName: string) => {
+    return buildSelectedImageDraftFromDataUrl(await readFileAsDataUrl(blob), fileName)
+  }
+
+  /** Finalize one selected image source using the current image-save settings. */
+  const finalizeSelectedImage = async (fileName: string, input: ImageSaveOutputInput) => {
+    if (!effectiveImageSaveSettings.applyToGenerationAttachments) {
+      const sourceBlob = typeof input.source === 'string'
+        ? await fetch(input.source).then((response) => response.blob())
+        : input.source
+      onSelect(await buildRawSelectedImageDraft(sourceBlob, fileName))
+      setIsOpen(false)
+      return
+    }
+
+    if (effectiveImageSaveSettings.alwaysShowDialog) {
+      const sourceInfo = await loadImageSaveSourceInfo(input)
+      setIsOpen(false)
+      setPendingImageSave({ fileName, input, sourceInfo })
+      return
+    }
+
+    const output = await buildImageSaveOutput(input, effectiveImageSaveSettings)
+    onSelect(buildSelectedImageDraftFromDataUrl(output.dataUrl, buildImageSaveOutputFileName(fileName, output.format)))
+    setIsOpen(false)
+  }
+
+  /** Apply the pending save-options dialog and close it after updating the caller field. */
+  const handleConfirmImageSave = async () => {
+    if (!pendingImageSave) {
+      return
+    }
+
+    try {
+      setIsImporting(true)
+      const output = await buildImageSaveOutput(pendingImageSave.input, imageSaveOptions)
+      onSelect(buildSelectedImageDraftFromDataUrl(output.dataUrl, buildImageSaveOutputFileName(pendingImageSave.fileName, output.format)))
+      setPendingImageSave(null)
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '이미지 저장 옵션을 적용하지 못했어.', tone: 'error' })
+    } finally {
+      setIsImporting(false)
+    }
+  }
 
   /** Import one picker file and close after updating the caller field. */
   const handleUploadFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -356,8 +434,10 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
 
     try {
       setIsImporting(true)
-      onSelect(await buildSelectedImageDraftFromFile(file))
-      setIsOpen(false)
+      await finalizeSelectedImage(file.name, {
+        source: file,
+        sourceMimeType: file.type,
+      })
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : '이미지를 불러오지 못했어.', tone: 'error' })
     } finally {
@@ -379,8 +459,16 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
 
     try {
       setIsImporting(true)
-      onSelect(await buildSelectedImageDraftFromUrl(sourceUrl, getImageListDisplayName(image)))
-      setIsOpen(false)
+      const response = await fetch(sourceUrl)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status}`)
+      }
+
+      const blob = await response.blob()
+      await finalizeSelectedImage(getImageListDisplayName(image), {
+        source: blob,
+        sourceMimeType: blob.type || image.mime_type || undefined,
+      })
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : '이미지를 가져오지 못했어.', tone: 'error' })
     } finally {
@@ -519,6 +607,21 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
 
         </div>
       </SettingsModal>
+
+      <ImageSaveOptionsModal
+        open={pendingImageSave !== null}
+        title="Image Save"
+        options={imageSaveOptions}
+        sourceInfo={pendingImageSave?.sourceInfo ?? null}
+        isSaving={isImporting}
+        onClose={() => {
+          if (!isImporting) {
+            setPendingImageSave(null)
+          }
+        }}
+        onOptionsChange={(patch) => setImageSaveOptions((current) => ({ ...current, ...patch }))}
+        onConfirm={() => void handleConfirmImageSave()}
+      />
     </>
   )
 }
