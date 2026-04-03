@@ -3,6 +3,8 @@ import fg from 'fast-glob';
 import { ALL_SUPPORTED_EXTENSIONS, shouldProcessFileExtension } from '../../constants/supportedExtensions';
 import { normalizeWindowsDriveLetter } from '../../utils/pathResolver';
 
+const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
+
 /**
  * 파일 검색 및 수집 서비스
  */
@@ -29,10 +31,12 @@ export class FileDiscoveryService {
       ? [`${normalizedPath}/**/*.{${exts}}`]
       : [`${normalizedPath}/*.{${exts}}`];
 
-    console.log(`Fast-glob 패턴:`, patterns);
-    console.log(`지원 확장자:`, ALL_SUPPORTED_EXTENSIONS);
-    console.log(`제외 확장자:`, options.excludeExtensions);
-    console.log(`제외 패턴:`, options.excludePatterns);
+    if (isVerboseScanDebugEnabled) {
+      console.log(`Fast-glob 패턴:`, patterns);
+      console.log(`지원 확장자:`, ALL_SUPPORTED_EXTENSIONS);
+      console.log(`제외 확장자:`, options.excludeExtensions);
+      console.log(`제외 패턴:`, options.excludePatterns);
+    }
 
     try {
       // Step 1: 지원하는 확장자 파일 모두 스캔
@@ -45,7 +49,9 @@ export class FileDiscoveryService {
         suppressErrors: true  // 권한 문제 등의 에러 무시
       });
 
-      console.log(`Fast-glob 결과: ${allFiles.length}개 파일 발견`);
+      if (isVerboseScanDebugEnabled) {
+        console.log(`Fast-glob 결과: ${allFiles.length}개 파일 발견`);
+      }
 
       // Step 2: 제외 확장자 필터링 + Windows 드라이브 문자 정규화 + 유니코드 정규화
       const { normalizePath } = require('../../utils/pathResolver');
@@ -57,11 +63,11 @@ export class FileDiscoveryService {
         .map(file => normalizeWindowsDriveLetter(file)) // Windows 드라이브 문자를 대문자로 통일
         .map(file => normalizePath(file)); // 유니코드 정규화 (NFC) 적용
 
-      if (filteredFiles.length < allFiles.length) {
+      if (isVerboseScanDebugEnabled && filteredFiles.length < allFiles.length) {
         console.log(`제외 필터 적용: ${allFiles.length} -> ${filteredFiles.length}개 파일`);
       }
 
-      if (filteredFiles.length > 0) {
+      if (isVerboseScanDebugEnabled && filteredFiles.length > 0) {
         console.log(`처음 3개 파일:`, filteredFiles.slice(0, 3));
       }
 

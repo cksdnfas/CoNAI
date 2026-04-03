@@ -1,6 +1,7 @@
 // Load environment variables from ROOT .env file
 // This must be done before any other imports that depend on process.env
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 
 const packagedExecutableNames = new Set(['conai', 'conai.exe']);
@@ -25,7 +26,25 @@ const getEnvPath = () => {
   return path.resolve(__dirname, '../../.env');
 };
 
+function getEnvExamplePath(envPath: string): string {
+  if (process.env.NODE_ENV === 'production' || process.env.PORTABLE_EXECUTABLE_DIR) {
+    return path.join(path.dirname(envPath), '.env.example');
+  }
+
+  return path.join(__dirname, '../.env.example');
+}
+
+function ensureEnvFileExists(envPath: string): void {
+  const envExamplePath = getEnvExamplePath(envPath);
+
+  if (!fs.existsSync(envPath) && fs.existsSync(envExamplePath)) {
+    fs.copyFileSync(envExamplePath, envPath);
+    console.log(`[Config] Created .env from ${path.basename(envExamplePath)} at: ${envPath}`);
+  }
+}
+
 const rootEnvPath = getEnvPath();
+ensureEnvFileExists(rootEnvPath);
 dotenv.config({ path: rootEnvPath });
 console.log(`[Config] Initialized with .env from: ${rootEnvPath}`);
 
@@ -47,7 +66,6 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import BetterSqlite3Store from 'better-sqlite3-session-store';
-import fs from 'fs';
 import crypto from 'crypto';
 import { runtimePaths, ensureRuntimeDirectories } from './config/runtimePaths';
 import { prepareHttpsOptions } from './utils/httpsOptions';
@@ -155,21 +173,6 @@ app.use(cors({
 app.use(express.json({ limit: `${IMAGE_PROCESSING.MAX_FILE_SIZE_MB}mb`, strict: false }));
 app.use(express.urlencoded({ extended: true, limit: `${IMAGE_PROCESSING.MAX_FILE_SIZE_MB}mb` }));
 
-// .env 파일 자동 생성
-const createEnvFileIfNotExists = () => {
-  const envPath = rootEnvPath;
-  // Assume .env.example is always in the same directory as the executable in portable/prod,
-  // or in backend/ directory in dev
-  const envExamplePath = process.env.NODE_ENV === 'production' || process.env.PORTABLE_EXECUTABLE_DIR
-    ? path.join(path.dirname(rootEnvPath), '.env.example')
-    : path.join(__dirname, '../.env.example');
-
-  if (!fs.existsSync(envPath) && fs.existsSync(envExamplePath)) {
-    fs.copyFileSync(envExamplePath, envPath);
-    console.log(`📝 Created .env file from ${path.basename(envExamplePath)} at ${envPath}`);
-  }
-};
-
 const uploadsDir = runtimePaths.uploadsDir;
 const tempDir = runtimePaths.tempDir;
 const saveDir = runtimePaths.saveDir;
@@ -236,11 +239,7 @@ async function startServer() {
     // 1-1. 시스템 환경 체크 (권한, 도커 등)
     await StartupCheck.runAllChecks();
 
-    // 2. .env 파일 자동 생성
-    console.log('⚙️  환경 설정을 확인하고 생성 중...');
-    createEnvFileIfNotExists();
-
-    // 3. 데이터베이스 자동 초기화
+    // 2. 데이터베이스 자동 초기화
     console.log('🗄️  데이터베이스를 초기화하는 중...');
     const isNewDatabase = !fs.existsSync(runtimePaths.databaseFile);
     await initializeDatabase();

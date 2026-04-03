@@ -29,6 +29,8 @@ import {
   validateInitialWatcherPath,
 } from './fileWatcher/fileWatcherPathUtils';
 
+const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
+
 /**
  * 워처 상태
  */
@@ -168,7 +170,9 @@ export class FileWatcherService {
 
     const preparedPath = prepareWatcherStartPath(folder.folder_path);
     const resolvedPath = preparedPath.resolvedPath;
-    console.log(`👀 [Watcher Debug] 경로 해석: ${folder.folder_path} → ${resolvedPath}`);
+    if (isVerboseScanDebugEnabled) {
+      console.log(`👀 [Watcher Debug] 경로 해석: ${folder.folder_path} → ${resolvedPath}`);
+    }
 
     if (!preparedPath.isReady) {
       console.warn(`  ⚠️  워처 건너뜀 (${preparedPath.skipReason}): ${folder.folder_name}`);
@@ -180,7 +184,9 @@ export class FileWatcherService {
       console.log(`  ✅ 폴더 자동 생성: ${resolvedPath}`);
     }
 
-    console.log(`👀 [Watcher Debug] 경로 접근 권한 확인 완료`);
+    if (isVerboseScanDebugEnabled) {
+      console.log(`👀 [Watcher Debug] 경로 접근 권한 확인 완료`);
+    }
 
     const excludeExtensions = parseWatcherJsonArray(folder.exclude_extensions);
     const excludePatterns = parseWatcherJsonArray(folder.exclude_patterns);

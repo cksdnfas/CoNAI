@@ -1,6 +1,14 @@
 
 import { Database } from 'better-sqlite3';
 
+function tableExists(db: Database, tableName: string): boolean {
+  const row = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(tableName) as { name?: string } | undefined;
+
+  return Boolean(row?.name);
+}
+
 export const up = async (db: Database): Promise<void> => {
   console.log('🔄 Running migration: 008_add_performance_indexes.ts');
 
@@ -36,12 +44,16 @@ export const up = async (db: Database): Promise<void> => {
     console.warn('⚠️  Index creation warning:', error.message);
   }
 
-  // 5. api_generation_history - status, created_at 복합 인덱스 (상태별 조회 및 정렬 최적화)
-  try {
-    db.prepare('CREATE INDEX IF NOT EXISTS idx_api_generation_history_status_created ON api_generation_history(generation_status, created_at DESC)').run();
-    console.log('✅ Created index: idx_api_generation_history_status_created');
-  } catch (error: any) {
-    console.warn('⚠️  Index creation warning:', error.message);
+  // 5. api_generation_history - status, created_at 복합 인덱스 (현재는 user.db에서 관리)
+  if (tableExists(db, 'api_generation_history')) {
+    try {
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_api_generation_history_status_created ON api_generation_history(generation_status, created_at DESC)').run();
+      console.log('✅ Created index: idx_api_generation_history_status_created');
+    } catch (error: any) {
+      console.warn('⚠️  Index creation warning:', error.message);
+    }
+  } else {
+    console.log('ℹ️  Skipped index idx_api_generation_history_status_created (table is managed in user.db)');
   }
 
   console.log('✅ All performance indexes created successfully');

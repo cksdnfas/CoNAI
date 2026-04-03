@@ -11,6 +11,8 @@ import { ThumbnailGenerationService } from './thumbnailGenerationService';
 import { ScanProgressTracker } from './scanProgressTracker';
 import { DuplicateDetectionService } from './duplicateDetectionService';
 
+const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
+
 /**
  * 폴더 스캔 오케스트레이터
  * Facade 패턴으로 모든 하위 서비스를 조율
@@ -55,11 +57,15 @@ export class FolderScanService {
 
       // 2. 폴더 경로 해석 (상대 경로 → 절대 경로)
       const resolvedPath = resolveFolderPath(folder.folder_path);
-      console.log(`🔍 [Scan Debug] 경로 해석: ${folder.folder_path} → ${resolvedPath}`);
+      if (isVerboseScanDebugEnabled) {
+        console.log(`🔍 [Scan Debug] 경로 해석: ${folder.folder_path} → ${resolvedPath}`);
+      }
 
       // 3. 폴더 경로 유효성 확인
       const validation = await WatchedFolderService.validateFolderPath(resolvedPath);
-      console.log(`🔍 [Scan Debug] 경로 유효성: exists=${validation.exists}, isDir=${validation.isDirectory}`);
+      if (isVerboseScanDebugEnabled) {
+        console.log(`🔍 [Scan Debug] 경로 유효성: exists=${validation.exists}, isDir=${validation.isDirectory}`);
+      }
       if (!validation.exists || !validation.isDirectory) {
         throw new Error(validation.error || '유효하지 않은 폴더 경로');
       }
@@ -75,8 +81,8 @@ export class FolderScanService {
       });
 
       console.log(`📂 스캔 시작: ${resolvedPath} (${files.length}개 파일 발견)`);
-      if (files.length === 0) {
-        console.warn(`⚠️ [Scan Debug] 파일 발견 실패 - 패턴 확인 필요: recursive=${folder.recursive === 1}, exclude_extensions=${folder.exclude_extensions}`);
+      if (files.length === 0 && isVerboseScanDebugEnabled) {
+        console.log(`ℹ️ [Scan Debug] 빈 스캔 결과: recursive=${folder.recursive === 1}, exclude_extensions=${folder.exclude_extensions}`);
       }
 
       // 6. 전체 재스캔인 경우 기존 파일들을 'missing'으로 표시

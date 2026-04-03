@@ -44,12 +44,7 @@ export class KaloscopeTaggerService {
     ];
 
     const foundPath = possiblePaths.find((candidate) => fs.existsSync(candidate));
-    if (!foundPath) {
-      console.error('[Kaloscope] Script not found in any location:', possiblePaths);
-      return possiblePaths[0];
-    }
-
-    return foundPath;
+    return foundPath || possiblePaths[0];
   }
 
   private getKaloscopeSettings(): KaloscopeSettings {
