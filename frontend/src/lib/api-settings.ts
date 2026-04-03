@@ -3,6 +3,7 @@ import type { ApiResponse } from '@/types/image'
 import type {
   AppearanceSettings,
   AppSettings,
+  ImageSaveSettings,
   KaloscopeServerStatus,
   KaloscopeSettings,
   MetadataExtractionSettings,
@@ -92,6 +93,22 @@ export async function updateAppearanceSettings(settings: Partial<AppearanceSetti
 
   if (!response.success) {
     throw new Error(response.error || '화면 설정을 저장하지 못했어.')
+  }
+
+  return response.data
+}
+
+export async function updateImageSaveSettings(settings: Partial<ImageSaveSettings>) {
+  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/image-save', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(settings),
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '이미지 저장 설정을 저장하지 못했어.')
   }
 
   return response.data

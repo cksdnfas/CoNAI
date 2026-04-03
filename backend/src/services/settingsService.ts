@@ -210,6 +210,17 @@ export class SettingsService {
         size: '1080',      // 기본값: 1080px
         quality: 80,       // 기본값: 80% 품질
       },
+      imageSave: {
+        defaultFormat: 'webp',
+        quality: 85,
+        resizeEnabled: true,
+        maxWidth: 1536,
+        maxHeight: 1536,
+        alwaysShowDialog: true,
+        applyToGenerationAttachments: true,
+        applyToEditorSave: true,
+        applyToCanvasSave: true,
+      },
     };
   }
 
@@ -285,6 +296,10 @@ export class SettingsService {
           thumbnail: {
             ...defaults.thumbnail,
             ...loadedSettings.thumbnail,
+          },
+          imageSave: {
+            ...defaults.imageSave,
+            ...loadedSettings.imageSave,
           },
         };
 
@@ -374,6 +389,14 @@ export class SettingsService {
     for (const key of Object.keys(defaults.thumbnail)) {
       if (!(key in (loaded.thumbnail || {}))) {
         console.log(`[SettingsService] Missing field: thumbnail.${key}`);
+        return true;
+      }
+    }
+
+    // Check image save fields
+    for (const key of Object.keys(defaults.imageSave)) {
+      if (!(key in (loaded.imageSave || {}))) {
+        console.log(`[SettingsService] Missing field: imageSave.${key}`);
         return true;
       }
     }
@@ -519,6 +542,22 @@ export class SettingsService {
       thumbnail: {
         ...currentSettings.thumbnail,
         ...thumbnailSettings,
+      },
+    };
+    this.saveSettings(updatedSettings);
+    return updatedSettings;
+  }
+
+  /**
+   * Update image save settings
+   */
+  updateImageSaveSettings(imageSaveSettings: Partial<AppSettings['imageSave']>): AppSettings {
+    const currentSettings = this.loadSettings();
+    const updatedSettings: AppSettings = {
+      ...currentSettings,
+      imageSave: {
+        ...currentSettings.imageSave,
+        ...imageSaveSettings,
       },
     };
     this.saveSettings(updatedSettings);

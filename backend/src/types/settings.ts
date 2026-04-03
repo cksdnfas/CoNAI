@@ -149,10 +149,23 @@ export interface AppearanceSettings extends AppearanceThemeSettings {
 }
 
 export type ThumbnailSize = 'original' | '2048' | '1080' | '720' | '512';
+export type ImageSaveFormat = 'original' | 'png' | 'jpeg' | 'webp';
 
 export interface ThumbnailSettings {
   size: ThumbnailSize;   // 썸네일 크기 (original = 원본 크기 유지)
   quality: number;       // 썸네일 품질 (60-100)
+}
+
+export interface ImageSaveSettings {
+  defaultFormat: ImageSaveFormat;
+  quality: number;
+  resizeEnabled: boolean;
+  maxWidth: number;
+  maxHeight: number;
+  alwaysShowDialog: boolean;
+  applyToGenerationAttachments: boolean;
+  applyToEditorSave: boolean;
+  applyToCanvasSave: boolean;
 }
 
 export interface AppSettings {
@@ -163,6 +176,7 @@ export interface AppSettings {
   appearance: AppearanceSettings;
   metadataExtraction: MetadataExtractionSettings;
   thumbnail: ThumbnailSettings;
+  imageSave: ImageSaveSettings;
 }
 
 export interface TaggerModelInfo {

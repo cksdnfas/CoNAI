@@ -14,6 +14,7 @@ import {
   runKaloscopeAutoTest,
   runTaggerAutoTest,
   updateAppearanceSettings,
+  updateImageSaveSettings,
   uploadAppearanceFont,
   updateKaloscopeSettings,
   updateMetadataSettings,
@@ -24,6 +25,7 @@ import type { ImageRecord } from '@/types/image'
 import type {
   AppearancePresetSlot,
   AppearanceSettings,
+  ImageSaveSettings,
   KaloscopeSettings,
   MetadataExtractionSettings,
   TaggerDependencyCheckResult,
@@ -32,6 +34,7 @@ import type {
 import { AutoTab } from './components/auto-tab'
 import { AppearanceTab } from './components/appearance-tab'
 import { FoldersTab } from './components/folders-tab'
+import { ImageSaveTab } from './components/image-save-tab'
 import { MetadataTab } from './components/metadata-tab'
 import { SettingsTabNav } from './components/settings-tab-nav'
 import type { SettingsTab } from './settings-tabs'
@@ -48,6 +51,7 @@ export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('folders')
   const [appearanceDraft, setAppearanceDraft] = useState<AppearanceSettings | null>(null)
   const [metadataDraft, setMetadataDraft] = useState<MetadataExtractionSettings | null>(null)
+  const [imageSaveDraft, setImageSaveDraft] = useState<ImageSaveSettings | null>(null)
   const [taggerDraft, setTaggerDraft] = useState<TaggerSettings | null>(null)
   const [kaloscopeDraft, setKaloscopeDraft] = useState<KaloscopeSettings | null>(null)
   const [taggerDependencyResult, setTaggerDependencyResult] = useState<TaggerDependencyCheckResult | null>(null)
@@ -83,6 +87,7 @@ export function SettingsPage() {
   const effectiveAppearanceDraft = appearanceDraft ?? settingsQuery.data?.appearance ?? null
   const savedAppearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
   const effectiveMetadataDraft = metadataDraft ?? settingsQuery.data?.metadataExtraction ?? null
+  const effectiveImageSaveDraft = imageSaveDraft ?? settingsQuery.data?.imageSave ?? null
   const effectiveTaggerDraft = taggerDraft ?? settingsQuery.data?.tagger ?? null
   const effectiveKaloscopeDraft = kaloscopeDraft ?? settingsQuery.data?.kaloscope ?? null
 
@@ -137,6 +142,18 @@ export function SettingsPage() {
     },
     onError: (error) => {
       notifyError(error instanceof Error ? error.message : '화면 설정 저장에 실패했어.')
+    },
+  })
+
+  const imageSaveMutation = useMutation({
+    mutationFn: updateImageSaveSettings,
+    onSuccess: (settings) => {
+      syncSettingsCache(settings)
+      setImageSaveDraft(settings.imageSave)
+      notifyInfo('이미지 저장 설정을 저장했어.')
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '이미지 저장 설정 저장에 실패했어.')
     },
   })
 
@@ -278,6 +295,11 @@ export function SettingsPage() {
   const patchMetadataDraft = (patch: Partial<MetadataExtractionSettings>) => {
     if (!effectiveMetadataDraft) return
     setMetadataDraft({ ...effectiveMetadataDraft, ...patch })
+  }
+
+  const patchImageSaveDraft = (patch: Partial<ImageSaveSettings>) => {
+    if (!effectiveImageSaveDraft) return
+    setImageSaveDraft({ ...effectiveImageSaveDraft, ...patch })
   }
 
   const patchAppearanceDraft = (patch: Partial<AppearanceSettings>) => {
@@ -499,6 +521,15 @@ export function SettingsPage() {
               onPatchMetadata={patchMetadataDraft}
               onSave={() => effectiveMetadataDraft && void metadataMutation.mutateAsync(effectiveMetadataDraft)}
               isSaving={metadataMutation.isPending}
+            />
+          ) : null}
+
+          {activeTab === 'image-save' ? (
+            <ImageSaveTab
+              imageSaveDraft={effectiveImageSaveDraft}
+              onPatchImageSave={patchImageSaveDraft}
+              onSave={() => effectiveImageSaveDraft && void imageSaveMutation.mutateAsync(effectiveImageSaveDraft)}
+              isSaving={imageSaveMutation.isPending}
             />
           ) : null}
         </section>

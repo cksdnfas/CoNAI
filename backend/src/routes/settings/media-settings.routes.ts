@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { settingsService } from '../../services/settingsService';
-import { MetadataExtractionSettings, SimilaritySettings, ThumbnailSettings } from '../../types/settings';
+import { ImageSaveSettings, MetadataExtractionSettings, SimilaritySettings, ThumbnailSettings } from '../../types/settings';
 
 const router = Router();
 
@@ -232,6 +232,65 @@ router.put(
       success: true,
       data: updatedSettings,
       message: 'Thumbnail settings updated successfully',
+    });
+    return;
+  }),
+);
+
+router.put(
+  '/image-save',
+  asyncHandler(async (req: Request, res: Response) => {
+    const imageSaveSettings: Partial<ImageSaveSettings> = req.body;
+
+    if (imageSaveSettings.defaultFormat !== undefined) {
+      const validFormats = ['original', 'png', 'jpeg', 'webp'];
+      if (!validFormats.includes(imageSaveSettings.defaultFormat)) {
+        res.status(400).json({
+          success: false,
+          error: `Invalid format. Must be one of: ${validFormats.join(', ')}`,
+        });
+        return;
+      }
+    }
+
+    if (imageSaveSettings.quality !== undefined) {
+      if (!Number.isFinite(imageSaveSettings.quality) || imageSaveSettings.quality < 1 || imageSaveSettings.quality > 100) {
+        res.status(400).json({
+          success: false,
+          error: 'Quality must be between 1 and 100',
+        });
+        return;
+      }
+    }
+
+    for (const field of ['maxWidth', 'maxHeight'] as const) {
+      const value = imageSaveSettings[field];
+      if (value !== undefined && (!Number.isInteger(value) || value < 64 || value > 16384)) {
+        res.status(400).json({
+          success: false,
+          error: `${field} must be an integer between 64 and 16384`,
+        });
+        return;
+      }
+    }
+
+    for (const field of ['resizeEnabled', 'alwaysShowDialog', 'applyToGenerationAttachments', 'applyToEditorSave', 'applyToCanvasSave'] as const) {
+      const value = imageSaveSettings[field];
+      if (value !== undefined && typeof value !== 'boolean') {
+        res.status(400).json({
+          success: false,
+          error: `${field} must be a boolean`,
+        });
+        return;
+      }
+    }
+
+    const updatedSettings = settingsService.updateImageSaveSettings(imageSaveSettings);
+
+    res.json({
+      success: true,
+      data: updatedSettings,
+      message: 'Image save settings updated successfully',
     });
     return;
   }),

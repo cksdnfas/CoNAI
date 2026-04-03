@@ -146,9 +146,23 @@ export interface MetadataExtractionSettings {
   skipStealthForWebUI: boolean
 }
 
+export type ImageSaveFormat = 'original' | 'png' | 'jpeg' | 'webp'
+
 export interface ThumbnailSettings {
   size: 'original' | '2048' | '1080' | '720' | '512'
   quality: number
+}
+
+export interface ImageSaveSettings {
+  defaultFormat: ImageSaveFormat
+  quality: number
+  resizeEnabled: boolean
+  maxWidth: number
+  maxHeight: number
+  alwaysShowDialog: boolean
+  applyToGenerationAttachments: boolean
+  applyToEditorSave: boolean
+  applyToCanvasSave: boolean
 }
 
 export interface AppSettings {
@@ -159,6 +173,7 @@ export interface AppSettings {
   appearance: AppearanceSettings
   metadataExtraction: MetadataExtractionSettings
   thumbnail: ThumbnailSettings
+  imageSave: ImageSaveSettings
 }
 
 export interface TaggerModelInfo {
