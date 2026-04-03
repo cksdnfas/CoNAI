@@ -131,7 +131,7 @@ export function ImageEditAction({ image }: ImageEditActionProps) {
 
       <ImageSaveOptionsModal
         open={pendingCanvasSaveDataUrl !== null}
-        title="Image Save"
+        title="이미지 저장"
         options={imageSaveOptions}
         sourceInfo={pendingCanvasSaveInfo}
         isSaving={saveMutation.isPending}

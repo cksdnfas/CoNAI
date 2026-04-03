@@ -780,7 +780,7 @@ export function UploadPage() {
 
       <ImageSaveOptionsModal
         open={pendingUploadSave !== null}
-        title="Image Save"
+        title="이미지 저장"
         options={uploadImageSaveOptions}
         sourceInfo={pendingUploadSaveInfo}
         isSaving={isUploading}

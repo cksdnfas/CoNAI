@@ -8,6 +8,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { ImageSaveSettings } from '@/types/settings'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
 
+const IMAGE_SAVE_SIZE_PRESETS = [
+  { label: '720p', width: 1280, height: 720 },
+  { label: '1080p', width: 1920, height: 1080 },
+  { label: '1440p', width: 2560, height: 1440 },
+  { label: '4K', width: 3840, height: 2160 },
+] as const
+
 interface ImageSaveTabProps {
   imageSaveDraft: ImageSaveSettings | null
   onPatchImageSave: (patch: Partial<ImageSaveSettings>) => void
@@ -24,7 +31,7 @@ export function ImageSaveTab({ imageSaveDraft, onPatchImageSave, onSave, isSavin
           <CardContent className="space-y-4">
             <SectionHeading
               variant="inside"
-              heading="Image Save"
+              heading="이미지 저장"
               actions={
                 <Button size="sm" onClick={onSave} disabled={!imageSaveDraft || isSaving}>
                   <Save className="h-4 w-4" />
@@ -36,20 +43,20 @@ export function ImageSaveTab({ imageSaveDraft, onPatchImageSave, onSave, isSavin
             <div className="grid gap-4 md:grid-cols-2">
               {imageSaveDraft ? (
                 <>
-                  <SettingsField label="Default format">
+                  <SettingsField label="기본 포맷">
                     <Select
                       variant="settings"
                       value={imageSaveDraft.defaultFormat}
                       onChange={(event) => onPatchImageSave({ defaultFormat: event.target.value as ImageSaveSettings['defaultFormat'] })}
                     >
-                      <option value="original">original</option>
-                      <option value="png">png</option>
-                      <option value="jpeg">jpeg</option>
-                      <option value="webp">webp</option>
+                      <option value="original">원본 유지</option>
+                      <option value="png">PNG</option>
+                      <option value="jpeg">JPEG</option>
+                      <option value="webp">WebP</option>
                     </Select>
                   </SettingsField>
 
-                  <SettingsField label="Quality">
+                  <SettingsField label="품질">
                     <Input
                       type="number"
                       min={1}
@@ -66,10 +73,26 @@ export function ImageSaveTab({ imageSaveDraft, onPatchImageSave, onSave, isSavin
                       checked={imageSaveDraft.resizeEnabled}
                       onChange={(event) => onPatchImageSave({ resizeEnabled: event.target.checked })}
                     />
-                    Resize before save
+                    저장 전에 크기 조정
                   </SettingsToggleRow>
 
-                  <SettingsField label="Max width">
+                  <SettingsField label="크기 프리셋">
+                    <div className="flex flex-wrap gap-2">
+                      {IMAGE_SAVE_SIZE_PRESETS.map((preset) => (
+                        <Button
+                          key={preset.label}
+                          type="button"
+                          size="sm"
+                          variant={imageSaveDraft.maxWidth === preset.width && imageSaveDraft.maxHeight === preset.height ? 'secondary' : 'outline'}
+                          onClick={() => onPatchImageSave({ maxWidth: preset.width, maxHeight: preset.height, resizeEnabled: true })}
+                        >
+                          {preset.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </SettingsField>
+
+                  <SettingsField label="최대 가로">
                     <Input
                       type="number"
                       min={64}
@@ -80,7 +103,7 @@ export function ImageSaveTab({ imageSaveDraft, onPatchImageSave, onSave, isSavin
                     />
                   </SettingsField>
 
-                  <SettingsField label="Max height">
+                  <SettingsField label="최대 세로">
                     <Input
                       type="number"
                       min={64}
@@ -91,14 +114,16 @@ export function ImageSaveTab({ imageSaveDraft, onPatchImageSave, onSave, isSavin
                     />
                   </SettingsField>
 
-                  <SettingsToggleRow>
-                    <input
-                      type="checkbox"
-                      checked={imageSaveDraft.alwaysShowDialog}
-                      onChange={(event) => onPatchImageSave({ alwaysShowDialog: event.target.checked })}
-                    />
-                    Always show save dialog
-                  </SettingsToggleRow>
+                  <SettingsField label="적용 방식">
+                    <Select
+                      variant="settings"
+                      value={imageSaveDraft.alwaysShowDialog ? 'dialog' : 'auto'}
+                      onChange={(event) => onPatchImageSave({ alwaysShowDialog: event.target.value === 'dialog' })}
+                    >
+                      <option value="auto">설정값 자동 적용</option>
+                      <option value="dialog">매번 팝업으로 확인</option>
+                    </Select>
+                  </SettingsField>
 
                   <SettingsToggleRow>
                     <input
@@ -106,7 +131,7 @@ export function ImageSaveTab({ imageSaveDraft, onPatchImageSave, onSave, isSavin
                       checked={imageSaveDraft.applyToGenerationAttachments}
                       onChange={(event) => onPatchImageSave({ applyToGenerationAttachments: event.target.checked })}
                     />
-                    Apply to generation attachments
+                    생성 첨부에 적용
                   </SettingsToggleRow>
 
                   <SettingsToggleRow>
@@ -115,7 +140,7 @@ export function ImageSaveTab({ imageSaveDraft, onPatchImageSave, onSave, isSavin
                       checked={imageSaveDraft.applyToEditorSave}
                       onChange={(event) => onPatchImageSave({ applyToEditorSave: event.target.checked })}
                     />
-                    Apply to editor save
+                    에디터 저장에 적용
                   </SettingsToggleRow>
 
                   <SettingsToggleRow>
@@ -124,7 +149,7 @@ export function ImageSaveTab({ imageSaveDraft, onPatchImageSave, onSave, isSavin
                       checked={imageSaveDraft.applyToCanvasSave}
                       onChange={(event) => onPatchImageSave({ applyToCanvasSave: event.target.checked })}
                     />
-                    Apply to canvas save
+                    캔버스 저장에 적용
                   </SettingsToggleRow>
 
                   <SettingsToggleRow>
@@ -133,7 +158,7 @@ export function ImageSaveTab({ imageSaveDraft, onPatchImageSave, onSave, isSavin
                       checked={imageSaveDraft.applyToUpload}
                       onChange={(event) => onPatchImageSave({ applyToUpload: event.target.checked })}
                     />
-                    Apply to upload
+                    업로드에 적용
                   </SettingsToggleRow>
                 </>
               ) : (

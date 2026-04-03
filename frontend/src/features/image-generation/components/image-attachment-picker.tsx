@@ -610,7 +610,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
 
       <ImageSaveOptionsModal
         open={pendingImageSave !== null}
-        title="Image Save"
+        title="이미지 저장"
         options={imageSaveOptions}
         sourceInfo={pendingImageSave?.sourceInfo ?? null}
         isSaving={isImporting}

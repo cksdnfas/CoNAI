@@ -10,5 +10,5 @@ export const SETTINGS_TAB_ITEMS: SettingsTabItem[] = [
   { value: 'appearance', label: 'Appearance' },
   { value: 'auto', label: 'Auto' },
   { value: 'metadata', label: 'Metadata' },
-  { value: 'image-save', label: 'Image Save' },
+  { value: 'image-save', label: '이미지 저장' },
 ]

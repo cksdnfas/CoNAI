@@ -22,7 +22,7 @@ interface ImageSaveOptionsModalProps {
 /** Render a compact image save-options modal shared by attachment/save flows. */
 export function ImageSaveOptionsModal({
   open,
-  title = 'Image Save',
+  title = '이미지 저장',
   options,
   sourceInfo,
   isSaving,
@@ -49,20 +49,20 @@ export function ImageSaveOptionsModal({
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label="Format">
+          <SettingsField label="포맷">
             <Select
               variant="settings"
               value={options.defaultFormat}
               onChange={(event) => onOptionsChange({ defaultFormat: event.target.value as ImageSaveSettings['defaultFormat'] })}
             >
-              <option value="original">original</option>
-              <option value="png">png</option>
-              <option value="jpeg">jpeg</option>
-              <option value="webp">webp</option>
+              <option value="original">원본 유지</option>
+              <option value="png">PNG</option>
+              <option value="jpeg">JPEG</option>
+              <option value="webp">WebP</option>
             </Select>
           </SettingsField>
 
-          <SettingsField label="Quality">
+          <SettingsField label="품질">
             <Input
               type="number"
               min={1}
@@ -79,10 +79,10 @@ export function ImageSaveOptionsModal({
               checked={options.resizeEnabled}
               onChange={(event) => onOptionsChange({ resizeEnabled: event.target.checked })}
             />
-            Resize before attach
+            저장 전에 크기 조정
           </SettingsToggleRow>
 
-          <SettingsField label="Max width">
+          <SettingsField label="최대 가로">
             <Input
               type="number"
               min={64}
@@ -94,7 +94,7 @@ export function ImageSaveOptionsModal({
             />
           </SettingsField>
 
-          <SettingsField label="Max height">
+          <SettingsField label="최대 세로">
             <Input
               type="number"
               min={64}

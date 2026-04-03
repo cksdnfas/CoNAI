@@ -1460,7 +1460,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh }: NaiGenera
 
       <ImageSaveOptionsModal
         open={pendingImageEditorSave !== null}
-        title="Image Save"
+        title="이미지 저장"
         options={imageEditorSaveOptions}
         sourceInfo={pendingImageEditorSaveInfo}
         isSaving={false}
