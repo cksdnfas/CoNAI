@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
@@ -39,6 +39,8 @@ export function ImageGenerationPage() {
   const [isControllerOpen, setIsControllerOpen] = useState(false)
   const isWideLayout = useDesktopPageLayout()
   const activeTab = parseImageGenerationTab(searchParams.get('tab'))
+  const shouldShowHistory = activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null)
+  const useWideNaiSplitPaneScroll = isWideLayout && activeTab === 'nai' && shouldShowHistory
 
   const handleGlobalRefresh = () => {
     setGlobalRefreshNonce((current) => current + 1)
@@ -52,65 +54,89 @@ export function ImageGenerationPage() {
   const handleChangeTab = (nextTab: ImageGenerationTab) => {
     const nextSearchParams = new URLSearchParams(searchParams)
     nextSearchParams.set('tab', nextTab)
+    setIsControllerOpen(false)
     setSearchParams(nextSearchParams)
   }
 
+  const controllerLabel = activeTab === 'nai' ? 'NAI' : activeTab === 'wildcards' ? 'Wildcard' : 'ComfyUI'
+  const shouldUseControllerDrawer = !isWideLayout && (activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null))
+  const useCompactNaiActionBar = activeTab === 'nai' && (useWideNaiSplitPaneScroll || shouldUseControllerDrawer)
+  const naiDrawerHeaderContentId = activeTab === 'nai' && shouldUseControllerDrawer ? 'nai-controller-drawer-header-content' : undefined
+  const comfyDrawerHeaderContentId = activeTab === 'comfyui' && shouldUseControllerDrawer && selectedComfyWorkflowId !== null
+    ? 'comfy-controller-drawer-header-content'
+    : undefined
+  const drawerHeaderContentId = naiDrawerHeaderContentId ?? comfyDrawerHeaderContentId
+  const useCompactControllerDrawer = Boolean(drawerHeaderContentId)
+
   const controllerPanel = activeTab === 'nai'
-    ? <NaiGenerationPanel refreshNonce={globalRefreshNonce} onHistoryRefresh={handleHistoryRefresh} />
+    ? <NaiGenerationPanel refreshNonce={globalRefreshNonce} onHistoryRefresh={handleHistoryRefresh} splitPaneScroll={useWideNaiSplitPaneScroll} compactActionBar={useCompactNaiActionBar} headerPortalTargetId={naiDrawerHeaderContentId} />
     : activeTab === 'comfyui'
-      ? <ComfyGenerationPanel refreshNonce={globalRefreshNonce} onHistoryRefresh={handleHistoryRefresh} onSelectedWorkflowChange={setSelectedComfyWorkflowId} />
+      ? (
+        <ComfyGenerationPanel
+          refreshNonce={globalRefreshNonce}
+          onHistoryRefresh={handleHistoryRefresh}
+          selectedWorkflowId={selectedComfyWorkflowId}
+          onSelectedWorkflowChange={setSelectedComfyWorkflowId}
+          headerPortalTargetId={comfyDrawerHeaderContentId}
+        />
+      )
       : activeTab === 'wildcards'
         ? <WildcardGenerationPanel refreshNonce={globalRefreshNonce} />
         : null
 
-  const controllerLabel = activeTab === 'nai' ? 'NAI' : activeTab === 'wildcards' ? 'Wildcard' : 'ComfyUI'
-  const shouldShowHistory = activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null)
-  const shouldUseControllerDrawer = !isWideLayout && (activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null))
-
-  useEffect(() => {
-    setIsControllerOpen(false)
-  }, [activeTab])
-
-  useEffect(() => {
-    if (!shouldUseControllerDrawer) {
-      setIsControllerOpen(false)
-    }
-  }, [shouldUseControllerDrawer])
+  const isDrawerOpen = shouldUseControllerDrawer && isControllerOpen
 
   return (
-    <div className={cn('space-y-6', isWideLayout ? 'pb-0' : 'pb-24')}>
-      <PageHeader
-        eyebrow="Create"
-        title="Image Generation"
-        actions={
-          activeTab !== 'workflows' ? (
-            <Button type="button" size="icon-sm" variant="outline" onClick={handleGlobalRefresh} aria-label="새로고침" title="새로고침">
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          ) : undefined
-        }
-      />
-
-      <div className="border-b border-border/70 pb-2">
-        <SegmentedControl
-          value={activeTab}
-          items={IMAGE_GENERATION_TABS}
-          onChange={(nextTab) => handleChangeTab(nextTab as ImageGenerationTab)}
+    <div
+      className={cn(
+        'space-y-6',
+        isWideLayout ? 'pb-0' : 'pb-24',
+        useWideNaiSplitPaneScroll && 'xl:flex xl:h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))] xl:min-h-0 xl:flex-col xl:space-y-0 xl:overflow-hidden',
+      )}
+    >
+      <div className={cn('space-y-6', useWideNaiSplitPaneScroll && 'xl:shrink-0 xl:pb-6')}>
+        <PageHeader
+          eyebrow="Create"
+          title="Image Generation"
+          actions={
+            activeTab !== 'workflows' ? (
+              <Button type="button" size="icon-sm" variant="outline" onClick={handleGlobalRefresh} aria-label="새로고침" title="새로고침">
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            ) : undefined
+          }
         />
+
+        <div className="border-b border-border/70 pb-2">
+          <SegmentedControl
+            value={activeTab}
+            items={IMAGE_GENERATION_TABS}
+            onChange={(nextTab) => handleChangeTab(nextTab as ImageGenerationTab)}
+          />
+        </div>
       </div>
 
       {activeTab === 'workflows' ? <ModuleWorkflowWorkspace embedded /> : null}
 
       {activeTab !== 'workflows' && controllerPanel ? (
         isWideLayout ? (
-          <div className={cn('grid items-start gap-8', shouldShowHistory ? 'grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]' : 'grid-cols-1')}>
-            <div className="min-w-0">{controllerPanel}</div>
+          <div
+            className={cn(
+              'grid items-start gap-8',
+              shouldShowHistory ? 'grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]' : 'grid-cols-1',
+              useWideNaiSplitPaneScroll && 'xl:min-h-0 xl:flex-1 xl:items-stretch',
+            )}
+          >
+            <div className={cn('min-w-0', useWideNaiSplitPaneScroll && 'xl:flex xl:min-h-0 xl:flex-col')}>
+              {controllerPanel}
+            </div>
             {shouldShowHistory ? (
-              <div className="min-w-0">
+              <div className={cn('min-w-0', useWideNaiSplitPaneScroll && 'xl:flex xl:min-h-0 xl:flex-col')}>
                 <GenerationHistoryPanel
                   refreshNonce={historyRefreshNonce}
                   serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'}
                   workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
+                  splitPaneScroll={useWideNaiSplitPaneScroll}
                 />
               </div>
             ) : null}
@@ -129,10 +155,12 @@ export function ImageGenerationPage() {
             </FloatingBottomAction>
 
             <BottomDrawerSheet
-              open={isControllerOpen}
-              title={controllerLabel}
+              open={isDrawerOpen}
+              title={useCompactControllerDrawer ? null : controllerLabel}
               ariaLabel={`${controllerLabel} 컨트롤 패널`}
               onClose={() => setIsControllerOpen(false)}
+              headerContentId={drawerHeaderContentId}
+              bodyClassName={useCompactControllerDrawer ? 'p-0 pb-14' : undefined}
             >
               {controllerPanel}
             </BottomDrawerSheet>

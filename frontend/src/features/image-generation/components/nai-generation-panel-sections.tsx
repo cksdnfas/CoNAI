@@ -10,12 +10,13 @@ export interface NaiConnectionHeaderProps {
   tierName?: string
   anlasBalance?: number
   onOpenAuth: () => void
+  compact?: boolean
 }
 
 /** Render the NovelAI connection header with auth status and external link. */
-export function NaiConnectionHeader({ connected, tierName, anlasBalance, onOpenAuth }: NaiConnectionHeaderProps) {
+export function NaiConnectionHeader({ connected, tierName, anlasBalance, onOpenAuth, compact = false }: NaiConnectionHeaderProps) {
   return (
-    <section className="space-y-3">
+    <section className={compact ? 'space-y-0' : 'space-y-3'}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="truncate text-base font-semibold text-foreground">NovelAI</div>
@@ -75,6 +76,7 @@ export function NaiPromptSection({
 }
 
 export interface NaiActionSectionProps {
+  variant?: 'card' | 'inline'
   canUpscale: boolean
   isUpscaling: boolean
   isGenerating: boolean
@@ -89,6 +91,7 @@ export interface NaiActionSectionProps {
 
 /** Render the bottom action bar for module save, reset, generate, and upscale flows. */
 export function NaiActionSection({
+  variant = 'card',
   canUpscale,
   isUpscaling,
   isGenerating,
@@ -100,35 +103,48 @@ export function NaiActionSection({
   onReset,
   onGenerate,
 }: NaiActionSectionProps) {
+  const actionContent = (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={onOpenModuleSave}>
+            <Save className="h-4 w-4" />
+            모듈 저장
+          </Button>
+          {canUpscale ? (
+            <Button type="button" variant="outline" onClick={onUpscale} disabled={isUpscaling}>
+              {isUpscaling ? '업스케일 중…' : '소스 2x 업스케일'}
+            </Button>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onReset} disabled={isGenerating || isUpscaling}>
+            초기화
+          </Button>
+          <Button type="button" onClick={onGenerate} disabled={isGenerating || !canGenerate}>
+            <Sparkles className="h-4 w-4" />
+            {generateButtonLabel}
+          </Button>
+        </div>
+      </div>
+      {costErrorMessage ? <div className="text-xs text-[#ffb4ab]">{costErrorMessage}</div> : null}
+    </>
+  )
+
+  if (variant === 'inline') {
+    return (
+      <section className="space-y-3">
+        {actionContent}
+      </section>
+    )
+  }
+
   return (
     <section className="space-y-3">
       <Card>
         <CardContent className="space-y-4">
-          <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Actions" />
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={onOpenModuleSave}>
-                <Save className="h-4 w-4" />
-                모듈 저장
-              </Button>
-              {canUpscale ? (
-                <Button type="button" variant="outline" onClick={onUpscale} disabled={isUpscaling}>
-                  {isUpscaling ? '업스케일 중…' : '소스 2x 업스케일'}
-                </Button>
-              ) : null}
-            </div>
-
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={onReset} disabled={isGenerating || isUpscaling}>
-                초기화
-              </Button>
-              <Button type="button" onClick={onGenerate} disabled={isGenerating || !canGenerate}>
-                <Sparkles className="h-4 w-4" />
-                {generateButtonLabel}
-              </Button>
-            </div>
-          </div>
-          {costErrorMessage ? <div className="text-xs text-[#ffb4ab]">{costErrorMessage}</div> : null}
+          {actionContent}
         </CardContent>
       </Card>
     </section>

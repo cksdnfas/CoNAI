@@ -10,6 +10,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { ImageRecord } from '@/types/image'
 import { cleanupFailedGenerationHistory, deleteGenerationHistoryRecord, getGenerationHistory, getGenerationWorkflowHistory } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import {
   getErrorMessage,
   getHistoryStatusLabel,
@@ -19,6 +20,7 @@ type GenerationHistoryPanelProps = {
   refreshNonce: number
   serviceType: 'novelai' | 'comfyui'
   workflowId?: number | null
+  splitPaneScroll?: boolean
 }
 
 function getGenerationHistorySelectionId(record: Awaited<ReturnType<typeof getGenerationHistory>>['records'][number]) {
@@ -42,7 +44,7 @@ function mapHistoryRecordToImageRecord(record: Awaited<ReturnType<typeof getGene
 }
 
 /** Render generation history using the shared image-list surface instead of per-record cards. */
-export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }: GenerationHistoryPanelProps) {
+export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, splitPaneScroll = false }: GenerationHistoryPanelProps) {
   const { showSnackbar } = useSnackbar()
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([])
   const [isDeletingSelection, setIsDeletingSelection] = useState(false)
@@ -73,6 +75,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }
     [historyRecordMap, selectedHistoryIds],
   )
   const historyLabel = serviceType === 'novelai' ? 'NAI' : workflowId ? 'ComfyUI Workflow' : 'ComfyUI'
+  const getHistoryImageHref = (image: ImageRecord) => (image?.composite_hash ? `/images/${image.composite_hash}` : undefined)
 
   useEffect(() => {
     setSelectedHistoryIds((current) => current.filter((id) => historyRecordMap.has(id)))
@@ -115,7 +118,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }
   }
 
   return (
-    <section className="space-y-4">
+    <section className={cn('space-y-4', splitPaneScroll && 'flex min-h-0 flex-1 flex-col')}>
       <SectionHeading
         className="border-b border-border/70 pb-4"
         heading="생성 히스토리"
@@ -143,36 +146,46 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId }
 
       {historyQuery.isPending ? <div className="text-sm text-muted-foreground">히스토리 불러오는 중…</div> : null}
 
-      {!historyQuery.isPending && historyImages.length === 0 ? (
-        <div className="py-4 text-sm text-muted-foreground">아직 생성 이력이 없어.</div>
-      ) : null}
+      <div className={cn(splitPaneScroll && 'min-h-0 flex-1')}>
+        {!historyQuery.isPending && historyImages.length === 0 ? (
+          <div className="py-4 text-sm text-muted-foreground">아직 생성 이력이 없어.</div>
+        ) : null}
 
-      {!historyQuery.isPending && historyImages.length > 0 ? (
-        <ImageList
-          items={historyImages}
-          layout="masonry"
-          activationMode="modal"
-          getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
-          selectable
-          selectedIds={selectedHistoryIds}
-          onSelectedIdsChange={setSelectedHistoryIds}
-          minColumnWidth={220}
-          columnGap={16}
-          rowGap={16}
-          renderItemOverlay={(image) => {
-            const record = historyRecordMap.get(String(image.composite_hash ?? image.id))
-            if (!record || record.generation_status === 'completed') {
-              return null
-            }
+        {!historyQuery.isPending && historyImages.length > 0 ? (
+          <ImageList
+            items={historyImages}
+            layout="masonry"
+            activationMode="modal"
+            getItemHref={getHistoryImageHref}
+            selectable
+            selectedIds={selectedHistoryIds}
+            onSelectedIdsChange={setSelectedHistoryIds}
+            minColumnWidth={220}
+            columnGap={splitPaneScroll ? 12 : 16}
+            rowGap={splitPaneScroll ? 12 : 16}
+            className={cn(splitPaneScroll && 'h-full pr-3 pb-1')}
+            scrollMode={splitPaneScroll ? 'container' : 'window'}
+            viewportHeight={splitPaneScroll ? '100%' : undefined}
+            renderItemOverlay={(image) => {
+              const imageSelectionId = image?.composite_hash ?? image?.id
+              if (!imageSelectionId) {
+                return null
+              }
 
-            return (
-              <Badge variant={record.generation_status === 'failed' ? 'outline' : 'secondary'}>
-                {getHistoryStatusLabel(record.generation_status)}
-              </Badge>
-            )
-          }}
-        />
-      ) : null}
+              const record = historyRecordMap.get(String(imageSelectionId))
+              if (!record || record.generation_status === 'completed') {
+                return null
+              }
+
+              return (
+                <Badge variant={record.generation_status === 'failed' ? 'outline' : 'secondary'}>
+                  {getHistoryStatusLabel(record.generation_status)}
+                </Badge>
+              )
+            }}
+          />
+        ) : null}
+      </div>
 
       <SelectionActionBar
         selectedCount={selectedHistoryRecords.length}

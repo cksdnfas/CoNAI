@@ -9,6 +9,7 @@ type BottomDrawerSheetProps = {
   title: ReactNode
   subtitle?: ReactNode
   headerActions?: ReactNode
+  headerContentId?: string
   children: ReactNode
   onClose: () => void
   ariaLabel?: string
@@ -23,6 +24,7 @@ export function BottomDrawerSheet({
   title,
   subtitle,
   headerActions,
+  headerContentId,
   children,
   onClose,
   ariaLabel,
@@ -78,13 +80,16 @@ export function BottomDrawerSheet({
         </div>
 
         <div className="theme-drawer-header border-b border-white/5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="truncate text-lg font-semibold tracking-tight text-foreground">{title}</div>
-              {subtitle ? <div className="text-sm text-muted-foreground">{subtitle}</div> : null}
+          {title !== null || subtitle || headerActions ? (
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-lg font-semibold tracking-tight text-foreground">{title}</div>
+                {subtitle ? <div className="text-sm text-muted-foreground">{subtitle}</div> : null}
+              </div>
+              {headerActions ? <div className="flex shrink-0 flex-wrap gap-2">{headerActions}</div> : null}
             </div>
-            {headerActions ? <div className="flex shrink-0 flex-wrap gap-2">{headerActions}</div> : null}
-          </div>
+          ) : null}
+          {headerContentId ? <div id={headerContentId} className={cn((title !== null || subtitle || headerActions) ? 'mt-4 border-t border-white/5 pt-4' : 'pt-4')} /> : null}
         </div>
 
         <div className={cn('theme-drawer-body min-h-0 flex-1 overflow-y-auto pb-20', bodyClassName)}>

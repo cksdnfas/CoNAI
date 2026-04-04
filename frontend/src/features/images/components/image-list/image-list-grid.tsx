@@ -45,12 +45,14 @@ export function ImageListGrid({
         ['--image-list-column-gap' as string]: `${columnGap}px`,
         ['--image-list-row-gap' as string]: `${rowGap}px`,
         height: usesWindowScroll ? undefined : (viewportHeight ?? '100%'),
+        overflowX: usesWindowScroll ? undefined : 'hidden',
+        paddingRight: usesWindowScroll ? undefined : '4px',
       }}
     >
       <VirtuosoGrid<ImageRecord>
         data={items}
         useWindowScroll={usesWindowScroll}
-        style={usesWindowScroll ? undefined : { height: '100%' }}
+        style={usesWindowScroll ? undefined : { height: '100%', overflowX: 'hidden', overflowY: 'auto' }}
         overscan={{ main: 1200, reverse: 600 }}
         endReached={onEndReached}
         listClassName="image-list-grid"
