@@ -14,18 +14,40 @@ interface InlineMediaPreviewProps {
   loading?: 'lazy' | 'eager'
 }
 
-/** Infer one mime type from a data URL source when explicit metadata is absent. */
+/** Infer one mime type from a data URL or file-like URL when explicit metadata is absent. */
 function inferMimeTypeFromSource(src?: string | null) {
-  if (!src || !src.startsWith('data:')) {
+  if (!src) {
     return null
   }
 
-  const match = /^data:([^;,]+)[;,]/i.exec(src)
-  return match?.[1] ?? null
+  if (src.startsWith('data:')) {
+    const match = /^data:([^;,]+)[;,]/i.exec(src)
+    return match?.[1] ?? null
+  }
+
+  const normalized = src.split('?')[0]?.toLowerCase() ?? ''
+
+  if (normalized.endsWith('.gif')) {
+    return 'image/gif'
+  }
+
+  if (normalized.endsWith('.mp4')) {
+    return 'video/mp4'
+  }
+
+  if (normalized.endsWith('.webm')) {
+    return 'video/webm'
+  }
+
+  if (normalized.endsWith('.mov')) {
+    return 'video/quicktime'
+  }
+
+  return null
 }
 
 /** Build one temporary ImageRecord so shared media rendering can be reused. */
-function buildPreviewImageRecord({ src, mimeType, fileName, alt }: Pick<InlineMediaPreviewProps, 'src' | 'mimeType' | 'fileName' | 'alt'>): ImageRecord | null {
+export function buildPreviewImageRecord({ src, mimeType, fileName, alt }: Pick<InlineMediaPreviewProps, 'src' | 'mimeType' | 'fileName' | 'alt'>): ImageRecord | null {
   if (!src) {
     return null
   }

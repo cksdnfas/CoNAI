@@ -1,11 +1,14 @@
 import type { KeyboardEvent } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
+import { buildPreviewImageRecord } from '@/features/images/components/inline-media-preview'
 
 type NaiSavedAssetTileProps = {
   title: string
   subtitle?: string
   imageUrl?: string
+  mimeType?: string
   onSelect: () => void
   onEdit: () => void
   onDelete: () => void
@@ -15,10 +18,18 @@ export function NaiSavedAssetTile({
   title,
   subtitle,
   imageUrl,
+  mimeType,
   onSelect,
   onEdit,
   onDelete,
 }: NaiSavedAssetTileProps) {
+  const previewImage = buildPreviewImageRecord({
+    src: imageUrl,
+    mimeType,
+    fileName: title,
+    alt: title,
+  })
+
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
@@ -34,8 +45,13 @@ export function NaiSavedAssetTile({
       onKeyDown={handleKeyDown}
       className="group relative isolate h-80 overflow-hidden rounded-sm border border-border bg-surface-container text-left transition-transform duration-300 hover:-translate-y-0.5 hover:bg-surface-high"
     >
-      {imageUrl ? (
-        <img src={imageUrl} alt={title} className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
+      {previewImage ? (
+        <ImagePreviewMedia
+          image={previewImage}
+          alt={title}
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+        />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-surface-lowest to-surface-high text-xs text-muted-foreground">
           no preview
