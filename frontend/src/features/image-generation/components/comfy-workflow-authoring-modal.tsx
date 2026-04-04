@@ -556,6 +556,18 @@ export function ComfyWorkflowAuthoringModal({
                           </div>
                         </div>
 
+                        {isExpanded ? (
+                          <div className="grid gap-3 md:grid-cols-2 rounded-sm border border-border/70 bg-background/50 p-3">
+                            <SettingsField label="라벨">
+                              <Input variant="settings" value={field.label} onChange={(event) => handleFieldPatch(field.id, { label: event.target.value })} />
+                            </SettingsField>
+
+                            <SettingsField label="설명" className="md:col-span-2">
+                              <Input variant="settings" value={field.description ?? ''} onChange={(event) => handleFieldPatch(field.id, { description: event.target.value })} />
+                            </SettingsField>
+                          </div>
+                        ) : null}
+
                         <div className="grid gap-3 md:grid-cols-2">
                           <SettingsField label="타입">
                             <Select variant="settings" value={field.type} onChange={(event) => handleFieldPatch(field.id, { type: event.target.value as WorkflowMarkedField['type'] })}>
@@ -594,18 +606,6 @@ export function ComfyWorkflowAuthoringModal({
                             )}
                           </SettingsField>
                         </div>
-
-                        {isExpanded ? (
-                          <div className="grid gap-3 md:grid-cols-2 rounded-sm border border-border/70 bg-background/50 p-3">
-                            <SettingsField label="라벨">
-                              <Input variant="settings" value={field.label} onChange={(event) => handleFieldPatch(field.id, { label: event.target.value })} />
-                            </SettingsField>
-
-                            <SettingsField label="설명" className="md:col-span-2">
-                              <Input variant="settings" value={field.description ?? ''} onChange={(event) => handleFieldPatch(field.id, { description: event.target.value })} />
-                            </SettingsField>
-                          </div>
-                        ) : null}
 
                         {field.type === 'select' ? (
                           <div className="grid gap-4 md:grid-cols-2">
