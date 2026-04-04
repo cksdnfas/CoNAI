@@ -11,7 +11,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useQuery } from '@tanstack/react-query'
-import { Check, Plus, Trash2, Upload } from 'lucide-react'
+import { Check, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -325,6 +325,7 @@ export function ComfyWorkflowAuthoringModal({
   const [workflowJson, setWorkflowJson] = useState('')
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [markedFields, setMarkedFields] = useState<WorkflowMarkedField[]>([])
+  const [expandedFieldIds, setExpandedFieldIds] = useState<string[]>([])
   const [workflowEditorTab, setWorkflowEditorTab] = useState<'json' | 'graph'>('json')
   const [isSaving, setIsSaving] = useState(false)
 
@@ -339,6 +340,7 @@ export function ComfyWorkflowAuthoringModal({
       setWorkflowJson(initialData.workflow.workflow_json)
       setJsonError(null)
       setMarkedFields(initialData.workflow.marked_fields ?? [])
+      setExpandedFieldIds([])
       setWorkflowEditorTab('graph')
       setIsSaving(false)
       return
@@ -349,6 +351,7 @@ export function ComfyWorkflowAuthoringModal({
     setWorkflowJson('')
     setJsonError(null)
     setMarkedFields([])
+    setExpandedFieldIds([])
     setWorkflowEditorTab('json')
     setIsSaving(false)
   }, [initialData, mode, open])
@@ -430,6 +433,14 @@ export function ComfyWorkflowAuthoringModal({
         .map((value) => value.trim())
         .filter(Boolean),
     })
+  }
+
+  const toggleExpandedField = (fieldId: string) => {
+    setExpandedFieldIds((current) => (
+      current.includes(fieldId)
+        ? current.filter((item) => item !== fieldId)
+        : [...current, fieldId]
+    ))
   }
 
   const handleSave = async () => {
@@ -522,96 +533,112 @@ export function ComfyWorkflowAuthoringModal({
                 <Badge variant="outline">{markedFields.length}</Badge>
               </div>
 
-              {markedFields.length === 0 ? (
-                <div className="rounded-sm border border-dashed border-border bg-surface-container px-4 py-6 text-sm text-muted-foreground">
-                  그래프 노드 안의 입력 항목을 눌러서 marked field로 추가해.
-                </div>
-              ) : (
+              {markedFields.length > 0 ? (
                 <div className="max-h-[620px] space-y-3 overflow-y-auto pr-1">
-                  {markedFields.map((field) => (
-                    <div key={field.id} className="space-y-3 rounded-sm border border-border/70 bg-surface-container p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 space-y-1">
-                          <div className="truncate text-sm font-medium text-foreground">{field.label || field.id}</div>
-                          <div className="truncate text-[11px] text-muted-foreground">{field.jsonPath}</div>
+                  {markedFields.map((field) => {
+                    const isExpanded = expandedFieldIds.includes(field.id)
+
+                    return (
+                      <div key={field.id} className="space-y-3 rounded-sm border border-border/70 bg-surface-container p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 space-y-1">
+                            <div className="truncate text-sm font-medium text-foreground">{field.label || field.id}</div>
+                            <div className="truncate text-[11px] text-muted-foreground">{field.jsonPath}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{field.type}</Badge>
+                            <Button type="button" size="icon-sm" variant="outline" onClick={() => toggleExpandedField(field.id)} title={isExpanded ? '라벨/설명 닫기' : '라벨/설명 수정'} aria-label={isExpanded ? '라벨/설명 닫기' : '라벨/설명 수정'}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button type="button" size="icon-sm" variant="outline" onClick={() => setMarkedFields((current) => current.filter((item) => item.id !== field.id))}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline">{field.type}</Badge>
-                          <Button type="button" size="icon-sm" variant="outline" onClick={() => setMarkedFields((current) => current.filter((item) => item.id !== field.id))}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
 
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <SettingsField label="라벨">
-                          <Input variant="settings" value={field.label} onChange={(event) => handleFieldPatch(field.id, { label: event.target.value })} />
-                        </SettingsField>
-
-                        <SettingsField label="타입">
-                          <Select variant="settings" value={field.type} onChange={(event) => handleFieldPatch(field.id, { type: event.target.value as WorkflowMarkedField['type'] })}>
-                            <option value="text">text</option>
-                            <option value="textarea">textarea</option>
-                            <option value="number">number</option>
-                            <option value="select">select</option>
-                            <option value="image">image</option>
-                          </Select>
-                        </SettingsField>
-
-                        <SettingsField label="Default">
-                          <Input
-                            variant="settings"
-                            type={field.type === 'number' ? 'number' : 'text'}
-                            value={field.default_value === undefined || field.default_value === null ? '' : String(field.default_value)}
-                            onChange={(event) => handleFieldPatch(field.id, { default_value: event.target.value })}
-                          />
-                        </SettingsField>
-
-                        <SettingsField label="설명" className="md:col-span-2">
-                          <Input variant="settings" value={field.description ?? ''} onChange={(event) => handleFieldPatch(field.id, { description: event.target.value })} />
-                        </SettingsField>
-                      </div>
-
-                      <SettingsToggleRow className="py-2">
-                        <input
-                          type="checkbox"
-                          checked={field.required === true}
-                          onChange={(event) => handleFieldPatch(field.id, { required: event.target.checked })}
-                        />
-                        required
-                      </SettingsToggleRow>
-
-                      {field.type === 'select' ? (
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <SettingsField label="Dropdown List">
-                            <Select
-                              variant="settings"
-                              value={field.dropdown_list_name ?? ''}
-                              onChange={(event) => handleFieldPatch(field.id, { dropdown_list_name: event.target.value || undefined })}
-                            >
-                              <option value="">없음</option>
-                              {dropdownListNames.map((name) => (
-                                <option key={name} value={name}>
-                                  {name}
-                                </option>
-                              ))}
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <SettingsField label="타입">
+                            <Select variant="settings" value={field.type} onChange={(event) => handleFieldPatch(field.id, { type: event.target.value as WorkflowMarkedField['type'] })}>
+                              <option value="text">text</option>
+                              <option value="textarea">textarea</option>
+                              <option value="number">number</option>
+                              <option value="select">select</option>
+                              <option value="image">image</option>
                             </Select>
                           </SettingsField>
 
-                          <SettingsField label="직접 옵션">
-                            <Input
-                              variant="settings"
-                              value={(field.options ?? []).join(', ')}
-                              onChange={(event) => handleFieldOptionsChange(field.id, event.target.value)}
-                              placeholder="option1, option2"
+                          <SettingsToggleRow className="rounded-sm border border-border/70 bg-background px-3 py-2 md:self-end">
+                            <input
+                              type="checkbox"
+                              checked={field.required === true}
+                              onChange={(event) => handleFieldPatch(field.id, { required: event.target.checked })}
                             />
+                            required
+                          </SettingsToggleRow>
+
+                          <SettingsField label="Default" className="md:col-span-2">
+                            {field.type === 'textarea' ? (
+                              <Textarea
+                                variant="settings"
+                                rows={4}
+                                value={field.default_value === undefined || field.default_value === null ? '' : String(field.default_value)}
+                                onChange={(event) => handleFieldPatch(field.id, { default_value: event.target.value })}
+                              />
+                            ) : (
+                              <Input
+                                variant="settings"
+                                type={field.type === 'number' ? 'number' : 'text'}
+                                value={field.default_value === undefined || field.default_value === null ? '' : String(field.default_value)}
+                                onChange={(event) => handleFieldPatch(field.id, { default_value: event.target.value })}
+                              />
+                            )}
                           </SettingsField>
                         </div>
-                      ) : null}
-                    </div>
-                  ))}
+
+                        {isExpanded ? (
+                          <div className="grid gap-3 md:grid-cols-2 rounded-sm border border-border/70 bg-background/50 p-3">
+                            <SettingsField label="라벨">
+                              <Input variant="settings" value={field.label} onChange={(event) => handleFieldPatch(field.id, { label: event.target.value })} />
+                            </SettingsField>
+
+                            <SettingsField label="설명" className="md:col-span-2">
+                              <Input variant="settings" value={field.description ?? ''} onChange={(event) => handleFieldPatch(field.id, { description: event.target.value })} />
+                            </SettingsField>
+                          </div>
+                        ) : null}
+
+                        {field.type === 'select' ? (
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <SettingsField label="Dropdown List">
+                              <Select
+                                variant="settings"
+                                value={field.dropdown_list_name ?? ''}
+                                onChange={(event) => handleFieldPatch(field.id, { dropdown_list_name: event.target.value || undefined })}
+                              >
+                                <option value="">없음</option>
+                                {dropdownListNames.map((name) => (
+                                  <option key={name} value={name}>
+                                    {name}
+                                  </option>
+                                ))}
+                              </Select>
+                            </SettingsField>
+
+                            <SettingsField label="직접 옵션">
+                              <Input
+                                variant="settings"
+                                value={(field.options ?? []).join(', ')}
+                                onChange={(event) => handleFieldOptionsChange(field.id, event.target.value)}
+                                placeholder="option1, option2"
+                              />
+                            </SettingsField>
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
                 </div>
-              )}
+              ) : null}
             </section>
           </div>
 
