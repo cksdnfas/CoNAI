@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
-import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
+import { buildSelectedImageDraftFromUrl, type SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import {
+  getNaiVibeAsset,
   listNaiCharacterReferenceAssets,
   listNaiVibeAssets,
   type StoredNaiCharacterReferenceAsset,
@@ -333,30 +334,57 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
     )))
   }
 
-  const appendSavedVibe = (asset: StoredNaiVibeAsset) => {
+  const appendSavedVibe = async (asset: StoredNaiVibeAsset) => {
+    const detailedAsset = asset.encoded ? asset : await getNaiVibeAsset(asset.id)
+    let image = detailedAsset.image_data_url
+
+    if (!image && (detailedAsset.image_url || detailedAsset.thumbnail_url)) {
+      try {
+        image = (await buildSelectedImageDraftFromUrl(detailedAsset.image_url || detailedAsset.thumbnail_url || '', detailedAsset.label)).dataUrl
+      } catch (error) {
+        console.error('Failed to load saved vibe image:', error)
+      }
+    }
+
+    const encoded = detailedAsset.encoded
+    if (!encoded) {
+      console.error('Saved vibe payload is missing:', detailedAsset.id)
+      return
+    }
+
     setRecentVibeIds((current) => saveRecentAssetIds('conai.nai.vibes.recent', asset.id, current))
     updateVibes([
       ...vibeDrafts,
       {
-        image: asset.image_data_url,
-        encoded: asset.encoded,
-        strength: String(asset.strength),
-        informationExtracted: String(asset.information_extracted),
+        image,
+        encoded,
+        strength: String(detailedAsset.strength),
+        informationExtracted: String(detailedAsset.information_extracted),
       },
     ])
   }
 
-  const appendSavedCharacterReference = (asset: StoredNaiCharacterReferenceAsset) => {
-    setRecentCharacterReferenceIds((current) => saveRecentAssetIds('conai.nai.character_refs.recent', asset.id, current))
+  const appendSavedCharacterReference = async (asset: StoredNaiCharacterReferenceAsset) => {
+    let image = asset.image_data_url
+
+    if (!image && (asset.image_url || asset.thumbnail_url)) {
+      try {
+        image = (await buildSelectedImageDraftFromUrl(asset.image_url || asset.thumbnail_url || '', asset.label)).dataUrl
+      } catch (error) {
+        console.error('Failed to load saved character reference image:', error)
+      }
+    }
+
     updateCharacterReferences([
       ...characterReferenceDrafts,
       {
-        image: asset.image_data_url,
+        image,
         type: asset.type,
         strength: String(asset.strength),
         fidelity: String(asset.fidelity),
       },
     ])
+    setRecentCharacterReferenceIds((current) => saveRecentAssetIds('conai.nai.character_refs.recent', asset.id, current))
   }
 
   const togglePinnedVibe = (assetId: string) => {
@@ -443,8 +471,8 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
               {filteredSavedVibes.map((asset) => (
                 <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
                   <div className="flex gap-3">
-                    {asset.image_data_url ? (
-                      <img src={asset.image_data_url} alt={asset.label} className="h-20 w-20 shrink-0 rounded-sm border border-border object-contain" />
+                    {asset.thumbnail_url || asset.image_url || asset.image_data_url ? (
+                      <img src={asset.thumbnail_url || asset.image_url || asset.image_data_url} alt={asset.label} className="h-20 w-20 shrink-0 rounded-sm border border-border object-contain" />
                     ) : (
                       <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-sm border border-dashed border-border text-[11px] text-muted-foreground">
                         no preview
@@ -466,7 +494,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                       {pinnedVibeIds.includes(asset.id) ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
                       {pinnedVibeIds.includes(asset.id) ? '핀 해제' : '핀'}
                     </Button>
-                    <Button type="button" size="sm" variant="outline" onClick={() => appendSavedVibe(asset)}>
+                    <Button type="button" size="sm" variant="outline" onClick={() => void appendSavedVibe(asset)}>
                       <Save className="h-4 w-4" />
                       추가
                     </Button>
@@ -560,7 +588,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
             {filteredSavedCharacterReferences.map((asset) => (
               <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
                 <div className="flex gap-3">
-                  <img src={asset.image_data_url} alt={asset.label} className="h-20 w-20 shrink-0 rounded-sm border border-border object-contain" />
+                  <img src={asset.thumbnail_url || asset.image_url || asset.image_data_url} alt={asset.label} className="h-20 w-20 shrink-0 rounded-sm border border-border object-contain" />
                   <div className="min-w-0 space-y-2">
                     <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
                     <div className="flex flex-wrap gap-1.5">
@@ -577,7 +605,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                     {pinnedCharacterReferenceIds.includes(asset.id) ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
                     {pinnedCharacterReferenceIds.includes(asset.id) ? '핀 해제' : '핀'}
                   </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => appendSavedCharacterReference(asset)}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => void appendSavedCharacterReference(asset)}>
                     <Save className="h-4 w-4" />
                     추가
                   </Button>

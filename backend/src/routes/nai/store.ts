@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import {
   deleteNaiCharacterReferenceAsset,
   deleteNaiVibeAsset,
+  getNaiVibeAsset,
   listNaiCharacterReferenceAssets,
   listNaiVibeAssets,
   saveNaiCharacterReferenceAsset,
@@ -12,8 +13,19 @@ import {
 
 const router = Router();
 
-router.get('/vibes', (req: Request<{}, {}, {}, { model?: string }>, res: Response) => {
-  res.json({ items: listNaiVibeAssets(req.query.model) });
+router.get('/vibes', async (req: Request<{}, {}, {}, { model?: string }>, res: Response) => {
+  const items = await listNaiVibeAssets(req.query.model);
+  res.json({ items: items.map(({ encoded, ...item }) => item) });
+});
+
+router.get('/vibes/:assetId', async (req: Request<{ assetId: string }>, res: Response) => {
+  const item = await getNaiVibeAsset(req.params.assetId);
+  if (!item) {
+    res.status(404).json({ error: 'Stored vibe not found' });
+    return;
+  }
+
+  res.json(item);
 });
 
 router.post('/vibes', async (req: Request<{}, {}, {
@@ -61,7 +73,7 @@ router.delete('/vibes/:assetId', (req: Request<{ assetId: string }>, res: Respon
   res.json({ success: true });
 });
 
-router.put('/vibes/:assetId', (req: Request<{ assetId: string }, {}, {
+router.put('/vibes/:assetId', async (req: Request<{ assetId: string }, {}, {
   label?: string;
   description?: string;
 }>, res: Response) => {
@@ -71,7 +83,7 @@ router.put('/vibes/:assetId', (req: Request<{ assetId: string }, {}, {
     return;
   }
 
-  const item = updateNaiVibeAsset(req.params.assetId, {
+  const item = await updateNaiVibeAsset(req.params.assetId, {
     label,
     description: req.body.description,
   });
@@ -84,8 +96,8 @@ router.put('/vibes/:assetId', (req: Request<{ assetId: string }, {}, {
   res.json(item);
 });
 
-router.get('/character-references', (_req: Request, res: Response) => {
-  res.json({ items: listNaiCharacterReferenceAssets() });
+router.get('/character-references', async (_req: Request, res: Response) => {
+  res.json({ items: await listNaiCharacterReferenceAssets() });
 });
 
 router.post('/character-references', async (req: Request<{}, {}, {
@@ -124,7 +136,7 @@ router.delete('/character-references/:assetId', (req: Request<{ assetId: string 
   res.json({ success: true });
 });
 
-router.put('/character-references/:assetId', (req: Request<{ assetId: string }, {}, {
+router.put('/character-references/:assetId', async (req: Request<{ assetId: string }, {}, {
   label?: string;
   description?: string;
 }>, res: Response) => {
@@ -134,7 +146,7 @@ router.put('/character-references/:assetId', (req: Request<{ assetId: string }, 
     return;
   }
 
-  const item = updateNaiCharacterReferenceAsset(req.params.assetId, {
+  const item = await updateNaiCharacterReferenceAsset(req.params.assetId, {
     label,
     description: req.body.description,
   });

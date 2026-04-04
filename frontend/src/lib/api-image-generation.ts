@@ -205,7 +205,9 @@ export interface StoredNaiVibeAsset {
   description?: string | null
   model: string
   image_data_url?: string
-  encoded: string
+  image_url?: string
+  thumbnail_url?: string
+  encoded?: string
   strength: number
   information_extracted: number
   created_date: string
@@ -215,7 +217,9 @@ export interface StoredNaiCharacterReferenceAsset {
   id: string
   label: string
   description?: string | null
-  image_data_url: string
+  image_data_url?: string
+  image_url?: string
+  thumbnail_url?: string
   type: 'character' | 'style' | 'character&style'
   strength: number
   fidelity: number
@@ -630,6 +634,11 @@ export async function listNaiVibeAssets(model?: string) {
 
   const response = await requestJson<{ items: StoredNaiVibeAsset[] }>(`/api/nai/store/vibes${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
   return response.items
+}
+
+/** Load one saved vibe-transfer asset with its full encoded payload. */
+export async function getNaiVibeAsset(assetId: string) {
+  return requestJson<StoredNaiVibeAsset>(`/api/nai/store/vibes/${assetId}`)
 }
 
 /** Save one reusable vibe-transfer asset for later use. */

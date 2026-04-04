@@ -138,7 +138,7 @@ export function NaiReferencesSection({
                       key={asset.id}
                       title={asset.label}
                       subtitle={asset.description?.trim() || asset.type}
-                      imageUrl={asset.image_data_url}
+                      imageUrl={asset.thumbnail_url || asset.image_url || asset.image_data_url}
                       onSelect={() => onLoadReferenceFromStore(asset.id)}
                       onEdit={() => onEditReferenceFromStore(asset.id)}
                       onDelete={() => onDeleteReferenceFromStore(asset.id)}

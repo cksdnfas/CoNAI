@@ -129,7 +129,7 @@ export function NaiVibesSection({
                       key={asset.id}
                       title={asset.label}
                       subtitle={asset.description?.trim() || asset.model}
-                      imageUrl={asset.image_data_url}
+                      imageUrl={asset.thumbnail_url || asset.image_url || asset.image_data_url}
                       onSelect={() => onLoadVibeFromStore(asset.id)}
                       onEdit={() => onEditVibeFromStore(asset.id)}
                       onDelete={() => onDeleteVibeFromStore(asset.id)}
