@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
 import type { ModuleDefinitionRecord } from '@/lib/api'
 
 type ModuleLibraryPanelProps = {
@@ -23,7 +22,6 @@ type ModuleLibraryTab = 'custom' | 'system'
 
 /** Render the reusable module library for graph authoring. */
 export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule, showHeader = true, surface = 'card' }: ModuleLibraryPanelProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<ModuleLibraryTab>('custom')
 
@@ -55,32 +53,18 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
     })
   }, [searchQuery, visibleModules])
 
-  const collapseButton = (
-    <Button
-      type="button"
-      size="icon-sm"
-      variant="ghost"
-      onClick={() => setIsCollapsed((current) => !current)}
-      aria-label={isCollapsed ? '모듈 펼치기' : '모듈 접기'}
-      title={isCollapsed ? '모듈 펼치기' : '모듈 접기'}
-    >
-      <ChevronDown className={cn('h-4 w-4 transition-transform', isCollapsed ? '-rotate-90' : 'rotate-0')} />
-    </Button>
-  )
-
-  const content = !isCollapsed ? (
+  const content = (
     <div className="space-y-3">
       {showHeader ? (
         <SectionHeading
           variant="inside"
           heading="모듈 라이브러리"
-          actions={
+          actions={(
             <>
               <Badge variant="outline">{activeTabLabel}</Badge>
               <Badge variant="outline">{filteredModules.length}</Badge>
-              {collapseButton}
             </>
-          }
+          )}
         />
       ) : (
         <div className="flex items-center justify-between gap-3">
@@ -88,7 +72,6 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
             <Badge variant="outline">{activeTabLabel}</Badge>
             <Badge variant="outline">{filteredModules.length}</Badge>
           </div>
-          {collapseButton}
         </div>
       )}
 
@@ -160,7 +143,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
             const isSystemModule = module.engine_type === 'system'
 
             return (
-              <div key={module.id} className={cn('flex h-full flex-col gap-3 rounded-sm border p-3', isSystemModule ? 'border-primary/40 bg-surface-high' : 'border-border bg-surface-low')}>
+              <div key={module.id} className={`flex h-full flex-col gap-3 rounded-sm border p-3 ${isSystemModule ? 'border-primary/40 bg-surface-high' : 'border-border bg-surface-low'}`}>
                 <div className="min-w-0 space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-foreground">{module.name}</span>
@@ -182,30 +165,6 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
         </div>
       </div>
     </div>
-  ) : (
-    <div>
-      {showHeader ? (
-        <SectionHeading
-          variant="inside"
-          heading="모듈 라이브러리"
-          actions={
-            <>
-              <Badge variant="outline">{activeTabLabel}</Badge>
-              <Badge variant="outline">{filteredModules.length}</Badge>
-              {collapseButton}
-            </>
-          }
-        />
-      ) : (
-        <div className="flex justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{activeTabLabel}</Badge>
-            <Badge variant="outline">{filteredModules.length}</Badge>
-          </div>
-          {collapseButton}
-        </div>
-      )}
-    </div>
   )
 
   if (surface === 'plain') {
@@ -214,7 +173,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
 
   return (
     <Card>
-      <CardContent className={isCollapsed ? undefined : 'space-y-3'}>{content}</CardContent>
+      <CardContent className="space-y-3">{content}</CardContent>
     </Card>
   )
 }

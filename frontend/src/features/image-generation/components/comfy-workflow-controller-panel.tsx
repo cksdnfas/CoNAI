@@ -1,11 +1,15 @@
-import { ArrowLeft, ImagePlus, Layers3 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { ArrowLeft, ImagePlus, Layers3, Save } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Select } from '@/components/ui/select'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api'
-import type { ComfyUIServerTestState, SelectedImageDraft, WorkflowFieldDraftValue } from '../image-generation-shared'
+import { cn } from '@/lib/utils'
+import { type ComfyUIServerTestState, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
 import { WorkflowFieldInput } from './workflow-field-input'
 
 type ComfyWorkflowControllerPanelProps = {
@@ -17,16 +21,18 @@ type ComfyWorkflowControllerPanelProps = {
   selectedServerId: string
   workflowDraft: Record<string, WorkflowFieldDraftValue>
   isGenerating: boolean
+  headerPortalTargetId?: string
   onBack: () => void
   onSelectServer: (serverId: string) => void
   onFieldChange: (fieldId: string, value: WorkflowFieldDraftValue) => void
   onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
   onResetDraft: () => void
+  onOpenModuleSave: () => void
   onGenerateSelected: () => void
   onGenerateAll: () => void
 }
 
-/** Render the ComfyUI workflow form with compact server targeting near the generation actions. */
+/** Render the ComfyUI workflow form with compact top actions and simplified server targeting. */
 export function ComfyWorkflowControllerPanel({
   workflowName,
   workflowDescription,
@@ -36,19 +42,100 @@ export function ComfyWorkflowControllerPanel({
   selectedServerId,
   workflowDraft,
   isGenerating,
+  headerPortalTargetId,
   onBack,
   onSelectServer,
   onFieldChange,
   onImageChange,
   onResetDraft,
+  onOpenModuleSave,
   onGenerateSelected,
   onGenerateAll,
 }: ComfyWorkflowControllerPanelProps) {
   const connectedServers = servers.filter((server) => serverTests[server.id]?.status?.is_connected === true)
   const selectedServer = servers.find((server) => String(server.id) === selectedServerId) ?? null
+  const [, setHeaderPortalRevision] = useState(0)
+  const useDrawerCompactChrome = Boolean(headerPortalTargetId)
 
-  return (
-    <section className="space-y-6">
+  useEffect(() => {
+    if (!headerPortalTargetId || typeof document === 'undefined') {
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      setHeaderPortalRevision((current) => current + 1)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [headerPortalTargetId])
+
+  const headerPortalTarget = headerPortalTargetId && typeof document !== 'undefined'
+    ? document.getElementById(headerPortalTargetId)
+    : null
+
+  const selectedServerStatus = selectedServer ? serverTests[selectedServer.id] : undefined
+  const selectedServerConnection = selectedServerStatus?.status
+  const selectedServerBadgeLabel = !selectedServer
+    ? '선택 안 됨'
+    : selectedServerStatus?.isLoading
+      ? '확인 중'
+      : selectedServerConnection?.is_connected
+        ? '연결됨'
+        : selectedServerConnection
+          ? '연결 실패'
+          : '미확인'
+
+  const actionButtons = (
+    <div className="flex justify-end">
+      <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto pb-1">
+        <Button type="button" size="sm" variant="outline" onClick={onOpenModuleSave}>
+          <Save className="h-4 w-4" />
+          모듈 저장
+        </Button>
+
+        <Button type="button" variant="ghost" size="sm" onClick={onResetDraft} disabled={isGenerating}>
+          초기화
+        </Button>
+
+        <Select
+          variant="detail"
+          className="h-9 w-[96px] shrink-0 px-2 text-xs sm:w-[108px]"
+          value={selectedServerId}
+          onChange={(event) => onSelectServer(event.target.value)}
+          disabled={servers.length === 0 || isGenerating}
+          aria-label="생성 서버 선택"
+        >
+          {servers.length === 0 ? <option value="">서버 없음</option> : null}
+          {servers.map((server) => {
+            const connectionStatus = serverTests[server.id]?.status
+            const statusLabel = connectionStatus?.is_connected === true
+              ? '연결'
+              : connectionStatus
+                ? '실패'
+                : '미확인'
+
+            return (
+              <option key={server.id} value={String(server.id)}>
+                {server.name} · {statusLabel}
+              </option>
+            )
+          })}
+        </Select>
+
+        <Button type="button" size="sm" variant="outline" onClick={onGenerateSelected} disabled={isGenerating || workflowFields.length === 0 || !selectedServer || serverTests[selectedServer.id]?.status?.is_connected !== true}>
+          <ImagePlus className="h-4 w-4" />
+          {isGenerating ? '요청 중…' : '생성'}
+        </Button>
+
+        <Button type="button" size="sm" onClick={onGenerateAll} disabled={isGenerating || workflowFields.length === 0 || connectedServers.length === 0}>
+          <Layers3 className="h-4 w-4" />
+          {isGenerating ? '요청 중…' : `모두 생성${connectedServers.length > 0 ? ` (${connectedServers.length})` : ''}`}
+        </Button>
+      </div>
+    </div>
+  )
+
+  const compactHeaderContent = (
+    <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-3">
           <Button type="button" variant="ghost" size="sm" onClick={onBack}>
@@ -66,109 +153,65 @@ export function ComfyWorkflowControllerPanel({
           <Badge variant="outline">필드 {workflowFields.length}</Badge>
           <Badge variant="outline">활성 서버 {servers.length}</Badge>
           <Badge variant="outline">연결 서버 {connectedServers.length}</Badge>
+          {servers.length > 0 ? <Badge variant={selectedServerConnection?.is_connected ? 'secondary' : 'outline'}>{selectedServerBadgeLabel}</Badge> : null}
         </div>
       </div>
 
-      <section className="space-y-3">
-        <Card>
-          <CardContent className="space-y-4">
-            <SectionHeading
-              variant="inside"
-              className="border-b border-border/70 pb-4"
-              heading="입력 필드"
-              actions={<Badge variant="outline">{workflowFields.length}</Badge>}
-            />
+      {actionButtons}
 
-            {workflowFields.length > 0 ? (
-              <div className="grid gap-4">
-                {workflowFields.map((field) => (
-                  <WorkflowFieldInput
-                    key={field.id}
-                    field={field}
-                    value={workflowDraft[field.id] ?? ''}
-                    onChange={(value) => onFieldChange(field.id, value)}
-                    onImageChange={(image) => onImageChange(field.id, image)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <Alert>
-                <AlertTitle>입력 필드 없음</AlertTitle>
-                <AlertDescription>노출된 필드가 없어.</AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+    </div>
+  )
 
-      <section className="space-y-3">
-        <Card>
-          <CardContent className="space-y-4">
-            <SectionHeading
-              variant="inside"
-              className="border-b border-border/70 pb-4"
-              heading="대상 서버"
-              actions={selectedServer ? <Badge variant="secondary">{selectedServer.name}</Badge> : <Badge variant="outline">선택 안 됨</Badge>}
-            />
+  return (
+    <section className="space-y-6">
+      {useDrawerCompactChrome
+        ? (headerPortalTarget ? createPortal(compactHeaderContent, headerPortalTarget) : null)
+        : (
+          <div className="space-y-3 border-b border-border/70 pb-4">
+            {compactHeaderContent}
+          </div>
+        )}
 
-            <div className="space-y-4">
-              {servers.length > 0 ? (
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {servers.map((server) => {
-                    const testState = serverTests[server.id]
-                    const connectionStatus = testState?.status
-                    const isSelected = String(server.id) === selectedServerId
-                    const isConnected = connectionStatus?.is_connected === true
+      <div className={cn('space-y-6', useDrawerCompactChrome && 'px-5 pt-4 pb-5')}>
+        {servers.length === 0 ? (
+          <Alert>
+            <AlertTitle>서버 필요</AlertTitle>
+            <AlertDescription>서버를 먼저 등록해줘.</AlertDescription>
+          </Alert>
+        ) : null}
 
-                    return (
-                      <button
-                        key={server.id}
-                        type="button"
-                        onClick={() => onSelectServer(String(server.id))}
-                        className="block w-full rounded-sm border border-border bg-surface-low px-3 py-2.5 text-left transition-colors hover:border-primary/35"
-                        style={isSelected ? { borderColor: 'var(--color-primary)' } : undefined}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium text-foreground">{server.name}</div>
-                            <div className="mt-1 truncate text-[11px] text-muted-foreground">{server.endpoint}</div>
-                          </div>
-                          <div className="flex shrink-0 flex-wrap gap-1">
-                            {isSelected ? <Badge variant="secondary">선택</Badge> : null}
-                            {testState?.isLoading ? <Badge variant="outline">확인 중</Badge> : null}
-                            {!testState?.isLoading && connectionStatus ? (
-                              <Badge variant={isConnected ? 'secondary' : 'outline'}>{isConnected ? '연결' : '실패'}</Badge>
-                            ) : null}
-                          </div>
-                        </div>
-                      </button>
-                    )
-                  })}
+        <section className="space-y-3">
+          <Card>
+            <CardContent className="space-y-4">
+              <SectionHeading
+                variant="inside"
+                className="border-b border-border/70 pb-4"
+                heading="입력 필드"
+                actions={<Badge variant="outline">{workflowFields.length}</Badge>}
+              />
+
+              {workflowFields.length > 0 ? (
+                <div className="grid gap-4">
+                  {workflowFields.map((field) => (
+                    <WorkflowFieldInput
+                      key={field.id}
+                      field={field}
+                      value={workflowDraft[field.id] ?? ''}
+                      onChange={(value) => onFieldChange(field.id, value)}
+                      onImageChange={(image) => onImageChange(field.id, image)}
+                    />
+                  ))}
                 </div>
               ) : (
                 <Alert>
-                  <AlertTitle>서버 필요</AlertTitle>
-                  <AlertDescription>서버를 먼저 등록해줘.</AlertDescription>
+                  <AlertTitle>입력 필드 없음</AlertTitle>
+                  <AlertDescription>노출된 필드가 없어.</AlertDescription>
                 </Alert>
               )}
-
-              <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4">
-                <Button type="button" variant="ghost" onClick={onResetDraft} disabled={isGenerating}>
-                  초기화
-                </Button>
-                <Button type="button" variant="outline" onClick={onGenerateAll} disabled={isGenerating || workflowFields.length === 0 || connectedServers.length === 0}>
-                  <Layers3 className="h-4 w-4" />
-                  {isGenerating ? '요청 중…' : `모든 연결 서버에 생성${connectedServers.length > 0 ? ` (${connectedServers.length})` : ''}`}
-                </Button>
-                <Button type="button" onClick={onGenerateSelected} disabled={isGenerating || workflowFields.length === 0 || !selectedServer || serverTests[selectedServer.id]?.status?.is_connected !== true}>
-                  <ImagePlus className="h-4 w-4" />
-                  {isGenerating ? '요청 중…' : selectedServer ? `${selectedServer.name}에 생성` : '서버 선택'}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
+            </CardContent>
+          </Card>
+        </section>
+      </div>
     </section>
   )
 }

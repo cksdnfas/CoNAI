@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
+  createComfyModuleFromWorkflow,
   createGenerationComfyUIServer,
   createGenerationWorkflow,
   deleteGenerationComfyUIServer,
@@ -24,10 +25,12 @@ import {
   hasWorkflowFieldValue,
   type ComfyUIServerFormDraft,
   type ComfyUIServerTestState,
+  type ModuleFieldOption,
   type SelectedImageDraft,
   type WorkflowFieldDraftValue,
 } from '../image-generation-shared'
 import { ComfyDropdownListsSection, ComfyServerListSection, ComfyWorkflowListSection } from './comfy-home-sections'
+import { ComfyModuleSaveModal } from './comfy-module-save-modal'
 import { ComfyServerRegistrationModal } from './comfy-server-registration-modal'
 import { ComfyWorkflowAuthoringModal } from './comfy-workflow-authoring-modal'
 import { ComfyWorkflowControllerPanel } from './comfy-workflow-controller-panel'
@@ -35,30 +38,40 @@ import { ComfyWorkflowControllerPanel } from './comfy-workflow-controller-panel'
 type ComfyGenerationPanelProps = {
   refreshNonce: number
   onHistoryRefresh: () => void
-  onSelectedWorkflowChange?: (workflowId: number | null) => void
+  selectedWorkflowId: number | null
+  onSelectedWorkflowChange: (workflowId: number | null) => void
+  headerPortalTargetId?: string
 }
-
-type ComfyPanelView = 'home' | 'workflow'
 
 type ComfyWorkflowEditorState = {
   workflow: GenerationWorkflowDetail
 }
 
 /** Render the ComfyUI home/workflow views and coordinate server-targeted generation. */
-export function ComfyGenerationPanel({ refreshNonce, onHistoryRefresh, onSelectedWorkflowChange }: ComfyGenerationPanelProps) {
+export function ComfyGenerationPanel({
+  refreshNonce,
+  onHistoryRefresh,
+  selectedWorkflowId,
+  onSelectedWorkflowChange,
+  headerPortalTargetId,
+}: ComfyGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
-  const [view, setView] = useState<ComfyPanelView>('home')
   const [isComfyGenerating, setIsComfyGenerating] = useState(false)
   const [isComfyServerSubmitting, setIsComfyServerSubmitting] = useState(false)
   const [comfyServerForm, setComfyServerForm] = useState<ComfyUIServerFormDraft>(DEFAULT_COMFYUI_SERVER_FORM)
   const [editingServerId, setEditingServerId] = useState<number | null>(null)
   const [comfyServerTests, setComfyServerTests] = useState<Record<number, ComfyUIServerTestState>>({})
-  const [activeWorkflowId, setActiveWorkflowId] = useState<string>('')
   const [selectedServerId, setSelectedServerId] = useState<string>('')
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
   const [isAuthoringModalOpen, setIsAuthoringModalOpen] = useState(false)
   const [workflowEditorState, setWorkflowEditorState] = useState<ComfyWorkflowEditorState | null>(null)
   const [isServerModalOpen, setIsServerModalOpen] = useState(false)
+  const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
+  const [isSavingComfyModule, setIsSavingComfyModule] = useState(false)
+  const [comfyModuleName, setComfyModuleName] = useState('')
+  const [comfyModuleDescription, setComfyModuleDescription] = useState('')
+  const [comfyExposedFieldIds, setComfyExposedFieldIds] = useState<string[]>([])
+  const activeWorkflowId = selectedWorkflowId !== null ? String(selectedWorkflowId) : ''
 
   const workflowsQuery = useQuery({
     queryKey: ['image-generation-workflows'],
@@ -76,8 +89,8 @@ export function ComfyGenerationPanel({ refreshNonce, onHistoryRefresh, onSelecte
   })
 
   const selectedWorkflow = useMemo(
-    () => workflowsQuery.data?.find((workflow) => String(workflow.id) === activeWorkflowId) ?? null,
-    [activeWorkflowId, workflowsQuery.data],
+    () => workflowsQuery.data?.find((workflow) => workflow.id === selectedWorkflowId) ?? null,
+    [selectedWorkflowId, workflowsQuery.data],
   )
 
   const dropdownListMap = useMemo(
@@ -106,8 +119,16 @@ export function ComfyGenerationPanel({ refreshNonce, onHistoryRefresh, onSelecte
     })
   }, [dropdownListMap, selectedWorkflow])
 
-  const activeServers = serversQuery.data ?? []
+  const activeServers = useMemo(() => serversQuery.data ?? [], [serversQuery.data])
   const connectedServers = activeServers.filter((server) => comfyServerTests[server.id]?.status?.is_connected === true)
+  const comfyModuleFieldOptions = useMemo<ModuleFieldOption[]>(() => (
+    selectedWorkflowFields.map((field) => ({
+      key: field.id,
+      label: field.label,
+      dataType: field.type === 'number' ? 'number' : field.type === 'image' ? 'image' : 'text',
+      options: field.options,
+    }))
+  ), [selectedWorkflowFields])
 
   useEffect(() => {
     if (refreshNonce === 0) {
@@ -120,10 +141,17 @@ export function ComfyGenerationPanel({ refreshNonce, onHistoryRefresh, onSelecte
   useEffect(() => {
     if (!selectedWorkflow) {
       setWorkflowDraft({})
+      setComfyModuleName('')
+      setComfyModuleDescription('')
+      setComfyExposedFieldIds([])
+      setIsModuleSaveModalOpen(false)
       return
     }
 
     setWorkflowDraft(buildWorkflowDraft(selectedWorkflowFields))
+    setComfyModuleName(`${selectedWorkflow.name} 모듈`)
+    setComfyModuleDescription(selectedWorkflow.description ?? '')
+    setComfyExposedFieldIds(selectedWorkflowFields.map((field) => field.id))
   }, [selectedWorkflow, selectedWorkflowFields])
 
   useEffect(() => {
@@ -141,79 +169,17 @@ export function ComfyGenerationPanel({ refreshNonce, onHistoryRefresh, onSelecte
   }, [activeServers, selectedServerId])
 
   useEffect(() => {
-    if (view !== 'workflow') {
-      return
-    }
-
-    if (activeWorkflowId.length === 0) {
-      setView('home')
+    if (selectedWorkflowId === null) {
       return
     }
 
     if (workflowsQuery.isSuccess && selectedWorkflow === null) {
-      setView('home')
+      onSelectedWorkflowChange(null)
     }
-  }, [activeWorkflowId, selectedWorkflow, view, workflowsQuery.isSuccess])
-
-  useEffect(() => {
-    onSelectedWorkflowChange?.(view === 'workflow' ? (selectedWorkflow?.id ?? null) : null)
-  }, [onSelectedWorkflowChange, selectedWorkflow, view])
-
-  useEffect(() => {
-    if (view !== 'workflow' || activeServers.length === 0) {
-      return
-    }
-
-    const untestedServers = activeServers.filter((server) => !comfyServerTests[server.id])
-    if (untestedServers.length === 0) {
-      return
-    }
-
-    for (const server of untestedServers) {
-      void handleTestComfyServer(server.id, { silent: true })
-    }
-  }, [activeServers, comfyServerTests, view])
-
-  const handleWorkflowFieldChange = (fieldId: string, value: WorkflowFieldDraftValue) => {
-    setWorkflowDraft((current) => ({
-      ...current,
-      [fieldId]: value,
-    }))
-  }
-
-  const handleWorkflowImageChange = async (fieldId: string, image?: SelectedImageDraft) => {
-    handleWorkflowFieldChange(fieldId, image ?? '')
-  }
-
-  const handleComfyServerFieldChange = (field: keyof ComfyUIServerFormDraft, value: string) => {
-    setComfyServerForm((current) => ({
-      ...current,
-      [field]: value,
-    }))
-  }
-
-  const resetComfyServerEditor = () => {
-    setEditingServerId(null)
-    setComfyServerForm(DEFAULT_COMFYUI_SERVER_FORM)
-  }
-
-  const handleOpenCreateWorkflow = () => {
-    setWorkflowEditorState(null)
-    setIsAuthoringModalOpen(true)
-  }
-
-  const handleOpenCreateServer = () => {
-    resetComfyServerEditor()
-    setIsServerModalOpen(true)
-  }
-
-  const handleOpenWorkflow = (workflowId: number) => {
-    setActiveWorkflowId(String(workflowId))
-    setView('workflow')
-  }
+  }, [onSelectedWorkflowChange, selectedWorkflow, selectedWorkflowId, workflowsQuery.isSuccess])
 
   /** Test a single ComfyUI server and cache its reachability state. */
-  const handleTestComfyServer = async (serverId: number, options?: { silent?: boolean }) => {
+  const handleTestComfyServer = useCallback(async (serverId: number, options?: { silent?: boolean }) => {
     setComfyServerTests((current) => ({
       ...current,
       [serverId]: {
@@ -250,6 +216,58 @@ export function ComfyGenerationPanel({ refreshNonce, onHistoryRefresh, onSelecte
         showSnackbar({ message, tone: 'error' })
       }
     }
+  }, [showSnackbar])
+
+  useEffect(() => {
+    if (selectedWorkflowId === null || activeServers.length === 0) {
+      return
+    }
+
+    const untestedServers = activeServers.filter((server) => !comfyServerTests[server.id])
+    if (untestedServers.length === 0) {
+      return
+    }
+
+    for (const server of untestedServers) {
+      void handleTestComfyServer(server.id, { silent: true })
+    }
+  }, [activeServers, comfyServerTests, handleTestComfyServer, selectedWorkflowId])
+
+  const handleWorkflowFieldChange = (fieldId: string, value: WorkflowFieldDraftValue) => {
+    setWorkflowDraft((current) => ({
+      ...current,
+      [fieldId]: value,
+    }))
+  }
+
+  const handleWorkflowImageChange = async (fieldId: string, image?: SelectedImageDraft) => {
+    handleWorkflowFieldChange(fieldId, image ?? '')
+  }
+
+  const handleComfyServerFieldChange = (field: keyof ComfyUIServerFormDraft, value: string) => {
+    setComfyServerForm((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
+  const resetComfyServerEditor = () => {
+    setEditingServerId(null)
+    setComfyServerForm(DEFAULT_COMFYUI_SERVER_FORM)
+  }
+
+  const handleOpenCreateWorkflow = () => {
+    setWorkflowEditorState(null)
+    setIsAuthoringModalOpen(true)
+  }
+
+  const handleOpenCreateServer = () => {
+    resetComfyServerEditor()
+    setIsServerModalOpen(true)
+  }
+
+  const handleOpenWorkflow = (workflowId: number) => {
+    onSelectedWorkflowChange(workflowId)
   }
 
   const handleSubmitComfyServer = async () => {
@@ -306,8 +324,7 @@ export function ComfyGenerationPanel({ refreshNonce, onHistoryRefresh, onSelecte
   const handleAuthoringSaved = async (workflowId: number) => {
     await Promise.all([workflowsQuery.refetch(), dropdownListsQuery.refetch()])
     setWorkflowEditorState(null)
-    setActiveWorkflowId(String(workflowId))
-    setView('workflow')
+    onSelectedWorkflowChange(workflowId)
   }
 
   const handleEditWorkflow = async (workflowId: number) => {
@@ -366,9 +383,8 @@ export function ComfyGenerationPanel({ refreshNonce, onHistoryRefresh, onSelecte
     try {
       await deleteGenerationWorkflow(workflowId)
       await workflowsQuery.refetch()
-      if (activeWorkflowId === String(workflowId)) {
-        setActiveWorkflowId('')
-        setView('home')
+      if (selectedWorkflowId === workflowId) {
+        onSelectedWorkflowChange(null)
       }
       showSnackbar({ message: 'ComfyUI 워크플로우를 삭제했어.', tone: 'info' })
     } catch (error) {
@@ -416,6 +432,37 @@ export function ComfyGenerationPanel({ refreshNonce, onHistoryRefresh, onSelecte
       showSnackbar({ message: 'ComfyUI 서버를 삭제했어.', tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, 'ComfyUI 서버 삭제에 실패했어.'), tone: 'error' })
+    }
+  }
+
+  const handleCreateComfyModule = async () => {
+    if (!selectedWorkflow) {
+      return
+    }
+
+    const moduleName = comfyModuleName.trim()
+    if (moduleName.length === 0 || isSavingComfyModule) {
+      return
+    }
+
+    if (comfyModuleFieldOptions.length > 0 && comfyExposedFieldIds.length === 0) {
+      showSnackbar({ message: '최소 1개는 입력 가능 필드로 열어줘.', tone: 'error' })
+      return
+    }
+
+    try {
+      setIsSavingComfyModule(true)
+      await createComfyModuleFromWorkflow(selectedWorkflow.id, {
+        name: moduleName,
+        description: comfyModuleDescription.trim() || undefined,
+        exposed_field_ids: comfyExposedFieldIds,
+      })
+      setIsModuleSaveModalOpen(false)
+      showSnackbar({ message: '현재 ComfyUI 워크플로우를 모듈로 저장했어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, 'ComfyUI 모듈 저장에 실패했어.'), tone: 'error' })
+    } finally {
+      setIsSavingComfyModule(false)
     }
   }
 
@@ -542,7 +589,7 @@ export function ComfyGenerationPanel({ refreshNonce, onHistoryRefresh, onSelecte
           </Alert>
         ) : null}
 
-        {view === 'home' ? (
+        {selectedWorkflowId === null ? (
           <div className="space-y-4">
             <div className="grid gap-4 xl:grid-cols-2">
               <ComfyWorkflowListSection
@@ -577,11 +624,13 @@ export function ComfyGenerationPanel({ refreshNonce, onHistoryRefresh, onSelecte
             selectedServerId={selectedServerId}
             workflowDraft={workflowDraft}
             isGenerating={isComfyGenerating}
-            onBack={() => setView('home')}
+            headerPortalTargetId={headerPortalTargetId}
+            onBack={() => onSelectedWorkflowChange(null)}
             onSelectServer={setSelectedServerId}
             onFieldChange={handleWorkflowFieldChange}
             onImageChange={handleWorkflowImageChange}
             onResetDraft={() => setWorkflowDraft(buildWorkflowDraft(selectedWorkflowFields))}
+            onOpenModuleSave={() => setIsModuleSaveModalOpen(true)}
             onGenerateSelected={() => void handleGenerateSelected()}
             onGenerateAll={() => void handleGenerateAllServers()}
           />
@@ -612,6 +661,20 @@ export function ComfyGenerationPanel({ refreshNonce, onHistoryRefresh, onSelecte
         onReset={resetComfyServerEditor}
         onFieldChange={handleComfyServerFieldChange}
         onSubmit={() => void handleSubmitComfyServer()}
+      />
+
+      <ComfyModuleSaveModal
+        open={isModuleSaveModalOpen}
+        moduleName={comfyModuleName}
+        moduleDescription={comfyModuleDescription}
+        fieldOptions={comfyModuleFieldOptions}
+        exposedFieldIds={comfyExposedFieldIds}
+        isSaving={isSavingComfyModule}
+        onClose={() => setIsModuleSaveModalOpen(false)}
+        onModuleNameChange={setComfyModuleName}
+        onModuleDescriptionChange={setComfyModuleDescription}
+        onExposedFieldIdsChange={setComfyExposedFieldIds}
+        onSave={() => void handleCreateComfyModule()}
       />
     </>
   )
