@@ -1,3 +1,4 @@
+import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import type { SelectedImageDraft } from '../image-generation-shared'
 
 export interface NaiSelectedImageCardProps {
@@ -10,9 +11,14 @@ export function NaiSelectedImageCard({ image, alt }: NaiSelectedImageCardProps) 
   return (
     <div className="space-y-2">
       <div className="truncate text-xs text-muted-foreground">{image.fileName}</div>
-      <div className="flex justify-center rounded-sm border border-border bg-surface-lowest p-3">
-        <img src={image.dataUrl} alt={alt} className="max-h-56 w-full rounded-sm object-contain" />
-      </div>
+      <InlineMediaPreview
+        src={image.dataUrl}
+        mimeType={image.mimeType}
+        fileName={image.fileName}
+        alt={alt}
+        frameClassName="p-3"
+        mediaClassName="max-h-56 w-full object-contain"
+      />
     </div>
   )
 }

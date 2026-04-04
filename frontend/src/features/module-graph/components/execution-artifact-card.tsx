@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge'
+import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import type { GraphExecutionArtifactRecord } from '@/lib/api'
 import { formatDateTime, getArtifactPreviewUrl } from '../module-graph-shared'
 import { cn } from '@/lib/utils'
@@ -28,10 +29,11 @@ export function ExecutionArtifactCard({ artifact, compact = false }: ExecutionAr
       </div>
 
       {previewUrl && (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') ? (
-        <img
+        <InlineMediaPreview
           src={previewUrl}
           alt={`${artifact.node_id}-${artifact.port_key}`}
-          className={cn('rounded-sm border border-border object-contain', compact ? 'max-h-40 w-full' : 'max-h-52 w-full')}
+          frameClassName="p-2"
+          mediaClassName={cn(compact ? 'max-h-40 w-full object-contain' : 'max-h-52 w-full object-contain')}
         />
       ) : null}
 

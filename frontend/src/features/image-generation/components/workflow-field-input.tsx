@@ -5,6 +5,7 @@ import type { WorkflowMarkedField } from '@/lib/api'
 import { FormField, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
+import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 
 type WorkflowFieldInputProps = {
   field: WorkflowMarkedField
@@ -59,7 +60,13 @@ export function WorkflowFieldInput({ field, value, onChange, onImageChange }: Wo
           {imageValue ? (
             <div className="space-y-2 rounded-sm bg-surface-low p-3">
               <div className="text-xs text-muted-foreground">{imageValue.fileName}</div>
-              <img src={imageValue.dataUrl} alt={field.label} className="max-h-40 rounded-sm border border-border object-contain" />
+              <InlineMediaPreview
+                src={imageValue.dataUrl}
+                mimeType={imageValue.mimeType}
+                fileName={imageValue.fileName}
+                alt={field.label}
+                frameClassName="p-3"
+              />
               <div className="flex justify-end">
                 <Button type="button" size="sm" variant="ghost" onClick={() => void onImageChange()}>
                   이미지 제거

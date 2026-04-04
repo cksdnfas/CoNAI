@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ImageList } from '@/features/images/components/image-list/image-list'
+import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { getImageListDisplayName, getImageListItemId, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { getAppSettings, getImages, listGenerationSaveImages, type SaveBrowserImageRecord } from '@/lib/api'
@@ -249,7 +250,14 @@ function ImageAttachmentSelectionCard({
 
         {image && previewUrl ? (
           <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
-            <img src={previewUrl} alt={fileName ?? 'selected image'} className="max-h-72 w-full rounded-sm border border-border bg-surface-lowest object-contain" />
+            <InlineMediaPreview
+              src={image.image_url || image.thumbnail_url}
+              mimeType={image.mime_type}
+              fileName={fileName}
+              alt={fileName ?? 'selected image'}
+              frameClassName="p-3"
+              mediaClassName="max-h-72 w-full object-contain"
+            />
             <div className="space-y-2">
               <div className="break-all text-sm font-medium text-foreground">{fileName}</div>
               <div className="flex flex-wrap gap-1.5">

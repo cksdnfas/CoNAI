@@ -13,6 +13,7 @@ export type HistoryFilter = 'all' | GenerationServiceType
 export type SelectedImageDraft = {
   fileName: string
   dataUrl: string
+  mimeType?: string
 }
 
 export type NAICharacterPromptDraft = {
@@ -233,11 +234,18 @@ export function readFileAsDataUrl(file: Blob) {
   })
 }
 
+/** Infer one mime type from a data URL so workflow previews can classify media correctly. */
+function inferMimeTypeFromDataUrl(dataUrl: string) {
+  const match = /^data:([^;,]+)[;,]/i.exec(dataUrl)
+  return match?.[1] ?? undefined
+}
+
 /** Build one selected-image draft from a local File object. */
 export async function buildSelectedImageDraftFromFile(file: File): Promise<SelectedImageDraft> {
   return {
     fileName: file.name,
     dataUrl: await readFileAsDataUrl(file),
+    mimeType: file.type || undefined,
   }
 }
 
@@ -250,10 +258,12 @@ export async function buildSelectedImageDraftFromUrl(url: string, fileName?: str
 
   const blob = await response.blob()
   const resolvedFileName = fileName || url.split('/').pop() || 'selected-image'
+  const dataUrl = await readFileAsDataUrl(blob)
 
   return {
     fileName: resolvedFileName,
-    dataUrl: await readFileAsDataUrl(blob),
+    dataUrl,
+    mimeType: blob.type || inferMimeTypeFromDataUrl(dataUrl),
   }
 }
 
@@ -262,6 +272,7 @@ export function buildSelectedImageDraftFromDataUrl(dataUrl: string, fileName = '
   return {
     fileName,
     dataUrl,
+    mimeType: inferMimeTypeFromDataUrl(dataUrl),
   }
 }
 

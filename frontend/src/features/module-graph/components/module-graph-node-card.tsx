@@ -3,6 +3,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { Play, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import type { ModulePortDefinition } from '@/lib/api'
 import { buildHandleId, getModuleColor, getPortTypeColor, type ModuleGraphNode } from '../module-graph-shared'
 
@@ -280,7 +281,12 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
             {data.executionReuseState === 'reused' ? 'cached artifact' : data.latestArtifactLabel || 'latest artifact'}
           </div>
           {data.latestArtifactPreviewUrl ? (
-            <img src={data.latestArtifactPreviewUrl} alt={data.latestArtifactLabel || `${module.name} output`} className="max-h-40 w-full rounded-sm border border-border object-contain" />
+            <InlineMediaPreview
+              src={data.latestArtifactPreviewUrl}
+              alt={data.latestArtifactLabel || `${module.name} output`}
+              frameClassName="p-2"
+              mediaClassName="max-h-40 w-full object-contain"
+            />
           ) : data.latestArtifactTextPreview ? (
             <div className="rounded-sm bg-surface-high px-2 py-1.5 text-[11px] leading-4 text-foreground break-words">
               {data.latestArtifactTextPreview}

@@ -9,6 +9,7 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
+import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import type { ModulePortDefinition } from '@/lib/api'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
@@ -296,8 +297,8 @@ export function NodeInspectorPanel({
         <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <ImageAttachmentPickerButton label={hasExplicitValue ? '이미지 변경' : '이미지 선택'} modalTitle={port.label} allowSaveDialog={false} onSelect={(image) => void onNodeImageChange(node.id, port.key, image)} />
-          {typeof rawValue === 'string' && rawValue.startsWith('data:image/') ? (
-            <img src={rawValue} alt={port.label} className="max-h-40 rounded-sm border border-border object-contain" />
+          {typeof rawValue === 'string' && rawValue.startsWith('data:') ? (
+            <InlineMediaPreview src={rawValue} alt={port.label} frameClassName="p-3" />
           ) : null}
         </div>
       )

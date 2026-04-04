@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
+import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import type { GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowRecord } from '@/lib/api'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
@@ -248,8 +249,8 @@ export function WorkflowRunnerPanel({
           </div>
           {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
           <ImageAttachmentPickerButton label={explicitValue ? '이미지 변경' : '이미지 선택'} modalTitle={inputDefinition.label} allowSaveDialog={false} onSelect={(image) => void onInputImageChange(inputDefinition.id, image)} />
-          {typeof rawValue === 'string' && rawValue.startsWith('data:image/') ? (
-            <img src={rawValue} alt={inputDefinition.label} className="max-h-40 rounded-sm border border-border object-contain" />
+          {typeof rawValue === 'string' && rawValue.startsWith('data:') ? (
+            <InlineMediaPreview src={rawValue} alt={inputDefinition.label} frameClassName="p-3" />
           ) : null}
         </div>
       )
@@ -334,7 +335,11 @@ export function WorkflowRunnerPanel({
                         : '실행 결과 없음'}
                   </div>
                   {latestPreviewUrl ? (
-                    <img src={latestPreviewUrl} alt={latestPreviewLabel || selectedGraph.name} className="max-h-40 w-full rounded-sm border border-border object-contain md:max-w-[168px]" />
+                    <InlineMediaPreview
+                      src={latestPreviewUrl}
+                      alt={latestPreviewLabel || selectedGraph.name}
+                      frameClassName="w-full p-2 md:max-w-[168px]"
+                    />
                   ) : null}
                 </AlertDescription>
               </Alert>

@@ -18,6 +18,7 @@ import {
   parseMetadataValue,
 } from '../module-graph-shared'
 import { cn } from '@/lib/utils'
+import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import {
   getExecutionInputEntries,
@@ -435,7 +436,12 @@ export function GraphExecutionPanel({
                     </div>
 
                     {previewUrl && (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') ? (
-                      <img src={previewUrl} alt={`${artifact.node_id}-${artifact.port_key}`} className="mt-2 max-h-44 rounded-sm border border-border object-contain" />
+                      <InlineMediaPreview
+                        src={previewUrl}
+                        alt={`${artifact.node_id}-${artifact.port_key}`}
+                        frameClassName="mt-2 p-2"
+                        mediaClassName="max-h-44 w-full object-contain"
+                      />
                     ) : null}
 
                     {artifact.storage_path ? <div className="mt-2 rounded-sm bg-surface-high px-2 py-1.5 break-all text-[11px] text-muted-foreground">{artifact.storage_path}</div> : null}
