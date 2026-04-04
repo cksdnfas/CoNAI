@@ -1,4 +1,4 @@
-import { Copy, ListTree, Pencil, Plus, Server, Trash2 } from 'lucide-react'
+import { Copy, ListTree, Pencil, Plus, Save, Server, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ type WorkflowListSectionProps = {
   selectedWorkflowId: string
   onSelectWorkflow: (workflowId: number) => void
   onCreateWorkflow: () => void
+  onSaveModule: (workflowId: number) => void
   onEditWorkflow: (workflowId: number) => void
   onCopyWorkflow: (workflowId: number) => void
   onDeleteWorkflow: (workflowId: number) => void
@@ -21,6 +22,7 @@ export function ComfyWorkflowListSection({
   selectedWorkflowId,
   onSelectWorkflow,
   onCreateWorkflow,
+  onSaveModule,
   onEditWorkflow,
   onCopyWorkflow,
   onDeleteWorkflow,
@@ -75,6 +77,19 @@ export function ComfyWorkflowListSection({
                       <div className="flex shrink-0 items-start gap-2">
                         <Badge variant="outline">필드 {(workflow.marked_fields ?? []).length}</Badge>
                         <div className="flex gap-1">
+                          <Button
+                            type="button"
+                            size="icon-xs"
+                            variant="ghost"
+                            onClick={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              onSaveModule(workflow.id)
+                            }}
+                            aria-label={`${workflow.name} 모듈 저장`}
+                          >
+                            <Save className="h-3.5 w-3.5" />
+                          </Button>
                           <Button
                             type="button"
                             size="icon-xs"

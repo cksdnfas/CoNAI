@@ -85,13 +85,15 @@ export function ComfyWorkflowControllerPanel({
           : '미확인'
 
   const actionButtons = (
-    <div className="flex justify-end">
-      <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto pb-1">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" variant="outline" onClick={onOpenModuleSave}>
           <Save className="h-4 w-4" />
           모듈 저장
         </Button>
+      </div>
 
+      <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto pb-1">
         <Button type="button" variant="ghost" size="sm" onClick={onResetDraft} disabled={isGenerating}>
           초기화
         </Button>

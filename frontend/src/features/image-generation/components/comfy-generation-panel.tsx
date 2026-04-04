@@ -15,6 +15,7 @@ import {
   getGenerationWorkflows,
   testGenerationComfyUIServer,
   updateGenerationComfyUIServer,
+  type GenerationWorkflow,
   type GenerationWorkflowDetail,
 } from '@/lib/api'
 import {
@@ -67,6 +68,7 @@ export function ComfyGenerationPanel({
   const [workflowEditorState, setWorkflowEditorState] = useState<ComfyWorkflowEditorState | null>(null)
   const [isServerModalOpen, setIsServerModalOpen] = useState(false)
   const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
+  const [moduleSaveWorkflowId, setModuleSaveWorkflowId] = useState<number | null>(null)
   const [isSavingComfyModule, setIsSavingComfyModule] = useState(false)
   const [comfyModuleName, setComfyModuleName] = useState('')
   const [comfyModuleDescription, setComfyModuleDescription] = useState('')
@@ -92,18 +94,22 @@ export function ComfyGenerationPanel({
     () => workflowsQuery.data?.find((workflow) => workflow.id === selectedWorkflowId) ?? null,
     [selectedWorkflowId, workflowsQuery.data],
   )
+  const moduleSaveWorkflow = useMemo(
+    () => workflowsQuery.data?.find((workflow) => workflow.id === moduleSaveWorkflowId) ?? null,
+    [moduleSaveWorkflowId, workflowsQuery.data],
+  )
 
   const dropdownListMap = useMemo(
     () => new Map((dropdownListsQuery.data ?? []).map((list) => [list.name, list])),
     [dropdownListsQuery.data],
   )
 
-  const selectedWorkflowFields = useMemo(() => {
-    if (!selectedWorkflow) {
+  const resolveWorkflowFields = useCallback((workflow: GenerationWorkflow | null) => {
+    if (!workflow) {
       return []
     }
 
-    return (selectedWorkflow.marked_fields ?? []).map((field) => {
+    return (workflow.marked_fields ?? []).map((field) => {
       if (field.dropdown_list_name) {
         const dropdownList = dropdownListMap.get(field.dropdown_list_name)
         if (dropdownList) {
@@ -117,18 +123,21 @@ export function ComfyGenerationPanel({
 
       return field
     })
-  }, [dropdownListMap, selectedWorkflow])
+  }, [dropdownListMap])
+
+  const selectedWorkflowFields = useMemo(() => resolveWorkflowFields(selectedWorkflow), [resolveWorkflowFields, selectedWorkflow])
+  const moduleSaveWorkflowFields = useMemo(() => resolveWorkflowFields(moduleSaveWorkflow), [resolveWorkflowFields, moduleSaveWorkflow])
 
   const activeServers = useMemo(() => serversQuery.data ?? [], [serversQuery.data])
   const connectedServers = activeServers.filter((server) => comfyServerTests[server.id]?.status?.is_connected === true)
   const comfyModuleFieldOptions = useMemo<ModuleFieldOption[]>(() => (
-    selectedWorkflowFields.map((field) => ({
+    moduleSaveWorkflowFields.map((field) => ({
       key: field.id,
       label: field.label,
       dataType: field.type === 'number' ? 'number' : field.type === 'image' ? 'image' : 'text',
       options: field.options,
     }))
-  ), [selectedWorkflowFields])
+  ), [moduleSaveWorkflowFields])
 
   useEffect(() => {
     if (refreshNonce === 0) {
@@ -141,18 +150,27 @@ export function ComfyGenerationPanel({
   useEffect(() => {
     if (!selectedWorkflow) {
       setWorkflowDraft({})
-      setComfyModuleName('')
-      setComfyModuleDescription('')
-      setComfyExposedFieldIds([])
-      setIsModuleSaveModalOpen(false)
       return
     }
 
     setWorkflowDraft(buildWorkflowDraft(selectedWorkflowFields))
-    setComfyModuleName(`${selectedWorkflow.name} 모듈`)
-    setComfyModuleDescription(selectedWorkflow.description ?? '')
-    setComfyExposedFieldIds(selectedWorkflowFields.map((field) => field.id))
   }, [selectedWorkflow, selectedWorkflowFields])
+
+  useEffect(() => {
+    if (!moduleSaveWorkflow) {
+      setComfyModuleName('')
+      setComfyModuleDescription('')
+      setComfyExposedFieldIds([])
+      if (isModuleSaveModalOpen) {
+        setIsModuleSaveModalOpen(false)
+      }
+      return
+    }
+
+    setComfyModuleName(`${moduleSaveWorkflow.name} 모듈`)
+    setComfyModuleDescription(moduleSaveWorkflow.description ?? '')
+    setComfyExposedFieldIds(moduleSaveWorkflowFields.map((field) => field.id))
+  }, [isModuleSaveModalOpen, moduleSaveWorkflow, moduleSaveWorkflowFields])
 
   useEffect(() => {
     if (activeServers.length === 0) {
@@ -268,6 +286,11 @@ export function ComfyGenerationPanel({
 
   const handleOpenWorkflow = (workflowId: number) => {
     onSelectedWorkflowChange(workflowId)
+  }
+
+  const handleOpenModuleSave = (workflowId: number) => {
+    setModuleSaveWorkflowId(workflowId)
+    setIsModuleSaveModalOpen(true)
   }
 
   const handleSubmitComfyServer = async () => {
@@ -436,7 +459,7 @@ export function ComfyGenerationPanel({
   }
 
   const handleCreateComfyModule = async () => {
-    if (!selectedWorkflow) {
+    if (!moduleSaveWorkflow) {
       return
     }
 
@@ -452,13 +475,14 @@ export function ComfyGenerationPanel({
 
     try {
       setIsSavingComfyModule(true)
-      await createComfyModuleFromWorkflow(selectedWorkflow.id, {
+      await createComfyModuleFromWorkflow(moduleSaveWorkflow.id, {
         name: moduleName,
         description: comfyModuleDescription.trim() || undefined,
         exposed_field_ids: comfyExposedFieldIds,
       })
       setIsModuleSaveModalOpen(false)
-      showSnackbar({ message: '현재 ComfyUI 워크플로우를 모듈로 저장했어.', tone: 'info' })
+      setModuleSaveWorkflowId(null)
+      showSnackbar({ message: `${moduleSaveWorkflow.name} 워크플로우를 모듈로 저장했어.`, tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, 'ComfyUI 모듈 저장에 실패했어.'), tone: 'error' })
     } finally {
@@ -597,6 +621,7 @@ export function ComfyGenerationPanel({
                 selectedWorkflowId={activeWorkflowId}
                 onSelectWorkflow={handleOpenWorkflow}
                 onCreateWorkflow={handleOpenCreateWorkflow}
+                onSaveModule={handleOpenModuleSave}
                 onEditWorkflow={(workflowId) => void handleEditWorkflow(workflowId)}
                 onCopyWorkflow={(workflowId) => void handleCopyWorkflow(workflowId)}
                 onDeleteWorkflow={(workflowId) => void handleDeleteWorkflow(workflowId)}
@@ -630,7 +655,7 @@ export function ComfyGenerationPanel({
             onFieldChange={handleWorkflowFieldChange}
             onImageChange={handleWorkflowImageChange}
             onResetDraft={() => setWorkflowDraft(buildWorkflowDraft(selectedWorkflowFields))}
-            onOpenModuleSave={() => setIsModuleSaveModalOpen(true)}
+            onOpenModuleSave={() => selectedWorkflow ? handleOpenModuleSave(selectedWorkflow.id) : undefined}
             onGenerateSelected={() => void handleGenerateSelected()}
             onGenerateAll={() => void handleGenerateAllServers()}
           />
@@ -670,7 +695,10 @@ export function ComfyGenerationPanel({
         fieldOptions={comfyModuleFieldOptions}
         exposedFieldIds={comfyExposedFieldIds}
         isSaving={isSavingComfyModule}
-        onClose={() => setIsModuleSaveModalOpen(false)}
+        onClose={() => {
+          setIsModuleSaveModalOpen(false)
+          setModuleSaveWorkflowId(null)
+        }}
         onModuleNameChange={setComfyModuleName}
         onModuleDescriptionChange={setComfyModuleDescription}
         onExposedFieldIdsChange={setComfyExposedFieldIds}
