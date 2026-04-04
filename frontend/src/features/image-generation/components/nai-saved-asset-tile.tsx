@@ -43,7 +43,7 @@ export function NaiSavedAssetTile({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={handleKeyDown}
-      className="group relative isolate h-80 overflow-hidden rounded-sm border border-border bg-surface-container text-left transition-transform duration-300 hover:-translate-y-0.5 hover:bg-surface-high"
+      className="group relative isolate h-60 overflow-hidden rounded-sm border border-border bg-surface-container text-left transition-transform duration-300 hover:-translate-y-0.5 hover:bg-surface-high"
     >
       {previewImage ? (
         <ImagePreviewMedia
