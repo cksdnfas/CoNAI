@@ -55,18 +55,24 @@ export function ImageListGrid({
         endReached={onEndReached}
         listClassName="image-list-grid"
         itemClassName="image-list-grid-item"
-        computeItemKey={(_, item) => String(item.composite_hash ?? item.id)}
-        itemContent={(_, image) => (
-          <ImageListItem
-            image={image}
-            href={getItemHref?.(image)}
-            selected={selectedIds.includes(String(image.composite_hash ?? image.id))}
-            selectionMode={selectionMode}
-            gridItemHeight={gridItemHeight}
-            onActivate={onActivate}
-            renderOverlay={renderItemOverlay?.(image)}
-          />
-        )}
+        computeItemKey={(index, item) => String(item?.composite_hash ?? item?.id ?? index)}
+        itemContent={(_, image) => {
+          if (!image) {
+            return null
+          }
+
+          return (
+            <ImageListItem
+              image={image}
+              href={getItemHref?.(image)}
+              selected={selectedIds.includes(String(image.composite_hash ?? image.id))}
+              selectionMode={selectionMode}
+              gridItemHeight={gridItemHeight}
+              onActivate={onActivate}
+              renderOverlay={renderItemOverlay?.(image)}
+            />
+          )
+        }}
       />
     </div>
   )

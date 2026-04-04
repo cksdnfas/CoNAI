@@ -47,19 +47,28 @@ export function ImageListMasonry({
       style={{
         columnGap: `${columnGap}px`,
         height: usesWindowScroll ? undefined : (viewportHeight ?? '100%'),
+        overflowX: usesWindowScroll ? undefined : 'hidden',
+        overflowY: usesWindowScroll ? undefined : 'auto',
+        paddingRight: usesWindowScroll ? undefined : '4px',
       }}
-      ItemContent={({ data: image }) => (
-        <div style={{ paddingBottom: `${rowGap}px` }}>
-          <ImageListItem
-            image={image}
-            href={getItemHref?.(image)}
-            selected={selectedIds.includes(String(image.composite_hash ?? image.id))}
-            selectionMode={selectionMode}
-            onActivate={onActivate}
-            renderOverlay={renderItemOverlay?.(image)}
-          />
-        </div>
-      )}
+      ItemContent={({ data: image }) => {
+        if (!image) {
+          return null
+        }
+
+        return (
+          <div style={{ paddingBottom: `${rowGap}px` }}>
+            <ImageListItem
+              image={image}
+              href={getItemHref?.(image)}
+              selected={selectedIds.includes(String(image.composite_hash ?? image.id))}
+              selectionMode={selectionMode}
+              onActivate={onActivate}
+              renderOverlay={renderItemOverlay?.(image)}
+            />
+          </div>
+        )
+      }}
     />
   )
 }
