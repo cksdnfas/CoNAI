@@ -82,8 +82,8 @@ export function formatPrimitiveValue(value: unknown) {
   }
 
   if (typeof value === 'string') {
-    if (value.startsWith('data:image/')) {
-      return '이미지 데이터'
+    if (value.startsWith('data:')) {
+      return '미디어 데이터'
     }
 
     return value

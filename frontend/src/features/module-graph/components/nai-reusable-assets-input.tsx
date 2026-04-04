@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import { buildSelectedImageDraftFromUrl, type SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
+import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import {
   getNaiVibeAsset,
   listNaiCharacterReferenceAssets,
@@ -425,7 +426,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
               <label className="space-y-2">
                 <span className="text-sm font-medium text-foreground">Reference Image</span>
                 <ImageAttachmentPickerButton label={draft.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Vibe ${index + 1} 이미지 선택`} allowSaveDialog={false} onSelect={(image) => void handleVibeImageChange(index, image)} />
-                {draft.image ? <img src={draft.image} alt={`Vibe ${index + 1}`} className="max-h-40 rounded-sm border border-border object-contain" /> : null}
+                {draft.image ? <InlineMediaPreview src={draft.image} alt={`Vibe ${index + 1}`} frameClassName="p-3" /> : null}
               </label>
 
               <label className="space-y-2">
@@ -472,7 +473,13 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                 <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
                   <div className="flex gap-3">
                     {asset.thumbnail_url || asset.image_url || asset.image_data_url ? (
-                      <img src={asset.thumbnail_url || asset.image_url || asset.image_data_url} alt={asset.label} className="h-20 w-20 shrink-0 rounded-sm border border-border object-contain" />
+                      <InlineMediaPreview
+                        src={asset.thumbnail_url || asset.image_url || asset.image_data_url}
+                        fileName={asset.label}
+                        alt={asset.label}
+                        frameClassName="h-20 w-20 shrink-0 p-1"
+                        mediaClassName="h-full w-full object-contain"
+                      />
                     ) : (
                       <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-sm border border-dashed border-border text-[11px] text-muted-foreground">
                         no preview
@@ -539,7 +546,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
             <label className="space-y-2">
               <span className="text-sm font-medium text-foreground">Reference Image</span>
               <ImageAttachmentPickerButton label={draft.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} allowSaveDialog={false} onSelect={(image) => void handleCharacterReferenceImageChange(index, image)} />
-              {draft.image ? <img src={draft.image} alt={`Reference ${index + 1}`} className="max-h-40 rounded-sm border border-border object-contain" /> : null}
+              {draft.image ? <InlineMediaPreview src={draft.image} alt={`Reference ${index + 1}`} frameClassName="p-3" /> : null}
             </label>
 
             <div className="grid gap-3 md:grid-cols-3">
@@ -588,7 +595,13 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
             {filteredSavedCharacterReferences.map((asset) => (
               <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
                 <div className="flex gap-3">
-                  <img src={asset.thumbnail_url || asset.image_url || asset.image_data_url} alt={asset.label} className="h-20 w-20 shrink-0 rounded-sm border border-border object-contain" />
+                  <InlineMediaPreview
+                    src={asset.thumbnail_url || asset.image_url || asset.image_data_url}
+                    fileName={asset.label}
+                    alt={asset.label}
+                    frameClassName="h-20 w-20 shrink-0 p-1"
+                    mediaClassName="h-full w-full object-contain"
+                  />
                   <div className="min-w-0 space-y-2">
                     <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
                     <div className="flex flex-wrap gap-1.5">
