@@ -325,6 +325,7 @@ export function ComfyWorkflowAuthoringModal({
   const [workflowJson, setWorkflowJson] = useState('')
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [markedFields, setMarkedFields] = useState<WorkflowMarkedField[]>([])
+  const [workflowEditorTab, setWorkflowEditorTab] = useState<'json' | 'graph'>('json')
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
@@ -338,6 +339,7 @@ export function ComfyWorkflowAuthoringModal({
       setWorkflowJson(initialData.workflow.workflow_json)
       setJsonError(null)
       setMarkedFields(initialData.workflow.marked_fields ?? [])
+      setWorkflowEditorTab('graph')
       setIsSaving(false)
       return
     }
@@ -347,6 +349,7 @@ export function ComfyWorkflowAuthoringModal({
     setWorkflowJson('')
     setJsonError(null)
     setMarkedFields([])
+    setWorkflowEditorTab('json')
     setIsSaving(false)
   }, [initialData, mode, open])
 
@@ -483,7 +486,6 @@ export function ComfyWorkflowAuthoringModal({
       open={open}
       onClose={onClose}
       title={modalTitle}
-      description="워크플로우 JSON을 넣고 Graph View에서 입력 항목을 골라 marked field를 구성해. 대상 서버 선택은 생성 화면에서 따로 해."
       widthClassName="max-w-[1380px]"
     >
       <div className="space-y-5">
@@ -516,82 +518,7 @@ export function ComfyWorkflowAuthoringModal({
 
             <section className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-foreground">Workflow JSON</div>
-                  <div className="mt-1 text-xs text-muted-foreground">ComfyUI API workflow JSON을 붙여넣거나 업로드해.</div>
-                </div>
-                <Button type="button" size="sm" variant="outline" asChild>
-                  <label className="cursor-pointer">
-                    <Upload className="h-4 w-4" />
-                    업로드
-                    <input type="file" accept=".json,application/json" hidden onChange={(event) => void handleFileUpload(event.target.files?.[0])} />
-                  </label>
-                </Button>
-              </div>
-
-              <Textarea
-                variant="settings"
-                rows={12}
-                value={workflowJson}
-                onChange={(event) => handleWorkflowJsonChange(event.target.value)}
-                placeholder="ComfyUI API workflow JSON"
-                className="min-h-[360px] font-mono text-xs"
-              />
-
-              {jsonError ? <div className="text-xs text-[#ffb4ab]">{jsonError}</div> : null}
-            </section>
-          </div>
-
-          <div className="space-y-5 2xl:grid 2xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.9fr)] 2xl:items-start 2xl:gap-5 2xl:space-y-0">
-            <section className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
-              <div>
-                <div className="text-sm font-semibold text-foreground">Graph View</div>
-                <div className="mt-1 text-xs text-muted-foreground">노드 안의 입력 항목을 눌러 marked field로 추가해.</div>
-              </div>
-
-              <div className="h-[500px] overflow-hidden rounded-sm border border-border bg-surface-lowest 2xl:h-[560px]">
-                {parsedGraph ? (
-                  <ReactFlowProvider>
-                    <ReactFlow<AuthoringNode, AuthoringEdge>
-                      className="theme-graph-flow"
-                      nodes={parsedGraph.nodes}
-                      edges={parsedGraph.edges}
-                      nodeTypes={nodeTypes}
-                      fitView
-                      colorMode={reactFlowColorMode}
-                      proOptions={{ hideAttribution: true }}
-                      defaultMarkerColor="var(--foreground)"
-                      defaultEdgeOptions={{ animated: false }}
-                      nodesDraggable
-                      nodesConnectable={false}
-                      elementsSelectable
-                      panOnDrag
-                    >
-                      <MiniMap
-                        pannable
-                        zoomable
-                        nodeColor="var(--primary)"
-                        maskColor="color-mix(in srgb, var(--background) 72%, transparent)"
-                        className="!bg-background"
-                      />
-                      <Controls />
-                      <Background color="color-mix(in srgb, var(--foreground) 10%, transparent)" />
-                    </ReactFlow>
-                  </ReactFlowProvider>
-                ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                    유효한 workflow JSON을 넣으면 그래프가 보여.
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-foreground">Marked Fields</div>
-                  <div className="mt-1 text-xs text-muted-foreground">생성 화면에 노출할 입력 필드를 여기서 정리해.</div>
-                </div>
+                <div className="text-sm font-semibold text-foreground">Marked Fields</div>
                 <Badge variant="outline">{markedFields.length}</Badge>
               </div>
 
@@ -600,7 +527,7 @@ export function ComfyWorkflowAuthoringModal({
                   그래프 노드 안의 입력 항목을 눌러서 marked field로 추가해.
                 </div>
               ) : (
-                <div className="max-h-[560px] space-y-3 overflow-y-auto pr-1">
+                <div className="max-h-[620px] space-y-3 overflow-y-auto pr-1">
                   {markedFields.map((field) => (
                     <div key={field.id} className="space-y-3 rounded-sm border border-border/70 bg-surface-container p-3">
                       <div className="flex items-start justify-between gap-3">
@@ -629,10 +556,6 @@ export function ComfyWorkflowAuthoringModal({
                             <option value="select">select</option>
                             <option value="image">image</option>
                           </Select>
-                        </SettingsField>
-
-                        <SettingsField label="Placeholder">
-                          <Input variant="settings" value={field.placeholder ?? ''} onChange={(event) => handleFieldPatch(field.id, { placeholder: event.target.value })} />
                         </SettingsField>
 
                         <SettingsField label="Default">
@@ -687,6 +610,92 @@ export function ComfyWorkflowAuthoringModal({
                       ) : null}
                     </div>
                   ))}
+                </div>
+              )}
+            </section>
+          </div>
+
+          <div className="min-w-0">
+            <section className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="inline-flex rounded-sm border border-border bg-surface-container p-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={workflowEditorTab === 'json' ? 'default' : 'ghost'}
+                    onClick={() => setWorkflowEditorTab('json')}
+                  >
+                    Workflow JSON
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={workflowEditorTab === 'graph' ? 'default' : 'ghost'}
+                    onClick={() => setWorkflowEditorTab('graph')}
+                  >
+                    Graph View
+                  </Button>
+                </div>
+
+                {workflowEditorTab === 'json' ? (
+                  <Button type="button" size="sm" variant="outline" asChild>
+                    <label className="cursor-pointer">
+                      <Upload className="h-4 w-4" />
+                      업로드
+                      <input type="file" accept=".json,application/json" hidden onChange={(event) => void handleFileUpload(event.target.files?.[0])} />
+                    </label>
+                  </Button>
+                ) : null}
+              </div>
+
+              {workflowEditorTab === 'json' ? (
+                <div className="space-y-3">
+                  <Textarea
+                    variant="settings"
+                    rows={12}
+                    value={workflowJson}
+                    onChange={(event) => handleWorkflowJsonChange(event.target.value)}
+                    placeholder="ComfyUI API workflow JSON"
+                    className="min-h-[620px] font-mono text-xs"
+                  />
+
+                  {jsonError ? <div className="text-xs text-[#ffb4ab]">{jsonError}</div> : null}
+                </div>
+              ) : (
+                <div className="h-[660px] overflow-hidden rounded-sm border border-border bg-surface-lowest">
+                  {parsedGraph ? (
+                    <ReactFlowProvider>
+                      <ReactFlow<AuthoringNode, AuthoringEdge>
+                        className="theme-graph-flow"
+                        nodes={parsedGraph.nodes}
+                        edges={parsedGraph.edges}
+                        nodeTypes={nodeTypes}
+                        fitView
+                        colorMode={reactFlowColorMode}
+                        proOptions={{ hideAttribution: true }}
+                        defaultMarkerColor="var(--foreground)"
+                        defaultEdgeOptions={{ animated: false }}
+                        nodesDraggable
+                        nodesConnectable={false}
+                        elementsSelectable
+                        panOnDrag
+                      >
+                        <MiniMap
+                          pannable
+                          zoomable
+                          nodeColor="var(--primary)"
+                          maskColor="color-mix(in srgb, var(--background) 72%, transparent)"
+                          className="!bg-background"
+                        />
+                        <Controls />
+                        <Background color="color-mix(in srgb, var(--foreground) 10%, transparent)" />
+                      </ReactFlow>
+                    </ReactFlowProvider>
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                      유효한 workflow JSON을 넣으면 그래프가 보여.
+                    </div>
+                  )}
                 </div>
               )}
             </section>
