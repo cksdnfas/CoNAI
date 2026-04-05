@@ -12,6 +12,8 @@ const os = require('os');
 const https = require('https');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
+const ROOT_PACKAGE_JSON = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf8'));
+const APP_VERSION = ROOT_PACKAGE_JSON.version;
 const BACKEND_DIST = path.join(ROOT_DIR, 'backend', 'dist');
 const BUNDLE_FILE = path.join(BACKEND_DIST, 'bundle.js');
 const BUILD_OUTPUT_DIR = path.join(ROOT_DIR, 'build-output');
@@ -386,7 +388,7 @@ if (fs.existsSync(bootstrapSource)) {
 console.log('Step 7.6: Creating package.json for dependency management...');
 const portablePackageJson = {
   name: "conai-portable",
-  version: "1.0.0",
+  version: APP_VERSION,
   private: true,
   description: "Portable distribution of CoNAI",
   dependencies: {

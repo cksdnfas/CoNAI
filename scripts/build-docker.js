@@ -9,6 +9,8 @@ const fs = require('fs-extra');
 const path = require('path');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
+const ROOT_PACKAGE_JSON = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf8'));
+const APP_VERSION = ROOT_PACKAGE_JSON.version;
 const BACKEND_DIST = path.join(ROOT_DIR, 'backend', 'dist');
 const BUNDLE_FILE = path.join(BACKEND_DIST, 'bundle.js');
 const BUILD_OUTPUT_DIR = path.join(ROOT_DIR, 'build-output');
@@ -157,7 +159,7 @@ const safeRemove = async (dirPath) => {
     console.log('Step 4: Creating production package.json...');
     const productionPackageJson = {
       name: "comfyui-image-manager-docker",
-      version: "1.0.0",
+      version: APP_VERSION,
       private: true,
       description: "ComfyUI Image Manager - Docker Distribution",
       main: "bundle.js",

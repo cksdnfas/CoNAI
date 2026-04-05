@@ -12,6 +12,28 @@ const { execSync } = require('child_process');
 const APP_DIR = path.join(__dirname, '..', 'app');
 const NODE_MODULES = path.join(APP_DIR, 'node_modules');
 const PACKAGE_JSON = path.join(APP_DIR, 'package.json');
+const DEFAULT_APP_VERSION = (() => {
+  const versionCandidates = [
+    PACKAGE_JSON,
+    path.join(__dirname, '..', 'package.json'),
+  ];
+
+  for (const candidate of versionCandidates) {
+    try {
+      if (!fs.existsSync(candidate)) {
+        continue;
+      }
+      const parsed = JSON.parse(fs.readFileSync(candidate, 'utf8'));
+      if (typeof parsed.version === 'string' && parsed.version.trim().length > 0) {
+        return parsed.version.trim();
+      }
+    } catch {
+      // Ignore malformed or unavailable package.json files and keep searching.
+    }
+  }
+
+  return '0.0.0';
+})();
 
 // Required native modules
 const REQUIRED_MODULES = ['sharp', 'better-sqlite3', 'ffmpeg-static', 'ffprobe-static'];
@@ -65,7 +87,7 @@ function installDependencies() {
     if (!fs.existsSync(PACKAGE_JSON)) {
       const packageJson = {
         name: "comfyui-image-manager-portable",
-        version: "1.0.0",
+        version: DEFAULT_APP_VERSION,
         private: true,
         dependencies: {
           "sharp": "^0.33.0",
