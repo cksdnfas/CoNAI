@@ -75,6 +75,12 @@ export interface CustomDropdownList {
   updated_date?: string
 }
 
+export interface ComfyUIModelFolderScanInput {
+  folderName: string
+  displayName: string
+  files: string[]
+}
+
 export interface CreateComfyUIServerPayload {
   name: string
   endpoint: string
@@ -507,6 +513,44 @@ export async function getGenerationWorkflowServers(workflowId: number) {
 export async function getGenerationCustomDropdownLists() {
   const response = await requestJson<CustomDropdownListResponse>('/api/custom-dropdown-lists')
   return response.data
+}
+
+/** Create one manual custom dropdown list. */
+export async function createGenerationCustomDropdownList(payload: {
+  name: string
+  description?: string
+  items: string[]
+}) {
+  return requestJson<{ success: boolean; data: { id: number; message: string } }>('/api/custom-dropdown-lists', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Delete one custom dropdown list. */
+export async function deleteGenerationCustomDropdownList(listId: number) {
+  return requestJson<{ success: boolean; data: { message: string } }>(`/api/custom-dropdown-lists/${listId}`, {
+    method: 'DELETE',
+  })
+}
+
+/** Scan a selected ComfyUI models folder dump and store auto-collected dropdown lists. */
+export async function scanGenerationComfyUIModelDropdownLists(payload: {
+  modelFolders: ComfyUIModelFolderScanInput[]
+  sourcePath?: string
+  mergeSubfolders?: boolean
+  createBoth?: boolean
+}) {
+  return requestJson<{ success: boolean; data: { scannedFolders: number; createdLists: number; deletedLists?: number; message: string } }>('/api/custom-dropdown-lists/scan-comfyui-models', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
 }
 
 /** Load recent generation history for the image generation page. */

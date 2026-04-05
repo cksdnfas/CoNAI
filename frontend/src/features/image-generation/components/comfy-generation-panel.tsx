@@ -5,14 +5,17 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   createComfyModuleFromWorkflow,
   createGenerationComfyUIServer,
+  createGenerationCustomDropdownList,
   createGenerationWorkflow,
   deleteGenerationComfyUIServer,
+  deleteGenerationCustomDropdownList,
   deleteGenerationWorkflow,
   generateComfyUIImage,
   getGenerationComfyUIServers,
   getGenerationCustomDropdownLists,
   getGenerationWorkflow,
   getGenerationWorkflows,
+  scanGenerationComfyUIModelDropdownLists,
   testGenerationComfyUIServer,
   updateGenerationComfyUIServer,
   type GenerationWorkflow,
@@ -415,6 +418,51 @@ export function ComfyGenerationPanel({
     }
   }
 
+  const handleCreateDropdownList = async (input: { name: string; description?: string; items: string[] }) => {
+    try {
+      await createGenerationCustomDropdownList(input)
+      await dropdownListsQuery.refetch()
+      showSnackbar({ message: '커스텀 드롭다운 목록을 만들었어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, '커스텀 드롭다운 목록 생성에 실패했어.'), tone: 'error' })
+    }
+  }
+
+  const handleDeleteDropdownList = async (listId: number) => {
+    const list = dropdownListsQuery.data?.find((item) => item.id === listId)
+    if (!list) {
+      return
+    }
+
+    const confirmed = window.confirm(`정말 ${list.name} 목록을 삭제할까?`)
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      await deleteGenerationCustomDropdownList(listId)
+      await dropdownListsQuery.refetch()
+      showSnackbar({ message: '드롭다운 목록을 삭제했어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, '드롭다운 목록 삭제에 실패했어.'), tone: 'error' })
+    }
+  }
+
+  const handleScanDropdownLists = async (input: {
+    modelFolders: { folderName: string; displayName: string; files: string[] }[]
+    sourcePath?: string
+    mergeSubfolders?: boolean
+    createBoth?: boolean
+  }) => {
+    try {
+      const response = await scanGenerationComfyUIModelDropdownLists(input)
+      await dropdownListsQuery.refetch()
+      showSnackbar({ message: response.data.message || '자동수집 목록을 갱신했어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, '자동수집 목록 생성에 실패했어.'), tone: 'error' })
+    }
+  }
+
   const handleEditServer = (serverId: number) => {
     const server = activeServers.find((item) => item.id === serverId)
     if (!server) {
@@ -627,7 +675,12 @@ export function ComfyGenerationPanel({
                 onDeleteWorkflow={(workflowId) => void handleDeleteWorkflow(workflowId)}
               />
 
-              <ComfyDropdownListsSection dropdownLists={dropdownListsQuery.data ?? []} />
+              <ComfyDropdownListsSection
+                dropdownLists={dropdownListsQuery.data ?? []}
+                onCreateManualList={(input) => handleCreateDropdownList(input)}
+                onDeleteList={(listId) => handleDeleteDropdownList(listId)}
+                onScanAutoLists={(input) => handleScanDropdownLists(input)}
+              />
             </div>
 
             <ComfyServerListSection
