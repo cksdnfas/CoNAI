@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { SettingsModal } from '@/features/settings/components/settings-modal'
 import type { ComfyUIModelFolderScanInput, ComfyUIServer, CustomDropdownList, GenerationWorkflow } from '@/lib/api'
 import type { ComfyUIServerTestState } from '../image-generation-shared'
 
@@ -338,16 +339,93 @@ function collectModelFoldersFromSelection(files: RelativeFile[]) {
   }
 }
 
-export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false, onCreateManualList, onDeleteList, onScanAutoLists }: DropdownListsSectionProps) {
+type CustomDropdownListCreateModalProps = {
+  open: boolean
+  isSubmitting?: boolean
+  onClose: () => void
+  onSubmit: (input: { name: string; description?: string; items: string[] }) => Promise<void> | void
+}
+
+function CustomDropdownListCreateModal({ open, isSubmitting = false, onClose, onSubmit }: CustomDropdownListCreateModalProps) {
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [itemsText, setItemsText] = useState('')
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    setName('')
+    setDescription('')
+    setItemsText('')
+  }, [open])
+
+  const items = useMemo(() => splitDropdownItems(itemsText), [itemsText])
+
+  const handleSubmit = async () => {
+    const trimmedName = name.trim()
+    if (!trimmedName || items.length === 0) {
+      return
+    }
+
+    await onSubmit({
+      name: trimmedName,
+      description: description.trim() || undefined,
+      items,
+    })
+  }
+
+  return (
+    <SettingsModal open={open} onClose={onClose} title="커스텀 드롭다운 목록" widthClassName="max-w-2xl">
+      <div className="space-y-4">
+        <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="목록 이름" />
+        <Textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="설명 (선택)" />
+        <Textarea rows={8} value={itemsText} onChange={(event) => setItemsText(event.target.value)} placeholder="항목을 줄바꿈 또는 쉼표로 입력" />
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs text-muted-foreground">{items.length}개 항목</div>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>취소</Button>
+            <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || !name.trim() || items.length === 0}>
+              <Plus className="h-4 w-4" />
+              추가
+            </Button>
+          </div>
+        </div>
+      </div>
+    </SettingsModal>
+  )
+}
+
+type ComfyDropdownAutoCollectModalProps = {
+  open: boolean
+  isSubmitting?: boolean
+  onClose: () => void
+  onSubmit: (input: {
+    modelFolders: ComfyUIModelFolderScanInput[]
+    sourcePath?: string
+    mergeSubfolders?: boolean
+    createBoth?: boolean
+  }) => Promise<void> | void
+}
+
+function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, onSubmit }: ComfyDropdownAutoCollectModalProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const [activeTab, setActiveTab] = useState<DropdownTab>('custom')
-  const [customName, setCustomName] = useState('')
-  const [customDescription, setCustomDescription] = useState('')
-  const [customItemsText, setCustomItemsText] = useState('')
   const [selectedSourceFiles, setSelectedSourceFiles] = useState<RelativeFile[]>([])
   const [selectedSourceLabel, setSelectedSourceLabel] = useState('')
   const [mergeSubfolders, setMergeSubfolders] = useState(true)
   const [createBoth, setCreateBoth] = useState(false)
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    setSelectedSourceFiles([])
+    setSelectedSourceLabel('')
+    setMergeSubfolders(true)
+    setCreateBoth(false)
+  }, [open])
 
   useEffect(() => {
     if (!inputRef.current) {
@@ -356,12 +434,8 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
 
     inputRef.current.setAttribute('webkitdirectory', '')
     inputRef.current.setAttribute('directory', '')
-  }, [])
+  }, [open])
 
-  const customLists = useMemo(() => dropdownLists.filter((list) => !list.is_auto_collected), [dropdownLists])
-  const autoLists = useMemo(() => dropdownLists.filter((list) => list.is_auto_collected), [dropdownLists])
-  const visibleLists = activeTab === 'custom' ? customLists : autoLists
-  const customItems = useMemo(() => splitDropdownItems(customItemsText), [customItemsText])
   const autoScanPreview = useMemo(() => (selectedSourceFiles.length > 0 ? collectModelFoldersFromSelection(selectedSourceFiles) : null), [selectedSourceFiles])
 
   const handlePickFolder = () => {
@@ -380,35 +454,73 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
     event.target.value = ''
   }
 
-  const handleCreateManual = async () => {
-    const name = customName.trim()
-    if (!name || customItems.length === 0) {
-      return
-    }
-
-    await onCreateManualList({
-      name,
-      description: customDescription.trim() || undefined,
-      items: customItems,
-    })
-
-    setCustomName('')
-    setCustomDescription('')
-    setCustomItemsText('')
-  }
-
-  const handleScanAuto = async () => {
+  const handleSubmit = async () => {
     if (!autoScanPreview || autoScanPreview.modelFolders.length === 0) {
       return
     }
 
-    await onScanAutoLists({
+    await onSubmit({
       modelFolders: autoScanPreview.modelFolders,
       sourcePath: autoScanPreview.sourcePath,
       mergeSubfolders,
       createBoth,
     })
   }
+
+  return (
+    <SettingsModal open={open} onClose={onClose} title="ComfyUI 자동수집" widthClassName="max-w-3xl">
+      <div className="space-y-5">
+        <input ref={inputRef} type="file" className="hidden" multiple onChange={(event) => handleFolderChange(event)} />
+
+        <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" onClick={handlePickFolder} disabled={isSubmitting}>
+              <FolderOpen className="h-4 w-4" />
+              {selectedSourceLabel ? selectedSourceLabel : '폴더 선택'}
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={mergeSubfolders} onChange={(event) => setMergeSubfolders(event.target.checked)} />
+              하위 폴더 통합
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={createBoth} onChange={(event) => setCreateBoth(event.target.checked)} disabled={!mergeSubfolders} />
+              통합 + 개별 생성
+            </label>
+          </div>
+
+          {autoScanPreview ? (
+            <Alert>
+              <AlertTitle>수집 미리보기</AlertTitle>
+              <AlertDescription>
+                폴더 {autoScanPreview.modelFolders.length}개, 항목 {autoScanPreview.modelFolders.reduce((sum, folder) => sum + folder.files.length, 0)}개
+              </AlertDescription>
+            </Alert>
+          ) : null}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>취소</Button>
+          <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || !autoScanPreview || autoScanPreview.modelFolders.length === 0}>
+            <Upload className="h-4 w-4" />
+            자동수집 실행
+          </Button>
+        </div>
+      </div>
+    </SettingsModal>
+  )
+}
+
+export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false, onCreateManualList, onDeleteList, onScanAutoLists }: DropdownListsSectionProps) {
+  const [activeTab, setActiveTab] = useState<DropdownTab>('custom')
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false)
+  const [isAutoModalOpen, setIsAutoModalOpen] = useState(false)
+
+  const customLists = useMemo(() => dropdownLists.filter((list) => !list.is_auto_collected), [dropdownLists])
+  const autoLists = useMemo(() => dropdownLists.filter((list) => list.is_auto_collected), [dropdownLists])
+  const visibleLists = activeTab === 'custom' ? customLists : autoLists
 
   return (
     <section className="space-y-3">
@@ -421,124 +533,82 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
             actions={<Badge variant="outline">{dropdownLists.length}</Badge>}
           />
 
-          <SegmentedControl
-            value={activeTab}
-            onChange={(value) => setActiveTab(value as DropdownTab)}
-            size="sm"
-            fullWidth
-            items={[
-              { value: 'custom', label: <span className="flex items-center justify-center gap-2">커스텀 <span className="text-xs text-muted-foreground">{customLists.length}</span></span> },
-              { value: 'auto', label: <span className="flex items-center justify-center gap-2">자동수집 <span className="text-xs text-muted-foreground">{autoLists.length}</span></span> },
-            ]}
-          />
+          <div className="border-b border-border/70 pb-2">
+            <SegmentedControl
+              value={activeTab}
+              onChange={(value) => setActiveTab(value as DropdownTab)}
+              items={[
+                { value: 'custom', label: '커스텀' },
+                { value: 'auto', label: '자동수집' },
+              ]}
+            />
+          </div>
 
-          {activeTab === 'custom' ? (
-            <div className="space-y-4">
-              <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
-                <div className="text-sm font-medium text-foreground">새 커스텀 목록</div>
-                <Input value={customName} onChange={(event) => setCustomName(event.target.value)} placeholder="목록 이름" />
-                <Textarea rows={3} value={customDescription} onChange={(event) => setCustomDescription(event.target.value)} placeholder="설명 (선택)" />
-                <Textarea rows={6} value={customItemsText} onChange={(event) => setCustomItemsText(event.target.value)} placeholder="항목을 줄바꿈 또는 쉼표로 입력" />
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-xs text-muted-foreground">{customItems.length}개 항목</div>
-                  <Button type="button" onClick={() => void handleCreateManual()} disabled={isSubmitting || !customName.trim() || customItems.length === 0}>
-                    <Plus className="h-4 w-4" />
-                    목록 추가
-                  </Button>
-                </div>
-              </div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm text-muted-foreground">{activeTab === 'custom' ? `${customLists.length}개 목록` : `${autoLists.length}개 목록`}</div>
+            {activeTab === 'custom' ? (
+              <Button type="button" size="sm" variant="outline" onClick={() => setIsCustomModalOpen(true)}>
+                <Plus className="h-4 w-4" />
+                목록 추가
+              </Button>
+            ) : (
+              <Button type="button" size="sm" variant="outline" onClick={() => setIsAutoModalOpen(true)}>
+                <FolderOpen className="h-4 w-4" />
+                자동수집
+              </Button>
+            )}
+          </div>
 
-              {visibleLists.length > 0 ? (
-                <div className="space-y-2">
-                  {visibleLists.map((list) => (
-                    <div key={list.id} className="rounded-sm border border-border bg-surface-low px-3 py-3 text-sm text-muted-foreground">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-medium text-foreground">{list.name}</span>
-                            <Badge variant="outline">items {list.items.length}</Badge>
-                          </div>
-                          {list.description ? <div className="mt-1 line-clamp-2 text-[11px]">{list.description}</div> : null}
-                          {list.items.length > 0 ? <div className="mt-1 line-clamp-1 text-[11px]">{list.items.slice(0, 6).join(', ')}</div> : null}
-                        </div>
-                        <Button type="button" size="sm" variant="outline" onClick={() => void onDeleteList(list.id)} disabled={isSubmitting}>
-                          <Trash2 className="h-4 w-4" />
-                          삭제
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">등록된 커스텀 목록이 없어.</div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <input ref={inputRef} type="file" className="hidden" multiple onChange={(event) => handleFolderChange(event)} />
-
-              <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-medium text-foreground">ComfyUI 폴더 자동수집</div>
-                    {selectedSourceLabel ? <div className="text-xs text-muted-foreground">{selectedSourceLabel}</div> : null}
-                  </div>
-                  <Button type="button" variant="outline" onClick={handlePickFolder} disabled={isSubmitting}>
-                    <FolderOpen className="h-4 w-4" />
-                    폴더 선택
-                  </Button>
-                </div>
-
-                <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={mergeSubfolders} onChange={(event) => setMergeSubfolders(event.target.checked)} />
-                    하위 폴더 통합
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={createBoth} onChange={(event) => setCreateBoth(event.target.checked)} disabled={!mergeSubfolders} />
-                    통합 + 개별 둘 다 생성
-                  </label>
-                </div>
-
-                {autoScanPreview ? (
-                  <Alert>
-                    <AlertTitle>수집 미리보기</AlertTitle>
-                    <AlertDescription>
-                      폴더 {autoScanPreview.modelFolders.length}개, 항목 {autoScanPreview.modelFolders.reduce((sum, folder) => sum + folder.files.length, 0)}개를 감지했어.
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-
-                <div className="flex justify-end">
-                  <Button type="button" onClick={() => void handleScanAuto()} disabled={isSubmitting || !autoScanPreview || autoScanPreview.modelFolders.length === 0}>
-                    <Upload className="h-4 w-4" />
-                    자동수집 실행
-                  </Button>
-                </div>
-              </div>
-
-              {visibleLists.length > 0 ? (
-                <div className="space-y-2">
-                  {visibleLists.map((list) => (
-                    <div key={list.id} className="rounded-sm border border-border bg-surface-low px-3 py-3 text-sm text-muted-foreground">
+          {visibleLists.length > 0 ? (
+            <div className="space-y-2">
+              {visibleLists.map((list) => (
+                <div key={list.id} className="rounded-sm border border-border bg-surface-low px-3 py-3 text-sm text-muted-foreground">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-medium text-foreground">{list.name}</span>
-                        <Badge variant="secondary">auto</Badge>
+                        <Badge variant={list.is_auto_collected ? 'secondary' : 'outline'}>{list.is_auto_collected ? 'auto' : 'manual'}</Badge>
                         <Badge variant="outline">items {list.items.length}</Badge>
                       </div>
                       {list.description ? <div className="mt-1 line-clamp-2 text-[11px]">{list.description}</div> : null}
                       {list.source_path ? <div className="mt-1 line-clamp-1 text-[11px]">source {list.source_path}</div> : null}
                       {list.items.length > 0 ? <div className="mt-1 line-clamp-1 text-[11px]">{list.items.slice(0, 6).join(', ')}</div> : null}
                     </div>
-                  ))}
+                    {!list.is_auto_collected ? (
+                      <Button type="button" size="sm" variant="outline" onClick={() => void onDeleteList(list.id)} disabled={isSubmitting}>
+                        <Trash2 className="h-4 w-4" />
+                        삭제
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">자동수집된 목록이 없어.</div>
-              )}
+              ))}
             </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">{activeTab === 'custom' ? '등록된 커스텀 목록이 없어.' : '자동수집된 목록이 없어.'}</div>
           )}
         </CardContent>
       </Card>
+
+      <CustomDropdownListCreateModal
+        open={isCustomModalOpen}
+        isSubmitting={isSubmitting}
+        onClose={() => setIsCustomModalOpen(false)}
+        onSubmit={async (input) => {
+          await onCreateManualList(input)
+          setIsCustomModalOpen(false)
+        }}
+      />
+
+      <ComfyDropdownAutoCollectModal
+        open={isAutoModalOpen}
+        isSubmitting={isSubmitting}
+        onClose={() => setIsAutoModalOpen(false)}
+        onSubmit={async (input) => {
+          await onScanAutoLists(input)
+          setIsAutoModalOpen(false)
+        }}
+      />
     </section>
   )
 }
