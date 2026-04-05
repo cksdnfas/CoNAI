@@ -116,6 +116,8 @@ router.put('/folders/:id', asyncHandler(async (req: Request, res: Response) => {
 
 router.delete('/folders/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)))
+  const deleteMode = req.query.mode === 'delete_tree' ? 'delete_tree' : 'move_children'
+
   if (isNaN(id)) {
     return res.status(400).json({ success: false, error: 'Invalid folder ID' } as ModuleGraphResponse)
   }
@@ -125,12 +127,12 @@ router.delete('/folders/:id', asyncHandler(async (req: Request, res: Response) =
   }
 
   try {
-    const deleted = GraphWorkflowFolderModel.delete(id)
+    const deleted = GraphWorkflowFolderModel.delete(id, deleteMode)
     if (!deleted) {
       return res.status(500).json({ success: false, error: 'Failed to delete graph workflow folder' } as ModuleGraphResponse)
     }
 
-    return res.json({ success: true, data: { message: 'Graph workflow folder deleted successfully' } } as ModuleGraphResponse)
+    return res.json({ success: true, data: { message: deleteMode === 'delete_tree' ? 'Graph workflow folder tree deleted successfully' : 'Graph workflow folder deleted and children moved successfully' } } as ModuleGraphResponse)
   } catch (error) {
     console.error('Error deleting graph workflow folder:', error)
     return res.status(500).json({ success: false, error: 'Failed to delete graph workflow folder' } as ModuleGraphResponse)

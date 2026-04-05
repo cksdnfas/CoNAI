@@ -1,3 +1,4 @@
+import { Folder, PenSquare, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -28,6 +29,8 @@ type WorkflowRunnerPanelProps = {
   onInputImageChange: (inputId: string, image?: SelectedImageDraft) => Promise<void> | void
   onExecute: () => void
   onEdit: () => void
+  onDeleteWorkflow?: () => void
+  onOpenFolderSettings?: () => void
   canExecute?: boolean
   validationIssues?: WorkflowValidationIssue[]
   onValidationIssueSelect?: (issue: WorkflowValidationIssue) => void
@@ -52,6 +55,8 @@ export function WorkflowRunnerPanel({
   onInputImageChange,
   onExecute,
   onEdit,
+  onDeleteWorkflow,
+  onOpenFolderSettings,
   canExecute = true,
   validationIssues = [],
   onValidationIssueSelect,
@@ -296,25 +301,47 @@ export function WorkflowRunnerPanel({
           />
         ) : null}
 
-        {!showHeader ? (
-          <div className="flex justify-end">
-            <Button type="button" size="sm" variant="outline" onClick={onEdit} disabled={!selectedGraph}>
-              구조 수정
-            </Button>
-          </div>
-        ) : null}
-
         {selectedGraph ? (
           <div className="space-y-3.5">
-            <div className="space-y-2">
-              <div className="text-base font-semibold text-foreground">{selectedGraph.name}</div>
-              {selectedGraph.description ? <div className="text-sm text-muted-foreground">{selectedGraph.description}</div> : null}
-              {latestExecution ? (
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>{latestExecution.status}</Badge>
+            {!showHeader ? (
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-2">
+                  <div className="truncate text-base font-semibold text-foreground">{selectedGraph.name}</div>
+                  {selectedGraph.description ? <div className="text-sm text-muted-foreground">{selectedGraph.description}</div> : null}
+                  {latestExecution ? (
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>{latestExecution.status}</Badge>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
+
+                <div className="flex shrink-0 items-center gap-2">
+                  {onOpenFolderSettings ? (
+                    <Button type="button" size="icon-sm" variant="outline" onClick={onOpenFolderSettings} disabled={!selectedGraph} aria-label="폴더 설정" title="폴더 설정">
+                      <Folder className="h-4 w-4" />
+                    </Button>
+                  ) : null}
+                  <Button type="button" size="icon-sm" variant="outline" onClick={onEdit} disabled={!selectedGraph} aria-label="구조 수정" title="구조 수정">
+                    <PenSquare className="h-4 w-4" />
+                  </Button>
+                  {onDeleteWorkflow ? (
+                    <Button type="button" size="icon-sm" variant="outline" onClick={onDeleteWorkflow} disabled={!selectedGraph} aria-label="워크플로우 삭제" title="워크플로우 삭제">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="text-base font-semibold text-foreground">{selectedGraph.name}</div>
+                {selectedGraph.description ? <div className="text-sm text-muted-foreground">{selectedGraph.description}</div> : null}
+                {latestExecution ? (
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>{latestExecution.status}</Badge>
+                  </div>
+                ) : null}
+              </div>
+            )}
 
             {latestExecution ? (
               <Alert>

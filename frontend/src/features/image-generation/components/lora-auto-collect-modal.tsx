@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { FolderOpen, Upload } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -15,8 +15,6 @@ type LoraAutoCollectModalProps = {
 }
 
 type MatchingMode = 'filename' | 'common'
-
-type MatchingPriority = 'filename' | 'common'
 
 type RelativeFile = File & {
   webkitRelativePath?: string
@@ -35,15 +33,15 @@ async function collectLoraFilesFromSelection(
   options: {
     matchingMode: MatchingMode
     commonTextFilename: string
-    matchingPriority: MatchingPriority
   },
 ) {
   const loraFiles: LoraFileData[] = []
   const commonTextCache = new Map<string, string[]>()
+  const normalizedCommonTextFilename = options.commonTextFilename.trim()
 
-  if (options.matchingMode === 'common') {
+  if (normalizedCommonTextFilename.length > 0) {
     for (const file of files) {
-      if (file.name !== options.commonTextFilename) {
+      if (file.name !== normalizedCommonTextFilename) {
         continue
       }
 
@@ -65,23 +63,12 @@ async function collectLoraFilesFromSelection(
     const loraName = file.name.replace(/\.safetensors$/i, '')
     const pairedTextPath = relativePath.replace(/\.safetensors$/i, '.txt')
     const pairedTextFile = files.find((candidate) => (candidate.webkitRelativePath ?? candidate.name) === pairedTextPath)
-
-    let promptLines: string[] = []
+    const pairedLines = pairedTextFile ? splitPromptLines(await pairedTextFile.text()) : []
     const commonLines = commonTextCache.get(folderPath) ?? []
 
-    if (options.matchingMode === 'filename') {
-      promptLines = pairedTextFile ? splitPromptLines(await pairedTextFile.text()) : []
-    } else if (options.matchingPriority === 'common') {
-      promptLines = commonLines.length > 0
-        ? commonLines
-        : pairedTextFile
-          ? splitPromptLines(await pairedTextFile.text())
-          : []
-    } else {
-      promptLines = pairedTextFile
-        ? splitPromptLines(await pairedTextFile.text())
-        : commonLines
-    }
+    const promptLines = options.matchingMode === 'common'
+      ? (commonLines.length > 0 ? commonLines : pairedLines)
+      : (pairedLines.length > 0 ? pairedLines : commonLines)
 
     loraFiles.push({
       folderName,
@@ -95,12 +82,12 @@ async function collectLoraFilesFromSelection(
 
 export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSubmit }: LoraAutoCollectModalProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const [selectedSourceFiles, setSelectedSourceFiles] = useState<RelativeFile[]>([])
   const [selectedFiles, setSelectedFiles] = useState<LoraFileData[]>([])
   const [loraWeight, setLoraWeight] = useState('1.0')
   const [duplicateHandling, setDuplicateHandling] = useState<'number' | 'parent'>('number')
   const [matchingMode, setMatchingMode] = useState<MatchingMode>('filename')
   const [commonTextFilename, setCommonTextFilename] = useState('add.txt')
-  const [matchingPriority, setMatchingPriority] = useState<MatchingPriority>('filename')
   const [formError, setFormError] = useState<string | null>(null)
   const [isPreparingFiles, setIsPreparingFiles] = useState(false)
 
@@ -109,12 +96,12 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
       return
     }
 
+    setSelectedSourceFiles([])
     setSelectedFiles([])
     setLoraWeight('1.0')
     setDuplicateHandling('number')
     setMatchingMode('filename')
     setCommonTextFilename('add.txt')
-    setMatchingPriority('filename')
     setFormError(null)
   }, [open])
 
@@ -129,6 +116,30 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
 
   const previewSummary = useMemo(() => selectedFiles.slice(0, 5), [selectedFiles])
 
+  const buildSelectedFiles = useCallback(async (files: RelativeFile[], overrides?: { matchingMode?: MatchingMode; commonTextFilename?: string }) => {
+    return collectLoraFilesFromSelection(files, {
+      matchingMode: overrides?.matchingMode ?? matchingMode,
+      commonTextFilename: overrides?.commonTextFilename ?? commonTextFilename,
+    })
+  }, [commonTextFilename, matchingMode])
+
+  const rebuildSelectedFiles = useCallback(async (files: RelativeFile[], overrides?: { matchingMode?: MatchingMode; commonTextFilename?: string }) => {
+    setIsPreparingFiles(true)
+    setFormError(null)
+
+    try {
+      const nextFiles = await buildSelectedFiles(files, overrides)
+      setSelectedFiles(nextFiles)
+      return nextFiles
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : '폴더 파일을 읽는 중 오류가 났어.')
+      setSelectedFiles([])
+      return []
+    } finally {
+      setIsPreparingFiles(false)
+    }
+  }, [buildSelectedFiles])
+
   const handlePickFolder = () => {
     inputRef.current?.click()
   }
@@ -139,27 +150,27 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
       return
     }
 
-    setIsPreparingFiles(true)
-    setFormError(null)
+    setSelectedSourceFiles(files)
+    await rebuildSelectedFiles(files)
+    event.target.value = ''
+  }
 
-    try {
-      const nextFiles = await collectLoraFilesFromSelection(files, {
-        matchingMode,
-        commonTextFilename,
-        matchingPriority,
-      })
-      setSelectedFiles(nextFiles)
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : '폴더 파일을 읽는 중 오류가 났어.')
-      setSelectedFiles([])
-    } finally {
-      setIsPreparingFiles(false)
-      event.target.value = ''
+  const handleMatchingModeChange = (nextMode: MatchingMode) => {
+    setMatchingMode(nextMode)
+    if (selectedSourceFiles.length > 0) {
+      void rebuildSelectedFiles(selectedSourceFiles, { matchingMode: nextMode })
+    }
+  }
+
+  const handleCommonTextFilenameChange = (nextFilename: string) => {
+    setCommonTextFilename(nextFilename)
+    if (selectedSourceFiles.length > 0) {
+      void rebuildSelectedFiles(selectedSourceFiles, { commonTextFilename: nextFilename })
     }
   }
 
   const handleSubmit = async () => {
-    if (selectedFiles.length === 0) {
+    if (selectedSourceFiles.length === 0) {
       setFormError('먼저 LoRA 폴더를 골라줘.')
       return
     }
@@ -171,14 +182,29 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
     }
 
     setFormError(null)
-    await onSubmit({
-      loraFiles: selectedFiles,
-      loraWeight: parsedWeight,
-      duplicateHandling,
-      matchingMode,
-      commonTextFilename,
-      matchingPriority,
-    })
+    setIsPreparingFiles(true)
+
+    try {
+      const nextFiles = await buildSelectedFiles(selectedSourceFiles)
+      setSelectedFiles(nextFiles)
+
+      if (nextFiles.length === 0) {
+        setFormError('선택한 폴더에서 LoRA 파일을 찾지 못했어.')
+        return
+      }
+
+      await onSubmit({
+        loraFiles: nextFiles,
+        loraWeight: parsedWeight,
+        duplicateHandling,
+        matchingMode,
+        commonTextFilename,
+      })
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : '자동 수집 준비 중 오류가 났어.')
+    } finally {
+      setIsPreparingFiles(false)
+    }
   }
 
   return (
@@ -204,7 +230,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
         <Alert>
           <AlertTitle>동작 방식</AlertTitle>
           <AlertDescription>
-            선택한 폴더 안의 `.safetensors`와 짝이 되는 `.txt` 또는 공용 텍스트 파일을 읽어서 auto-collected LoRA 트리를 다시 만든다.
+            선택한 폴더 안의 `.safetensors`와 같은 이름의 `.txt`, 그리고 지정한 공용 텍스트 파일을 읽어서 auto-collected LoRA 트리를 다시 만든다.
           </AlertDescription>
         </Alert>
 
@@ -255,29 +281,17 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <p className="text-sm font-medium text-foreground">프롬프트 매칭 모드</p>
-            <Select value={matchingMode} onChange={(event) => setMatchingMode(event.target.value as MatchingMode)}>
-              <option value="filename">같은 이름의 txt 우선</option>
-              <option value="common">공용 txt 허용</option>
-            </Select>
-          </div>
-
-          {matchingMode === 'common' ? (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground">공용 txt 파일명</p>
-              <Input value={commonTextFilename} onChange={(event) => setCommonTextFilename(event.target.value)} placeholder="예: add.txt" />
-            </div>
-          ) : null}
-        </div>
-
-        {matchingMode === 'common' ? (
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">우선순위</p>
-            <Select value={matchingPriority} onChange={(event) => setMatchingPriority(event.target.value as MatchingPriority)}>
+            <Select value={matchingMode} onChange={(event) => handleMatchingModeChange(event.target.value as MatchingMode)}>
               <option value="filename">개별 txt 먼저, 없으면 공용 txt</option>
               <option value="common">공용 txt 먼저, 없으면 개별 txt</option>
             </Select>
           </div>
-        ) : null}
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">공용 txt 파일명</p>
+            <Input value={commonTextFilename} onChange={(event) => handleCommonTextFilenameChange(event.target.value)} placeholder="예: add.txt" />
+          </div>
+        </div>
 
         <Alert>
           <AlertTitle>주의</AlertTitle>
@@ -290,7 +304,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting || isPreparingFiles}>
             취소
           </Button>
-          <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || isPreparingFiles || selectedFiles.length === 0}>
+          <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || isPreparingFiles || selectedSourceFiles.length === 0}>
             <Upload className="h-4 w-4" />
             {isSubmitting ? '수집 중…' : '자동 수집 실행'}
           </Button>

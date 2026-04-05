@@ -14,6 +14,27 @@ export type GraphWorkflowFolderUpdateData = {
   parent_id?: number | null
 }
 
+export type GraphWorkflowFolderDeleteMode = 'move_children' | 'delete_tree'
+
+function collectDescendantFolderIds(folders: GraphWorkflowFolderRecord[], folderId: number) {
+  const descendants = new Set<number>()
+  const queue = [folderId]
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!
+    for (const folder of folders) {
+      if (folder.parent_id !== currentId || descendants.has(folder.id)) {
+        continue
+      }
+
+      descendants.add(folder.id)
+      queue.push(folder.id)
+    }
+  }
+
+  return [...descendants]
+}
+
 /** Manage workflow explorer folders for graph workflows. */
 export class GraphWorkflowFolderModel {
   static create(folderData: GraphWorkflowFolderCreateData): number {
@@ -60,9 +81,29 @@ export class GraphWorkflowFolderModel {
     return info.changes > 0
   }
 
-  static delete(id: number): boolean {
+  static delete(id: number, mode: GraphWorkflowFolderDeleteMode = 'move_children'): boolean {
     const db = getUserSettingsDb()
-    const info = db.prepare('DELETE FROM graph_workflow_folders WHERE id = ?').run(id)
-    return info.changes > 0
+    const targetFolder = this.findById(id)
+    if (!targetFolder) {
+      return false
+    }
+
+    const transaction = db.transaction(() => {
+      if (mode === 'delete_tree') {
+        const descendantFolderIds = collectDescendantFolderIds(this.findAll(), id)
+        const targetFolderIds = [id, ...descendantFolderIds]
+        const placeholders = targetFolderIds.map(() => '?').join(', ')
+
+        db.prepare(`DELETE FROM graph_workflows WHERE folder_id IN (${placeholders})`).run(...targetFolderIds)
+      } else {
+        db.prepare('UPDATE graph_workflow_folders SET parent_id = ?, updated_date = CURRENT_TIMESTAMP WHERE parent_id = ?').run(targetFolder.parent_id ?? null, id)
+        db.prepare('UPDATE graph_workflows SET folder_id = ?, updated_date = CURRENT_TIMESTAMP WHERE folder_id = ?').run(targetFolder.parent_id ?? null, id)
+      }
+
+      const info = db.prepare('DELETE FROM graph_workflow_folders WHERE id = ?').run(id)
+      return info.changes > 0
+    })
+
+    return transaction()
   }
 }

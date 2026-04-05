@@ -31,6 +31,8 @@ export type ExecutionInputEntry = {
   value: unknown
 }
 
+const COMPACT_HIDDEN_ARTIFACT_PORT_KEYS = new Set(['image_ref', 'metadata'])
+
 /** Parse one execution-plan JSON string into the normalized panel view model. */
 export function parseExecutionPlan(value?: string | null): ParsedExecutionPlan | null {
   if (!value) {
@@ -136,6 +138,28 @@ export function buildArtifactDetailLines(artifact: GraphExecutionArtifactRecord)
 
   const summaryText = buildArtifactSummaryText(artifact)
   return summaryText ? [summaryText] : []
+}
+
+/** Hide low-value technical artifacts from the compact execution summary surface. */
+export function isCompactExecutionArtifactVisible(artifact: GraphExecutionArtifactRecord) {
+  return !COMPACT_HIDDEN_ARTIFACT_PORT_KEYS.has(artifact.port_key)
+}
+
+/** Resolve the short user-facing label used by compact artifact cards. */
+export function getCompactExecutionArtifactLabel(artifact: GraphExecutionArtifactRecord) {
+  if (artifact.port_key === 'input') {
+    return '입력'
+  }
+
+  if (artifact.port_key === 'output') {
+    return '출력'
+  }
+
+  if (artifact.port_key === 'result' || artifact.port_key === 'value') {
+    return '결과물'
+  }
+
+  return artifact.port_key
 }
 
 /** Build a lookup map from exposed-input ids to display labels. */

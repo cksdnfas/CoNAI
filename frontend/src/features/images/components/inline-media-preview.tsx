@@ -12,6 +12,7 @@ interface InlineMediaPreviewProps {
   mediaClassName?: string
   emptyLabel?: string
   loading?: 'lazy' | 'eager'
+  fitToMedia?: boolean
 }
 
 /** Infer one mime type from a data URL or file-like URL when explicit metadata is absent. */
@@ -71,13 +72,14 @@ export function InlineMediaPreview({
   mediaClassName,
   emptyLabel = 'No preview available',
   loading = 'lazy',
+  fitToMedia = false,
 }: InlineMediaPreviewProps) {
   const previewImage = buildPreviewImageRecord({ src, mimeType, fileName, alt })
 
   return (
     <div
       className={cn(
-        'flex items-center justify-center overflow-hidden rounded-sm border border-border bg-surface-lowest p-2',
+        fitToMedia ? 'inline-flex max-w-full items-center justify-center overflow-hidden rounded-sm border border-border bg-surface-lowest p-2' : 'flex items-center justify-center overflow-hidden rounded-sm border border-border bg-surface-lowest p-2',
         frameClassName,
       )}
     >
@@ -86,7 +88,7 @@ export function InlineMediaPreview({
           image={previewImage}
           alt={alt}
           loading={loading}
-          className={cn('max-h-40 w-full object-contain', mediaClassName)}
+          className={cn(fitToMedia ? 'max-h-40 max-w-full w-auto object-contain' : 'max-h-40 w-full object-contain', mediaClassName)}
         />
       ) : (
         <div className="flex flex-col items-center justify-center gap-2 px-3 py-6 text-center text-xs text-muted-foreground">

@@ -96,7 +96,6 @@ export interface LoraScanRequest {
   duplicateHandling: 'number' | 'parent'
   matchingMode?: 'filename' | 'common'
   commonTextFilename?: string
-  matchingPriority?: 'filename' | 'common'
 }
 
 export interface LoraScanResponse {

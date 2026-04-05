@@ -332,9 +332,11 @@ export async function updateGraphWorkflowFolder(folderId: number, payload: {
   return response.data
 }
 
+export type GraphWorkflowFolderDeleteMode = 'move_children' | 'delete_tree'
+
 /** Delete one workflow explorer folder. */
-export async function deleteGraphWorkflowFolder(folderId: number) {
-  const response = await requestJson<ApiEnvelope<{ message: string }>>(`/api/graph-workflows/folders/${folderId}`, {
+export async function deleteGraphWorkflowFolder(folderId: number, mode: GraphWorkflowFolderDeleteMode = 'move_children') {
+  const response = await requestJson<ApiEnvelope<{ message: string }>>(`/api/graph-workflows/folders/${folderId}?mode=${mode}`, {
     method: 'DELETE',
   })
 

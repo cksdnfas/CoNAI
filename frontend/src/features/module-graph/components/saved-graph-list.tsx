@@ -26,8 +26,24 @@ type SavedGraphListProps = {
   floatingActionContainerClassName?: string
 }
 
+type TreeEntry =
+  | { type: 'folder'; label: string; folder: GraphWorkflowFolderRecord }
+  | { type: 'workflow'; label: string; workflow: GraphWorkflowRecord }
+
 function normalizeFolderKey(folderId: number | null | undefined) {
   return folderId ?? null
+}
+
+function compareTreeLabels(left: string, right: string) {
+  return left.localeCompare(right, 'ko-KR', { numeric: true, sensitivity: 'base' })
+}
+
+function sortTreeEntries(left: TreeEntry, right: TreeEntry) {
+  if (left.type !== right.type) {
+    return left.type === 'workflow' ? -1 : 1
+  }
+
+  return compareTreeLabels(left.label, right.label)
 }
 
 /** Render one explorer-style tree sidebar for workflow folders and documents. */
@@ -46,17 +62,14 @@ export function SavedGraphList({
   const sidebarAnchorRef = useRef<HTMLDivElement | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [isSidebarFloating, setIsSidebarFloating] = useState(false)
-  const [isSidebarFloatingLocked, setIsSidebarFloatingLocked] = useState(false)
-  const [expandedFolderIds, setExpandedFolderIds] = useState<number[]>([])
-
-  useEffect(() => {
+  const [isSidebarFloatingLocked, setIsSidebarFloatingLocked] = useState(() => {
     if (typeof window === 'undefined') {
-      return
+      return false
     }
 
-    const storedValue = window.localStorage.getItem(WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY)
-    setIsSidebarFloatingLocked(storedValue === 'true')
-  }, [])
+    return window.localStorage.getItem(WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY) === 'true'
+  })
+  const [collapsedFolderIds, setCollapsedFolderIds] = useState<number[]>([])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -65,24 +78,6 @@ export function SavedGraphList({
 
     window.localStorage.setItem(WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY, isSidebarFloatingLocked ? 'true' : 'false')
   }, [isSidebarFloatingLocked])
-
-  useEffect(() => {
-    if (folders.length === 0) {
-      return
-    }
-
-    setExpandedFolderIds((current) => {
-      const currentSet = new Set(current)
-      let changed = false
-      for (const folder of folders) {
-        if (!currentSet.has(folder.id)) {
-          currentSet.add(folder.id)
-          changed = true
-        }
-      }
-      return changed ? [...currentSet] : current
-    })
-  }, [folders])
 
   const foldersByParent = useMemo(() => {
     const nextMap = new Map<number | null, GraphWorkflowFolderRecord[]>()
@@ -94,7 +89,7 @@ export function SavedGraphList({
     }
 
     for (const entry of nextMap.values()) {
-      entry.sort((left, right) => left.name.localeCompare(right.name, 'ko'))
+      entry.sort((left, right) => compareTreeLabels(left.name, right.name))
     }
 
     return nextMap
@@ -110,20 +105,12 @@ export function SavedGraphList({
     }
 
     for (const entry of nextMap.values()) {
-      entry.sort((left, right) => left.name.localeCompare(right.name, 'ko'))
+      entry.sort((left, right) => compareTreeLabels(left.name, right.name))
     }
 
     return nextMap
   }, [graphs])
 
-  const duplicateNameCounts = useMemo(
-    () =>
-      graphs.reduce<Record<string, number>>((acc, graph) => {
-        acc[graph.name] = (acc[graph.name] ?? 0) + 1
-        return acc
-      }, {}),
-    [graphs],
-  )
   const finalResultNodeCountByWorkflowId = useMemo(() => {
     const nextMap = new Map<number, number>()
 
@@ -207,12 +194,14 @@ export function SavedGraphList({
   }
 
   const toggleFolder = (folderId: number) => {
-    setExpandedFolderIds((current) => (current.includes(folderId) ? current.filter((item) => item !== folderId) : [...current, folderId]))
+    setCollapsedFolderIds((current) => (current.includes(folderId) ? current.filter((item) => item !== folderId) : [...current, folderId]))
   }
 
   const renderWorkflowRow = (graph: GraphWorkflowRecord, depth: number) => {
-    const duplicateCount = duplicateNameCounts[graph.name] ?? 0
     const finalResultNodeCount = finalResultNodeCountByWorkflowId.get(graph.id) ?? 0
+    const issueMessages = [
+      finalResultNodeCount === 0 ? '최종 결과가 아직 지정되지 않았어.' : null,
+    ].filter((message): message is string => Boolean(message))
 
     return (
       <button
@@ -231,8 +220,11 @@ export function SavedGraphList({
           <div className={cn('min-w-0 truncate text-sm font-medium', selectedGraphId === graph.id ? 'text-primary' : 'text-foreground')}>
             {graph.name}
           </div>
-          {finalResultNodeCount > 0 ? <Badge variant="secondary">최종 {finalResultNodeCount}</Badge> : <Badge variant="outline">미지정</Badge>}
-          {duplicateCount > 1 ? <Badge variant="outline">동명 {duplicateCount}</Badge> : null}
+          {issueMessages.length > 0 ? (
+            <Badge variant="outline" className="h-5 min-w-5 shrink-0 justify-center px-1.5" title={issueMessages.join('\n')} aria-label="주의">
+              !
+            </Badge>
+          ) : null}
         </div>
       </button>
     )
@@ -250,8 +242,12 @@ export function SavedGraphList({
       }
       return [workflow.name, workflow.description ?? ''].join(' ').toLowerCase().includes(query)
     })
-    const isExpanded = expandedFolderIds.includes(folder.id)
+    const isExpanded = !collapsedFolderIds.includes(folder.id)
     const hasChildren = childFolders.length > 0 || childWorkflows.length > 0
+    const childEntries: TreeEntry[] = [
+      ...childFolders.map((childFolder) => ({ type: 'folder' as const, label: childFolder.name, folder: childFolder })),
+      ...childWorkflows.map((workflow) => ({ type: 'workflow' as const, label: workflow.name, workflow })),
+    ].sort(sortTreeEntries)
 
     return (
       <div key={`folder-${folder.id}`} className="space-y-1">
@@ -290,13 +286,22 @@ export function SavedGraphList({
 
         {isExpanded ? (
           <div className="space-y-1">
-            {childFolders.map((childFolder) => renderFolderNode(childFolder, depth + 1))}
-            {childWorkflows.map((workflow) => renderWorkflowRow(workflow, depth + 1))}
+            {childEntries.map((entry) => entry.type === 'folder'
+              ? renderFolderNode(entry.folder, depth + 1)
+              : renderWorkflowRow(entry.workflow, depth + 1))}
           </div>
         ) : null}
       </div>
     )
   }
+
+  const rootEntries: TreeEntry[] = useMemo(
+    () => [
+      ...(foldersByParent.get(null) ?? []).map((folder) => ({ type: 'folder' as const, label: folder.name, folder })),
+      ...filteredRootWorkflows.map((workflow) => ({ type: 'workflow' as const, label: workflow.name, workflow })),
+    ].sort(sortTreeEntries),
+    [filteredRootWorkflows, foldersByParent],
+  )
 
   return (
     <>
@@ -358,8 +363,7 @@ export function SavedGraphList({
             </span>
           </button>
 
-          {(foldersByParent.get(null) ?? []).map((folder) => renderFolderNode(folder, 0))}
-          {filteredRootWorkflows.map((graph) => renderWorkflowRow(graph, 0))}
+          {rootEntries.map((entry) => entry.type === 'folder' ? renderFolderNode(entry.folder, 0) : renderWorkflowRow(entry.workflow, 0))}
 
           {graphs.length === 0 && folders.length === 0 ? (
             <Alert>

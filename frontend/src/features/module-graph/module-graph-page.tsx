@@ -13,14 +13,14 @@ import {
   type Connection,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Folder, FolderOpen, Plus, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Folder, FolderOpen, FolderPlus, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import {
@@ -29,6 +29,7 @@ import {
   createGraphWorkflowFolder,
   deleteGraphWorkflow,
   deleteGraphWorkflowFolder,
+  type GraphWorkflowFolderDeleteMode,
   executeGraphNode,
   executeGraphWorkflow,
   getAppSettings,
@@ -66,7 +67,6 @@ import {
   buildModuleEdgePresentation,
   buildNodeArtifactPreview,
   findNodePort,
-  getArtifactPreviewUrl,
   getModulePortCompatibility,
   getNodeExecutionStatus,
   parseHandleId,
@@ -126,6 +126,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const [cancellingExecutionId, setCancellingExecutionId] = useState<number | null>(null)
   const [workflowView, setWorkflowView] = useState<'browse' | 'edit'>('browse')
   const [isModuleLibraryOpen, setIsModuleLibraryOpen] = useState(false)
+  const [isBrowseManageModalOpen, setIsBrowseManageModalOpen] = useState(false)
+  const [folderDeleteTarget, setFolderDeleteTarget] = useState<GraphWorkflowFolderRecord | null>(null)
   const [isEditorSupportOpen, setIsEditorSupportOpen] = useState(false)
   const [activeEditorSupportSection, setActiveEditorSupportSection] = useState<EditorSupportSectionKey>('setup')
   const [workflowExposedInputs, setWorkflowExposedInputs] = useState<GraphWorkflowExposedInput[]>([])
@@ -817,10 +819,14 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     }
 
     try {
+      const resolvedParentId = input && Object.prototype.hasOwnProperty.call(input, 'parent_id')
+        ? (input.parent_id ?? null)
+        : selectedFolderId
+
       const result = await createGraphWorkflowFolder({
         name: nextName,
         description: input?.description?.trim() || undefined,
-        parent_id: input?.parent_id ?? selectedFolderId,
+        parent_id: resolvedParentId,
       })
       await graphWorkflowFoldersQuery.refetch()
       setSelectedFolderId(result.id)
@@ -857,20 +863,25 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       return
     }
 
-    const confirmed = window.confirm(`폴더 "${targetFolder.name}"을(를) 삭제할까?\n하위 폴더는 함께 삭제되고, 들어 있던 워크플로우는 Root로 이동해.`)
-    if (!confirmed) {
+    setIsBrowseManageModalOpen(false)
+    setFolderDeleteTarget(targetFolder)
+  }
+
+  const handleConfirmDeleteFolder = async (mode: GraphWorkflowFolderDeleteMode) => {
+    if (!folderDeleteTarget) {
       return
     }
 
     try {
-      await deleteGraphWorkflowFolder(targetFolder.id)
-      setSelectedFolderId(targetFolder.parent_id ?? null)
+      await deleteGraphWorkflowFolder(folderDeleteTarget.id, mode)
+      setSelectedFolderId(folderDeleteTarget.parent_id ?? null)
       setSelectedGraphId(null)
+      setFolderDeleteTarget(null)
       await Promise.all([
         graphWorkflowFoldersQuery.refetch(),
         graphWorkflowsQuery.refetch(),
       ])
-      showSnackbar({ message: '폴더를 삭제했어.', tone: 'info' })
+      showSnackbar({ message: mode === 'delete_tree' ? '폴더와 내부 항목을 모두 삭제했어.' : '폴더만 삭제하고 내부 항목은 상위 폴더로 올렸어.', tone: 'info' })
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : '폴더 삭제에 실패했어.', tone: 'error' })
     }
@@ -1450,6 +1461,12 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     [executingGraphId, handleExecuteNodeById, isDirty, nodes, selectedGraphId],
   )
 
+  const browseManageModalTitle = selectedGraphRecord
+    ? '워크플로우 설정'
+    : selectedFolderRecord
+      ? '폴더 설정'
+      : '폴더 생성'
+
   const workflowListSidebar = (
     <SavedGraphList
       graphs={graphWorkflowsQuery.data ?? []}
@@ -1498,6 +1515,19 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
+          {workflowView === 'browse' && !selectedGraphRecord ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="bg-surface-low"
+              onClick={() => setIsBrowseManageModalOpen(true)}
+              aria-label={browseManageModalTitle}
+              title={browseManageModalTitle}
+            >
+              <FolderPlus className="h-4 w-4" />
+            </Button>
+          ) : null}
           <Button
             type="button"
             size="icon-sm"
@@ -1509,6 +1539,47 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           >
             <Plus className="h-4 w-4" />
           </Button>
+          {workflowView === 'browse' && selectedGraphRecord ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="bg-surface-low"
+              onClick={handleEditSelectedWorkflow}
+              aria-label="워크플로우 편집"
+              title="워크플로우 편집"
+            >
+              <PenSquare className="h-4 w-4" />
+            </Button>
+          ) : null}
+          {workflowView === 'browse' && selectedGraphRecord ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="bg-surface-low"
+              onClick={() => void handleDeleteSelectedWorkflow()}
+              aria-label="워크플로우 삭제"
+              title="워크플로우 삭제"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          ) : null}
+          {workflowView === 'browse' && !selectedGraphRecord && selectedFolderRecord ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="bg-surface-low"
+              onClick={() => {
+                void handleDeleteSelectedFolder(selectedFolderRecord.id)
+              }}
+              aria-label="폴더 삭제"
+              title="폴더 삭제"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          ) : null}
         </>
       )}
     />
@@ -1577,52 +1648,29 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   )
 
   const workflowBrowseSidePanel = selectedGraphRecord ? (
-    <div className="space-y-5">
-      <WorkflowFolderSettingsPanel
-        folders={graphWorkflowFoldersQuery.data ?? []}
-        selectedFolder={selectedFolderRecord}
-        selectedWorkflow={selectedGraphRecord}
-        onAssignWorkflowFolder={(folderId) => handleAssignSelectedWorkflowFolder(folderId)}
-        onCreateFolder={(input) => handleCreateWorkflowFolder(input)}
-        onUpdateFolder={(folderId, input) => handleUpdateSelectedFolder(folderId, input)}
-        onDeleteFolder={(folderId) => handleDeleteSelectedFolder(folderId)}
-        onEditWorkflow={() => {
-          enterWorkflowEditor('setup')
-        }}
-        onDeleteWorkflow={() => handleDeleteSelectedWorkflow()}
-      />
-      <WorkflowRunnerPanel
-        showHeader={false}
-        selectedGraph={selectedGraphRecord}
-        inputDefinitions={selectedGraphRecord.graph.metadata?.exposed_inputs ?? []}
-        inputValues={workflowRunInputValues}
-        isExecuting={executingGraphId !== null}
-        latestExecution={latestExecution}
-        latestExecutionArtifacts={latestExecutionDetail?.artifacts}
-        latestExecutionFinalResults={latestExecutionDetail?.final_results}
-        onInputValueChange={handleWorkflowRunInputChange}
-        onInputValueClear={handleWorkflowRunInputClear}
-        onInputImageChange={handleWorkflowRunInputImageChange}
-        onExecute={() => void handleRunSelectedWorkflow()}
-        onEdit={() => {
-          enterWorkflowEditor('setup')
-        }}
-        canExecute={selectedWorkflowCanExecute}
-        validationIssues={selectedWorkflowValidationIssues}
-        onValidationIssueSelect={focusValidationIssue}
-      />
-    </div>
-  ) : (
-    <WorkflowFolderSettingsPanel
-      folders={graphWorkflowFoldersQuery.data ?? []}
-      selectedFolder={selectedFolderRecord}
-      selectedWorkflow={null}
-      onAssignWorkflowFolder={() => undefined}
-      onCreateFolder={(input) => handleCreateWorkflowFolder(input)}
-      onUpdateFolder={(folderId, input) => handleUpdateSelectedFolder(folderId, input)}
-      onDeleteFolder={(folderId) => handleDeleteSelectedFolder(folderId)}
+    <WorkflowRunnerPanel
+      showHeader={false}
+      selectedGraph={selectedGraphRecord}
+      inputDefinitions={selectedGraphRecord.graph.metadata?.exposed_inputs ?? []}
+      inputValues={workflowRunInputValues}
+      isExecuting={executingGraphId !== null}
+      latestExecution={latestExecution}
+      latestExecutionArtifacts={latestExecutionDetail?.artifacts}
+      latestExecutionFinalResults={latestExecutionDetail?.final_results}
+      onInputValueChange={handleWorkflowRunInputChange}
+      onInputValueClear={handleWorkflowRunInputClear}
+      onInputImageChange={handleWorkflowRunInputImageChange}
+      onExecute={() => void handleRunSelectedWorkflow()}
+      onEdit={() => {
+        handleEditSelectedWorkflow()
+      }}
+      onDeleteWorkflow={() => void handleDeleteSelectedWorkflow()}
+      onOpenFolderSettings={() => setIsBrowseManageModalOpen(true)}
+      canExecute={selectedWorkflowCanExecute}
+      validationIssues={selectedWorkflowValidationIssues}
+      onValidationIssueSelect={focusValidationIssue}
     />
-  )
+  ) : null
 
   const workflowEditorSupportPanels = (
     <ModuleWorkflowEditorSupportPanel
@@ -1718,7 +1766,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           isDesktopPageLayout={isDesktopPageLayout}
           workflowListSidebar={workflowListSidebar}
           workflowRunnerPanel={workflowBrowseSidePanel}
-          graphExecutionPanel={
+          graphExecutionPanel={selectedGraphRecord ? (
             <GraphExecutionPanel
               selectedGraphId={selectedGraphId}
               selectedGraph={selectedGraphRecord}
@@ -1737,7 +1785,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               onRetryExecution={() => void handleRetrySelectedExecution()}
               onCancelExecution={() => void handleCancelSelectedExecution()}
             />
-          }
+          ) : null}
         />
       ) : (
         <ModuleWorkflowEditorView
@@ -1807,6 +1855,65 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           }
         />
       )}
+
+      <SettingsModal
+        open={workflowView === 'browse' && isBrowseManageModalOpen}
+        title={browseManageModalTitle}
+        onClose={() => setIsBrowseManageModalOpen(false)}
+        widthClassName="max-w-3xl"
+      >
+        <WorkflowFolderSettingsPanel
+          key={selectedGraphRecord ? `workflow-${selectedGraphRecord.id}` : selectedFolderRecord ? `folder-${selectedFolderRecord.id}` : 'root'}
+          folders={graphWorkflowFoldersQuery.data ?? []}
+          selectedFolder={selectedFolderRecord}
+          selectedWorkflow={selectedGraphRecord}
+          showHeader={false}
+          onAssignWorkflowFolder={(folderId) => handleAssignSelectedWorkflowFolder(folderId)}
+          onCreateFolder={(input) => handleCreateWorkflowFolder(input)}
+          onUpdateFolder={(folderId, input) => handleUpdateSelectedFolder(folderId, input)}
+          onDeleteFolder={(folderId) => handleDeleteSelectedFolder(folderId)}
+          onEditWorkflow={() => {
+            setIsBrowseManageModalOpen(false)
+            handleEditSelectedWorkflow()
+          }}
+          onDeleteWorkflow={async () => {
+            await handleDeleteSelectedWorkflow()
+            setIsBrowseManageModalOpen(false)
+          }}
+        />
+      </SettingsModal>
+
+      <SettingsModal
+        open={folderDeleteTarget !== null}
+        title="폴더 삭제"
+        onClose={() => setFolderDeleteTarget(null)}
+        widthClassName="max-w-xl"
+      >
+        <div className="space-y-4">
+          <Alert>
+            <AlertTitle>{folderDeleteTarget ? `"${folderDeleteTarget.name}" 폴더를 어떻게 삭제할지 골라줘.` : '폴더 삭제'}</AlertTitle>
+            <AlertDescription>
+              <div>원하는 정리 방식을 선택하면 돼.</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                <li>폴더만 삭제: 하위 폴더와 워크플로우를 상위 폴더로 올림</li>
+                <li>내용 포함 삭제: 하위 폴더와 그 안의 워크플로우까지 함께 삭제</li>
+              </ul>
+            </AlertDescription>
+          </Alert>
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setFolderDeleteTarget(null)}>
+              취소
+            </Button>
+            <Button type="button" variant="outline" onClick={() => void handleConfirmDeleteFolder('move_children')}>
+              폴더만 삭제
+            </Button>
+            <Button type="button" variant="destructive" onClick={() => void handleConfirmDeleteFolder('delete_tree')}>
+              내용 포함 삭제
+            </Button>
+          </div>
+        </div>
+      </SettingsModal>
 
       <SettingsModal
         open={isModuleLibraryOpen}

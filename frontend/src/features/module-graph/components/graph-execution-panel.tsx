@@ -109,11 +109,13 @@ function SelectedExecutionSummary({
         </div>
       ) : null}
 
-      <WorkflowFinalResultsSection
-        finalResults={finalResults}
-        artifacts={executionDetail.artifacts}
-        selectedGraph={selectedGraph}
-      />
+      <div className="rounded-sm border border-border bg-background/35 p-3">
+        <WorkflowFinalResultsSection
+          finalResults={finalResults}
+          artifacts={executionDetail.artifacts}
+          selectedGraph={selectedGraph}
+        />
+      </div>
 
       <div className="space-y-2.5">
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -126,18 +128,27 @@ function SelectedExecutionSummary({
             표시할 출력 없음
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {compactArtifactGroups.map((group) => (
-              <div key={group.nodeId} className="rounded-sm border border-border bg-background/40 p-3">
-                <div className="mb-3 flex flex-wrap items-center gap-2">
+              <div key={group.nodeId} className="rounded-sm border border-border bg-background/35 p-3 space-y-2.5">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold text-foreground">{group.nodeLabel}</span>
                   <Badge variant="outline">출력 {group.artifacts.length}</Badge>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2">
-                  {group.artifacts.map((artifact) => (
-                    <ExecutionArtifactCard key={artifact.id} artifact={artifact} compact />
-                  ))}
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {group.artifacts.map((artifact) => {
+                    const useVisualCompactCard = artifact.artifact_type === 'image' || artifact.artifact_type === 'mask'
+
+                    return (
+                      <ExecutionArtifactCard
+                        key={artifact.id}
+                        artifact={artifact}
+                        compact
+                        hideTitle={useVisualCompactCard}
+                      />
+                    )
+                  })}
                 </div>
               </div>
             ))}

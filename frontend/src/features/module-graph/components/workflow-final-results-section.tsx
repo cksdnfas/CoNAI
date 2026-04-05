@@ -3,6 +3,15 @@ import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, Gra
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { getNodeDisplayLabel } from './graph-execution-panel-helpers'
 
+function getFinalResultOverlayLabel(nodeLabel: string) {
+  const normalizedLabel = nodeLabel.trim().toLowerCase()
+  if (!normalizedLabel || normalizedLabel === 'final' || normalizedLabel === 'final result') {
+    return undefined
+  }
+
+  return nodeLabel
+}
+
 function buildFallbackArtifact(finalResult: GraphExecutionFinalResultRecord): GraphExecutionArtifactRecord {
   return {
     id: finalResult.source_artifact_id,
@@ -37,7 +46,7 @@ export function WorkflowFinalResultsSection({
   return (
     <div className="space-y-2.5">
       <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-        <span>최종 결과</span>
+        <span>결과물</span>
         <Badge variant="outline">{resolvedEntries.length}</Badge>
       </div>
 
@@ -52,13 +61,13 @@ export function WorkflowFinalResultsSection({
             const finalNodeLabel = getNodeDisplayLabel(selectedGraph, finalResult.final_node_id)
 
             return (
-              <div key={finalResult.id} className="space-y-2 rounded-sm border border-border bg-background/40 p-2.5">
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <Badge variant="secondary">final</Badge>
-                  <Badge variant="outline">{finalNodeLabel}</Badge>
-                </div>
-                <ExecutionArtifactCard artifact={artifact} compact />
-              </div>
+              <ExecutionArtifactCard
+                key={finalResult.id}
+                artifact={artifact}
+                compact
+                hideTitle
+                overlayLabel={getFinalResultOverlayLabel(finalNodeLabel)}
+              />
             )
           })}
         </div>
