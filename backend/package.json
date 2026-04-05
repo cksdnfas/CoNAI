@@ -1,6 +1,6 @@
 {
   "name": "conai-backend",
-  "version": "26.3.26",
+  "version": "26.4.5",
   "description": "Backend API server for CoNAI",
   "main": "dist/backend/src/index.js",
   "scripts": {
