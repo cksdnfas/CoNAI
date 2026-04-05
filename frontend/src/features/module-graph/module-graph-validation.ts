@@ -61,12 +61,17 @@ export function buildWorkflowValidationIssues(params: {
   const { nodes, edges, exposedInputs, runtimeInputValues = {}, settings } = params
   const issues: WorkflowValidationIssue[] = []
   const connectedInputMap = new Map<string, Set<string>>()
+  const connectedInputCountMap = new Map<string, Map<string, number>>()
   const exposedInputMap = new Map(exposedInputs.map((inputDefinition) => [buildWorkflowExposedInputId(inputDefinition.node_id, inputDefinition.port_key), inputDefinition]))
 
   for (const edge of edges) {
     const current = connectedInputMap.get(edge.targetNodeId) ?? new Set<string>()
     current.add(edge.targetPortKey)
     connectedInputMap.set(edge.targetNodeId, current)
+
+    const nodeCounts = connectedInputCountMap.get(edge.targetNodeId) ?? new Map<string, number>()
+    nodeCounts.set(edge.targetPortKey, (nodeCounts.get(edge.targetPortKey) ?? 0) + 1)
+    connectedInputCountMap.set(edge.targetNodeId, nodeCounts)
   }
 
   const finalResultNodes = nodes.filter((node) => node.module && isFinalResultModule(node.module))
@@ -108,6 +113,32 @@ export function buildWorkflowValidationIssues(params: {
     }
 
     const connectedInputKeys = connectedInputMap.get(node.id) ?? new Set<string>()
+    const connectedInputCounts = connectedInputCountMap.get(node.id) ?? new Map<string, number>()
+
+    if (isFinalResultModule(node.module)) {
+      const finalInputCount = connectedInputCounts.get('value') ?? 0
+      if (finalInputCount === 0) {
+        issues.push({
+          id: `final-result-unconnected:${node.id}`,
+          nodeId: node.id,
+          portKey: 'value',
+          nodeLabel,
+          severity: 'error',
+          title: '최종 결과 노드 입력이 비어 있어',
+          detail: 'Final Result 노드는 value 입력에 최종 결과로 확정할 업스트림 출력을 정확히 1개 연결해야 해.',
+        })
+      } else if (finalInputCount > 1) {
+        issues.push({
+          id: `final-result-multi-input:${node.id}`,
+          nodeId: node.id,
+          portKey: 'value',
+          nodeLabel,
+          severity: 'error',
+          title: '최종 결과 노드에 입력이 너무 많아',
+          detail: 'Final Result 노드는 value 입력에 업스트림 출력을 1개만 연결할 수 있어.',
+        })
+      }
+    }
     for (const port of node.module.exposed_inputs ?? []) {
       if (!port.required) {
         continue
