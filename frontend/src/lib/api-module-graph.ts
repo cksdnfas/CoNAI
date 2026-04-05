@@ -313,6 +313,30 @@ export async function createGraphWorkflowFolder(payload: {
   return response.data
 }
 
+/** Rename one workflow explorer folder. */
+export async function updateGraphWorkflowFolder(folderId: number, payload: {
+  name?: string
+}) {
+  const response = await requestJson<ApiEnvelope<{ message: string }>>(`/api/graph-workflows/folders/${folderId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  return response.data
+}
+
+/** Delete one workflow explorer folder. */
+export async function deleteGraphWorkflowFolder(folderId: number) {
+  const response = await requestJson<ApiEnvelope<{ message: string }>>(`/api/graph-workflows/folders/${folderId}`, {
+    method: 'DELETE',
+  })
+
+  return response.data
+}
+
 /** Save a graph workflow document. */
 export async function createGraphWorkflow(payload: {
   name: string

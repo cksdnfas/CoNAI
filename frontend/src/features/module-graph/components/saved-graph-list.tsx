@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
 import { getNavigationItemClassName } from '@/components/common/navigation-item'
-import type { GraphWorkflowFolderRecord, GraphWorkflowRecord } from '@/lib/api'
+import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { isFinalResultModule } from '../module-graph-shared'
 
 const WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY = 'conai:module-graph:workflow-sidebar-locked'
 
@@ -17,6 +18,7 @@ type SavedGraphListProps = {
   folders: GraphWorkflowFolderRecord[]
   selectedGraphId: number | null
   selectedFolderId: number | null
+  moduleDefinitionById: Map<number, ModuleDefinitionRecord>
   onLoadGraph: (graph: GraphWorkflowRecord) => void
   onSelectFolder: (folderId: number | null) => void
   leftToolbar?: ReactNode
@@ -34,6 +36,7 @@ export function SavedGraphList({
   folders,
   selectedGraphId,
   selectedFolderId,
+  moduleDefinitionById,
   onLoadGraph,
   onSelectFolder,
   leftToolbar,
@@ -121,6 +124,20 @@ export function SavedGraphList({
       }, {}),
     [graphs],
   )
+  const finalResultNodeCountByWorkflowId = useMemo(() => {
+    const nextMap = new Map<number, number>()
+
+    for (const graph of graphs) {
+      const finalResultCount = graph.graph.nodes.reduce((count, node) => {
+        const module = moduleDefinitionById.get(node.module_id)
+        return count + (module && isFinalResultModule(module) ? 1 : 0)
+      }, 0)
+
+      nextMap.set(graph.id, finalResultCount)
+    }
+
+    return nextMap
+  }, [graphs, moduleDefinitionById])
 
   const query = searchQuery.trim().toLowerCase()
   const visibleFolderIds = useMemo(() => {
@@ -195,6 +212,7 @@ export function SavedGraphList({
 
   const renderWorkflowRow = (graph: GraphWorkflowRecord, depth: number) => {
     const duplicateCount = duplicateNameCounts[graph.name] ?? 0
+    const finalResultNodeCount = finalResultNodeCountByWorkflowId.get(graph.id) ?? 0
 
     return (
       <button
@@ -213,6 +231,7 @@ export function SavedGraphList({
           <div className={cn('min-w-0 truncate text-sm font-medium', selectedGraphId === graph.id ? 'text-primary' : 'text-foreground')}>
             {graph.name}
           </div>
+          {finalResultNodeCount > 0 ? <Badge variant="secondary">최종 {finalResultNodeCount}</Badge> : <Badge variant="outline">미지정</Badge>}
           {duplicateCount > 1 ? <Badge variant="outline">동명 {duplicateCount}</Badge> : null}
         </div>
       </button>

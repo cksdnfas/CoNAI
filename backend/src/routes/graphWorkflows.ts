@@ -68,6 +68,58 @@ router.post('/folders', asyncHandler(async (req: Request, res: Response) => {
   }
 }))
 
+router.put('/folders/:id', asyncHandler(async (req: Request, res: Response) => {
+  const id = parseInt(routeParam(routeParam(req.params.id)))
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : ''
+
+  if (isNaN(id)) {
+    return res.status(400).json({ success: false, error: 'Invalid folder ID' } as ModuleGraphResponse)
+  }
+
+  if (!name) {
+    return res.status(400).json({ success: false, error: 'name is required' } as ModuleGraphResponse)
+  }
+
+  if (!GraphWorkflowFolderModel.findById(id)) {
+    return res.status(404).json({ success: false, error: 'Graph workflow folder not found' } as ModuleGraphResponse)
+  }
+
+  try {
+    const updated = GraphWorkflowFolderModel.update(id, { name })
+    if (!updated) {
+      return res.status(400).json({ success: false, error: 'No folder changes detected' } as ModuleGraphResponse)
+    }
+
+    return res.json({ success: true, data: { message: 'Graph workflow folder updated successfully' } } as ModuleGraphResponse)
+  } catch (error) {
+    console.error('Error updating graph workflow folder:', error)
+    return res.status(500).json({ success: false, error: 'Failed to update graph workflow folder' } as ModuleGraphResponse)
+  }
+}))
+
+router.delete('/folders/:id', asyncHandler(async (req: Request, res: Response) => {
+  const id = parseInt(routeParam(routeParam(req.params.id)))
+  if (isNaN(id)) {
+    return res.status(400).json({ success: false, error: 'Invalid folder ID' } as ModuleGraphResponse)
+  }
+
+  if (!GraphWorkflowFolderModel.findById(id)) {
+    return res.status(404).json({ success: false, error: 'Graph workflow folder not found' } as ModuleGraphResponse)
+  }
+
+  try {
+    const deleted = GraphWorkflowFolderModel.delete(id)
+    if (!deleted) {
+      return res.status(500).json({ success: false, error: 'Failed to delete graph workflow folder' } as ModuleGraphResponse)
+    }
+
+    return res.json({ success: true, data: { message: 'Graph workflow folder deleted successfully' } } as ModuleGraphResponse)
+  } catch (error) {
+    console.error('Error deleting graph workflow folder:', error)
+    return res.status(500).json({ success: false, error: 'Failed to delete graph workflow folder' } as ModuleGraphResponse)
+  }
+}))
+
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)))
   if (isNaN(id)) {

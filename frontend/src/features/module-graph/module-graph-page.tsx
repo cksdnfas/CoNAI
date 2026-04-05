@@ -13,7 +13,7 @@ import {
   type Connection,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, FolderPlus, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, FolderPlus, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
@@ -25,6 +25,7 @@ import {
   createGraphWorkflow,
   createGraphWorkflowFolder,
   deleteGraphWorkflow,
+  deleteGraphWorkflowFolder,
   executeGraphNode,
   executeGraphWorkflow,
   getAppSettings,
@@ -34,6 +35,7 @@ import {
   getGraphWorkflows,
   getModuleDefinitions,
   updateGraphWorkflow,
+  updateGraphWorkflowFolder,
   type GraphExecutionArtifactRecord,
   type GraphExecutionRecord,
   type GraphWorkflowExposedInput,
@@ -820,6 +822,72 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     }
   }
 
+  const handleRenameSelectedFolder = async () => {
+    if (!selectedFolderRecord) {
+      showSnackbar({ message: '먼저 폴더를 하나 선택해줘.', tone: 'error' })
+      return
+    }
+
+    const nextName = window.prompt('새 폴더 이름을 입력해줘.', selectedFolderRecord.name)?.trim()
+    if (!nextName || nextName === selectedFolderRecord.name) {
+      return
+    }
+
+    try {
+      await updateGraphWorkflowFolder(selectedFolderRecord.id, { name: nextName })
+      await graphWorkflowFoldersQuery.refetch()
+      showSnackbar({ message: '폴더 이름을 바꿨어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '폴더 이름 변경에 실패했어.', tone: 'error' })
+    }
+  }
+
+  const handleDeleteSelectedFolder = async () => {
+    if (!selectedFolderRecord) {
+      showSnackbar({ message: '먼저 폴더를 하나 선택해줘.', tone: 'error' })
+      return
+    }
+
+    const confirmed = window.confirm(`폴더 "${selectedFolderRecord.name}"을(를) 삭제할까?\n하위 폴더는 함께 삭제되고, 들어 있던 워크플로우는 루트로 이동해.`)
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      await deleteGraphWorkflowFolder(selectedFolderRecord.id)
+      setSelectedFolderId(selectedFolderRecord.parent_id ?? null)
+      await Promise.all([
+        graphWorkflowFoldersQuery.refetch(),
+        graphWorkflowsQuery.refetch(),
+      ])
+      showSnackbar({ message: '폴더를 삭제했어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '폴더 삭제에 실패했어.', tone: 'error' })
+    }
+  }
+
+  const handleMoveSelectedWorkflowToCurrentFolder = async () => {
+    if (!selectedGraphRecord) {
+      showSnackbar({ message: '먼저 워크플로우를 하나 선택해줘.', tone: 'error' })
+      return
+    }
+
+    const targetFolderId = selectedFolderId ?? null
+    const currentFolderId = selectedGraphRecord.folder_id ?? null
+    if (targetFolderId === currentFolderId) {
+      showSnackbar({ message: '이미 그 위치에 있어.', tone: 'info' })
+      return
+    }
+
+    try {
+      await updateGraphWorkflow(selectedGraphRecord.id, { folder_id: targetFolderId })
+      await graphWorkflowsQuery.refetch()
+      showSnackbar({ message: targetFolderId === null ? '워크플로우를 Root로 옮겼어.' : '워크플로우를 현재 폴더로 옮겼어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '워크플로우 이동에 실패했어.', tone: 'error' })
+    }
+  }
+
   const handleEditSelectedWorkflow = () => {
     if (!selectedGraphRecord) {
       showSnackbar({ message: '먼저 워크플로우를 하나 선택해줘.', tone: 'error' })
@@ -1384,6 +1452,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       folders={graphWorkflowFoldersQuery.data ?? []}
       selectedGraphId={selectedGraphId}
       selectedFolderId={selectedFolderId}
+      moduleDefinitionById={moduleDefinitionById}
       onLoadGraph={(graph) => {
         void handleLoadGraph(graph, { silent: true })
       }}
@@ -1437,11 +1506,47 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             size="icon-sm"
             variant="outline"
             className="bg-surface-low"
+            onClick={() => void handleRenameSelectedFolder()}
+            disabled={!selectedFolderRecord}
+            aria-label="폴더 이름 변경"
+            title="폴더 이름 변경"
+          >
+            <PenSquare className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            className="bg-surface-low border-rose-500/30 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
+            onClick={() => void handleDeleteSelectedFolder()}
+            disabled={!selectedFolderRecord}
+            aria-label="폴더 삭제"
+            title="폴더 삭제"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            className="bg-surface-low"
             onClick={handleCreateWorkflow}
             aria-label="새 워크플로우"
             title="새 워크플로우"
           >
             <Plus className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            className="bg-surface-low"
+            onClick={() => void handleMoveSelectedWorkflowToCurrentFolder()}
+            disabled={!selectedGraphRecord || (selectedGraphRecord.folder_id ?? null) === (selectedFolderId ?? null)}
+            aria-label="현재 폴더로 이동"
+            title="현재 폴더로 이동"
+          >
+            <ArrowRight className="h-4 w-4" />
           </Button>
           <Button
             type="button"
