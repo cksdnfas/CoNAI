@@ -49,6 +49,7 @@ router.get('/folders', asyncHandler(async (_req: Request, res: Response) => {
 
 router.post('/folders', asyncHandler(async (req: Request, res: Response) => {
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : ''
+  const description = typeof req.body?.description === 'string' ? req.body.description.trim() : ''
   const parentId = typeof req.body?.parent_id === 'number' ? req.body.parent_id : null
 
   if (!name) {
@@ -60,7 +61,7 @@ router.post('/folders', asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    const id = GraphWorkflowFolderModel.create({ name, parent_id: parentId })
+    const id = GraphWorkflowFolderModel.create({ name, description: description || null, parent_id: parentId })
     return res.status(201).json({ success: true, data: { id, message: 'Graph workflow folder created successfully' } } as ModuleGraphResponse)
   } catch (error) {
     console.error('Error creating graph workflow folder:', error)
@@ -70,22 +71,38 @@ router.post('/folders', asyncHandler(async (req: Request, res: Response) => {
 
 router.put('/folders/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)))
-  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : ''
+  const existingFolder = !isNaN(id) ? GraphWorkflowFolderModel.findById(id) : null
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : undefined
+  const description = typeof req.body?.description === 'string' ? req.body.description.trim() : undefined
+  const parentId = typeof req.body?.parent_id === 'number' ? req.body.parent_id : req.body?.parent_id === null ? null : undefined
 
   if (isNaN(id)) {
     return res.status(400).json({ success: false, error: 'Invalid folder ID' } as ModuleGraphResponse)
   }
 
-  if (!name) {
-    return res.status(400).json({ success: false, error: 'name is required' } as ModuleGraphResponse)
-  }
-
-  if (!GraphWorkflowFolderModel.findById(id)) {
+  if (!existingFolder) {
     return res.status(404).json({ success: false, error: 'Graph workflow folder not found' } as ModuleGraphResponse)
   }
 
+  if (name !== undefined && !name) {
+    return res.status(400).json({ success: false, error: 'name is required' } as ModuleGraphResponse)
+  }
+
+  if (parentId !== undefined) {
+    if (parentId === id) {
+      return res.status(400).json({ success: false, error: 'Folder cannot be its own parent' } as ModuleGraphResponse)
+    }
+    if (parentId !== null && !GraphWorkflowFolderModel.findById(parentId)) {
+      return res.status(404).json({ success: false, error: 'Parent folder not found' } as ModuleGraphResponse)
+    }
+  }
+
   try {
-    const updated = GraphWorkflowFolderModel.update(id, { name })
+    const updated = GraphWorkflowFolderModel.update(id, {
+      name,
+      description: description === undefined ? undefined : description || null,
+      parent_id: parentId,
+    })
     if (!updated) {
       return res.status(400).json({ success: false, error: 'No folder changes detected' } as ModuleGraphResponse)
     }

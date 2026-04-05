@@ -150,6 +150,7 @@ export interface GraphWorkflowRecord {
 export interface GraphWorkflowFolderRecord {
   id: number
   name: string
+  description?: string | null
   parent_id?: number | null
   created_date: string
   updated_date: string

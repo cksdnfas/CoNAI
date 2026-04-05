@@ -221,6 +221,7 @@ function createTables(): void {
     CREATE TABLE IF NOT EXISTS graph_workflow_folders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
+      description TEXT,
       parent_id INTEGER,
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -378,6 +379,12 @@ function createTables(): void {
   if (!hasColumn('external_api_providers', 'provider_type')) {
     console.log('  Migrating external_api_providers: adding provider_type column');
     userSettingsDb.exec("ALTER TABLE external_api_providers ADD COLUMN provider_type TEXT NOT NULL DEFAULT 'general'");
+  }
+
+  // Migrate graph_workflow_folders table
+  if (!hasColumn('graph_workflow_folders', 'description')) {
+    console.log('  Migrating graph_workflow_folders: adding description column');
+    userSettingsDb.exec('ALTER TABLE graph_workflow_folders ADD COLUMN description TEXT');
   }
 
   // Migrate graph_workflows table

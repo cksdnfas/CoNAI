@@ -13,7 +13,7 @@ import {
   type Connection,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, ArrowRight, Folder, FolderOpen, FolderPlus, MoreHorizontal, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, Folder, FolderOpen, Plus, RefreshCw } from 'lucide-react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
@@ -128,7 +128,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const [isModuleLibraryOpen, setIsModuleLibraryOpen] = useState(false)
   const [isEditorSupportOpen, setIsEditorSupportOpen] = useState(false)
   const [activeEditorSupportSection, setActiveEditorSupportSection] = useState<EditorSupportSectionKey>('setup')
-  const [isExplorerActionMenuOpen, setIsExplorerActionMenuOpen] = useState(false)
   const [workflowExposedInputs, setWorkflowExposedInputs] = useState<GraphWorkflowExposedInput[]>([])
   const [workflowRunInputValues, setWorkflowRunInputValues] = useState<Record<string, unknown>>({})
   const previousExecutionStatusesRef = useRef<Record<number, GraphExecutionRecord['status']>>({})
@@ -140,7 +139,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     validation: null,
     results: null,
   })
-  const explorerActionMenuRef = useRef<HTMLDivElement | null>(null)
   const [nodes, setNodes, onNodesChange] = useNodesState<ModuleGraphNode>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<ModuleGraphEdge>([])
 
@@ -346,21 +344,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     })
   }, [moduleDefinitionById, selectedGraphRecord, settingsQuery.data, workflowRunInputValues])
   const selectedWorkflowCanExecute = selectedWorkflowValidationIssues.every((issue) => issue.severity !== 'error')
-
-  useEffect(() => {
-    if (!isExplorerActionMenuOpen) {
-      return
-    }
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!explorerActionMenuRef.current?.contains(event.target as Node)) {
-        setIsExplorerActionMenuOpen(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handlePointerDown)
-    return () => document.removeEventListener('mousedown', handlePointerDown)
-  }, [isExplorerActionMenuOpen])
 
   const scrollToEditorSupportSection = useCallback((section: EditorSupportSectionKey, behavior: ScrollBehavior = 'smooth') => {
     setActiveEditorSupportSection(section)
@@ -841,6 +824,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       })
       await graphWorkflowFoldersQuery.refetch()
       setSelectedFolderId(result.id)
+      setDraftWorkflowFolderId(result.id)
 
       if (input?.assignToWorkflow && selectedGraphRecord) {
         await updateGraphWorkflow(selectedGraphRecord.id, { folder_id: result.id })
@@ -1605,6 +1589,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
         onCreateFolder={(input) => handleCreateWorkflowFolder(input)}
         onUpdateFolder={(folderId, input) => handleUpdateSelectedFolder(folderId, input)}
         onDeleteFolder={(folderId) => handleDeleteSelectedFolder(folderId)}
+        onEditWorkflow={() => {
+          enterWorkflowEditor('setup')
+        }}
+        onDeleteWorkflow={() => handleDeleteSelectedWorkflow()}
       />
       <WorkflowRunnerPanel
         selectedGraph={selectedGraphRecord}

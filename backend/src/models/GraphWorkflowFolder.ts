@@ -4,11 +4,13 @@ import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpd
 
 export type GraphWorkflowFolderCreateData = {
   name: string
+  description?: string | null
   parent_id?: number | null
 }
 
 export type GraphWorkflowFolderUpdateData = {
   name?: string
+  description?: string | null
   parent_id?: number | null
 }
 
@@ -18,10 +20,11 @@ export class GraphWorkflowFolderModel {
     const db = getUserSettingsDb()
     const info = db.prepare(`
       INSERT INTO graph_workflow_folders (
-        name, parent_id
-      ) VALUES (?, ?)
+        name, description, parent_id
+      ) VALUES (?, ?, ?)
     `).run(
       folderData.name,
+      folderData.description ?? null,
       folderData.parent_id ?? null,
     )
 
@@ -43,6 +46,7 @@ export class GraphWorkflowFolderModel {
     const db = getUserSettingsDb()
     const updates = filterDefined({
       name: folderData.name,
+      description: folderData.description,
       parent_id: folderData.parent_id,
       updated_date: sqlLiteral('CURRENT_TIMESTAMP'),
     })

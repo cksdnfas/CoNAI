@@ -117,6 +117,7 @@ export interface GraphWorkflowRecord {
 export interface GraphWorkflowFolderRecord {
   id: number
   name: string
+  description?: string | null
   parent_id?: number | null
   created_date: string
   updated_date: string
@@ -300,6 +301,7 @@ export async function getGraphWorkflowFolders() {
 /** Create one workflow explorer folder. */
 export async function createGraphWorkflowFolder(payload: {
   name: string
+  description?: string
   parent_id?: number | null
 }) {
   const response = await requestJson<ApiEnvelope<CreateEnvelope>>('/api/graph-workflows/folders', {
@@ -316,6 +318,8 @@ export async function createGraphWorkflowFolder(payload: {
 /** Rename one workflow explorer folder. */
 export async function updateGraphWorkflowFolder(folderId: number, payload: {
   name?: string
+  description?: string | null
+  parent_id?: number | null
 }) {
   const response = await requestJson<ApiEnvelope<{ message: string }>>(`/api/graph-workflows/folders/${folderId}`, {
     method: 'PUT',
