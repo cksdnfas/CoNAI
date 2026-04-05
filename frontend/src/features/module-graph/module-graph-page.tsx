@@ -1538,10 +1538,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
   const workflowSetupFolderPanel = (
     <div className="space-y-3 rounded-sm border border-border/70 bg-background/40 p-3">
-      <div className="space-y-1">
-        <div className="text-sm font-medium text-foreground">저장 폴더</div>
-        <div className="text-xs text-muted-foreground">저장 버튼을 누를 때 이 위치에 워크플로우를 넣어.</div>
-      </div>
+      <div className="text-sm font-medium text-foreground">저장 폴더</div>
 
       <HierarchyPicker
         items={graphWorkflowFoldersQuery.data ?? []}
@@ -1595,6 +1592,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
         onDeleteWorkflow={() => handleDeleteSelectedWorkflow()}
       />
       <WorkflowRunnerPanel
+        showHeader={false}
         selectedGraph={selectedGraphRecord}
         inputDefinitions={selectedGraphRecord.graph.metadata?.exposed_inputs ?? []}
         inputValues={workflowRunInputValues}

@@ -1,7 +1,6 @@
 import { Folder, FolderOpen, Plus, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -117,8 +116,7 @@ export function WorkflowFolderSettingsPanel({
         {showHeader ? (
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-base font-semibold text-foreground">{selectedWorkflow ? 'Workflow Settings' : 'Folder Settings'}</div>
-              <div className="text-sm text-muted-foreground">{selectedWorkflow ? '워크플로우 저장 위치와 폴더 할당을 관리해.' : '선택한 폴더를 관리하거나 하위 폴더를 만들어.'}</div>
+              <div className="text-base font-semibold text-foreground">{selectedWorkflow ? 'Workflow' : 'Folder'}</div>
             </div>
             <Badge variant="outline">{selectedWorkflow ? 'workflow' : isRootSelected ? 'root' : 'folder'}</Badge>
           </div>
@@ -166,7 +164,7 @@ export function WorkflowFolderSettingsPanel({
             </div>
 
             <div className="space-y-3 rounded-sm border border-border/70 bg-surface-low/50 p-3">
-              <div className="text-sm font-medium text-foreground">현재 위치에 새 자식 폴더</div>
+              <div className="text-sm font-medium text-foreground">새 자식 폴더</div>
               <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder="새 폴더 이름" />
               <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder="설명 (선택)" />
               <div className="flex flex-wrap gap-2">
@@ -186,20 +184,11 @@ export function WorkflowFolderSettingsPanel({
             <div className="space-y-1">
               <div className="text-base font-semibold text-foreground">{currentFolderTitle}</div>
               {isRootSelected ? (
-                <div className="text-sm text-muted-foreground">루트 폴더는 기본 위치야. 이름 변경이나 삭제는 할 수 없어.</div>
+                <div className="text-sm text-muted-foreground">기본 위치</div>
               ) : selectedFolder?.description ? (
                 <div className="text-sm text-muted-foreground">{selectedFolder.description}</div>
-              ) : (
-                <div className="text-sm text-muted-foreground">폴더 설명이 아직 없어.</div>
-              )}
+              ) : null}
             </div>
-
-            {isRootSelected ? (
-              <Alert>
-                <AlertTitle>Root 폴더</AlertTitle>
-                <AlertDescription>폴더에 할당되지 않은 워크플로우는 모두 Root에 속한 것으로 취급해.</AlertDescription>
-              </Alert>
-            ) : null}
 
             {!isRootSelected ? (
               <div className="space-y-3">
