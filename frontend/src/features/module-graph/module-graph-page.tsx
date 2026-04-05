@@ -17,10 +17,8 @@ import { ArrowLeft, Folder, FolderOpen, FolderPlus, PenSquare, Plus, RefreshCw, 
 import { useQuery } from '@tanstack/react-query'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
-import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import {
@@ -51,14 +49,12 @@ import { GraphExecutionPanel } from './components/graph-execution-panel'
 import { ModuleGraphNodeCard } from './components/module-graph-node-card'
 import { ModuleLibraryPanel } from './components/module-library-panel'
 import { ModuleWorkflowBrowseView } from './components/module-workflow-browse-view'
-import { ModuleWorkflowEditorSupportPanel, type EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
+import { type EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
 import { ModuleWorkflowEditorView } from './components/module-workflow-editor-view'
-import { NodeInspectorPanel } from './components/node-inspector-panel'
+import { ModuleGraphEditorSupportSubtitle, ModuleGraphWorkflowBrowseSidePanel, ModuleGraphWorkflowEditorSupportPanels, ModuleGraphWorkflowSetupFolderPanel } from './components/module-graph-page-sections'
 import { SavedGraphList } from './components/saved-graph-list'
-import { WorkflowExposedInputEditor } from './components/workflow-exposed-input-editor'
 import { WorkflowFolderSettingsPanel } from './components/workflow-folder-settings-panel'
-import { WorkflowRunnerPanel } from './components/workflow-runner-panel'
-import { WorkflowValidationPanel, type WorkflowValidationIssue } from './components/workflow-validation-panel'
+import { type WorkflowValidationIssue } from './components/workflow-validation-panel'
 import {
   buildAutoLayoutedNodes,
   buildFlowFromGraphRecord,
@@ -1475,169 +1471,105 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   )
 
   const editorSupportSubtitle = (
-    <div className="flex flex-wrap gap-2">
-      {([
-        ['setup', '설정'],
-        ['inspector', '검사'],
-        ['inputs', '입력'],
-        ['validation', '검증'],
-        ['results', '결과'],
-      ] as const).map(([sectionKey, label]) => (
-        <Button
-          key={sectionKey}
-          type="button"
-          size="sm"
-          variant={activeEditorSupportSection === sectionKey ? 'default' : 'outline'}
-          onClick={() => scrollToEditorSupportSection(sectionKey)}
-        >
-          {label}
-        </Button>
-      ))}
-    </div>
+    <ModuleGraphEditorSupportSubtitle
+      activeSection={activeEditorSupportSection}
+      onSelectSection={scrollToEditorSupportSection}
+    />
   )
 
   const workflowSetupFolderPanel = (
-    <div className="space-y-3 rounded-sm border border-border/70 bg-background/40 p-3">
-      <div className="text-sm font-medium text-foreground">저장 폴더</div>
-
-      <HierarchyPicker
-        items={graphWorkflowFoldersQuery.data ?? []}
-        selectedId={draftWorkflowFolderId}
-        onSelectRoot={() => setDraftWorkflowFolderId(null)}
-        onSelect={(folder) => setDraftWorkflowFolderId(folder.id)}
-        getId={(folder) => folder.id}
-        getParentId={(folder) => folder.parent_id}
-        getLabel={(folder) => folder.name}
-        sortItems={(left, right) => left.name.localeCompare(right.name, 'ko')}
-        renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
-        rootLabel="Root"
-      />
-
-      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-        <Input value={draftChildFolderName} onChange={(event) => setDraftChildFolderName(event.target.value)} placeholder="새 자식 폴더 이름" />
-        <Input value={draftChildFolderDescription} onChange={(event) => setDraftChildFolderDescription(event.target.value)} placeholder="설명 (선택)" />
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => void handleCreateWorkflowFolder({
-            name: draftChildFolderName,
-            description: draftChildFolderDescription,
-            parent_id: draftWorkflowFolderId,
-          }).then(() => {
-            setDraftChildFolderName('')
-            setDraftChildFolderDescription('')
-          })}
-          disabled={!draftChildFolderName.trim()}
-        >
-          <Plus className="h-4 w-4" />
-          폴더 생성
-        </Button>
-      </div>
-    </div>
+    <ModuleGraphWorkflowSetupFolderPanel
+      folders={graphWorkflowFoldersQuery.data ?? []}
+      draftWorkflowFolderId={draftWorkflowFolderId}
+      draftChildFolderName={draftChildFolderName}
+      draftChildFolderDescription={draftChildFolderDescription}
+      onSelectFolder={setDraftWorkflowFolderId}
+      onSelectRoot={() => setDraftWorkflowFolderId(null)}
+      onDraftChildFolderNameChange={setDraftChildFolderName}
+      onDraftChildFolderDescriptionChange={setDraftChildFolderDescription}
+      onCreateChildFolder={() => {
+        void handleCreateWorkflowFolder({
+          name: draftChildFolderName,
+          description: draftChildFolderDescription,
+          parent_id: draftWorkflowFolderId,
+        }).then(() => {
+          setDraftChildFolderName('')
+          setDraftChildFolderDescription('')
+        })
+      }}
+    />
   )
 
-  const workflowBrowseSidePanel = selectedGraphRecord ? (
-    <WorkflowRunnerPanel
-      showHeader={false}
-      selectedGraph={selectedGraphRecord}
-      inputDefinitions={selectedGraphRecord.graph.metadata?.exposed_inputs ?? []}
-      inputValues={workflowRunInputValues}
+  const workflowBrowseSidePanel = (
+    <ModuleGraphWorkflowBrowseSidePanel
+      selectedGraphRecord={selectedGraphRecord}
+      workflowRunInputValues={workflowRunInputValues}
       isExecuting={executingGraphId !== null}
       latestExecution={latestExecution}
-      latestExecutionArtifacts={latestExecutionDetail?.artifacts}
-      latestExecutionFinalResults={latestExecutionDetail?.final_results}
+      latestExecutionDetail={latestExecutionDetail}
+      selectedWorkflowCanExecute={selectedWorkflowCanExecute}
+      selectedWorkflowValidationIssues={selectedWorkflowValidationIssues}
       onInputValueChange={handleWorkflowRunInputChange}
       onInputValueClear={handleWorkflowRunInputClear}
       onInputImageChange={handleWorkflowRunInputImageChange}
       onExecute={() => void handleRunSelectedWorkflow()}
-      onEdit={() => {
-        handleEditSelectedWorkflow()
-      }}
+      onEdit={handleEditSelectedWorkflow}
       onDeleteWorkflow={() => void handleDeleteSelectedWorkflow()}
       onOpenFolderSettings={() => setIsBrowseManageModalOpen(true)}
-      canExecute={selectedWorkflowCanExecute}
-      validationIssues={selectedWorkflowValidationIssues}
       onValidationIssueSelect={focusValidationIssue}
     />
-  ) : null
+  )
 
   const workflowEditorSupportPanels = (
-    <ModuleWorkflowEditorSupportPanel
-      nodesCount={nodes.length}
-      edgesCount={edges.length}
-      selectedGraphName={selectedGraphRecord?.name ?? null}
-      selectedGraphVersion={selectedGraphRecord?.version ?? null}
+    <ModuleGraphWorkflowEditorSupportPanels
+      nodes={nodes}
+      edges={edges}
+      selectedGraphId={selectedGraphId}
+      selectedGraphRecord={selectedGraphRecord}
       workflowName={workflowName}
       workflowDescription={workflowDescription}
       isDirty={isDirty}
-      selectedNodeLabel={selectedNode?.data.module.name ?? null}
+      selectedNode={selectedNode}
+      selectedEdge={selectedEdge}
       selectedExecutionId={selectedExecutionId}
       isSavingGraph={isSavingGraph}
-      hasNodes={nodes.length > 0}
+      executingGraphId={executingGraphId}
+      cancellingExecutionId={cancellingExecutionId}
+      workflowInputCandidates={workflowInputCandidates}
+      workflowExposedInputs={workflowExposedInputs}
+      editorValidationIssues={editorValidationIssues}
+      executionList={executionList}
+      executionListError={graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : '실행 목록을 불러오지 못했어.'}
+      executionListIsError={graphExecutionsQuery.isError}
+      executionDetail={executionDetailQuery.data}
+      executionDetailError={executionDetailQuery.error instanceof Error ? executionDetailQuery.error.message : '실행 상세를 불러오지 못했어.'}
+      executionDetailIsError={executionDetailQuery.isError}
+      selectedExecutionStatus={selectedExecution?.status ?? null}
+      highlightedPortKey={selectedValidationPortKey}
+      folderPanel={workflowSetupFolderPanel}
       onWorkflowNameChange={setWorkflowName}
       onWorkflowDescriptionChange={setWorkflowDescription}
       onSaveGraph={() => void handleSaveGraph()}
       setSectionRef={(section, node) => {
         editorSupportSectionRefs.current[section] = node
       }}
-      folderPanel={workflowSetupFolderPanel}
-      inspectorPanel={
-        <NodeInspectorPanel
-          nodes={nodes}
-          selectedNode={selectedNode}
-          selectedEdge={selectedEdge}
-          onNodeValueChange={handleNodeValueChange}
-          onNodeValueClear={handleNodeValueClear}
-          onNodeImageChange={handleNodeImageChange}
-          onExecuteSelectedNode={() => void handleExecuteSelectedNode(false)}
-          onForceExecuteSelectedNode={() => void handleExecuteSelectedNode(true)}
-          executeSelectedNodeDisabled={!selectedNode || executingGraphId !== null}
-          executeSelectedNodeLabel={executingGraphId !== null ? '실행 요청 중…' : '선택 노드 실행'}
-          forceExecuteSelectedNodeLabel={executingGraphId !== null ? '실행 요청 중…' : '강제 재실행'}
-          highlightedPortKey={selectedValidationPortKey}
-        />
-      }
-      inputsPanel={
-        <WorkflowExposedInputEditor
-          candidates={workflowInputCandidates}
-          selectedInputs={workflowExposedInputs}
-          onToggleInput={handleToggleWorkflowExposedInput}
-          onUpdateInput={handleUpdateWorkflowExposedInput}
-          onMoveInput={handleMoveWorkflowExposedInput}
-          onChangeDefaultImage={handleWorkflowExposedInputDefaultImageChange}
-        />
-      }
-      validationPanel={
-        <WorkflowValidationPanel
-          issues={editorValidationIssues}
-          title="편집기 검증"
-          description="실행 전 확인"
-          onIssueSelect={focusValidationIssue}
-        />
-      }
-      resultsPanel={
-        <GraphExecutionPanel
-          selectedGraphId={selectedGraphId}
-          selectedGraph={selectedGraphRecord}
-          selectedExecutionId={selectedExecutionId}
-          selectedExecutionStatus={selectedExecution?.status ?? null}
-          executionList={executionList}
-          executionListError={graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : '실행 목록을 불러오지 못했어.'}
-          executionListIsError={graphExecutionsQuery.isError}
-          executionDetail={executionDetailQuery.data}
-          executionDetailError={executionDetailQuery.error instanceof Error ? executionDetailQuery.error.message : '실행 상세를 불러오지 못했어.'}
-          executionDetailIsError={executionDetailQuery.isError}
-          isExecutingGraph={executingGraphId !== null}
-          isCancellingExecution={cancellingExecutionId === selectedExecutionId}
-          onSelectExecution={(executionId) => {
-            setSelectedExecutionId(executionId)
-            openEditorSupport('results')
-          }}
-          onRerunGraph={() => void handleRerunSelectedGraph()}
-          onRetryExecution={() => void handleRetrySelectedExecution()}
-          onCancelExecution={() => void handleCancelSelectedExecution()}
-        />
-      }
+      onNodeValueChange={handleNodeValueChange}
+      onNodeValueClear={handleNodeValueClear}
+      onNodeImageChange={handleNodeImageChange}
+      onExecuteSelectedNode={() => void handleExecuteSelectedNode(false)}
+      onForceExecuteSelectedNode={() => void handleExecuteSelectedNode(true)}
+      onToggleInput={handleToggleWorkflowExposedInput}
+      onUpdateInput={handleUpdateWorkflowExposedInput}
+      onMoveInput={handleMoveWorkflowExposedInput}
+      onChangeDefaultImage={handleWorkflowExposedInputDefaultImageChange}
+      onValidationIssueSelect={focusValidationIssue}
+      onSelectExecution={(executionId) => {
+        setSelectedExecutionId(executionId)
+        openEditorSupport('results')
+      }}
+      onRerunGraph={() => void handleRerunSelectedGraph()}
+      onRetryExecution={() => void handleRetrySelectedExecution()}
+      onCancelExecution={() => void handleCancelSelectedExecution()}
     />
   )
 
