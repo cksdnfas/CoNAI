@@ -7,16 +7,14 @@ import { ImageSaveOptionsModal } from '@/components/media/image-save-options-mod
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { SegmentedControl } from '@/components/common/segmented-control'
 import { Input } from '@/components/ui/input'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
-import { DEFAULT_IMAGE_SAVE_SETTINGS, buildImageSaveOutput, buildImageSaveOutputFileName, loadImageSaveSourceInfo, type ImageSaveSourceInfo } from '@/lib/image-save-output'
+import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import {
   createNaiModuleFromSnapshot,
   deleteNaiCharacterReferenceAsset,
@@ -29,8 +27,6 @@ import {
   getNaiUserData,
   listNaiCharacterReferenceAssets,
   listNaiVibeAssets,
-  loginNai,
-  loginNaiWithToken,
   saveNaiCharacterReferenceAsset,
   saveNaiVibeAsset,
   updateNaiCharacterReferenceAsset,
@@ -44,7 +40,6 @@ import {
   buildNaiModuleSnapshot,
   buildNaiModuleUiSchema,
   buildNaiVibePayload,
-  buildSelectedImageDraftFromDataUrl,
   buildSelectedImageDraftFromUrl,
   canUseNaiCharacterPositions,
   clampNaiSampleCount,
@@ -74,6 +69,7 @@ import {
   type SelectedImageDraft,
 } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
+import { NaiAuthModal } from './nai-auth-modal'
 import { NaiReferencesSection } from './nai-references-section'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { NaiVibesSection } from './nai-vibes-section'
@@ -81,9 +77,10 @@ import { NaiAssetSaveModal } from './nai-asset-save-modal'
 import { NaiCharacterPositionBoard } from './nai-character-position-board'
 import { NaiModuleSaveModal } from './nai-module-save-modal'
 import { PromptToggleField } from './prompt-toggle-field'
-import { decodeNaiBase64Png, deriveNaiAssetLabel, buildNaiEditedImageFileName } from './nai-generation-panel-helpers'
+import { decodeNaiBase64Png, deriveNaiAssetLabel } from './nai-generation-panel-helpers'
 import { NaiActionSection, NaiConnectionHeader, NaiPromptSection } from './nai-generation-panel-sections'
-import type { ImageSaveSettings } from '@/types/settings'
+import { useNaiAuthController } from './use-nai-auth-controller'
+import { useNaiImageEditorBridge } from './use-nai-image-editor-bridge'
 
 const ImageEditorModal = lazy(() => import('@/features/image-editor/image-editor-modal'))
 
@@ -95,111 +92,15 @@ type NaiGenerationPanelProps = {
   headerPortalTargetId?: string
 }
 
-type NaiLoginMode = 'account' | 'token'
-
 type AssetSaveTarget =
   | { mode: 'create'; kind: 'vibe'; index: number }
   | { mode: 'create'; kind: 'reference'; index: number }
   | { mode: 'edit'; kind: 'vibe'; assetId: string }
   | { mode: 'edit'; kind: 'reference'; assetId: string }
 
-type NaiAuthModalProps = {
-  open: boolean
-  loginMode: NaiLoginMode
-  isSubmitting: boolean
-  username: string
-  password: string
-  token: string
-  connectionHint: string
-  showStatusHint: boolean
-  onClose: () => void
-  onLoginModeChange: (mode: NaiLoginMode) => void
-  onUsernameChange: (value: string) => void
-  onPasswordChange: (value: string) => void
-  onTokenChange: (value: string) => void
-  onSubmit: () => void
-}
-
-/** Render the NovelAI authentication modal used from the status header. */
-function NaiAuthModal({
-  open,
-  loginMode,
-  isSubmitting,
-  username,
-  password,
-  token,
-  connectionHint,
-  showStatusHint,
-  onClose,
-  onLoginModeChange,
-  onUsernameChange,
-  onPasswordChange,
-  onTokenChange,
-  onSubmit,
-}: NaiAuthModalProps) {
-  const submitDisabled = isSubmitting || (loginMode === 'account' ? username.trim().length === 0 || password.length === 0 : token.trim().length === 0)
-
-  return (
-    <SettingsModal
-      open={open}
-      onClose={onClose}
-      title="NovelAI 로그인"
-      description="계정 로그인 또는 access token 저장으로 연결할 수 있어. 토큰은 서버에 저장돼."
-      widthClassName="max-w-2xl"
-    >
-      <div className="space-y-4">
-        <SegmentedControl
-          value={loginMode}
-          items={[
-            { value: 'account', label: '로그인' },
-            { value: 'token', label: '토큰' },
-          ]}
-          onChange={(nextMode) => onLoginModeChange(nextMode as NaiLoginMode)}
-          fullWidth
-          size="sm"
-        />
-
-        {loginMode === 'account' ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            <FormField label="Username">
-              <Input value={username} onChange={(event) => onUsernameChange(event.target.value)} autoComplete="username" />
-            </FormField>
-            <FormField label="Password">
-              <Input type="password" value={password} onChange={(event) => onPasswordChange(event.target.value)} autoComplete="current-password" />
-            </FormField>
-          </div>
-        ) : (
-          <FormField label="Access Token">
-            <Input
-              value={token}
-              onChange={(event) => onTokenChange(event.target.value)}
-              placeholder=""
-              autoComplete="off"
-            />
-          </FormField>
-        )}
-
-        {showStatusHint ? <div className="text-xs text-[#ffb4ab]">{connectionHint}</div> : null}
-
-        <div className="flex justify-end border-t border-border/70 pt-4">
-          <Button type="button" onClick={onSubmit} disabled={submitDisabled}>
-            {isSubmitting ? '연결 중…' : loginMode === 'account' ? '로그인' : '토큰 저장'}
-          </Button>
-        </div>
-      </div>
-    </SettingsModal>
-  )
-}
-
 /** Render the NAI login, generation, and module-authoring workflow. */
 export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneScroll = false, compactActionBar = false, headerPortalTargetId }: NaiGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
-  const [loginMode, setLoginMode] = useState<NaiLoginMode>('account')
-  const [naiUsernameInput, setNaiUsernameInput] = useState('')
-  const [naiPasswordInput, setNaiPasswordInput] = useState('')
-  const [naiTokenInput, setNaiTokenInput] = useState('')
-  const [isNaiAuthModalOpen, setIsNaiAuthModalOpen] = useState(false)
-  const [isNaiLoggingIn, setIsNaiLoggingIn] = useState(false)
   const [isNaiGenerating, setIsNaiGenerating] = useState(false)
   const [isSavingNaiModule, setIsSavingNaiModule] = useState(false)
   const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
@@ -208,10 +109,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
   const [assetSaveName, setAssetSaveName] = useState('')
   const [assetSaveDescription, setAssetSaveDescription] = useState('')
   const [isUpscaling, setIsUpscaling] = useState(false)
-  const [isImageEditorOpen, setIsImageEditorOpen] = useState(false)
-  const [pendingImageEditorSave, setPendingImageEditorSave] = useState<{ sourceImageDataUrl: string; maskImageDataUrl?: string } | null>(null)
-  const [pendingImageEditorSaveInfo, setPendingImageEditorSaveInfo] = useState<ImageSaveSourceInfo | null>(null)
-  const [imageEditorSaveOptions, setImageEditorSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
   const [encodingVibeIndex, setEncodingVibeIndex] = useState<number | null>(null)
   const [selectedCharacterIndex, setSelectedCharacterIndex] = useState<number | null>(null)
   const [savedVibeSearch, setSavedVibeSearch] = useState('')
@@ -230,6 +127,43 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
   const appSettingsQuery = useQuery({
     queryKey: ['app-settings'],
     queryFn: getAppSettings,
+  })
+
+  const {
+    loginMode,
+    setLoginMode,
+    usernameInput: naiUsernameInput,
+    setUsernameInput: setNaiUsernameInput,
+    passwordInput: naiPasswordInput,
+    setPasswordInput: setNaiPasswordInput,
+    tokenInput: naiTokenInput,
+    setTokenInput: setNaiTokenInput,
+    isAuthModalOpen: isNaiAuthModalOpen,
+    setIsAuthModalOpen: setIsNaiAuthModalOpen,
+    isLoggingIn: isNaiLoggingIn,
+    connectionHint: naiConnectionHint,
+    handleSubmit: handleNaiAuthSubmit,
+  } = useNaiAuthController({
+    refetchUserData: naiUserQuery.refetch,
+    showSnackbar,
+  })
+
+  const {
+    isImageEditorOpen,
+    setIsImageEditorOpen,
+    pendingImageEditorSave,
+    pendingImageEditorSaveInfo,
+    editorSaveOptions: imageEditorSaveOptions,
+    setEditorSaveOptions: setImageEditorSaveOptions,
+    handleOpenImageEditor,
+    handleSaveImageEditor,
+    handleConfirmImageEditorSave,
+    handleCloseImageEditorSaveOptions,
+  } = useNaiImageEditorBridge({
+    naiForm,
+    setNaiForm,
+    imageSaveSettings: appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS,
+    showSnackbar,
   })
 
   const savedVibesQuery = useQuery({
@@ -384,90 +318,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
       ...current,
       [field]: image,
     }))
-  }
-
-  const handleOpenImageEditor = () => {
-    if (!naiForm.sourceImage) {
-      showSnackbar({ message: '먼저 소스 이미지를 선택해.', tone: 'error' })
-      return
-    }
-
-    setIsImageEditorOpen(true)
-  }
-
-  const applyImageEditorSaveOutput = async (
-    payload: { sourceImageDataUrl: string; maskImageDataUrl?: string },
-    imageSaveSettings: ImageSaveSettings,
-  ) => {
-    if (!imageSaveSettings.applyToEditorSave) {
-      setNaiForm((current) => ({
-        ...current,
-        sourceImage: buildSelectedImageDraftFromDataUrl(payload.sourceImageDataUrl, buildNaiEditedImageFileName(current.sourceImage?.fileName, 'source-image')),
-        maskImage: current.action === 'infill'
-          ? payload.maskImageDataUrl
-            ? buildSelectedImageDraftFromDataUrl(payload.maskImageDataUrl, buildNaiEditedImageFileName(current.maskImage?.fileName, 'mask-image'))
-            : undefined
-          : current.maskImage,
-      }))
-      return
-    }
-
-    const sourceOutput = await buildImageSaveOutput(
-      {
-        source: payload.sourceImageDataUrl,
-        sourceMimeType: 'image/png',
-      },
-      imageSaveSettings,
-    )
-
-    const maskOutput = payload.maskImageDataUrl
-      ? await buildImageSaveOutput(
-        {
-          source: payload.maskImageDataUrl,
-          sourceMimeType: 'image/png',
-        },
-        imageSaveSettings,
-      )
-      : null
-
-    setNaiForm((current) => ({
-      ...current,
-      sourceImage: buildSelectedImageDraftFromDataUrl(
-        sourceOutput.dataUrl,
-        buildImageSaveOutputFileName(buildNaiEditedImageFileName(current.sourceImage?.fileName, 'source-image'), sourceOutput.format),
-      ),
-      maskImage: current.action === 'infill'
-        ? maskOutput
-          ? buildSelectedImageDraftFromDataUrl(
-            maskOutput.dataUrl,
-            buildImageSaveOutputFileName(buildNaiEditedImageFileName(current.maskImage?.fileName, 'mask-image'), maskOutput.format),
-          )
-          : undefined
-        : current.maskImage,
-    }))
-  }
-
-  const handleSaveImageEditor = async (payload: { sourceImageDataUrl: string; maskImageDataUrl?: string }) => {
-    const imageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
-
-    if (imageSaveSettings.applyToEditorSave && imageSaveSettings.alwaysShowDialog) {
-      setImageEditorSaveOptions(imageSaveSettings)
-      setPendingImageEditorSaveInfo(await loadImageSaveSourceInfo({ source: payload.sourceImageDataUrl, sourceMimeType: 'image/png' }))
-      setPendingImageEditorSave(payload)
-      return
-    }
-
-    await applyImageEditorSaveOutput(payload, imageSaveSettings)
-  }
-
-  const handleConfirmImageEditorSave = async () => {
-    if (!pendingImageEditorSave) {
-      return
-    }
-
-    await applyImageEditorSaveOutput(pendingImageEditorSave, imageEditorSaveOptions)
-    setPendingImageEditorSave(null)
-    setPendingImageEditorSaveInfo(null)
   }
 
   const handleAddCharacterPrompt = () => {
@@ -890,47 +740,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
     }
   }
 
-  const handleNaiAccountLogin = async () => {
-    const username = naiUsernameInput.trim()
-    const password = naiPasswordInput
-    if (username.length === 0 || password.length === 0 || isNaiLoggingIn) {
-      return
-    }
-
-    try {
-      setIsNaiLoggingIn(true)
-      await loginNai(username, password)
-      await naiUserQuery.refetch()
-      setNaiPasswordInput('')
-      setIsNaiAuthModalOpen(false)
-      showSnackbar({ message: 'NovelAI 로그인 완료.', tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'NovelAI 로그인에 실패했어.'), tone: 'error' })
-    } finally {
-      setIsNaiLoggingIn(false)
-    }
-  }
-
-  const handleNaiTokenLogin = async () => {
-    const token = naiTokenInput.trim()
-    if (token.length === 0 || isNaiLoggingIn) {
-      return
-    }
-
-    try {
-      setIsNaiLoggingIn(true)
-      await loginNaiWithToken(token)
-      await naiUserQuery.refetch()
-      setNaiTokenInput('')
-      setIsNaiAuthModalOpen(false)
-      showSnackbar({ message: 'NovelAI 토큰 연결 완료.', tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'NovelAI 토큰 로그인에 실패했어.'), tone: 'error' })
-    } finally {
-      setIsNaiLoggingIn(false)
-    }
-  }
-
   const handleNaiGenerate = async () => {
     if (isNaiGenerating) {
       return
@@ -1076,9 +885,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
   }
 
   const connected = naiUserQuery.isSuccess
-  const naiConnectionHint = loginMode === 'account'
-    ? 'NovelAI 인증이 필요합니다. 계정으로 로그인하세요.'
-    : 'NovelAI 인증이 필요합니다. access token을 입력해 연결하세요.'
   const naiGenerateButtonLabel = isNaiGenerating
     ? '생성 요청 중…'
     : !connected
@@ -1498,7 +1304,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
         onUsernameChange={setNaiUsernameInput}
         onPasswordChange={setNaiPasswordInput}
         onTokenChange={setNaiTokenInput}
-        onSubmit={() => void (loginMode === 'account' ? handleNaiAccountLogin() : handleNaiTokenLogin())}
+        onSubmit={() => void handleNaiAuthSubmit()}
       />
 
       <NaiAssetSaveModal
@@ -1555,10 +1361,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
         options={imageEditorSaveOptions}
         sourceInfo={pendingImageEditorSaveInfo}
         isSaving={false}
-        onClose={() => {
-          setPendingImageEditorSave(null)
-          setPendingImageEditorSaveInfo(null)
-        }}
+        onClose={handleCloseImageEditorSaveOptions}
         onOptionsChange={(patch) => setImageEditorSaveOptions((current) => ({ ...current, ...patch }))}
         onConfirm={() => void handleConfirmImageEditorSave()}
       />
