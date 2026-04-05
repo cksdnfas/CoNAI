@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  addEdge,
   Background,
   Controls,
   MarkerType,
@@ -10,7 +9,6 @@ import {
   useEdgesState,
   useNodesState,
   useReactFlow,
-  type Connection,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { ArrowLeft, Folder, FolderOpen, FolderPlus, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
@@ -47,12 +45,8 @@ import { SavedGraphList } from './components/saved-graph-list'
 import { WorkflowFolderSettingsPanel } from './components/workflow-folder-settings-panel'
 import { type WorkflowValidationIssue } from './components/workflow-validation-panel'
 import {
-  buildAutoLayoutedNodes,
   buildGraphEditorSnapshot,
-  buildModuleEdgePresentation,
   buildNodeArtifactPreview,
-  findNodePort,
-  getModulePortCompatibility,
   getNodeExecutionStatus,
   parseHandleId,
   type ModuleGraphEdge,
@@ -65,6 +59,7 @@ import { buildWorkflowExposedInputId } from './module-graph-validation'
 import { useModuleGraphPageViewModel } from './use-module-graph-page-view-model'
 import { useModuleGraphExecutionActions } from './use-module-graph-execution-actions'
 import { useModuleGraphBrowseActions } from './use-module-graph-browse-actions'
+import { useModuleGraphEditorInteractions } from './use-module-graph-editor-interactions'
 
 type ModuleWorkflowWorkspaceProps = {
   embedded?: boolean
@@ -494,102 +489,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     )
   }, [edges, executionDetailQuery.data, latestArtifactPreviewByNode, setNodes])
 
-  const isValidConnection = useCallback(
-    (edgeOrConnection: Connection | ModuleGraphEdge) => {
-      const connection = edgeOrConnection as Connection
-
-      if (!connection.source || !connection.target || !connection.sourceHandle || !connection.targetHandle) {
-        return false
-      }
-
-      if (connection.source === connection.target) {
-        return false
-      }
-
-      const sourceNode = nodes.find((node) => node.id === connection.source)
-      const targetNode = nodes.find((node) => node.id === connection.target)
-      if (!sourceNode || !targetNode) {
-        return false
-      }
-
-      const sourceHandle = parseHandleId(connection.sourceHandle)
-      const targetHandle = parseHandleId(connection.targetHandle)
-      if (!sourceHandle || !targetHandle) {
-        return false
-      }
-
-      const sourcePort = sourceNode.data.module.output_ports.find((port) => port.key === sourceHandle.portKey)
-      const targetPort = targetNode.data.module.exposed_inputs.find((port) => port.key === targetHandle.portKey)
-      if (!sourcePort || !targetPort) {
-        return false
-      }
-
-      return getModulePortCompatibility(sourcePort.data_type, targetPort.data_type) !== 'incompatible'
-    },
-    [nodes],
-  )
-
-  const handleConnect = useCallback(
-    (connection: Connection) => {
-      if (!isValidConnection(connection)) {
-        showSnackbar({ message: '포트 타입이 맞지 않아서 연결할 수 없어.', tone: 'error' })
-        return
-      }
-
-      const sourceNode = nodes.find((node) => node.id === connection.source)
-      const targetNode = nodes.find((node) => node.id === connection.target)
-      const sourceHandle = parseHandleId(connection.sourceHandle)
-      const targetHandle = parseHandleId(connection.targetHandle)
-      const sourcePort = findNodePort(sourceNode, 'out', sourceHandle?.portKey)
-      const targetPort = findNodePort(targetNode, 'in', targetHandle?.portKey)
-      const compatibility = getModulePortCompatibility(sourcePort?.data_type, targetPort?.data_type)
-
-      setEdges((currentEdges) =>
-        addEdge(
-          {
-            ...connection,
-            markerEnd: { type: MarkerType.ArrowClosed },
-            ...buildModuleEdgePresentation(sourcePort, targetPort),
-          },
-          currentEdges,
-        ),
-      )
-
-      if (compatibility === 'string-bridge') {
-        showSnackbar({ message: 'text ↔ prompt 연결은 허용돼. 이런 브리지 연결은 점선으로 표시해둘게.', tone: 'info' })
-      }
-    },
-    [isValidConnection, setEdges, showSnackbar],
-  )
-
-  const handleAddModuleNode = (module: ModuleDefinitionRecord) => {
-    const nodeId = `module-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const offset = nodes.length % 5
-
-    setNodes((current) => [
-      ...current,
-      {
-        id: nodeId,
-        type: 'module',
-        position: {
-          x: 80 + offset * 40,
-          y: 80 + current.length * 48,
-        },
-        data: {
-          module,
-          inputValues: {},
-        },
-      },
-    ])
-    setSelectedEdgeId(null)
-    setSelectedNodeId(nodeId)
-  }
-
-  const handleAddModuleFromLibrary = (module: ModuleDefinitionRecord) => {
-    handleAddModuleNode(module)
-    setIsModuleLibraryOpen(false)
-  }
-
   /** Confirm before replacing or clearing unsaved graph edits. */
   const confirmDiscardUnsavedChanges = () => {
     if (!isDirty) {
@@ -599,30 +498,54 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     return window.confirm(UNSAVED_CHANGES_CONFIRM_MESSAGE)
   }
 
-  const resetWorkflowDraft = () => {
-    setNodes([])
-    setEdges([])
-    setSelectedGraphId(null)
-    setDraftWorkflowFolderId(selectedFolderId)
-    setSelectedExecutionId(null)
-    setSelectedNodeId(null)
-    setSelectedEdgeId(null)
-    setWorkflowName('Workflow Draft')
-    setWorkflowDescription('')
-    setWorkflowExposedInputs([])
-    setWorkflowRunInputValues({})
-    setLastSavedSnapshot(
-      buildGraphEditorSnapshot({
-        name: 'Workflow Draft',
-        description: '',
-        nodes: [],
-        edges: [],
-        workflowMetadata: {
-          exposed_inputs: [],
-        },
-      }),
-    )
-  }
+  const {
+    isValidConnection,
+    handleConnect,
+    handleAddModuleFromLibrary,
+    handleDuplicateSelectedNode,
+    handleNodeValueChange,
+    handleNodeValueClear,
+    handleNodeImageChange,
+    handleWorkflowRunInputChange,
+    handleWorkflowRunInputClear,
+    handleWorkflowRunInputImageChange,
+    handleToggleWorkflowExposedInput,
+    handleUpdateWorkflowExposedInput,
+    handleMoveWorkflowExposedInput,
+    handleWorkflowExposedInputDefaultImageChange,
+    handleAutoLayout,
+    handleRemoveSelectedNode,
+    handleRemoveSelectedEdge,
+    handleResetCanvas,
+    resetEmptyWorkflowDraft: resetWorkflowDraft,
+  } = useModuleGraphEditorInteractions({
+    nodes,
+    edges,
+    selectedNode,
+    selectedNodeId,
+    selectedEdgeId,
+    selectedFolderId,
+    setNodes,
+    setEdges,
+    setSelectedGraphId,
+    setDraftWorkflowFolderId,
+    setSelectedExecutionId,
+    setSelectedNodeId,
+    setSelectedEdgeId,
+    setWorkflowName,
+    setWorkflowDescription,
+    setWorkflowExposedInputs,
+    setWorkflowRunInputValues,
+    setLastSavedSnapshot,
+    setIsModuleLibraryOpen,
+    confirmDiscardUnsavedChanges,
+    fitViewAfterAutoLayout: () => {
+      requestAnimationFrame(() => {
+        void reactFlow.fitView({ padding: 0.2, duration: 200 })
+      })
+    },
+    showSnackbar,
+  })
 
   const {
     handleLoadGraph,
@@ -671,159 +594,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     showSnackbar,
   })
 
-  const handleDuplicateSelectedNode = () => {
-    if (!selectedNode) {
-      return
-    }
-
-    const duplicatedNodeId = `module-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const duplicatedInputValues = JSON.parse(JSON.stringify(selectedNode.data.inputValues || {})) as Record<string, unknown>
-
-    setNodes((currentNodes) => [
-      ...currentNodes,
-      {
-        id: duplicatedNodeId,
-        type: 'module',
-        position: {
-          x: selectedNode.position.x + 48,
-          y: selectedNode.position.y + 48,
-        },
-        data: {
-          module: selectedNode.data.module,
-          inputValues: duplicatedInputValues,
-        },
-      },
-    ])
-    setSelectedEdgeId(null)
-    setSelectedNodeId(duplicatedNodeId)
-    showSnackbar({ message: '선택 노드를 복제했어.', tone: 'info' })
-  }
-
-  const handleNodeValueChange = (nodeId: string, portKey: string, value: unknown) => {
-    setNodes((currentNodes) =>
-      currentNodes.map((node) =>
-        node.id === nodeId
-          ? {
-              ...node,
-              data: {
-                ...node.data,
-                inputValues: {
-                  ...node.data.inputValues,
-                  [portKey]: value,
-                },
-              },
-            }
-          : node,
-      ),
-    )
-  }
-
-  const handleNodeValueClear = (nodeId: string, portKey: string) => {
-    setNodes((currentNodes) =>
-      currentNodes.map((node) => {
-        if (node.id !== nodeId) {
-          return node
-        }
-
-        const nextValues = { ...node.data.inputValues }
-        delete nextValues[portKey]
-
-        return {
-          ...node,
-          data: {
-            ...node.data,
-            inputValues: nextValues,
-          },
-        }
-      }),
-    )
-  }
-
-  const handleNodeImageChange = async (nodeId: string, portKey: string, image?: SelectedImageDraft) => {
-    if (!image) {
-      handleNodeValueClear(nodeId, portKey)
-      return
-    }
-
-    handleNodeValueChange(nodeId, portKey, image.dataUrl)
-  }
-
-  const handleWorkflowRunInputChange = (inputId: string, value: unknown) => {
-    setWorkflowRunInputValues((current) => ({
-      ...current,
-      [inputId]: value,
-    }))
-  }
-
-  const handleWorkflowRunInputClear = (inputId: string) => {
-    setWorkflowRunInputValues((current) => {
-      const nextValues = { ...current }
-      delete nextValues[inputId]
-      return nextValues
-    })
-  }
-
-  const handleWorkflowRunInputImageChange = async (inputId: string, image?: SelectedImageDraft) => {
-    if (!image) {
-      handleWorkflowRunInputClear(inputId)
-      return
-    }
-
-    handleWorkflowRunInputChange(inputId, image.dataUrl)
-  }
-
-  const handleToggleWorkflowExposedInput = (inputDefinition: GraphWorkflowExposedInput) => {
-    setWorkflowExposedInputs((current) => {
-      const alreadySelected = current.some((item) => item.id === inputDefinition.id)
-      if (alreadySelected) {
-        return current.filter((item) => item.id !== inputDefinition.id)
-      }
-
-      return [...current, inputDefinition]
-    })
-  }
-
-  const handleUpdateWorkflowExposedInput = (inputId: string, patch: Partial<GraphWorkflowExposedInput>) => {
-    setWorkflowExposedInputs((current) =>
-      current.map((inputDefinition) =>
-        inputDefinition.id === inputId
-          ? {
-              ...inputDefinition,
-              ...patch,
-            }
-          : inputDefinition,
-      ),
-    )
-  }
-
-  const handleMoveWorkflowExposedInput = (inputId: string, direction: 'up' | 'down') => {
-    setWorkflowExposedInputs((current) => {
-      const index = current.findIndex((inputDefinition) => inputDefinition.id === inputId)
-      if (index === -1) {
-        return current
-      }
-
-      const targetIndex = direction === 'up' ? index - 1 : index + 1
-      if (targetIndex < 0 || targetIndex >= current.length) {
-        return current
-      }
-
-      const next = [...current]
-      const [moved] = next.splice(index, 1)
-      next.splice(targetIndex, 0, moved)
-      return next
-    })
-  }
-
-  const handleWorkflowExposedInputDefaultImageChange = async (inputId: string, image?: SelectedImageDraft) => {
-    if (!image) {
-      handleUpdateWorkflowExposedInput(inputId, { default_value: undefined })
-      return
-    }
-
-    handleUpdateWorkflowExposedInput(inputId, { default_value: image.dataUrl })
-  }
-
   const {
     isSavingGraph,
     executingGraphId,
@@ -866,46 +636,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       modulesQuery.refetch(),
       handleRefreshBrowseWorkspace(selectedGraphId !== null ? graphExecutionsQuery.refetch : undefined),
     ])
-
-  const handleAutoLayout = () => {
-    if (nodes.length === 0) {
-      return
-    }
-
-    setNodes((currentNodes) => buildAutoLayoutedNodes(currentNodes, edges))
-    requestAnimationFrame(() => {
-      void reactFlow.fitView({ padding: 0.2, duration: 200 })
-    })
-    showSnackbar({ message: '그래프를 자동 정렬했어.', tone: 'info' })
-  }
-
-  const handleRemoveSelectedNode = () => {
-    if (!selectedNodeId) {
-      return
-    }
-
-    setNodes((currentNodes) => currentNodes.filter((node) => node.id !== selectedNodeId))
-    setEdges((currentEdges) => currentEdges.filter((edge) => edge.source !== selectedNodeId && edge.target !== selectedNodeId))
-    setWorkflowExposedInputs((current) => current.filter((inputDefinition) => inputDefinition.node_id !== selectedNodeId))
-    setSelectedNodeId(null)
-  }
-
-  const handleRemoveSelectedEdge = () => {
-    if (!selectedEdgeId) {
-      return
-    }
-
-    setEdges((currentEdges) => currentEdges.filter((edge) => edge.id !== selectedEdgeId))
-    setSelectedEdgeId(null)
-  }
-
-  const handleResetCanvas = () => {
-    if (!confirmDiscardUnsavedChanges()) {
-      return
-    }
-
-    resetWorkflowDraft()
-  }
 
   const nodeTypes = useMemo(() => ({ module: ModuleGraphNodeCard }), [])
   const graphCanvasNodes = useMemo(
