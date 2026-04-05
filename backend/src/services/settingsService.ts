@@ -23,6 +23,16 @@ import {
   readRawSettingsFile,
   writeSettingsFile,
 } from './settingsServiceStorage';
+import {
+  applyAppearanceSettingsUpdate,
+  applyGeneralSettingsUpdate,
+  applyImageSaveSettingsUpdate,
+  applyKaloscopeSettingsUpdate,
+  applyMetadataSettingsUpdate,
+  applySimilaritySettingsUpdate,
+  applyTaggerSettingsUpdate,
+  applyThumbnailSettingsUpdate,
+} from './settingsServiceUpdates';
 
 const MODEL_REPO_MAP: Record<TaggerModel, string> = {
   vit: 'SmilingWolf/wd-vit-tagger-v3',
@@ -129,13 +139,7 @@ export class SettingsService {
    */
   updateGeneralSettings(generalSettings: Partial<GeneralSettings>): AppSettings {
     const currentSettings = this.loadSettings();
-    const updatedSettings: AppSettings = {
-      ...currentSettings,
-      general: {
-        ...currentSettings.general,
-        ...generalSettings,
-      },
-    };
+    const updatedSettings = applyGeneralSettingsUpdate(currentSettings, generalSettings);
     this.saveSettings(updatedSettings);
     return updatedSettings;
   }
@@ -145,13 +149,7 @@ export class SettingsService {
    */
   updateTaggerSettings(taggerSettings: Partial<TaggerSettings>): AppSettings {
     const currentSettings = this.loadSettings();
-    const updatedSettings: AppSettings = {
-      ...currentSettings,
-      tagger: {
-        ...currentSettings.tagger,
-        ...taggerSettings,
-      },
-    };
+    const updatedSettings = applyTaggerSettingsUpdate(currentSettings, taggerSettings);
     this.saveSettings(updatedSettings);
     return updatedSettings;
   }
@@ -161,13 +159,7 @@ export class SettingsService {
    */
   updateKaloscopeSettings(kaloscopeSettings: Partial<KaloscopeSettings>): AppSettings {
     const currentSettings = this.loadSettings();
-    const updatedSettings: AppSettings = {
-      ...currentSettings,
-      kaloscope: {
-        ...currentSettings.kaloscope,
-        ...kaloscopeSettings,
-      },
-    };
+    const updatedSettings = applyKaloscopeSettingsUpdate(currentSettings, kaloscopeSettings);
     this.saveSettings(updatedSettings);
     return updatedSettings;
   }
@@ -177,25 +169,7 @@ export class SettingsService {
    */
   updateSimilaritySettings(similaritySettings: Partial<SimilaritySettings>): AppSettings {
     const currentSettings = this.loadSettings();
-    const updatedSettings: AppSettings = {
-      ...currentSettings,
-      similarity: {
-        ...currentSettings.similarity,
-        ...similaritySettings,
-        promptSimilarity: {
-          ...currentSettings.similarity.promptSimilarity,
-          ...similaritySettings.promptSimilarity,
-          weights: {
-            ...currentSettings.similarity.promptSimilarity.weights,
-            ...similaritySettings.promptSimilarity?.weights,
-          },
-          fieldThresholds: {
-            ...currentSettings.similarity.promptSimilarity.fieldThresholds,
-            ...similaritySettings.promptSimilarity?.fieldThresholds,
-          },
-        },
-      },
-    };
+    const updatedSettings = applySimilaritySettingsUpdate(currentSettings, similaritySettings);
     this.saveSettings(updatedSettings);
     return updatedSettings;
   }
@@ -205,13 +179,7 @@ export class SettingsService {
    */
   updateAppearanceSettings(appearanceSettings: Partial<AppearanceSettings>): AppSettings {
     const currentSettings = this.loadSettings();
-    const updatedSettings: AppSettings = {
-      ...currentSettings,
-      appearance: {
-        ...currentSettings.appearance,
-        ...appearanceSettings,
-      },
-    };
+    const updatedSettings = applyAppearanceSettingsUpdate(currentSettings, appearanceSettings);
     this.saveSettings(updatedSettings);
     cleanupUnusedAppearanceFontFiles(updatedSettings.appearance);
     return updatedSettings;
@@ -222,13 +190,7 @@ export class SettingsService {
    */
   updateMetadataSettings(metadataSettings: Partial<MetadataExtractionSettings>): AppSettings {
     const currentSettings = this.loadSettings();
-    const updatedSettings: AppSettings = {
-      ...currentSettings,
-      metadataExtraction: {
-        ...currentSettings.metadataExtraction,
-        ...metadataSettings,
-      },
-    };
+    const updatedSettings = applyMetadataSettingsUpdate(currentSettings, metadataSettings);
     this.saveSettings(updatedSettings);
     return updatedSettings;
   }
@@ -238,13 +200,7 @@ export class SettingsService {
    */
   updateThumbnailSettings(thumbnailSettings: Partial<ThumbnailSettings>): AppSettings {
     const currentSettings = this.loadSettings();
-    const updatedSettings: AppSettings = {
-      ...currentSettings,
-      thumbnail: {
-        ...currentSettings.thumbnail,
-        ...thumbnailSettings,
-      },
-    };
+    const updatedSettings = applyThumbnailSettingsUpdate(currentSettings, thumbnailSettings);
     this.saveSettings(updatedSettings);
     return updatedSettings;
   }
@@ -254,13 +210,7 @@ export class SettingsService {
    */
   updateImageSaveSettings(imageSaveSettings: Partial<AppSettings['imageSave']>): AppSettings {
     const currentSettings = this.loadSettings();
-    const updatedSettings: AppSettings = {
-      ...currentSettings,
-      imageSave: {
-        ...currentSettings.imageSave,
-        ...imageSaveSettings,
-      },
-    };
+    const updatedSettings = applyImageSaveSettingsUpdate(currentSettings, imageSaveSettings);
     this.saveSettings(updatedSettings);
     return updatedSettings;
   }
