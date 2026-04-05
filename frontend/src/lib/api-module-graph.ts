@@ -306,6 +306,15 @@ export async function updateGraphWorkflow(workflowId: number, payload: {
   return response.data
 }
 
+/** Delete one saved graph workflow document. */
+export async function deleteGraphWorkflow(workflowId: number) {
+  const response = await requestJson<ApiEnvelope<{ message: string }>>(`/api/graph-workflows/${workflowId}`, {
+    method: 'DELETE',
+  })
+
+  return response.data
+}
+
 /** Enqueue a saved graph workflow for background execution. */
 export async function executeGraphWorkflow(workflowId: number, payload?: { input_values?: Record<string, unknown> }) {
   const response = await requestJson<ApiEnvelope<{

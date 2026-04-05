@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { PenSquare, Pin, PinOff, Play, Search } from 'lucide-react'
+import { Pin, PinOff, Search } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,27 +16,19 @@ const WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY = 'conai:module-graph:workflow-sidebar-l
 type SavedGraphListProps = {
   graphs: GraphWorkflowRecord[]
   selectedGraphId: number | null
-  executingGraphId: number | null
   onLoadGraph: (graph: GraphWorkflowRecord) => void
-  onExecuteGraph: (graphId: number) => void
-  onEditGraph?: (graph: GraphWorkflowRecord) => void
-  showExecuteButton?: boolean
-  headerActions?: ReactNode
-  topToolbar?: ReactNode
+  leftToolbar?: ReactNode
+  rightToolbar?: ReactNode
   floatingActionContainerClassName?: string
 }
 
-/** Render saved workflows with quick run and edit actions. */
+/** Render saved workflows in one explorer-style sidebar with header actions. */
 export function SavedGraphList({
   graphs,
   selectedGraphId,
-  executingGraphId,
   onLoadGraph,
-  onExecuteGraph,
-  onEditGraph,
-  showExecuteButton = true,
-  headerActions,
-  topToolbar,
+  leftToolbar,
+  rightToolbar,
   floatingActionContainerClassName,
 }: SavedGraphListProps) {
   const sidebarAnchorRef = useRef<HTMLDivElement | null>(null)
@@ -113,25 +105,8 @@ export function SavedGraphList({
     <>
       <div ref={sidebarAnchorRef}>
         <ExplorerSidebar
-          title="워크플로우"
-          badge={(
-            <div className="flex items-center gap-2">
-              {headerActions}
-              {isSidebarFloatingLocked ? (
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  className="bg-surface-low"
-                  onClick={() => setIsSidebarFloatingLocked(false)}
-                  aria-label="사이드바 고정 해제"
-                  title="사이드바 고정 해제"
-                >
-                  <PinOff className="h-4 w-4" />
-                </Button>
-              ) : null}
-            </div>
-          )}
+          title="Explorer"
+          badge={<Badge variant="outline">{graphs.length}</Badge>}
           floatingFrame
           floatingLocked={isSidebarFloatingLocked}
           onFloatingChange={setIsSidebarFloating}
@@ -141,10 +116,29 @@ export function SavedGraphList({
               ? 'z-20'
               : 'sticky top-24 z-30 max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]',
           )}
-          bodyClassName="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1"
+          bodyClassName="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1"
           headerExtra={
-            <div className="space-y-3">
-              {topToolbar ? <div className="flex flex-wrap gap-2">{topToolbar}</div> : null}
+            <div className="space-y-3 border-b border-white/5 pb-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">{leftToolbar}</div>
+                <div className="flex items-center justify-end gap-2">
+                  {rightToolbar}
+                  {isSidebarFloatingLocked ? (
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      className="bg-surface-low"
+                      onClick={() => setIsSidebarFloatingLocked(false)}
+                      aria-label="사이드바 고정 해제"
+                      title="사이드바 고정 해제"
+                    >
+                      <PinOff className="h-4 w-4" />
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="검색" className="h-8 pl-9 text-sm" />
@@ -156,56 +150,26 @@ export function SavedGraphList({
             const duplicateCount = duplicateNameCounts[graph.name] ?? 0
 
             return (
-              <div
+              <button
                 key={graph.id}
+                type="button"
+                onClick={() => onLoadGraph(graph)}
                 className={getNavigationItemClassName({
                   active: selectedGraphId === graph.id,
-                  className: 'flex items-start gap-2 py-3',
+                  className: 'block w-full px-3 py-2.5 text-left',
                 })}
+                title={`${graph.name} · #${graph.id} · ${formatDateTime(graph.updated_date)}${graph.description?.trim() ? `\n${graph.description}` : ''}`}
               >
-          <button
-            type="button"
-            onClick={() => onLoadGraph(graph)}
-            className="min-w-0 flex-1 text-left"
-            title={`${graph.name} · #${graph.id} · ${formatDateTime(graph.updated_date)}${graph.description?.trim() ? `\n${graph.description}` : ''}`}
-          >
-            <div className="flex min-w-0 items-center gap-2">
-              <div className={cn('min-w-0 truncate text-sm font-semibold', selectedGraphId === graph.id ? 'text-primary' : 'text-foreground')}>
-                {graph.name}
-              </div>
-              {duplicateCount > 1 ? <Badge variant="outline">동명 {duplicateCount}</Badge> : null}
-            </div>
-            <div className="mt-1 text-[11px] text-muted-foreground">
-              #{graph.id} · v{graph.version} · 수정 {formatDateTime(graph.updated_date)}
-            </div>
-            {graph.description ? (
-              <div className="mt-1 line-clamp-1 text-xs text-muted-foreground" title={graph.description}>
-                {graph.description}
-              </div>
-            ) : null}
-          </button>
-
-          <div className="flex shrink-0 gap-1">
-            {onEditGraph ? (
-              <Button type="button" size="icon-sm" variant="ghost" onClick={() => onEditGraph(graph)} title="편집" aria-label="워크플로우 편집">
-                <PenSquare className="h-4 w-4" />
-              </Button>
-            ) : null}
-            {showExecuteButton ? (
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => onExecuteGraph(graph.id)}
-                disabled={executingGraphId !== null}
-                title={executingGraphId === graph.id ? '실행 중' : '실행'}
-                aria-label={executingGraphId === graph.id ? '워크플로우 실행 중' : '워크플로우 실행'}
-              >
-                <Play className="h-4 w-4" />
-              </Button>
-            ) : null}
-          </div>
-              </div>
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={cn('min-w-0 truncate text-sm font-medium', selectedGraphId === graph.id ? 'text-primary' : 'text-foreground')}>
+                    {graph.name}
+                  </div>
+                  {duplicateCount > 1 ? <Badge variant="outline">동명 {duplicateCount}</Badge> : null}
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  #{graph.id} · v{graph.version} · 수정 {formatDateTime(graph.updated_date)}
+                </div>
+              </button>
             )
           })}
 

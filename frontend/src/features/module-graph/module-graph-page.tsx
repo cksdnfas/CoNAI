@@ -13,7 +13,7 @@ import {
   type Connection,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Plus, RefreshCw } from 'lucide-react'
+import { ArrowLeft, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
@@ -23,6 +23,7 @@ import { SettingsModal } from '@/features/settings/components/settings-modal'
 import {
   cancelGraphExecution,
   createGraphWorkflow,
+  deleteGraphWorkflow,
   executeGraphNode,
   executeGraphWorkflow,
   getAppSettings,
@@ -778,6 +779,38 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     showSnackbar({ message: '새 워크플로우 초안을 열었어.', tone: 'info' })
   }
 
+  const handleEditSelectedWorkflow = () => {
+    if (!selectedGraphRecord) {
+      showSnackbar({ message: '먼저 워크플로우를 하나 선택해줘.', tone: 'error' })
+      return
+    }
+
+    handleLoadGraph(selectedGraphRecord, { openEditor: true, silent: true })
+  }
+
+  const handleDeleteSelectedWorkflow = async () => {
+    if (!selectedGraphRecord) {
+      showSnackbar({ message: '먼저 워크플로우를 하나 선택해줘.', tone: 'error' })
+      return
+    }
+
+    const confirmed = window.confirm(`워크플로우 "${selectedGraphRecord.name}"을(를) 삭제할까? 이 작업은 되돌릴 수 없어.`)
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      await deleteGraphWorkflow(selectedGraphRecord.id)
+      resetWorkflowDraft()
+      setWorkflowView('browse')
+      setIsEditorSupportOpen(false)
+      await graphWorkflowsQuery.refetch()
+      showSnackbar({ message: '워크플로우를 삭제했어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '워크플로우 삭제에 실패했어.', tone: 'error' })
+    }
+  }
+
   const handleLeaveWorkflowEditor = () => {
     if (workflowView !== 'edit') {
       setWorkflowView('browse')
@@ -1306,66 +1339,77 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     <SavedGraphList
       graphs={graphWorkflowsQuery.data ?? []}
       selectedGraphId={selectedGraphId}
-      executingGraphId={executingGraphId}
       onLoadGraph={(graph) => {
         void handleLoadGraph(graph, { silent: true })
       }}
-      onEditGraph={(graph) => {
-        void handleLoadGraph(graph, { openEditor: true, silent: true })
-      }}
-      onExecuteGraph={(graphId) => void handleExecuteGraph(graphId)}
-      showExecuteButton={false}
       floatingActionContainerClassName={workflowView === 'edit' ? 'bottom-24' : undefined}
-      headerActions={
-        workflowView === 'browse' ? (
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="outline"
-              className="bg-surface-low"
-              onClick={() => void handleRefreshWorkspace()}
-              aria-label="새로고침"
-              title="새로고침"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-            <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={handleCreateWorkflow} aria-label="새 워크플로우" title="새 워크플로우">
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-        ) : undefined
-      }
-      topToolbar={
+      leftToolbar={
         workflowView === 'edit' ? (
-          <>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="outline"
-              className="bg-surface-low"
-              onClick={() => {
-                handleLeaveWorkflowEditor()
-              }}
-              aria-label="목록으로"
-              title="목록으로"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="outline"
-              className="bg-surface-low"
-              onClick={() => void handleRefreshWorkspace()}
-              aria-label="새로고침"
-              title="새로고침"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          </>
-        ) : undefined
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            className="bg-surface-low"
+            onClick={() => {
+              handleLeaveWorkflowEditor()
+            }}
+            aria-label="목록으로"
+            title="목록으로"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        ) : null
       }
+      rightToolbar={(
+        <>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            className="bg-surface-low"
+            onClick={() => void handleRefreshWorkspace()}
+            aria-label="새로고침"
+            title="새로고침"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            className="bg-surface-low"
+            onClick={handleCreateWorkflow}
+            aria-label="새 워크플로우"
+            title="새 워크플로우"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            className="bg-surface-low"
+            onClick={handleEditSelectedWorkflow}
+            disabled={!selectedGraphRecord}
+            aria-label="워크플로우 편집"
+            title="워크플로우 편집"
+          >
+            <PenSquare className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            className="bg-surface-low border-rose-500/30 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
+            onClick={() => void handleDeleteSelectedWorkflow()}
+            disabled={!selectedGraphRecord}
+            aria-label="워크플로우 삭제"
+            title="워크플로우 삭제"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </>
+      )}
     />
   )
 
