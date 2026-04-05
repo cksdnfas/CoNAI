@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search } from 'lucide-react'
+import { ChevronDown, ChevronRight, Search } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -85,6 +85,7 @@ function getCustomModuleGroup(module: ModuleDefinitionRecord): { key: string; la
 export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule, showHeader = true, surface = 'card' }: ModuleLibraryPanelProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<ModuleLibraryTab>('custom')
+  const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<string[]>([])
 
   const customModules = useMemo(() => modules.filter((module) => module.engine_type !== 'system'), [modules])
   const systemModules = useMemo(() => modules.filter((module) => module.engine_type === 'system'), [modules])
@@ -154,6 +155,24 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
       return left.label.localeCompare(right.label, 'ko')
     })
   }, [activeTab, filteredModules])
+
+  useEffect(() => {
+    if (groupedModules.length === 0) {
+      return
+    }
+
+    const visibleKeys = new Set(groupedModules.map((group) => `${activeTab}:${group.key}`))
+    setCollapsedGroupKeys((current) => current.filter((key) => !key.startsWith(`${activeTab}:`) || visibleKeys.has(key)))
+  }, [activeTab, groupedModules])
+
+  const toggleGroup = (groupKey: string) => {
+    const scopedKey = `${activeTab}:${groupKey}`
+    setCollapsedGroupKeys((current) => (
+      current.includes(scopedKey)
+        ? current.filter((key) => key !== scopedKey)
+        : [...current, scopedKey]
+    ))
+  }
 
   const content = (
     <div className="space-y-3">
@@ -252,47 +271,61 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
       ) : null}
 
       <div className="max-h-[min(68vh,760px)] space-y-5 overflow-y-auto pr-1">
-        {groupedModules.map((group) => (
-          <section key={group.key} className="space-y-2">
-            <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-2">
-              <div className="text-sm font-semibold text-foreground">{group.label}</div>
-              <Badge variant="outline">{group.modules.length}</Badge>
-            </div>
+        {groupedModules.map((group) => {
+          const scopedKey = `${activeTab}:${group.key}`
+          const isCollapsed = collapsedGroupKeys.includes(scopedKey)
 
-            <div className="space-y-1">
-              {group.modules.map((module) => {
-                const isSystemModule = module.engine_type === 'system'
-                const isFinalResult = isFinalResultModule(module)
+          return (
+            <section key={group.key} className="space-y-2">
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.key)}
+                className="flex w-full items-center justify-between gap-3 border-b border-border/70 pb-2 text-left"
+              >
+                <div className="flex items-center gap-2">
+                  {isCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  <div className="text-sm font-semibold text-foreground">{group.label}</div>
+                </div>
+                <Badge variant="outline">{group.modules.length}</Badge>
+              </button>
 
-                return (
-                  <div
-                    key={module.id}
-                    className={cn(
-                      'flex items-center justify-between gap-3 rounded-sm border px-3 py-2.5',
-                      isSystemModule ? 'border-primary/25 bg-surface-high/70' : 'border-border bg-surface-low',
-                    )}
-                  >
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate text-sm font-medium text-foreground">{module.name}</span>
-                        <Badge variant="outline">{module.engine_type}</Badge>
-                        {isFinalResult ? <Badge variant="secondary">최종 결과</Badge> : null}
+              {!isCollapsed ? (
+                <div className="space-y-1">
+                  {group.modules.map((module) => {
+                    const isSystemModule = module.engine_type === 'system'
+                    const isFinalResult = isFinalResultModule(module)
+
+                    return (
+                      <div
+                        key={module.id}
+                        className={cn(
+                          'flex items-center justify-between gap-3 rounded-sm border px-3 py-2.5',
+                          isSystemModule ? 'border-primary/25 bg-surface-high/70' : 'border-border bg-surface-low',
+                        )}
+                      >
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate text-sm font-medium text-foreground">{module.name}</span>
+                            <Badge variant="outline">{module.engine_type}</Badge>
+                            {isFinalResult ? <Badge variant="secondary">최종 결과</Badge> : null}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            입력 {module.exposed_inputs.length} · 출력 {module.output_ports.length}
+                          </div>
+                          {module.description ? <div className="truncate text-xs text-muted-foreground">{module.description}</div> : null}
+                        </div>
+
+                        <Button type="button" size="sm" variant="outline" onClick={() => onAddModule(module)}>
+                          추가
+                        </Button>
                       </div>
-                      <div className="text-[11px] text-muted-foreground">
-                        입력 {module.exposed_inputs.length} · 출력 {module.output_ports.length}
-                      </div>
-                      {module.description ? <div className="truncate text-xs text-muted-foreground">{module.description}</div> : null}
-                    </div>
-
-                    <Button type="button" size="sm" variant="outline" onClick={() => onAddModule(module)}>
-                      추가
-                    </Button>
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-        ))}
+                    )
+                  })}
+                </div>
+              ) : null}
+            </section>
+          )
+        })}
       </div>
     </div>
   )
