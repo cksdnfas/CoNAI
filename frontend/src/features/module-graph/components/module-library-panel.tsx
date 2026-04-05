@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import type { ModuleDefinitionRecord } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { isFinalResultModule } from '../module-graph-shared'
 
 type ModuleLibraryPanelProps = {
@@ -20,6 +21,65 @@ type ModuleLibraryPanelProps = {
 }
 
 type ModuleLibraryTab = 'custom' | 'system'
+
+type ModuleGroup = {
+  key: string
+  label: string
+  modules: ModuleDefinitionRecord[]
+}
+
+const SYSTEM_GROUP_ORDER = ['prompt', 'image', 'analysis', 'output', 'utility', 'other']
+const CUSTOM_GROUP_ORDER = ['nai', 'comfyui', 'other']
+
+function toTitleCase(rawValue: string) {
+  return rawValue
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+/** Build a user-facing group for system modules based on practical workflow role. */
+function getSystemModuleGroup(module: ModuleDefinitionRecord): { key: string; label: string } {
+  const category = (module.category ?? '').toLowerCase()
+  const name = module.name.toLowerCase()
+
+  if (isFinalResultModule(module) || category === 'output') {
+    return { key: 'output', label: 'Output' }
+  }
+
+  if (category === 'analysis' || name.includes('extract')) {
+    return { key: 'analysis', label: 'Analysis' }
+  }
+
+  if (category === 'prompt-source' || name.includes('prompt')) {
+    return { key: 'prompt', label: 'Prompt' }
+  }
+
+  if (category === 'retrieval' || name.includes('image') || name.includes('reference') || name.includes('library')) {
+    return { key: 'image', label: 'Image / Retrieval' }
+  }
+
+  if (category === 'utility') {
+    return { key: 'utility', label: 'Utility' }
+  }
+
+  return { key: 'other', label: category ? toTitleCase(category) : 'Other' }
+}
+
+/** Build a user-facing group for custom modules with minimal noise. */
+function getCustomModuleGroup(module: ModuleDefinitionRecord): { key: string; label: string } {
+  if (module.engine_type === 'nai') {
+    return { key: 'nai', label: 'NovelAI' }
+  }
+
+  if (module.engine_type === 'comfyui') {
+    return { key: 'comfyui', label: 'ComfyUI' }
+  }
+
+  const category = (module.category ?? '').toLowerCase()
+  return { key: 'other', label: category ? toTitleCase(category) : 'Other' }
+}
 
 /** Render the reusable module library for graph authoring. */
 export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule, showHeader = true, surface = 'card' }: ModuleLibraryPanelProps) {
@@ -58,9 +118,42 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
         return finalResultDelta
       }
 
-      return left.name.localeCompare(right.name)
+      return left.name.localeCompare(right.name, 'ko')
     })
   }, [searchQuery, visibleModules])
+
+  const groupedModules = useMemo(() => {
+    const groupMap = new Map<string, ModuleGroup>()
+
+    for (const module of filteredModules) {
+      const group = activeTab === 'system' ? getSystemModuleGroup(module) : getCustomModuleGroup(module)
+      const existing = groupMap.get(group.key)
+      if (existing) {
+        existing.modules.push(module)
+        continue
+      }
+
+      groupMap.set(group.key, {
+        key: group.key,
+        label: group.label,
+        modules: [module],
+      })
+    }
+
+    const orderedKeys = activeTab === 'system' ? SYSTEM_GROUP_ORDER : CUSTOM_GROUP_ORDER
+
+    return [...groupMap.values()].sort((left, right) => {
+      const leftIndex = orderedKeys.indexOf(left.key)
+      const rightIndex = orderedKeys.indexOf(right.key)
+      const normalizedLeftIndex = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex
+      const normalizedRightIndex = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex
+      if (normalizedLeftIndex !== normalizedRightIndex) {
+        return normalizedLeftIndex - normalizedRightIndex
+      }
+
+      return left.label.localeCompare(right.label, 'ko')
+    })
+  }, [activeTab, filteredModules])
 
   const content = (
     <div className="space-y-3">
@@ -158,35 +251,48 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
         </Alert>
       ) : null}
 
-      <div className="max-h-[min(62vh,720px)] overflow-y-auto pr-1">
-        <div className="grid gap-3 md:grid-cols-2">
-          {filteredModules.map((module) => {
-            const isSystemModule = module.engine_type === 'system'
-            const isFinalResult = isFinalResultModule(module)
+      <div className="max-h-[min(68vh,760px)] space-y-5 overflow-y-auto pr-1">
+        {groupedModules.map((group) => (
+          <section key={group.key} className="space-y-2">
+            <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-2">
+              <div className="text-sm font-semibold text-foreground">{group.label}</div>
+              <Badge variant="outline">{group.modules.length}</Badge>
+            </div>
 
-            return (
-              <div key={module.id} className={`flex h-full flex-col gap-3 rounded-sm border p-3 ${isSystemModule ? 'border-primary/40 bg-surface-high' : 'border-border bg-surface-low'}`}>
-                <div className="min-w-0 space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-foreground">{module.name}</span>
-                    <Badge variant="outline">{module.engine_type}</Badge>
-                    <Badge variant={isSystemModule ? 'secondary' : 'outline'}>{isSystemModule ? '기본 제공' : '사용자 정의'}</Badge>
-                    {module.category ? <Badge variant="secondary">{module.category}</Badge> : null}
-                    {isFinalResult ? <Badge variant="secondary">최종 결과</Badge> : null}
+            <div className="space-y-1">
+              {group.modules.map((module) => {
+                const isSystemModule = module.engine_type === 'system'
+                const isFinalResult = isFinalResultModule(module)
+
+                return (
+                  <div
+                    key={module.id}
+                    className={cn(
+                      'flex items-center justify-between gap-3 rounded-sm border px-3 py-2.5',
+                      isSystemModule ? 'border-primary/25 bg-surface-high/70' : 'border-border bg-surface-low',
+                    )}
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="truncate text-sm font-medium text-foreground">{module.name}</span>
+                        <Badge variant="outline">{module.engine_type}</Badge>
+                        {isFinalResult ? <Badge variant="secondary">최종 결과</Badge> : null}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        입력 {module.exposed_inputs.length} · 출력 {module.output_ports.length}
+                      </div>
+                      {module.description ? <div className="truncate text-xs text-muted-foreground">{module.description}</div> : null}
+                    </div>
+
+                    <Button type="button" size="sm" variant="outline" onClick={() => onAddModule(module)}>
+                      추가
+                    </Button>
                   </div>
-                  <div className="text-xs text-muted-foreground">입력 {module.exposed_inputs.length} · 출력 {module.output_ports.length}</div>
-                  {module.description ? <div className="line-clamp-3 text-xs text-muted-foreground">{module.description}</div> : null}
-                  {isFinalResult ? <div className="text-xs text-amber-200/90">업스트림 결과를 명시적 최종 결과로 선언하는 출력 노드</div> : null}
-                </div>
-                <div className="mt-auto flex justify-end">
-                  <Button type="button" size="sm" variant="outline" onClick={() => onAddModule(module)}>
-                    추가
-                  </Button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+                )
+              })}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   )
