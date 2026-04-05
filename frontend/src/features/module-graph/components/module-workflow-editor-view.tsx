@@ -19,6 +19,7 @@ export interface ModuleWorkflowEditorViewProps {
   workflowEditorSupportPanels: ReactNode
   isEditorSupportOpen: boolean
   editorSupportTitle: string
+  editorSupportSubtitle?: ReactNode
   onOpenModuleLibrary: () => void
   onAutoLayout: () => void
   onDuplicateSelectedNode: () => void
@@ -41,6 +42,7 @@ export function ModuleWorkflowEditorView({
   workflowEditorSupportPanels,
   isEditorSupportOpen,
   editorSupportTitle,
+  editorSupportSubtitle,
   onOpenModuleLibrary,
   onAutoLayout,
   onDuplicateSelectedNode,
@@ -152,7 +154,7 @@ export function ModuleWorkflowEditorView({
         <BottomDrawerSheet
           open={isEditorSupportOpen}
           title={editorSupportTitle}
-          subtitle="설정 · 노드 검사 · 입력 · 검증 · 실행 결과"
+          subtitle={editorSupportSubtitle}
           ariaLabel="워크플로우 편집 도구"
           onClose={onCloseEditorSupport}
           className={isDesktopPageLayout ? 'inset-x-auto left-1/2 w-[min(80vw,1400px)] -translate-x-1/2' : undefined}

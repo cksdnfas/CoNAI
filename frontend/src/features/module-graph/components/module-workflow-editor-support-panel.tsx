@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input'
 export type EditorSupportSectionKey = 'setup' | 'inspector' | 'inputs' | 'validation' | 'results'
 
 export interface ModuleWorkflowEditorSupportPanelProps {
-  activeSection: EditorSupportSectionKey
   nodesCount: number
   edgesCount: number
   selectedGraphName: string | null
@@ -20,11 +19,11 @@ export interface ModuleWorkflowEditorSupportPanelProps {
   selectedExecutionId: number | null
   isSavingGraph: boolean
   hasNodes: boolean
-  onSelectSection: (section: EditorSupportSectionKey) => void
   onWorkflowNameChange: (value: string) => void
   onWorkflowDescriptionChange: (value: string) => void
   onSaveGraph: () => void
   setSectionRef: (section: EditorSupportSectionKey, node: HTMLDivElement | null) => void
+  folderPanel?: ReactNode
   inspectorPanel: ReactNode
   inputsPanel: ReactNode
   validationPanel: ReactNode
@@ -33,7 +32,6 @@ export interface ModuleWorkflowEditorSupportPanelProps {
 
 /** Render the editor support drawer content for workflow setup, validation, and results. */
 export function ModuleWorkflowEditorSupportPanel({
-  activeSection,
   nodesCount,
   edgesCount,
   selectedGraphName,
@@ -45,11 +43,11 @@ export function ModuleWorkflowEditorSupportPanel({
   selectedExecutionId,
   isSavingGraph,
   hasNodes,
-  onSelectSection,
   onWorkflowNameChange,
   onWorkflowDescriptionChange,
   onSaveGraph,
   setSectionRef,
+  folderPanel,
   inspectorPanel,
   inputsPanel,
   validationPanel,
@@ -57,27 +55,7 @@ export function ModuleWorkflowEditorSupportPanel({
 }: ModuleWorkflowEditorSupportPanelProps) {
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {([
-          ['setup', '설정'],
-          ['inspector', '검사'],
-          ['inputs', '입력'],
-          ['validation', '검증'],
-          ['results', '결과'],
-        ] as const).map(([sectionKey, label]) => (
-          <Button
-            key={sectionKey}
-            type="button"
-            size="sm"
-            variant={activeSection === sectionKey ? 'default' : 'outline'}
-            onClick={() => onSelectSection(sectionKey)}
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
-
-      <div ref={(node) => { setSectionRef('setup', node) }} className="scroll-mt-4">
+      <div ref={(node) => { setSectionRef('setup', node) }} className="scroll-mt-24 md:scroll-mt-28">
         <Card>
           <CardContent className="space-y-4">
             <SectionHeading
@@ -104,6 +82,8 @@ export function ModuleWorkflowEditorSupportPanel({
               <Input value={workflowDescription} onChange={(event) => onWorkflowDescriptionChange(event.target.value)} placeholder="설명 (선택)" />
             </div>
 
+            {folderPanel}
+
             <Button type="button" onClick={onSaveGraph} disabled={isSavingGraph || !hasNodes}>
               {isSavingGraph ? '저장 중…' : selectedGraphVersion !== null ? '워크플로우 업데이트' : '워크플로우 저장'}
             </Button>
@@ -111,19 +91,19 @@ export function ModuleWorkflowEditorSupportPanel({
         </Card>
       </div>
 
-      <div ref={(node) => { setSectionRef('inspector', node) }} className="scroll-mt-4">
+      <div ref={(node) => { setSectionRef('inspector', node) }} className="scroll-mt-24 md:scroll-mt-28">
         {inspectorPanel}
       </div>
 
-      <div ref={(node) => { setSectionRef('inputs', node) }} className="scroll-mt-4">
+      <div ref={(node) => { setSectionRef('inputs', node) }} className="scroll-mt-24 md:scroll-mt-28">
         {inputsPanel}
       </div>
 
-      <div ref={(node) => { setSectionRef('validation', node) }} className="scroll-mt-4">
+      <div ref={(node) => { setSectionRef('validation', node) }} className="scroll-mt-24 md:scroll-mt-28">
         {validationPanel}
       </div>
 
-      <div ref={(node) => { setSectionRef('results', node) }} className="scroll-mt-4">
+      <div ref={(node) => { setSectionRef('results', node) }} className="scroll-mt-24 md:scroll-mt-28">
         {resultsPanel}
       </div>
     </div>
