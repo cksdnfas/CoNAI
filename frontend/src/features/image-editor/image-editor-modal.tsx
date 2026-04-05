@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } from 'react'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { ImageEditorCanvas } from './image-editor-canvas'
-import { ImageEditorLayerPanel } from './image-editor-layer-panel'
-import { ImageEditorSessionActions } from './image-editor-session-actions'
-import { ImageEditorToolbar } from './image-editor-toolbar'
+import { ImageEditorModalLayout } from './image-editor-modal-layout'
 import { useImageEditorHistory } from './use-image-editor-history'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorSavePayload, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 import {
@@ -1477,155 +1471,133 @@ export function ImageEditorModal({
   const selectionHandleSize = Math.max(6, 10 / zoom)
 
   return (
-    <SettingsModal
+    <ImageEditorModalLayout
       open={open}
-      onClose={() => {
-        if (!saving) {
-          onClose()
-        }
-      }}
+      saving={saving}
       title={title}
-      description="Paint-style source and mask editing for img2img and infill."
-      widthClassName="max-w-[96vw]"
-    >
-      <div className="space-y-4">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="min-w-0 space-y-4">
-            <Card>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-4">
-                  <div className="space-y-1">
-                    <div className="text-base font-semibold text-foreground">{sourceFileName || 'Editor Session'}</div>
-                    <div className="text-xs text-muted-foreground">{documentSize.width > 0 ? `${documentSize.width} × ${documentSize.height}` : 'No image loaded'}</div>
-                    {activeLayer ? <div className="text-xs text-muted-foreground">Active layer: {activeLayer.name}{activeLayer.locked ? ' · Locked' : ''}</div> : null}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline">Zoom {Math.round(zoom * 100)}%</Badge>
-                    <Badge variant="outline">Rotate {((rotation % 360) + 360) % 360}°</Badge>
-                    {enableMaskEditing ? <Badge variant={hasVisibleMask ? 'secondary' : 'outline'}>Mask {hasVisibleMask ? 'On' : 'Empty'}</Badge> : null}
-                  </div>
-                </div>
-
-                <ImageEditorToolbar
-                  tool={tool}
-                  enableMaskEditing={enableMaskEditing}
-                  brushColor={brushColor}
-                  brushSize={brushSize}
-                  brushOpacity={brushOpacity}
-                  historyLength={historyStack.length}
-                  redoLength={redoStack.length}
-                  loading={loading}
-                  hasStoredSelection={hasStoredSelection}
-                  canApplySelectionOperation={canApplySelectionOperation}
-                  canApplyCrop={canApplyCrop}
-                  onToolChange={setTool}
-                  onBrushColorChange={setBrushColor}
-                  onBrushSizeChange={setBrushSize}
-                  onBrushOpacityChange={setBrushOpacity}
-                  onUndo={() => void handleUndo()}
-                  onRedo={() => void handleRedo()}
-                  onZoomOut={() => setZoom((current) => Math.max(0.1, current * 0.9))}
-                  onZoomIn={() => setZoom((current) => Math.min(8, current * 1.1))}
-                  onFitToScreen={handleFitToScreen}
-                  onRotate={() => { setRotation((current) => (current + 90) % 360); queueHistoryCommit() }}
-                  onFlip={() => { setFlippedX((current) => !current); queueHistoryCommit() }}
-                  onPasteFromClipboard={() => void handlePasteFromClipboardButton()}
-                  onPasteStoredSelection={handlePasteStoredSelection}
-                  onSelectionCopy={() => void handleSelectionTransfer('copy')}
-                  onSelectionPromote={() => void handleSelectionTransfer('promote')}
-                  onSelectionDuplicate={() => void handleSelectionTransfer('duplicate')}
-                  onSelectionDelete={() => void handleDeleteSelection()}
-                  onSelectionCut={() => void handleSelectionTransfer('cut')}
-                  onClearMask={enableMaskEditing ? handleClearMask : undefined}
-                  onApplyCrop={handleApplyCrop}
-                />
-
-                <ImageEditorCanvas
-                  viewportRef={viewportRef}
-                  documentGroupRef={documentGroupRef}
-                  baseImage={baseImage}
-                  loading={loading}
-                  viewportSize={viewportSize}
-                  documentSize={documentSize}
-                  pan={pan}
-                  zoom={zoom}
-                  rotation={rotation}
-                  flippedX={flippedX}
-                  layers={layers}
-                  activeLayerId={activeLayerId}
-                  tool={tool}
-                  brushPreviewPoint={brushPreviewPoint}
-                  brushSize={brushSize}
-                  brushOpacity={brushOpacity}
-                  enableMaskEditing={enableMaskEditing}
-                  maskPreviewSurface={maskPreviewSurface}
-                  maskStrokes={maskStrokes}
-                  normalizedSelectionRect={normalizedSelectionRect}
-                  normalizedCropRect={normalizedCropRect}
-                  selectionHandleSize={selectionHandleSize}
-                  onWheel={handleWheel}
-                  onStagePointerDown={handleStagePointerDown}
-                  onStagePointerMove={handleStagePointerMove}
-                  onStagePointerUp={handleStagePointerUp}
-                  onMovePasteLayer={handleMovePasteLayer}
-                />
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="min-w-0 space-y-4 xl:sticky xl:top-0 xl:self-start">
-            <ImageEditorLayerPanel
-              layers={layers}
-              activeLayerId={activeLayerId}
-              loading={loading}
-              enableMaskEditing={enableMaskEditing}
-              hasVisibleMask={hasVisibleMask}
-              onAddLayer={() => {
-                const nextLayer = createDefaultDrawLayer(layers.filter((layer) => layer.type === 'draw').length + 1)
-                setLayers((current) => [...current, nextLayer])
-                setActiveLayerId(nextLayer.id)
-                queueHistoryCommit()
-              }}
-              onSetActiveLayerId={setActiveLayerId}
-              onRenameLayer={(layerId, name) => setLayers((current) => current.map((currentLayer) => currentLayer.id === layerId ? { ...currentLayer, name } : currentLayer))}
-              onCommitRename={queueHistoryCommit}
-              onToggleLayerVisible={(layerId) => { setLayers((current) => current.map((currentLayer) => currentLayer.id === layerId ? { ...currentLayer, visible: !currentLayer.visible } : currentLayer)); queueHistoryCommit() }}
-              onToggleLayerLocked={(layerId) => { setLayers((current) => current.map((currentLayer) => currentLayer.id === layerId ? { ...currentLayer, locked: !currentLayer.locked } : currentLayer)); queueHistoryCommit() }}
-              onMoveLayer={moveLayer}
-              onDuplicateLayer={handleDuplicateLayer}
-              onMergeLayerDown={() => void handleMergeActiveLayerDown()}
-              onDeleteLayer={(layerId) => { setLayers((current) => current.filter((currentLayer) => currentLayer.id !== layerId)); queueHistoryCommit() }}
-            />
-
-            <ImageEditorSessionActions
-              canMergeVisible={canMergeVisible}
-              canFlattenVisible={canFlattenVisible}
-              canClearActiveDrawLayer={canClearActiveDrawLayer}
-              hasSelectionRect={Boolean(selectionRect)}
-              selectionRect={normalizedSelectionRect}
-              cropRect={normalizedCropRect}
-              saving={saving}
-              loading={loading}
-              canSave={Boolean(baseImage)}
-              onMergeVisible={() => void handleMergeVisible()}
-              onFlattenVisible={() => void handleFlattenVisible()}
-              onClearActiveDrawLayer={() => { setLayers((current) => current.map((layer) => layer.id === activeLayerId && layer.type === 'draw' ? { ...layer, lines: [] } : layer)); queueHistoryCommit() }}
-              onClearAllDrawLayers={() => { setLayers((current) => current.map((layer) => layer.type === 'draw' ? { ...layer, lines: [] } : layer)); queueHistoryCommit() }}
-              onClearSelection={() => setSelectionRect(null)}
-              onSelectionRectFieldChange={(field, value) => {
-                setSelectionRect((current) => updateRectField(current, field, value))
-              }}
-              onCropRectFieldChange={(field, value) => {
-                setCropRect((current) => updateRectField(current, field, value))
-              }}
-              onCancelCrop={() => { setCropRect(null); setTool('brush') }}
-              onClose={onClose}
-              onSave={() => void handleSave()}
-            />
-          </div>
-        </div>
-      </div>
-    </SettingsModal>
+      sourceFileName={sourceFileName}
+      onClose={onClose}
+      onSave={() => void handleSave()}
+      sourceSummary={{
+        width: documentSize.width,
+        height: documentSize.height,
+        activeLayerName: activeLayer?.name ?? null,
+        activeLayerLocked: activeLayer?.locked ?? false,
+        zoom,
+        rotation,
+        enableMaskEditing,
+        hasVisibleMask,
+      }}
+      toolbar={{
+        tool,
+        enableMaskEditing,
+        brushColor,
+        brushSize,
+        brushOpacity,
+        historyLength: historyStack.length,
+        redoLength: redoStack.length,
+        loading,
+        hasStoredSelection,
+        canApplySelectionOperation,
+        canApplyCrop,
+        onToolChange: setTool,
+        onBrushColorChange: setBrushColor,
+        onBrushSizeChange: setBrushSize,
+        onBrushOpacityChange: setBrushOpacity,
+        onUndo: () => void handleUndo(),
+        onRedo: () => void handleRedo(),
+        onZoomOut: () => setZoom((current) => Math.max(0.1, current * 0.9)),
+        onZoomIn: () => setZoom((current) => Math.min(8, current * 1.1)),
+        onFitToScreen: handleFitToScreen,
+        onRotate: () => { setRotation((current) => (current + 90) % 360); queueHistoryCommit() },
+        onFlip: () => { setFlippedX((current) => !current); queueHistoryCommit() },
+        onPasteFromClipboard: () => void handlePasteFromClipboardButton(),
+        onPasteStoredSelection: handlePasteStoredSelection,
+        onSelectionCopy: () => void handleSelectionTransfer('copy'),
+        onSelectionPromote: () => void handleSelectionTransfer('promote'),
+        onSelectionDuplicate: () => void handleSelectionTransfer('duplicate'),
+        onSelectionDelete: () => void handleDeleteSelection(),
+        onSelectionCut: () => void handleSelectionTransfer('cut'),
+        onClearMask: enableMaskEditing ? handleClearMask : undefined,
+        onApplyCrop: handleApplyCrop,
+      }}
+      canvas={{
+        viewportRef,
+        documentGroupRef,
+        baseImage,
+        loading,
+        viewportSize,
+        documentSize,
+        pan,
+        zoom,
+        rotation,
+        flippedX,
+        layers,
+        activeLayerId,
+        tool,
+        brushPreviewPoint,
+        brushSize,
+        brushOpacity,
+        enableMaskEditing,
+        maskPreviewSurface,
+        maskStrokes,
+        normalizedSelectionRect,
+        normalizedCropRect,
+        selectionHandleSize,
+        onWheel: handleWheel,
+        onStagePointerDown: handleStagePointerDown,
+        onStagePointerMove: handleStagePointerMove,
+        onStagePointerUp: handleStagePointerUp,
+        onMovePasteLayer: handleMovePasteLayer,
+      }}
+      layerPanel={{
+        layers,
+        activeLayerId,
+        loading,
+        enableMaskEditing,
+        hasVisibleMask,
+        onAddLayer: () => {
+          const nextLayer = createDefaultDrawLayer(layers.filter((layer) => layer.type === 'draw').length + 1)
+          setLayers((current) => [...current, nextLayer])
+          setActiveLayerId(nextLayer.id)
+          queueHistoryCommit()
+        },
+        onSetActiveLayerId: setActiveLayerId,
+        onRenameLayer: (layerId, name) => setLayers((current) => current.map((currentLayer) => currentLayer.id === layerId ? { ...currentLayer, name } : currentLayer)),
+        onCommitRename: queueHistoryCommit,
+        onToggleLayerVisible: (layerId) => { setLayers((current) => current.map((currentLayer) => currentLayer.id === layerId ? { ...currentLayer, visible: !currentLayer.visible } : currentLayer)); queueHistoryCommit() },
+        onToggleLayerLocked: (layerId) => { setLayers((current) => current.map((currentLayer) => currentLayer.id === layerId ? { ...currentLayer, locked: !currentLayer.locked } : currentLayer)); queueHistoryCommit() },
+        onMoveLayer: moveLayer,
+        onDuplicateLayer: handleDuplicateLayer,
+        onMergeLayerDown: () => void handleMergeActiveLayerDown(),
+        onDeleteLayer: (layerId) => { setLayers((current) => current.filter((currentLayer) => currentLayer.id !== layerId)); queueHistoryCommit() },
+      }}
+      sessionActions={{
+        canMergeVisible,
+        canFlattenVisible,
+        canClearActiveDrawLayer,
+        hasSelectionRect: Boolean(selectionRect),
+        selectionRect: normalizedSelectionRect,
+        cropRect: normalizedCropRect,
+        saving,
+        loading,
+        canSave: Boolean(baseImage),
+        onMergeVisible: () => void handleMergeVisible(),
+        onFlattenVisible: () => void handleFlattenVisible(),
+        onClearActiveDrawLayer: () => { setLayers((current) => current.map((layer) => layer.id === activeLayerId && layer.type === 'draw' ? { ...layer, lines: [] } : layer)); queueHistoryCommit() },
+        onClearAllDrawLayers: () => { setLayers((current) => current.map((layer) => layer.type === 'draw' ? { ...layer, lines: [] } : layer)); queueHistoryCommit() },
+        onClearSelection: () => setSelectionRect(null),
+        onSelectionRectFieldChange: (field, value) => {
+          setSelectionRect((current) => updateRectField(current, field, value))
+        },
+        onCropRectFieldChange: (field, value) => {
+          setCropRect((current) => updateRectField(current, field, value))
+        },
+        onCancelCrop: () => { setCropRect(null); setTool('brush') },
+        onClose,
+        onSave: () => void handleSave(),
+      }}
+    />
   )
 }
 
