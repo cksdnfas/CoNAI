@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } fr
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ImageEditorModalLayout } from './image-editor-modal-layout'
 import { useImageEditorLayerSessionActions } from './use-image-editor-layer-session-actions'
+import { useImageEditorPointerInteractions } from './use-image-editor-pointer-interactions'
 import { useImageEditorSelectionActions } from './use-image-editor-selection-actions'
 import { useImageEditorHistory } from './use-image-editor-history'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorSavePayload, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
@@ -26,8 +27,6 @@ type ImageEditorModalProps = {
   onClose: () => void
   onSave: (payload: ImageEditorSavePayload) => void | Promise<void>
 }
-
-type ImageEditorSelectionHandle = 'nw' | 'ne' | 'sw' | 'se'
 
 type ImageEditorSelectionClipboard = {
   imageDataUrl: string
@@ -60,20 +59,6 @@ function readClipboardFileAsDataUrl(file: Blob) {
   })
 }
 
-/** Find the active selection resize handle under the current document pointer. */
-function getSelectionHandleAtPoint(point: { x: number; y: number }, rect: ImageEditorCropRect, zoom: number): ImageEditorSelectionHandle | null {
-  const handleRadius = Math.max(6, 10 / zoom)
-  const corners: Array<{ handle: ImageEditorSelectionHandle; x: number; y: number }> = [
-    { handle: 'nw', x: rect.x, y: rect.y },
-    { handle: 'ne', x: rect.x + rect.width, y: rect.y },
-    { handle: 'sw', x: rect.x, y: rect.y + rect.height },
-    { handle: 'se', x: rect.x + rect.width, y: rect.y + rect.height },
-  ]
-
-  const matchedCorner = corners.find((corner) => Math.abs(point.x - corner.x) <= handleRadius && Math.abs(point.y - corner.y) <= handleRadius)
-  return matchedCorner?.handle ?? null
-}
-
 export function ImageEditorModal({
   open,
   title = 'Image Editor',
@@ -87,18 +72,7 @@ export function ImageEditorModal({
   const { showSnackbar } = useSnackbar()
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const documentGroupRef = useRef<any>(null)
-  const isPanningRef = useRef(false)
-  const isDrawingRef = useRef(false)
-  const isCroppingRef = useRef(false)
-  const isSelectingRef = useRef(false)
-  const isMovingSelectionRef = useRef(false)
-  const selectionResizeHandleRef = useRef<ImageEditorSelectionHandle | null>(null)
-  const selectionResizeOriginRectRef = useRef<ImageEditorCropRect | null>(null)
   const selectionClipboardRef = useRef<ImageEditorSelectionClipboard | null>(null)
-  const lastPointerRef = useRef<{ x: number; y: number } | null>(null)
-  const cropStartRef = useRef<{ x: number; y: number } | null>(null)
-  const selectionStartRef = useRef<{ x: number; y: number } | null>(null)
-  const selectionMoveOffsetRef = useRef<{ x: number; y: number } | null>(null)
 
   const [viewportSize, setViewportSize] = useState({ width: 960, height: 640 })
   const [baseImage, setBaseImage] = useState<HTMLImageElement | null>(null)
@@ -329,105 +303,6 @@ export function ImageEditorModal({
     setZoom(calculateImageEditorFitZoom(documentSize.width, documentSize.height, viewportSize.width, viewportSize.height))
     setPan({ x: 0, y: 0 })
   }, [documentSize.height, documentSize.width, viewportSize.height, viewportSize.width])
-
-  /** Resolve the current pointer in document space using the transformed Konva group. */
-  const getDocumentPointerPosition = useCallback(() => {
-    const position = documentGroupRef.current?.getRelativePointerPosition?.()
-    if (!position || typeof position.x !== 'number' || typeof position.y !== 'number') {
-      return null
-    }
-
-    return {
-      x: Math.max(0, Math.min(position.x, documentSize.width)),
-      y: Math.max(0, Math.min(position.y, documentSize.height)),
-    }
-  }, [documentSize.height, documentSize.width])
-
-  /** Ensure the editor always has one active draw layer for brush-based tools. */
-  const ensureActiveDrawLayer = useCallback(() => {
-    const existingLayer = layers.find((layer) => layer.id === activeLayerId && layer.type === 'draw')
-    if (existingLayer) {
-      return existingLayer.locked ? null : existingLayer.id
-    }
-
-    const nextLayer = createDefaultDrawLayer(layers.filter((layer) => layer.type === 'draw').length + 1)
-    setLayers((current) => [...current, nextLayer])
-    setActiveLayerId(nextLayer.id)
-    return nextLayer.id
-  }, [activeLayerId, layers])
-
-  /** Start one source or mask stroke at the current document pointer. */
-  const startStroke = useCallback((point: { x: number; y: number }) => {
-    const isMaskTool = tool === 'mask-brush' || tool === 'mask-eraser'
-    const nextStroke: ImageEditorStroke = {
-      id: createImageEditorId('stroke'),
-      mode: tool === 'eraser' || tool === 'mask-eraser' ? 'erase' : 'draw',
-      points: [point.x, point.y],
-      strokeWidth: brushSize,
-      color: isMaskTool ? '#ffffff' : brushColor,
-      opacity: brushOpacity / 100,
-    }
-
-    if (isMaskTool) {
-      setMaskStrokes((current) => [...current, nextStroke])
-      return
-    }
-
-    const drawLayerId = ensureActiveDrawLayer()
-    if (!drawLayerId) {
-      showSnackbar({ message: '잠긴 레이어에는 그릴 수 없어.', tone: 'error' })
-      return
-    }
-
-    setLayers((current) => current.map((layer) => {
-      if (layer.id !== drawLayerId || layer.type !== 'draw') {
-        return layer
-      }
-
-      return {
-        ...layer,
-        lines: [...layer.lines, nextStroke],
-      }
-    }))
-  }, [brushColor, brushSize, ensureActiveDrawLayer, tool])
-
-  /** Append one point to the currently active source or mask stroke. */
-  const extendStroke = useCallback((point: { x: number; y: number }) => {
-    const isMaskTool = tool === 'mask-brush' || tool === 'mask-eraser'
-    if (isMaskTool) {
-      setMaskStrokes((current) => {
-        const lastStroke = current[current.length - 1]
-        if (!lastStroke) {
-          return current
-        }
-
-        return [
-          ...current.slice(0, -1),
-          { ...lastStroke, points: [...lastStroke.points, point.x, point.y] },
-        ]
-      })
-      return
-    }
-
-    setLayers((current) => current.map((layer) => {
-      if (layer.id !== activeLayerId || layer.type !== 'draw') {
-        return layer
-      }
-
-      const lastStroke = layer.lines[layer.lines.length - 1]
-      if (!lastStroke) {
-        return layer
-      }
-
-      return {
-        ...layer,
-        lines: [
-          ...layer.lines.slice(0, -1),
-          { ...lastStroke, points: [...lastStroke.points, point.x, point.y] },
-        ],
-      }
-    }))
-  }, [activeLayerId, tool])
 
   const {
     addPasteLayerFromDataUrl,
@@ -724,188 +599,32 @@ export function ImageEditorModal({
     setZoom((current) => Math.max(0.1, Math.min(8, current * (event.deltaY > 0 ? 0.92 : 1.08))))
   }, [])
 
-  /** Start pan, selection move, stroke, or crop interactions from the current tool state. */
-  const handleStagePointerDown = useCallback(() => {
-    if (tool === 'pan') {
-      const stage = documentGroupRef.current?.getStage?.()
-      const pointer = stage?.getPointerPosition?.()
-      if (!pointer) {
-        return
-      }
-
-      isPanningRef.current = true
-      lastPointerRef.current = pointer
-      return
-    }
-
-    const point = getDocumentPointerPosition()
-    if (!point) {
-      return
-    }
-
-    if (tool === 'brush' || tool === 'eraser' || tool === 'mask-brush' || tool === 'mask-eraser') {
-      setBrushPreviewPoint(point)
-    }
-
-    if (tool === 'select') {
-      const currentSelectionRect = selectionRect ? normalizeImageEditorRect(selectionRect) : null
-      const selectionHandle = currentSelectionRect ? getSelectionHandleAtPoint(point, currentSelectionRect, zoom) : null
-
-      if (currentSelectionRect && selectionHandle) {
-        selectionResizeHandleRef.current = selectionHandle
-        selectionResizeOriginRectRef.current = currentSelectionRect
-        return
-      }
-
-      if (
-        currentSelectionRect
-        && point.x >= currentSelectionRect.x
-        && point.x <= currentSelectionRect.x + currentSelectionRect.width
-        && point.y >= currentSelectionRect.y
-        && point.y <= currentSelectionRect.y + currentSelectionRect.height
-      ) {
-        isMovingSelectionRef.current = true
-        selectionMoveOffsetRef.current = {
-          x: point.x - currentSelectionRect.x,
-          y: point.y - currentSelectionRect.y,
-        }
-        return
-      }
-
-      isSelectingRef.current = true
-      selectionStartRef.current = point
-      setSelectionRect({ x: point.x, y: point.y, width: 0, height: 0 })
-      return
-    }
-
-    if (tool === 'crop') {
-      isCroppingRef.current = true
-      cropStartRef.current = point
-      setCropRect({ x: point.x, y: point.y, width: 0, height: 0 })
-      return
-    }
-
-    isDrawingRef.current = true
-    startStroke(point)
-  }, [getDocumentPointerPosition, selectionRect, startStroke, tool, zoom])
-
-  /** Continue the active pan, selection move, stroke, or crop interaction as the pointer moves. */
-  const handleStagePointerMove = useCallback(() => {
-    if (isPanningRef.current) {
-      const stage = documentGroupRef.current?.getStage?.()
-      const pointer = stage?.getPointerPosition?.()
-      if (!pointer || !lastPointerRef.current) {
-        return
-      }
-
-      setPan((current) => ({ x: current.x + (pointer.x - lastPointerRef.current!.x), y: current.y + (pointer.y - lastPointerRef.current!.y) }))
-      lastPointerRef.current = pointer
-      return
-    }
-
-    const point = getDocumentPointerPosition()
-    if (!point) {
-      setBrushPreviewPoint(null)
-      return
-    }
-
-    if (tool === 'brush' || tool === 'eraser' || tool === 'mask-brush' || tool === 'mask-eraser') {
-      setBrushPreviewPoint(point)
-    }
-
-    const currentSelectionRect = selectionRect ? normalizeImageEditorRect(selectionRect) : null
-
-    if (selectionResizeHandleRef.current && selectionResizeOriginRectRef.current) {
-      const originRect = selectionResizeOriginRectRef.current
-      const resizedRectByHandle = selectionResizeHandleRef.current === 'nw'
-        ? {
-            x: point.x,
-            y: point.y,
-            width: originRect.x + originRect.width - point.x,
-            height: originRect.y + originRect.height - point.y,
-          }
-        : selectionResizeHandleRef.current === 'ne'
-          ? {
-              x: originRect.x,
-              y: point.y,
-              width: point.x - originRect.x,
-              height: originRect.y + originRect.height - point.y,
-            }
-          : selectionResizeHandleRef.current === 'sw'
-            ? {
-                x: point.x,
-                y: originRect.y,
-                width: originRect.x + originRect.width - point.x,
-                height: point.y - originRect.y,
-              }
-            : {
-                x: originRect.x,
-                y: originRect.y,
-                width: point.x - originRect.x,
-                height: point.y - originRect.y,
-              }
-
-      setSelectionRect(clampImageEditorRect(resizedRectByHandle, documentSize.width, documentSize.height))
-      return
-    }
-
-    if (isMovingSelectionRef.current && selectionMoveOffsetRef.current && currentSelectionRect) {
-      const nextX = Math.max(0, Math.min(point.x - selectionMoveOffsetRef.current.x, documentSize.width - currentSelectionRect.width))
-      const nextY = Math.max(0, Math.min(point.y - selectionMoveOffsetRef.current.y, documentSize.height - currentSelectionRect.height))
-      setSelectionRect({
-        x: nextX,
-        y: nextY,
-        width: currentSelectionRect.width,
-        height: currentSelectionRect.height,
-      })
-      return
-    }
-
-    if (isSelectingRef.current && selectionStartRef.current) {
-      setSelectionRect({
-        x: selectionStartRef.current.x,
-        y: selectionStartRef.current.y,
-        width: point.x - selectionStartRef.current.x,
-        height: point.y - selectionStartRef.current.y,
-      })
-      return
-    }
-
-    if (isCroppingRef.current && cropStartRef.current) {
-      setCropRect({
-        x: cropStartRef.current.x,
-        y: cropStartRef.current.y,
-        width: point.x - cropStartRef.current.x,
-        height: point.y - cropStartRef.current.y,
-      })
-      return
-    }
-
-    if (isDrawingRef.current) {
-      extendStroke(point)
-    }
-  }, [documentSize.height, documentSize.width, extendStroke, getDocumentPointerPosition, selectionRect, tool])
-
-  /** Finish the current pointer interaction and commit history only for real document edits. */
-  const handleStagePointerUp = useCallback(() => {
-    const shouldCommitHistory = isDrawingRef.current
-    isPanningRef.current = false
-    isDrawingRef.current = false
-    isCroppingRef.current = false
-    isSelectingRef.current = false
-    isMovingSelectionRef.current = false
-    selectionResizeHandleRef.current = null
-    selectionResizeOriginRectRef.current = null
-    setBrushPreviewPoint(null)
-    lastPointerRef.current = null
-    cropStartRef.current = null
-    selectionStartRef.current = null
-    selectionMoveOffsetRef.current = null
-
-    if (shouldCommitHistory) {
-      queueHistoryCommit()
-    }
-  }, [queueHistoryCommit])
+  const {
+    handleStagePointerDown,
+    handleStagePointerMove,
+    handleStagePointerUp,
+  } = useImageEditorPointerInteractions({
+    documentGroupRef,
+    documentSize,
+    tool,
+    zoom,
+    brushColor,
+    brushSize,
+    brushOpacity,
+    activeLayerId,
+    layers,
+    selectionRect,
+    setPan,
+    setBrushPreviewPoint,
+    setSelectionRect,
+    setCropRect,
+    setMaskStrokes,
+    setLayers,
+    setActiveLayerId,
+    queueHistoryCommit,
+    createDrawLayer: createDefaultDrawLayer,
+    showSnackbar,
+  })
 
   const normalizedSelectionRect = selectionRect ? normalizeImageEditorRect(selectionRect) : null
   const normalizedCropRect = cropRect ? normalizeImageEditorRect(cropRect) : null
