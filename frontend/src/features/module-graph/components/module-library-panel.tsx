@@ -28,6 +28,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
 
   const customModules = useMemo(() => modules.filter((module) => module.engine_type !== 'system'), [modules])
   const systemModules = useMemo(() => modules.filter((module) => module.engine_type === 'system'), [modules])
+  const finalResultModule = useMemo(() => systemModules.find((module) => isFinalResultModule(module)) ?? null, [systemModules])
   const visibleModules = activeTab === 'system' ? systemModules : customModules
   const activeTabLabel = activeTab === 'system' ? '시스템 모듈' : '사용자 모듈'
 
@@ -44,13 +45,20 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
 
   const filteredModules = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
-    if (query.length === 0) {
-      return visibleModules
-    }
+    const matchedModules = query.length === 0
+      ? visibleModules
+      : visibleModules.filter((module) => {
+          const haystack = [module.name, module.description ?? '', module.engine_type, module.category ?? '', module.authoring_source].join(' ').toLowerCase()
+          return haystack.includes(query)
+        })
 
-    return visibleModules.filter((module) => {
-      const haystack = [module.name, module.description ?? '', module.engine_type, module.category ?? '', module.authoring_source].join(' ').toLowerCase()
-      return haystack.includes(query)
+    return [...matchedModules].sort((left, right) => {
+      const finalResultDelta = Number(isFinalResultModule(right)) - Number(isFinalResultModule(left))
+      if (finalResultDelta !== 0) {
+        return finalResultDelta
+      }
+
+      return left.name.localeCompare(right.name)
     })
   }, [searchQuery, visibleModules])
 
@@ -114,6 +122,18 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
         <Alert variant="destructive">
           <AlertTitle>모듈 목록 오류</AlertTitle>
           <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {!isError && activeTab === 'system' && finalResultModule ? (
+        <Alert>
+          <AlertTitle>권장 출력 노드</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span>최종 결과를 표시하려면 Final Result 시스템 노드를 추가해서 원하는 출력에 연결해줘.</span>
+            <Button type="button" size="sm" variant="outline" onClick={() => onAddModule(finalResultModule)}>
+              Final Result 바로 추가
+            </Button>
+          </AlertDescription>
         </Alert>
       ) : null}
 
