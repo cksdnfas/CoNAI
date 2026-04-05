@@ -8,7 +8,6 @@ import {
   createGenerationWorkflow,
   deleteGenerationCustomDropdownList,
   deleteGenerationWorkflow,
-  generateComfyUIImage,
   getGenerationComfyUIServers,
   getGenerationCustomDropdownLists,
   getGenerationWorkflow,
@@ -20,9 +19,7 @@ import {
 } from '@/lib/api'
 import {
   buildWorkflowDraft,
-  buildWorkflowPromptData,
   getErrorMessage,
-  hasWorkflowFieldValue,
   type ModuleFieldOption,
   type SelectedImageDraft,
   type WorkflowFieldDraftValue,
@@ -32,6 +29,7 @@ import { ComfyModuleSaveModal } from './comfy-module-save-modal'
 import { ComfyServerRegistrationModal } from './comfy-server-registration-modal'
 import { ComfyWorkflowAuthoringModal } from './comfy-workflow-authoring-modal'
 import { ComfyWorkflowControllerPanel } from './comfy-workflow-controller-panel'
+import { useComfyGenerationActions } from './use-comfy-generation-actions'
 import { useComfyServerController } from './use-comfy-server-controller'
 
 type ComfyGenerationPanelProps = {
@@ -55,7 +53,6 @@ export function ComfyGenerationPanel({
   headerPortalTargetId,
 }: ComfyGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
-  const [isComfyGenerating, setIsComfyGenerating] = useState(false)
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
   const [isAuthoringModalOpen, setIsAuthoringModalOpen] = useState(false)
   const [workflowEditorState, setWorkflowEditorState] = useState<ComfyWorkflowEditorState | null>(null)
@@ -144,6 +141,21 @@ export function ComfyGenerationPanel({
     showSnackbar,
   })
   const connectedServers = activeServers.filter((server) => comfyServerTests[server.id]?.status?.is_connected === true)
+  const {
+    isComfyGenerating,
+    handleGenerateSelected,
+    handleGenerateAllServers,
+  } = useComfyGenerationActions({
+    selectedWorkflow,
+    selectedWorkflowFields,
+    workflowDraft,
+    selectedServerId,
+    activeServers,
+    connectedServers,
+    comfyServerTests,
+    onHistoryRefresh,
+    showSnackbar,
+  })
   const comfyModuleFieldOptions = useMemo<ModuleFieldOption[]>(() => (
     moduleSaveWorkflowFields.map((field) => ({
       key: field.id,
@@ -376,105 +388,6 @@ export function ComfyGenerationPanel({
       showSnackbar({ message: getErrorMessage(error, 'ComfyUI 모듈 저장에 실패했어.'), tone: 'error' })
     } finally {
       setIsSavingComfyModule(false)
-    }
-  }
-
-  /** Validate the selected workflow fields before sending a generation request. */
-  const validateComfyGeneration = () => {
-    if (!selectedWorkflow) {
-      showSnackbar({ message: '먼저 ComfyUI 워크플로우를 선택해줘.', tone: 'error' })
-      return false
-    }
-
-    const missingField = selectedWorkflowFields.find((field) => field.required && !hasWorkflowFieldValue(workflowDraft[field.id]))
-    if (missingField) {
-      showSnackbar({ message: `필수 필드가 비어 있어: ${missingField.label}`, tone: 'error' })
-      return false
-    }
-
-    return true
-  }
-
-  /** Send one generation request to a specific server. */
-  const handleGenerateOnServer = async (serverId: number) => {
-    if (!selectedWorkflow) {
-      return
-    }
-
-    const promptData = buildWorkflowPromptData(selectedWorkflowFields, workflowDraft)
-    return generateComfyUIImage(selectedWorkflow.id, {
-      prompt_data: promptData,
-      server_id: serverId,
-    })
-  }
-
-  /** Generate once on the currently selected server. */
-  const handleGenerateSelected = async () => {
-    if (isComfyGenerating || !validateComfyGeneration()) {
-      return
-    }
-
-    const serverId = Number(selectedServerId)
-    if (!Number.isFinite(serverId)) {
-      showSnackbar({ message: '생성할 서버를 먼저 골라줘.', tone: 'error' })
-      return
-    }
-
-    const server = activeServers.find((item) => item.id === serverId)
-    if (!server) {
-      showSnackbar({ message: '선택한 서버를 찾지 못했어.', tone: 'error' })
-      return
-    }
-
-    if (comfyServerTests[serverId]?.status?.is_connected !== true) {
-      showSnackbar({ message: '선택한 서버가 아직 연결 확인되지 않았어.', tone: 'error' })
-      return
-    }
-
-    try {
-      setIsComfyGenerating(true)
-      const response = await handleGenerateOnServer(serverId)
-      onHistoryRefresh()
-      showSnackbar({ message: response?.data.message || `${server.name}에 생성 요청을 시작했어.`, tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'ComfyUI 생성에 실패했어.'), tone: 'error' })
-    } finally {
-      setIsComfyGenerating(false)
-    }
-  }
-
-  /** Generate once on every connected server in parallel. */
-  const handleGenerateAllServers = async () => {
-    if (isComfyGenerating || !validateComfyGeneration()) {
-      return
-    }
-
-    if (connectedServers.length === 0) {
-      showSnackbar({ message: '연결된 ComfyUI 서버가 없어.', tone: 'error' })
-      return
-    }
-
-    try {
-      setIsComfyGenerating(true)
-      const results = await Promise.allSettled(connectedServers.map((server) => handleGenerateOnServer(server.id)))
-      const successCount = results.filter((result) => result.status === 'fulfilled').length
-      const failedCount = results.length - successCount
-
-      if (successCount > 0) {
-        onHistoryRefresh()
-      }
-
-      if (failedCount === 0) {
-        showSnackbar({ message: `${successCount}개 서버에 생성 요청을 보냈어.`, tone: 'info' })
-      } else if (successCount === 0) {
-        showSnackbar({ message: '모든 서버 생성 요청이 실패했어.', tone: 'error' })
-      } else {
-        showSnackbar({ message: `${successCount}개 서버 성공, ${failedCount}개 서버 실패.`, tone: 'error' })
-      }
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '전체 서버 생성 요청에 실패했어.'), tone: 'error' })
-    } finally {
-      setIsComfyGenerating(false)
     }
   }
 
