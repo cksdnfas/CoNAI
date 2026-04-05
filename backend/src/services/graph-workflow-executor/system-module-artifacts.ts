@@ -10,7 +10,7 @@ export function buildRuntimeArtifact(
   value: unknown,
   metadata?: Record<string, unknown>,
 ): RuntimeArtifact {
-  GraphExecutionArtifactModel.create({
+  const artifactRecordId = GraphExecutionArtifactModel.create({
     execution_id: executionId,
     node_id: nodeId,
     port_key: portKey,
@@ -21,6 +21,7 @@ export function buildRuntimeArtifact(
   return {
     type: artifactType,
     value,
+    artifactRecordId,
     metadata,
   }
 }

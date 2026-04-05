@@ -5,7 +5,7 @@
 export type ModuleEngineType = 'nai' | 'comfyui' | 'system'
 export type ModuleAuthoringSource = 'nai_form_snapshot' | 'comfyui_workflow_wrap' | 'manual'
 export type ModulePortDirection = 'input' | 'output'
-export type ModulePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json'
+export type ModulePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json' | 'any'
 export type GraphExecutionStatus = 'draft' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
 export interface ModulePortDefinition {
@@ -208,6 +208,20 @@ export interface GraphExecutionArtifactRecord {
   artifact_type: ModulePortDataType | 'file'
   storage_path?: string | null
   metadata?: string | null
+  created_date: string
+}
+
+export interface GraphExecutionFinalResultRecord {
+  id: number
+  execution_id: number
+  final_node_id: string
+  source_artifact_id: number
+  source_execution_id?: number | null
+  source_node_id: string
+  source_port_key: string
+  artifact_type: ModulePortDataType | 'file'
+  source_storage_path?: string | null
+  source_metadata?: string | null
   created_date: string
 }
 

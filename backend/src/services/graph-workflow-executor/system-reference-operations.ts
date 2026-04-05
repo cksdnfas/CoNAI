@@ -160,7 +160,7 @@ export async function executeLoadImageFromReference(
   const imageBuffer = await fs.promises.readFile(activeFile.original_file_path)
   const mimeType = activeFile.mime_type || 'image/png'
   const imageDataUrl = bufferToDataUrl(imageBuffer, mimeType)
-  const storagePath = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
+  const { storagePath, artifactRecordId } = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
     mimeType,
     sourcePathForMetadata: activeFile.original_file_path,
     originalFileName: path.basename(activeFile.original_file_path),
@@ -182,6 +182,7 @@ export async function executeLoadImageFromReference(
       type: 'image' as const,
       value: imageDataUrl,
       storagePath,
+      artifactRecordId,
       metadata: {
         kind: 'system-load-image-from-reference',
         composite_hash: metadata.composite_hash,
@@ -229,7 +230,7 @@ export async function executeRandomImageFromLibrary(
   const imageBuffer = await fs.promises.readFile(activeFile.original_file_path)
   const mimeType = activeFile.mime_type || 'image/png'
   const imageDataUrl = bufferToDataUrl(imageBuffer, mimeType)
-  const storagePath = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
+  const { storagePath, artifactRecordId } = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
     mimeType,
     sourcePathForMetadata: activeFile.original_file_path,
     originalFileName: path.basename(activeFile.original_file_path),
@@ -266,6 +267,7 @@ export async function executeRandomImageFromLibrary(
       type: 'image' as const,
       value: imageDataUrl,
       storagePath,
+      artifactRecordId,
       metadata: {
         kind: 'system-random-image-from-library',
         composite_hash: metadata.composite_hash,

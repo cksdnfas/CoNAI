@@ -70,7 +70,7 @@ export async function executeComfyModule(context: ExecutionContext, node: GraphW
 
   const imageBuffer = await fs.promises.readFile(firstPath)
   const imageDataUrl = bufferToDataUrl(imageBuffer)
-  const storagePath = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
+  const { storagePath, artifactRecordId } = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
     mimeType: 'image/png',
     sourcePathForMetadata: firstPath,
     originalFileName: firstPath.split(/[/\\]/).pop(),
@@ -87,6 +87,7 @@ export async function executeComfyModule(context: ExecutionContext, node: GraphW
       type: 'image' as const,
       value: imageDataUrl,
       storagePath,
+      artifactRecordId,
       metadata: {
         module: moduleDefinition.name,
       },

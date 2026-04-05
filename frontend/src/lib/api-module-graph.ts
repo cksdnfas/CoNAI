@@ -4,7 +4,7 @@ import type { WorkflowMarkedField } from '@/lib/api-image-generation'
 export type ModuleEngineType = 'nai' | 'comfyui' | 'system'
 export type ModuleAuthoringSource = 'nai_form_snapshot' | 'comfyui_workflow_wrap' | 'manual'
 export type ModulePortDirection = 'input' | 'output'
-export type ModulePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json'
+export type ModulePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json' | 'any'
 
 export interface ModulePortDefinition {
   key: string
@@ -152,6 +152,20 @@ export interface GraphExecutionArtifactRecord {
   artifact_type: ModulePortDataType | 'file'
   storage_path?: string | null
   metadata?: string | null
+  created_date: string
+}
+
+export interface GraphExecutionFinalResultRecord {
+  id: number
+  execution_id: number
+  final_node_id: string
+  source_artifact_id: number
+  source_execution_id?: number | null
+  source_node_id: string
+  source_port_key: string
+  artifact_type: ModulePortDataType | 'file'
+  source_storage_path?: string | null
+  source_metadata?: string | null
   created_date: string
 }
 
@@ -371,6 +385,7 @@ export async function getGraphExecution(executionId: number) {
   const response = await requestJson<ApiEnvelope<{
     execution: GraphExecutionRecord
     artifacts: GraphExecutionArtifactRecord[]
+    final_results: GraphExecutionFinalResultRecord[]
     logs: GraphExecutionLogRecord[]
   }>>(`/api/graph-workflows/executions/${executionId}`)
   return response.data

@@ -1,4 +1,5 @@
 import { GraphExecutionArtifactModel } from '../models/GraphExecutionArtifact'
+import { GraphExecutionFinalResultModel } from '../models/GraphExecutionFinalResult'
 import { GraphExecutionLogModel } from '../models/GraphExecutionLog'
 import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
@@ -282,6 +283,7 @@ export class GraphWorkflowExecutor {
         orderedNodeIds,
         targetNodeId: targetNodeId ?? null,
         artifacts: GraphExecutionArtifactModel.findByExecution(executionId),
+        final_results: GraphExecutionFinalResultModel.findByExecution(executionId),
         logs: GraphExecutionLogModel.findByExecution(executionId),
       }
     } catch (error) {
@@ -305,6 +307,7 @@ export class GraphWorkflowExecutor {
           orderedNodeIds,
           targetNodeId: targetNodeId ?? null,
           artifacts: GraphExecutionArtifactModel.findByExecution(executionId),
+          final_results: GraphExecutionFinalResultModel.findByExecution(executionId),
           logs: GraphExecutionLogModel.findByExecution(executionId),
         }
       }

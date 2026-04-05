@@ -45,6 +45,7 @@ const PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], string> = {
   number: '숫자',
   boolean: '불리언',
   json: 'JSON',
+  any: '임의',
 }
 
 /** Check whether a node input has any explicit or default value. */
@@ -300,6 +301,17 @@ export function NodeInspectorPanel({
           {typeof rawValue === 'string' && rawValue.startsWith('data:') ? (
             <InlineMediaPreview src={rawValue} alt={port.label} frameClassName="p-3" />
           ) : null}
+        </div>
+      )
+    }
+
+    if (port.data_type === 'any') {
+      return (
+        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
+          <div className="text-sm text-muted-foreground">
+            이 포트는 연결된 업스트림 값을 그대로 받아. 직접 편집은 지원하지 않아.
+          </div>
         </div>
       )
     }

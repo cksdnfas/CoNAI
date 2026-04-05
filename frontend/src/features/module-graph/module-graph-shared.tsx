@@ -65,6 +65,7 @@ const PORT_TYPE_COLORS: Record<ModulePortDataType, string> = {
   number: '#ffd54f',
   boolean: '#ef9a9a',
   json: '#90a4ae',
+  any: '#b0bec5',
 }
 
 /** Resolve a visible color for module nodes when the module does not define one. */
@@ -260,7 +261,7 @@ export function getModulePortCompatibility(sourceType?: ModulePortDataType | nul
     return 'incompatible' as const
   }
 
-  if (sourceType === targetType) {
+  if (sourceType === targetType || targetType === 'any') {
     return 'exact' as const
   }
 

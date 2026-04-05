@@ -54,7 +54,7 @@ export async function executeNaiModule(context: ExecutionContext, node: GraphWor
 
   const imageBuffer = firstEntry.getData()
   const imageDataUrl = bufferToDataUrl(imageBuffer)
-  const storagePath = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
+  const { storagePath, artifactRecordId } = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
     mimeType: 'image/png',
     originalFileName: firstEntry.entryName,
   })
@@ -78,6 +78,7 @@ export async function executeNaiModule(context: ExecutionContext, node: GraphWor
       type: 'image' as const,
       value: imageDataUrl,
       storagePath,
+      artifactRecordId,
       metadata: {
         model: requestBody.model,
         action: metadata.action,

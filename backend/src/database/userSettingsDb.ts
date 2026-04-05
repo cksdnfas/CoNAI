@@ -292,6 +292,23 @@ function createTables(): void {
     )
   `);
 
+  // 15. Graph execution final results table (explicit workflow-declared final outputs)
+  userSettingsDb.exec(`
+    CREATE TABLE IF NOT EXISTS graph_execution_final_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      execution_id INTEGER NOT NULL,
+      final_node_id TEXT NOT NULL,
+      source_artifact_id INTEGER NOT NULL,
+      source_node_id TEXT NOT NULL,
+      source_port_key TEXT NOT NULL,
+      artifact_type TEXT NOT NULL,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (execution_id) REFERENCES graph_executions(id) ON DELETE CASCADE,
+      FOREIGN KEY (source_artifact_id) REFERENCES graph_execution_artifacts(id) ON DELETE CASCADE,
+      UNIQUE (execution_id, final_node_id)
+    )
+  `);
+
   // ===== MIGRATION: Add missing columns BEFORE creating indexes =====
   // Helper function to check if column exists
   const hasColumn = (tableName: string, columnName: string): boolean => {
@@ -390,7 +407,9 @@ function createTables(): void {
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_node_port ON graph_execution_artifacts(node_id, port_key)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_logs_execution_id ON graph_execution_logs(execution_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_logs_node_id ON graph_execution_logs(node_id)',
-    'CREATE INDEX IF NOT EXISTS idx_graph_execution_logs_level ON graph_execution_logs(level)'
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_logs_level ON graph_execution_logs(level)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_final_results_execution_id ON graph_execution_final_results(execution_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_final_results_source_artifact_id ON graph_execution_final_results(source_artifact_id)'
   ];
 
   indexes.forEach(sql => userSettingsDb.exec(sql));
@@ -405,7 +424,7 @@ function createTables(): void {
     VALUES (?, ?, ?)
   `).run('civitai', 'Civitai', 1);
 
-  console.log('  ✅ User settings tables created (14 tables + indexes)');
+  console.log('  ✅ User settings tables created (15 tables + indexes)');
 
   // Run migrations for existing tables
   migrateExistingTables();
@@ -1034,6 +1053,27 @@ function ensureBuiltinSystemModules(): void {
     { operation_key: 'system.extract_tags_from_image' },
     [],
     '#ab47bc',
+  );
+
+  insertIfMissing(
+    'Final Result',
+    'Declare one upstream artifact as an explicit workflow final result without duplicating stored payloads.',
+    'output',
+    [
+      {
+        key: 'value',
+        label: 'Value',
+        direction: 'input',
+        data_type: 'any',
+        required: true,
+        multiple: false,
+        description: 'Any upstream artifact that should be recorded as one final workflow result.',
+      },
+    ],
+    [],
+    { operation_key: 'system.final_result' },
+    [],
+    '#ffa726',
   );
 
   insertIfMissing(

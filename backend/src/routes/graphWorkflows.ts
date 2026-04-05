@@ -3,6 +3,7 @@ import { routeParam } from './routeParam'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
 import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphExecutionArtifactModel } from '../models/GraphExecutionArtifact'
+import { GraphExecutionFinalResultModel } from '../models/GraphExecutionFinalResult'
 import { GraphExecutionLogModel } from '../models/GraphExecutionLog'
 import { GraphWorkflowExecutionQueue } from '../services/graphWorkflowExecutionQueue'
 import { ModuleGraphResponse, GraphWorkflowCreateData, GraphWorkflowUpdateData } from '../types/moduleGraph'
@@ -82,8 +83,9 @@ router.get('/executions/:executionId', asyncHandler(async (req: Request, res: Re
     }
 
     const artifacts = GraphExecutionArtifactModel.findByExecution(executionId)
+    const finalResults = GraphExecutionFinalResultModel.findByExecution(executionId)
     const logs = GraphExecutionLogModel.findByExecution(executionId)
-    return res.json({ success: true, data: { execution: decorateExecutionRecord(execution), artifacts, logs } } as ModuleGraphResponse)
+    return res.json({ success: true, data: { execution: decorateExecutionRecord(execution), artifacts, final_results: finalResults, logs } } as ModuleGraphResponse)
   } catch (error) {
     console.error('Error getting graph execution:', error)
     return res.status(500).json({ success: false, error: 'Failed to get graph execution' } as ModuleGraphResponse)

@@ -106,7 +106,7 @@ export async function saveArtifactBuffer(
 
   await fs.promises.writeFile(filePath, outputBuffer)
 
-  GraphExecutionArtifactModel.create({
+  const artifactRecordId = GraphExecutionArtifactModel.create({
     execution_id: executionId,
     node_id: nodeId,
     port_key: portKey,
@@ -115,7 +115,10 @@ export async function saveArtifactBuffer(
     metadata: JSON.stringify({ size: outputBuffer.length, mimeType: outputMimeType }),
   })
 
-  return filePath
+  return {
+    storagePath: filePath,
+    artifactRecordId,
+  }
 }
 
 /** Look up the source artifact feeding a graph edge. */
@@ -203,6 +206,7 @@ async function loadRuntimeArtifactFromRecord(artifact: GraphExecutionArtifactRec
             : 'image/png',
         ),
         storagePath: artifact.storage_path,
+        artifactRecordId: artifact.id,
         metadata: parsedMetadata && typeof parsedMetadata === 'object' && !Array.isArray(parsedMetadata) ? parsedMetadata : undefined,
       }
     } catch {
@@ -217,6 +221,7 @@ async function loadRuntimeArtifactFromRecord(artifact: GraphExecutionArtifactRec
   return {
     type: artifact.artifact_type,
     value,
+    artifactRecordId: artifact.id,
     metadata: parsedMetadata && typeof parsedMetadata === 'object' && !Array.isArray(parsedMetadata) ? parsedMetadata : undefined,
   }
 }

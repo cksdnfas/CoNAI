@@ -15,6 +15,7 @@ const PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], string> = {
   number: '숫자',
   boolean: '불리언',
   json: 'JSON',
+  any: '임의',
 }
 
 const ENGINE_TYPE_LABELS = {

@@ -27,6 +27,7 @@ export type RuntimeArtifact = {
   type: ModulePortDataType | 'file'
   value: any
   storagePath?: string
+  artifactRecordId?: number
   metadata?: Record<string, unknown>
 }
 

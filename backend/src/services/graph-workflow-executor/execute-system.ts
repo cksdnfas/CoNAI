@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { runtimePaths } from '../../config/runtimePaths'
 import { db } from '../../database/init'
+import { GraphExecutionFinalResultModel } from '../../models/GraphExecutionFinalResult'
 import { PromptCollectionModel } from '../../models/PromptCollection'
 import { PromptGroupModel } from '../../models/PromptGroup'
 import { ImageSimilarityService } from '../imageSimilarity'
@@ -471,6 +472,55 @@ async function executeExtractArtistFromImage(
   }
 }
 
+/** Register one upstream artifact as an explicit workflow final result without duplicating payload storage. */
+async function executeFinalResultNode(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+) {
+  const incomingEdges = context.workflow.graph.edges.filter((edge) => edge.target_node_id === node.id && edge.target_port_key === 'value')
+
+  if (incomingEdges.length === 0) {
+    throw new Error('Final Result requires one connected upstream artifact on port value')
+  }
+
+  if (incomingEdges.length > 1) {
+    throw new Error('Final Result supports exactly one upstream artifact on port value')
+  }
+
+  const sourceEdge = incomingEdges[0]
+  const sourceArtifact = context.artifactsByNode.get(sourceEdge.source_node_id)?.[sourceEdge.source_port_key]
+  if (!sourceArtifact?.artifactRecordId) {
+    throw new Error('Final Result requires one persisted upstream artifact reference')
+  }
+
+  GraphExecutionFinalResultModel.create({
+    execution_id: context.executionId,
+    final_node_id: node.id,
+    source_artifact_id: sourceArtifact.artifactRecordId,
+    source_node_id: sourceEdge.source_node_id,
+    source_port_key: sourceEdge.source_port_key,
+    artifact_type: sourceArtifact.type,
+  })
+
+  context.artifactsByNode.set(node.id, {})
+
+  writeExecutionLog({
+    executionId: context.executionId,
+    nodeId: node.id,
+    eventType: 'node_engine_complete',
+    message: `System module completed: ${moduleDefinition.name}`,
+    details: {
+      engine: 'system',
+      operationKey: 'system.final_result',
+      sourceNodeId: sourceEdge.source_node_id,
+      sourcePortKey: sourceEdge.source_port_key,
+      sourceArtifactId: sourceArtifact.artifactRecordId,
+      artifactType: sourceArtifact.type,
+    },
+  })
+}
+
 /** Execute a CoNAI system-native module node through a stable operation key. */
 export async function executeSystemModule(
   context: ExecutionContext,
@@ -533,6 +583,11 @@ export async function executeSystemModule(
 
   if (operationKey === 'system.extract_artist_from_image') {
     await executeExtractArtistFromImage(context, node, moduleDefinition, resolvedInputs)
+    return
+  }
+
+  if (operationKey === 'system.final_result') {
+    await executeFinalResultNode(context, node, moduleDefinition)
     return
   }
 
