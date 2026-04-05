@@ -3,6 +3,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImageEditorHistory } from './use-image-editor-history'
 import { useImageEditorKeyboardShortcuts } from './use-image-editor-keyboard-shortcuts'
 import { useImageEditorLayerSessionActions } from './use-image-editor-layer-session-actions'
+import { useImageEditorLifecycle } from './use-image-editor-lifecycle'
 import { ImageEditorModalLayout } from './image-editor-modal-layout'
 import { useImageEditorPointerInteractions } from './use-image-editor-pointer-interactions'
 import { useImageEditorSelectionActions } from './use-image-editor-selection-actions'
@@ -157,84 +158,6 @@ export function ImageEditorModal({
   }, [open, syncViewportSize])
 
   /** Reset the editor session from the provided source and optional mask inputs. */
-  useEffect(() => {
-    if (!open || !sourceImageDataUrl) {
-      return
-    }
-
-    let cancelled = false
-
-    const load = async () => {
-      try {
-        setLoading(true)
-        const loadedBaseImage = await loadEditorImage(sourceImageDataUrl)
-        if (cancelled) {
-          return
-        }
-
-        const firstLayer = createDefaultDrawLayer(1)
-        setBaseImage(loadedBaseImage)
-        setBaseImageDataUrl(sourceImageDataUrl)
-        setDocumentSize({ width: loadedBaseImage.width, height: loadedBaseImage.height })
-        setLayers([firstLayer])
-        setActiveLayerId(firstLayer.id)
-        setMaskStrokes([])
-        setSelectionRect(null)
-        setCropRect(null)
-        selectionClipboardRef.current = null
-        setHasStoredSelection(false)
-        setRotation(0)
-        setFlippedX(false)
-        setTool(enableMaskEditing ? 'brush' : 'brush')
-
-        const fitZoom = calculateImageEditorFitZoom(loadedBaseImage.width, loadedBaseImage.height, viewportSize.width, viewportSize.height)
-        setZoom(fitZoom)
-        setPan({ x: 0, y: 0 })
-
-        if (enableMaskEditing && maskImageDataUrl) {
-          const loadedMaskImage = await loadEditorImage(maskImageDataUrl)
-          if (cancelled) {
-            return
-          }
-
-          setInitialMaskImage(loadedMaskImage)
-          setInitialMaskImageDataUrl(maskImageDataUrl)
-        } else {
-          setInitialMaskImage(null)
-          setInitialMaskImageDataUrl(null)
-          setMaskPreviewSurface(null)
-        }
-
-        resetHistory({
-          baseImageDataUrl: sourceImageDataUrl,
-          documentSize: { width: loadedBaseImage.width, height: loadedBaseImage.height },
-          layers: [firstLayer],
-          activeLayerId: firstLayer.id,
-          initialMaskImageDataUrl: enableMaskEditing && maskImageDataUrl ? maskImageDataUrl : null,
-          maskStrokes: [],
-          selectionRect: null,
-          cropRect: null,
-          rotation: 0,
-          flippedX: false,
-        })
-      } catch (error) {
-        if (!cancelled) {
-          showSnackbar({ message: error instanceof Error ? error.message : '에디터 이미지를 불러오지 못했어.', tone: 'error' })
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-
-    void load()
-
-    return () => {
-      cancelled = true
-    }
-  }, [enableMaskEditing, maskImageDataUrl, open, resetHistory, showSnackbar, sourceImageDataUrl, viewportSize.height, viewportSize.width])
-
   /** Rebuild the live red mask preview whenever the effective mask changes. */
   useEffect(() => {
     if (!enableMaskEditing || documentSize.width <= 0 || documentSize.height <= 0) {
@@ -375,6 +298,48 @@ export function ImageEditorModal({
     showSnackbar({ message: '마스크를 비웠어.', tone: 'info' })
   }, [queueHistoryCommit, showSnackbar])
 
+  const { handleSave } = useImageEditorLifecycle({
+    open,
+    sourceImageDataUrl,
+    maskImageDataUrl,
+    enableMaskEditing,
+    viewportSize,
+    baseImage,
+    documentSize,
+    layers,
+    initialMaskImage,
+    maskStrokes,
+    rotation,
+    flippedX,
+    saving,
+    selectionClipboardRef,
+    resetHistory,
+    queueHistoryCommit,
+    onClose,
+    onSave,
+    createDrawLayer: createDefaultDrawLayer,
+    setLoading,
+    setSaving,
+    setBaseImage,
+    setBaseImageDataUrl,
+    setDocumentSize,
+    setLayers,
+    setActiveLayerId,
+    setMaskStrokes,
+    setSelectionRect,
+    setCropRect,
+    setHasStoredSelection,
+    setRotation,
+    setFlippedX,
+    setTool,
+    setZoom,
+    setPan,
+    setInitialMaskImage,
+    setInitialMaskImageDataUrl,
+    setMaskPreviewSurface,
+    showSnackbar,
+  })
+
   useImageEditorKeyboardShortcuts({
     open,
     enableMaskEditing,
@@ -393,46 +358,6 @@ export function ImageEditorModal({
     handleSelectionTransfer,
     handlePasteStoredSelection,
   })
-
-  /** Save the current source and optional mask back into the caller draft state. */
-  const handleSave = useCallback(async () => {
-    if (!baseImage || saving) {
-      return
-    }
-
-    try {
-      setSaving(true)
-      const sourceCanvas = await renderImageEditorSourceCanvas({
-        baseImage,
-        documentWidth: documentSize.width,
-        documentHeight: documentSize.height,
-        layers,
-      })
-      const transformedSourceCanvas = transformImageEditorCanvas(sourceCanvas, rotation, flippedX)
-
-      let maskImageDataUrl: string | undefined
-      if (enableMaskEditing) {
-        const maskCanvas = await renderImageEditorMaskCanvas({
-          initialMaskImage,
-          documentWidth: documentSize.width,
-          documentHeight: documentSize.height,
-          maskStrokes,
-        })
-        const transformedMaskCanvas = transformImageEditorCanvas(maskCanvas, rotation, flippedX)
-        maskImageDataUrl = transformedMaskCanvas.toDataURL('image/png')
-      }
-
-      await onSave({
-        sourceImageDataUrl: transformedSourceCanvas.toDataURL('image/png'),
-        maskImageDataUrl,
-      })
-      onClose()
-    } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '편집 결과를 저장하지 못했어.', tone: 'error' })
-    } finally {
-      setSaving(false)
-    }
-  }, [baseImage, documentSize.height, documentSize.width, enableMaskEditing, flippedX, initialMaskImage, layers, maskStrokes, onClose, onSave, rotation, saving, showSnackbar])
 
   /** Update the position of one pasted layer after drag movement. */
   const handleMovePasteLayer = useCallback((layerId: string, nextX: number, nextY: number) => {

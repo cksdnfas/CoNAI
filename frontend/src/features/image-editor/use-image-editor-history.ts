@@ -3,7 +3,7 @@ import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorStroke } from '.
 
 type ImageEditorDocumentSize = { width: number; height: number }
 
-type ImageEditorHistorySnapshot = {
+export type ImageEditorHistorySnapshot = {
   baseImageDataUrl: string
   documentSize: ImageEditorDocumentSize
   layers: ImageEditorLayer[]
@@ -194,4 +194,3 @@ export function useImageEditorHistory(options: UseImageEditorHistoryOptions) {
   }
 }
 
-export type { ImageEditorHistorySnapshot }
