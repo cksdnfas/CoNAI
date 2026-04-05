@@ -18,6 +18,7 @@ import {
   scanGenerationComfyUIModelDropdownLists,
   testGenerationComfyUIServer,
   updateGenerationComfyUIServer,
+  updateGenerationCustomDropdownList,
   type GenerationWorkflow,
   type GenerationWorkflowDetail,
 } from '@/lib/api'
@@ -448,6 +449,16 @@ export function ComfyGenerationPanel({
     }
   }
 
+  const handleUpdateDropdownList = async (listId: number, input: { name?: string; description?: string; items?: string[] }) => {
+    try {
+      await updateGenerationCustomDropdownList(listId, input)
+      await dropdownListsQuery.refetch()
+      showSnackbar({ message: '드롭다운 목록을 수정했어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, '드롭다운 목록 수정에 실패했어.'), tone: 'error' })
+    }
+  }
+
   const handleScanDropdownLists = async (input: {
     modelFolders: { folderName: string; displayName: string; files: string[] }[]
     sourcePath?: string
@@ -663,25 +674,24 @@ export function ComfyGenerationPanel({
 
         {selectedWorkflowId === null ? (
           <div className="space-y-4">
-            <div className="grid gap-4 xl:grid-cols-2">
-              <ComfyWorkflowListSection
-                workflows={workflowsQuery.data ?? []}
-                selectedWorkflowId={activeWorkflowId}
-                onSelectWorkflow={handleOpenWorkflow}
-                onCreateWorkflow={handleOpenCreateWorkflow}
-                onSaveModule={handleOpenModuleSave}
-                onEditWorkflow={(workflowId) => void handleEditWorkflow(workflowId)}
-                onCopyWorkflow={(workflowId) => void handleCopyWorkflow(workflowId)}
-                onDeleteWorkflow={(workflowId) => void handleDeleteWorkflow(workflowId)}
-              />
+            <ComfyWorkflowListSection
+              workflows={workflowsQuery.data ?? []}
+              selectedWorkflowId={activeWorkflowId}
+              onSelectWorkflow={handleOpenWorkflow}
+              onCreateWorkflow={handleOpenCreateWorkflow}
+              onSaveModule={handleOpenModuleSave}
+              onEditWorkflow={(workflowId) => void handleEditWorkflow(workflowId)}
+              onCopyWorkflow={(workflowId) => void handleCopyWorkflow(workflowId)}
+              onDeleteWorkflow={(workflowId) => void handleDeleteWorkflow(workflowId)}
+            />
 
-              <ComfyDropdownListsSection
-                dropdownLists={dropdownListsQuery.data ?? []}
-                onCreateManualList={(input) => handleCreateDropdownList(input)}
-                onDeleteList={(listId) => handleDeleteDropdownList(listId)}
-                onScanAutoLists={(input) => handleScanDropdownLists(input)}
-              />
-            </div>
+            <ComfyDropdownListsSection
+              dropdownLists={dropdownListsQuery.data ?? []}
+              onCreateManualList={(input) => handleCreateDropdownList(input)}
+              onUpdateList={(listId, input) => handleUpdateDropdownList(listId, input)}
+              onDeleteList={(listId) => handleDeleteDropdownList(listId)}
+              onScanAutoLists={(input) => handleScanDropdownLists(input)}
+            />
 
             <ComfyServerListSection
               servers={activeServers}

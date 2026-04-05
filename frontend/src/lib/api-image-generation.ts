@@ -530,6 +530,21 @@ export async function createGenerationCustomDropdownList(payload: {
   })
 }
 
+/** Update one manual custom dropdown list. */
+export async function updateGenerationCustomDropdownList(listId: number, payload: {
+  name?: string
+  description?: string
+  items?: string[]
+}) {
+  return requestJson<{ success: boolean; data: { message: string } }>(`/api/custom-dropdown-lists/${listId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
 /** Delete one custom dropdown list. */
 export async function deleteGenerationCustomDropdownList(listId: number) {
   return requestJson<{ success: boolean; data: { message: string } }>(`/api/custom-dropdown-lists/${listId}`, {

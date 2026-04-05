@@ -241,6 +241,7 @@ type DropdownListsSectionProps = {
   dropdownLists: CustomDropdownList[]
   isSubmitting?: boolean
   onCreateManualList: (input: { name: string; description?: string; items: string[] }) => Promise<void> | void
+  onUpdateList: (listId: number, input: { name?: string; description?: string; items?: string[] }) => Promise<void> | void
   onDeleteList: (listId: number) => Promise<void> | void
   onScanAutoLists: (input: {
     modelFolders: ComfyUIModelFolderScanInput[]
@@ -339,14 +340,16 @@ function collectModelFoldersFromSelection(files: RelativeFile[]) {
   }
 }
 
-type CustomDropdownListCreateModalProps = {
+type CustomDropdownListEditorModalProps = {
   open: boolean
   isSubmitting?: boolean
+  initialList?: CustomDropdownList | null
+  readOnly?: boolean
   onClose: () => void
-  onSubmit: (input: { name: string; description?: string; items: string[] }) => Promise<void> | void
+  onSubmit?: (input: { name: string; description?: string; items: string[] }) => Promise<void> | void
 }
 
-function CustomDropdownListCreateModal({ open, isSubmitting = false, onClose, onSubmit }: CustomDropdownListCreateModalProps) {
+function CustomDropdownListEditorModal({ open, isSubmitting = false, initialList, readOnly = false, onClose, onSubmit }: CustomDropdownListEditorModalProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [itemsText, setItemsText] = useState('')
@@ -356,14 +359,18 @@ function CustomDropdownListCreateModal({ open, isSubmitting = false, onClose, on
       return
     }
 
-    setName('')
-    setDescription('')
-    setItemsText('')
-  }, [open])
+    setName(initialList?.name ?? '')
+    setDescription(initialList?.description ?? '')
+    setItemsText((initialList?.items ?? []).join('\n'))
+  }, [initialList, open])
 
   const items = useMemo(() => splitDropdownItems(itemsText), [itemsText])
 
   const handleSubmit = async () => {
+    if (readOnly || !onSubmit) {
+      return
+    }
+
     const trimmedName = name.trim()
     if (!trimmedName || items.length === 0) {
       return
@@ -377,19 +384,21 @@ function CustomDropdownListCreateModal({ open, isSubmitting = false, onClose, on
   }
 
   return (
-    <SettingsModal open={open} onClose={onClose} title="커스텀 드롭다운 목록" widthClassName="max-w-2xl">
+    <SettingsModal open={open} onClose={onClose} title={readOnly ? '드롭다운 목록 상세' : initialList ? '커스텀 드롭다운 수정' : '커스텀 드롭다운 목록'} widthClassName="max-w-2xl">
       <div className="space-y-4">
-        <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="목록 이름" />
-        <Textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="설명 (선택)" />
-        <Textarea rows={8} value={itemsText} onChange={(event) => setItemsText(event.target.value)} placeholder="항목을 줄바꿈 또는 쉼표로 입력" />
+        <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="목록 이름" readOnly={readOnly} />
+        <Textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="설명 (선택)" readOnly={readOnly} />
+        <Textarea rows={10} value={itemsText} onChange={(event) => setItemsText(event.target.value)} placeholder="항목을 줄바꿈 또는 쉼표로 입력" readOnly={readOnly} />
         <div className="flex items-center justify-between gap-3">
           <div className="text-xs text-muted-foreground">{items.length}개 항목</div>
           <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>취소</Button>
-            <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || !name.trim() || items.length === 0}>
-              <Plus className="h-4 w-4" />
-              추가
-            </Button>
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>{readOnly ? '닫기' : '취소'}</Button>
+            {!readOnly ? (
+              <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || !name.trim() || items.length === 0}>
+                <Save className="h-4 w-4" />
+                저장
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -513,10 +522,12 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
   )
 }
 
-export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false, onCreateManualList, onDeleteList, onScanAutoLists }: DropdownListsSectionProps) {
+export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false, onCreateManualList, onUpdateList, onDeleteList, onScanAutoLists }: DropdownListsSectionProps) {
   const [activeTab, setActiveTab] = useState<DropdownTab>('custom')
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false)
   const [isAutoModalOpen, setIsAutoModalOpen] = useState(false)
+  const [editingCustomList, setEditingCustomList] = useState<CustomDropdownList | null>(null)
+  const [viewingAutoList, setViewingAutoList] = useState<CustomDropdownList | null>(null)
 
   const customLists = useMemo(() => dropdownLists.filter((list) => !list.is_auto_collected), [dropdownLists])
   const autoLists = useMemo(() => dropdownLists.filter((list) => list.is_auto_collected), [dropdownLists])
@@ -564,7 +575,15 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
               {visibleLists.map((list) => (
                 <div key={list.id} className="rounded-sm border border-border bg-surface-low px-3 py-3 text-sm text-muted-foreground">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 text-left"
+                      onClick={() => {
+                        if (list.is_auto_collected) {
+                          setViewingAutoList(list)
+                        }
+                      }}
+                    >
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-medium text-foreground">{list.name}</span>
                         <Badge variant={list.is_auto_collected ? 'secondary' : 'outline'}>{list.is_auto_collected ? 'auto' : 'manual'}</Badge>
@@ -573,13 +592,23 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
                       {list.description ? <div className="mt-1 line-clamp-2 text-[11px]">{list.description}</div> : null}
                       {list.source_path ? <div className="mt-1 line-clamp-1 text-[11px]">source {list.source_path}</div> : null}
                       {list.items.length > 0 ? <div className="mt-1 line-clamp-1 text-[11px]">{list.items.slice(0, 6).join(', ')}</div> : null}
-                    </div>
+                    </button>
                     {!list.is_auto_collected ? (
-                      <Button type="button" size="sm" variant="outline" onClick={() => void onDeleteList(list.id)} disabled={isSubmitting}>
-                        <Trash2 className="h-4 w-4" />
-                        삭제
+                      <div className="flex shrink-0 gap-2">
+                        <Button type="button" size="sm" variant="outline" onClick={() => setEditingCustomList(list)} disabled={isSubmitting}>
+                          <Pencil className="h-4 w-4" />
+                          수정
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" onClick={() => void onDeleteList(list.id)} disabled={isSubmitting}>
+                          <Trash2 className="h-4 w-4" />
+                          삭제
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button type="button" size="sm" variant="outline" onClick={() => setViewingAutoList(list)}>
+                        보기
                       </Button>
-                    ) : null}
+                    )}
                   </div>
                 </div>
               ))}
@@ -590,7 +619,7 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
         </CardContent>
       </Card>
 
-      <CustomDropdownListCreateModal
+      <CustomDropdownListEditorModal
         open={isCustomModalOpen}
         isSubmitting={isSubmitting}
         onClose={() => setIsCustomModalOpen(false)}
@@ -598,6 +627,27 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
           await onCreateManualList(input)
           setIsCustomModalOpen(false)
         }}
+      />
+
+      <CustomDropdownListEditorModal
+        open={editingCustomList !== null}
+        initialList={editingCustomList}
+        isSubmitting={isSubmitting}
+        onClose={() => setEditingCustomList(null)}
+        onSubmit={async (input) => {
+          if (!editingCustomList) {
+            return
+          }
+          await onUpdateList(editingCustomList.id, input)
+          setEditingCustomList(null)
+        }}
+      />
+
+      <CustomDropdownListEditorModal
+        open={viewingAutoList !== null}
+        initialList={viewingAutoList}
+        readOnly
+        onClose={() => setViewingAutoList(null)}
       />
 
       <ComfyDropdownAutoCollectModal
