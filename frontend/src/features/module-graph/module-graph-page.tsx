@@ -13,7 +13,7 @@ import {
   type Connection,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, ArrowRight, FolderPlus, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, FolderPlus, MoreHorizontal, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
@@ -97,6 +97,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const [workflowName, setWorkflowName] = useState('Workflow Draft')
   const [workflowDescription, setWorkflowDescription] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
+  const [isExplorerActionMenuOpen, setIsExplorerActionMenuOpen] = useState(false)
   const [draftWorkflowFolderId, setDraftWorkflowFolderId] = useState<number | null>(null)
   const [selectedGraphId, setSelectedGraphId] = useState<number | null>(null)
   const [selectedExecutionId, setSelectedExecutionId] = useState<number | null>(null)
@@ -126,6 +127,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const [workflowRunInputValues, setWorkflowRunInputValues] = useState<Record<string, unknown>>({})
   const previousExecutionStatusesRef = useRef<Record<number, GraphExecutionRecord['status']>>({})
   const lastNodePreviewSyncSignatureRef = useRef('')
+  const explorerActionMenuRef = useRef<HTMLDivElement | null>(null)
   const editorSupportSectionRefs = useRef<Record<EditorSupportSectionKey, HTMLDivElement | null>>({
     setup: null,
     inspector: null,
@@ -205,6 +207,26 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       setDraftWorkflowFolderId(selectedFolderId)
     }
   }, [selectedFolderId, selectedGraphId])
+
+  useEffect(() => {
+    setIsExplorerActionMenuOpen(false)
+  }, [selectedFolderId, selectedGraphId, workflowView])
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!explorerActionMenuRef.current?.contains(event.target as Node)) {
+        setIsExplorerActionMenuOpen(false)
+      }
+    }
+
+    if (!isExplorerActionMenuOpen) {
+      return
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [isExplorerActionMenuOpen])
+
   const workflowInputCandidates = useMemo(
     () =>
       nodes.flatMap((node) =>
@@ -1506,72 +1528,91 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             size="icon-sm"
             variant="outline"
             className="bg-surface-low"
-            onClick={() => void handleRenameSelectedFolder()}
-            disabled={!selectedFolderRecord}
-            aria-label="폴더 이름 변경"
-            title="폴더 이름 변경"
-          >
-            <PenSquare className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="outline"
-            className="bg-surface-low border-rose-500/30 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
-            onClick={() => void handleDeleteSelectedFolder()}
-            disabled={!selectedFolderRecord}
-            aria-label="폴더 삭제"
-            title="폴더 삭제"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="outline"
-            className="bg-surface-low"
             onClick={handleCreateWorkflow}
             aria-label="새 워크플로우"
             title="새 워크플로우"
           >
             <Plus className="h-4 w-4" />
           </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="outline"
-            className="bg-surface-low"
-            onClick={() => void handleMoveSelectedWorkflowToCurrentFolder()}
-            disabled={!selectedGraphRecord || (selectedGraphRecord.folder_id ?? null) === (selectedFolderId ?? null)}
-            aria-label="현재 폴더로 이동"
-            title="현재 폴더로 이동"
-          >
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="outline"
-            className="bg-surface-low"
-            onClick={handleEditSelectedWorkflow}
-            disabled={!selectedGraphRecord}
-            aria-label="워크플로우 편집"
-            title="워크플로우 편집"
-          >
-            <PenSquare className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="outline"
-            className="bg-surface-low border-rose-500/30 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
-            onClick={() => void handleDeleteSelectedWorkflow()}
-            disabled={!selectedGraphRecord}
-            aria-label="워크플로우 삭제"
-            title="워크플로우 삭제"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <div ref={explorerActionMenuRef} className="relative">
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="bg-surface-low"
+              onClick={() => setIsExplorerActionMenuOpen((current) => !current)}
+              aria-label="추가 관리 작업"
+              title="추가 관리 작업"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+
+            {isExplorerActionMenuOpen ? (
+              <div className="absolute right-0 top-full z-50 mt-2 min-w-44 rounded-sm border border-border bg-surface-low p-1 shadow-lg">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm text-foreground hover:bg-surface-high disabled:cursor-not-allowed disabled:text-muted-foreground"
+                  onClick={() => {
+                    setIsExplorerActionMenuOpen(false)
+                    void handleRenameSelectedFolder()
+                  }}
+                  disabled={!selectedFolderRecord}
+                >
+                  <PenSquare className="h-4 w-4" />
+                  폴더 이름 변경
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm text-rose-200 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:text-muted-foreground"
+                  onClick={() => {
+                    setIsExplorerActionMenuOpen(false)
+                    void handleDeleteSelectedFolder()
+                  }}
+                  disabled={!selectedFolderRecord}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  폴더 삭제
+                </button>
+                <div className="my-1 border-t border-border/70" />
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm text-foreground hover:bg-surface-high disabled:cursor-not-allowed disabled:text-muted-foreground"
+                  onClick={() => {
+                    setIsExplorerActionMenuOpen(false)
+                    void handleMoveSelectedWorkflowToCurrentFolder()
+                  }}
+                  disabled={!selectedGraphRecord || (selectedGraphRecord.folder_id ?? null) === (selectedFolderId ?? null)}
+                >
+                  <ArrowRight className="h-4 w-4" />
+                  현재 폴더로 이동
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm text-foreground hover:bg-surface-high disabled:cursor-not-allowed disabled:text-muted-foreground"
+                  onClick={() => {
+                    setIsExplorerActionMenuOpen(false)
+                    handleEditSelectedWorkflow()
+                  }}
+                  disabled={!selectedGraphRecord}
+                >
+                  <PenSquare className="h-4 w-4" />
+                  워크플로우 편집
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm text-rose-200 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:text-muted-foreground"
+                  onClick={() => {
+                    setIsExplorerActionMenuOpen(false)
+                    void handleDeleteSelectedWorkflow()
+                  }}
+                  disabled={!selectedGraphRecord}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  워크플로우 삭제
+                </button>
+              </div>
+            ) : null}
+          </div>
         </>
       )}
     />
