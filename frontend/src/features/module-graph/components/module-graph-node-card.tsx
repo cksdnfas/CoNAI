@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import type { ModulePortDefinition } from '@/lib/api'
-import { buildHandleId, getModuleColor, getPortTypeColor, type ModuleGraphNode } from '../module-graph-shared'
+import { buildHandleId, getModuleColor, getPortTypeColor, isFinalResultModule, type ModuleGraphNode } from '../module-graph-shared'
 
 const PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], string> = {
   image: '이미지',
@@ -184,6 +184,7 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
             ? '#f59e0b'
             : `${accentColor}66`
   const hasArtifactPreview = Boolean(data.latestArtifactPreviewUrl || data.latestArtifactTextPreview)
+  const isFinalResult = isFinalResultModule(module)
 
   return (
     <div
@@ -200,6 +201,7 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-1">
+          {isFinalResult ? <Badge variant="secondary">최종 결과</Badge> : null}
           {data.executionReuseState === 'reused' ? <Badge variant="outline">캐시</Badge> : null}
           {data.executionArtifactCount ? <Badge variant="outline">A {data.executionArtifactCount}</Badge> : null}
           {statusLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}

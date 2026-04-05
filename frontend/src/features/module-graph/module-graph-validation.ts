@@ -4,6 +4,7 @@ import type {
 } from '@/lib/api'
 import type { AppSettings } from '@/types/settings'
 import type { WorkflowValidationIssue } from './components/workflow-validation-panel'
+import { isFinalResultModule } from './module-graph-shared'
 
 export type ValidationNodeRecord = {
   id: string
@@ -66,6 +67,17 @@ export function buildWorkflowValidationIssues(params: {
     const current = connectedInputMap.get(edge.targetNodeId) ?? new Set<string>()
     current.add(edge.targetPortKey)
     connectedInputMap.set(edge.targetNodeId, current)
+  }
+
+  const finalResultNodes = nodes.filter((node) => node.module && isFinalResultModule(node.module))
+  if (finalResultNodes.length === 0) {
+    issues.push({
+      id: 'missing-final-result-node',
+      nodeLabel: '워크플로우',
+      severity: 'error',
+      title: '최종 결과 노드가 없어',
+      detail: '실행 결과를 최종 결과로 확정하려면 Final Result 시스템 노드를 최소 하나 추가해줘.',
+    })
   }
 
   for (const node of nodes) {

@@ -68,6 +68,24 @@ const PORT_TYPE_COLORS: Record<ModulePortDataType, string> = {
   any: '#b0bec5',
 }
 
+/** Resolve one stable system-operation key from module metadata when present. */
+export function getModuleOperationKey(module: ModuleDefinitionRecord) {
+  if (typeof module.internal_fixed_values?.operation_key === 'string') {
+    return module.internal_fixed_values.operation_key
+  }
+
+  if (typeof module.template_defaults?.operation_key === 'string') {
+    return module.template_defaults.operation_key
+  }
+
+  return null
+}
+
+/** Resolve whether one module is the built-in explicit final-result marker. */
+export function isFinalResultModule(module: ModuleDefinitionRecord) {
+  return module.engine_type === 'system' && getModuleOperationKey(module) === 'system.final_result'
+}
+
 /** Resolve a visible color for module nodes when the module does not define one. */
 export function getModuleColor(module: ModuleDefinitionRecord) {
   if (module.color) {

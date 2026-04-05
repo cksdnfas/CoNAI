@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import type { ModuleDefinitionRecord } from '@/lib/api'
+import { isFinalResultModule } from '../module-graph-shared'
 
 type ModuleLibraryPanelProps = {
   modules: ModuleDefinitionRecord[]
@@ -141,6 +142,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
         <div className="grid gap-3 md:grid-cols-2">
           {filteredModules.map((module) => {
             const isSystemModule = module.engine_type === 'system'
+            const isFinalResult = isFinalResultModule(module)
 
             return (
               <div key={module.id} className={`flex h-full flex-col gap-3 rounded-sm border p-3 ${isSystemModule ? 'border-primary/40 bg-surface-high' : 'border-border bg-surface-low'}`}>
@@ -150,9 +152,11 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
                     <Badge variant="outline">{module.engine_type}</Badge>
                     <Badge variant={isSystemModule ? 'secondary' : 'outline'}>{isSystemModule ? '기본 제공' : '사용자 정의'}</Badge>
                     {module.category ? <Badge variant="secondary">{module.category}</Badge> : null}
+                    {isFinalResult ? <Badge variant="secondary">최종 결과</Badge> : null}
                   </div>
                   <div className="text-xs text-muted-foreground">입력 {module.exposed_inputs.length} · 출력 {module.output_ports.length}</div>
                   {module.description ? <div className="line-clamp-3 text-xs text-muted-foreground">{module.description}</div> : null}
+                  {isFinalResult ? <div className="text-xs text-amber-200/90">업스트림 결과를 명시적 최종 결과로 선언하는 출력 노드</div> : null}
                 </div>
                 <div className="mt-auto flex justify-end">
                   <Button type="button" size="sm" variant="outline" onClick={() => onAddModule(module)}>
