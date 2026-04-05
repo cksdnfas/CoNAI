@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } from 'react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { ImageEditorModalLayout } from './image-editor-modal-layout'
+import { useImageEditorHistory } from './use-image-editor-history'
+import { useImageEditorKeyboardShortcuts } from './use-image-editor-keyboard-shortcuts'
 import { useImageEditorLayerSessionActions } from './use-image-editor-layer-session-actions'
+import { ImageEditorModalLayout } from './image-editor-modal-layout'
 import { useImageEditorPointerInteractions } from './use-image-editor-pointer-interactions'
 import { useImageEditorSelectionActions } from './use-image-editor-selection-actions'
-import { useImageEditorHistory } from './use-image-editor-history'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorSavePayload, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 import {
   calculateImageEditorFitZoom,
@@ -365,168 +366,6 @@ export function ImageEditorModal({
     return () => window.removeEventListener('paste', handlePaste)
   }, [addPasteLayerFromDataUrl, open])
 
-  /** Handle editor keyboard shortcuts while avoiding text-input conflicts. */
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      const isTypingTarget = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable
-      if (isTypingTarget) {
-        return
-      }
-
-      const lowerKey = event.key.toLowerCase()
-      const isShortcutModifier = event.ctrlKey || event.metaKey
-      if (isShortcutModifier && lowerKey === 'z' && !event.shiftKey) {
-        event.preventDefault()
-        void handleUndo()
-        return
-      }
-
-      if (isShortcutModifier && (lowerKey === 'y' || (event.shiftKey && lowerKey === 'z'))) {
-        event.preventDefault()
-        void handleRedo()
-        return
-      }
-
-      if (event.key === 'Escape') {
-        if (cropRect) {
-          event.preventDefault()
-          setCropRect(null)
-          setTool('brush')
-          return
-        }
-
-        if (selectionRect) {
-          event.preventDefault()
-          setSelectionRect(null)
-          return
-        }
-      }
-
-      if (event.key === '[') {
-        event.preventDefault()
-        setBrushSize((current) => Math.max(1, current - 2))
-        return
-      }
-
-      if (event.key === ']') {
-        event.preventDefault()
-        setBrushSize((current) => Math.min(256, current + 2))
-        return
-      }
-
-      if (!isShortcutModifier) {
-        if (lowerKey === 'h') {
-          event.preventDefault()
-          setTool('pan')
-          return
-        }
-
-        if (lowerKey === 's') {
-          event.preventDefault()
-          setTool('select')
-          return
-        }
-
-        if (lowerKey === 'b') {
-          event.preventDefault()
-          setTool('brush')
-          return
-        }
-
-        if (lowerKey === 'e') {
-          event.preventDefault()
-          setTool('eraser')
-          return
-        }
-
-        if (lowerKey === 'c') {
-          event.preventDefault()
-          setTool('crop')
-          return
-        }
-
-        if (enableMaskEditing && lowerKey === 'm') {
-          event.preventDefault()
-          setTool(event.shiftKey ? 'mask-eraser' : 'mask-brush')
-          return
-        }
-      }
-
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-        const step = event.shiftKey ? 10 : 1
-        const deltaX = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0
-        const deltaY = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0
-
-        if (event.altKey) {
-          if (cropRect) {
-            event.preventDefault()
-            setCropRect((current) => resizeRect(current, deltaX, deltaY))
-            queueHistoryCommit()
-            return
-          }
-
-          if (selectionRect) {
-            event.preventDefault()
-            setSelectionRect((current) => resizeRect(current, deltaX, deltaY))
-            queueHistoryCommit()
-            return
-          }
-        }
-
-        if (cropRect) {
-          event.preventDefault()
-          setCropRect((current) => nudgeRect(current, deltaX, deltaY))
-          queueHistoryCommit()
-          return
-        }
-
-        if (selectionRect) {
-          event.preventDefault()
-          setSelectionRect((current) => nudgeRect(current, deltaX, deltaY))
-          queueHistoryCommit()
-          return
-        }
-      }
-
-      if ((event.key === 'Delete' || event.key === 'Backspace') && selectionRect) {
-        event.preventDefault()
-        void handleDeleteSelection()
-        return
-      }
-
-      if (isShortcutModifier && lowerKey === 'c' && selectionRect) {
-        event.preventDefault()
-        void handleSelectionTransfer('copy')
-        return
-      }
-
-      if (isShortcutModifier && lowerKey === 'x' && selectionRect) {
-        event.preventDefault()
-        void handleSelectionTransfer('cut')
-        return
-      }
-
-      if (isShortcutModifier && lowerKey === 'd' && selectionRect) {
-        event.preventDefault()
-        void handleSelectionTransfer('duplicate')
-        return
-      }
-
-      if (isShortcutModifier && event.shiftKey && lowerKey === 'v' && selectionClipboardRef.current) {
-        event.preventDefault()
-        handlePasteStoredSelection()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [cropRect, enableMaskEditing, handleDeleteSelection, handlePasteStoredSelection, handleRedo, handleSelectionTransfer, handleUndo, open, queueHistoryCommit, selectionRect])
-
   const handleClearMask = useCallback(() => {
     setInitialMaskImage(null)
     setInitialMaskImageDataUrl(null)
@@ -535,6 +374,25 @@ export function ImageEditorModal({
     queueHistoryCommit()
     showSnackbar({ message: '마스크를 비웠어.', tone: 'info' })
   }, [queueHistoryCommit, showSnackbar])
+
+  useImageEditorKeyboardShortcuts({
+    open,
+    enableMaskEditing,
+    documentSize,
+    cropRect,
+    selectionRect,
+    selectionClipboardRef,
+    queueHistoryCommit,
+    setCropRect,
+    setSelectionRect,
+    setTool,
+    setBrushSize,
+    handleUndo,
+    handleRedo,
+    handleDeleteSelection,
+    handleSelectionTransfer,
+    handlePasteStoredSelection,
+  })
 
   /** Save the current source and optional mask back into the caller draft state. */
   const handleSave = useCallback(async () => {
@@ -637,34 +495,6 @@ export function ImageEditorModal({
     const nextRect = { ...normalizeImageEditorRect(rect), [field]: field === 'width' || field === 'height' ? Math.max(1, value) : Math.max(0, value) }
     return clampImageEditorRect(nextRect, documentSize.width, documentSize.height)
   }, [documentSize.height, documentSize.width])
-
-  function nudgeRect(rect: ImageEditorCropRect | null, deltaX: number, deltaY: number) {
-    if (!rect) {
-      return null
-    }
-
-    const normalizedRect = normalizeImageEditorRect(rect)
-    return clampImageEditorRect({
-      x: normalizedRect.x + deltaX,
-      y: normalizedRect.y + deltaY,
-      width: normalizedRect.width,
-      height: normalizedRect.height,
-    }, documentSize.width, documentSize.height)
-  }
-
-  function resizeRect(rect: ImageEditorCropRect | null, deltaWidth: number, deltaHeight: number) {
-    if (!rect) {
-      return null
-    }
-
-    const normalizedRect = normalizeImageEditorRect(rect)
-    return clampImageEditorRect({
-      x: normalizedRect.x,
-      y: normalizedRect.y,
-      width: Math.max(1, normalizedRect.width + deltaWidth),
-      height: Math.max(1, normalizedRect.height + deltaHeight),
-    }, documentSize.width, documentSize.height)
-  }
 
   const canApplySelectionOperation = Boolean(normalizedSelectionRect && normalizedSelectionRect.width >= 2 && normalizedSelectionRect.height >= 2)
   const canApplyCrop = Boolean(normalizedCropRect && normalizedCropRect.width >= 2 && normalizedCropRect.height >= 2)
