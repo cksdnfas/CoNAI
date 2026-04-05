@@ -69,7 +69,7 @@ export function WildcardExplorerSidebarPanel({
       bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 space-y-4 overflow-y-auto pr-1')}
       headerExtra={(
         <div className="space-y-3 border-b border-white/5 pb-3">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {activeWorkspaceTab === 'lora' ? (
               <>
                 <Button
@@ -126,7 +126,7 @@ export function WildcardExplorerSidebarPanel({
                   type="button"
                   size="icon-sm"
                   variant="outline"
-                  className="ml-2 bg-surface-low"
+                  className="border-rose-500/30 bg-surface-low text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
                   onClick={onDeleteSelected}
                   disabled={!selectedWildcard || isDeleting}
                   aria-label="삭제"
