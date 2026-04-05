@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import type {
   GraphExecutionArtifactRecord,
+  GraphExecutionFinalResultRecord,
   GraphExecutionLogRecord,
   GraphExecutionRecord,
   GraphWorkflowRecord,
@@ -25,15 +26,16 @@ import {
   getExecutionModeLabel,
   getNodeDisplayLabel,
   parseExecutionPlan,
-  pickFinalArtifacts,
   type ParsedExecutionPlan,
   groupArtifactsByNode,
   formatPrimitiveValue,
 } from './graph-execution-panel-helpers'
+import { WorkflowFinalResultsSection } from './workflow-final-results-section'
 
 type GraphExecutionDetail = {
   execution: GraphExecutionRecord
   artifacts: GraphExecutionArtifactRecord[]
+  final_results: GraphExecutionFinalResultRecord[]
   logs: GraphExecutionLogRecord[]
 }
 
@@ -121,10 +123,7 @@ export function GraphExecutionPanel({
     () => groupArtifactsByNode(executionDetail?.artifacts ?? [], selectedGraph),
     [executionDetail?.artifacts, selectedGraph],
   )
-  const finalArtifacts = useMemo(
-    () => pickFinalArtifacts({ artifacts: executionDetail?.artifacts ?? [], executionPlan: selectedExecutionPlan, selectedGraph }),
-    [executionDetail?.artifacts, selectedExecutionPlan, selectedGraph],
-  )
+  const finalResults = executionDetail?.final_results ?? []
 
   const scrollToDetailSection = (section: ExecutionDetailSectionKey) => {
     detailSectionRefs.current[section]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -296,24 +295,11 @@ export function GraphExecutionPanel({
                 </div>
               ) : null}
 
-              <div className="space-y-2.5">
-                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  <span>최종 결과</span>
-                  <Badge variant="outline">{finalArtifacts.length}</Badge>
-                </div>
-
-                {finalArtifacts.length === 0 ? (
-                  <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-                    최종 결과 없음
-                  </div>
-                ) : (
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {finalArtifacts.map((artifact) => (
-                      <ExecutionArtifactCard key={artifact.id} artifact={artifact} compact />
-                    ))}
-                  </div>
-                )}
-              </div>
+              <WorkflowFinalResultsSection
+                finalResults={finalResults}
+                artifacts={executionDetail.artifacts}
+                selectedGraph={selectedGraph}
+              />
 
               <div className="space-y-2.5">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">

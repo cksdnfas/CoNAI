@@ -9,10 +9,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
-import type { GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowRecord } from '@/lib/api'
+import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowRecord } from '@/lib/api'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
+import { WorkflowFinalResultsSection } from './workflow-final-results-section'
 
 type WorkflowRunnerPanelProps = {
   selectedGraph: GraphWorkflowRecord | null
@@ -20,8 +21,8 @@ type WorkflowRunnerPanelProps = {
   inputValues: Record<string, unknown>
   isExecuting: boolean
   latestExecution?: GraphExecutionRecord | null
-  latestPreviewUrl?: string | null
-  latestPreviewLabel?: string | null
+  latestExecutionArtifacts?: GraphExecutionArtifactRecord[] | null
+  latestExecutionFinalResults?: GraphExecutionFinalResultRecord[] | null
   onInputValueChange: (inputId: string, value: unknown) => void
   onInputValueClear: (inputId: string) => void
   onInputImageChange: (inputId: string, image?: SelectedImageDraft) => Promise<void> | void
@@ -44,8 +45,8 @@ export function WorkflowRunnerPanel({
   inputValues,
   isExecuting,
   latestExecution,
-  latestPreviewUrl,
-  latestPreviewLabel,
+  latestExecutionArtifacts,
+  latestExecutionFinalResults,
   onInputValueChange,
   onInputValueClear,
   onInputImageChange,
@@ -315,32 +316,24 @@ export function WorkflowRunnerPanel({
               ) : null}
             </div>
 
-            {latestExecution || latestPreviewUrl ? (
+            {latestExecution ? (
               <Alert>
                 <AlertTitle className="flex flex-wrap items-center gap-1.5">
                   <span>최근 결과</span>
-                  {latestExecution ? (
-                    <>
-                      <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>#{latestExecution.id}</Badge>
-                      <Badge variant="outline">{latestExecution.status}</Badge>
-                    </>
-                  ) : null}
+                  <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>#{latestExecution.id}</Badge>
+                  <Badge variant="outline">{latestExecution.status}</Badge>
                 </AlertTitle>
-                <AlertDescription className="space-y-3">
-                  <div>
-                    {latestPreviewUrl
-                      ? `미리보기${latestPreviewLabel ? ` · ${latestPreviewLabel}` : ''}`
-                      : latestExecution
-                        ? '이미지 결과 없음'
-                        : '실행 결과 없음'}
-                  </div>
-                  {latestPreviewUrl ? (
-                    <InlineMediaPreview
-                      src={latestPreviewUrl}
-                      alt={latestPreviewLabel || selectedGraph.name}
-                      frameClassName="w-full p-2 md:max-w-[168px]"
+                <AlertDescription className="pt-3">
+                  {latestExecutionArtifacts && latestExecutionFinalResults ? (
+                    <WorkflowFinalResultsSection
+                      finalResults={latestExecutionFinalResults}
+                      artifacts={latestExecutionArtifacts}
+                      selectedGraph={selectedGraph}
+                      emptyLabel="아직 선언된 최종 결과가 없어"
                     />
-                  ) : null}
+                  ) : (
+                    <div className="text-sm text-muted-foreground">최종 결과를 불러오는 중…</div>
+                  )}
                 </AlertDescription>
               </Alert>
             ) : null}

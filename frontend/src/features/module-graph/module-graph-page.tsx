@@ -267,13 +267,13 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
     return previewByNode
   }, [previewExecutionCandidates, previewExecutionDetailQueries])
-  const latestExecutionPreviewArtifact = useMemo(() => {
+  const latestExecutionDetail = useMemo(() => {
     const latestPreviewDetail = previewExecutionDetailQueries[0]?.data
     if (!latestExecution || !latestPreviewDetail || latestPreviewDetail.execution.id !== latestExecution.id) {
       return null
     }
 
-    return latestPreviewDetail.artifacts.find((artifact) => artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') ?? null
+    return latestPreviewDetail
   }, [latestExecution, previewExecutionDetailQueries])
   const selectedExecution = useMemo(() => executionList.find((execution) => execution.id === selectedExecutionId) ?? executionDetailQuery.data?.execution ?? null, [executionDetailQuery.data?.execution, executionList, selectedExecutionId])
   const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedNodeId) ?? null, [nodes, selectedNodeId])
@@ -1514,8 +1514,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
               inputValues={workflowRunInputValues}
               isExecuting={executingGraphId !== null}
               latestExecution={latestExecution}
-              latestPreviewUrl={latestExecutionPreviewArtifact ? getArtifactPreviewUrl(latestExecutionPreviewArtifact) : null}
-              latestPreviewLabel={latestExecutionPreviewArtifact ? `${latestExecutionPreviewArtifact.node_id} · ${latestExecutionPreviewArtifact.port_key}` : null}
+              latestExecutionArtifacts={latestExecutionDetail?.artifacts}
+              latestExecutionFinalResults={latestExecutionDetail?.final_results}
               onInputValueChange={handleWorkflowRunInputChange}
               onInputValueClear={handleWorkflowRunInputClear}
               onInputImageChange={handleWorkflowRunInputImageChange}
