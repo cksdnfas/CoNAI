@@ -50,8 +50,6 @@ export function WorkflowExposedInputEditor({
   onChangeDefaultImage,
   showHeader = true,
 }: WorkflowExposedInputEditorProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false)
-  const [showAvailableInputs, setShowAvailableInputs] = useState(false)
   const [expandedInputId, setExpandedInputId] = useState<string | null>(null)
   const [availableSearchQuery, setAvailableSearchQuery] = useState('')
 
@@ -179,208 +177,174 @@ export function WorkflowExposedInputEditor({
     )
   }
 
-  const collapseButton = (
-    <Button type="button" size="sm" variant="ghost" onClick={() => setIsCollapsed((current) => !current)}>
-      <ChevronDown className={cn('h-4 w-4 transition-transform', isCollapsed ? '-rotate-90' : 'rotate-0')} />
-    </Button>
-  )
-
   return (
     <Card>
-      {!isCollapsed ? (
-        <CardContent className="space-y-5">
-          {showHeader ? (
-            <SectionHeading
-              variant="inside"
-              heading="Exposed Run Inputs"
-              actions={
-                <>
-                  <Badge variant="outline">{selectedInputs.length} selected</Badge>
-                  {collapseButton}
-                </>
-              }
-            />
-          ) : (
-            <div className="flex items-center justify-between gap-3">
-              <Badge variant="outline">{selectedInputs.length} selected</Badge>
-              {collapseButton}
-            </div>
-          )}
+      <CardContent className="space-y-5">
+        {showHeader ? (
+          <SectionHeading
+            variant="inside"
+            heading="Exposed Run Inputs"
+            actions={<Badge variant="outline">{selectedInputs.length} selected</Badge>}
+          />
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <Badge variant="outline">{selectedInputs.length} selected</Badge>
+          </div>
+        )}
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-foreground">Selected Inputs</div>
-            </div>
-            {selectedInputs.length === 0 ? (
-              <Alert>
-                <AlertTitle>노출된 실행 입력이 없어</AlertTitle>
-                <AlertDescription>아래 입력에서 추가해.</AlertDescription>
-              </Alert>
-            ) : (
-              selectedInputs.map((inputDefinition, index) => {
-                const expanded = expandedInputId === inputDefinition.id
-                return (
-                  <div key={inputDefinition.id} className="rounded-sm border border-primary/25 bg-surface-low">
-                    <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
-                      <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setExpandedInputId(expanded ? null : inputDefinition.id)}>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="secondary">#{index + 1}</Badge>
-                          <span className="font-medium text-foreground">{inputDefinition.label}</span>
-                          <Badge variant="outline">{inputDefinition.data_type}</Badge>
-                          {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
-                        </div>
-                        <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                          <span>{inputDefinition.module_name || '연결된 모듈 입력'}</span>
-                          <TechnicalReferenceHint
-                            title={`module ${inputDefinition.module_name || '-'}\nnode ${inputDefinition.node_id}\nport ${inputDefinition.port_key}`}
-                            label="선택 입력의 내부 연결 정보 보기"
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-foreground">Selected Inputs</div>
+          </div>
+          {selectedInputs.length === 0 ? (
+            <Alert>
+              <AlertTitle>노출된 실행 입력이 없어</AlertTitle>
+              <AlertDescription>아래 입력에서 추가해.</AlertDescription>
+            </Alert>
+          ) : (
+            selectedInputs.map((inputDefinition, index) => {
+              const expanded = expandedInputId === inputDefinition.id
+              return (
+                <div key={inputDefinition.id} className="rounded-sm border border-primary/25 bg-surface-low">
+                  <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setExpandedInputId(expanded ? null : inputDefinition.id)}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary">#{index + 1}</Badge>
+                        <span className="font-medium text-foreground">{inputDefinition.label}</span>
+                        <Badge variant="outline">{inputDefinition.data_type}</Badge>
+                        {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                        <span>{inputDefinition.module_name || '연결된 모듈 입력'}</span>
+                        <TechnicalReferenceHint
+                          title={`module ${inputDefinition.module_name || '-'}\nnode ${inputDefinition.node_id}\nport ${inputDefinition.port_key}`}
+                          label="선택 입력의 내부 연결 정보 보기"
+                        />
+                      </div>
+                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" size="sm" variant="outline" onClick={() => onMoveInput(inputDefinition.id, 'up')} disabled={index === 0}>
+                        <ArrowUp className="h-4 w-4" />
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => onMoveInput(inputDefinition.id, 'down')} disabled={index === selectedInputs.length - 1}>
+                        <ArrowDown className="h-4 w-4" />
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => setExpandedInputId(expanded ? null : inputDefinition.id)}>
+                        <ChevronDown className={cn('h-4 w-4 transition-transform', expanded ? 'rotate-0' : '-rotate-90')} />
+                        {expanded ? '접기' : '편집'}
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => onToggleInput(inputDefinition)}>
+                        <Trash2 className="h-4 w-4" />
+                        제외
+                      </Button>
+                    </div>
+                  </div>
+
+                  {expanded ? (
+                    <div className="space-y-4 border-t border-border px-4 py-4">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Label</div>
+                          <Input
+                            value={inputDefinition.label}
+                            onChange={(event) => onUpdateInput(inputDefinition.id, { label: event.target.value })}
+                            placeholder="사용자에게 보일 이름"
                           />
                         </div>
-                      </button>
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" size="sm" variant="outline" onClick={() => onMoveInput(inputDefinition.id, 'up')} disabled={index === 0}>
-                          <ArrowUp className="h-4 w-4" />
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => onMoveInput(inputDefinition.id, 'down')} disabled={index === selectedInputs.length - 1}>
-                          <ArrowDown className="h-4 w-4" />
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => setExpandedInputId(expanded ? null : inputDefinition.id)}>
-                          <ChevronDown className={cn('h-4 w-4 transition-transform', expanded ? 'rotate-0' : '-rotate-90')} />
-                          {expanded ? '접기' : '편집'}
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => onToggleInput(inputDefinition)}>
-                          <Trash2 className="h-4 w-4" />
-                          제외
-                        </Button>
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Placeholder</div>
+                          <Input
+                            value={inputDefinition.placeholder ?? ''}
+                            onChange={(event) => onUpdateInput(inputDefinition.id, { placeholder: event.target.value || undefined })}
+                            placeholder="입력 칸 힌트"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Description</div>
+                        <Textarea
+                          rows={2}
+                          value={inputDefinition.description ?? ''}
+                          onChange={(event) => onUpdateInput(inputDefinition.id, { description: event.target.value || undefined })}
+                          placeholder="사용자에게 보여줄 설명"
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-6">
+                        <ToggleRow variant="detail" className="cursor-pointer px-3 py-2">
+                          <input
+                            type="checkbox"
+                            checked={!!inputDefinition.required}
+                            onChange={(event) => onUpdateInput(inputDefinition.id, { required: event.target.checked })}
+                          />
+                          <span>필수 입력</span>
+                        </ToggleRow>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Default Value</div>
+                        {renderDefaultValueEditor(inputDefinition)}
                       </div>
                     </div>
+                  ) : null}
+                </div>
+              )
+            })
+          )}
+        </div>
 
-                    {expanded ? (
-                      <div className="space-y-4 border-t border-border px-4 py-4">
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div className="space-y-2">
-                            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Label</div>
-                            <Input
-                              value={inputDefinition.label}
-                              onChange={(event) => onUpdateInput(inputDefinition.id, { label: event.target.value })}
-                              placeholder="사용자에게 보일 이름"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Placeholder</div>
-                            <Input
-                              value={inputDefinition.placeholder ?? ''}
-                              onChange={(event) => onUpdateInput(inputDefinition.id, { placeholder: event.target.value || undefined })}
-                              placeholder="입력 칸 힌트"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Description</div>
-                          <Textarea
-                            rows={2}
-                            value={inputDefinition.description ?? ''}
-                            onChange={(event) => onUpdateInput(inputDefinition.id, { description: event.target.value || undefined })}
-                            placeholder="사용자에게 보여줄 설명"
-                          />
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-6">
-                          <ToggleRow variant="detail" className="cursor-pointer px-3 py-2">
-                            <input
-                              type="checkbox"
-                              checked={!!inputDefinition.required}
-                              onChange={(event) => onUpdateInput(inputDefinition.id, { required: event.target.checked })}
-                            />
-                            <span>필수 입력</span>
-                          </ToggleRow>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Default Value</div>
-                          {renderDefaultValueEditor(inputDefinition)}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                )
-              })
-            )}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-foreground">Available Inputs</div>
           </div>
 
           <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-foreground">Available Inputs</div>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setShowAvailableInputs((current) => !current)}>
-                <ChevronDown className={cn('h-4 w-4 transition-transform', showAvailableInputs ? 'rotate-0' : '-rotate-90')} />
-                {showAvailableInputs ? '접기' : '펼치기'}
-              </Button>
-            </div>
-
-            {showAvailableInputs ? (
-              <div className="space-y-3">
-                <Input value={availableSearchQuery} onChange={(event) => setAvailableSearchQuery(event.target.value)} placeholder="추가할 입력 검색" />
-                {candidates.length === 0 ? (
-                  <Alert>
-                    <AlertTitle>노출 가능한 입력이 없어</AlertTitle>
-                    <AlertDescription>먼저 모듈을 배치해.</AlertDescription>
-                  </Alert>
-                ) : filteredAvailableCandidates.length === 0 ? (
-                  <Alert>
-                    <AlertTitle>추가 가능한 입력이 없어</AlertTitle>
-                    <AlertDescription>이미 모두 선택했거나 검색 결과가 없어.</AlertDescription>
-                  </Alert>
-                ) : (
-                  <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
-                    {filteredAvailableCandidates.map((candidate) => (
-                      <button
-                        key={candidate.id}
-                        type="button"
-                        onClick={() => onToggleInput(candidate)}
-                        className={cn('block w-full rounded-sm border border-border bg-surface-low px-3 py-3 text-left transition-colors hover:bg-surface-high')}
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium text-foreground">{candidate.label}</span>
-                          <Badge variant="outline">{candidate.data_type}</Badge>
-                          {candidate.module_name ? <Badge variant="outline">{candidate.module_name}</Badge> : null}
-                        </div>
-                        <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                          <span className="min-w-0 flex-1 truncate">{candidate.description || '연결 가능한 입력'}</span>
-                          <TechnicalReferenceHint
-                            title={`module ${candidate.module_name || '-'}\nnode ${candidate.node_id}\nport ${candidate.port_key}`}
-                            label="추가 가능한 입력의 내부 연결 정보 보기"
-                          />
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
+            <Input value={availableSearchQuery} onChange={(event) => setAvailableSearchQuery(event.target.value)} placeholder="추가할 입력 검색" />
+            {candidates.length === 0 ? (
+              <Alert>
+                <AlertTitle>노출 가능한 입력이 없어</AlertTitle>
+                <AlertDescription>먼저 모듈을 배치해.</AlertDescription>
+              </Alert>
+            ) : filteredAvailableCandidates.length === 0 ? (
+              <Alert>
+                <AlertTitle>추가 가능한 입력이 없어</AlertTitle>
+                <AlertDescription>이미 모두 선택했거나 검색 결과가 없어.</AlertDescription>
+              </Alert>
+            ) : (
+              <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
+                {filteredAvailableCandidates.map((candidate) => (
+                  <button
+                    key={candidate.id}
+                    type="button"
+                    onClick={() => onToggleInput(candidate)}
+                    className={cn('block w-full rounded-sm border border-border bg-surface-low px-3 py-3 text-left transition-colors hover:bg-surface-high')}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-foreground">{candidate.label}</span>
+                      <Badge variant="outline">{candidate.data_type}</Badge>
+                      {candidate.module_name ? <Badge variant="outline">{candidate.module_name}</Badge> : null}
+                    </div>
+                    <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                      <span className="min-w-0 flex-1 truncate">{candidate.description || '연결 가능한 입력'}</span>
+                      <TechnicalReferenceHint
+                        title={`module ${candidate.module_name || '-'}\nnode ${candidate.node_id}\nport ${candidate.port_key}`}
+                        label="추가 가능한 입력의 내부 연결 정보 보기"
+                      />
+                    </div>
+                  </button>
+                ))}
               </div>
-            ) : null}
+            )}
           </div>
-        </CardContent>
-      ) : (
-        <CardContent>
-          {showHeader ? (
-            <SectionHeading
-              variant="inside"
-              heading="Exposed Run Inputs"
-              actions={
-                <>
-                  <Badge variant="outline">{selectedInputs.length} selected</Badge>
-                  {collapseButton}
-                </>
-              }
-            />
-          ) : (
-            <div className="flex justify-between gap-3">
-              <Badge variant="outline">{selectedInputs.length} selected</Badge>
-              {collapseButton}
-            </div>
-          )}
-        </CardContent>
-      )}
+        </div>
+
+        {selectedInputs.length > 1 ? (
+          <div className="rounded-sm border border-border/70 bg-background/40 px-3 py-2 text-xs text-muted-foreground">
+            순서는 실행 폼에 그대로 반영돼. 위/아래 버튼으로 정렬해.
+          </div>
+        ) : null}
+      </CardContent>
     </Card>
   )
 }

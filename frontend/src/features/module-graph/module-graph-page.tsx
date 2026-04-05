@@ -114,7 +114,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const [isModuleLibraryOpen, setIsModuleLibraryOpen] = useState(false)
   const [isEditorSupportOpen, setIsEditorSupportOpen] = useState(false)
   const [activeEditorSupportSection, setActiveEditorSupportSection] = useState<EditorSupportSectionKey>('setup')
-  const [isSetupCollapsed, setIsSetupCollapsed] = useState(true)
   const [workflowExposedInputs, setWorkflowExposedInputs] = useState<GraphWorkflowExposedInput[]>([])
   const [workflowRunInputValues, setWorkflowRunInputValues] = useState<Record<string, unknown>>({})
   const previousExecutionStatusesRef = useRef<Record<number, GraphExecutionRecord['status']>>({})
@@ -1380,13 +1379,11 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       workflowName={workflowName}
       workflowDescription={workflowDescription}
       isDirty={isDirty}
-      isSetupCollapsed={isSetupCollapsed}
       selectedNodeLabel={selectedNode?.data.module.name ?? null}
       selectedExecutionId={selectedExecutionId}
       isSavingGraph={isSavingGraph}
       hasNodes={nodes.length > 0}
       onSelectSection={scrollToEditorSupportSection}
-      onToggleSetup={() => setIsSetupCollapsed((current) => !current)}
       onWorkflowNameChange={setWorkflowName}
       onWorkflowDescriptionChange={setWorkflowDescription}
       onSaveGraph={() => void handleSaveGraph()}
