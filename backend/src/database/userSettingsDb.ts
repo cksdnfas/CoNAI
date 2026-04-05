@@ -645,10 +645,15 @@ function ensureBuiltinSystemModules(): void {
     color: string,
   ) => {
     const existing = userSettingsDb
-      .prepare('SELECT id FROM module_definitions WHERE name = ?')
-      .get(name) as { id: number } | undefined;
+      .prepare('SELECT id, category, engine_type, authoring_source FROM module_definitions WHERE name = ?')
+      .get(name) as { id: number; category?: string | null; engine_type: string; authoring_source: string } | undefined;
 
     if (existing) {
+      if (existing.engine_type === 'system' && existing.authoring_source === 'manual' && existing.category !== category) {
+        userSettingsDb
+          .prepare('UPDATE module_definitions SET category = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(category, existing.id);
+      }
       return;
     }
 
@@ -678,7 +683,7 @@ function ensureBuiltinSystemModules(): void {
   insertIfMissing(
     'Random Prompt From Group',
     'Pick one prompt entry from a stored prompt group and expose it as reusable workflow text.',
-    'prompt-source',
+    'prompt',
     [
       {
         key: 'group_name',
@@ -776,7 +781,7 @@ function ensureBuiltinSystemModules(): void {
   insertIfMissing(
     'Find Similar Images',
     'Search the active library for visually similar images based on one input image.',
-    'retrieval',
+    'image',
     [
       {
         key: 'image',
@@ -855,7 +860,7 @@ function ensureBuiltinSystemModules(): void {
   insertIfMissing(
     'Load Prompt From Reference',
     'Resolve one image reference into reusable prompt text and metadata.',
-    'retrieval',
+    'prompt',
     [
       {
         key: 'reference',
@@ -932,7 +937,7 @@ function ensureBuiltinSystemModules(): void {
   insertIfMissing(
     'Load Image From Reference',
     'Resolve one image reference into an actual graph image artifact.',
-    'retrieval',
+    'image',
     [
       {
         key: 'reference',
@@ -1001,7 +1006,7 @@ function ensureBuiltinSystemModules(): void {
   insertIfMissing(
     'Random Image From Library',
     'Pick one random image from the active library and expose it as a reusable graph image.',
-    'retrieval',
+    'image',
     [],
     [
       {

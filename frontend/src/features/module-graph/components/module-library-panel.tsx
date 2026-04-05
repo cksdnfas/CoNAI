@@ -52,11 +52,11 @@ function getSystemModuleGroup(module: ModuleDefinitionRecord): { key: string; la
     return { key: 'analysis', label: 'Analysis' }
   }
 
-  if (category === 'prompt-source' || name.includes('prompt')) {
+  if (category === 'prompt' || category === 'prompt-source' || name.includes('prompt')) {
     return { key: 'prompt', label: 'Prompt' }
   }
 
-  if (category === 'retrieval' || name.includes('image') || name.includes('reference') || name.includes('library')) {
+  if (category === 'image' || category === 'retrieval' || name.includes('image') || name.includes('reference') || name.includes('library')) {
     return { key: 'image', label: 'Image / Retrieval' }
   }
 
