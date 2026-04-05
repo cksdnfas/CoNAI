@@ -20,33 +20,17 @@ import {
   getNaiUserData,
 } from '@/lib/api'
 import {
-  buildNaiModuleFieldOptions,
-  canUseNaiCharacterPositions,
   clampNaiSampleCount,
-  DEFAULT_NAI_FORM,
-  EMPTY_NAI_CHARACTER_PROMPT,
-  EMPTY_NAI_CHARACTER_REFERENCE,
-  EMPTY_NAI_VIBE,
   FormField,
   getErrorMessage,
-  NAI_SAMPLE_COUNT_MAX,
-  NAI_SAMPLE_COUNT_MIN,
   NAI_ACTION_OPTIONS,
   NAI_MODEL_OPTIONS,
   NAI_RESOLUTION_PRESETS,
+  NAI_SAMPLE_COUNT_MAX,
+  NAI_SAMPLE_COUNT_MIN,
   NAI_SAMPLER_OPTIONS,
   NAI_SCHEDULER_OPTIONS,
-  normalizeNaiCharacterPromptDrafts,
   parseNumberInput,
-  resolveNaiResolutionPreset,
-  shouldUseNaiCharacterPositions,
-  supportsNaiCharacterPrompts,
-  supportsNaiCharacterReferences,
-  type NAICharacterPromptDraft,
-  type NAICharacterReferenceDraft,
-  type NAIFormDraft,
-  type NAIVibeDraft,
-  type SelectedImageDraft,
 } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { NaiAuthModal } from './nai-auth-modal'
@@ -62,6 +46,7 @@ import { useNaiAssetLibrary } from './use-nai-asset-library'
 import { useNaiAuthController } from './use-nai-auth-controller'
 import { useNaiGenerationActions } from './use-nai-generation-actions'
 import { useNaiImageEditorBridge } from './use-nai-image-editor-bridge'
+import { useNaiFormController } from './use-nai-form-controller'
 
 const ImageEditorModal = lazy(() => import('@/features/image-editor/image-editor-modal'))
 
@@ -77,11 +62,39 @@ type NaiGenerationPanelProps = {
 export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneScroll = false, compactActionBar = false, headerPortalTargetId }: NaiGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
   const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
-  const [selectedCharacterIndex, setSelectedCharacterIndex] = useState<number | null>(null)
-  const [naiForm, setNaiForm] = useState<NAIFormDraft>(DEFAULT_NAI_FORM)
-  const [naiModuleName, setNaiModuleName] = useState('NAI Module')
-  const [naiModuleDescription, setNaiModuleDescription] = useState('')
-  const [naiExposedFieldKeys, setNaiExposedFieldKeys] = useState<string[]>(['prompt', 'negative_prompt', 'characters', 'vibes', 'character_refs', 'seed'])
+
+  const {
+    selectedCharacterIndex,
+    setSelectedCharacterIndex,
+    naiForm,
+    setNaiForm,
+    naiModuleName,
+    setNaiModuleName,
+    naiModuleDescription,
+    setNaiModuleDescription,
+    naiExposedFieldKeys,
+    setNaiExposedFieldKeys,
+    naiModuleFieldOptions,
+    supportsCharacterPrompts,
+    supportsCharacterReference,
+    canUseCharacterPositions,
+    useCharacterPositions,
+    resetNaiForm,
+    handleNaiFieldChange,
+    handleResolutionPresetChange,
+    handleNaiImageChange,
+    handleAddCharacterPrompt,
+    handleCharacterPromptChange,
+    handleRemoveCharacterPrompt,
+    handleAddVibe,
+    handleVibeFieldChange,
+    handleVibeImageChange,
+    handleRemoveVibe,
+    handleAddCharacterReference,
+    handleCharacterReferenceFieldChange,
+    handleCharacterReferenceImageChange,
+    handleRemoveCharacterReference,
+  } = useNaiFormController({ showSnackbar })
 
   const naiUserQuery = useQuery({
     queryKey: ['image-generation-nai-user'],
@@ -196,10 +209,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
       naiCostInputs.n_samples > 0,
   })
 
-  const naiModuleFieldOptions = useMemo(() => buildNaiModuleFieldOptions(naiForm), [naiForm])
-  const supportsCharacterPrompts = useMemo(() => supportsNaiCharacterPrompts(naiForm.model), [naiForm.model])
-  const supportsCharacterReference = useMemo(() => supportsNaiCharacterReferences(naiForm.model), [naiForm.model])
-
   const {
     isNaiGenerating,
     isSavingNaiModule,
@@ -231,218 +240,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
     void naiUserQuery.refetch()
   }, [naiUserQuery, refreshNonce])
 
-  useEffect(() => {
-    const allowedKeys = new Set(naiModuleFieldOptions.map((field) => field.key))
-    setNaiExposedFieldKeys((current) => current.filter((key) => allowedKeys.has(key)))
-  }, [naiModuleFieldOptions])
-
-  useEffect(() => {
-    if (naiForm.characterPositionAiChoice || canUseNaiCharacterPositions(naiForm.characters.length)) {
-      return
-    }
-
-    setNaiForm((current) => ({
-      ...current,
-      characterPositionAiChoice: true,
-    }))
-  }, [naiForm.characterPositionAiChoice, naiForm.characters.length])
-
-  const handleNaiFieldChange = (field: 'prompt' | 'negativePrompt' | 'model' | 'action' | 'sampler' | 'scheduler' | 'width' | 'height' | 'steps' | 'scale' | 'samples' | 'seed' | 'strength' | 'noise', value: string) => {
-    if (field === 'samples') {
-      const trimmedValue = value.trim()
-
-      if (trimmedValue.length === 0) {
-        setNaiForm((current) => ({
-          ...current,
-          samples: '',
-        }))
-        return
-      }
-
-      const parsedValue = Number(trimmedValue)
-      if (!Number.isFinite(parsedValue)) {
-        return
-      }
-
-      const clampedValue = clampNaiSampleCount(parsedValue)
-      if (parsedValue > NAI_SAMPLE_COUNT_MAX) {
-        showSnackbar({ message: `Samples는 최대 ${NAI_SAMPLE_COUNT_MAX}개까지 가능해. ${NAI_SAMPLE_COUNT_MAX}로 맞출게.`, tone: 'info' })
-      } else if (parsedValue < NAI_SAMPLE_COUNT_MIN) {
-        showSnackbar({ message: `Samples는 ${NAI_SAMPLE_COUNT_MIN}~${NAI_SAMPLE_COUNT_MAX}만 가능해.`, tone: 'info' })
-      }
-
-      value = String(clampedValue)
-    }
-
-    setNaiForm((current) => {
-      const nextForm = {
-        ...current,
-        [field]: value,
-      }
-
-      if (field === 'width' || field === 'height') {
-        nextForm.resolutionPreset = resolveNaiResolutionPreset(
-          field === 'width' ? value : nextForm.width,
-          field === 'height' ? value : nextForm.height,
-        )
-      }
-
-      return nextForm
-    })
-  }
-
-  const handleResolutionPresetChange = (presetKey: string) => {
-    setNaiForm((current) => {
-      const preset = NAI_RESOLUTION_PRESETS.find((entry) => entry.key === presetKey)
-      if (!preset) {
-        return {
-          ...current,
-          resolutionPreset: 'custom',
-        }
-      }
-
-      return {
-        ...current,
-        resolutionPreset: preset.key,
-        width: String(preset.width),
-        height: String(preset.height),
-      }
-    })
-  }
-
-  const handleNaiImageChange = (field: 'sourceImage' | 'maskImage', image?: SelectedImageDraft) => {
-    setNaiForm((current) => ({
-      ...current,
-      [field]: image,
-    }))
-  }
-
-  const handleAddCharacterPrompt = () => {
-    setNaiForm((current) => {
-      const nextCharacters = normalizeNaiCharacterPromptDrafts([...current.characters, { ...EMPTY_NAI_CHARACTER_PROMPT }])
-      setSelectedCharacterIndex(nextCharacters.length - 1)
-      return {
-        ...current,
-        characters: nextCharacters,
-      }
-    })
-  }
-
-  const handleCharacterPromptChange = (index: number, field: keyof NAICharacterPromptDraft, value: string) => {
-    setNaiForm((current) => ({
-      ...current,
-      characters: normalizeNaiCharacterPromptDrafts(current.characters.map((character, characterIndex) => (
-        characterIndex === index
-          ? {
-            ...character,
-            [field]: value,
-          }
-          : character
-      ))),
-    }))
-  }
-
-  const handleRemoveCharacterPrompt = (index: number) => {
-    setNaiForm((current) => ({
-      ...current,
-      characters: normalizeNaiCharacterPromptDrafts(current.characters.filter((_, characterIndex) => characterIndex !== index)),
-    }))
-    setSelectedCharacterIndex((current) => {
-      if (current === null) {
-        return null
-      }
-      if (current === index) {
-        return null
-      }
-      return current > index ? current - 1 : current
-    })
-  }
-
-  const handleAddVibe = () => {
-    setNaiForm((current) => ({
-      ...current,
-      vibes: [...current.vibes, { ...EMPTY_NAI_VIBE }],
-    }))
-  }
-
-  const handleVibeFieldChange = (index: number, field: 'strength' | 'informationExtracted', value: string) => {
-    setNaiForm((current) => ({
-      ...current,
-      vibes: current.vibes.map((vibe, vibeIndex) => (
-        vibeIndex === index
-          ? {
-            ...vibe,
-            [field]: value,
-          }
-          : vibe
-      )),
-    }))
-  }
-
-  const handleVibeImageChange = (index: number, image?: SelectedImageDraft) => {
-    setNaiForm((current) => ({
-      ...current,
-      vibes: current.vibes.map((vibe, vibeIndex) => (
-        vibeIndex === index
-          ? {
-            ...vibe,
-            image,
-            encoded: '',
-          }
-          : vibe
-      )),
-    }))
-  }
-
-  const handleRemoveVibe = (index: number) => {
-    setNaiForm((current) => ({
-      ...current,
-      vibes: current.vibes.filter((_, vibeIndex) => vibeIndex !== index),
-    }))
-  }
-
-  const handleAddCharacterReference = () => {
-    setNaiForm((current) => ({
-      ...current,
-      characterReferences: [...current.characterReferences, { ...EMPTY_NAI_CHARACTER_REFERENCE }],
-    }))
-  }
-
-  const handleCharacterReferenceFieldChange = (index: number, field: 'type' | 'strength' | 'fidelity', value: string) => {
-    setNaiForm((current) => ({
-      ...current,
-      characterReferences: current.characterReferences.map((reference, referenceIndex) => (
-        referenceIndex === index
-          ? {
-            ...reference,
-            [field]: value,
-          }
-          : reference
-      )),
-    }))
-  }
-
-  const handleCharacterReferenceImageChange = (index: number, image?: SelectedImageDraft) => {
-    setNaiForm((current) => ({
-      ...current,
-      characterReferences: current.characterReferences.map((reference, referenceIndex) => (
-        referenceIndex === index
-          ? {
-            ...reference,
-            image,
-          }
-          : reference
-      )),
-    }))
-  }
-
-  const handleRemoveCharacterReference = (index: number) => {
-    setNaiForm((current) => ({
-      ...current,
-      characterReferences: current.characterReferences.filter((_, referenceIndex) => referenceIndex !== index),
-    }))
-  }
-
   const naiGenerateButtonLabel = isNaiGenerating
     ? '생성 요청 중…'
     : !connected
@@ -454,8 +251,6 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
         : naiCostQuery.isPending
           ? '생성 (계산 중…)'
           : '생성'
-  const canUseCharacterPositions = canUseNaiCharacterPositions(naiForm.characters.length)
-  const useCharacterPositions = shouldUseNaiCharacterPositions(naiForm)
   const useInlineActionBar = splitPaneScroll || compactActionBar
   const useDrawerCompactChrome = compactActionBar && !splitPaneScroll
   const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLElement | null>(null)
@@ -486,7 +281,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
       costErrorMessage={naiCostQuery.isError ? getErrorMessage(naiCostQuery.error, '예상 비용 계산에 실패했어.') : null}
       onOpenModuleSave={() => setIsModuleSaveModalOpen(true)}
       onUpscale={handleUpscale}
-      onReset={() => setNaiForm(DEFAULT_NAI_FORM)}
+      onReset={resetNaiForm}
       onGenerate={handleNaiGenerate}
     />
   )
