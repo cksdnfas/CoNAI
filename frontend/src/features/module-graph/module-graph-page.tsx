@@ -14,7 +14,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { ArrowLeft, Folder, FolderOpen, FolderPlus, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
@@ -76,7 +76,8 @@ import {
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
-import { buildWorkflowExposedInputId, buildWorkflowValidationIssues } from './module-graph-validation'
+import { buildWorkflowExposedInputId } from './module-graph-validation'
+import { useModuleGraphPageViewModel } from './use-module-graph-page-view-model'
 
 type ModuleWorkflowWorkspaceProps = {
   embedded?: boolean
@@ -189,24 +190,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
 
   const modules = modulesQuery.data ?? []
   const executionList = graphExecutionsQuery.data ?? []
-  const currentSnapshot = useMemo(
-    () =>
-      buildGraphEditorSnapshot({
-        name: workflowName,
-        description: workflowDescription,
-        nodes,
-        edges,
-        workflowMetadata: {
-          exposed_inputs: workflowExposedInputs,
-        },
-      }),
-    [edges, nodes, workflowDescription, workflowExposedInputs, workflowName],
-  )
-  const isDirty = currentSnapshot !== lastSavedSnapshot
-  const shouldBlockGraphExit = workflowView === 'edit' && isDirty
-  const selectedGraphRecord = useMemo(() => (graphWorkflowsQuery.data ?? []).find((graph) => graph.id === selectedGraphId) ?? null, [graphWorkflowsQuery.data, selectedGraphId])
-  const selectedFolderRecord = useMemo(() => (graphWorkflowFoldersQuery.data ?? []).find((folder) => folder.id === selectedFolderId) ?? null, [graphWorkflowFoldersQuery.data, selectedFolderId])
-  const moduleDefinitionById = useMemo(() => new Map(modules.map((module) => [module.id, module])), [modules])
 
   useEffect(() => {
     if (selectedGraphId === null) {
@@ -214,138 +197,44 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     }
   }, [selectedFolderId, selectedGraphId])
 
-  const workflowInputCandidates = useMemo(
-    () =>
-      nodes.flatMap((node) =>
-        node.data.module.exposed_inputs.map((port) => {
-          const uiField = node.data.module.ui_schema?.find((field) => field.key === port.key)
-
-          return {
-            id: buildWorkflowExposedInputId(node.id, port.key),
-            node_id: node.id,
-            port_key: port.key,
-            label: `${node.data.module.name} · ${port.label}`,
-            data_type: port.data_type,
-            ui_data_type: uiField?.data_type,
-            description: port.description,
-            required: port.required,
-            placeholder: uiField?.placeholder || port.description || port.label,
-            default_value: port.default_value,
-            options: uiField?.options,
-            module_id: node.data.module.id,
-            module_name: node.data.module.name,
-          }
-        }),
-      ),
-    [nodes],
-  )
-  const latestExecution = executionList[0] ?? null
-  const previewExecutionCandidates = useMemo(
-    () => executionList.filter((execution) => execution.status === 'completed').slice(0, 8),
-    [executionList],
-  )
-  const previewExecutionDetailQueries = useQueries({
-    queries: previewExecutionCandidates.map((execution) => ({
-      queryKey: ['module-graph-preview-execution-detail', execution.id],
-      queryFn: () => getGraphExecution(execution.id),
-      staleTime: 30_000,
-    })),
+  const {
+    currentSnapshot,
+    isDirty,
+    shouldBlockGraphExit,
+    selectedGraphRecord,
+    selectedFolderRecord,
+    moduleDefinitionById,
+    workflowInputCandidates,
+    latestExecution,
+    latestArtifactPreviewByNode,
+    latestExecutionDetail,
+    selectedExecution,
+    selectedNode,
+    selectedEdge,
+    editorValidationIssues,
+    selectedWorkflowValidationIssues,
+    selectedWorkflowCanExecute,
+  } = useModuleGraphPageViewModel({
+    workflowName,
+    workflowDescription,
+    nodes,
+    edges,
+    workflowExposedInputs,
+    workflowView,
+    lastSavedSnapshot,
+    graphWorkflows: graphWorkflowsQuery.data ?? [],
+    selectedGraphId,
+    graphWorkflowFolders: graphWorkflowFoldersQuery.data ?? [],
+    selectedFolderId,
+    modules,
+    executionList,
+    selectedExecutionId,
+    selectedNodeId,
+    selectedEdgeId,
+    executionDetail: executionDetailQuery.data,
+    settings: settingsQuery.data,
+    workflowRunInputValues,
   })
-  const latestArtifactPreviewByNode = useMemo(() => {
-    const previewByNode = new Map<string, {
-      executionArtifactCount: number
-      latestArtifactLabel: string | null
-      latestArtifactPreviewUrl: string | null
-      latestArtifactTextPreview: string | null
-    }>()
-
-    previewExecutionCandidates.forEach((execution, index) => {
-      const detail = previewExecutionDetailQueries[index]?.data
-      if (!detail || detail.execution.id !== execution.id) {
-        return
-      }
-
-      const artifactsByNode = detail.artifacts.reduce<Record<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
-        if (!acc[artifact.node_id]) {
-          acc[artifact.node_id] = []
-        }
-
-        acc[artifact.node_id].push(artifact)
-        return acc
-      }, {})
-
-      Object.entries(artifactsByNode).forEach(([nodeId, nodeArtifacts]) => {
-        if (previewByNode.has(nodeId)) {
-          return
-        }
-
-        const artifactPreview = buildNodeArtifactPreview(nodeArtifacts)
-        if (!artifactPreview.latestArtifactLabel && !artifactPreview.latestArtifactPreviewUrl && !artifactPreview.latestArtifactTextPreview) {
-          return
-        }
-
-        previewByNode.set(nodeId, {
-          executionArtifactCount: nodeArtifacts.length,
-          latestArtifactLabel: artifactPreview.latestArtifactLabel,
-          latestArtifactPreviewUrl: artifactPreview.latestArtifactPreviewUrl,
-          latestArtifactTextPreview: artifactPreview.latestArtifactTextPreview,
-        })
-      })
-    })
-
-    return previewByNode
-  }, [previewExecutionCandidates, previewExecutionDetailQueries])
-  const latestExecutionDetail = useMemo(() => {
-    const latestPreviewDetail = previewExecutionDetailQueries[0]?.data
-    if (!latestExecution || !latestPreviewDetail || latestPreviewDetail.execution.id !== latestExecution.id) {
-      return null
-    }
-
-    return latestPreviewDetail
-  }, [latestExecution, previewExecutionDetailQueries])
-  const selectedExecution = useMemo(() => executionList.find((execution) => execution.id === selectedExecutionId) ?? executionDetailQuery.data?.execution ?? null, [executionDetailQuery.data?.execution, executionList, selectedExecutionId])
-  const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedNodeId) ?? null, [nodes, selectedNodeId])
-  const selectedEdge = useMemo(() => edges.find((edge) => edge.id === selectedEdgeId) ?? null, [edges, selectedEdgeId])
-  const editorValidationIssues = useMemo(
-    () =>
-      buildWorkflowValidationIssues({
-        nodes: nodes.map((node) => ({
-          id: node.id,
-          module: node.data.module,
-          inputValues: node.data.inputValues ?? {},
-        })),
-        edges: edges
-          .map((edge) => ({
-            targetNodeId: edge.target,
-            targetPortKey: parseHandleId(edge.targetHandle)?.portKey ?? '',
-          }))
-          .filter((edge) => edge.targetPortKey.length > 0),
-        exposedInputs: workflowExposedInputs,
-        settings: settingsQuery.data,
-      }),
-    [edges, nodes, settingsQuery.data, workflowExposedInputs],
-  )
-  const selectedWorkflowValidationIssues = useMemo(() => {
-    if (!selectedGraphRecord) {
-      return []
-    }
-
-    return buildWorkflowValidationIssues({
-      nodes: selectedGraphRecord.graph.nodes.map((node) => ({
-        id: node.id,
-        module: moduleDefinitionById.get(node.module_id) ?? null,
-        inputValues: node.input_values ?? {},
-      })),
-      edges: selectedGraphRecord.graph.edges.map((edge) => ({
-        targetNodeId: edge.target_node_id,
-        targetPortKey: edge.target_port_key,
-      })),
-      exposedInputs: selectedGraphRecord.graph.metadata?.exposed_inputs ?? [],
-      runtimeInputValues: workflowRunInputValues,
-      settings: settingsQuery.data,
-    })
-  }, [moduleDefinitionById, selectedGraphRecord, settingsQuery.data, workflowRunInputValues])
-  const selectedWorkflowCanExecute = selectedWorkflowValidationIssues.every((issue) => issue.severity !== 'error')
 
   const scrollToEditorSupportSection = useCallback((section: EditorSupportSectionKey, behavior: ScrollBehavior = 'smooth') => {
     setActiveEditorSupportSection(section)
