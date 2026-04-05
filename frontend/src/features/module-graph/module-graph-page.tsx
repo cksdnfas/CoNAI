@@ -22,9 +22,6 @@ import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import {
-  createGraphWorkflowFolder,
-  deleteGraphWorkflow,
-  deleteGraphWorkflowFolder,
   type GraphWorkflowFolderDeleteMode,
   getAppSettings,
   getGraphExecution,
@@ -32,8 +29,6 @@ import {
   getGraphWorkflowFolders,
   getGraphWorkflows,
   getModuleDefinitions,
-  updateGraphWorkflow,
-  updateGraphWorkflowFolder,
   type GraphExecutionArtifactRecord,
   type GraphExecutionRecord,
   type GraphWorkflowExposedInput,
@@ -53,7 +48,6 @@ import { WorkflowFolderSettingsPanel } from './components/workflow-folder-settin
 import { type WorkflowValidationIssue } from './components/workflow-validation-panel'
 import {
   buildAutoLayoutedNodes,
-  buildFlowFromGraphRecord,
   buildGraphEditorSnapshot,
   buildModuleEdgePresentation,
   buildNodeArtifactPreview,
@@ -70,6 +64,7 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { buildWorkflowExposedInputId } from './module-graph-validation'
 import { useModuleGraphPageViewModel } from './use-module-graph-page-view-model'
 import { useModuleGraphExecutionActions } from './use-module-graph-execution-actions'
+import { useModuleGraphBrowseActions } from './use-module-graph-browse-actions'
 
 type ModuleWorkflowWorkspaceProps = {
   embedded?: boolean
@@ -629,227 +624,52 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     )
   }
 
-  const handleLoadGraph = (graph: GraphWorkflowRecord, options?: { openEditor?: boolean; silent?: boolean }) => {
-    if (!confirmDiscardUnsavedChanges()) {
-      return false
-    }
-
-    const { nodes: nextNodes, edges: nextEdges } = buildFlowFromGraphRecord(graph, modules)
-    setNodes(nextNodes)
-    setEdges(nextEdges)
-    setSelectedGraphId(graph.id)
-    setSelectedExecutionId(null)
-    setSelectedEdgeId(null)
-    setSelectedNodeId(nextNodes[0]?.id ?? null)
-    setWorkflowName(graph.name)
-    setWorkflowDescription(graph.description || '')
-    setSelectedFolderId(graph.folder_id ?? null)
-    setDraftWorkflowFolderId(graph.folder_id ?? null)
-    setWorkflowExposedInputs(graph.graph.metadata?.exposed_inputs ?? [])
-    setLastSavedSnapshot(
-      buildGraphEditorSnapshot({
-        name: graph.name,
-        description: graph.description || '',
-        nodes: nextNodes,
-        edges: nextEdges,
-        workflowMetadata: {
-          exposed_inputs: graph.graph.metadata?.exposed_inputs ?? [],
-        },
-      }),
-    )
-    if (options?.openEditor) {
-      enterWorkflowEditor('setup')
-    }
-    if (!options?.silent) {
-      showSnackbar({ message: '저장된 워크플로우를 불러왔어.', tone: 'info' })
-    }
-
-    return true
-  }
-
-  const handleCreateWorkflow = () => {
-    if (!confirmDiscardUnsavedChanges()) {
-      return
-    }
-
-    resetWorkflowDraft()
-    setDraftWorkflowFolderId(selectedFolderId)
-    enterWorkflowEditor('setup')
-    showSnackbar({ message: '새 워크플로우 초안을 열었어.', tone: 'info' })
-  }
-
-  const handleCreateWorkflowFolder = async (input?: { name?: string; description?: string; parent_id?: number | null; assignToWorkflow?: boolean }) => {
-    const nextName = input?.name?.trim()
-    if (!nextName) {
-      showSnackbar({ message: '폴더 이름을 먼저 입력해줘.', tone: 'error' })
-      return
-    }
-
-    try {
-      const resolvedParentId = input && Object.prototype.hasOwnProperty.call(input, 'parent_id')
-        ? (input.parent_id ?? null)
-        : selectedFolderId
-
-      const result = await createGraphWorkflowFolder({
-        name: nextName,
-        description: input?.description?.trim() || undefined,
-        parent_id: resolvedParentId,
-      })
-      await graphWorkflowFoldersQuery.refetch()
-      setSelectedFolderId(result.id)
-      setDraftWorkflowFolderId(result.id)
-
-      if (input?.assignToWorkflow && selectedGraphRecord) {
-        await updateGraphWorkflow(selectedGraphRecord.id, { folder_id: result.id })
-        await graphWorkflowsQuery.refetch()
-      }
-
-      showSnackbar({ message: `폴더 "${nextName}"을(를) 만들었어.`, tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '폴더 생성에 실패했어.', tone: 'error' })
-    }
-  }
-
-  const handleUpdateSelectedFolder = async (folderId: number, input: { name?: string; description?: string | null; parent_id?: number | null }) => {
-    try {
-      await updateGraphWorkflowFolder(folderId, input)
-      await graphWorkflowFoldersQuery.refetch()
-      showSnackbar({ message: '폴더 설정을 저장했어.', tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '폴더 저장에 실패했어.', tone: 'error' })
-    }
-  }
-
-  const handleDeleteSelectedFolder = async (folderId?: number) => {
-    const targetFolder = folderId != null
-      ? (graphWorkflowFoldersQuery.data ?? []).find((folder) => folder.id === folderId) ?? null
-      : selectedFolderRecord
-
-    if (!targetFolder) {
-      showSnackbar({ message: '먼저 폴더를 하나 선택해줘.', tone: 'error' })
-      return
-    }
-
-    setIsBrowseManageModalOpen(false)
-    setFolderDeleteTarget(targetFolder)
-  }
-
-  const handleConfirmDeleteFolder = async (mode: GraphWorkflowFolderDeleteMode) => {
-    if (!folderDeleteTarget) {
-      return
-    }
-
-    try {
-      await deleteGraphWorkflowFolder(folderDeleteTarget.id, mode)
-      setSelectedFolderId(folderDeleteTarget.parent_id ?? null)
-      setSelectedGraphId(null)
-      setFolderDeleteTarget(null)
-      await Promise.all([
-        graphWorkflowFoldersQuery.refetch(),
-        graphWorkflowsQuery.refetch(),
-      ])
-      showSnackbar({ message: mode === 'delete_tree' ? '폴더와 내부 항목을 모두 삭제했어.' : '폴더만 삭제하고 내부 항목은 상위 폴더로 올렸어.', tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '폴더 삭제에 실패했어.', tone: 'error' })
-    }
-  }
-
-  const handleAssignSelectedWorkflowFolder = async (folderId: number | null) => {
-    if (!selectedGraphRecord) {
-      showSnackbar({ message: '먼저 워크플로우를 하나 선택해줘.', tone: 'error' })
-      return
-    }
-
-    try {
-      await updateGraphWorkflow(selectedGraphRecord.id, { folder_id: folderId })
-      setSelectedFolderId(folderId)
-      await graphWorkflowsQuery.refetch()
-      showSnackbar({ message: folderId === null ? '워크플로우를 Root에 할당했어.' : '워크플로우 폴더 할당을 바꿨어.', tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '워크플로우 폴더 할당에 실패했어.', tone: 'error' })
-    }
-  }
-
-  const handleEditSelectedWorkflow = () => {
-    if (!selectedGraphRecord) {
-      showSnackbar({ message: '먼저 워크플로우를 하나 선택해줘.', tone: 'error' })
-      return
-    }
-
-    handleLoadGraph(selectedGraphRecord, { openEditor: true, silent: true })
-  }
-
-  const handleDeleteSelectedWorkflow = async () => {
-    if (!selectedGraphRecord) {
-      showSnackbar({ message: '먼저 워크플로우를 하나 선택해줘.', tone: 'error' })
-      return
-    }
-
-    const confirmed = window.confirm(`워크플로우 "${selectedGraphRecord.name}"을(를) 삭제할까? 이 작업은 되돌릴 수 없어.`)
-    if (!confirmed) {
-      return
-    }
-
-    try {
-      await deleteGraphWorkflow(selectedGraphRecord.id)
-      resetWorkflowDraft()
-      setWorkflowView('browse')
-      setIsEditorSupportOpen(false)
-      await graphWorkflowsQuery.refetch()
-      showSnackbar({ message: '워크플로우를 삭제했어.', tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '워크플로우 삭제에 실패했어.', tone: 'error' })
-    }
-  }
-
-  const handleLeaveWorkflowEditor = () => {
-    if (workflowView !== 'edit') {
-      setWorkflowView('browse')
-      setIsEditorSupportOpen(false)
-      return
-    }
-
-    if (!confirmDiscardUnsavedChanges()) {
-      return
-    }
-
-    if (selectedGraphRecord) {
-      const { nodes: nextNodes, edges: nextEdges } = buildFlowFromGraphRecord(selectedGraphRecord, modules)
-      setNodes(nextNodes)
-      setEdges(nextEdges)
-      setSelectedExecutionId(null)
-      setSelectedEdgeId(null)
-      setSelectedNodeId(nextNodes[0]?.id ?? null)
-      setWorkflowName(selectedGraphRecord.name)
-      setWorkflowDescription(selectedGraphRecord.description || '')
-      setWorkflowExposedInputs(selectedGraphRecord.graph.metadata?.exposed_inputs ?? [])
-      setWorkflowRunInputValues(
-        (selectedGraphRecord.graph.metadata?.exposed_inputs ?? []).reduce<Record<string, unknown>>((acc, inputDefinition) => {
-          if (inputDefinition.default_value !== undefined) {
-            acc[inputDefinition.id] = inputDefinition.default_value
-          }
-          return acc
-        }, {}),
-      )
-      setLastSavedSnapshot(
-        buildGraphEditorSnapshot({
-          name: selectedGraphRecord.name,
-          description: selectedGraphRecord.description || '',
-          nodes: nextNodes,
-          edges: nextEdges,
-          workflowMetadata: {
-            exposed_inputs: selectedGraphRecord.graph.metadata?.exposed_inputs ?? [],
-          },
-        }),
-      )
-    } else {
-      resetWorkflowDraft()
-    }
-
-    setWorkflowView('browse')
-    setIsEditorSupportOpen(false)
-    setActiveEditorSupportSection('setup')
-  }
+  const {
+    handleLoadGraph,
+    handleCreateWorkflow,
+    handleCreateWorkflowFolder,
+    handleUpdateSelectedFolder,
+    handleDeleteSelectedFolder,
+    handleConfirmDeleteFolder,
+    handleAssignSelectedWorkflowFolder,
+    handleEditSelectedWorkflow,
+    handleDeleteSelectedWorkflow,
+    handleLeaveWorkflowEditor,
+    handleRefreshWorkspace: handleRefreshBrowseWorkspace,
+  } = useModuleGraphBrowseActions({
+    isDirty,
+    selectedFolderId,
+    selectedFolderRecord,
+    selectedGraphRecord,
+    folderDeleteTarget,
+    workflowView,
+    modules,
+    graphWorkflowFolders: graphWorkflowFoldersQuery.data ?? [],
+    setNodes,
+    setEdges,
+    setSelectedFolderId,
+    setDraftWorkflowFolderId,
+    setSelectedGraphId,
+    setSelectedExecutionId,
+    setSelectedNodeId,
+    setSelectedEdgeId,
+    setWorkflowName,
+    setWorkflowDescription,
+    setWorkflowExposedInputs,
+    setWorkflowRunInputValues,
+    setLastSavedSnapshot,
+    setWorkflowView,
+    setIsEditorSupportOpen,
+    setActiveEditorSupportSection,
+    setIsBrowseManageModalOpen,
+    setFolderDeleteTarget,
+    refetchGraphWorkflowFolders: graphWorkflowFoldersQuery.refetch,
+    refetchGraphWorkflows: graphWorkflowsQuery.refetch,
+    confirmDiscardUnsavedChanges,
+    resetWorkflowDraft,
+    enterWorkflowEditor,
+    showSnackbar,
+  })
 
   const handleDuplicateSelectedNode = () => {
     if (!selectedNode) {
@@ -1044,9 +864,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const handleRefreshWorkspace = () =>
     Promise.all([
       modulesQuery.refetch(),
-      graphWorkflowsQuery.refetch(),
-      graphWorkflowFoldersQuery.refetch(),
-      ...(selectedGraphId !== null ? [graphExecutionsQuery.refetch()] : []),
+      handleRefreshBrowseWorkspace(selectedGraphId !== null ? graphExecutionsQuery.refetch : undefined),
     ])
 
   const handleAutoLayout = () => {
