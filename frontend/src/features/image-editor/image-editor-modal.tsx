@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } from 'react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ImageEditorModalLayout } from './image-editor-modal-layout'
+import { useImageEditorLayerSessionActions } from './use-image-editor-layer-session-actions'
 import { useImageEditorHistory } from './use-image-editor-history'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorSavePayload, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 import {
@@ -9,7 +10,6 @@ import {
   createImageEditorId,
   loadEditorImage,
   normalizeImageEditorRect,
-  renderImageEditorLayerCanvas,
   renderImageEditorMaskCanvas,
   renderImageEditorSourceCanvas,
   transformImageEditorCanvas,
@@ -674,184 +674,6 @@ export function ImageEditorModal({
     }
   }, [baseImage, documentSize.height, documentSize.width, layers, queueHistoryCommit, selectionRect, showSnackbar])
 
-  /** Flatten the currently visible source composition into a new base image. */
-  const handleFlattenVisible = useCallback(async () => {
-    if (!baseImage) {
-      return
-    }
-
-    try {
-      setLoading(true)
-      const flattenedSourceCanvas = await renderImageEditorSourceCanvas({
-        baseImage,
-        documentWidth: documentSize.width,
-        documentHeight: documentSize.height,
-        layers,
-      })
-      const nextBaseImageDataUrl = flattenedSourceCanvas.toDataURL('image/png')
-      const nextBaseImage = await loadEditorImage(nextBaseImageDataUrl)
-      const firstLayer = createDefaultDrawLayer(1)
-      setBaseImage(nextBaseImage)
-      setBaseImageDataUrl(nextBaseImageDataUrl)
-      setLayers([firstLayer])
-      setActiveLayerId(firstLayer.id)
-      setSelectionRect(null)
-      setCropRect(null)
-      queueHistoryCommit()
-      showSnackbar({ message: '보이는 결과를 새 베이스로 평탄화했어.', tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '보이는 레이어를 평탄화하지 못했어.', tone: 'error' })
-    } finally {
-      setLoading(false)
-    }
-  }, [baseImage, documentSize.height, documentSize.width, layers, queueHistoryCommit, showSnackbar])
-
-  /** Duplicate one layer in place as a new editable layer copy. */
-  const handleDuplicateLayer = useCallback((layerId: string) => {
-    const sourceLayer = layers.find((layer) => layer.id === layerId)
-    if (!sourceLayer) {
-      return
-    }
-
-    const duplicatedLayer: ImageEditorLayer = sourceLayer.type === 'draw'
-      ? {
-          ...sourceLayer,
-          id: createImageEditorId('draw-layer'),
-          name: `${sourceLayer.name} Copy`,
-          lines: sourceLayer.lines.map((line) => ({ ...line, id: createImageEditorId('stroke') })),
-        }
-      : {
-          ...sourceLayer,
-          id: createImageEditorId('paste-layer'),
-          name: `${sourceLayer.name} Copy`,
-          x: Math.max(0, Math.min(sourceLayer.x + 16, documentSize.width - sourceLayer.width)),
-          y: Math.max(0, Math.min(sourceLayer.y + 16, documentSize.height - sourceLayer.height)),
-        }
-
-    setLayers((current) => {
-      const sourceIndex = current.findIndex((layer) => layer.id === layerId)
-      if (sourceIndex < 0) {
-        return current
-      }
-
-      const nextLayers = [...current]
-      nextLayers.splice(sourceIndex + 1, 0, duplicatedLayer)
-      return nextLayers
-    })
-    setActiveLayerId(duplicatedLayer.id)
-    queueHistoryCommit()
-    showSnackbar({ message: `${sourceLayer.name} 레이어를 복제했어.`, tone: 'info' })
-  }, [documentSize.height, documentSize.width, layers, queueHistoryCommit, showSnackbar])
-
-  /** Merge all currently visible layers into one new paste layer while preserving hidden layers. */
-  const handleMergeVisible = useCallback(async () => {
-    const visibleLayers = layers.filter((layer) => layer.visible)
-    if (visibleLayers.length <= 1) {
-      return
-    }
-
-    if (visibleLayers.some((layer) => layer.locked)) {
-      showSnackbar({ message: '잠긴 보이는 레이어는 전체 병합할 수 없어.', tone: 'error' })
-      return
-    }
-
-    try {
-      setLoading(true)
-      const mergedCanvas = await renderImageEditorLayerCanvas({
-        documentWidth: documentSize.width,
-        documentHeight: documentSize.height,
-        layers: visibleLayers,
-      })
-
-      const firstVisibleIndex = layers.findIndex((layer) => layer.visible)
-      const mergedLayer: Extract<ImageEditorLayer, { type: 'paste' }> = {
-        id: createImageEditorId('paste-layer'),
-        type: 'paste',
-        name: 'Merged Visible',
-        visible: true,
-        locked: false,
-        imageDataUrl: mergedCanvas.toDataURL('image/png'),
-        x: 0,
-        y: 0,
-        width: documentSize.width,
-        height: documentSize.height,
-      }
-
-      setLayers((current) => current.flatMap((layer, index) => {
-        if (index === firstVisibleIndex) {
-          return [mergedLayer]
-        }
-
-        return layer.visible ? [] : [layer]
-      }))
-      setActiveLayerId(mergedLayer.id)
-      queueHistoryCommit()
-      showSnackbar({ message: '보이는 레이어를 하나로 병합했어.', tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '보이는 레이어를 병합하지 못했어.', tone: 'error' })
-    } finally {
-      setLoading(false)
-    }
-  }, [documentSize.height, documentSize.width, layers, queueHistoryCommit, showSnackbar])
-
-  /** Merge the active layer into the layer immediately below it. */
-  const handleMergeActiveLayerDown = useCallback(async () => {
-    if (!activeLayerId) {
-      return
-    }
-
-    const activeIndex = layers.findIndex((layer) => layer.id === activeLayerId)
-    if (activeIndex <= 0) {
-      return
-    }
-
-    const lowerLayer = layers[activeIndex - 1]
-    const currentLayer = layers[activeIndex]
-    if (!lowerLayer || !currentLayer) {
-      return
-    }
-
-    if (lowerLayer.locked || currentLayer.locked) {
-      showSnackbar({ message: '잠긴 레이어는 병합할 수 없어.', tone: 'error' })
-      return
-    }
-
-    try {
-      setLoading(true)
-      const mergedCanvas = await renderImageEditorLayerCanvas({
-        documentWidth: documentSize.width,
-        documentHeight: documentSize.height,
-        layers: [lowerLayer, currentLayer],
-      })
-
-      const mergedLayer: Extract<ImageEditorLayer, { type: 'paste' }> = {
-        id: createImageEditorId('paste-layer'),
-        type: 'paste',
-        name: `${lowerLayer.name} + ${currentLayer.name}`,
-        visible: lowerLayer.visible || currentLayer.visible,
-        locked: false,
-        imageDataUrl: mergedCanvas.toDataURL('image/png'),
-        x: 0,
-        y: 0,
-        width: documentSize.width,
-        height: documentSize.height,
-      }
-
-      setLayers((current) => {
-        const nextLayers = [...current]
-        nextLayers.splice(activeIndex - 1, 2, mergedLayer)
-        return nextLayers
-      })
-      setActiveLayerId(mergedLayer.id)
-      queueHistoryCommit()
-      showSnackbar({ message: '활성 레이어를 아래 레이어와 병합했어.', tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '레이어를 병합하지 못했어.', tone: 'error' })
-    } finally {
-      setLoading(false)
-    }
-  }, [activeLayerId, documentSize.height, documentSize.width, layers, queueHistoryCommit, showSnackbar])
-
   /** Handle editor keyboard shortcuts while avoiding text-input conflicts. */
   useEffect(() => {
     if (!open) {
@@ -1170,27 +992,6 @@ export function ImageEditorModal({
     }
   }, [baseImage, documentSize.height, documentSize.width, enableMaskEditing, flippedX, initialMaskImage, layers, maskStrokes, onClose, onSave, rotation, saving, showSnackbar])
 
-  /** Move one selected layer up or down inside the current stack. */
-  const moveLayer = useCallback((layerId: string, direction: -1 | 1) => {
-    setLayers((current) => {
-      const index = current.findIndex((layer) => layer.id === layerId)
-      if (index < 0) {
-        return current
-      }
-
-      const nextIndex = index + direction
-      if (nextIndex < 0 || nextIndex >= current.length) {
-        return current
-      }
-
-      const next = [...current]
-      const [movedLayer] = next.splice(index, 1)
-      next.splice(nextIndex, 0, movedLayer)
-      return next
-    })
-    queueHistoryCommit()
-  }, [queueHistoryCommit])
-
   /** Update the position of one pasted layer after drag movement. */
   const handleMovePasteLayer = useCallback((layerId: string, nextX: number, nextY: number) => {
     setLayers((current) => current.map((layer) => {
@@ -1461,13 +1262,41 @@ export function ImageEditorModal({
   const canApplySelectionOperation = Boolean(normalizedSelectionRect && normalizedSelectionRect.width >= 2 && normalizedSelectionRect.height >= 2)
   const canApplyCrop = Boolean(normalizedCropRect && normalizedCropRect.width >= 2 && normalizedCropRect.height >= 2)
   const hasVisibleMask = enableMaskEditing && (Boolean(initialMaskImage) || maskStrokes.length > 0)
-  const visibleLayerCount = layers.filter((layer) => layer.visible).length
-  const canMergeVisible = visibleLayerCount > 1 && !loading
-  const canFlattenVisible = Boolean(baseImage && visibleLayerCount > 0 && !loading)
-  const activeLayerIndex = activeLayerId ? layers.findIndex((layer) => layer.id === activeLayerId) : -1
-  const activeDrawLayer = activeLayer?.type === 'draw' ? activeLayer : null
-  const canClearActiveDrawLayer = Boolean(activeDrawLayer && activeDrawLayer.lines.length > 0)
-  const canMergeActiveLayerDown = activeLayerIndex > 0 && !loading
+  const {
+    canMergeVisible,
+    canFlattenVisible,
+    canClearActiveDrawLayer,
+    handleAddLayer,
+    handleRenameLayer,
+    handleToggleLayerVisible,
+    handleToggleLayerLocked,
+    handleMoveLayer,
+    handleDuplicateLayer,
+    handleDeleteLayer,
+    handleMergeVisible,
+    handleFlattenVisible,
+    handleMergeActiveLayerDown,
+    handleClearActiveDrawLayer,
+    handleClearAllDrawLayers,
+    handleCancelCrop,
+  } = useImageEditorLayerSessionActions({
+    baseImage,
+    documentSize,
+    layers,
+    activeLayerId,
+    activeLayer,
+    queueHistoryCommit,
+    setLoading,
+    setBaseImage,
+    setBaseImageDataUrl,
+    setLayers,
+    setActiveLayerId,
+    setSelectionRect,
+    setCropRect,
+    setTool,
+    createDrawLayer: createDefaultDrawLayer,
+    showSnackbar,
+  })
   const selectionHandleSize = Math.max(6, 10 / zoom)
 
   return (
@@ -1556,21 +1385,16 @@ export function ImageEditorModal({
         loading,
         enableMaskEditing,
         hasVisibleMask,
-        onAddLayer: () => {
-          const nextLayer = createDefaultDrawLayer(layers.filter((layer) => layer.type === 'draw').length + 1)
-          setLayers((current) => [...current, nextLayer])
-          setActiveLayerId(nextLayer.id)
-          queueHistoryCommit()
-        },
+        onAddLayer: handleAddLayer,
         onSetActiveLayerId: setActiveLayerId,
-        onRenameLayer: (layerId, name) => setLayers((current) => current.map((currentLayer) => currentLayer.id === layerId ? { ...currentLayer, name } : currentLayer)),
+        onRenameLayer: handleRenameLayer,
         onCommitRename: queueHistoryCommit,
-        onToggleLayerVisible: (layerId) => { setLayers((current) => current.map((currentLayer) => currentLayer.id === layerId ? { ...currentLayer, visible: !currentLayer.visible } : currentLayer)); queueHistoryCommit() },
-        onToggleLayerLocked: (layerId) => { setLayers((current) => current.map((currentLayer) => currentLayer.id === layerId ? { ...currentLayer, locked: !currentLayer.locked } : currentLayer)); queueHistoryCommit() },
-        onMoveLayer: moveLayer,
+        onToggleLayerVisible: handleToggleLayerVisible,
+        onToggleLayerLocked: handleToggleLayerLocked,
+        onMoveLayer: handleMoveLayer,
         onDuplicateLayer: handleDuplicateLayer,
         onMergeLayerDown: () => void handleMergeActiveLayerDown(),
-        onDeleteLayer: (layerId) => { setLayers((current) => current.filter((currentLayer) => currentLayer.id !== layerId)); queueHistoryCommit() },
+        onDeleteLayer: handleDeleteLayer,
       }}
       sessionActions={{
         canMergeVisible,
@@ -1584,8 +1408,8 @@ export function ImageEditorModal({
         canSave: Boolean(baseImage),
         onMergeVisible: () => void handleMergeVisible(),
         onFlattenVisible: () => void handleFlattenVisible(),
-        onClearActiveDrawLayer: () => { setLayers((current) => current.map((layer) => layer.id === activeLayerId && layer.type === 'draw' ? { ...layer, lines: [] } : layer)); queueHistoryCommit() },
-        onClearAllDrawLayers: () => { setLayers((current) => current.map((layer) => layer.type === 'draw' ? { ...layer, lines: [] } : layer)); queueHistoryCommit() },
+        onClearActiveDrawLayer: handleClearActiveDrawLayer,
+        onClearAllDrawLayers: handleClearAllDrawLayers,
         onClearSelection: () => setSelectionRect(null),
         onSelectionRectFieldChange: (field, value) => {
           setSelectionRect((current) => updateRectField(current, field, value))
@@ -1593,7 +1417,7 @@ export function ImageEditorModal({
         onCropRectFieldChange: (field, value) => {
           setCropRect((current) => updateRectField(current, field, value))
         },
-        onCancelCrop: () => { setCropRect(null); setTool('brush') },
+        onCancelCrop: handleCancelCrop,
         onClose,
         onSave: () => void handleSave(),
       }}
