@@ -13,7 +13,7 @@ import {
   type Connection,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, FolderPlus, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
@@ -23,18 +23,21 @@ import { SettingsModal } from '@/features/settings/components/settings-modal'
 import {
   cancelGraphExecution,
   createGraphWorkflow,
+  createGraphWorkflowFolder,
   deleteGraphWorkflow,
   executeGraphNode,
   executeGraphWorkflow,
   getAppSettings,
   getGraphExecution,
   getGraphWorkflowExecutions,
+  getGraphWorkflowFolders,
   getGraphWorkflows,
   getModuleDefinitions,
   updateGraphWorkflow,
   type GraphExecutionArtifactRecord,
   type GraphExecutionRecord,
   type GraphWorkflowExposedInput,
+  type GraphWorkflowFolderRecord,
   type GraphWorkflowRecord,
   type ModuleDefinitionRecord,
 } from '@/lib/api'
@@ -91,6 +94,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const reactFlow = useReactFlow()
   const [workflowName, setWorkflowName] = useState('Workflow Draft')
   const [workflowDescription, setWorkflowDescription] = useState('')
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
+  const [draftWorkflowFolderId, setDraftWorkflowFolderId] = useState<number | null>(null)
   const [selectedGraphId, setSelectedGraphId] = useState<number | null>(null)
   const [selectedExecutionId, setSelectedExecutionId] = useState<number | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -147,6 +152,11 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     queryFn: () => getGraphWorkflows(true),
   })
 
+  const graphWorkflowFoldersQuery = useQuery({
+    queryKey: ['module-graph-workflow-folders'],
+    queryFn: () => getGraphWorkflowFolders(),
+  })
+
   const graphExecutionsQuery = useQuery({
     queryKey: ['module-graph-executions', selectedGraphId],
     queryFn: () => getGraphWorkflowExecutions(selectedGraphId as number),
@@ -185,7 +195,14 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const isDirty = currentSnapshot !== lastSavedSnapshot
   const shouldBlockGraphExit = workflowView === 'edit' && isDirty
   const selectedGraphRecord = useMemo(() => (graphWorkflowsQuery.data ?? []).find((graph) => graph.id === selectedGraphId) ?? null, [graphWorkflowsQuery.data, selectedGraphId])
+  const selectedFolderRecord = useMemo(() => (graphWorkflowFoldersQuery.data ?? []).find((folder) => folder.id === selectedFolderId) ?? null, [graphWorkflowFoldersQuery.data, selectedFolderId])
   const moduleDefinitionById = useMemo(() => new Map(modules.map((module) => [module.id, module])), [modules])
+
+  useEffect(() => {
+    if (selectedGraphId === null) {
+      setDraftWorkflowFolderId(selectedFolderId)
+    }
+  }, [selectedFolderId, selectedGraphId])
   const workflowInputCandidates = useMemo(
     () =>
       nodes.flatMap((node) =>
@@ -713,6 +730,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     setNodes([])
     setEdges([])
     setSelectedGraphId(null)
+    setDraftWorkflowFolderId(selectedFolderId)
     setSelectedExecutionId(null)
     setSelectedNodeId(null)
     setSelectedEdgeId(null)
@@ -747,6 +765,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     setSelectedNodeId(nextNodes[0]?.id ?? null)
     setWorkflowName(graph.name)
     setWorkflowDescription(graph.description || '')
+    setSelectedFolderId(graph.folder_id ?? null)
+    setDraftWorkflowFolderId(graph.folder_id ?? null)
     setWorkflowExposedInputs(graph.graph.metadata?.exposed_inputs ?? [])
     setLastSavedSnapshot(
       buildGraphEditorSnapshot({
@@ -775,8 +795,29 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     }
 
     resetWorkflowDraft()
+    setDraftWorkflowFolderId(selectedFolderId)
     enterWorkflowEditor('setup')
     showSnackbar({ message: '새 워크플로우 초안을 열었어.', tone: 'info' })
+  }
+
+  const handleCreateWorkflowFolder = async () => {
+    const parentLabel = selectedFolderRecord?.name ?? '루트'
+    const nextName = window.prompt(`새 폴더 이름을 입력해줘.\n현재 위치: ${parentLabel}`, '')?.trim()
+    if (!nextName) {
+      return
+    }
+
+    try {
+      const result = await createGraphWorkflowFolder({
+        name: nextName,
+        parent_id: selectedFolderId,
+      })
+      await graphWorkflowFoldersQuery.refetch()
+      setSelectedFolderId(result.id)
+      showSnackbar({ message: `폴더 "${nextName}"을(를) 만들었어.`, tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '폴더 생성에 실패했어.', tone: 'error' })
+    }
   }
 
   const handleEditSelectedWorkflow = () => {
@@ -1032,6 +1073,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       name: resolvedName,
       description,
       graph,
+      folder_id: draftWorkflowFolderId,
     }
 
     let graphId: number
@@ -1072,7 +1114,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       created,
       name: resolvedName,
     }
-  }, [edges, graphWorkflowsQuery, nodes, selectedGraphId, selectedGraphRecord, showSnackbar, workflowDescription, workflowExposedInputs, workflowName])
+  }, [draftWorkflowFolderId, edges, graphWorkflowsQuery, nodes, selectedGraphId, selectedGraphRecord, showSnackbar, workflowDescription, workflowExposedInputs, workflowName])
 
   const handleSaveGraph = async () => {
     if (isSavingGraph) {
@@ -1277,6 +1319,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     Promise.all([
       modulesQuery.refetch(),
       graphWorkflowsQuery.refetch(),
+      graphWorkflowFoldersQuery.refetch(),
       ...(selectedGraphId !== null ? [graphExecutionsQuery.refetch()] : []),
     ])
 
@@ -1338,9 +1381,14 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const workflowListSidebar = (
     <SavedGraphList
       graphs={graphWorkflowsQuery.data ?? []}
+      folders={graphWorkflowFoldersQuery.data ?? []}
       selectedGraphId={selectedGraphId}
+      selectedFolderId={selectedFolderId}
       onLoadGraph={(graph) => {
         void handleLoadGraph(graph, { silent: true })
+      }}
+      onSelectFolder={(folderId) => {
+        setSelectedFolderId(folderId)
       }}
       floatingActionContainerClassName={workflowView === 'edit' ? 'bottom-24' : undefined}
       leftToolbar={
@@ -1372,6 +1420,17 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             title="새로고침"
           >
             <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            className="bg-surface-low"
+            onClick={() => void handleCreateWorkflowFolder()}
+            aria-label="새 폴더"
+            title="새 폴더"
+          >
+            <FolderPlus className="h-4 w-4" />
           </Button>
           <Button
             type="button"

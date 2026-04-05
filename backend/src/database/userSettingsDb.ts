@@ -216,21 +216,35 @@ function createTables(): void {
     )
   `);
 
-  // 10. Graph workflows table (node/edge documents)
+  // 10. Graph workflow folders table (explorer tree)
+  userSettingsDb.exec(`
+    CREATE TABLE IF NOT EXISTS graph_workflow_folders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      parent_id INTEGER,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (parent_id) REFERENCES graph_workflow_folders(id) ON DELETE CASCADE
+    )
+  `);
+
+  // 11. Graph workflows table (node/edge documents)
   userSettingsDb.exec(`
     CREATE TABLE IF NOT EXISTS graph_workflows (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       description TEXT,
       graph_json TEXT NOT NULL,
+      folder_id INTEGER,
       version INTEGER NOT NULL DEFAULT 1,
       is_active INTEGER DEFAULT 1,
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (folder_id) REFERENCES graph_workflow_folders(id) ON DELETE SET NULL
     )
   `);
 
-  // 11. Graph workflow versions table (history snapshots)
+  // 12. Graph workflow versions table (history snapshots)
   userSettingsDb.exec(`
     CREATE TABLE IF NOT EXISTS graph_workflow_versions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -244,7 +258,7 @@ function createTables(): void {
     )
   `);
 
-  // 12. Graph executions table (future runtime execution tracking)
+  // 13. Graph executions table (future runtime execution tracking)
   userSettingsDb.exec(`
     CREATE TABLE IF NOT EXISTS graph_executions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -262,7 +276,7 @@ function createTables(): void {
     )
   `);
 
-  // 13. Graph execution artifacts table (future intermediate image/text/blob tracking)
+  // 14. Graph execution artifacts table (future intermediate image/text/blob tracking)
   userSettingsDb.exec(`
     CREATE TABLE IF NOT EXISTS graph_execution_artifacts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -277,7 +291,7 @@ function createTables(): void {
     )
   `);
 
-  // 14. Graph execution logs table (node-level timeline/logging)
+  // 15. Graph execution logs table (node-level timeline/logging)
   userSettingsDb.exec(`
     CREATE TABLE IF NOT EXISTS graph_execution_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -292,7 +306,7 @@ function createTables(): void {
     )
   `);
 
-  // 15. Graph execution final results table (explicit workflow-declared final outputs)
+  // 16. Graph execution final results table (explicit workflow-declared final outputs)
   userSettingsDb.exec(`
     CREATE TABLE IF NOT EXISTS graph_execution_final_results (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -366,6 +380,12 @@ function createTables(): void {
     userSettingsDb.exec("ALTER TABLE external_api_providers ADD COLUMN provider_type TEXT NOT NULL DEFAULT 'general'");
   }
 
+  // Migrate graph_workflows table
+  if (!hasColumn('graph_workflows', 'folder_id')) {
+    console.log('  Migrating graph_workflows: adding folder_id column');
+    userSettingsDb.exec('ALTER TABLE graph_workflows ADD COLUMN folder_id INTEGER');
+  }
+
   // Migrate graph_executions table
   if (!hasColumn('graph_executions', 'failed_node_id')) {
     console.log('  Migrating graph_executions: adding failed_node_id column');
@@ -397,7 +417,9 @@ function createTables(): void {
     'CREATE INDEX IF NOT EXISTS idx_module_definitions_engine_type ON module_definitions(engine_type)',
     'CREATE INDEX IF NOT EXISTS idx_module_definitions_source_workflow ON module_definitions(source_workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_module_definitions_active ON module_definitions(is_active)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_workflow_folders_parent_id ON graph_workflow_folders(parent_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_workflows_name ON graph_workflows(name)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_workflows_folder_id ON graph_workflows(folder_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_workflows_active ON graph_workflows(is_active)',
     'CREATE INDEX IF NOT EXISTS idx_graph_workflow_versions_workflow_id ON graph_workflow_versions(workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_executions_workflow_id ON graph_executions(graph_workflow_id)',
@@ -424,7 +446,7 @@ function createTables(): void {
     VALUES (?, ?, ?)
   `).run('civitai', 'Civitai', 1);
 
-  console.log('  ✅ User settings tables created (15 tables + indexes)');
+  console.log('  ✅ User settings tables created (16 tables + indexes)');
 
   // Run migrations for existing tables
   migrateExistingTables();
@@ -578,22 +600,25 @@ function ensureGraphWorkflowsAllowDuplicateNames(): void {
         name TEXT NOT NULL,
         description TEXT,
         graph_json TEXT NOT NULL,
+        folder_id INTEGER,
         version INTEGER NOT NULL DEFAULT 1,
         is_active INTEGER DEFAULT 1,
         created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+        updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (folder_id) REFERENCES graph_workflow_folders(id) ON DELETE SET NULL
       );
 
       INSERT INTO graph_workflows__new (
-        id, name, description, graph_json, version, is_active, created_date, updated_date
+        id, name, description, graph_json, folder_id, version, is_active, created_date, updated_date
       )
       SELECT
-        id, name, description, graph_json, version, is_active, created_date, updated_date
+        id, name, description, graph_json, folder_id, version, is_active, created_date, updated_date
       FROM graph_workflows;
 
       DROP TABLE graph_workflows;
       ALTER TABLE graph_workflows__new RENAME TO graph_workflows;
       CREATE INDEX IF NOT EXISTS idx_graph_workflows_name ON graph_workflows(name);
+      CREATE INDEX IF NOT EXISTS idx_graph_workflows_folder_id ON graph_workflows(folder_id);
       CREATE INDEX IF NOT EXISTS idx_graph_workflows_active ON graph_workflows(is_active);
       COMMIT;
     `);

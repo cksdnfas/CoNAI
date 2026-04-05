@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { routeParam } from './routeParam'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
+import { GraphWorkflowFolderModel } from '../models/GraphWorkflowFolder'
 import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphExecutionArtifactModel } from '../models/GraphExecutionArtifact'
 import { GraphExecutionFinalResultModel } from '../models/GraphExecutionFinalResult'
@@ -33,6 +34,37 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error getting graph workflows:', error)
     return res.status(500).json({ success: false, error: 'Failed to get graph workflows' } as ModuleGraphResponse)
+  }
+}))
+
+router.get('/folders', asyncHandler(async (_req: Request, res: Response) => {
+  try {
+    const folders = GraphWorkflowFolderModel.findAll()
+    return res.json({ success: true, data: folders } as ModuleGraphResponse)
+  } catch (error) {
+    console.error('Error getting graph workflow folders:', error)
+    return res.status(500).json({ success: false, error: 'Failed to get graph workflow folders' } as ModuleGraphResponse)
+  }
+}))
+
+router.post('/folders', asyncHandler(async (req: Request, res: Response) => {
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : ''
+  const parentId = typeof req.body?.parent_id === 'number' ? req.body.parent_id : null
+
+  if (!name) {
+    return res.status(400).json({ success: false, error: 'name is required' } as ModuleGraphResponse)
+  }
+
+  if (parentId !== null && !GraphWorkflowFolderModel.findById(parentId)) {
+    return res.status(404).json({ success: false, error: 'Parent folder not found' } as ModuleGraphResponse)
+  }
+
+  try {
+    const id = GraphWorkflowFolderModel.create({ name, parent_id: parentId })
+    return res.status(201).json({ success: true, data: { id, message: 'Graph workflow folder created successfully' } } as ModuleGraphResponse)
+  } catch (error) {
+    console.error('Error creating graph workflow folder:', error)
+    return res.status(500).json({ success: false, error: 'Failed to create graph workflow folder' } as ModuleGraphResponse)
   }
 }))
 
@@ -163,7 +195,7 @@ router.post('/executions/:executionId/cancel', asyncHandler(async (req: Request,
 }))
 
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { name, description, graph, version, is_active } = req.body
+  const { name, description, graph, folder_id, version, is_active } = req.body
   if (!name || !graph) {
     return res.status(400).json({ success: false, error: 'name and graph are required' } as ModuleGraphResponse)
   }
@@ -173,6 +205,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       name,
       description,
       graph,
+      folder_id: typeof folder_id === 'number' ? folder_id : null,
       version,
       is_active,
     }
@@ -201,6 +234,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
       name: req.body.name,
       description: req.body.description,
       graph: req.body.graph,
+      folder_id: typeof req.body.folder_id === 'number' ? req.body.folder_id : req.body.folder_id === null ? null : undefined,
       version: req.body.version,
       is_active: req.body.is_active,
     }

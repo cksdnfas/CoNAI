@@ -107,8 +107,17 @@ export interface GraphWorkflowRecord {
   name: string
   description?: string | null
   graph: GraphWorkflowDocument
+  folder_id?: number | null
   version: number
   is_active: boolean
+  created_date: string
+  updated_date: string
+}
+
+export interface GraphWorkflowFolderRecord {
+  id: number
+  name: string
+  parent_id?: number | null
   created_date: string
   updated_date: string
 }
@@ -282,11 +291,34 @@ export async function getGraphWorkflows(activeOnly = true) {
   return response.data
 }
 
+/** List workflow explorer folders for the graph editor. */
+export async function getGraphWorkflowFolders() {
+  const response = await requestJson<ApiEnvelope<GraphWorkflowFolderRecord[]>>('/api/graph-workflows/folders')
+  return response.data
+}
+
+/** Create one workflow explorer folder. */
+export async function createGraphWorkflowFolder(payload: {
+  name: string
+  parent_id?: number | null
+}) {
+  const response = await requestJson<ApiEnvelope<CreateEnvelope>>('/api/graph-workflows/folders', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  return response.data
+}
+
 /** Save a graph workflow document. */
 export async function createGraphWorkflow(payload: {
   name: string
   description?: string
   graph: GraphWorkflowDocument
+  folder_id?: number | null
   version?: number
   is_active?: boolean
 }) {
@@ -306,6 +338,7 @@ export async function updateGraphWorkflow(workflowId: number, payload: {
   name?: string
   description?: string
   graph?: GraphWorkflowDocument
+  folder_id?: number | null
   version?: number
   is_active?: boolean
 }) {

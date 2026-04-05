@@ -15,12 +15,13 @@ export class GraphWorkflowModel {
     const db = getUserSettingsDb()
     const info = db.prepare(`
       INSERT INTO graph_workflows (
-        name, description, graph_json, version, is_active
-      ) VALUES (?, ?, ?, ?, ?)
+        name, description, graph_json, folder_id, version, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?)
     `).run(
       workflowData.name,
       workflowData.description || null,
       stringifyGraph(workflowData.graph),
+      workflowData.folder_id ?? null,
       workflowData.version ?? 1,
       workflowData.is_active !== undefined ? (workflowData.is_active ? 1 : 0) : 1,
     )
@@ -59,6 +60,7 @@ export class GraphWorkflowModel {
       description: workflowData.description,
       version: workflowData.version,
       graph_json: workflowData.graph !== undefined ? stringifyGraph(workflowData.graph) : undefined,
+      folder_id: workflowData.folder_id,
       is_active: workflowData.is_active !== undefined ? (workflowData.is_active ? 1 : 0) : undefined,
     }
 

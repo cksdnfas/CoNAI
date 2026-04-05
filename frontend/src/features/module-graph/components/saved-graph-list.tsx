@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Pin, PinOff, Search } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileCode2, Folder, Pin, PinOff, Search } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -7,26 +7,35 @@ import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
 import { getNavigationItemClassName } from '@/components/common/navigation-item'
-import type { GraphWorkflowRecord } from '@/lib/api'
-import { formatDateTime } from '../module-graph-shared'
+import type { GraphWorkflowFolderRecord, GraphWorkflowRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 const WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY = 'conai:module-graph:workflow-sidebar-locked'
 
 type SavedGraphListProps = {
   graphs: GraphWorkflowRecord[]
+  folders: GraphWorkflowFolderRecord[]
   selectedGraphId: number | null
+  selectedFolderId: number | null
   onLoadGraph: (graph: GraphWorkflowRecord) => void
+  onSelectFolder: (folderId: number | null) => void
   leftToolbar?: ReactNode
   rightToolbar?: ReactNode
   floatingActionContainerClassName?: string
 }
 
-/** Render saved workflows in one explorer-style sidebar with header actions. */
+function normalizeFolderKey(folderId: number | null | undefined) {
+  return folderId ?? null
+}
+
+/** Render one explorer-style tree sidebar for workflow folders and documents. */
 export function SavedGraphList({
   graphs,
+  folders,
   selectedGraphId,
+  selectedFolderId,
   onLoadGraph,
+  onSelectFolder,
   leftToolbar,
   rightToolbar,
   floatingActionContainerClassName,
@@ -35,6 +44,7 @@ export function SavedGraphList({
   const [searchQuery, setSearchQuery] = useState('')
   const [isSidebarFloating, setIsSidebarFloating] = useState(false)
   const [isSidebarFloatingLocked, setIsSidebarFloatingLocked] = useState(false)
+  const [expandedFolderIds, setExpandedFolderIds] = useState<number[]>([])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -53,25 +63,55 @@ export function SavedGraphList({
     window.localStorage.setItem(WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY, isSidebarFloatingLocked ? 'true' : 'false')
   }, [isSidebarFloatingLocked])
 
-  const filteredGraphs = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase()
-    const matchedGraphs = query.length === 0
-      ? graphs
-      : graphs.filter((graph) => {
-          const haystack = [graph.name, graph.description ?? '', graph.id].join(' ').toLowerCase()
-          return haystack.includes(query)
-        })
+  useEffect(() => {
+    if (folders.length === 0) {
+      return
+    }
 
-    return [...matchedGraphs].sort((left, right) => {
-      const leftTime = new Date(left.updated_date).getTime()
-      const rightTime = new Date(right.updated_date).getTime()
-      if (leftTime !== rightTime) {
-        return rightTime - leftTime
+    setExpandedFolderIds((current) => {
+      const currentSet = new Set(current)
+      let changed = false
+      for (const folder of folders) {
+        if (!currentSet.has(folder.id)) {
+          currentSet.add(folder.id)
+          changed = true
+        }
       }
-
-      return right.id - left.id
+      return changed ? [...currentSet] : current
     })
-  }, [graphs, searchQuery])
+  }, [folders])
+
+  const foldersByParent = useMemo(() => {
+    const nextMap = new Map<number | null, GraphWorkflowFolderRecord[]>()
+    for (const folder of folders) {
+      const parentId = normalizeFolderKey(folder.parent_id)
+      const bucket = nextMap.get(parentId) ?? []
+      bucket.push(folder)
+      nextMap.set(parentId, bucket)
+    }
+
+    for (const entry of nextMap.values()) {
+      entry.sort((left, right) => left.name.localeCompare(right.name, 'ko'))
+    }
+
+    return nextMap
+  }, [folders])
+
+  const workflowsByFolder = useMemo(() => {
+    const nextMap = new Map<number | null, GraphWorkflowRecord[]>()
+    for (const graph of graphs) {
+      const folderId = normalizeFolderKey(graph.folder_id)
+      const bucket = nextMap.get(folderId) ?? []
+      bucket.push(graph)
+      nextMap.set(folderId, bucket)
+    }
+
+    for (const entry of nextMap.values()) {
+      entry.sort((left, right) => left.name.localeCompare(right.name, 'ko'))
+    }
+
+    return nextMap
+  }, [graphs])
 
   const duplicateNameCounts = useMemo(
     () =>
@@ -81,6 +121,54 @@ export function SavedGraphList({
       }, {}),
     [graphs],
   )
+
+  const query = searchQuery.trim().toLowerCase()
+  const visibleFolderIds = useMemo(() => {
+    if (!query) {
+      return null
+    }
+
+    const nextVisible = new Set<number>()
+    const matchesFolder = (folder: GraphWorkflowFolderRecord) => folder.name.toLowerCase().includes(query)
+    const matchesWorkflow = (workflow: GraphWorkflowRecord) => [workflow.name, workflow.description ?? ''].join(' ').toLowerCase().includes(query)
+
+    const visit = (folderId: number | null): boolean => {
+      let hasMatch = false
+
+      for (const folder of foldersByParent.get(folderId) ?? []) {
+        const childHasMatch = visit(folder.id)
+        const folderHasMatch = matchesFolder(folder)
+        const workflowHasMatch = (workflowsByFolder.get(folder.id) ?? []).some(matchesWorkflow)
+        if (folderHasMatch || childHasMatch || workflowHasMatch) {
+          nextVisible.add(folder.id)
+          hasMatch = true
+        }
+      }
+
+      const rootWorkflowMatch = folderId === null && (workflowsByFolder.get(null) ?? []).some(matchesWorkflow)
+      return hasMatch || rootWorkflowMatch
+    }
+
+    visit(null)
+    return nextVisible
+  }, [foldersByParent, query, workflowsByFolder])
+
+  const filteredRootWorkflows = useMemo(() => {
+    const items = workflowsByFolder.get(null) ?? []
+    if (!query) {
+      return items
+    }
+
+    return items.filter((workflow) => [workflow.name, workflow.description ?? ''].join(' ').toLowerCase().includes(query))
+  }, [query, workflowsByFolder])
+
+  const hasAnyVisibleItem = useMemo(() => {
+    if (!query) {
+      return graphs.length > 0 || folders.length > 0
+    }
+
+    return filteredRootWorkflows.length > 0 || (visibleFolderIds?.size ?? 0) > 0
+  }, [filteredRootWorkflows.length, folders.length, graphs.length, query, visibleFolderIds])
 
   const handleLockSidebar = () => {
     setIsSidebarFloatingLocked(true)
@@ -99,6 +187,96 @@ export function SavedGraphList({
         window.scrollBy({ top: nextOffset, behavior: 'smooth' })
       })
     })
+  }
+
+  const toggleFolder = (folderId: number) => {
+    setExpandedFolderIds((current) => (current.includes(folderId) ? current.filter((item) => item !== folderId) : [...current, folderId]))
+  }
+
+  const renderWorkflowRow = (graph: GraphWorkflowRecord, depth: number) => {
+    const duplicateCount = duplicateNameCounts[graph.name] ?? 0
+
+    return (
+      <button
+        key={`workflow-${graph.id}`}
+        type="button"
+        onClick={() => onLoadGraph(graph)}
+        className={getNavigationItemClassName({
+          active: selectedGraphId === graph.id,
+          className: 'block w-full px-3 py-2 text-left',
+        })}
+        style={{ paddingLeft: `${12 + depth * 18}px` }}
+        title={graph.description?.trim() ? `${graph.name}\n${graph.description}` : graph.name}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <FileCode2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className={cn('min-w-0 truncate text-sm font-medium', selectedGraphId === graph.id ? 'text-primary' : 'text-foreground')}>
+            {graph.name}
+          </div>
+          {duplicateCount > 1 ? <Badge variant="outline">동명 {duplicateCount}</Badge> : null}
+        </div>
+      </button>
+    )
+  }
+
+  const renderFolderNode = (folder: GraphWorkflowFolderRecord, depth: number): ReactNode => {
+    if (query && visibleFolderIds && !visibleFolderIds.has(folder.id)) {
+      return null
+    }
+
+    const childFolders = foldersByParent.get(folder.id) ?? []
+    const childWorkflows = (workflowsByFolder.get(folder.id) ?? []).filter((workflow) => {
+      if (!query) {
+        return true
+      }
+      return [workflow.name, workflow.description ?? ''].join(' ').toLowerCase().includes(query)
+    })
+    const isExpanded = expandedFolderIds.includes(folder.id)
+    const hasChildren = childFolders.length > 0 || childWorkflows.length > 0
+
+    return (
+      <div key={`folder-${folder.id}`} className="space-y-1">
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            className="h-7 w-7 shrink-0"
+            onClick={() => toggleFolder(folder.id)}
+            disabled={!hasChildren}
+            aria-label={isExpanded ? '폴더 접기' : '폴더 펼치기'}
+          >
+            {hasChildren ? (
+              isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
+            ) : (
+              <span className="h-4 w-4" />
+            )}
+          </Button>
+          <button
+            type="button"
+            onClick={() => onSelectFolder(folder.id)}
+            className={getNavigationItemClassName({
+              active: selectedFolderId === folder.id,
+              className: 'flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left',
+            })}
+            style={{ paddingLeft: `${4 + depth * 18}px` }}
+            title={folder.name}
+          >
+            <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className={cn('min-w-0 truncate text-sm font-medium', selectedFolderId === folder.id ? 'text-primary' : 'text-foreground')}>
+              {folder.name}
+            </span>
+          </button>
+        </div>
+
+        {isExpanded ? (
+          <div className="space-y-1">
+            {childFolders.map((childFolder) => renderFolderNode(childFolder, depth + 1))}
+            {childWorkflows.map((workflow) => renderWorkflowRow(workflow, depth + 1))}
+          </div>
+        ) : null}
+      </div>
+    )
   }
 
   return (
@@ -146,40 +324,31 @@ export function SavedGraphList({
             </div>
           }
         >
-          {filteredGraphs.map((graph) => {
-            const duplicateCount = duplicateNameCounts[graph.name] ?? 0
+          <button
+            type="button"
+            onClick={() => onSelectFolder(null)}
+            className={getNavigationItemClassName({
+              active: selectedFolderId === null && selectedGraphId === null,
+              className: 'flex w-full items-center gap-2 px-3 py-2 text-left',
+            })}
+            title="Root"
+          >
+            <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className={cn('truncate text-sm font-medium', selectedFolderId === null && selectedGraphId === null ? 'text-primary' : 'text-foreground')}>
+              Root
+            </span>
+          </button>
 
-            return (
-              <button
-                key={graph.id}
-                type="button"
-                onClick={() => onLoadGraph(graph)}
-                className={getNavigationItemClassName({
-                  active: selectedGraphId === graph.id,
-                  className: 'block w-full px-3 py-2.5 text-left',
-                })}
-                title={`${graph.name} · #${graph.id} · ${formatDateTime(graph.updated_date)}${graph.description?.trim() ? `\n${graph.description}` : ''}`}
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <div className={cn('min-w-0 truncate text-sm font-medium', selectedGraphId === graph.id ? 'text-primary' : 'text-foreground')}>
-                    {graph.name}
-                  </div>
-                  {duplicateCount > 1 ? <Badge variant="outline">동명 {duplicateCount}</Badge> : null}
-                </div>
-                <div className="mt-1 text-[11px] text-muted-foreground">
-                  #{graph.id} · v{graph.version} · 수정 {formatDateTime(graph.updated_date)}
-                </div>
-              </button>
-            )
-          })}
+          {(foldersByParent.get(null) ?? []).map((folder) => renderFolderNode(folder, 0))}
+          {filteredRootWorkflows.map((graph) => renderWorkflowRow(graph, 0))}
 
-          {graphs.length === 0 ? (
+          {graphs.length === 0 && folders.length === 0 ? (
             <Alert>
               <AlertTitle>저장된 워크플로우가 없어</AlertTitle>
-              <AlertDescription>새 워크플로우를 만들면 여기서 바로 불러올 수 있어.</AlertDescription>
+              <AlertDescription>새 폴더나 새 워크플로우를 만들면 여기서 바로 탐색할 수 있어.</AlertDescription>
             </Alert>
           ) : null}
-          {graphs.length > 0 && filteredGraphs.length === 0 ? (
+          {(graphs.length > 0 || folders.length > 0) && !hasAnyVisibleItem ? (
             <Alert>
               <AlertTitle>검색 결과가 없어</AlertTitle>
               <AlertDescription>다른 키워드로 찾아봐.</AlertDescription>

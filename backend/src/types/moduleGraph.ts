@@ -140,8 +140,17 @@ export interface GraphWorkflowRecord {
   name: string
   description?: string | null
   graph_json: string
+  folder_id?: number | null
   version: number
   is_active: boolean
+  created_date: string
+  updated_date: string
+}
+
+export interface GraphWorkflowFolderRecord {
+  id: number
+  name: string
+  parent_id?: number | null
   created_date: string
   updated_date: string
 }
@@ -150,6 +159,7 @@ export interface GraphWorkflowCreateData {
   name: string
   description?: string
   graph: GraphWorkflowDocument
+  folder_id?: number | null
   version?: number
   is_active?: boolean
 }
@@ -158,6 +168,7 @@ export interface GraphWorkflowUpdateData {
   name?: string
   description?: string
   graph?: GraphWorkflowDocument
+  folder_id?: number | null
   version?: number
   is_active?: boolean
 }
