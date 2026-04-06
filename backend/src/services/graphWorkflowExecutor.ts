@@ -6,6 +6,7 @@ import { GraphWorkflowModel } from '../models/GraphWorkflow'
 import { ModuleDefinitionModel } from '../models/ModuleDefinition'
 import { getIncomingArtifacts, loadRuntimeArtifactsByNode, resolveNodeInputs } from './graph-workflow-executor/artifacts'
 import { executeComfyModule } from './graph-workflow-executor/execute-comfy'
+import { executeCustomJsModule } from './graph-workflow-executor/execute-custom-js'
 import { executeNaiModule } from './graph-workflow-executor/execute-nai'
 import { executeSystemModule } from './graph-workflow-executor/execute-system'
 import {
@@ -249,6 +250,8 @@ export class GraphWorkflowExecutor {
           await executeComfyModule(context, node, moduleDefinition, resolvedInputs)
         } else if (moduleDefinition.engine_type === 'system') {
           await executeSystemModule(context, node, moduleDefinition, resolvedInputs)
+        } else if (moduleDefinition.engine_type === 'custom_js') {
+          await executeCustomJsModule(context, node, moduleDefinition, resolvedInputs)
         } else {
           throw new Error(`Unsupported module engine type: ${moduleDefinition.engine_type}`)
         }

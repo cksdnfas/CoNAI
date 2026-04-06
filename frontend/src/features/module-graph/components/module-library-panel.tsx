@@ -77,6 +77,10 @@ function getCustomModuleGroup(module: ModuleDefinitionRecord): { key: string; la
     return { key: 'comfyui', label: 'ComfyUI' }
   }
 
+  if (module.engine_type === 'custom_js') {
+    return { key: 'custom-js', label: 'Custom JS' }
+  }
+
   const category = (module.category ?? '').toLowerCase()
   return { key: 'other', label: category ? toTitleCase(category) : 'Other' }
 }

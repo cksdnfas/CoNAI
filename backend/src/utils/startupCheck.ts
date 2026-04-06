@@ -27,6 +27,7 @@ export class StartupCheck {
       { name: 'Logs', path: runtimePaths.logsDir },
       { name: 'Temp', path: runtimePaths.tempDir },
       { name: 'Models', path: runtimePaths.modelsDir },
+      { name: 'CustomNodes', path: runtimePaths.customNodesDir },
       { name: 'RecycleBin', path: runtimePaths.recycleBinDir },
     ];
 

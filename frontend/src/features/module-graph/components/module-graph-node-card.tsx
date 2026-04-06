@@ -22,6 +22,7 @@ const ENGINE_TYPE_LABELS = {
   nai: 'NAI',
   comfyui: 'ComfyUI',
   system: '시스템',
+  custom_js: 'Custom JS',
 } as const
 
 const TEXT_PORT_COLOR = getPortTypeColor('text')

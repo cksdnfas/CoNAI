@@ -262,7 +262,12 @@ async function startServer() {
     // 4. Initialize session middleware (User Settings DB + Session configuration)
     await initializeSessionMiddleware();
 
-    // 4-1. Register all routes (after session middleware is configured)
+    // 4-1. Sync file-based custom nodes into the module registry.
+    const { CustomNodeRegistryService } = await import('./services/customNodeRegistryService');
+    const customNodeSyncResult = await CustomNodeRegistryService.syncCustomNodesFromFileSystem();
+    console.log(`🧩 Custom nodes synced: ${customNodeSyncResult.nodes.length} loaded, ${customNodeSyncResult.errors.length} errors, ${customNodeSyncResult.createdCount} created, ${customNodeSyncResult.updatedCount} updated, ${customNodeSyncResult.deactivatedCount} deactivated`);
+
+    // 4-2. Register all routes (after session middleware is configured)
     registerAppRoutes(app, {
       uploadsDir,
       tempDir,

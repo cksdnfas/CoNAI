@@ -17,8 +17,8 @@ export class ModuleDefinitionModel {
       INSERT INTO module_definitions (
         name, description, engine_type, authoring_source, category, source_workflow_id,
         template_defaults, exposed_inputs, output_ports, internal_fixed_values, ui_schema,
-        version, is_active, color
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        version, is_active, color, external_key, source_path, source_hash
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       moduleData.name,
       moduleData.description || null,
@@ -34,6 +34,9 @@ export class ModuleDefinitionModel {
       moduleData.version ?? 1,
       moduleData.is_active !== undefined ? (moduleData.is_active ? 1 : 0) : 1,
       moduleData.color || '#7c4dff',
+      moduleData.external_key || null,
+      moduleData.source_path || null,
+      moduleData.source_hash || null,
     )
 
     return info.lastInsertRowid as number
@@ -68,6 +71,9 @@ export class ModuleDefinitionModel {
         : undefined,
       ui_schema: moduleData.ui_schema !== undefined ? stringifyJson(moduleData.ui_schema) : undefined,
       is_active: moduleData.is_active !== undefined ? (moduleData.is_active ? 1 : 0) : undefined,
+      external_key: moduleData.external_key,
+      source_path: moduleData.source_path,
+      source_hash: moduleData.source_hash,
     }
 
     const updates = filterDefined(cleanData)
@@ -103,5 +109,11 @@ export class ModuleDefinitionModel {
 
     const row = db.prepare(query).get(...params)
     return !!row
+  }
+
+  static findByExternalKey(externalKey: string): ModuleDefinitionRecord | null {
+    const db = getUserSettingsDb()
+    const row = db.prepare('SELECT * FROM module_definitions WHERE external_key = ?').get(externalKey) as ModuleDefinitionRecord | undefined
+    return row || null
   }
 }

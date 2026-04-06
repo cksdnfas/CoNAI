@@ -53,17 +53,25 @@ export function migrateExistingUserSettingsTables(db: Database.Database): void {
   }
 }
 
-/** Recreate module_definitions when an older database still restricts engine_type to nai/comfyui. */
-export function ensureModuleDefinitionsSupportsSystemEngine(db: Database.Database): void {
+/** Recreate module_definitions when an older database is missing current custom-node columns or enum values. */
+export function ensureModuleDefinitionsSupportsCurrentShape(db: Database.Database): void {
   const schemaRow = db
     .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='module_definitions'")
     .get() as { sql?: string } | undefined;
 
-  if (!schemaRow?.sql || schemaRow.sql.includes("'system'")) {
+  const normalizedSql = schemaRow?.sql?.toLowerCase() ?? '';
+  if (
+    !normalizedSql ||
+    (normalizedSql.includes("'custom_js'") &&
+      normalizedSql.includes("'custom_node_fs'") &&
+      normalizedSql.includes('external_key') &&
+      normalizedSql.includes('source_path') &&
+      normalizedSql.includes('source_hash'))
+  ) {
     return;
   }
 
-  console.log('🔧 Updating module_definitions schema to support system engine...');
+  console.log('🔧 Updating module_definitions schema to support current custom-node shape...');
 
   try {
     db.exec(`
@@ -72,8 +80,8 @@ export function ensureModuleDefinitionsSupportsSystemEngine(db: Database.Databas
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
         description TEXT,
-        engine_type TEXT NOT NULL CHECK(engine_type IN ('nai', 'comfyui', 'system')),
-        authoring_source TEXT NOT NULL CHECK(authoring_source IN ('nai_form_snapshot', 'comfyui_workflow_wrap', 'manual')),
+        engine_type TEXT NOT NULL CHECK(engine_type IN ('nai', 'comfyui', 'system', 'custom_js')),
+        authoring_source TEXT NOT NULL CHECK(authoring_source IN ('nai_form_snapshot', 'comfyui_workflow_wrap', 'manual', 'custom_node_fs')),
         category TEXT,
         source_workflow_id INTEGER,
         template_defaults TEXT NOT NULL,
@@ -84,6 +92,9 @@ export function ensureModuleDefinitionsSupportsSystemEngine(db: Database.Databas
         version INTEGER NOT NULL DEFAULT 1,
         is_active INTEGER DEFAULT 1,
         color TEXT DEFAULT '#7c4dff',
+        external_key TEXT,
+        source_path TEXT,
+        source_hash TEXT,
         created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (source_workflow_id) REFERENCES workflows(id) ON DELETE SET NULL
@@ -92,22 +103,38 @@ export function ensureModuleDefinitionsSupportsSystemEngine(db: Database.Databas
       INSERT INTO module_definitions__new (
         id, name, description, engine_type, authoring_source, category, source_workflow_id,
         template_defaults, exposed_inputs, output_ports, internal_fixed_values, ui_schema,
-        version, is_active, color, created_date, updated_date
+        version, is_active, color, external_key, source_path, source_hash, created_date, updated_date
       )
       SELECT
         id, name, description, engine_type, authoring_source, category, source_workflow_id,
         template_defaults, exposed_inputs, output_ports, internal_fixed_values, ui_schema,
-        version, is_active, color, created_date, updated_date
+        version, is_active, color,
+        NULL AS external_key,
+        NULL AS source_path,
+        NULL AS source_hash,
+        created_date, updated_date
       FROM module_definitions;
 
       DROP TABLE module_definitions;
       ALTER TABLE module_definitions__new RENAME TO module_definitions;
+      CREATE INDEX IF NOT EXISTS idx_module_definitions_name ON module_definitions(name);
+      CREATE INDEX IF NOT EXISTS idx_module_definitions_engine_type ON module_definitions(engine_type);
+      CREATE INDEX IF NOT EXISTS idx_module_definitions_source_workflow ON module_definitions(source_workflow_id);
+      CREATE INDEX IF NOT EXISTS idx_module_definitions_active ON module_definitions(is_active);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_module_definitions_external_key ON module_definitions(external_key);
+      CREATE INDEX IF NOT EXISTS idx_module_definitions_authoring_source ON module_definitions(authoring_source);
       COMMIT;
     `);
   } catch (error) {
     db.exec('ROLLBACK;');
     throw error;
   }
+}
+
+/** Ensure custom-node related module_definition indexes exist after schema reconciliation. */
+function ensureModuleDefinitionCompatibilityIndexes(db: Database.Database): void {
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_module_definitions_external_key ON module_definitions(external_key)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_module_definitions_authoring_source ON module_definitions(authoring_source)');
 }
 
 /** Recreate graph_workflows when an older database still enforces unique workflow names. */
@@ -164,7 +191,8 @@ export function ensureGraphWorkflowsAllowDuplicateNames(db: Database.Database): 
 
 /** Apply all post-migration compatibility fixes for older user database schemas. */
 export function ensureUserSettingsCompatibility(db: Database.Database): void {
-  ensureModuleDefinitionsSupportsSystemEngine(db);
+  ensureModuleDefinitionsSupportsCurrentShape(db);
+  ensureModuleDefinitionCompatibilityIndexes(db);
   ensureGraphWorkflowsAllowDuplicateNames(db);
   ensureBuiltinSystemModulesInDb(db);
 }

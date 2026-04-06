@@ -67,6 +67,7 @@ const tempDir = resolvePath(process.env.RUNTIME_TEMP_DIR, path.join(basePath, 't
 const saveDir = resolvePath(process.env.RUNTIME_SAVE_DIR, path.join(basePath, 'save'));
 const canvasDir = resolvePath(process.env.RUNTIME_CANVAS_DIR, path.join(saveDir, 'canvas'));
 const modelsDir = resolvePath(process.env.RUNTIME_MODELS_DIR, path.join(basePath, 'models'));
+const customNodesDir = resolvePath(process.env.RUNTIME_CUSTOM_NODES_DIR, path.join(basePath, 'custom_nodes'));
 const recycleBinDir = resolvePath(process.env.RUNTIME_RECYCLE_BIN_DIR, path.join(basePath, 'RecycleBin'));
 
 const databaseFile = path.join(databaseDir, 'images.db');
@@ -110,6 +111,7 @@ export const runtimePaths = {
   saveDir,
   canvasDir,
   modelsDir,
+  customNodesDir,
   recycleBinDir
 };
 
@@ -128,11 +130,12 @@ export function ensureRuntimeDirectories(): void {
   console.log(`   - Database:    ${databaseDir}`);
   console.log(`   - Logs:        ${logsDir}`);
   console.log(`   - Models:      ${modelsDir}`);
+  console.log(`   - CustomNodes: ${customNodesDir}`);
   console.log(`   - Temp:        ${tempDir}`);
   console.log(`   - Save:        ${saveDir}`);
   console.log(`   - Canvas:      ${canvasDir}`);
 
-  [uploadsDir, databaseDir, logsDir, tempDir, saveDir, canvasDir, modelsDir, recycleBinDir].forEach(dir => {
+  [uploadsDir, databaseDir, logsDir, tempDir, saveDir, canvasDir, modelsDir, customNodesDir, recycleBinDir].forEach(dir => {
     if (!fs.existsSync(dir)) {
       try {
         fs.mkdirSync(dir, { recursive: true });

@@ -100,6 +100,10 @@ export function getModuleColor(module: ModuleDefinitionRecord) {
     return '#2196f3'
   }
 
+  if (module.engine_type === 'custom_js') {
+    return '#ff8a65'
+  }
+
   return '#26a69a'
 }
 

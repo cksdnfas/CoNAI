@@ -2,8 +2,8 @@
  * Generic module-graph types for modular image generation workflows.
  */
 
-export type ModuleEngineType = 'nai' | 'comfyui' | 'system'
-export type ModuleAuthoringSource = 'nai_form_snapshot' | 'comfyui_workflow_wrap' | 'manual'
+export type ModuleEngineType = 'nai' | 'comfyui' | 'system' | 'custom_js'
+export type ModuleAuthoringSource = 'nai_form_snapshot' | 'comfyui_workflow_wrap' | 'manual' | 'custom_node_fs'
 export type ModulePortDirection = 'input' | 'output'
 export type ModulePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json' | 'any'
 export type GraphExecutionStatus = 'draft' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
@@ -50,6 +50,9 @@ export interface ModuleDefinitionRecord {
   version: number
   is_active: boolean
   color?: string | null
+  external_key?: string | null
+  source_path?: string | null
+  source_hash?: string | null
   created_date: string
   updated_date: string
 }
@@ -69,6 +72,9 @@ export interface ModuleDefinitionCreateData {
   version?: number
   is_active?: boolean
   color?: string
+  external_key?: string
+  source_path?: string
+  source_hash?: string
 }
 
 export interface ModuleDefinitionUpdateData {
@@ -83,6 +89,9 @@ export interface ModuleDefinitionUpdateData {
   version?: number
   is_active?: boolean
   color?: string
+  external_key?: string | null
+  source_path?: string | null
+  source_hash?: string | null
 }
 
 export interface GraphWorkflowNode {

@@ -11,6 +11,7 @@ import { settingsRoutes } from '../routes/settings';
 import { workflowRoutes } from '../routes/workflows';
 import { comfyuiServerRoutes } from '../routes/comfyuiServers';
 import { customDropdownListRoutes } from '../routes/customDropdownLists';
+import { customNodeRoutes } from '../routes/customNodes.routes';
 import { moduleDefinitionRoutes } from '../routes/moduleDefinitions';
 import { graphWorkflowRoutes } from '../routes/graphWorkflows';
 import naiRoutes from '../routes/nai';
@@ -88,6 +89,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/workflows', options.readOnlyLimiter, optionalAuth, workflowRoutes);
   app.use('/api/comfyui-servers', optionalAuth, comfyuiServerRoutes);
   app.use('/api/custom-dropdown-lists', optionalAuth, customDropdownListRoutes);
+  app.use('/api/custom-nodes', optionalAuth, customNodeRoutes);
   app.use('/api/module-definitions', optionalAuth, moduleDefinitionRoutes);
   app.use('/api/graph-workflows', optionalAuth, graphWorkflowRoutes);
   app.use('/api/nai', options.uploadLimiter, optionalAuth, naiRoutes);
