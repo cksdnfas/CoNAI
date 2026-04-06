@@ -40,6 +40,15 @@ function toTitleCase(rawValue: string) {
     .join(' ')
 }
 
+/** Build one compact native hover tooltip for module-library rows. */
+function getModuleHoverTitle(module: ModuleDefinitionRecord) {
+  if (!module.description?.trim()) {
+    return undefined
+  }
+
+  return `${module.name}\n${module.description.trim()}`
+}
+
 /** Build a user-facing group for system modules based on practical workflow role. */
 function getSystemModuleGroup(module: ModuleDefinitionRecord): { key: string; label: string } {
   const category = (module.category ?? '').toLowerCase()
@@ -318,7 +327,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
                           isSystemModule ? 'border-primary/25 bg-surface-high/70' : 'border-border bg-surface-low',
                         )}
                       >
-                        <div className="min-w-0 space-y-1">
+                        <div className={cn('min-w-0 space-y-1', module.description ? 'cursor-help' : undefined)} title={getModuleHoverTitle(module)}>
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="truncate text-sm font-medium text-foreground">{module.name}</span>
                             <Badge variant="outline">{module.engine_type}</Badge>
@@ -327,7 +336,6 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
                           <div className="text-[11px] text-muted-foreground">
                             입력 {module.exposed_inputs.length} · 출력 {module.output_ports.length}
                           </div>
-                          {module.description ? <div className="truncate text-xs text-muted-foreground">{module.description}</div> : null}
                         </div>
 
                         <Button type="button" size="sm" variant="outline" onClick={() => onAddModule(module)}>

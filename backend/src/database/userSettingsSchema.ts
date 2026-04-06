@@ -25,7 +25,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS comfyui_servers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name VARCHAR(255) NOT NULL UNIQUE,
-      url VARCHAR(500) NOT NULL,
+      endpoint VARCHAR(500) NOT NULL,
+      description TEXT,
       is_active BOOLEAN DEFAULT 1,
       is_default BOOLEAN DEFAULT 0,
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -39,7 +40,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       workflow_id INTEGER NOT NULL,
       server_id INTEGER NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      is_enabled INTEGER DEFAULT 1,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE,
       FOREIGN KEY (server_id) REFERENCES comfyui_servers(id) ON DELETE CASCADE,
       UNIQUE(workflow_id, server_id)
@@ -256,6 +258,33 @@ export function createUserSettingsSchema(db: Database.Database): void {
     const pragma = db.prepare(`PRAGMA table_info(${tableName})`).all() as any[];
     return pragma.some((col: any) => col.name === columnName);
   };
+
+  // Migrate comfyui_servers table
+  if (!hasColumn('comfyui_servers', 'endpoint')) {
+    console.log('  Migrating comfyui_servers: adding endpoint column');
+    db.exec('ALTER TABLE comfyui_servers ADD COLUMN endpoint VARCHAR(500)');
+    if (hasColumn('comfyui_servers', 'url')) {
+      db.exec('UPDATE comfyui_servers SET endpoint = COALESCE(endpoint, url) WHERE endpoint IS NULL');
+    }
+  }
+  if (!hasColumn('comfyui_servers', 'description')) {
+    console.log('  Migrating comfyui_servers: adding description column');
+    db.exec('ALTER TABLE comfyui_servers ADD COLUMN description TEXT');
+  }
+
+  // Migrate workflow_servers table
+  if (!hasColumn('workflow_servers', 'is_enabled')) {
+    console.log('  Migrating workflow_servers: adding is_enabled column');
+    db.exec('ALTER TABLE workflow_servers ADD COLUMN is_enabled INTEGER DEFAULT 1');
+  }
+  if (!hasColumn('workflow_servers', 'created_date')) {
+    console.log('  Migrating workflow_servers: adding created_date column');
+    db.exec('ALTER TABLE workflow_servers ADD COLUMN created_date DATETIME');
+    if (hasColumn('workflow_servers', 'created_at')) {
+      db.exec('UPDATE workflow_servers SET created_date = COALESCE(created_date, created_at) WHERE created_date IS NULL');
+    }
+    db.exec("UPDATE workflow_servers SET created_date = COALESCE(created_date, CURRENT_TIMESTAMP) WHERE created_date IS NULL");
+  }
 
   // Migrate wildcards table
   if (!hasColumn('wildcards', 'is_auto_collected')) {

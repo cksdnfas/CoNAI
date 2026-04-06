@@ -9,7 +9,8 @@
     "copy:migrations": "copyfiles -u 1 \"src/database/migrations/**/*.sql\" dist/",
     "start": "node dist/backend/src/index.js",
     "db:migrate": "tsx src/database/migrate.ts",
-    "validate:metadata": "tsx src/scripts/validateMetadataExtraction.ts"
+    "validate:metadata": "tsx src/scripts/validateMetadataExtraction.ts",
+    "verify:user-db-smoke": "tsx src/scripts/verifyUserSettingsSchemaSmoke.ts"
   },
   "dependencies": {
     "@conai/shared": "file:../shared",

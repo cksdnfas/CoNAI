@@ -38,6 +38,7 @@
     "db:reset": "rm -f database/*.db && cd backend && npm run db:migrate",
     "verify:no-banned-imports": "node scripts/verify-no-banned-imports.mjs --mode=phase1",
     "verify:no-banned-imports:phase2": "node scripts/verify-no-banned-imports.mjs --mode=phase2",
+    "verify:user-db-smoke": "cd backend && npm run verify:user-db-smoke",
     "verify:no-ui-signatures:active": "node scripts/verify-no-ui-signatures.mjs --scope=active",
     "verify:no-ui-signatures:generated": "node scripts/verify-no-ui-signatures.mjs --scope=generated",
     "verify:no-ui-signatures:full": "node scripts/verify-no-ui-signatures.mjs --scope=full",
