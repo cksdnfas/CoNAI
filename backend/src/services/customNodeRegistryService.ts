@@ -67,6 +67,8 @@ export type CustomNodeRecord = {
   folderPath: string;
   manifestPath: string;
   entryPath: string;
+  packageJsonPath: string | null;
+  readmePath: string | null;
   sourceHash: string;
   manifest: CustomNodeManifest;
 };
@@ -207,12 +209,16 @@ async function loadCustomNodeRecord(folderName: string, folderPath: string): Pro
   }
 
   const entryContent = await fs.promises.readFile(entryPath, 'utf8');
+  const packageJsonPath = path.join(folderPath, 'package.json');
+  const readmePath = path.join(folderPath, 'README.md');
 
   return {
     folderName,
     folderPath,
     manifestPath,
     entryPath,
+    packageJsonPath: fs.existsSync(packageJsonPath) ? packageJsonPath : null,
+    readmePath: fs.existsSync(readmePath) ? readmePath : null,
     sourceHash: buildCustomNodeSourceHash(manifestContent, entryContent),
     manifest: parsedManifest,
   };

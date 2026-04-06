@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   getCustomNodeSource,
+  installCustomNodeDependencies,
   listCustomNodes,
   openCustomNodeFolder,
   rescanCustomNodes,
@@ -53,6 +54,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
   const [testInputsText, setTestInputsText] = useState('{}')
   const [testResultText, setTestResultText] = useState('')
   const [testResultData, setTestResultData] = useState<CustomNodeTestResult | null>(null)
+  const [installResultText, setInstallResultText] = useState('')
 
   const customNodesQuery = useQuery({
     queryKey: ['custom-nodes'],
@@ -138,6 +140,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
       setSelectedTestKey(variables.key)
       setTestResultData(null)
       setTestResultText('')
+      setInstallResultText('')
       showSnackbar({ message: `커스텀 노드 폴더를 만들었어: ${result.folderPath}`, tone: 'info' })
       await handleModulesChanged()
     },
@@ -159,6 +162,19 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
         message: error instanceof Error ? error.message : '커스텀 노드 폴더 열기에 실패했어.',
         tone: 'error',
       })
+    },
+  })
+
+  const installDependenciesMutation = useMutation({
+    mutationFn: async (key: string) => await installCustomNodeDependencies(key),
+    onSuccess: (result) => {
+      setInstallResultText(stringifyPrettyJson(result))
+      showSnackbar({ message: `npm install 완료: ${result.key}`, tone: 'info' })
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : '커스텀 노드 의존성 설치에 실패했어.'
+      setInstallResultText(message)
+      showSnackbar({ message, tone: 'error' })
     },
   })
 
@@ -264,6 +280,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                                 setSelectedTestKey(node.manifest.key)
                                 setTestResultData(null)
                                 setTestResultText('')
+                                setInstallResultText('')
                               }}
                             >
                               {isSelected ? '테스트 대상' : '테스트 선택'}
@@ -382,6 +399,8 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                     <div><span className="font-medium text-foreground">폴더:</span> {selectedNodeSourceQuery.data.folderPath}</div>
                     <div><span className="font-medium text-foreground">manifest:</span> {selectedNodeSourceQuery.data.manifestPath}</div>
                     <div><span className="font-medium text-foreground">entry:</span> {selectedNodeSourceQuery.data.entryPath}</div>
+                    <div><span className="font-medium text-foreground">package.json:</span> {selectedNodeSourceQuery.data.packageJsonPath ?? '없음'}</div>
+                    <div><span className="font-medium text-foreground">README:</span> {selectedNodeSourceQuery.data.readmePath ?? '없음'}</div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" size="sm" variant="outline" onClick={() => void openFolderMutation.mutateAsync(selectedNodeSourceQuery.data.key)} disabled={openFolderMutation.isPending}>
@@ -398,7 +417,19 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                     >
                       Entry 경로 복사
                     </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void installDependenciesMutation.mutateAsync(selectedNodeSourceQuery.data.key)}
+                      disabled={installDependenciesMutation.isPending || !selectedNodeSourceQuery.data.packageJsonPath}
+                    >
+                      {installDependenciesMutation.isPending ? 'npm install 중...' : 'npm install'}
+                    </Button>
                   </div>
+                  {selectedNodeSourceQuery.data.packageJsonPath ? (
+                    <Textarea rows={8} value={installResultText} placeholder="npm install 결과가 여기에 보여." readOnly />
+                  ) : null}
                   <Textarea rows={8} value={stringifyPrettyJson(selectedNodeSourceQuery.data.manifest)} readOnly />
                 </div>
               ) : null}

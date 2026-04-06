@@ -57,6 +57,7 @@ Implement the MVP foundations for local file-based custom nodes.
 - [x] Add file watcher auto-reload
 - [x] Add a basic custom node management view
 - [x] Add source path and open-folder actions in the management UI
+- [x] Add package.json visibility and local `npm install` action in the management UI
 
 ## Implementation notes
 

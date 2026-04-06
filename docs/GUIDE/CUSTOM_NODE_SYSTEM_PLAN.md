@@ -227,6 +227,8 @@ The scaffold API currently ships with these starter templates:
 - `http_json` — external API call starter returning JSON/text outputs
 - `image_file` — local file-path image output starter returning `image` + `text`
 
+The current local workflow also supports dependency installation from the custom node manager when a node folder contains `package.json`.
+
 ## Implementation Phases
 
 ### Phase 1 — Foundations

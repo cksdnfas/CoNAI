@@ -26,6 +26,33 @@ function openFolderInHostExplorer(folderPath: string) {
   child.unref();
 }
 
+/** Run one npm install inside a custom node folder and capture the command output. */
+async function runCustomNodeNpmInstall(folderPath: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  return await new Promise((resolve, reject) => {
+    const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const child = spawn(npmCommand, ['install'], {
+      cwd: folderPath,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      resolve({ code, stdout, stderr });
+    });
+  });
+}
+
 /** List local custom node folders and their current manifest load status. */
 router.get('/', asyncHandler(async (_req: Request, res: Response) => {
   const result = await CustomNodeRegistryService.scanCustomNodesFromFileSystem();
@@ -97,8 +124,58 @@ router.get('/:key/source', asyncHandler(async (req: Request, res: Response) => {
       folderPath: customNodeRecord.folderPath,
       manifestPath: customNodeRecord.manifestPath,
       entryPath: customNodeRecord.entryPath,
+      packageJsonPath: customNodeRecord.packageJsonPath,
+      readmePath: customNodeRecord.readmePath,
       sourceHash: customNodeRecord.sourceHash,
       manifest: customNodeRecord.manifest,
+    },
+  });
+}));
+
+/** Run npm install inside one valid custom node folder when the package.json file exists. */
+router.post('/:key/install', asyncHandler(async (req: Request, res: Response) => {
+  const key = String(req.params.key ?? '').trim();
+  if (!key) {
+    return res.status(400).json({
+      success: false,
+      error: 'Custom node key is required',
+    });
+  }
+
+  const customNodeRecord = await CustomNodeRegistryService.findCustomNodeRecordByKey(key);
+  if (!customNodeRecord) {
+    return res.status(404).json({
+      success: false,
+      error: `Custom node package not found: ${key}`,
+    });
+  }
+
+  if (!customNodeRecord.packageJsonPath) {
+    return res.status(400).json({
+      success: false,
+      error: `No package.json found for custom node: ${key}`,
+    });
+  }
+
+  const installResult = await runCustomNodeNpmInstall(customNodeRecord.folderPath);
+  const success = installResult.code === 0;
+
+  return res.status(success ? 200 : 500).json({
+    success,
+    data: success ? {
+      key,
+      folderPath: customNodeRecord.folderPath,
+      packageJsonPath: customNodeRecord.packageJsonPath,
+      stdout: installResult.stdout,
+      stderr: installResult.stderr,
+    } : undefined,
+    error: success ? undefined : `npm install failed for custom node: ${key}`,
+    details: success ? undefined : {
+      key,
+      folderPath: customNodeRecord.folderPath,
+      packageJsonPath: customNodeRecord.packageJsonPath,
+      stdout: installResult.stdout,
+      stderr: installResult.stderr,
     },
   });
 }));

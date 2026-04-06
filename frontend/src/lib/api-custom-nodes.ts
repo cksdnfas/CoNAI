@@ -56,6 +56,8 @@ export interface CustomNodeRecord {
   folderPath: string
   manifestPath: string
   entryPath: string
+  packageJsonPath: string | null
+  readmePath: string | null
   sourceHash: string
   manifest: CustomNodeManifest
 }
@@ -96,8 +98,18 @@ export interface CustomNodeSourceResult {
   folderPath: string
   manifestPath: string
   entryPath: string
+  packageJsonPath: string | null
+  readmePath: string | null
   sourceHash: string
   manifest: CustomNodeManifest
+}
+
+export interface CustomNodeInstallResult {
+  key: string
+  folderPath: string
+  packageJsonPath: string
+  stdout: string
+  stderr: string
 }
 
 export interface CustomNodeTestResult {
@@ -156,6 +168,16 @@ export async function openCustomNodeFolder(key: string) {
   })
   if (!response.success) {
     throw new Error(response.error || '커스텀 노드 폴더를 열지 못했어.')
+  }
+  return response.data
+}
+
+export async function installCustomNodeDependencies(key: string) {
+  const response = await fetchJson<ApiResponse<CustomNodeInstallResult>>(`/api/custom-nodes/${encodeURIComponent(key)}/install`, {
+    method: 'POST',
+  })
+  if (!response.success) {
+    throw new Error(response.error || '커스텀 노드 의존성 설치에 실패했어.')
   }
   return response.data
 }
