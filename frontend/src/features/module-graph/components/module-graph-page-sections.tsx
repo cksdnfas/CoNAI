@@ -13,6 +13,10 @@ import { WorkflowExposedInputEditor } from './workflow-exposed-input-editor'
 import { WorkflowRunnerPanel } from './workflow-runner-panel'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
 
+export { ModuleGraphWorkflowListSidebar } from './module-graph-workflow-list-sidebar'
+export { ModuleGraphWorkflowBrowseContent, ModuleGraphWorkflowEditorContent } from './module-graph-workflow-content'
+export { ModuleGraphWorkspaceModals } from './module-graph-workspace-modals'
+
 type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
 
 /** Render the editor-support section tabs used by the workflow editor drawer. */

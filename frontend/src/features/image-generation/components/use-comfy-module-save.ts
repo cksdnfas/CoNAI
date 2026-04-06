@@ -1,14 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createComfyModuleFromWorkflow } from '@/lib/api'
+import { createComfyModuleFromWorkflow, type ModulePortDataType } from '@/lib/api'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation'
-import {
-  buildComfyModuleFieldOptions,
-  buildComfyModuleSnapshot,
-  buildComfyModuleUiSchema,
-  getErrorMessage,
-  type ModuleFieldOption,
-  type WorkflowFieldDraftValue,
-} from '../image-generation-shared'
+import { getErrorMessage, type ModuleFieldOption, type WorkflowFieldDraftValue } from '../image-generation-shared'
+
+/** Map one marked workflow field to the closest module-port data type. */
+function getComfyModuleFieldDataType(field: WorkflowMarkedField): ModulePortDataType {
+  if (field.type === 'image') {
+    return 'image'
+  }
+
+  if (field.type === 'number') {
+    return 'number'
+  }
+
+  return 'text'
+}
 
 /** Manage Comfy module-save modal state and module creation from the selected workflow draft. */
 export function useComfyModuleSave({
@@ -27,7 +33,14 @@ export function useComfyModuleSave({
   const [moduleSaveDescription, setModuleSaveDescription] = useState('')
   const [moduleExposedFieldKeys, setModuleExposedFieldKeys] = useState<string[]>([])
 
-  const comfyModuleFieldOptions = useMemo<ModuleFieldOption[]>(() => buildComfyModuleFieldOptions(selectedWorkflowFields), [selectedWorkflowFields])
+  const comfyModuleFieldOptions = useMemo<ModuleFieldOption[]>(() => (
+    selectedWorkflowFields.map((field) => ({
+      key: field.id,
+      label: field.label,
+      dataType: getComfyModuleFieldDataType(field),
+      options: field.options,
+    }))
+  ), [selectedWorkflowFields])
 
   useEffect(() => {
     const allowedKeys = new Set(comfyModuleFieldOptions.map((field) => field.key))
@@ -63,23 +76,12 @@ export function useComfyModuleSave({
     }
 
     try {
-      const snapshot = buildComfyModuleSnapshot(selectedWorkflowFields, workflowDraft)
-      const exposedFields = comfyModuleFieldOptions
-        .filter((field) => moduleExposedFieldKeys.includes(field.key))
-        .map((field) => ({
-          key: field.key,
-          label: field.label,
-          data_type: field.dataType,
-        }))
-      const uiSchema = buildComfyModuleUiSchema(comfyModuleFieldOptions, workflowDraft, moduleExposedFieldKeys)
-
-      await createComfyModuleFromWorkflow({
+      await createComfyModuleFromWorkflow(selectedWorkflow.id, {
         name: moduleName,
         description: moduleSaveDescription.trim() || undefined,
-        workflow_id: selectedWorkflow.id,
-        snapshot,
-        exposed_fields: exposedFields,
-        ui_schema: uiSchema,
+        exposed_field_ids: comfyModuleFieldOptions
+          .filter((field) => moduleExposedFieldKeys.includes(field.key))
+          .map((field) => field.key),
       })
 
       setIsModuleSaveModalOpen(false)
