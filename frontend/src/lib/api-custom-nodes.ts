@@ -90,6 +90,16 @@ export interface CustomNodeScaffoldResult {
   sync: CustomNodeSyncResult
 }
 
+export interface CustomNodeSourceResult {
+  key: string
+  folderName: string
+  folderPath: string
+  manifestPath: string
+  entryPath: string
+  sourceHash: string
+  manifest: CustomNodeManifest
+}
+
 export interface CustomNodeTestResult {
   key: string
   name: string
@@ -128,6 +138,24 @@ export async function scaffoldCustomNode(input: CustomNodeScaffoldInput) {
   })
   if (!response.success) {
     throw new Error(response.error || '커스텀 노드 스캐폴드를 만들지 못했어.')
+  }
+  return response.data
+}
+
+export async function getCustomNodeSource(key: string) {
+  const response = await fetchJson<ApiResponse<CustomNodeSourceResult>>(`/api/custom-nodes/${encodeURIComponent(key)}/source`)
+  if (!response.success) {
+    throw new Error(response.error || '커스텀 노드 소스를 불러오지 못했어.')
+  }
+  return response.data
+}
+
+export async function openCustomNodeFolder(key: string) {
+  const response = await fetchJson<ApiResponse<{ key: string; folderPath: string }>>(`/api/custom-nodes/${encodeURIComponent(key)}/open-folder`, {
+    method: 'POST',
+  })
+  if (!response.success) {
+    throw new Error(response.error || '커스텀 노드 폴더를 열지 못했어.')
   }
   return response.data
 }

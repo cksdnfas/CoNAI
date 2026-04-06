@@ -1,3 +1,4 @@
+import { spawn } from 'child_process';
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import { ModuleDefinitionModel } from '../models/ModuleDefinition';
@@ -6,6 +7,24 @@ import { runCustomJsModuleOnce } from '../services/graph-workflow-executor/execu
 import { parseModuleDefinition } from '../services/graph-workflow-executor/shared';
 
 const router = Router();
+
+/** Open one local folder path in the host operating system file explorer. */
+function openFolderInHostExplorer(folderPath: string) {
+  if (process.platform === 'win32') {
+    const child = spawn('explorer.exe', [folderPath], { detached: true, stdio: 'ignore' });
+    child.unref();
+    return;
+  }
+
+  if (process.platform === 'darwin') {
+    const child = spawn('open', [folderPath], { detached: true, stdio: 'ignore' });
+    child.unref();
+    return;
+  }
+
+  const child = spawn('xdg-open', [folderPath], { detached: true, stdio: 'ignore' });
+  child.unref();
+}
 
 /** List local custom node folders and their current manifest load status. */
 router.get('/', asyncHandler(async (_req: Request, res: Response) => {
@@ -49,6 +68,66 @@ router.post('/scaffold', asyncHandler(async (req: Request, res: Response) => {
   return res.status(201).json({
     success: true,
     data: result,
+  });
+}));
+
+/** Return source paths and manifest details for one valid local custom node package. */
+router.get('/:key/source', asyncHandler(async (req: Request, res: Response) => {
+  const key = String(req.params.key ?? '').trim();
+  if (!key) {
+    return res.status(400).json({
+      success: false,
+      error: 'Custom node key is required',
+    });
+  }
+
+  const customNodeRecord = await CustomNodeRegistryService.findCustomNodeRecordByKey(key);
+  if (!customNodeRecord) {
+    return res.status(404).json({
+      success: false,
+      error: `Custom node source not found: ${key}`,
+    });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      key,
+      folderName: customNodeRecord.folderName,
+      folderPath: customNodeRecord.folderPath,
+      manifestPath: customNodeRecord.manifestPath,
+      entryPath: customNodeRecord.entryPath,
+      sourceHash: customNodeRecord.sourceHash,
+      manifest: customNodeRecord.manifest,
+    },
+  });
+}));
+
+/** Open one valid local custom node folder in the host OS file explorer. */
+router.post('/:key/open-folder', asyncHandler(async (req: Request, res: Response) => {
+  const key = String(req.params.key ?? '').trim();
+  if (!key) {
+    return res.status(400).json({
+      success: false,
+      error: 'Custom node key is required',
+    });
+  }
+
+  const customNodeRecord = await CustomNodeRegistryService.findCustomNodeRecordByKey(key);
+  if (!customNodeRecord) {
+    return res.status(404).json({
+      success: false,
+      error: `Custom node folder not found: ${key}`,
+    });
+  }
+
+  openFolderInHostExplorer(customNodeRecord.folderPath);
+  return res.json({
+    success: true,
+    data: {
+      key,
+      folderPath: customNodeRecord.folderPath,
+    },
   });
 }));
 

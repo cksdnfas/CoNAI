@@ -10,7 +10,9 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
+  getCustomNodeSource,
   listCustomNodes,
+  openCustomNodeFolder,
   rescanCustomNodes,
   scaffoldCustomNode,
   testCustomNode,
@@ -69,6 +71,12 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
     () => loadedNodes.find((node) => node.manifest.key === testResultData?.key) ?? null,
     [loadedNodes, testResultData?.key],
   )
+
+  const selectedNodeSourceQuery = useQuery({
+    queryKey: ['custom-node-source', selectedTestKey],
+    queryFn: () => getCustomNodeSource(selectedTestKey),
+    enabled: !!selectedTestKey,
+  })
 
   const previewableImageOutputs = useMemo(() => {
     if (!testResultData || !testResultNode) {
@@ -136,6 +144,19 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
     onError: (error) => {
       showSnackbar({
         message: error instanceof Error ? error.message : '커스텀 노드 스캐폴드 생성에 실패했어.',
+        tone: 'error',
+      })
+    },
+  })
+
+  const openFolderMutation = useMutation({
+    mutationFn: async (key: string) => await openCustomNodeFolder(key),
+    onSuccess: (result) => {
+      showSnackbar({ message: `커스텀 노드 폴더를 열었어: ${result.folderPath}`, tone: 'info' })
+    },
+    onError: (error) => {
+      showSnackbar({
+        message: error instanceof Error ? error.message : '커스텀 노드 폴더 열기에 실패했어.',
         tone: 'error',
       })
     },
@@ -247,6 +268,26 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                             >
                               {isSelected ? '테스트 대상' : '테스트 선택'}
                             </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void openFolderMutation.mutateAsync(node.manifest.key)}
+                              disabled={openFolderMutation.isPending}
+                            >
+                              폴더 열기
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={async () => {
+                                await navigator.clipboard.writeText(node.folderPath)
+                                showSnackbar({ message: '폴더 경로를 복사했어.', tone: 'info' })
+                              }}
+                            >
+                              경로 복사
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -327,6 +368,40 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                 description={selectedTestNode ? `${selectedTestNode.manifest.name} 테스트` : '먼저 테스트할 노드를 선택해.'}
                 variant="inside"
               />
+
+              {selectedNodeSourceQuery.data ? (
+                <div className="space-y-3 rounded-sm border border-border/70 bg-background/50 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-medium text-foreground">소스 정보</div>
+                      <div className="text-xs text-muted-foreground">선택한 커스텀 노드의 파일 경로와 manifest 요약이야.</div>
+                    </div>
+                    <Badge variant="outline">{selectedNodeSourceQuery.data.sourceHash.slice(0, 12)}</Badge>
+                  </div>
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <div><span className="font-medium text-foreground">폴더:</span> {selectedNodeSourceQuery.data.folderPath}</div>
+                    <div><span className="font-medium text-foreground">manifest:</span> {selectedNodeSourceQuery.data.manifestPath}</div>
+                    <div><span className="font-medium text-foreground">entry:</span> {selectedNodeSourceQuery.data.entryPath}</div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={() => void openFolderMutation.mutateAsync(selectedNodeSourceQuery.data.key)} disabled={openFolderMutation.isPending}>
+                      폴더 열기
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(selectedNodeSourceQuery.data.entryPath)
+                        showSnackbar({ message: 'entry 경로를 복사했어.', tone: 'info' })
+                      }}
+                    >
+                      Entry 경로 복사
+                    </Button>
+                  </div>
+                  <Textarea rows={8} value={stringifyPrettyJson(selectedNodeSourceQuery.data.manifest)} readOnly />
+                </div>
+              ) : null}
 
               <Textarea
                 rows={8}

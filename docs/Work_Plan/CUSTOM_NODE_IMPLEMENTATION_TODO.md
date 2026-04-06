@@ -36,6 +36,8 @@ Implement the MVP foundations for local file-based custom nodes.
 - [x] Add `GET /api/custom-nodes`
 - [x] Add `POST /api/custom-nodes/rescan`
 - [x] Return valid nodes and load errors in a simple admin-friendly response
+- [x] Add `GET /api/custom-nodes/:key/source`
+- [x] Add `POST /api/custom-nodes/:key/open-folder`
 
 ## Phase 4 — Execution
 
@@ -54,6 +56,7 @@ Implement the MVP foundations for local file-based custom nodes.
 - [x] Add test-run endpoint for ad-hoc custom node execution
 - [x] Add file watcher auto-reload
 - [x] Add a basic custom node management view
+- [x] Add source path and open-folder actions in the management UI
 
 ## Implementation notes
 

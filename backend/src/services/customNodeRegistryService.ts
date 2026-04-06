@@ -526,6 +526,12 @@ export class CustomNodeRegistryService {
     };
   }
 
+  /** Find one valid file-backed custom node record by its stable manifest key. */
+  static async findCustomNodeRecordByKey(key: string): Promise<CustomNodeRecord | null> {
+    const scanResult = await this.scanCustomNodesFromFileSystem();
+    return scanResult.nodes.find((node) => node.manifest.key === key) ?? null;
+  }
+
   /** Sync file-backed custom nodes into module_definitions for graph usage. */
   static async syncCustomNodesFromFileSystem(): Promise<CustomNodeSyncResult> {
     const scanResult = await this.scanCustomNodesFromFileSystem();

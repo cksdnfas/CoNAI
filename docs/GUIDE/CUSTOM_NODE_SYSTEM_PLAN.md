@@ -196,12 +196,14 @@ For `image` and `mask` outputs, the local custom JS runner currently accepts eit
 
 - `GET /api/custom-nodes`
 - `POST /api/custom-nodes/rescan`
-
-### Post-MVP endpoints
-
 - `POST /api/custom-nodes/scaffold`
 - `POST /api/custom-nodes/:key/test`
 - `GET /api/custom-nodes/:key/source`
+- `POST /api/custom-nodes/:key/open-folder`
+
+### Post-MVP endpoints
+
+- richer source inspection and edit helpers if needed
 
 ## UI Surface
 
@@ -214,8 +216,6 @@ For `image` and `mask` outputs, the local custom JS runner currently accepts eit
 ### Post-MVP
 
 - Settings page for custom node status
-- Open folder button
-- Rescan button
 - Load error details
 - Scaffold wizard
 
