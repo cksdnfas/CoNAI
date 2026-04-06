@@ -83,7 +83,7 @@ export type CustomNodeSyncResult = CustomNodeScanResult & {
   deactivatedCount: number;
 };
 
-export type CustomNodeScaffoldTemplate = 'empty' | 'http_json';
+export type CustomNodeScaffoldTemplate = 'empty' | 'http_json' | 'image_file';
 
 export type CustomNodeScaffoldInput = {
   folderName: string;
@@ -247,7 +247,24 @@ function buildCustomNodeScaffoldManifest(input: CustomNodeScaffoldInput) {
             default_value: 'GET',
           },
         ]
-      : [],
+      : input.template === 'image_file'
+        ? [
+            {
+              key: 'file_path',
+              label: 'File Path',
+              data_type: 'text' as const,
+              required: true,
+              default_value: './assets/sample.png',
+            },
+            {
+              key: 'status_text',
+              label: 'Status Text',
+              data_type: 'text' as const,
+              required: false,
+              default_value: 'Loaded image from file path',
+            },
+          ]
+        : [],
     outputs: input.template === 'http_json'
       ? [
           {
@@ -262,14 +279,28 @@ function buildCustomNodeScaffoldManifest(input: CustomNodeScaffoldInput) {
             data_type: 'text' as const,
           },
         ]
-      : [
-          {
-            key: 'text',
-            label: 'Text',
-            data_type: 'text' as const,
-            required: true,
-          },
-        ],
+      : input.template === 'image_file'
+        ? [
+            {
+              key: 'preview_image',
+              label: 'Preview Image',
+              data_type: 'image' as const,
+              required: true,
+            },
+            {
+              key: 'status_text',
+              label: 'Status Text',
+              data_type: 'text' as const,
+            },
+          ]
+        : [
+            {
+              key: 'text',
+              label: 'Text',
+              data_type: 'text' as const,
+              required: true,
+            },
+          ],
     ui_schema: input.template === 'http_json'
       ? [
           {
@@ -283,7 +314,20 @@ function buildCustomNodeScaffoldManifest(input: CustomNodeScaffoldInput) {
             data_type: 'text' as const,
           },
         ]
-      : [],
+      : input.template === 'image_file'
+        ? [
+            {
+              key: 'file_path',
+              label: 'File Path',
+              data_type: 'text' as const,
+            },
+            {
+              key: 'status_text',
+              label: 'Status Text',
+              data_type: 'text' as const,
+            },
+          ]
+        : [],
   };
 }
 
@@ -313,6 +357,30 @@ function buildCustomNodeScaffoldEntrySource(template: CustomNodeScaffoldTemplate
 `;
   }
 
+  if (template === 'image_file') {
+    return `const path = require('path')
+
+module.exports = async function run(ctx) {
+  const filePath = String(ctx.inputs.file_path ?? '').trim()
+  const statusText = String(ctx.inputs.status_text ?? 'Loaded image from file path')
+
+  if (!filePath) {
+    throw new Error('Image File template requires a file_path input')
+  }
+
+  const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(__dirname, filePath)
+  ctx.log(\`Loading image from: \${resolvedPath}\`)
+
+  return {
+    outputs: {
+      preview_image: resolvedPath,
+      status_text: statusText,
+    },
+  }
+}
+`;
+  }
+
   return `module.exports = async function run(ctx) {
   const input = ctx.inputs
 
@@ -327,6 +395,21 @@ function buildCustomNodeScaffoldEntrySource(template: CustomNodeScaffoldTemplate
 
 /** Build one starter README for a scaffolded custom node package. */
 function buildCustomNodeScaffoldReadme(input: CustomNodeScaffoldInput): string {
+  const template = input.template ?? 'empty';
+  const templateNotes = template === 'http_json'
+    ? [
+        '- The `HTTP JSON` template shows how to call an external API and return JSON/text outputs.',
+        '- Edit the default URL and request method in `node.json` or through the module graph inspector.',
+      ]
+    : template === 'image_file'
+      ? [
+          '- The `Image File` template shows how to return an image output from a local file path.',
+          '- `preview_image` can return either an absolute path or a path relative to the custom node folder.',
+        ]
+      : [
+          '- The `Empty` template is a minimal echo-style starter for text or JSON-shaped experimentation.',
+        ];
+
   return `# ${input.name}
 
 This folder was scaffolded by CoNAI as a local file-based custom node package.
@@ -341,6 +424,20 @@ This folder was scaffolded by CoNAI as a local file-based custom node package.
 - For \`.js\` entries, prefer CommonJS exports such as \`module.exports = async function run(ctx) { ... }\`
 - If you want ESM syntax like \`export default\`, use an ESM entry file such as \`.mjs\` and update the manifest entry path
 - Return outputs through \`{ outputs: { ... } }\`
+- Supported local output types currently include text, prompt, number, boolean, json, any, image, and mask
+- For image or mask outputs, return either a \`data:image/...;base64,...\` string or a file path string
+
+## Template notes
+
+${templateNotes.join('\n')}
+
+## Quick iteration loop
+
+1. Edit \`node.json\` to change ports or defaults.
+2. Edit \`index.js\` to change runtime behavior.
+3. Save the files under \`user/custom_nodes\`.
+4. CoNAI will auto-rescan through the custom node folder watcher, or you can press rescan in the UI.
+5. Use the custom node management panel to run an ad-hoc test.
 `;
 }
 

@@ -3,7 +3,7 @@ import type { ApiResponse } from '@/types/image'
 
 export type CustomNodePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json' | 'any'
 export type CustomNodeUiDataType = CustomNodePortDataType | 'select'
-export type CustomNodeScaffoldTemplate = 'empty' | 'http_json'
+export type CustomNodeScaffoldTemplate = 'empty' | 'http_json' | 'image_file'
 
 export interface CustomNodePortDefinition {
   key: string

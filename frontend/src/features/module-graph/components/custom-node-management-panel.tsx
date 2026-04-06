@@ -79,12 +79,12 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
 
   const scaffoldMutation = useMutation({
     mutationFn: scaffoldCustomNode,
-    onSuccess: async (result) => {
+    onSuccess: async (result, variables) => {
       setFolderName('')
       setNodeKey('')
       setNodeName('')
       setNodeDescription('')
-      setSelectedTestKey(result.sync.nodes[0]?.manifest.key ?? '')
+      setSelectedTestKey(variables.key)
       showSnackbar({ message: `커스텀 노드 폴더를 만들었어: ${result.folderPath}`, tone: 'info' })
       await handleModulesChanged()
     },
@@ -253,6 +253,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                 <Select value={scaffoldTemplate} onChange={(event) => setScaffoldTemplate(event.target.value as CustomNodeScaffoldTemplate)}>
                   <option value="empty">Empty</option>
                   <option value="http_json">HTTP JSON</option>
+                  <option value="image_file">Image File</option>
                 </Select>
                 <Button
                   type="button"

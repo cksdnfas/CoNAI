@@ -219,6 +219,14 @@ For `image` and `mask` outputs, the local custom JS runner currently accepts eit
 - Load error details
 - Scaffold wizard
 
+## Starter Templates
+
+The scaffold API currently ships with these starter templates:
+
+- `empty` — minimal text/JSON experimentation starter
+- `http_json` — external API call starter returning JSON/text outputs
+- `image_file` — local file-path image output starter returning `image` + `text`
+
 ## Implementation Phases
 
 ### Phase 1 — Foundations
