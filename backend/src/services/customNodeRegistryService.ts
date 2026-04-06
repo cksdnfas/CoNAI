@@ -85,7 +85,7 @@ export type CustomNodeSyncResult = CustomNodeScanResult & {
   deactivatedCount: number;
 };
 
-export type CustomNodeScaffoldTemplate = 'empty' | 'http_json' | 'image_file';
+export type CustomNodeScaffoldTemplate = 'empty' | 'hello_world' | 'http_json' | 'image_file';
 
 export type CustomNodeScaffoldInput = {
   folderName: string;
@@ -236,61 +236,78 @@ function buildCustomNodeScaffoldManifest(input: CustomNodeScaffoldInput) {
     entry: 'index.js',
     category: input.category ?? 'Custom',
     color: input.color ?? '#ff8a65',
-    inputs: input.template === 'http_json'
+    inputs: input.template === 'hello_world'
       ? [
           {
-            key: 'url',
-            label: 'URL',
-            data_type: 'text' as const,
-            required: true,
-            default_value: 'https://example.com/api',
-          },
-          {
-            key: 'method',
-            label: 'Method',
+            key: 'name',
+            label: 'Name',
             data_type: 'text' as const,
             required: false,
-            default_value: 'GET',
+            default_value: 'World',
+          },
+          {
+            key: 'prefix',
+            label: 'Prefix',
+            data_type: 'text' as const,
+            required: false,
+            default_value: 'Hello',
           },
         ]
-      : input.template === 'image_file'
+      : input.template === 'http_json'
         ? [
             {
-              key: 'file_path',
-              label: 'File Path',
+              key: 'url',
+              label: 'URL',
               data_type: 'text' as const,
               required: true,
-              default_value: './assets/sample.png',
+              default_value: 'https://example.com/api',
             },
             {
-              key: 'status_text',
-              label: 'Status Text',
+              key: 'method',
+              label: 'Method',
               data_type: 'text' as const,
               required: false,
-              default_value: 'Loaded image from file path',
+              default_value: 'GET',
             },
           ]
-        : [],
-    outputs: input.template === 'http_json'
+        : input.template === 'image_file'
+          ? [
+              {
+                key: 'file_path',
+                label: 'File Path',
+                data_type: 'text' as const,
+                required: true,
+                default_value: './assets/sample.png',
+              },
+              {
+                key: 'status_text',
+                label: 'Status Text',
+                data_type: 'text' as const,
+                required: false,
+                default_value: 'Loaded image from file path',
+              },
+            ]
+          : [],
+    outputs: input.template === 'hello_world'
       ? [
           {
-            key: 'response_json',
-            label: 'Response JSON',
-            data_type: 'json' as const,
+            key: 'text',
+            label: 'Greeting',
+            data_type: 'text' as const,
             required: true,
           },
           {
-            key: 'status_text',
-            label: 'Status Text',
-            data_type: 'text' as const,
+            key: 'payload',
+            label: 'Payload',
+            data_type: 'json' as const,
           },
         ]
-      : input.template === 'image_file'
+      : input.template === 'http_json'
         ? [
             {
-              key: 'preview_image',
-              label: 'Preview Image',
-              data_type: 'image' as const,
+              key: 'response_json',
+              label: 'Response JSON',
+              data_type: 'json' as const,
               required: true,
             },
             {
@@ -299,46 +316,94 @@ function buildCustomNodeScaffoldManifest(input: CustomNodeScaffoldInput) {
               data_type: 'text' as const,
             },
           ]
-        : [
-            {
-              key: 'text',
-              label: 'Text',
-              data_type: 'text' as const,
-              required: true,
-            },
-          ],
-    ui_schema: input.template === 'http_json'
+        : input.template === 'image_file'
+          ? [
+              {
+                key: 'preview_image',
+                label: 'Preview Image',
+                data_type: 'image' as const,
+                required: true,
+              },
+              {
+                key: 'status_text',
+                label: 'Status Text',
+                data_type: 'text' as const,
+              },
+            ]
+          : [
+              {
+                key: 'text',
+                label: 'Text',
+                data_type: 'text' as const,
+                required: true,
+              },
+            ],
+    ui_schema: input.template === 'hello_world'
       ? [
           {
-            key: 'url',
-            label: 'URL',
+            key: 'name',
+            label: 'Name',
             data_type: 'text' as const,
           },
           {
-            key: 'method',
-            label: 'Method',
+            key: 'prefix',
+            label: 'Prefix',
             data_type: 'text' as const,
           },
         ]
-      : input.template === 'image_file'
+      : input.template === 'http_json'
         ? [
             {
-              key: 'file_path',
-              label: 'File Path',
+              key: 'url',
+              label: 'URL',
               data_type: 'text' as const,
             },
             {
-              key: 'status_text',
-              label: 'Status Text',
+              key: 'method',
+              label: 'Method',
               data_type: 'text' as const,
             },
           ]
-        : [],
+        : input.template === 'image_file'
+          ? [
+              {
+                key: 'file_path',
+                label: 'File Path',
+                data_type: 'text' as const,
+              },
+              {
+                key: 'status_text',
+                label: 'Status Text',
+                data_type: 'text' as const,
+              },
+            ]
+          : [],
   };
 }
 
 /** Build one starter entry source file for a scaffolded custom node package. */
 function buildCustomNodeScaffoldEntrySource(template: CustomNodeScaffoldTemplate): string {
+  if (template === 'hello_world') {
+    return `module.exports = async function run(ctx) {
+  const name = String(ctx.inputs.name ?? 'World')
+  const prefix = String(ctx.inputs.prefix ?? 'Hello')
+
+  ctx.log(\`Generating greeting for \${name}\`)
+
+  return {
+    outputs: {
+      text: \`\${prefix}, \${name}!\`,
+      payload: {
+        prefix,
+        name,
+        generatedAt: new Date().toISOString(),
+      },
+    },
+  }
+}
+`;
+  }
+
   if (template === 'http_json') {
     return `module.exports = async function run(ctx) {
   const url = String(ctx.inputs.url ?? '').trim()
@@ -402,19 +467,24 @@ module.exports = async function run(ctx) {
 /** Build one starter README for a scaffolded custom node package. */
 function buildCustomNodeScaffoldReadme(input: CustomNodeScaffoldInput): string {
   const template = input.template ?? 'empty';
-  const templateNotes = template === 'http_json'
+  const templateNotes = template === 'hello_world'
     ? [
-        '- The `HTTP JSON` template shows how to call an external API and return JSON/text outputs.',
-        '- Edit the default URL and request method in `node.json` or through the module graph inspector.',
+        '- The `Hello World` template is a friendly first custom node with text and JSON outputs.',
+        '- Edit `name` and `prefix` defaults in `node.json`, then tweak the runtime logic in `index.js`.',
       ]
-    : template === 'image_file'
+    : template === 'http_json'
       ? [
-          '- The `Image File` template shows how to return an image output from a local file path.',
-          '- `preview_image` can return either an absolute path or a path relative to the custom node folder.',
+          '- The `HTTP JSON` template shows how to call an external API and return JSON/text outputs.',
+          '- Edit the default URL and request method in `node.json` or through the module graph inspector.',
         ]
-      : [
-          '- The `Empty` template is a minimal echo-style starter for text or JSON-shaped experimentation.',
-        ];
+      : template === 'image_file'
+        ? [
+            '- The `Image File` template shows how to return an image output from a local file path.',
+            '- `preview_image` can return either an absolute path or a path relative to the custom node folder.',
+          ]
+        : [
+            '- The `Empty` template is a minimal echo-style starter for text or JSON-shaped experimentation.',
+          ];
 
   return `# ${input.name}
 

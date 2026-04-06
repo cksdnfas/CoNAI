@@ -53,6 +53,7 @@ Implement the MVP foundations for local file-based custom nodes.
 - [x] Add frontend API bindings for custom nodes
 - [x] Show `custom_js` nodes cleanly in the module library
 - [x] Add scaffold endpoint and starter templates
+- [x] Add a `hello_world` starter template for first-time custom node authors
 - [x] Add test-run endpoint for ad-hoc custom node execution
 - [x] Add file watcher auto-reload
 - [x] Add a basic custom node management view

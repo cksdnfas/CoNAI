@@ -224,6 +224,7 @@ For `image` and `mask` outputs, the local custom JS runner currently accepts eit
 The scaffold API currently ships with these starter templates:
 
 - `empty` — minimal text/JSON experimentation starter
+- `hello_world` — friendly first custom node returning greeting text plus JSON payload
 - `http_json` — external API call starter returning JSON/text outputs
 - `image_file` — local file-path image output starter returning `image` + `text`
 

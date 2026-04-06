@@ -358,6 +358,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                 <Textarea rows={3} value={nodeDescription} onChange={(event) => setNodeDescription(event.target.value)} placeholder="설명 (선택)" />
                 <Select value={scaffoldTemplate} onChange={(event) => setScaffoldTemplate(event.target.value as CustomNodeScaffoldTemplate)}>
                   <option value="empty">Empty</option>
+                  <option value="hello_world">Hello World</option>
                   <option value="http_json">HTTP JSON</option>
                   <option value="image_file">Image File</option>
                 </Select>
