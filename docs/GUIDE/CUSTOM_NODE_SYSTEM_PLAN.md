@@ -182,8 +182,13 @@ MVP output support:
 - `boolean`
 - `json`
 - `any`
+- `image`
+- `mask`
 
-Image and mask output support can be added after the basic JS runtime is stable.
+For `image` and `mask` outputs, the local custom JS runner currently accepts either:
+
+- a `data:image/...;base64,...` string
+- a file path string (absolute or relative to the custom node folder)
 
 ## API Surface
 

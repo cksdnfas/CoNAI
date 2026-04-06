@@ -1,8 +1,11 @@
+import fs from 'fs'
 import path from 'path'
 import { spawn } from 'child_process'
 import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact'
 import { type GraphWorkflowNode, type ModulePortDefinition, type ModulePortDataType } from '../../types/moduleGraph'
+import { saveArtifactBuffer } from './artifacts'
 import {
+  bufferToDataUrl,
   writeExecutionLog,
   type ExecutionContext,
   type ParsedModuleDefinition,
@@ -157,6 +160,96 @@ function buildCustomValueArtifact(
   }
 }
 
+/** Guess one image mime type from a file extension for custom-node binary outputs. */
+function guessCustomNodeImageMimeType(filePath: string) {
+  const extension = path.extname(filePath).toLowerCase()
+  if (extension === '.jpg' || extension === '.jpeg') {
+    return 'image/jpeg'
+  }
+  if (extension === '.webp') {
+    return 'image/webp'
+  }
+  if (extension === '.gif') {
+    return 'image/gif'
+  }
+  if (extension === '.bmp') {
+    return 'image/bmp'
+  }
+  if (extension === '.tif' || extension === '.tiff') {
+    return 'image/tiff'
+  }
+  return 'image/png'
+}
+
+/** Resolve a custom-node image or mask output from either a data URL or a file path string. */
+async function resolveCustomNodeBinaryOutput(value: unknown, nodeFolderPath: string) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error('Binary custom node outputs must be non-empty strings')
+  }
+
+  const trimmedValue = value.trim()
+  const dataUrlMatch = trimmedValue.match(/^data:(image\/[^;]+);base64,(.+)$/)
+  if (dataUrlMatch) {
+    return {
+      buffer: Buffer.from(dataUrlMatch[2], 'base64'),
+      mimeType: dataUrlMatch[1],
+      sourcePathForMetadata: undefined,
+      originalFileName: undefined,
+    }
+  }
+
+  const resolvedPath = path.isAbsolute(trimmedValue) ? trimmedValue : path.resolve(nodeFolderPath, trimmedValue)
+  const buffer = await fs.promises.readFile(resolvedPath)
+  return {
+    buffer,
+    mimeType: guessCustomNodeImageMimeType(resolvedPath),
+    sourcePathForMetadata: resolvedPath,
+    originalFileName: path.basename(resolvedPath),
+  }
+}
+
+/** Build one runtime artifact for a validated custom-node output value. */
+async function buildCustomRuntimeArtifact(params: {
+  executionId: number
+  nodeId: string
+  port: ModulePortDefinition
+  value: unknown
+  moduleName: string
+  nodeFolderPath: string
+}): Promise<RuntimeArtifact> {
+  if (params.port.data_type === 'image' || params.port.data_type === 'mask') {
+    const resolvedBinary = await resolveCustomNodeBinaryOutput(params.value, params.nodeFolderPath)
+    const { storagePath, artifactRecordId } = await saveArtifactBuffer(
+      params.executionId,
+      params.nodeId,
+      params.port.key,
+      params.port.data_type,
+      resolvedBinary.buffer,
+      {
+        mimeType: resolvedBinary.mimeType,
+        sourcePathForMetadata: resolvedBinary.sourcePathForMetadata,
+        originalFileName: resolvedBinary.originalFileName,
+      },
+    )
+
+    return {
+      type: params.port.data_type,
+      value: bufferToDataUrl(resolvedBinary.buffer, resolvedBinary.mimeType),
+      storagePath,
+      artifactRecordId,
+      metadata: {
+        kind: 'custom-js-output',
+        module: params.moduleName,
+      },
+    }
+  }
+
+  return buildCustomValueArtifact(params.executionId, params.nodeId, params.port.key, params.port.data_type, params.value, {
+    kind: 'custom-js-output',
+    module: params.moduleName,
+  })
+}
+
 /** Ensure one custom-node output can be represented inside the existing artifact model. */
 function validateCustomNodeOutputValue(port: ModulePortDefinition, value: unknown) {
   if (port.data_type === 'text' || port.data_type === 'prompt') {
@@ -181,7 +274,10 @@ function validateCustomNodeOutputValue(port: ModulePortDefinition, value: unknow
   }
 
   if (port.data_type === 'image' || port.data_type === 'mask') {
-    throw new Error(`Custom node output ${port.key} with type ${port.data_type} is not supported yet in MVP`)
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      throw new Error(`Custom node output ${port.key} must be a data URL or file path string for ${port.data_type}`)
+    }
+    return
   }
 
   try {
@@ -366,7 +462,7 @@ export async function executeCustomJsModule(
     },
   })
 
-  const { executionResult } = await runCustomJsModuleOnce({
+  const { executionResult, folderPath } = await runCustomJsModuleOnce({
     moduleDefinition,
     resolvedInputs,
     node: {
@@ -389,9 +485,13 @@ export async function executeCustomJsModule(
     }
 
     const value = executionResult.outputs[port.key]
-    nodeArtifacts[port.key] = buildCustomValueArtifact(context.executionId, node.id, port.key, port.data_type, value, {
-      kind: 'custom-js-output',
-      module: moduleDefinition.name,
+    nodeArtifacts[port.key] = await buildCustomRuntimeArtifact({
+      executionId: context.executionId,
+      nodeId: node.id,
+      port,
+      value,
+      moduleName: moduleDefinition.name,
+      nodeFolderPath: folderPath,
     })
   }
 

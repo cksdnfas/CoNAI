@@ -59,7 +59,7 @@ Implement the MVP foundations for local file-based custom nodes.
 
 - Keep file system as the source of truth
 - Keep MVP JavaScript-only
-- Prefer simple JSON-serializable outputs first
+- Prefer simple JSON-serializable outputs first, but custom JS image/mask outputs are now supported through data URLs or file path strings
 - Avoid building a heavy permission model for the local-only MVP
 - Use process isolation for stability, not policy enforcement
-- Smoke verification performed with a temporary file-backed node folder that was synced into `module_definitions`, run through the custom JS runner, and then removed/resynced to confirm deactivation behavior
+- Smoke verification performed with temporary file-backed node folders that were synced into `module_definitions`, run through the custom JS runner, validated for deactivation behavior, and validated for image artifact persistence from a data URL output
