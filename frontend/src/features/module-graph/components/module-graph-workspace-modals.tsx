@@ -2,6 +2,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api'
+import { CustomNodeManagementPanel } from './custom-node-management-panel'
 import { ModuleLibraryPanel } from './module-library-panel'
 import { WorkflowFolderSettingsPanel } from './workflow-folder-settings-panel'
 
@@ -15,6 +16,7 @@ export function ModuleGraphWorkspaceModals({
   selectedFolderRecord,
   folderDeleteTarget,
   isModuleLibraryOpen,
+  isCustomNodeManagerOpen,
   modules,
   modulesErrorMessage,
   modulesIsError,
@@ -28,6 +30,9 @@ export function ModuleGraphWorkspaceModals({
   onCloseFolderDelete,
   onConfirmDeleteFolder,
   onCloseModuleLibrary,
+  onOpenCustomNodeManager,
+  onCloseCustomNodeManager,
+  onRefreshModules,
   onAddModule,
 }: {
   workflowView: 'browse' | 'edit'
@@ -38,6 +43,7 @@ export function ModuleGraphWorkspaceModals({
   selectedFolderRecord: GraphWorkflowFolderRecord | null
   folderDeleteTarget: GraphWorkflowFolderRecord | null
   isModuleLibraryOpen: boolean
+  isCustomNodeManagerOpen: boolean
   modules: ModuleDefinitionRecord[]
   modulesErrorMessage: string
   modulesIsError: boolean
@@ -51,6 +57,9 @@ export function ModuleGraphWorkspaceModals({
   onCloseFolderDelete: () => void
   onConfirmDeleteFolder: (mode: 'move_children' | 'delete_tree') => void
   onCloseModuleLibrary: () => void
+  onOpenCustomNodeManager: () => void
+  onCloseCustomNodeManager: () => void
+  onRefreshModules: () => Promise<unknown> | void
   onAddModule: (module: ModuleDefinitionRecord) => void
 }) {
   return (
@@ -120,8 +129,19 @@ export function ModuleGraphWorkspaceModals({
           isError={modulesIsError}
           errorMessage={modulesErrorMessage}
           onAddModule={onAddModule}
+          onOpenCustomNodeManager={onOpenCustomNodeManager}
           surface="plain"
         />
+      </SettingsModal>
+
+      <SettingsModal
+        open={isCustomNodeManagerOpen}
+        title="커스텀 노드 관리"
+        description="user/custom_nodes 기반 로컬 커스텀 노드를 스캔, 생성, 테스트해."
+        onClose={onCloseCustomNodeManager}
+        widthClassName="max-w-6xl"
+      >
+        <CustomNodeManagementPanel onModulesChanged={onRefreshModules} />
       </SettingsModal>
     </>
   )

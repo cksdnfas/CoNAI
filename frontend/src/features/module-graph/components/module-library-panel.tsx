@@ -16,6 +16,7 @@ type ModuleLibraryPanelProps = {
   isError: boolean
   errorMessage: string
   onAddModule: (module: ModuleDefinitionRecord) => void
+  onOpenCustomNodeManager?: () => void
   showHeader?: boolean
   surface?: 'card' | 'plain'
 }
@@ -86,7 +87,7 @@ function getCustomModuleGroup(module: ModuleDefinitionRecord): { key: string; la
 }
 
 /** Render the reusable module library for graph authoring. */
-export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule, showHeader = true, surface = 'card' }: ModuleLibraryPanelProps) {
+export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule, onOpenCustomNodeManager, showHeader = true, surface = 'card' }: ModuleLibraryPanelProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<ModuleLibraryTab>('custom')
   const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<string[]>([])
@@ -186,6 +187,11 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
           heading="모듈 라이브러리"
           actions={(
             <>
+              {activeTab === 'custom' && onOpenCustomNodeManager ? (
+                <Button type="button" size="sm" variant="outline" onClick={onOpenCustomNodeManager}>
+                  Custom Nodes 관리
+                </Button>
+              ) : null}
               <Badge variant="outline">{activeTabLabel}</Badge>
               <Badge variant="outline">{filteredModules.length}</Badge>
             </>
@@ -194,6 +200,11 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
       ) : (
         <div className="flex items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
+            {activeTab === 'custom' && onOpenCustomNodeManager ? (
+              <Button type="button" size="sm" variant="outline" onClick={onOpenCustomNodeManager}>
+                Custom Nodes 관리
+              </Button>
+            ) : null}
             <Badge variant="outline">{activeTabLabel}</Badge>
             <Badge variant="outline">{filteredModules.length}</Badge>
           </div>

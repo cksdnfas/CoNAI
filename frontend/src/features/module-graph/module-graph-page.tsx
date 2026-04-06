@@ -56,6 +56,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     setWorkflowView,
     isModuleLibraryOpen,
     setIsModuleLibraryOpen,
+    isCustomNodeManagerOpen,
+    setIsCustomNodeManagerOpen,
     isBrowseManageModalOpen,
     setIsBrowseManageModalOpen,
     folderDeleteTarget,
@@ -460,6 +462,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
         selectedFolderRecord={selectedFolderRecord}
         folderDeleteTarget={folderDeleteTarget}
         isModuleLibraryOpen={isModuleLibraryOpen}
+        isCustomNodeManagerOpen={isCustomNodeManagerOpen}
         modules={modules}
         modulesErrorMessage={modulesQuery.error instanceof Error ? modulesQuery.error.message : '모듈 목록을 불러오지 못했어.'}
         modulesIsError={modulesQuery.isError}
@@ -481,6 +484,9 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           void handleConfirmDeleteFolder(mode)
         }}
         onCloseModuleLibrary={() => setIsModuleLibraryOpen(false)}
+        onOpenCustomNodeManager={() => setIsCustomNodeManagerOpen(true)}
+        onCloseCustomNodeManager={() => setIsCustomNodeManagerOpen(false)}
+        onRefreshModules={modulesQuery.refetch}
         onAddModule={handleAddModuleFromLibrary}
       />
     </div>

@@ -30,6 +30,7 @@ export function useModuleGraphPageState() {
   )
   const [workflowView, setWorkflowView] = useState<'browse' | 'edit'>('browse')
   const [isModuleLibraryOpen, setIsModuleLibraryOpen] = useState(false)
+  const [isCustomNodeManagerOpen, setIsCustomNodeManagerOpen] = useState(false)
   const [isBrowseManageModalOpen, setIsBrowseManageModalOpen] = useState(false)
   const [folderDeleteTarget, setFolderDeleteTarget] = useState<GraphWorkflowFolderRecord | null>(null)
   const [isEditorSupportOpen, setIsEditorSupportOpen] = useState(false)
@@ -74,6 +75,8 @@ export function useModuleGraphPageState() {
     setWorkflowView,
     isModuleLibraryOpen,
     setIsModuleLibraryOpen,
+    isCustomNodeManagerOpen,
+    setIsCustomNodeManagerOpen,
     isBrowseManageModalOpen,
     setIsBrowseManageModalOpen,
     folderDeleteTarget,

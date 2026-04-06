@@ -53,7 +53,7 @@ Implement the MVP foundations for local file-based custom nodes.
 - [x] Add scaffold endpoint and starter templates
 - [x] Add test-run endpoint for ad-hoc custom node execution
 - [ ] Add file watcher auto-reload
-- [ ] Add a basic custom node management view
+- [x] Add a basic custom node management view
 
 ## Implementation notes
 
