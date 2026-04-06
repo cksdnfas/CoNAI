@@ -51,6 +51,7 @@ Implement the MVP foundations for local file-based custom nodes.
 - [x] Add frontend API bindings for custom nodes
 - [x] Show `custom_js` nodes cleanly in the module library
 - [x] Add scaffold endpoint and starter templates
+- [x] Add test-run endpoint for ad-hoc custom node execution
 - [ ] Add file watcher auto-reload
 - [ ] Add a basic custom node management view
 
@@ -61,4 +62,4 @@ Implement the MVP foundations for local file-based custom nodes.
 - Prefer simple JSON-serializable outputs first
 - Avoid building a heavy permission model for the local-only MVP
 - Use process isolation for stability, not policy enforcement
-- Smoke verification performed with a temporary file-backed node folder that was synced into `module_definitions` and then removed/resynced to confirm deactivation behavior
+- Smoke verification performed with a temporary file-backed node folder that was synced into `module_definitions`, run through the custom JS runner, and then removed/resynced to confirm deactivation behavior

@@ -126,7 +126,7 @@ type CustomNodeProcessResponse = {
   stack?: string
 }
 
-type CustomNodeExecutionResult = {
+export type CustomNodeExecutionResult = {
   outputs: Record<string, unknown>
   metadata?: Record<string, unknown>
   logs: Array<{ level?: 'info' | 'warn' | 'error'; message: string }>
@@ -287,6 +287,66 @@ async function runCustomNodeProcess(payload: CustomNodeProcessPayload): Promise<
   })
 }
 
+/** Execute one custom JS module once and validate its declared outputs without persisting artifacts. */
+export async function runCustomJsModuleOnce(params: {
+  moduleDefinition: ParsedModuleDefinition
+  resolvedInputs: Record<string, unknown>
+  node: {
+    id: string
+    moduleId: number
+    moduleName: string
+  }
+  workflow: {
+    id: number
+    name: string
+    executionId: number
+  }
+}) {
+  const entry = typeof params.moduleDefinition.template_defaults?.entry === 'string' ? params.moduleDefinition.template_defaults.entry : null
+  const folderPath = typeof params.moduleDefinition.source_path === 'string' ? params.moduleDefinition.source_path : null
+  const entryPath = entry && folderPath ? path.resolve(folderPath, entry) : null
+
+  if (!folderPath || !entryPath) {
+    throw new Error(`Custom JS module ${params.moduleDefinition.name} is missing source_path or entry`)
+  }
+
+  const processResponse = await runCustomNodeProcess({
+    entryPath,
+    inputs: params.resolvedInputs,
+    node: params.node,
+    workflow: params.workflow,
+  })
+
+  if (!processResponse.success) {
+    throw new Error(processResponse.error || `Custom JS module failed: ${params.moduleDefinition.name}`)
+  }
+
+  const executionResult = normalizeCustomNodeExecutionResult(processResponse)
+  const declaredOutputPorts = new Map(params.moduleDefinition.output_ports.map((port) => [port.key, port]))
+  const outputKeys = Object.keys(executionResult.outputs)
+  const unknownOutputKeys = outputKeys.filter((key) => !declaredOutputPorts.has(key))
+  if (unknownOutputKeys.length > 0) {
+    throw new Error(`Custom node returned undeclared outputs: ${unknownOutputKeys.join(', ')}`)
+  }
+
+  for (const port of params.moduleDefinition.output_ports) {
+    if (!(port.key in executionResult.outputs)) {
+      if (port.required) {
+        throw new Error(`Custom node did not return required output: ${port.key}`)
+      }
+      continue
+    }
+
+    validateCustomNodeOutputValue(port, executionResult.outputs[port.key])
+  }
+
+  return {
+    executionResult,
+    entry,
+    folderPath,
+  }
+}
+
 /** Execute a file-backed local custom JS node and persist its declared outputs. */
 export async function executeCustomJsModule(
   context: ExecutionContext,
@@ -294,14 +354,6 @@ export async function executeCustomJsModule(
   moduleDefinition: ParsedModuleDefinition,
   resolvedInputs: Record<string, unknown>,
 ) {
-  const entry = typeof moduleDefinition.template_defaults?.entry === 'string' ? moduleDefinition.template_defaults.entry : null
-  const folderPath = typeof moduleDefinition.source_path === 'string' ? moduleDefinition.source_path : null
-  const entryPath = entry && folderPath ? path.resolve(folderPath, entry) : null
-
-  if (!folderPath || !entryPath) {
-    throw new Error(`Custom JS module ${moduleDefinition.name} is missing source_path or entry`)
-  }
-
   writeExecutionLog({
     executionId: context.executionId,
     nodeId: node.id,
@@ -309,14 +361,14 @@ export async function executeCustomJsModule(
     message: `Custom JS module start: ${moduleDefinition.name}`,
     details: {
       engine: 'custom_js',
-      sourcePath: folderPath,
-      entry,
+      sourcePath: moduleDefinition.source_path ?? null,
+      entry: typeof moduleDefinition.template_defaults?.entry === 'string' ? moduleDefinition.template_defaults.entry : null,
     },
   })
 
-  const processResponse = await runCustomNodeProcess({
-    entryPath,
-    inputs: resolvedInputs,
+  const { executionResult } = await runCustomJsModuleOnce({
+    moduleDefinition,
+    resolvedInputs,
     node: {
       id: node.id,
       moduleId: moduleDefinition.id,
@@ -329,30 +381,14 @@ export async function executeCustomJsModule(
     },
   })
 
-  if (!processResponse.success) {
-    throw new Error(processResponse.error || `Custom JS module failed: ${moduleDefinition.name}`)
-  }
-
-  const executionResult = normalizeCustomNodeExecutionResult(processResponse)
-  const declaredOutputPorts = new Map(moduleDefinition.output_ports.map((port) => [port.key, port]))
-  const outputKeys = Object.keys(executionResult.outputs)
-  const unknownOutputKeys = outputKeys.filter((key) => !declaredOutputPorts.has(key))
-  if (unknownOutputKeys.length > 0) {
-    throw new Error(`Custom node returned undeclared outputs: ${unknownOutputKeys.join(', ')}`)
-  }
-
   const nodeArtifacts: Record<string, RuntimeArtifact> = {}
 
   for (const port of moduleDefinition.output_ports) {
     if (!(port.key in executionResult.outputs)) {
-      if (port.required) {
-        throw new Error(`Custom node did not return required output: ${port.key}`)
-      }
       continue
     }
 
     const value = executionResult.outputs[port.key]
-    validateCustomNodeOutputValue(port, value)
     nodeArtifacts[port.key] = buildCustomValueArtifact(context.executionId, node.id, port.key, port.data_type, value, {
       kind: 'custom-js-output',
       module: moduleDefinition.name,

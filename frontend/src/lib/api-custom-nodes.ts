@@ -90,6 +90,16 @@ export interface CustomNodeScaffoldResult {
   sync: CustomNodeSyncResult
 }
 
+export interface CustomNodeTestResult {
+  key: string
+  name: string
+  entry: string | null
+  folderPath: string | null
+  outputs: Record<string, unknown>
+  metadata: Record<string, unknown> | null
+  logs: Array<{ level?: 'info' | 'warn' | 'error'; message: string }>
+}
+
 export async function listCustomNodes() {
   const response = await fetchJson<ApiResponse<CustomNodeScanResult>>('/api/custom-nodes')
   if (!response.success) {
@@ -118,6 +128,20 @@ export async function scaffoldCustomNode(input: CustomNodeScaffoldInput) {
   })
   if (!response.success) {
     throw new Error(response.error || '커스텀 노드 스캐폴드를 만들지 못했어.')
+  }
+  return response.data
+}
+
+export async function testCustomNode(key: string, inputs?: Record<string, unknown>) {
+  const response = await fetchJson<ApiResponse<CustomNodeTestResult>>(`/api/custom-nodes/${encodeURIComponent(key)}/test`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ inputs: inputs ?? {} }),
+  })
+  if (!response.success) {
+    throw new Error(response.error || '커스텀 노드 테스트 실행에 실패했어.')
   }
   return response.data
 }
