@@ -2,13 +2,45 @@ import path from 'path';
 import fs from 'fs';
 import sharp from 'sharp';
 import { ImageSimilarityService } from '../services/imageSimilarity';
+import { ImageMetadataWriteService, type ImageOutputFormat } from '../services/imageMetadataWriteService';
 import { runtimePaths } from '../config/runtimePaths';
+
+export type GeneratedImageSaveOptions = {
+  format?: 'original' | ImageOutputFormat;
+  quality?: number;
+  resizeEnabled?: boolean;
+  maxWidth?: number;
+  maxHeight?: number;
+  sourcePathForMetadata?: string;
+  sourceMimeType?: string;
+  originalFileName?: string;
+};
 
 /**
  * API 생성 이미지 파일 저장 유틸리티
  * 업로드 페이지와 동일한 파일 저장 로직 사용
  */
 export class FileSaver {
+  /** Resolve an output image format from explicit options or the source mime/path. */
+  private static resolveOutputFormat(options?: GeneratedImageSaveOptions): ImageOutputFormat {
+    if (options?.format && options.format !== 'original') {
+      return options.format;
+    }
+
+    const normalizedMime = (options?.sourceMimeType || '').toLowerCase();
+    const extension = options?.sourcePathForMetadata ? path.extname(options.sourcePathForMetadata).toLowerCase() : '';
+
+    if (normalizedMime === 'image/jpeg' || extension === '.jpg' || extension === '.jpeg') {
+      return 'jpeg';
+    }
+
+    if (normalizedMime === 'image/webp' || extension === '.webp') {
+      return 'webp';
+    }
+
+    return 'png';
+  }
+
   /**
    * 날짜 기반 폴더 경로 생성 (YYYY-MM-DD)
    */
@@ -53,43 +85,67 @@ export class FileSaver {
    */
   static async saveGeneratedImage(
     imageBuffer: Buffer,
-    serviceType: 'comfyui' | 'novelai'
+    serviceType: 'comfyui' | 'novelai',
+    options?: GeneratedImageSaveOptions,
   ): Promise<{
-    originalPath: string;  // uploads 기준 상대 경로
+    originalPath: string;
     fileSize: number;
     width: number;
     height: number;
-    compositeHash: string;  // 48-character composite hash
+    compositeHash: string;
   }> {
     try {
-      // 1. 날짜 기반 폴더 생성
       const dateFolder = this.getDateFolder();
       const dateFolderPath = path.join(runtimePaths.uploadsDir, 'API', 'images', dateFolder);
 
       await fs.promises.mkdir(dateFolderPath, { recursive: true });
 
-      // 2. 고유 파일명 생성
-      const filename = this.generateUniqueFilename('png');
+      const outputFormat = this.resolveOutputFormat(options);
+      const outputExtension = outputFormat === 'jpeg' ? 'jpg' : outputFormat;
+      const filename = this.generateUniqueFilename(outputExtension);
       const fullPath = path.join(dateFolderPath, filename);
 
-      // 3. Sharp로 이미지 메타데이터 추출
-      const metadata = await sharp(imageBuffer).metadata();
-      const width = metadata.width || 0;
-      const height = metadata.height || 0;
+      const hasTransformOptions = Boolean(
+        options
+        && (
+          options.format !== undefined
+          || options.resizeEnabled !== undefined
+          || options.quality !== undefined
+          || options.maxWidth !== undefined
+          || options.maxHeight !== undefined
+        )
+      );
 
-      // 4. 원본 파일만 저장 (썸네일/최적화 버전 생성 안함)
-      await sharp(imageBuffer)
-        .png() // PNG 포맷 유지
-        .toFile(fullPath);
+      let outputBuffer = imageBuffer;
+      let width = 0;
+      let height = 0;
 
-      // 5. Composite hash 생성
+      if (hasTransformOptions) {
+        const rewritten = await ImageMetadataWriteService.writeBufferAsFormatBuffer(imageBuffer, {
+          format: outputFormat,
+          quality: options?.quality,
+          sourcePathForMetadata: options?.sourcePathForMetadata,
+          originalFileName: options?.originalFileName,
+          mimeType: options?.sourceMimeType,
+          maxWidth: options?.resizeEnabled ? options.maxWidth : undefined,
+          maxHeight: options?.resizeEnabled ? options.maxHeight : undefined,
+        });
+
+        outputBuffer = rewritten.buffer;
+        width = rewritten.info.width || 0;
+        height = rewritten.info.height || 0;
+      } else {
+        const metadata = await sharp(imageBuffer).metadata();
+        width = metadata.width || 0;
+        height = metadata.height || 0;
+      }
+
+      await fs.promises.writeFile(fullPath, outputBuffer);
+
       const { hashes } = await ImageSimilarityService.generateHashAndHistogram(fullPath);
       const compositeHash = hashes.compositeHash;
 
-      // 6. 파일 크기 확인
       const stats = await fs.promises.stat(fullPath);
-
-      // 7. uploads 디렉토리 기준 상대 경로 반환
       const relativePath = this.normalizeRelativePath(fullPath);
 
       return {
@@ -97,7 +153,7 @@ export class FileSaver {
         fileSize: stats.size,
         width,
         height,
-        compositeHash
+        compositeHash,
       };
     } catch (error) {
       console.error(`[FileSaver] ${serviceType} 이미지 저장 실패:`, error);

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { generateComfyUIImage } from '@/lib/api'
-import type { WorkflowMarkedField } from '@/lib/api-image-generation'
+import type { GenerationImageSaveOptions, WorkflowMarkedField } from '@/lib/api-image-generation'
 import {
   buildWorkflowPromptData,
   getErrorMessage,
@@ -28,6 +28,7 @@ export function useComfyGenerationActions({
   activeServers,
   connectedServers,
   comfyServerTests,
+  imageSaveOptions,
   onHistoryRefresh,
   showSnackbar,
 }: {
@@ -38,6 +39,7 @@ export function useComfyGenerationActions({
   activeServers: ConnectedServerLike[]
   connectedServers: ConnectedServerLike[]
   comfyServerTests: Record<number, ComfyServerTestLike>
+  imageSaveOptions?: GenerationImageSaveOptions
   onHistoryRefresh: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
@@ -69,6 +71,7 @@ export function useComfyGenerationActions({
     return generateComfyUIImage(selectedWorkflow.id, {
       prompt_data: promptData,
       server_id: serverId,
+      imageSaveOptions,
     })
   }
 

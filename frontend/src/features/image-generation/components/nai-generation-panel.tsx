@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import type { ImageSaveSettings } from '@/types/settings'
 import { cn } from '@/lib/utils'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import {
@@ -40,6 +41,8 @@ type NaiGenerationPanelProps = {
 export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneScroll = false, compactActionBar = false, headerPortalTargetId }: NaiGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
   const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
+  const [isGenerationSaveOptionsOpen, setIsGenerationSaveOptionsOpen] = useState(false)
+  const [generationSaveOptions, setGenerationSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
 
   const {
     selectedCharacterIndex,
@@ -86,6 +89,14 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
   })
 
   const connected = naiUserQuery.isSuccess
+
+  useEffect(() => {
+    if (!appSettingsQuery.data?.imageSave) {
+      return
+    }
+
+    setGenerationSaveOptions((current) => current === DEFAULT_IMAGE_SAVE_SETTINGS ? appSettingsQuery.data.imageSave : current)
+  }, [appSettingsQuery.data?.imageSave])
 
   const {
     loginMode,
@@ -206,6 +217,13 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
     naiModuleDescription,
     naiExposedFieldKeys,
     naiModuleFieldOptions,
+    imageSaveOptions: {
+      format: generationSaveOptions.defaultFormat,
+      quality: generationSaveOptions.quality,
+      resizeEnabled: generationSaveOptions.resizeEnabled,
+      maxWidth: generationSaveOptions.maxWidth,
+      maxHeight: generationSaveOptions.maxHeight,
+    },
     closeModuleSaveModal: () => setIsModuleSaveModalOpen(false),
     showSnackbar,
   })
@@ -248,6 +266,22 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
     return () => window.cancelAnimationFrame(frame)
   }, [headerPortalTargetId, useDrawerCompactChrome])
 
+  const generationSaveSourceInfo = useMemo(() => {
+    const width = parseNumberInput(naiForm.width, 1024)
+    const height = parseNumberInput(naiForm.height, 1024)
+
+    if (width <= 0 || height <= 0) {
+      return null
+    }
+
+    return {
+      width,
+      height,
+      mimeType: 'image/png',
+      fileSize: null,
+    }
+  }, [naiForm.height, naiForm.width])
+
   const actionSection = (
     <NaiActionSection
       variant={useInlineActionBar ? 'inline' : 'card'}
@@ -258,6 +292,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
       generateButtonLabel={naiGenerateButtonLabel}
       costErrorMessage={naiCostQuery.isError ? getErrorMessage(naiCostQuery.error, '예상 비용 계산에 실패했어.') : null}
       onOpenModuleSave={() => setIsModuleSaveModalOpen(true)}
+      onOpenSaveOptions={() => setIsGenerationSaveOptionsOpen(true)}
       onUpscale={handleUpscale}
       onReset={resetNaiForm}
       onGenerate={handleNaiGenerate}
@@ -411,6 +446,17 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
           />
         </Suspense>
       ) : null}
+
+      <ImageSaveOptionsModal
+        open={isGenerationSaveOptionsOpen}
+        title="생성 결과 저장 옵션"
+        options={generationSaveOptions}
+        sourceInfo={generationSaveSourceInfo}
+        isSaving={false}
+        onClose={() => setIsGenerationSaveOptionsOpen(false)}
+        onOptionsChange={(patch) => setGenerationSaveOptions((current) => ({ ...current, ...patch }))}
+        onConfirm={() => setIsGenerationSaveOptionsOpen(false)}
+      />
 
       <ImageSaveOptionsModal
         open={pendingImageEditorSave !== null}

@@ -1,4 +1,4 @@
-import { ExternalLink, Save, Sparkles } from 'lucide-react'
+import { ArrowUp, ExternalLink, RotateCcw, Save, Settings2, Sparkles } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -84,6 +84,7 @@ export interface NaiActionSectionProps {
   generateButtonLabel: string
   costErrorMessage?: string | null
   onOpenModuleSave: () => void
+  onOpenSaveOptions: () => void
   onUpscale: () => void
   onReset: () => void
   onGenerate: () => void
@@ -99,6 +100,7 @@ export function NaiActionSection({
   generateButtonLabel,
   costErrorMessage,
   onOpenModuleSave,
+  onOpenSaveOptions,
   onUpscale,
   onReset,
   onGenerate,
@@ -107,24 +109,58 @@ export function NaiActionSection({
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={onOpenModuleSave}>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={onOpenModuleSave}
+            disabled={isGenerating || isUpscaling}
+            aria-label="모듈 저장"
+            title="모듈 저장"
+          >
             <Save className="h-4 w-4" />
-            모듈 저장
           </Button>
           {canUpscale ? (
-            <Button type="button" variant="outline" onClick={onUpscale} disabled={isUpscaling}>
-              {isUpscaling ? '업스케일 중…' : '소스 2x 업스케일'}
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              onClick={onUpscale}
+              disabled={isUpscaling || isGenerating}
+              aria-label={isUpscaling ? '업스케일 중' : '소스 2x 업스케일'}
+              title={isUpscaling ? '업스케일 중' : '소스 2x 업스케일'}
+            >
+              <ArrowUp className="h-4 w-4" />
             </Button>
           ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onReset}
+            disabled={isGenerating || isUpscaling}
+            aria-label="초기화"
+            title="초기화"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
         </div>
 
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onReset} disabled={isGenerating || isUpscaling}>
-            초기화
-          </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button type="button" onClick={onGenerate} disabled={isGenerating || !canGenerate}>
             <Sparkles className="h-4 w-4" />
             {generateButtonLabel}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={onOpenSaveOptions}
+            disabled={isGenerating || isUpscaling}
+            aria-label="생성 결과 저장 옵션"
+            title="생성 결과 저장 옵션"
+          >
+            <Settings2 className="h-4 w-4" />
           </Button>
         </div>
       </div>

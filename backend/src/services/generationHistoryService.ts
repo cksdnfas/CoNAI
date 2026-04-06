@@ -1,5 +1,6 @@
 import { GenerationHistoryModel, GenerationHistoryRecord, ServiceType } from '../models/GenerationHistory';
 import { APIImageProcessor } from './APIImageProcessor';
+import type { GeneratedImageSaveOptions } from '../utils/fileSaver';
 import { ImageGroupModel } from '../models/Group';
 import axios from 'axios';
 import FormData from 'form-data';
@@ -182,14 +183,15 @@ export class GenerationHistoryService {
   static async processAndUploadImage(
     historyId: number,
     imageBuffer: Buffer,
-    serviceType: ServiceType
+    serviceType: ServiceType,
+    saveOptions?: GeneratedImageSaveOptions,
   ): Promise<void> {
     try {
       // Step 1: Update status to processing
       GenerationHistoryModel.updateStatus(historyId, 'processing');
 
       // Step 2: Save original file only to uploads/API/images/YYYY-MM-DD/
-      const processedPaths = await APIImageProcessor.processGeneratedImage(imageBuffer, serviceType);
+      const processedPaths = await APIImageProcessor.processGeneratedImage(imageBuffer, serviceType, saveOptions);
 
       // Step 3: Update API history with original file path and composite_hash
       GenerationHistoryModel.updateImagePaths(historyId, {

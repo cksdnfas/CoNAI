@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, ImagePlus, Layers3, Save } from 'lucide-react'
+import { ArrowLeft, ImagePlus, Layers3, RotateCcw, Save, Settings2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -28,6 +28,7 @@ type ComfyWorkflowControllerPanelProps = {
   onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
   onResetDraft: () => void
   onOpenModuleSave: () => void
+  onOpenSaveOptions: () => void
   onGenerateSelected: () => void
   onGenerateAll: () => void
 }
@@ -49,6 +50,7 @@ export function ComfyWorkflowControllerPanel({
   onImageChange,
   onResetDraft,
   onOpenModuleSave,
+  onOpenSaveOptions,
   onGenerateSelected,
   onGenerateAll,
 }: ComfyWorkflowControllerPanelProps) {
@@ -87,15 +89,30 @@ export function ComfyWorkflowControllerPanel({
   const actionButtons = (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" variant="outline" onClick={onOpenModuleSave}>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="outline"
+          onClick={onOpenModuleSave}
+          disabled={isGenerating}
+          aria-label="모듈 저장"
+          title="모듈 저장"
+        >
           <Save className="h-4 w-4" />
-          모듈 저장
         </Button>
       </div>
 
       <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto pb-1">
-        <Button type="button" variant="ghost" size="sm" onClick={onResetDraft} disabled={isGenerating}>
-          초기화
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onResetDraft}
+          disabled={isGenerating}
+          aria-label="초기화"
+          title="초기화"
+        >
+          <RotateCcw className="h-4 w-4" />
         </Button>
 
         <Select
@@ -123,14 +140,39 @@ export function ComfyWorkflowControllerPanel({
           })}
         </Select>
 
-        <Button type="button" size="sm" variant="outline" onClick={onGenerateSelected} disabled={isGenerating || workflowFields.length === 0 || !selectedServer || serverTests[selectedServer.id]?.status?.is_connected !== true}>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="outline"
+          onClick={onGenerateSelected}
+          disabled={isGenerating || workflowFields.length === 0 || !selectedServer || serverTests[selectedServer.id]?.status?.is_connected !== true}
+          aria-label={isGenerating ? '생성 요청 중' : '선택 서버 생성'}
+          title={isGenerating ? '생성 요청 중' : '선택 서버 생성'}
+        >
           <ImagePlus className="h-4 w-4" />
-          {isGenerating ? '요청 중…' : '생성'}
         </Button>
 
-        <Button type="button" size="sm" onClick={onGenerateAll} disabled={isGenerating || workflowFields.length === 0 || connectedServers.length === 0}>
+        <Button
+          type="button"
+          size="icon-sm"
+          onClick={onGenerateAll}
+          disabled={isGenerating || workflowFields.length === 0 || connectedServers.length === 0}
+          aria-label={isGenerating ? '전체 생성 요청 중' : `모두 생성${connectedServers.length > 0 ? ` (${connectedServers.length})` : ''}`}
+          title={isGenerating ? '전체 생성 요청 중' : `모두 생성${connectedServers.length > 0 ? ` (${connectedServers.length})` : ''}`}
+        >
           <Layers3 className="h-4 w-4" />
-          {isGenerating ? '요청 중…' : `모두 생성${connectedServers.length > 0 ? ` (${connectedServers.length})` : ''}`}
+        </Button>
+
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="outline"
+          onClick={onOpenSaveOptions}
+          disabled={isGenerating || workflowFields.length === 0}
+          aria-label="생성 결과 저장 옵션"
+          title="생성 결과 저장 옵션"
+        >
+          <Settings2 className="h-4 w-4" />
         </Button>
       </div>
     </div>

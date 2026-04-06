@@ -7,6 +7,7 @@ import { preprocessMetadata, type NAIMetadataInputParams, type NAIMetadataParams
 import { buildNaiRequestBody, normalizeBase64ImageData } from '../../utils/nai/requestBuilder'
 import { getToken } from '../../utils/nai/auth'
 import { GenerationHistoryService } from '../../services/generationHistoryService'
+import type { GeneratedImageSaveOptions } from '../../utils/fileSaver'
 
 const router = Router()
 
@@ -80,7 +81,7 @@ function unpackGeneratedImages(payload: Buffer) {
   }))
 }
 
-router.post('/image', async (req: Request<{}, {}, NAIMetadataInputParams>, res: Response): Promise<void> => {
+router.post('/image', async (req: Request<{}, {}, NAIMetadataInputParams & { imageSaveOptions?: GeneratedImageSaveOptions }>, res: Response): Promise<void> => {
   try {
     const token = resolveToken(req)
     if (!token) {
@@ -147,7 +148,7 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataInputParams>, res: 
         historyIds.push(historyId)
 
         const imageBuffer = Buffer.from(images[index].data, 'base64')
-        GenerationHistoryService.processAndUploadImage(historyId, imageBuffer, 'novelai')
+        GenerationHistoryService.processAndUploadImage(historyId, imageBuffer, 'novelai', req.body.imageSaveOptions)
           .catch((historyError) => console.error(`[NAI Generate] Background upload failed for history ${historyId}:`, historyError))
       }
     } catch (historyError) {

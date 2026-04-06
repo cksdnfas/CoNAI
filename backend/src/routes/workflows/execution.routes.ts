@@ -8,6 +8,7 @@ import { runtimePaths, publicUrls } from '../../config/runtimePaths';
 import path from 'path';
 import fs from 'fs';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
+import type { GeneratedImageSaveOptions } from '../../utils/fileSaver';
 import { ComfyUIWorkflowParser } from '../../utils/comfyuiWorkflowParser';
 import { GenerationHistoryModel } from '../../models/GenerationHistory';
 
@@ -70,7 +71,13 @@ async function prepareWorkflowPromptData(
  */
 router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
-  const { prompt_data, server_id, groupId, source_image } = req.body;
+  const { prompt_data, server_id, groupId, source_image, imageSaveOptions } = req.body as {
+    prompt_data?: Record<string, any>;
+    server_id?: number;
+    groupId?: string | number;
+    source_image?: string;
+    imageSaveOptions?: GeneratedImageSaveOptions;
+  };
 
   if (isNaN(id) || !prompt_data) {
     return res.status(400).json({
@@ -153,7 +160,7 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
         negativePrompt: extractedParams.negativePrompt,
         width: extractedParams.width,
         height: extractedParams.height,
-        groupId: groupId ? parseInt(groupId) : undefined, // User-selected group for automatic assignment
+        groupId: groupId !== undefined && groupId !== null ? Number(groupId) : undefined, // User-selected group for automatic assignment
         metadata: {
           server_endpoint: apiEndpoint,
           server_name: serverName,
@@ -205,43 +212,25 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
             // Read temp file
             const imageBuffer = await fs.promises.readFile(tempPath);
 
-            // Create date-based directory (YYYY-MM-DD)
-            const dateDir = new Date().toISOString().split('T')[0];
-            const targetDir = path.join(runtimePaths.uploadsDir, 'API', 'images', dateDir);
+            const { APIImageProcessor } = await import('../../services/APIImageProcessor');
+            const processedPaths = await APIImageProcessor.processGeneratedImage(imageBuffer, 'comfyui', {
+              ...imageSaveOptions,
+              sourcePathForMetadata: tempPath,
+              originalFileName: path.basename(tempPath),
+            });
 
-            // Ensure directory exists
-            if (!fs.existsSync(targetDir)) {
-              fs.mkdirSync(targetDir, { recursive: true });
-            }
-
-            // Generate unique filename
-            const ext = path.extname(tempPath);
-            const filename = `comfyui_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`;
-            const targetPath = path.join(targetDir, filename);
-
-            // Write file to target
-            fs.writeFileSync(targetPath, imageBuffer);
-
-            // Delete temp file
             fs.unlinkSync(tempPath);
 
-            console.log(`✅ ComfyUI image saved: API/images/${dateDir}/${filename}`);
+            console.log(`✅ ComfyUI image saved: ${processedPaths.originalPath}`);
 
-            // Update history (first image only)
             if (historyId && tempFilePaths.indexOf(tempPath) === 0) {
-              const relativePath = `API/images/${dateDir}/${filename}`;
-
-              // Generate composite hash
-              const { ImageSimilarityService } = await import('../../services/imageSimilarity');
-              const { hashes } = await ImageSimilarityService.generateHashAndHistogram(targetPath);
-
               GenerationHistoryModel.updateImagePaths(historyId, {
-                original: relativePath,
-                fileSize: imageBuffer.length,
-                compositeHash: hashes.compositeHash
+                original: processedPaths.originalPath,
+                fileSize: processedPaths.fileSize,
+                compositeHash: processedPaths.compositeHash
               });
 
-              console.log(`✅ ComfyUI history ${historyId} updated with composite_hash: ${hashes.compositeHash.substring(0, 16)}...`);
+              console.log(`✅ ComfyUI history ${historyId} updated with composite_hash: ${processedPaths.compositeHash.substring(0, 16)}...`);
               // Note: Group assignment is handled by BackgroundProcessorService after file watcher detects the new file
               // (due to foreign key constraint on image_groups table requiring media_metadata entry first)
             }

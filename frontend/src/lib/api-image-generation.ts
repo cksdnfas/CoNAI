@@ -131,6 +131,7 @@ export interface NAILoginResponse {
 
 export interface NAIImageGenerationPayload {
   prompt: string
+  imageSaveOptions?: GenerationImageSaveOptions
   negative_prompt?: string
   model?: string
   action?: 'generate' | 'img2img' | 'infill'
@@ -248,9 +249,18 @@ export interface ComfyUIImageFieldValue {
   dataUrl: string
 }
 
+export interface GenerationImageSaveOptions {
+  format?: 'original' | 'png' | 'jpeg' | 'webp'
+  quality?: number
+  resizeEnabled?: boolean
+  maxWidth?: number
+  maxHeight?: number
+}
+
 export interface ComfyUIGenerationPayload {
   prompt_data: Record<string, string | number | ComfyUIImageFieldValue>
   server_id?: number
+  imageSaveOptions?: GenerationImageSaveOptions
 }
 
 export interface ComfyUIGenerationResponse {

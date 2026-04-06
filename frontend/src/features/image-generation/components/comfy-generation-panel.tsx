@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
@@ -8,6 +9,7 @@ import {
   createGenerationWorkflow,
   deleteGenerationCustomDropdownList,
   deleteGenerationWorkflow,
+  getAppSettings,
   getGenerationComfyUIServers,
   getGenerationCustomDropdownLists,
   getGenerationWorkflow,
@@ -17,6 +19,8 @@ import {
   type GenerationWorkflow,
   type GenerationWorkflowDetail,
 } from '@/lib/api'
+import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
+import type { ImageSaveSettings } from '@/types/settings'
 import {
   buildWorkflowDraft,
   getErrorMessage,
@@ -57,12 +61,19 @@ export function ComfyGenerationPanel({
   const [isAuthoringModalOpen, setIsAuthoringModalOpen] = useState(false)
   const [workflowEditorState, setWorkflowEditorState] = useState<ComfyWorkflowEditorState | null>(null)
   const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
+  const [isGenerationSaveOptionsOpen, setIsGenerationSaveOptionsOpen] = useState(false)
+  const [generationSaveOptions, setGenerationSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
   const [moduleSaveWorkflowId, setModuleSaveWorkflowId] = useState<number | null>(null)
   const [isSavingComfyModule, setIsSavingComfyModule] = useState(false)
   const [comfyModuleName, setComfyModuleName] = useState('')
   const [comfyModuleDescription, setComfyModuleDescription] = useState('')
   const [comfyExposedFieldIds, setComfyExposedFieldIds] = useState<string[]>([])
   const activeWorkflowId = selectedWorkflowId !== null ? String(selectedWorkflowId) : ''
+
+  const appSettingsQuery = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: getAppSettings,
+  })
 
   const workflowsQuery = useQuery({
     queryKey: ['image-generation-workflows'],
@@ -140,6 +151,14 @@ export function ComfyGenerationPanel({
     refetchServers: serversQuery.refetch,
     showSnackbar,
   })
+  useEffect(() => {
+    if (!appSettingsQuery.data?.imageSave) {
+      return
+    }
+
+    setGenerationSaveOptions((current) => current === DEFAULT_IMAGE_SAVE_SETTINGS ? appSettingsQuery.data.imageSave : current)
+  }, [appSettingsQuery.data?.imageSave])
+
   const connectedServers = activeServers.filter((server) => comfyServerTests[server.id]?.status?.is_connected === true)
   const {
     isComfyGenerating,
@@ -153,6 +172,13 @@ export function ComfyGenerationPanel({
     activeServers,
     connectedServers,
     comfyServerTests,
+    imageSaveOptions: {
+      format: generationSaveOptions.defaultFormat,
+      quality: generationSaveOptions.quality,
+      resizeEnabled: generationSaveOptions.resizeEnabled,
+      maxWidth: generationSaveOptions.maxWidth,
+      maxHeight: generationSaveOptions.maxHeight,
+    },
     onHistoryRefresh,
     showSnackbar,
   })
@@ -462,11 +488,23 @@ export function ComfyGenerationPanel({
             onImageChange={handleWorkflowImageChange}
             onResetDraft={() => setWorkflowDraft(buildWorkflowDraft(selectedWorkflowFields))}
             onOpenModuleSave={() => selectedWorkflow ? handleOpenModuleSave(selectedWorkflow.id) : undefined}
+            onOpenSaveOptions={() => setIsGenerationSaveOptionsOpen(true)}
             onGenerateSelected={() => void handleGenerateSelected()}
             onGenerateAll={() => void handleGenerateAllServers()}
           />
         ) : null}
       </div>
+
+      <ImageSaveOptionsModal
+        open={isGenerationSaveOptionsOpen}
+        title="생성 결과 저장 옵션"
+        options={generationSaveOptions}
+        sourceInfo={null}
+        isSaving={false}
+        onClose={() => setIsGenerationSaveOptionsOpen(false)}
+        onOptionsChange={(patch) => setGenerationSaveOptions((current) => ({ ...current, ...patch }))}
+        onConfirm={() => setIsGenerationSaveOptionsOpen(false)}
+      />
 
       <ComfyWorkflowAuthoringModal
         open={isAuthoringModalOpen}

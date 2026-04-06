@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { ImageProcessor } from './imageProcessor';
-import { FileSaver } from '../utils/fileSaver';
+import { FileSaver, type GeneratedImageSaveOptions } from '../utils/fileSaver';
 import { runtimePaths } from '../config/runtimePaths';
 
 export class APIImageProcessor {
@@ -65,7 +65,8 @@ export class APIImageProcessor {
    */
   static async processGeneratedImage(
     imageBuffer: Buffer,
-    serviceType: 'comfyui' | 'novelai'
+    serviceType: 'comfyui' | 'novelai',
+    saveOptions?: GeneratedImageSaveOptions,
   ): Promise<{
     originalPath: string;
     fileSize: number;
@@ -76,7 +77,7 @@ export class APIImageProcessor {
     try {
       // Use FileSaver to save original file only
       // Background scan will handle thumbnail/optimization
-      return await FileSaver.saveGeneratedImage(imageBuffer, serviceType);
+      return await FileSaver.saveGeneratedImage(imageBuffer, serviceType, saveOptions);
     } catch (error) {
       console.error('API Image processing failed:', error);
       throw new Error(`Failed to process ${serviceType} generated image: ${error instanceof Error ? error.message : 'Unknown error'}`);

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { createNaiModuleFromSnapshot, generateNaiImage, upscaleNaiImage } from '@/lib/api'
+import type { GenerationImageSaveOptions } from '@/lib/api-image-generation'
 import {
   buildNaiCharacterPromptPayload,
   buildNaiCharacterReferencePayload,
@@ -29,6 +30,7 @@ export function useNaiGenerationActions({
   naiModuleDescription,
   naiExposedFieldKeys,
   naiModuleFieldOptions,
+  imageSaveOptions,
   closeModuleSaveModal,
   showSnackbar,
 }: {
@@ -43,6 +45,7 @@ export function useNaiGenerationActions({
   naiModuleDescription: string
   naiExposedFieldKeys: string[]
   naiModuleFieldOptions: ModuleFieldOption[]
+  imageSaveOptions?: GenerationImageSaveOptions
   closeModuleSaveModal: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
@@ -113,6 +116,7 @@ export function useNaiGenerationActions({
         strength: naiForm.action !== 'generate' ? Number(naiForm.strength) : undefined,
         noise: naiForm.action !== 'generate' ? Number(naiForm.noise) : undefined,
         add_original_image: naiForm.action === 'infill' ? naiForm.addOriginalImage : undefined,
+        imageSaveOptions,
       })
 
       await refetchUserData()
