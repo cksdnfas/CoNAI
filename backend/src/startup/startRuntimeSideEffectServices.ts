@@ -36,6 +36,11 @@ export async function startRuntimeSideEffectServices(isSafeSmokeMode: boolean) {
       const { BackupSourceWatcherService } = await import('../services/backupSourceWatcherService')
       await BackupSourceWatcherService.initialize()
       console.log('✅ Backup source watcher service started successfully')
+
+      console.log('🧩 Starting custom node watcher service...')
+      const { CustomNodeWatcherService } = await import('../services/customNodeWatcherService')
+      await CustomNodeWatcherService.initialize()
+      console.log('✅ Custom node watcher service started successfully')
     } catch (error) {
       console.warn('⚠️  Failed to start file watcher service:', error instanceof Error ? error.message : error)
       console.warn('   Falling back to scheduled scans only')

@@ -52,7 +52,7 @@ Implement the MVP foundations for local file-based custom nodes.
 - [x] Show `custom_js` nodes cleanly in the module library
 - [x] Add scaffold endpoint and starter templates
 - [x] Add test-run endpoint for ad-hoc custom node execution
-- [ ] Add file watcher auto-reload
+- [x] Add file watcher auto-reload
 - [x] Add a basic custom node management view
 
 ## Implementation notes

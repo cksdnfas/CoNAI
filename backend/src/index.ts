@@ -474,6 +474,15 @@ ${divider}`);
           console.warn('⚠️  Error stopping file watcher service:', error);
         }
 
+        // Stop custom node watcher service
+        try {
+          const { CustomNodeWatcherService } = await import('./services/customNodeWatcherService');
+          await CustomNodeWatcherService.stopAll();
+          console.log('✅ Custom node watcher service stopped');
+        } catch (error) {
+          console.warn('⚠️  Error stopping custom node watcher service:', error);
+        }
+
         // Stop auto-scan scheduler
         try {
           AutoScanScheduler.stop();
