@@ -15,6 +15,7 @@ import {
   scaffoldCustomNode,
   testCustomNode,
   type CustomNodeScaffoldTemplate,
+  type CustomNodeTestResult,
 } from '@/lib/api'
 
 type CustomNodeManagementPanelProps = {
@@ -29,6 +30,14 @@ function stringifyPrettyJson(value: unknown) {
   }
 }
 
+function isImageDataUrl(value: unknown): value is string {
+  return typeof value === 'string' && /^data:image\//.test(value)
+}
+
+function isLikelyFilePath(value: unknown): value is string {
+  return typeof value === 'string' && !/^data:image\//.test(value) && /[\\/]|\.[a-z0-9]+$/i.test(value)
+}
+
 /** Render a local-only manager for file-based custom nodes inside the module graph workspace. */
 export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManagementPanelProps) {
   const { showSnackbar } = useSnackbar()
@@ -41,6 +50,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
   const [selectedTestKey, setSelectedTestKey] = useState<string>('')
   const [testInputsText, setTestInputsText] = useState('{}')
   const [testResultText, setTestResultText] = useState('')
+  const [testResultData, setTestResultData] = useState<CustomNodeTestResult | null>(null)
 
   const customNodesQuery = useQuery({
     queryKey: ['custom-nodes'],
@@ -54,6 +64,39 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
     () => loadedNodes.find((node) => node.manifest.key === selectedTestKey) ?? null,
     [loadedNodes, selectedTestKey],
   )
+
+  const testResultNode = useMemo(
+    () => loadedNodes.find((node) => node.manifest.key === testResultData?.key) ?? null,
+    [loadedNodes, testResultData?.key],
+  )
+
+  const previewableImageOutputs = useMemo(() => {
+    if (!testResultData || !testResultNode) {
+      return [] as Array<{ key: string; label: string; value: string }>
+    }
+
+    return testResultNode.manifest.outputs
+      .filter((port) => (port.data_type === 'image' || port.data_type === 'mask') && isImageDataUrl(testResultData.outputs[port.key]))
+      .map((port) => ({
+        key: port.key,
+        label: port.label ?? port.key,
+        value: testResultData.outputs[port.key] as string,
+      }))
+  }, [testResultData, testResultNode])
+
+  const filePathOutputs = useMemo(() => {
+    if (!testResultData || !testResultNode) {
+      return [] as Array<{ key: string; label: string; value: string }>
+    }
+
+    return testResultNode.manifest.outputs
+      .filter((port) => (port.data_type === 'image' || port.data_type === 'mask') && isLikelyFilePath(testResultData.outputs[port.key]))
+      .map((port) => ({
+        key: port.key,
+        label: port.label ?? port.key,
+        value: testResultData.outputs[port.key] as string,
+      }))
+  }, [testResultData, testResultNode])
 
   const handleModulesChanged = async () => {
     await queryClient.invalidateQueries({ queryKey: ['custom-nodes'] })
@@ -85,6 +128,8 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
       setNodeName('')
       setNodeDescription('')
       setSelectedTestKey(variables.key)
+      setTestResultData(null)
+      setTestResultText('')
       showSnackbar({ message: `커스텀 노드 폴더를 만들었어: ${result.folderPath}`, tone: 'info' })
       await handleModulesChanged()
     },
@@ -115,11 +160,13 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
       return await testCustomNode(selectedTestKey, parsedInputs)
     },
     onSuccess: (result) => {
+      setTestResultData(result)
       setTestResultText(stringifyPrettyJson(result))
       showSnackbar({ message: `커스텀 노드 테스트 완료: ${result.name}`, tone: 'info' })
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : '커스텀 노드 테스트 실행에 실패했어.'
+      setTestResultData(null)
       setTestResultText(message)
       showSnackbar({ message, tone: 'error' })
     },
@@ -194,6 +241,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                               variant={isSelected ? 'default' : 'outline'}
                               onClick={() => {
                                 setSelectedTestKey(node.manifest.key)
+                                setTestResultData(null)
                                 setTestResultText('')
                               }}
                             >
@@ -289,6 +337,50 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
               <Button type="button" variant="outline" onClick={() => void testMutation.mutateAsync()} disabled={testMutation.isPending || !selectedTestKey}>
                 {testMutation.isPending ? '테스트 실행 중...' : '테스트 실행'}
               </Button>
+
+              {previewableImageOutputs.length > 0 ? (
+                <div className="space-y-3 rounded-sm border border-border/70 bg-background/50 p-3">
+                  <div className="text-sm font-medium text-foreground">이미지 미리보기</div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {previewableImageOutputs.map((output) => (
+                      <div key={output.key} className="space-y-2">
+                        <div className="text-xs text-muted-foreground">{output.label}</div>
+                        <img src={output.value} alt={output.label} className="max-h-56 w-full rounded-sm border border-border/70 object-contain bg-black/20" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {filePathOutputs.length > 0 ? (
+                <Alert>
+                  <AlertTitle>파일 경로 이미지 출력</AlertTitle>
+                  <AlertDescription>
+                    <div className="space-y-1 text-sm">
+                      <div>이 테스트 결과는 이미지 포트를 파일 경로 문자열로 반환했어. 현재 패널에서는 경로만 보여주고, 실제 그래프 실행 시 artifact로 저장돼.</div>
+                      {filePathOutputs.map((output) => (
+                        <div key={output.key} className="font-mono text-xs text-muted-foreground">
+                          {output.label}: {output.value}
+                        </div>
+                      ))}
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
+              {testResultData?.logs.length ? (
+                <div className="space-y-2 rounded-sm border border-border/70 bg-background/50 p-3">
+                  <div className="text-sm font-medium text-foreground">실행 로그</div>
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    {testResultData.logs.map((logItem, index) => (
+                      <div key={`${index}:${logItem.message}`}>
+                        <span className="font-medium text-foreground">[{logItem.level ?? 'info'}]</span> {logItem.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <Textarea rows={14} value={testResultText} placeholder="테스트 결과가 여기에 보여." readOnly />
             </CardContent>
           </Card>
