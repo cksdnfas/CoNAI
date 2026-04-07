@@ -207,6 +207,13 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
           }
         }
 
+        let savedImageCount = 0;
+        let representativeImage: {
+          originalPath: string;
+          fileSize: number;
+          compositeHash: string;
+        } | null = null;
+
         for (const tempPath of tempFilePaths) {
           try {
             // Read temp file
@@ -220,31 +227,40 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
             });
 
             fs.unlinkSync(tempPath);
+            savedImageCount += 1;
+
+            if (!representativeImage) {
+              representativeImage = {
+                originalPath: processedPaths.originalPath,
+                fileSize: processedPaths.fileSize,
+                compositeHash: processedPaths.compositeHash,
+              };
+            }
 
             console.log(`✅ ComfyUI image saved: ${processedPaths.originalPath}`);
-
-            if (historyId && tempFilePaths.indexOf(tempPath) === 0) {
-              GenerationHistoryModel.updateImagePaths(historyId, {
-                original: processedPaths.originalPath,
-                fileSize: processedPaths.fileSize,
-                compositeHash: processedPaths.compositeHash
-              });
-
-              console.log(`✅ ComfyUI history ${historyId} updated with composite_hash: ${processedPaths.compositeHash.substring(0, 16)}...`);
-              // Note: Group assignment is handled by BackgroundProcessorService after file watcher detects the new file
-              // (due to foreign key constraint on image_groups table requiring media_metadata entry first)
-            }
           } catch (error) {
             console.error(`❌ Failed to save ComfyUI image ${tempPath}:`, error);
           }
         }
 
-        // Mark as completed
         if (historyId) {
-          GenerationHistoryModel.updateStatus(historyId, 'completed');
-        }
+          if (representativeImage) {
+            GenerationHistoryModel.updateImagePaths(historyId, {
+              original: representativeImage.originalPath,
+              fileSize: representativeImage.fileSize,
+              compositeHash: representativeImage.compositeHash,
+            });
+            GenerationHistoryModel.updateStatus(historyId, 'completed');
 
-        console.log(`✅ Image generation completed for history ID ${historyId}`);
+            console.log(`✅ ComfyUI history ${historyId} linked to representative image: ${representativeImage.compositeHash.substring(0, 16)}...`);
+            console.log(`✅ Image generation completed for history ID ${historyId} (${savedImageCount}/${tempFilePaths.length} saved)`);
+          } else {
+            GenerationHistoryModel.recordError(historyId, 'ComfyUI generation finished but no output image could be saved');
+            console.error(`❌ ComfyUI history ${historyId} has no saved representative image after generation`);
+          }
+        } else {
+          console.log(`✅ Image generation completed without history tracking (${savedImageCount}/${tempFilePaths.length} saved)`);
+        }
       } catch (error) {
         console.error(`❌ Image generation failed for history ID ${historyId}:`, error);
 
