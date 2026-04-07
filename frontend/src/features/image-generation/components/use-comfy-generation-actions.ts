@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { generateComfyUIImage } from '@/lib/api'
+import type { GenerationHistoryRecord } from '@/lib/api-image-generation'
 import type { GenerationImageSaveOptions, WorkflowMarkedField } from '@/lib/api-image-generation'
 import {
   buildWorkflowPromptData,
@@ -7,6 +9,7 @@ import {
   hasWorkflowFieldValue,
   type WorkflowFieldDraftValue,
 } from '../image-generation-shared'
+import { prependGenerationHistoryRecords } from '../generation-history-cache'
 
 type ConnectedServerLike = {
   id: number
@@ -43,6 +46,7 @@ export function useComfyGenerationActions({
   onHistoryRefresh: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const queryClient = useQueryClient()
   const [isComfyGenerating, setIsComfyGenerating] = useState(false)
 
   /** Validate the currently selected workflow fields before any generation request. */
@@ -101,6 +105,19 @@ export function useComfyGenerationActions({
     try {
       setIsComfyGenerating(true)
       const response = await handleGenerateOnServer(serverId)
+      if (selectedWorkflow && response?.data.history_id) {
+        const optimisticRecord: GenerationHistoryRecord = {
+          id: response.data.history_id,
+          service_type: 'comfyui',
+          generation_status: response.data.status,
+          workflow_id: selectedWorkflow.id,
+          workflow_name: 'name' in selectedWorkflow ? String(selectedWorkflow.name ?? '') : null,
+          width: null,
+          height: null,
+          created_at: new Date().toISOString(),
+        }
+        prependGenerationHistoryRecords(queryClient, 'comfyui', [optimisticRecord], selectedWorkflow.id)
+      }
       onHistoryRefresh()
       showSnackbar({ message: response?.data.message || `${server.name}에 생성 요청을 시작했어.`, tone: 'info' })
     } catch (error) {
@@ -127,7 +144,32 @@ export function useComfyGenerationActions({
       const successCount = results.filter((result) => result.status === 'fulfilled').length
       const failedCount = results.length - successCount
 
-      if (successCount > 0) {
+      const optimisticRecords: GenerationHistoryRecord[] = []
+      results.forEach((result) => {
+        if (result.status !== 'fulfilled' || !result.value) {
+          return
+        }
+
+        const responseData = result.value.data
+        const historyId = responseData.history_id
+        if (!selectedWorkflow || !historyId) {
+          return
+        }
+
+        optimisticRecords.push({
+          id: historyId,
+          service_type: 'comfyui',
+          generation_status: responseData.status,
+          workflow_id: selectedWorkflow.id,
+          workflow_name: 'name' in selectedWorkflow ? String(selectedWorkflow.name ?? '') : null,
+          width: null,
+          height: null,
+          created_at: new Date().toISOString(),
+        })
+      })
+
+      if (optimisticRecords.length > 0 && selectedWorkflow) {
+        prependGenerationHistoryRecords(queryClient, 'comfyui', optimisticRecords, selectedWorkflow.id)
         onHistoryRefresh()
       }
 

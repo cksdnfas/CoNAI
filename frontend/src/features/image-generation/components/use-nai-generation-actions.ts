@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { createNaiModuleFromSnapshot, generateNaiImage, upscaleNaiImage } from '@/lib/api'
-import type { GenerationImageSaveOptions } from '@/lib/api-image-generation'
+import type { GenerationHistoryRecord, GenerationImageSaveOptions } from '@/lib/api-image-generation'
 import {
   buildNaiCharacterPromptPayload,
   buildNaiCharacterReferencePayload,
@@ -16,6 +17,7 @@ import {
   type NAIVibeDraft,
 } from '../image-generation-shared'
 import { decodeNaiBase64Png } from './nai-generation-panel-helpers'
+import { prependGenerationHistoryRecords } from '../generation-history-cache'
 
 /** Manage generation, upscale, and module-save actions for the NAI generation panel. */
 export function useNaiGenerationActions({
@@ -49,6 +51,7 @@ export function useNaiGenerationActions({
   closeModuleSaveModal: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const queryClient = useQueryClient()
   const [isNaiGenerating, setIsNaiGenerating] = useState(false)
   const [isSavingNaiModule, setIsSavingNaiModule] = useState(false)
   const [isUpscaling, setIsUpscaling] = useState(false)
@@ -119,6 +122,24 @@ export function useNaiGenerationActions({
         imageSaveOptions,
       })
 
+      const createdAt = new Date().toISOString()
+      const optimisticRecords: GenerationHistoryRecord[] = response.historyIds.map((historyId, index) => ({
+        id: historyId,
+        service_type: 'novelai',
+        generation_status: 'pending',
+        nai_model: naiForm.model,
+        nai_sampler: naiForm.sampler,
+        nai_seed: naiForm.seed.trim().length > 0 ? Number(naiForm.seed) + index : null,
+        nai_steps: Number(naiForm.steps),
+        nai_scale: Number(naiForm.scale),
+        positive_prompt: naiForm.prompt.trim(),
+        negative_prompt: naiForm.negativePrompt.trim() || null,
+        width: Number(naiForm.width),
+        height: Number(naiForm.height),
+        created_at: createdAt,
+      }))
+
+      prependGenerationHistoryRecords(queryClient, 'novelai', optimisticRecords)
       await refetchUserData()
       onHistoryRefresh()
       showSnackbar({ message: `NAI 생성 요청 완료. 히스토리 ${response.count}건 등록됐어.`, tone: 'info' })
