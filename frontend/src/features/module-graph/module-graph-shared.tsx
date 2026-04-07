@@ -10,6 +10,16 @@ import type {
   ModulePortDefinition,
 } from '@/lib/api'
 
+export type NodeArtifactGroupPreview = {
+  portKey: string
+  portLabel: string
+  portType: ModulePortDataType | null
+  artifactCount: number
+  latestArtifactLabel: string | null
+  latestArtifactPreviewUrl: string | null
+  latestArtifactTextPreview: string | null
+}
+
 export type ModuleGraphNodeData = {
   module: ModuleDefinitionRecord
   inputValues: Record<string, unknown>
@@ -19,6 +29,7 @@ export type ModuleGraphNodeData = {
   latestArtifactLabel?: string | null
   latestArtifactPreviewUrl?: string | null
   latestArtifactTextPreview?: string | null
+  executionOutputGroups?: NodeArtifactGroupPreview[]
   executeNodeDisabled?: boolean
   onExecuteNode?: () => void
   onForceExecuteNode?: () => void
@@ -208,7 +219,7 @@ export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord
 
   const latestTextArtifact = [...artifacts]
     .reverse()
-    .find((artifact) => artifact.artifact_type === 'prompt' || artifact.artifact_type === 'text' || artifact.artifact_type === 'json')
+    .find((artifact) => artifact.artifact_type === 'prompt' || artifact.artifact_type === 'text' || artifact.artifact_type === 'json' || artifact.artifact_type === 'number' || artifact.artifact_type === 'boolean')
 
   if (latestTextArtifact) {
     return {
@@ -223,6 +234,46 @@ export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord
     latestArtifactPreviewUrl: null,
     latestArtifactTextPreview: null,
   }
+}
+
+/** Build compact per-port artifact previews so node cards can expose outputs without opening the results panel. */
+export function buildNodeArtifactGroups(
+  artifacts: GraphExecutionArtifactRecord[],
+  outputPorts: ModulePortDefinition[],
+): NodeArtifactGroupPreview[] {
+  const outputPortMap = new Map(outputPorts.map((port, index) => [port.key, { port, index }]))
+  const groupedArtifacts = artifacts.reduce<Map<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
+    const current = acc.get(artifact.port_key) ?? []
+    current.push(artifact)
+    acc.set(artifact.port_key, current)
+    return acc
+  }, new Map())
+
+  return Array.from(groupedArtifacts.entries())
+    .map(([portKey, portArtifacts]) => {
+      const sortedArtifacts = [...portArtifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
+      const artifactPreview = buildNodeArtifactPreview(sortedArtifacts)
+      const outputPort = outputPortMap.get(portKey)?.port ?? null
+
+      return {
+        portKey,
+        portLabel: outputPort?.label ?? portKey,
+        portType: outputPort?.data_type ?? (sortedArtifacts[0]?.artifact_type === 'file' ? null : sortedArtifacts[0]?.artifact_type ?? null),
+        artifactCount: sortedArtifacts.length,
+        latestArtifactLabel: artifactPreview.latestArtifactLabel,
+        latestArtifactPreviewUrl: artifactPreview.latestArtifactPreviewUrl,
+        latestArtifactTextPreview: artifactPreview.latestArtifactTextPreview,
+      } satisfies NodeArtifactGroupPreview
+    })
+    .sort((left, right) => {
+      const leftIndex = outputPortMap.get(left.portKey)?.index ?? Number.MAX_SAFE_INTEGER
+      const rightIndex = outputPortMap.get(right.portKey)?.index ?? Number.MAX_SAFE_INTEGER
+      if (leftIndex !== rightIndex) {
+        return leftIndex - rightIndex
+      }
+
+      return left.portLabel.localeCompare(right.portLabel, 'ko')
+    })
 }
 
 /** Resolve a compact node execution status from the selected execution detail. */

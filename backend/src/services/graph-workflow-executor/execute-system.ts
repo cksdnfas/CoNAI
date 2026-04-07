@@ -18,6 +18,7 @@ import {
   type ExecutionContext,
   type ParsedModuleDefinition,
 } from './shared'
+import { saveArtifactBuffer } from './artifacts'
 import { buildRuntimeArtifact } from './system-module-artifacts'
 import {
   executeLoadImageFromReference,
@@ -82,6 +83,247 @@ function normalizeBooleanInput(value: unknown, fallback = false) {
 function normalizeNumberInput(value: unknown, fallback: number) {
   const numericValue = Number(value)
   return Number.isFinite(numericValue) ? numericValue : fallback
+}
+
+/** Normalize a required string-ish constant-node input. */
+function normalizeRequiredStringInput(value: unknown, label: string) {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value
+  }
+
+  throw new Error(`${label} requires a non-empty string input`)
+}
+
+/** Normalize a JSON constant-node input from either a parsed value or a JSON string. */
+function normalizeJsonConstantInput(value: unknown) {
+  if (typeof value === 'string') {
+    const trimmedValue = value.trim()
+    if (trimmedValue.length === 0) {
+      throw new Error('Constant JSON requires one JSON value')
+    }
+
+    try {
+      return JSON.parse(trimmedValue)
+    } catch {
+      throw new Error('Constant JSON requires valid JSON text')
+    }
+  }
+
+  if (value === undefined) {
+    throw new Error('Constant JSON requires one JSON value')
+  }
+
+  return value
+}
+
+/** Normalize a number constant-node input. */
+function normalizeRequiredNumberInput(value: unknown, label: string) {
+  const numericValue = Number(value)
+  if (Number.isFinite(numericValue)) {
+    return numericValue
+  }
+
+  throw new Error(`${label} requires a valid number input`)
+}
+
+/** Normalize a boolean constant-node input. */
+function normalizeRequiredBooleanInput(value: unknown, label: string) {
+  if (typeof value === 'boolean') {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true') return true
+    if (normalized === 'false') return false
+  }
+
+  throw new Error(`${label} requires a boolean input`)
+}
+
+/** Execute a constant text or prompt system node. */
+function executeConstantStringNode(params: {
+  context: ExecutionContext
+  node: GraphWorkflowNode
+  moduleDefinition: ParsedModuleDefinition
+  resolvedInputs: Record<string, any>
+  operationKey: 'system.constant_text' | 'system.constant_prompt'
+  inputKey: 'text' | 'prompt'
+  artifactType: 'text' | 'prompt'
+}) {
+  const value = normalizeRequiredStringInput(params.resolvedInputs[params.inputKey], params.moduleDefinition.name)
+  const nodeArtifacts = {
+    [params.inputKey]: buildRuntimeArtifact(
+      params.context.executionId,
+      params.node.id,
+      params.inputKey,
+      params.artifactType,
+      value,
+      {
+        kind: 'system-constant-input',
+        operationKey: params.operationKey,
+      },
+    ),
+  }
+
+  params.context.artifactsByNode.set(params.node.id, nodeArtifacts)
+
+  writeExecutionLog({
+    executionId: params.context.executionId,
+    nodeId: params.node.id,
+    eventType: 'node_engine_complete',
+    message: `System module completed: ${params.moduleDefinition.name}`,
+    details: {
+      engine: 'system',
+      operationKey: params.operationKey,
+      outputKeys: Object.keys(nodeArtifacts),
+    },
+  })
+}
+
+/** Execute a constant JSON system node. */
+function executeConstantJsonNode(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  const jsonValue = normalizeJsonConstantInput(resolvedInputs.json)
+  const nodeArtifacts = {
+    json: buildRuntimeArtifact(context.executionId, node.id, 'json', 'json', jsonValue, {
+      kind: 'system-constant-input',
+      operationKey: 'system.constant_json',
+    }),
+  }
+
+  context.artifactsByNode.set(node.id, nodeArtifacts)
+
+  writeExecutionLog({
+    executionId: context.executionId,
+    nodeId: node.id,
+    eventType: 'node_engine_complete',
+    message: `System module completed: ${moduleDefinition.name}`,
+    details: {
+      engine: 'system',
+      operationKey: 'system.constant_json',
+      outputKeys: Object.keys(nodeArtifacts),
+    },
+  })
+}
+
+/** Execute a constant image system node. */
+function executeConstantNumberNode(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  const numberValue = normalizeRequiredNumberInput(resolvedInputs.number, moduleDefinition.name)
+  const nodeArtifacts = {
+    number: buildRuntimeArtifact(context.executionId, node.id, 'number', 'number', numberValue, {
+      kind: 'system-constant-input',
+      operationKey: 'system.constant_number',
+    }),
+  }
+
+  context.artifactsByNode.set(node.id, nodeArtifacts)
+
+  writeExecutionLog({
+    executionId: context.executionId,
+    nodeId: node.id,
+    eventType: 'node_engine_complete',
+    message: `System module completed: ${moduleDefinition.name}`,
+    details: {
+      engine: 'system',
+      operationKey: 'system.constant_number',
+      outputKeys: Object.keys(nodeArtifacts),
+    },
+  })
+}
+
+/** Execute a constant boolean system node. */
+function executeConstantBooleanNode(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  const booleanValue = normalizeRequiredBooleanInput(resolvedInputs.boolean, moduleDefinition.name)
+  const nodeArtifacts = {
+    boolean: buildRuntimeArtifact(context.executionId, node.id, 'boolean', 'boolean', booleanValue, {
+      kind: 'system-constant-input',
+      operationKey: 'system.constant_boolean',
+    }),
+  }
+
+  context.artifactsByNode.set(node.id, nodeArtifacts)
+
+  writeExecutionLog({
+    executionId: context.executionId,
+    nodeId: node.id,
+    eventType: 'node_engine_complete',
+    message: `System module completed: ${moduleDefinition.name}`,
+    details: {
+      engine: 'system',
+      operationKey: 'system.constant_boolean',
+      outputKeys: Object.keys(nodeArtifacts),
+    },
+  })
+}
+
+/** Execute a constant image system node. */
+async function executeConstantImageNode(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  const imageValue = resolvedInputs.image
+  if (typeof imageValue !== 'string' || !imageValue.startsWith('data:image/')) {
+    throw new Error('Constant Image requires one image input')
+  }
+
+  const base64 = normalizeBase64ImageData(imageValue)
+  if (!base64) {
+    throw new Error('Constant Image requires a valid image data URL input')
+  }
+
+  const mimeType = imageValue.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/)?.[1] ?? 'image/png'
+  const { storagePath, artifactRecordId } = await saveArtifactBuffer(
+    context.executionId,
+    node.id,
+    'image',
+    'image',
+    Buffer.from(base64, 'base64'),
+    { mimeType },
+  )
+
+  const nodeArtifacts = {
+    image: {
+      type: 'image' as const,
+      value: imageValue,
+      storagePath,
+      artifactRecordId,
+      metadata: {
+        kind: 'system-constant-input',
+        operationKey: 'system.constant_image',
+      },
+    },
+  }
+
+  context.artifactsByNode.set(node.id, nodeArtifacts)
+
+  writeExecutionLog({
+    executionId: context.executionId,
+    nodeId: node.id,
+    eventType: 'node_engine_complete',
+    message: `System module completed: ${moduleDefinition.name}`,
+    details: {
+      engine: 'system',
+      operationKey: 'system.constant_image',
+      outputKeys: Object.keys(nodeArtifacts),
+    },
+  })
 }
 
 /** Resolve one prompt group by explicit id or exact group name. */
@@ -549,6 +791,52 @@ export async function executeSystemModule(
 
   if (!operationKey) {
     throw new Error(`System module ${moduleDefinition.name} is missing operation_key`)
+  }
+
+  if (operationKey === 'system.constant_text') {
+    executeConstantStringNode({
+      context,
+      node,
+      moduleDefinition,
+      resolvedInputs,
+      operationKey,
+      inputKey: 'text',
+      artifactType: 'text',
+    })
+    return
+  }
+
+  if (operationKey === 'system.constant_prompt') {
+    executeConstantStringNode({
+      context,
+      node,
+      moduleDefinition,
+      resolvedInputs,
+      operationKey,
+      inputKey: 'prompt',
+      artifactType: 'prompt',
+    })
+    return
+  }
+
+  if (operationKey === 'system.constant_json') {
+    executeConstantJsonNode(context, node, moduleDefinition, resolvedInputs)
+    return
+  }
+
+  if (operationKey === 'system.constant_image') {
+    await executeConstantImageNode(context, node, moduleDefinition, resolvedInputs)
+    return
+  }
+
+  if (operationKey === 'system.constant_number') {
+    executeConstantNumberNode(context, node, moduleDefinition, resolvedInputs)
+    return
+  }
+
+  if (operationKey === 'system.constant_boolean') {
+    executeConstantBooleanNode(context, node, moduleDefinition, resolvedInputs)
+    return
   }
 
   if (operationKey === 'system.random_prompt_from_group') {

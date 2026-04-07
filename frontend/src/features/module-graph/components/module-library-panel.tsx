@@ -29,7 +29,7 @@ type ModuleGroup = {
   modules: ModuleDefinitionRecord[]
 }
 
-const SYSTEM_GROUP_ORDER = ['prompt', 'image', 'analysis', 'output', 'utility', 'other']
+const SYSTEM_GROUP_ORDER = ['input', 'prompt', 'image', 'analysis', 'output', 'utility', 'other']
 const CUSTOM_GROUP_ORDER = ['nai', 'comfyui', 'other']
 
 function toTitleCase(rawValue: string) {
@@ -56,6 +56,10 @@ function getSystemModuleGroup(module: ModuleDefinitionRecord): { key: string; la
 
   if (isFinalResultModule(module) || category === 'output') {
     return { key: 'output', label: 'Output' }
+  }
+
+  if (category === 'input' || name.includes('constant')) {
+    return { key: 'input', label: 'Input' }
   }
 
   if (category === 'analysis' || name.includes('extract')) {

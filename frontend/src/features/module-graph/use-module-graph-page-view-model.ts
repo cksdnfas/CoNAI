@@ -3,7 +3,7 @@ import { useQueries } from '@tanstack/react-query'
 import { getGraphExecution, type GraphExecutionArtifactRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api'
 import type { AppSettings } from '@/types/settings'
 import type { WorkflowValidationIssue } from './components/workflow-validation-panel'
-import { buildNodeArtifactPreview, buildGraphEditorSnapshot, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
+import { buildNodeArtifactGroups, buildNodeArtifactPreview, buildGraphEditorSnapshot, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { buildWorkflowExposedInputId, buildWorkflowValidationIssues } from './module-graph-validation'
 
 type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
@@ -116,6 +116,7 @@ export function useModuleGraphPageViewModel({
       latestArtifactLabel: string | null
       latestArtifactPreviewUrl: string | null
       latestArtifactTextPreview: string | null
+      executionOutputGroups: ReturnType<typeof buildNodeArtifactGroups>
     }>()
 
     previewExecutionCandidates.forEach((execution, index) => {
@@ -143,17 +144,19 @@ export function useModuleGraphPageViewModel({
           return
         }
 
+        const currentNode = nodes.find((node) => node.id === nodeId)
         previewByNode.set(nodeId, {
           executionArtifactCount: nodeArtifacts.length,
           latestArtifactLabel: artifactPreview.latestArtifactLabel,
           latestArtifactPreviewUrl: artifactPreview.latestArtifactPreviewUrl,
           latestArtifactTextPreview: artifactPreview.latestArtifactTextPreview,
+          executionOutputGroups: buildNodeArtifactGroups(nodeArtifacts, currentNode?.data.module.output_ports ?? []),
         })
       })
     })
 
     return previewByNode
-  }, [previewExecutionCandidates, previewExecutionDetailQueries])
+  }, [nodes, previewExecutionCandidates, previewExecutionDetailQueries])
 
   const latestExecutionDetail = useMemo(() => {
     const latestPreviewDetail = previewExecutionDetailQueries[0]?.data

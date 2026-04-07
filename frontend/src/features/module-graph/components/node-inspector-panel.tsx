@@ -1,5 +1,5 @@
-import type { CSSProperties } from 'react'
-import { CircleHelp } from 'lucide-react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { ChevronDown, ChevronRight, CircleHelp } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
-import type { ModulePortDefinition } from '@/lib/api'
+import type { GraphExecutionArtifactRecord, ModulePortDefinition } from '@/lib/api'
+import { ExecutionArtifactCard } from './execution-artifact-card'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 import { parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
@@ -19,6 +20,8 @@ type NodeInspectorPanelProps = {
   nodes: ModuleGraphNode[]
   selectedNode: ModuleGraphNode | null
   selectedEdge: ModuleGraphEdge | null
+  selectedExecutionId?: number | null
+  selectedExecutionArtifacts?: GraphExecutionArtifactRecord[]
   onNodeValueChange: (nodeId: string, portKey: string, value: unknown) => void
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => Promise<void> | void
@@ -35,6 +38,13 @@ type ResolvedEdgeEndpoint = {
   node: ModuleGraphNode | null
   port: ModulePortDefinition | null
   portKey: string | null
+}
+
+type NodeOutputArtifactGroup = {
+  portKey: string
+  portLabel: string
+  portType: ModulePortDefinition['data_type'] | null
+  artifacts: GraphExecutionArtifactRecord[]
 }
 
 const PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], string> = {
@@ -174,11 +184,44 @@ function EdgeEndpointCard({
   )
 }
 
+/** Group one selected node's execution artifacts by output port for inspector display. */
+function groupNodeOutputArtifacts(node: ModuleGraphNode, artifacts: GraphExecutionArtifactRecord[]) {
+  const outputPortMap = new Map(node.data.module.output_ports.map((port, index) => [port.key, { port, index }]))
+  const groupedArtifacts = artifacts.reduce<Map<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
+    const current = acc.get(artifact.port_key) ?? []
+    current.push(artifact)
+    acc.set(artifact.port_key, current)
+    return acc
+  }, new Map())
+
+  return Array.from(groupedArtifacts.entries())
+    .map(([portKey, portArtifacts]) => {
+      const outputPort = outputPortMap.get(portKey)?.port ?? null
+      return {
+        portKey,
+        portLabel: outputPort?.label ?? portKey,
+        portType: outputPort?.data_type ?? (portArtifacts[0]?.artifact_type === 'file' ? null : portArtifacts[0]?.artifact_type ?? null),
+        artifacts: [...portArtifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime()),
+      } satisfies NodeOutputArtifactGroup
+    })
+    .sort((left, right) => {
+      const leftOrder = outputPortMap.get(left.portKey)?.index ?? Number.MAX_SAFE_INTEGER
+      const rightOrder = outputPortMap.get(right.portKey)?.index ?? Number.MAX_SAFE_INTEGER
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder
+      }
+
+      return left.portLabel.localeCompare(right.portLabel, 'ko')
+    })
+}
+
 /** Render editable node input overrides and selected edge details. */
 export function NodeInspectorPanel({
   nodes,
   selectedNode,
   selectedEdge,
+  selectedExecutionId = null,
+  selectedExecutionArtifacts,
   onNodeValueChange,
   onNodeValueClear,
   onNodeImageChange,
@@ -190,6 +233,12 @@ export function NodeInspectorPanel({
   highlightedPortKey = null,
   showHeader = true,
 }: NodeInspectorPanelProps) {
+  const [collapsedOutputGroupKeys, setCollapsedOutputGroupKeys] = useState<string[]>([])
+
+  useEffect(() => {
+    setCollapsedOutputGroupKeys([])
+  }, [selectedNode?.id, selectedExecutionId])
+
   const renderPortInput = (node: ModuleGraphNode, port: ModulePortDefinition) => {
     const rawValue = node.data.inputValues?.[port.key]
     const uiField = findNodeUiField(node, port.key)
@@ -357,6 +406,23 @@ export function NodeInspectorPanel({
         return left.label.localeCompare(right.label)
       })
     : []
+  const selectedNodeOutputGroups = useMemo(
+    () => selectedNode && selectedExecutionArtifacts
+      ? groupNodeOutputArtifacts(
+          selectedNode,
+          selectedExecutionArtifacts.filter((artifact) => artifact.node_id === selectedNode.id),
+        )
+      : [],
+    [selectedExecutionArtifacts, selectedNode],
+  )
+
+  const toggleOutputGroup = (portKey: string) => {
+    setCollapsedOutputGroupKeys((current) => (
+      current.includes(portKey)
+        ? current.filter((key) => key !== portKey)
+        : [...current, portKey]
+    ))
+  }
 
   return (
     <Card>
@@ -428,6 +494,56 @@ export function NodeInspectorPanel({
                 </div>
               </div>
             ) : null}
+
+            <div className="space-y-3 rounded-sm border border-border bg-background/40 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-sm font-medium text-foreground">노드 출력</div>
+                {selectedExecutionId ? <Badge variant="outline">실행 #{selectedExecutionId}</Badge> : <Badge variant="outline">실행 선택 필요</Badge>}
+                {selectedNodeOutputGroups.length > 0 ? <Badge variant="outline">포트 {selectedNodeOutputGroups.length}</Badge> : null}
+              </div>
+
+              {!selectedExecutionArtifacts ? (
+                <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+                  실행 결과를 선택하면 이 노드의 출력 값을 포트별로 여기서 바로 확인할 수 있어.
+                </div>
+              ) : selectedNodeOutputGroups.length === 0 ? (
+                <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+                  선택한 실행에서 이 노드가 남긴 출력이 없어.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {selectedNodeOutputGroups.map((group) => {
+                    const isCollapsed = collapsedOutputGroupKeys.includes(group.portKey)
+
+                    return (
+                      <div key={group.portKey} className="rounded-sm border border-border bg-surface-low/70">
+                        <button
+                          type="button"
+                          onClick={() => toggleOutputGroup(group.portKey)}
+                          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            {isCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                            <span className="truncate text-sm font-medium text-foreground">{group.portLabel}</span>
+                            <Badge variant="secondary">{group.portKey}</Badge>
+                            {group.portType ? <Badge variant="outline">{PORT_TYPE_LABELS[group.portType]}</Badge> : null}
+                          </div>
+                          <Badge variant="outline">{group.artifacts.length}</Badge>
+                        </button>
+
+                        {!isCollapsed ? (
+                          <div className="space-y-3 border-t border-border px-3 py-3">
+                            {group.artifacts.map((artifact) => (
+                              <ExecutionArtifactCard key={artifact.id} artifact={artifact} />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
 
             {(selectedNode.data.module.exposed_inputs ?? []).length === 0 ? (
               <div className="text-sm text-muted-foreground">이 노드는 편집 가능한 입력 포트가 없어.</div>

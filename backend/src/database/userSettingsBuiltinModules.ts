@@ -49,6 +49,220 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
   };
 
   insertIfMissing(
+    'Constant Text',
+    'Output one fixed text value directly from the graph without requiring workflow-run exposed inputs.',
+    'input',
+    [
+      {
+        key: 'text',
+        label: 'Text',
+        direction: 'input',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+        description: 'Fixed text value stored on the node itself.',
+      },
+    ],
+    [
+      {
+        key: 'text',
+        label: 'Text',
+        direction: 'output',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.constant_text' },
+    [
+      {
+        key: 'text',
+        label: 'Text',
+        data_type: 'text',
+        placeholder: '고정 텍스트 입력',
+      },
+    ],
+    '#66bb6a',
+  );
+
+  insertIfMissing(
+    'Constant Prompt',
+    'Output one fixed prompt string directly from the graph without requiring workflow-run exposed inputs.',
+    'input',
+    [
+      {
+        key: 'prompt',
+        label: 'Prompt',
+        direction: 'input',
+        data_type: 'prompt',
+        required: true,
+        multiple: false,
+        description: 'Fixed prompt value stored on the node itself.',
+      },
+    ],
+    [
+      {
+        key: 'prompt',
+        label: 'Prompt',
+        direction: 'output',
+        data_type: 'prompt',
+        required: true,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.constant_prompt' },
+    [
+      {
+        key: 'prompt',
+        label: 'Prompt',
+        data_type: 'text',
+        placeholder: '고정 프롬프트 입력',
+      },
+    ],
+    '#8e24aa',
+  );
+
+  insertIfMissing(
+    'Constant JSON',
+    'Output one fixed JSON value directly from the graph without requiring workflow-run exposed inputs.',
+    'input',
+    [
+      {
+        key: 'json',
+        label: 'JSON',
+        direction: 'input',
+        data_type: 'json',
+        required: true,
+        multiple: false,
+        description: 'Fixed JSON value stored on the node itself.',
+      },
+    ],
+    [
+      {
+        key: 'json',
+        label: 'JSON',
+        direction: 'output',
+        data_type: 'json',
+        required: true,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.constant_json' },
+    [
+      {
+        key: 'json',
+        label: 'JSON',
+        data_type: 'json',
+        placeholder: '{\n  "key": "value"\n}',
+      },
+    ],
+    '#78909c',
+  );
+
+  insertIfMissing(
+    'Constant Image',
+    'Output one fixed image value directly from the graph without requiring workflow-run exposed inputs.',
+    'input',
+    [
+      {
+        key: 'image',
+        label: 'Image',
+        direction: 'input',
+        data_type: 'image',
+        required: true,
+        multiple: false,
+        description: 'Fixed image value stored on the node itself.',
+      },
+    ],
+    [
+      {
+        key: 'image',
+        label: 'Image',
+        direction: 'output',
+        data_type: 'image',
+        required: true,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.constant_image' },
+    [],
+    '#29b6f6',
+  );
+
+  insertIfMissing(
+    'Constant Number',
+    'Output one fixed number value directly from the graph without requiring workflow-run exposed inputs.',
+    'input',
+    [
+      {
+        key: 'number',
+        label: 'Number',
+        direction: 'input',
+        data_type: 'number',
+        required: true,
+        multiple: false,
+        description: 'Fixed number value stored on the node itself.',
+      },
+    ],
+    [
+      {
+        key: 'number',
+        label: 'Number',
+        direction: 'output',
+        data_type: 'number',
+        required: true,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.constant_number' },
+    [
+      {
+        key: 'number',
+        label: 'Number',
+        data_type: 'number',
+      },
+    ],
+    '#ffd54f',
+  );
+
+  insertIfMissing(
+    'Constant Boolean',
+    'Output one fixed boolean value directly from the graph without requiring workflow-run exposed inputs.',
+    'input',
+    [
+      {
+        key: 'boolean',
+        label: 'Boolean',
+        direction: 'input',
+        data_type: 'boolean',
+        required: true,
+        multiple: false,
+        description: 'Fixed boolean value stored on the node itself.',
+      },
+    ],
+    [
+      {
+        key: 'boolean',
+        label: 'Boolean',
+        direction: 'output',
+        data_type: 'boolean',
+        required: true,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.constant_boolean' },
+    [
+      {
+        key: 'boolean',
+        label: 'Boolean',
+        data_type: 'select',
+        options: ['true', 'false'],
+      },
+    ],
+    '#ef9a9a',
+  );
+
+  insertIfMissing(
     'Random Prompt From Group',
     'Pick one prompt entry from a stored prompt group and expose it as reusable workflow text.',
     'prompt',

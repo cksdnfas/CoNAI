@@ -8,6 +8,7 @@ import {
   type GraphWorkflowRecord,
 } from '@/lib/api'
 import {
+  buildNodeArtifactGroups,
   buildNodeArtifactPreview,
   getNodeExecutionStatus,
   parseHandleId,
@@ -22,6 +23,7 @@ type NodeArtifactPreviewRecord = {
   latestArtifactLabel: string | null
   latestArtifactPreviewUrl: string | null
   latestArtifactTextPreview: string | null
+  executionOutputGroups: ReturnType<typeof buildNodeArtifactGroups>
 }
 
 /** Keep module-graph workspace selection, input defaults, feedback, and node previews in sync. */
@@ -153,7 +155,7 @@ export function useModuleGraphWorkspaceSync({
 
     const fallbackPreviewSignature = Array.from(latestArtifactPreviewByNode.entries())
       .sort(([leftNodeId], [rightNodeId]) => leftNodeId.localeCompare(rightNodeId))
-      .map(([nodeId, preview]) => `${nodeId}:${preview.executionArtifactCount}:${preview.latestArtifactLabel ?? ''}:${preview.latestArtifactPreviewUrl ?? ''}:${preview.latestArtifactTextPreview ?? ''}`)
+      .map(([nodeId, preview]) => `${nodeId}:${preview.executionArtifactCount}:${preview.latestArtifactLabel ?? ''}:${preview.latestArtifactPreviewUrl ?? ''}:${preview.latestArtifactTextPreview ?? ''}:${preview.executionOutputGroups.map((group) => `${group.portKey}:${group.artifactCount}:${group.latestArtifactLabel ?? ''}:${group.latestArtifactPreviewUrl ?? ''}:${group.latestArtifactTextPreview ?? ''}`).join(',')}`)
       .join('|')
     const edgeSignature = edges
       .map((edge) => `${edge.id}:${edge.source}:${edge.sourceHandle ?? ''}:${edge.target}:${edge.targetHandle ?? ''}`)
@@ -180,6 +182,7 @@ export function useModuleGraphWorkspaceSync({
               latestArtifactPreviewUrl: fallbackPreview?.latestArtifactPreviewUrl ?? null,
               latestArtifactTextPreview: fallbackPreview?.latestArtifactTextPreview ?? null,
               executionReuseState: null,
+              executionOutputGroups: fallbackPreview?.executionOutputGroups ?? [],
               connectedInputKeys: Array.from(connectedInputMap.get(node.id) ?? []),
               connectedOutputKeys: Array.from(connectedOutputMap.get(node.id) ?? []),
             },
@@ -239,6 +242,10 @@ export function useModuleGraphWorkspaceSync({
             ? 'completed'
             : 'idle'
 
+        const executionOutputGroups = nodeArtifacts.length > 0
+          ? buildNodeArtifactGroups(nodeArtifacts, node.data.module.output_ports ?? [])
+          : (fallbackPreview?.executionOutputGroups ?? [])
+
         return {
           ...node,
           data: {
@@ -249,6 +256,7 @@ export function useModuleGraphWorkspaceSync({
             latestArtifactPreviewUrl: artifactPreview.latestArtifactPreviewUrl,
             latestArtifactTextPreview: artifactPreview.latestArtifactTextPreview,
             executionReuseState: reusedNodeIds.has(node.id) ? 'reused' : null,
+            executionOutputGroups,
             connectedInputKeys: Array.from(connectedInputMap.get(node.id) ?? []),
             connectedOutputKeys: Array.from(connectedOutputMap.get(node.id) ?? []),
           },

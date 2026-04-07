@@ -1,6 +1,6 @@
-import type { CSSProperties, MouseEvent } from 'react'
+import { useState, type CSSProperties, type MouseEvent } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { Play, RotateCcw } from 'lucide-react'
+import { ChevronDown, ChevronRight, Play, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
@@ -147,6 +147,7 @@ function stopNodeActionEvent(event: MouseEvent<HTMLButtonElement>) {
 /** Render a cleaner module graph node card with compact ports and hover-only details. */
 export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
   const { module } = data
+  const [outputsExpanded, setOutputsExpanded] = useState(false)
   const inputPorts = module.exposed_inputs ?? []
   const outputPorts = module.output_ports ?? []
   const accentColor = getModuleColor(module)
@@ -185,6 +186,8 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
             ? '#f59e0b'
             : `${accentColor}66`
   const hasArtifactPreview = Boolean(data.latestArtifactPreviewUrl || data.latestArtifactTextPreview)
+  const outputGroups = data.executionOutputGroups ?? []
+  const hasOutputGroups = outputGroups.length > 0
   const isFinalResult = isFinalResultModule(module)
 
   return (
@@ -294,6 +297,65 @@ export function ModuleGraphNodeCard({ data }: NodeProps<ModuleGraphNode>) {
           ) : data.latestArtifactTextPreview ? (
             <div className="rounded-sm bg-surface-high px-2 py-1.5 text-[11px] leading-4 text-foreground break-words">
               {data.latestArtifactTextPreview}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {hasOutputGroups ? (
+        <div className="mt-2.5 rounded-sm border border-border/70 bg-surface-low p-2">
+          <button
+            type="button"
+            className="nodrag nowheel flex w-full items-center justify-between gap-2 text-left"
+            onMouseDown={stopNodeActionEvent}
+            onClick={(event) => {
+              stopNodeActionEvent(event)
+              setOutputsExpanded((current) => !current)
+            }}
+            title="포트별 출력 보기"
+          >
+            <div className="flex items-center gap-2">
+              {outputsExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+              <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">node outputs</span>
+            </div>
+            <Badge variant="outline">{outputGroups.length}</Badge>
+          </button>
+
+          {outputsExpanded ? (
+            <div className="mt-2 space-y-2">
+              {outputGroups.map((group) => (
+                <div key={group.portKey} className="rounded-sm border border-border/60 bg-surface-high px-2 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-[11px] font-medium text-foreground">{group.portLabel}</div>
+                      <div className="text-[10px] text-muted-foreground">{group.portKey}</div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {group.portType ? (
+                        <Badge variant="outline" className="px-1.5 py-0 text-[9px] uppercase tracking-[0.08em]">
+                          {PORT_TYPE_LABELS[group.portType]}
+                        </Badge>
+                      ) : null}
+                      <Badge variant="secondary" className="px-1.5 py-0 text-[9px]">{group.artifactCount}</Badge>
+                    </div>
+                  </div>
+
+                  {group.latestArtifactPreviewUrl ? (
+                    <div className="mt-2 overflow-hidden rounded-sm border border-border/60 bg-surface-lowest">
+                      <InlineMediaPreview
+                        src={group.latestArtifactPreviewUrl}
+                        alt={group.latestArtifactLabel || `${module.name} ${group.portLabel}`}
+                        frameClassName="p-1.5"
+                        mediaClassName="max-h-24 w-full object-contain"
+                      />
+                    </div>
+                  ) : group.latestArtifactTextPreview ? (
+                    <div className="mt-2 rounded-sm bg-surface-low px-2 py-1.5 text-[11px] leading-4 text-foreground break-words">
+                      {group.latestArtifactTextPreview}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
             </div>
           ) : null}
         </div>

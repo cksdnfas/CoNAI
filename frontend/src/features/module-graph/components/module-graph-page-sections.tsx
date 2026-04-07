@@ -276,6 +276,8 @@ export function ModuleGraphWorkflowEditorSupportPanels({
           nodes={nodes}
           selectedNode={selectedNode}
           selectedEdge={selectedEdge}
+          selectedExecutionId={selectedExecutionId}
+          selectedExecutionArtifacts={executionDetail?.artifacts}
           onNodeValueChange={onNodeValueChange}
           onNodeValueClear={onNodeValueClear}
           onNodeImageChange={onNodeImageChange}
