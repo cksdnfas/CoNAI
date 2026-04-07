@@ -228,13 +228,15 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
     showSnackbar,
   })
 
+  const refetchNaiUserData = naiUserQuery.refetch
+
   useEffect(() => {
     if (refreshNonce === 0) {
       return
     }
 
-    void naiUserQuery.refetch()
-  }, [naiUserQuery, refreshNonce])
+    void refetchNaiUserData()
+  }, [refreshNonce, refetchNaiUserData])
 
   const naiGenerateButtonLabel = isNaiGenerating
     ? '생성 요청 중…'

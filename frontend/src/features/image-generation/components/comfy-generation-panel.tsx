@@ -191,13 +191,17 @@ export function ComfyGenerationPanel({
     }))
   ), [moduleSaveWorkflowFields])
 
+  const refetchComfyGenerationSurface = async () => {
+    await Promise.all([workflowsQuery.refetch(), serversQuery.refetch(), dropdownListsQuery.refetch()])
+  }
+
   useEffect(() => {
     if (refreshNonce === 0) {
       return
     }
 
-    void Promise.all([workflowsQuery.refetch(), serversQuery.refetch(), dropdownListsQuery.refetch()])
-  }, [dropdownListsQuery, refreshNonce, serversQuery, workflowsQuery])
+    void refetchComfyGenerationSurface()
+  }, [refreshNonce])
 
   useEffect(() => {
     if (!selectedWorkflow) {

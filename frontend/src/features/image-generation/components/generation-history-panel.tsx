@@ -23,6 +23,10 @@ type GenerationHistoryPanelProps = {
   splitPaneScroll?: boolean
 }
 
+function hasInFlightHistory(records: Awaited<ReturnType<typeof getGenerationHistory>>['records']) {
+  return records.some((record) => record.generation_status === 'pending' || record.generation_status === 'processing')
+}
+
 function getGenerationHistorySelectionId(record: Awaited<ReturnType<typeof getGenerationHistory>>['records'][number]) {
   return String(record.actual_composite_hash || record.composite_hash || `generation-history-${record.id}`)
 }
@@ -50,19 +54,24 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   const [isDeletingSelection, setIsDeletingSelection] = useState(false)
   const [isCleaningFailed, setIsCleaningFailed] = useState(false)
 
+  const historyQueryKey = ['image-generation-history', serviceType, workflowId ?? null] as const
   const historyQuery = useQuery({
-    queryKey: ['image-generation-history', serviceType, workflowId ?? null],
+    queryKey: historyQueryKey,
     queryFn: () => (serviceType === 'comfyui' && workflowId ? getGenerationWorkflowHistory(workflowId) : getGenerationHistory(serviceType)),
-    refetchInterval: 5000,
+    refetchInterval: (query) => {
+      const records = query.state.data?.records ?? []
+      return hasInFlightHistory(records) ? 1500 : false
+    },
   })
+  const refetchHistory = historyQuery.refetch
 
   useEffect(() => {
     if (refreshNonce === 0) {
       return
     }
 
-    void historyQuery.refetch()
-  }, [historyQuery, refreshNonce])
+    void refetchHistory()
+  }, [refreshNonce, refetchHistory])
 
   const historyRecords = historyQuery.data?.records ?? []
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
@@ -90,7 +99,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       setIsDeletingSelection(true)
       await Promise.all(selectedHistoryRecords.map((record) => deleteGenerationHistoryRecord(record.id)))
       setSelectedHistoryIds([])
-      await historyQuery.refetch()
+      await refetchHistory()
       showSnackbar({ message: `${selectedHistoryRecords.length.toLocaleString('ko-KR')}개 히스토리를 삭제했어.`, tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, '히스토리 삭제에 실패했어.'), tone: 'error' })
@@ -108,7 +117,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       setIsCleaningFailed(true)
       const result = await cleanupFailedGenerationHistory()
       setSelectedHistoryIds([])
-      await historyQuery.refetch()
+      await refetchHistory()
       showSnackbar({ message: result.message || '실패한 히스토리를 정리했어.', tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, '실패 히스토리 정리에 실패했어.'), tone: 'error' })
@@ -130,7 +139,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               <Trash2 className="h-4 w-4" />
               {isCleaningFailed ? '실패 정리 중…' : '실패 항목 정리'}
             </Button>
-            <Button type="button" size="icon-sm" variant="outline" onClick={() => void historyQuery.refetch()} title="히스토리 새로고침" aria-label="히스토리 새로고침">
+            <Button type="button" size="icon-sm" variant="outline" onClick={() => void refetchHistory()} title="히스토리 새로고침" aria-label="히스토리 새로고침">
               <RefreshCw className="h-4 w-4" />
             </Button>
           </>

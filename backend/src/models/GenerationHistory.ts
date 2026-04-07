@@ -138,7 +138,7 @@ export class GenerationHistoryModel {
     // Order by
     const orderBy = filters.order_by || 'created_at';
     const orderDir = filters.order_direction || 'DESC';
-    sql += ` ORDER BY ${orderBy} ${orderDir}`;
+    sql += ` ORDER BY ${orderBy} ${orderDir}, id ${orderDir}`;
 
     // Pagination
     if (filters.limit) {
@@ -314,14 +314,27 @@ export class GenerationHistoryModel {
     const stmt = apiGenDb.prepare(`
       SELECT
         gh.*,
-        if.composite_hash as actual_composite_hash,
+        matched_file.composite_hash as actual_composite_hash,
         im.width as actual_width,
         im.height as actual_height
       FROM api_generation_history gh
-      LEFT JOIN main_db.image_files if ON
-        (if.composite_hash = gh.composite_hash AND gh.composite_hash IS NOT NULL)
-        OR if.original_file_path LIKE '%' || gh.original_path
-      LEFT JOIN main_db.media_metadata im ON im.composite_hash = if.composite_hash
+      LEFT JOIN main_db.image_files matched_file ON matched_file.id = (
+        SELECT if2.id
+        FROM main_db.image_files if2
+        WHERE (
+          gh.composite_hash IS NOT NULL
+          AND if2.composite_hash = gh.composite_hash
+        ) OR (
+          gh.original_path IS NOT NULL
+          AND if2.original_file_path = gh.original_path
+        )
+        ORDER BY
+          CASE WHEN if2.file_status = 'active' THEN 0 ELSE 1 END,
+          CASE WHEN gh.composite_hash IS NOT NULL AND if2.composite_hash = gh.composite_hash THEN 0 ELSE 1 END,
+          if2.id DESC
+        LIMIT 1
+      )
+      LEFT JOIN main_db.media_metadata im ON im.composite_hash = matched_file.composite_hash
       WHERE gh.id = ?
       LIMIT 1
     `);
@@ -343,15 +356,28 @@ export class GenerationHistoryModel {
     let sql = `
       SELECT
         gh.*,
-        if.composite_hash as actual_composite_hash,
+        matched_file.composite_hash as actual_composite_hash,
         im.width as actual_width,
         im.height as actual_height,
         im.auto_tags as actual_auto_tags
       FROM api_generation_history gh
-      LEFT JOIN main_db.image_files if ON
-        (if.composite_hash = gh.composite_hash AND gh.composite_hash IS NOT NULL)
-        OR if.original_file_path LIKE '%' || gh.original_path
-      LEFT JOIN main_db.media_metadata im ON im.composite_hash = if.composite_hash
+      LEFT JOIN main_db.image_files matched_file ON matched_file.id = (
+        SELECT if2.id
+        FROM main_db.image_files if2
+        WHERE (
+          gh.composite_hash IS NOT NULL
+          AND if2.composite_hash = gh.composite_hash
+        ) OR (
+          gh.original_path IS NOT NULL
+          AND if2.original_file_path = gh.original_path
+        )
+        ORDER BY
+          CASE WHEN if2.file_status = 'active' THEN 0 ELSE 1 END,
+          CASE WHEN gh.composite_hash IS NOT NULL AND if2.composite_hash = gh.composite_hash THEN 0 ELSE 1 END,
+          if2.id DESC
+        LIMIT 1
+      )
+      LEFT JOIN main_db.media_metadata im ON im.composite_hash = matched_file.composite_hash
       WHERE 1=1
     `;
     const params: any[] = [];
@@ -374,7 +400,7 @@ export class GenerationHistoryModel {
     // Order by
     const orderBy = filters.order_by || 'created_at';
     const orderDir = filters.order_direction || 'DESC';
-    sql += ` ORDER BY gh.${orderBy} ${orderDir}`;
+    sql += ` ORDER BY gh.${orderBy} ${orderDir}, gh.id ${orderDir}`;
 
     // Pagination
     if (filters.limit) {
@@ -447,7 +473,7 @@ export class GenerationHistoryModel {
       params.push(olderThan);
     }
 
-    sql += ' ORDER BY created_at DESC';
+    sql += ' ORDER BY created_at DESC, id DESC';
 
     const stmt = apiGenDb.prepare(sql);
     return stmt.all(...params) as GenerationHistoryRecord[];
@@ -471,7 +497,7 @@ export class GenerationHistoryModel {
       params.push(olderThan);
     }
 
-    sql += ' ORDER BY created_at DESC';
+    sql += ' ORDER BY created_at DESC, id DESC';
 
     const stmt = apiGenDb.prepare(sql);
     return stmt.all(...params) as GenerationHistoryRecord[];
