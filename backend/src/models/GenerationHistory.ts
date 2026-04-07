@@ -330,7 +330,6 @@ export class GenerationHistoryModel {
         )
         ORDER BY
           CASE WHEN if2.file_status = 'active' THEN 0 ELSE 1 END,
-          CASE WHEN gh.composite_hash IS NOT NULL AND if2.composite_hash = gh.composite_hash THEN 0 ELSE 1 END,
           if2.id DESC
         LIMIT 1
       )
@@ -373,7 +372,6 @@ export class GenerationHistoryModel {
         )
         ORDER BY
           CASE WHEN if2.file_status = 'active' THEN 0 ELSE 1 END,
-          CASE WHEN gh.composite_hash IS NOT NULL AND if2.composite_hash = gh.composite_hash THEN 0 ELSE 1 END,
           if2.id DESC
         LIMIT 1
       )
