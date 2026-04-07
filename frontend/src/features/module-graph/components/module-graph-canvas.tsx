@@ -13,6 +13,11 @@ type PendingConnectionStart = {
   handleType: 'source' | 'target'
 }
 
+export type RecommendedModuleMatch = {
+  module: ModuleDefinitionRecord
+  compatibility: 'exact' | 'string-bridge'
+}
+
 type QuickCreateState = {
   mode: 'pane' | 'connect'
   anchor: { x: number; y: number }
@@ -55,12 +60,25 @@ function isPaneLikeEventTarget(event: unknown) {
   return Boolean(eventTarget.closest('.react-flow__pane, .react-flow__background'))
 }
 
+/** Resolve a sortable rank for one compatible port match. */
+function getCompatibilityRank(compatibility: 'exact' | 'string-bridge' | 'incompatible') {
+  if (compatibility === 'exact') {
+    return 2
+  }
+
+  if (compatibility === 'string-bridge') {
+    return 1
+  }
+
+  return 0
+}
+
 /** Build the recommended modules that can connect directly from one pending dragged port. */
 function getRecommendedModulesFromConnectionStart(
   modules: ModuleDefinitionRecord[],
   nodes: ModuleGraphNode[],
   connectionStart: PendingConnectionStart | null,
-) {
+): RecommendedModuleMatch[] {
   if (!connectionStart) {
     return []
   }
@@ -71,21 +89,50 @@ function getRecommendedModulesFromConnectionStart(
     return []
   }
 
-  if (connectionStart.handleType === 'source') {
-    const sourcePort = existingNode.data.module.output_ports.find((port) => port.key === parsedHandle.portKey)
-    if (!sourcePort) {
-      return []
+  const matches = connectionStart.handleType === 'source'
+    ? (() => {
+        const sourcePort = existingNode.data.module.output_ports.find((port) => port.key === parsedHandle.portKey)
+        if (!sourcePort) {
+          return []
+        }
+
+        return modules.flatMap((module) => {
+          const bestCompatibility = module.exposed_inputs.reduce<'exact' | 'string-bridge' | 'incompatible'>((best, port) => {
+            const compatibility = getModulePortCompatibility(sourcePort.data_type, port.data_type)
+            return getCompatibilityRank(compatibility) > getCompatibilityRank(best) ? compatibility : best
+          }, 'incompatible')
+
+          return bestCompatibility === 'incompatible'
+            ? []
+            : [{ module, compatibility: bestCompatibility } satisfies RecommendedModuleMatch]
+        })
+      })()
+    : (() => {
+        const targetPort = existingNode.data.module.exposed_inputs.find((port) => port.key === parsedHandle.portKey)
+        if (!targetPort) {
+          return []
+        }
+
+        return modules.flatMap((module) => {
+          const bestCompatibility = module.output_ports.reduce<'exact' | 'string-bridge' | 'incompatible'>((best, port) => {
+            const compatibility = getModulePortCompatibility(port.data_type, targetPort.data_type)
+            return getCompatibilityRank(compatibility) > getCompatibilityRank(best) ? compatibility : best
+          }, 'incompatible')
+
+          return bestCompatibility === 'incompatible'
+            ? []
+            : [{ module, compatibility: bestCompatibility } satisfies RecommendedModuleMatch]
+        })
+      })()
+
+  return [...matches].sort((left, right) => {
+    const compatibilityDelta = getCompatibilityRank(right.compatibility) - getCompatibilityRank(left.compatibility)
+    if (compatibilityDelta !== 0) {
+      return compatibilityDelta
     }
 
-    return modules.filter((module) => module.exposed_inputs.some((port) => getModulePortCompatibility(sourcePort.data_type, port.data_type) !== null))
-  }
-
-  const targetPort = existingNode.data.module.exposed_inputs.find((port) => port.key === parsedHandle.portKey)
-  if (!targetPort) {
-    return []
-  }
-
-  return modules.filter((module) => module.output_ports.some((port) => getModulePortCompatibility(port.data_type, targetPort.data_type) !== null))
+    return left.module.name.localeCompare(right.module.name, 'ko')
+  })
 }
 
 /** Render the React Flow canvas for the module-graph editor. */
